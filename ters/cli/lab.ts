@@ -61,6 +61,7 @@ import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { emitWasm } from "../../compiler/src/wasm.ts";
+import { ownedArrays } from "../../compiler/src/owned-arrays.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
@@ -260,13 +261,17 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // printer's by its reader written out, C110 s7c), since they can't solve;
 // a main that is a value prints it, as lab run does; the host answers an
 // effect the program never handles itself, and one it handles is on the
-// handler stack (L213c4), as effects' Ask is.
-function nativeLowered(main: Id) {
+// handler stack (L213c4), as effects' Ask is. In WebAssembly a replace in
+// an array nobody else holds is written in place (C56), as in compiled
+// JavaScript; C knows that from its counts.
+function nativeLowered(main: Id, wasm = false) {
   const q0 = withInverses(p.code, p.info, p.names);
   const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-  return { lowered: lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted }), root };
+  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted });
+  if (wasm) ownedArrays(lowered, q.code, q.info, q.names, root);
+  return { lowered, root };
 }
 
 // A program whose main is a value, with a main that prints it (`lab
@@ -544,7 +549,7 @@ switch (command) {
     // lab native lowers it.
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a file") : `${basename(resolve(path)).replace(/\.json$/, "")}.wasm`;
-    const { lowered, root } = nativeLowered(main);
+    const { lowered, root } = nativeLowered(main, true);
     if (!lowered.funcs.some((f) => f.def === root && !f.inner)) fail(`main isn't in WebAssembly: ${lowered.refused.get(root as never) ?? "it isn't lowered"}`);
     let m: ReturnType<typeof emitWasm>;
     try { m = emitWasm(lowered, { wasi: true, main: root }); } catch (e) { fail((e as Error).message); }

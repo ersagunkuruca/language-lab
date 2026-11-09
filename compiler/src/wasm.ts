@@ -357,7 +357,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     const k = structs.length;
     structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
     // An Int array's buffer has its bytes too (L189f2b, wasm-rt.ts byteSlots).
-    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : [])], final: true, mutable: true });
+    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, { name: "shared", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : [])], final: true, mutable: true });
     structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
     arrIndex.set(a.key, k + 2);
   }
