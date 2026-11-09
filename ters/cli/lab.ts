@@ -575,8 +575,9 @@ switch (command) {
   }
   case "render": {
     const named = loaded.own.find((d) => loaded.names[d] === mainName) ?? fail(`${loaded.title} has no definition named ${mainName}`);
-    // Stored as `lab compile` stores it, with the sound as the root (C137 s1).
-    const p = rest.includes("--compiled") && defined < 0 ? represented(loaded, named, true, false, true) : loaded, def = named;
+    // Stored as `lab compile` stores it, with the sound as the root (C137
+    // s1), compiled or not, so the evaluator plays what is compiled (C197).
+    const p = defined < 0 ? represented(loaded, named, true, false, true) : loaded, def = named;
     // Checked as written: stored, its blocks may be arrays (C196).
     const problem = audioProblem(loaded.info, def, loaded.names);
     if (problem) fail(`${mainName} can't be a sound: ${problem}`);

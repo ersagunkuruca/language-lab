@@ -26,8 +26,12 @@ export async function soundOf(p: { code: Code; info: Info; names: Names }, def: 
   const gen = seededGenerator(seed);
   const world = { random: () => gen.next() };
   const step = <T>(f: () => T) => withSteps(PAGE_STEPS, f);
+  // A sound whose lists are arrays (C196) takes and gives its blocks so.
+  const t = p.info.typeOf.get(def), made = t?.t === "fn" ? p.info.subst.zonk(t.ret) : undefined;
+  const arrays = made?.t === "fn" && [made.params[0], made.ret].map((x) => p.info.subst.zonk(x)).every((x) => x.t === "con" && x.id === ARRAY);
   if (way === "evaluator") {
     const play = runMain(p.code, p.info, def, { print: () => {}, names: p.names, world });
+    if (arrays) return (block) => step(() => itemsOfArray(evaluatorCall(play, arrayOf(block) as never) as never) as number[]);
     return (block) => step(() => fromList(evaluatorCall(play, toList(block))) as number[]);
   }
   const name = p.names[def];
@@ -36,9 +40,6 @@ export async function soundOf(p: { code: Code; info: Info; names: Names }, def: 
   if (why) throw new Error(`${name} isn't compiled through the core IR: it ${why}`);
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   const play = step(() => loadCoreJs(ir, { print: () => {}, world })[fi]()) as Value;
-  // A sound whose lists are arrays (C196) takes and gives its blocks so.
-  const t = p.info.typeOf.get(def), made = t?.t === "fn" ? p.info.subst.zonk(t.ret) : undefined;
-  const arrays = made?.t === "fn" && [made.params[0], made.ret].map((x) => p.info.subst.zonk(x)).every((x) => x.t === "con" && x.id === ARRAY);
   if (arrays) return (block) => step(() => itemsOfArray(coreCall(play, arrayOf(block) as never) as never) as number[]);
   return (block) => step(() => fromList(coreCall(play, toList(block))) as number[]);
 }

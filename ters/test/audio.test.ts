@@ -29,7 +29,7 @@ import { replaying } from "../src/lang/sound-thread.ts";
 import type { World } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
 import { soundOf } from "../cli/sound.ts";
-import { represented } from "../cli/represented.ts";
+import { represented, type Program } from "../cli/represented.ts";
 import { readWav, writeWav } from "../cli/wav.ts";
 
 const lab = join(import.meta.dirname, "../cli/lab.ts");
@@ -149,7 +149,7 @@ test("the pedal stored as a sound keeps its blocks as arrays, and plays what its
   const pr = loadProgram(join(import.meta.dirname, "../examples/pedal"));
   const p = { code: pr.code, info: infer(pr.code, pr.pres.names, undefined, pr.options), names: pr.pres.names };
   const pedal = pr.named("pedal");
-  const stored = represented({ title: "pedal", ...p, own: pr.own.defs, reps: [], options: pr.options }, pedal, true, false, true);
+  const stored = represented<Program>({ title: "pedal", ...p, own: pr.own.defs, reps: [], options: pr.options }, pedal, true, false, true);
   assert.deepEqual(stored.chosen, ["List as array of List"]);
   const block = sine(128, 0.4);
   const [lists, arrays] = [await soundOf(p, pedal, "core"), await soundOf(stored, pedal, "core")];
