@@ -583,7 +583,9 @@ function looked(code: Code, info: Info): (def: Id) => Set<number> {
 // backwards (solve), or a definition the array's own jobs use, which the
 // rewrite leaves as it is. Null when one is found; otherwise the nodes
 // that put the boundary in.
-const PASSES_ON = new Set<Id>([S.first, S.optional, S.all]);
+// first, optional, all, seeded and with fuel run a function and hand on
+// what it answers (dice's `seeded` given a function making a list, C196).
+const PASSES_ON = new Set<Id>([S.first, S.optional, S.all, S.seeded, S.fuel]);
 // Builtins that only move values of a variable type about (C70).
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // `owned`: the program's own types the rewrite leaves as they are, whose
