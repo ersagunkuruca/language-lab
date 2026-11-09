@@ -344,7 +344,9 @@ const forwardBuiltin = (id: Id) => {
   return () => { throw new Unsupported(id); };
 };
 export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<unknown>, forwards: Id[], consts: unknown[], all: boolean | "one", none: string) => {
-  const solve = make(NO_ANSWER, equal, { add: I.add, sub: I.sub, neg: I.neg }, forwards.map(forwardBuiltin), consts) as ((...xs: unknown[]) => Iterable<unknown>) & { one?: (...xs: unknown[]) => unknown; wrap?: boolean };
+  // A builtin called as itself comes by its id (core-js.ts printSolve).
+  const ks = consts.map((c) => (c && typeof c === "object" && "$builtin" in c ? STD_IMPL[(c as { $builtin: Id }).$builtin] : c));
+  const solve = make(NO_ANSWER, equal, { add: I.add, sub: I.sub, neg: I.neg }, forwards.map(forwardBuiltin), ks) as ((...xs: unknown[]) => Iterable<unknown>) & { one?: (...xs: unknown[]) => unknown; wrap?: boolean };
   if (all === "one" && solve.one) { const { one, wrap } = solve; return (...xs: unknown[]) => { const r = one(...xs.map(inn)); if (r === NO_ANSWER) throw FAIL; return wrap ? [r] : r; }; }
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };

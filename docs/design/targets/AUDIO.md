@@ -41,8 +41,9 @@ becomes a solve on f, as compile.ts has it, and each solve's plan is
 written out once when the program loads, the equations' or the mode's.
 Stored as a sound (C196), the pedal's blocks are arrays, not a cons cell
 a sample for the garbage collector to take back while blocks are due:
-0.038 ms a block, 70 times real time, against 0.022 on lists; most of
-the gap is the bands solve, which the evaluator runs on the arrays.
+0.034 ms a block, 78 times real time, against 0.022 on lists (its
+bands solve, which takes arrays apart and builds them with the array's
+builtins, is printed as its mode plan, not run by the evaluator).
 A4 is done: the editor's preview plays the pedal (Editor lane).
 The pedal you can hear (BACKLOG L30): Softer and Harder sounded like
 volume, because at drive 8 a quiet strum mostly got louder. Now the

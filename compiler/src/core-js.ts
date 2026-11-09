@@ -26,7 +26,7 @@ import { arrayOffsets } from "./array-offsets.ts";
 import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
-import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, FALSE, STD_IMPL, STD_MANY, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -60,10 +60,17 @@ const printSolve = (code: Code, fn: string): string | null => {
   const sp = solverPlan(code, id);
   if (sp) return `R.planned(({ ${PLAN_NAMES.join(", ")} }) => {\n${sp}\n}, ${rest})`;
   const mp = modePlan(code, id);
-  if (!mp || !mp.forwards.every((f) => code.nodes[f]?.kind === "builtin") || !mp.consts.every(plain)) return null;
+  // A builtin called as itself (an array's front and push, C196) goes by
+  // its id, as core-rt.ts moded reads it back.
+  const consts = mp?.consts.map((c) => (typeof c === "function" ? builtinIdOf(c) : c));
+  if (!mp || !consts || !mp.forwards.every((f) => code.nodes[f]?.kind === "builtin") || !consts.every((c) => plain(c) || !!(c as { $builtin?: Id } | null)?.$builtin)) return null;
   // `one` (C184): one answer's binds (one bind as itself, `wrap`), or $no.
   const wrap = Object.keys(bindsOf(code.nodes[id] as Use)).length === 1;
-  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nif (typeof solve$$one === "function") { solve$.one = solve$$one; solve$.wrap = ${wrap}; }\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(mp.consts)}, ${rest})`;
+  return `R.moded(($no, $eq, $int, F, K) => {\n${mp.code}\nif (typeof solve$$one === "function") { solve$.one = solve$$one; solve$.wrap = ${wrap}; }\nreturn solve$;\n}, ${JSON.stringify(mp.forwards)}, ${JSON.stringify(consts)}, ${rest})`;
+};
+const builtinIdOf = (f: unknown): { $builtin: Id } | null => {
+  const id = Object.keys(STD_IMPL).find((k) => STD_IMPL[k] === f);
+  return id && !STD_MANY[id] ? { $builtin: id } : null;
 };
 const planOf = (code: Code, fn: string): string | null => {
   let m = plans.get(code);
