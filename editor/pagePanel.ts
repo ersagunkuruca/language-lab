@@ -15,6 +15,8 @@ import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
 import { handOver, type Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
+import { LIBRARY } from "../ters/src/lang/library.ts";
+import { checkedForRun } from "./coreMain.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import type { LogEntry } from "../ters/src/lang/worldlog.ts";
@@ -328,7 +330,10 @@ export function pagePanels(host: PageHost) {
     const title = titleOf(doc()), name = `${slug(title)}.html`;
     const core = corePageRuntimeText();
     if (!core) throw new Error("this editor has no core IR runtime");
-    return { html: corePageFile(title, core, prog(), info, pres().names, ownDefs(), main, coreWorkletRuntimeText()), name };
+    // Stored as lab build-web stores it (C197): its lists and Maps chosen.
+    const r = checkedForRun(prog(), pres().names, main);
+    const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
+    return { html: corePageFile(title, core, r.code, r.info, r.names, own, main, coreWorkletRuntimeText()), name };
   }
 
   function savePage(open: boolean) {

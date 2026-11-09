@@ -8,17 +8,19 @@ import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { corePageScript, lowerCore } from "../compiler/src/core-js.ts";
-import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
+import { setDisplayNames, setProgramPins } from "./typed.ts";
+import { checkedForRun } from "./coreMain.ts";
 
 export type CompiledPage = { program: string; core: true };
 
 export function compilePageProgram(code: Code, names: Names, pins: Pins, main: Id): CompiledPage {
   setDisplayNames(names);
   setProgramPins(pins);
-  const info = infer(code, names);
-  const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-  const ir = lowerCore(code, info, names, own);
+  // Stored as lab build-web stores it (C197): its lists and Maps chosen.
+  const r = checkedForRun(code, names, main);
+  const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
+  const ir = lowerCore(r.code, r.info, r.names, own);
   const why = ir.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
-  return { program: corePageScript(ir, names[main], "$core", ""), core: true };
+  return { program: corePageScript(ir, r.names[main], "$core", ""), core: true };
 }
