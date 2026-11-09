@@ -144,9 +144,23 @@ export function modePlan(given: Code, id: Id): { code: string; forwards: Id[]; c
     };
     const modes = modeCompiler(code, {});
     if (!modes.solver(n, "solve$", emit)) return null;
-    return { code: modes.code.join("\n"), forwards, consts };
+    return { code: unbuilt(modes.code.join("\n")), forwards, consts };
   } catch (e) {
     return null;
+  }
+}
+// A case the plan built and nothing reads, left out (C196: a match on the
+// option and pair just made reads their fields as given).
+function unbuilt(code: string): string {
+  for (;;) {
+    const lines = code.split("\n");
+    const dead = lines.findIndex((l) => {
+      const m = /^const (m\$\d+) = \{ tag: [^;]*\};$/.exec(l);
+      return m && !new RegExp(`(?<![\\w$])${m[1].replace("$", "\\$")}(?![\\w$])`).test(code.replace(l, ""));
+    });
+    if (dead < 0) return code;
+    lines.splice(dead, 1);
+    code = lines.join("\n");
   }
 }
 // What a written-out plan calls, from plan-rt.js (core-rt.ts RUNTIME.plans).
