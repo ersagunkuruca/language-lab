@@ -590,7 +590,11 @@ const PASSES_ON = new Set<Id>([S.first, S.optional, S.all, S.seeded, S.fuel]);
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // `owned`: the program's own types the rewrite leaves as they are, whose
 // lists are converted where they're read and made (rep-split.ts, C93 s3).
-export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set()): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
+// `asWritten`: definitions the program's arrays never reach, called with
+// values no list crosses in (rep-split.ts): not looked into, and a value
+// of a library type holding lists (bounce's Algebra) may be passed about,
+// only not taken apart or made, since its lists stay as written.
+export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set(), asWritten?: Set<Id>): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
   const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST), stored = new Set(asked.map((r) => r.of));
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
@@ -605,13 +609,30 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   while (todo.length) {
     const d = todo.pop()!;
     // An asked row's meaning is written on its type as written, and stays.
-    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d)) continue;
+    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d) || asWritten?.has(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || (def.body && code.nodes[def.body]?.kind === "typedef")) continue;
     if (own.has(d)) return null;
     reached.add(d);
     for (const id of subtree(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") todo.push(n.target); }
   }
+  // Reading a library type's field, making one of its cases, or matching
+  // on one.
+  let partOf: Map<Id, Id> | undefined;
+  const ownerOf = (x: Id) => {
+    if (!partOf) {
+      partOf = new Map();
+      for (const d of code.defs) {
+        const t = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""];
+        if (t?.kind === "typedef") for (const v of t.variants) { partOf.set(v, d); for (const fl of (code.nodes[v] as NodeOf<"variant">).fields) partOf.set(fl, d); }
+      }
+    }
+    return partOf.get(x);
+  };
+  const takesApart = (n: Node): boolean => {
+    if (n.kind === "arm") return !program.has(ownerOf(n.variant) ?? "");
+    return n.kind === "ref" && (code.nodes[n.target]?.kind === "variant" || code.nodes[n.target]?.kind === "field") && !program.has(ownerOf(n.target) ?? "");
+  };
   const nodes: Record<Id, Node> = {}, made: Id[] = [];
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
   // The row's own way to store a whole list (`store by`: the array's
@@ -640,7 +661,7 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     // array runs backwards as a list does (front and push front, modes.ts).
     if (isUse(n) && [...Object.values(n.given), ...Object.values(bindsOf(n)), n.id].some((x) => { const t = info.typeOf.get(x); return !!t && hasList(t); })) return null;
     const ty = info.typeOf.get(id);
-    if (ty && libraryHolder(ty)) return null;
+    if (ty && libraryHolder(ty) && (!asWritten || takesApart(n))) return null;
     const target = n.kind === "ref" ? n.target : null;
     if (!target || !SIGS[target] || code.nodes[target]?.kind === "def") continue;
     const at = info.typeOf.get(id);
