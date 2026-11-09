@@ -173,7 +173,9 @@ const BUDGETED = discharge("a shader", [DIVERGE], "only under a literal with fue
 export type SType = "f64" | "i32" | "int32" | "i64";
 // A record: a data type with one case, at particular type arguments.
 // `mutable`: a box the lowering makes (W4d), whose one field a search sets.
-export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[]; mutable?: true }
+// `owned`: its values are written in place (owned-records.ts), so none is
+// made once and shared.
+export interface RType { key: string; name: string; def: Id; variant: Id; case?: string; fields: { name: string; t: LType }[]; mutable?: true; owned?: true }
 // A data type with several cases, or one that contains itself (`data`).
 // A case's fields are in the order written.
 // `inner`: made by the lowering (a fold's stack), not the program's.
@@ -387,7 +389,9 @@ export type SExpr =
   // `cps`: a call of a function with several answers (W4d), the rest of
   // the search passed as its last input.
   | { k: "call"; fn: number; args: SExpr[]; tail: boolean; cps?: true }
-  | { k: "make"; t: RType; args: SExpr[] }
+  // `into` (C93 s5, owned-records.ts): written into that local's value,
+  // whose fields at `same` are already these.
+  | { k: "make"; t: RType; args: SExpr[]; into?: number; same?: number[] }
   | { k: "get"; rec: SExpr; t: RType; i: number }
   // A value of case c of t, and field i of one (it is that case: the
   // checker says so, or the match just looked).

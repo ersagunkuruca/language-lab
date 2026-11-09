@@ -24,6 +24,7 @@ import { inlineSmall } from "./inline-small.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { arrayOffsets } from "./array-offsets.ts";
 import { ownedPushes } from "./owned-pushes.ts";
+import { ownedRecords } from "./owned-records.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -147,7 +148,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     pre.push(`${d}const ${t} = ${rec};`);
     return `(${t}.f${i} ?? ${t}.fields[${i}])`;
   };
-  const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || (((e.k === "new" && !stack(e.t)) || (e.k === "make" && !e.t.mutable)) && e.args.every(constant));
+  const constant = (e: SExpr): boolean => ["num", "int", "text", "bool"].includes(e.k) || (((e.k === "new" && !stack(e.t)) || (e.k === "make" && !e.t.mutable && !e.t.owned)) && e.args.every(constant));
   // A fold's stack (scalar.ts framesOf), which only its own loop down and
   // loop up see and each uses once: a JavaScript array pushed on the way
   // down and popped on the way up, not a frame object a value (C137d21).
@@ -326,7 +327,18 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           const c = call(e.fn, xs);
           return ir.funcs[e.fn].partial ? `R.ck(${c})` : c;
         }
-        case "make": { const v = made(e.t.variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v; }
+        case "make": {
+          // Written into a local's value (C93 s5, owned-records.ts): every
+          // input first, then the changed fields; a value made outside,
+          // not one of the classes, is made again.
+          if (e.into !== undefined) {
+            const xs = e.args.map((a) => named(ex(a, pre, d), pre, d)), y = local(e.into);
+            const fresh = made(e.t.variant, xs), k = fresh.slice(4, fresh.indexOf("("));
+            const writes = xs.flatMap((x, i) => (e.same?.includes(i) ? [] : [`${y}.f${i} = ${x}`]));
+            return `(${y} instanceof ${k} ? (${[...writes, y].join(", ")}) : ${fresh})`;
+          }
+          const v = made(e.t.variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v;
+        }
         case "get": return read(ex(e.rec, pre, d), e.i, pre, d);
         case "new": {
           if (stack(e.t)) {
@@ -593,6 +605,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0]);
   // A push onto an array a call just made, on its view (C196).
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+  // And records rebuilt from their own fields (owned-records.ts, C93 s5).
+  if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;

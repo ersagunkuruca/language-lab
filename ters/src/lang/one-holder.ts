@@ -50,7 +50,12 @@ export interface OneHolder { ok: boolean; problems: string[] }
 // `item`: only the values of `types` whose first argument is this type
 // (Array Int, of machine's registers and memory: C93 s4), the others not
 // followed.
-export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id): OneHolder {
+// `rebuilds`: a value of `types` (a one-case record) made from fields of
+// another of its type, all of one value (`machine(machine.pc + 1, …,
+// machine.counts)`), changes that value: it is written in place (C93 s5,
+// owned-records.ts). Its other fields are read first, as arguments are.
+// `rebuilt` gets the binders so changed.
+export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>): OneHolder {
   const nodes = code.nodes;
   const nm = (id: Id) => names[id] ?? id;
   const problems: string[] = [];
@@ -140,7 +145,11 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     // in a parameter's mode, one of a type still open might be.
     const counts = (node: Id) => mentions(info.typeOf.get(node)) || (!typed && open(info.typeOf.get(node)));
     const use = (st: Walk, p: string, consume: boolean, node: Id) => {
-      if (!counts(node)) return;
+      // With rebuilds, a function reading any field of its parameter reads
+      // the parameter: written in place, it would say something else. The
+      // function's own reads are of the fields as they were when it was
+      // named (owned-records.ts reads them there).
+      if (!counts(node)) { if (rebuilds && !typed && p.includes("/")) seen(p, false); return; }
       for (const c of st.consumed) if (clash(c, p)) { report(`${nm(rootOf(p))} is used after it was changed or kept`, rootOf(p)); return; }
       seen(p, consume);
       if (!consume) return;
@@ -268,7 +277,29 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
         w.consumed.forEach((c) => { if (!snapshot.has(c)) adds.add(c); });
       }
       adds.forEach((c) => st.consumed.add(c));
+      // A rebuild: the value its fields came from is changed, after them.
+      if (rebuilds && tn?.kind === "variant") {
+        const from = rebuildOf(n);
+        if (from) { use(st, from.path, true, from.node); if (!from.path.includes("/")) rebuilt?.add(from.path); }
+      }
       closures.forEach((g) => g());
+    };
+    // The value a constructor's arguments are fields of, when they are
+    // fields of one value of its own type (and at least one is).
+    const rebuildOf = (n: Call): { path: string; node: Id } | null => {
+      const t = info.typeOf.get(n.id), z = t && info.subst.zonk(t);
+      if (z?.t !== "con" || !types.has(z.id)) return null;
+      let got: { path: string; node: Id } | null = null;
+      for (const a of n.args) {
+        const an = nodes[a];
+        if (!(isCall(an) && an.args.length === 1 && nodes[an.fn]?.kind === "ref" && nodes[(nodes[an.fn] as NodeOf<"ref">).target]?.kind === "field")) continue;
+        const base = place(an.args[0]);
+        const bt = info.typeOf.get(an.args[0]), bz = bt && info.subst.zonk(bt);
+        if (base === null || bz?.t !== "con" || bz.id !== z.id) continue;
+        if (got && got.path !== base) return null;
+        got = { path: base, node: an.args[0] };
+      }
+      return got;
     };
     // A closure's body, walked where it runs: its own parameters are fresh
     // on each call; what it captures it may only read; a closure that is
