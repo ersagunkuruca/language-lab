@@ -12,6 +12,10 @@ import { seededGenerator } from "../src/lang/random.ts";
 import { fromList, PAGE_STEPS, runMain, toList, withSteps } from "../src/lang/run.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { coreCall } from "../../compiler/src/core-rt.ts";
+import { arrayOf, arrayView } from "../src/lang/std.ts";
+import { ARRAY } from "../src/lang/types.ts";
+
+const itemsOfArray = (a: Parameters<typeof arrayView>[0]): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n) as unknown[]; };
 
 // "core": printed from the core IR (C137d3).
 export type Way = "evaluator" | "core";
@@ -32,5 +36,9 @@ export async function soundOf(p: { code: Code; info: Info; names: Names }, def: 
   if (why) throw new Error(`${name} isn't compiled through the core IR: it ${why}`);
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   const play = step(() => loadCoreJs(ir, { print: () => {}, world })[fi]()) as Value;
+  // A sound whose lists are arrays (C196) takes and gives its blocks so.
+  const t = p.info.typeOf.get(def), made = t?.t === "fn" ? p.info.subst.zonk(t.ret) : undefined;
+  const arrays = made?.t === "fn" && [made.params[0], made.ret].map((x) => p.info.subst.zonk(x)).every((x) => x.t === "con" && x.id === ARRAY);
+  if (arrays) return (block) => step(() => itemsOfArray(coreCall(play, arrayOf(block) as never) as never) as number[]);
   return (block) => step(() => fromList(coreCall(play, toList(block))) as number[]);
 }
