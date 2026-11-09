@@ -890,7 +890,7 @@ function calleeDef(id: Id): Id | null {
 // Opening a definition with holes selects the first: that's where work is.
 const firstHole = () => T.nextHole(doc.code, ui.def, ui.def) ?? null;
 
-function openDef(d: Id) {
+function openDef(d: Id, draw = true) {
   ui.back.push(ui.def);
   ui.def = d;
   ui.selected = firstHole();
@@ -899,8 +899,15 @@ function openDef(d: Id) {
   ui.query = "";
   ui.touched = [];
   ui.note = `Opened ${new Namer(doc.code, pres(), d).name(d)}. Back returns to where you were.`;
-  render();
+  graphLater = subtree(doc.code, d).length > GRAPH_LATER;
+  if (draw) render();
 }
+// A big definition's graph is drawn in a task of its own when it is
+// opened, after the rest of the page (I192: Spacetime's `rapidity
+// picture`, 1,229 nodes, opened in one task of 1.0 s, 0.45 of it its
+// graph). A redraw after draws it at once, its layout kept.
+const GRAPH_LATER = 400;
+let graphLater = false;
 
 // ---------------------------------------------------------------- gestures
 
@@ -2243,6 +2250,9 @@ function draw() {
   const info = typesOf();
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
+  const later = graphLater && !EMBED;
+  graphLater = false;
+  if (later) graph = null;
 
   // Open definitions are tabs; the one shown is always among them. Past
   // MAX_TABS, opening one closes the one looked at longest ago, so the strip
@@ -2326,7 +2336,7 @@ function draw() {
       h("div", { class: "center" },
         h("section", { class: "panel p-graph", "aria-label": "Graph" },
           h("div", { class: "tabs" }, ...ui.tabs.map(tab), h("span", { class: "hint", title: GRAPH_HINT }, GRAPH_HINT)),
-          h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, graphOf(info))),
+          h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, later ? null : graphOf(info))),
         h("div", { class: "gutter row", "data-gutter": "text-h", "aria-hidden": "true" }),
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
@@ -2350,6 +2360,10 @@ function draw() {
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
   restore();
+  if (later) {
+    const code = doc.code, def = ui.def, host = app.querySelector<HTMLElement>(".p-graph .graph-host");
+    setTimeout(() => { const now = typesOf(); if (now === info && doc.code === code && ui.def === def && host?.isConnected && !host.firstChild) host.append(graphOf(now)); }, 0);
+  }
 }
 
 // A press outside the menu closes it, before anything else sees the press.
@@ -2383,9 +2397,10 @@ document.addEventListener("click", (e) => {
     return;
   }
   const def = t.closest<HTMLElement>("[data-def]");
-  if (def) { openDef(def.dataset.def!); ui.back = []; ui.pane = "graph"; return render(); }
+  // Drawn once, with the pane picked (the open drew it twice, I192).
+  if (def) { openDef(def.dataset.def!, false); ui.back = []; ui.pane = "graph"; return render(); }
   const tb = t.closest<HTMLElement>("[data-tab]");
-  if (tb) { if (tb.dataset.tab !== ui.def) { openDef(tb.dataset.tab!); ui.back = []; render(); } return; }
+  if (tb) { if (tb.dataset.tab !== ui.def) { openDef(tb.dataset.tab!, false); ui.back = []; render(); } return; }
   const close = t.closest<HTMLElement>("[data-close-tab]");
   if (close) {
     const d = close.dataset.closeTab!, i = ui.tabs.indexOf(d);
