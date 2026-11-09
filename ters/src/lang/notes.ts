@@ -179,6 +179,7 @@ export const NOTES: Comments = {
   "builtin.real.cos": "real cos(x) is the cosine of x as a Real, exactly: real cos(real pi()) is −1 to as many places as asked.",
   "builtin.real.digits": "real digits(x, n) is x rounded to n decimals, as text: right to within one in the last place, since whether a Real is just below or just above a decimal can't always be told.",
   "builtin.real.less": "real less than(a, b, fuel) is a < b, worked out by narrowing both until they come apart, to at most 1/2^fuel. Two equal Reals never come apart, so when they are still that close it has no answer (Choice): real less than(real pi(), 22/7, 64) is true.",
+  "builtin.real.lessForever": "a < b at Real, which is what < means there: both are narrowed until they come apart. Two equal Reals never do, so it may not finish (Diverge); real less than takes a fuel instead, and has no answer when that runs out.",
   "builtin.real.approximate": "approximate(x, p) is an Int m with x within 1/2ᵖ of m/2ᵖ: x lies between (m − 1)/2ᵖ and (m + 1)/2ᵖ. Asking a larger p narrows it; what it works out is kept with the value.",
   "builtin.algebraic.add": "a + b for Algebraic numbers, exactly: what the generic + is at Algebraic.",
   "builtin.algebraic.sub": "a − b for Algebraic numbers, exactly: what the generic − is at Algebraic.",

@@ -12,7 +12,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { COMPLEX_TYPE, LIBRARY, FIXED_TYPE, RATIONAL_TYPE } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { DIVIDE, INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
+import { DIVIDE, DIVISION, INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { schemeNeeds, showType } from "../src/lang/types.ts";
 const L = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -63,7 +63,11 @@ test("divide's type says Division; Int has none", () => {
   const half = check((k) => { const d = k.def("half"); k.define(d, k.fn(["x"], (x) => k.call(DIVIDE, x, k.lit(2)))); });
   const d = half.code.defs.find((x) => half.names[x] === "half")!;
   const s = half.info.schemes.get(d)!;
-  assert.equal(showType(s.type, half.names, undefined, s.subs ?? [], schemeNeeds(s)), "(a) -[Choice]-> a where a has Division");
+  // Whether it may fail is its type's divide's (L88: a use does what the
+  // implementation at its type does), so the scheme carries the use, not
+  // a Choice: by 0, Float64's and Rational's have no answer.
+  assert.equal(showType(s.type, half.names, undefined, s.subs ?? [], schemeNeeds(s)), "(a) -> a where a has Division");
+  assert.deepEqual(s.effectsAt?.map(([, iface]) => iface), [DIVISION]);
   const int = check((k) => { const u = k.def("use"); k.define(u, k.fn(["n"], (n) => k.call(DIVIDE, k.call(INT_OPS.add, n, k.int(2)), k.int(3)))); });
   assert.deepEqual(int.info.errors.map((e) => e.message), ["Int has no divide: use quotient and remainder, or turn it into a Float64 (as float64) or a fraction (as fraction) first"]);
 });

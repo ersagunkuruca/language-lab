@@ -157,8 +157,12 @@ real arithmetic.
    answers kept. Step e2 built: `real pi()` by Machin's formula, and
    `real digits(x, n)` rounded within one in the last place. Step e3
    built: `real less than(a, b, fuel)`, narrowing until they come apart,
-   with no answer within 2⁻ᶠᵘᵉˡ. Left: e, exp, sin and log as Reals, and the
-   one < at Real carrying Diverge instead of fuel.
+   with no answer within 2⁻ᶠᵘᵉˡ. Steps e4 and e5 built exp, log, sin
+   and cos. Last: the one < at Real, which may not finish (Diverge). An
+   interface's operation says what an implementation may do (Ordered's
+   less: Diverge), and each use of it does what its type's own
+   implementation does, so < at Int stays pure and generic code (larger,
+   smallest of) carries Diverge only to a caller that uses it at Real.
 
 ## Prior art
 

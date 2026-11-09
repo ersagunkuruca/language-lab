@@ -27390,73 +27390,73 @@
           "@jr5si7ikdc37v36qn6u5qkl7dc:6"
         ]
       },
-      "@kik872v9ijd2d13c7og30l8ks0": {
-        "id": "@kik872v9ijd2d13c7og30l8ks0",
+      "@j6e6ue0jp6k05suc5ubdbbmcf1": {
+        "id": "@j6e6ue0jp6k05suc5ubdbbmcf1",
         "kind": "def",
-        "body": "@kik872v9ijd2d13c7og30l8ks0:1"
+        "body": "@j6e6ue0jp6k05suc5ubdbbmcf1:1"
       },
-      "@kik872v9ijd2d13c7og30l8ks0:3": {
-        "id": "@kik872v9ijd2d13c7og30l8ks0:3",
+      "@j6e6ue0jp6k05suc5ubdbbmcf1:3": {
+        "id": "@j6e6ue0jp6k05suc5ubdbbmcf1:3",
         "kind": "ref",
         "target": "builtin.less"
       },
-      "@kik872v9ijd2d13c7og30l8ks0:2": {
-        "id": "@kik872v9ijd2d13c7og30l8ks0:2",
+      "@j6e6ue0jp6k05suc5ubdbbmcf1:2": {
+        "id": "@j6e6ue0jp6k05suc5ubdbbmcf1:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@kik872v9ijd2d13c7og30l8ks0:1": {
-        "id": "@kik872v9ijd2d13c7og30l8ks0:1",
+      "@j6e6ue0jp6k05suc5ubdbbmcf1:1": {
+        "id": "@j6e6ue0jp6k05suc5ubdbbmcf1:1",
         "kind": "call",
-        "fn": "@kik872v9ijd2d13c7og30l8ks0:2",
+        "fn": "@j6e6ue0jp6k05suc5ubdbbmcf1:2",
         "args": [
-          "@kik872v9ijd2d13c7og30l8ks0:3"
+          "@j6e6ue0jp6k05suc5ubdbbmcf1:3"
         ]
       },
-      "@nvgioq87hl9063tsf06a2heb9m": {
-        "id": "@nvgioq87hl9063tsf06a2heb9m",
+      "@t082tb34ioudh4epbe4b8dis7r": {
+        "id": "@t082tb34ioudh4epbe4b8dis7r",
         "kind": "def",
-        "body": "@nvgioq87hl9063tsf06a2heb9m:1"
+        "body": "@t082tb34ioudh4epbe4b8dis7r:1"
       },
-      "@nvgioq87hl9063tsf06a2heb9m:3": {
-        "id": "@nvgioq87hl9063tsf06a2heb9m:3",
+      "@t082tb34ioudh4epbe4b8dis7r:3": {
+        "id": "@t082tb34ioudh4epbe4b8dis7r:3",
         "kind": "ref",
         "target": "builtin.int.less"
       },
-      "@nvgioq87hl9063tsf06a2heb9m:2": {
-        "id": "@nvgioq87hl9063tsf06a2heb9m:2",
+      "@t082tb34ioudh4epbe4b8dis7r:2": {
+        "id": "@t082tb34ioudh4epbe4b8dis7r:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@nvgioq87hl9063tsf06a2heb9m:1": {
-        "id": "@nvgioq87hl9063tsf06a2heb9m:1",
+      "@t082tb34ioudh4epbe4b8dis7r:1": {
+        "id": "@t082tb34ioudh4epbe4b8dis7r:1",
         "kind": "call",
-        "fn": "@nvgioq87hl9063tsf06a2heb9m:2",
+        "fn": "@t082tb34ioudh4epbe4b8dis7r:2",
         "args": [
-          "@nvgioq87hl9063tsf06a2heb9m:3"
+          "@t082tb34ioudh4epbe4b8dis7r:3"
         ]
       },
-      "@9c1rkiahlhi0c3fk4gpts9o1jq": {
-        "id": "@9c1rkiahlhi0c3fk4gpts9o1jq",
+      "@h9tl1jsdct46d41d666gc2gj72": {
+        "id": "@h9tl1jsdct46d41d666gc2gj72",
         "kind": "def",
-        "body": "@9c1rkiahlhi0c3fk4gpts9o1jq:1"
+        "body": "@h9tl1jsdct46d41d666gc2gj72:1"
       },
-      "@9c1rkiahlhi0c3fk4gpts9o1jq:3": {
-        "id": "@9c1rkiahlhi0c3fk4gpts9o1jq:3",
+      "@h9tl1jsdct46d41d666gc2gj72:3": {
+        "id": "@h9tl1jsdct46d41d666gc2gj72:3",
         "kind": "ref",
         "target": "builtin.algebraic.less"
       },
-      "@9c1rkiahlhi0c3fk4gpts9o1jq:2": {
-        "id": "@9c1rkiahlhi0c3fk4gpts9o1jq:2",
+      "@h9tl1jsdct46d41d666gc2gj72:2": {
+        "id": "@h9tl1jsdct46d41d666gc2gj72:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@9c1rkiahlhi0c3fk4gpts9o1jq:1": {
-        "id": "@9c1rkiahlhi0c3fk4gpts9o1jq:1",
+      "@h9tl1jsdct46d41d666gc2gj72:1": {
+        "id": "@h9tl1jsdct46d41d666gc2gj72:1",
         "kind": "call",
-        "fn": "@9c1rkiahlhi0c3fk4gpts9o1jq:2",
+        "fn": "@h9tl1jsdct46d41d666gc2gj72:2",
         "args": [
-          "@9c1rkiahlhi0c3fk4gpts9o1jq:3"
+          "@h9tl1jsdct46d41d666gc2gj72:3"
         ]
       },
       "@c9t5mf6jqlcm89ni5ti15ghl95": {
@@ -27523,27 +27523,27 @@
           "@lrbmnueqk3h5mlmtcvdtp9j1l4:6"
         ]
       },
-      "@rp296fj6otj065jl7qv6d68vil": {
-        "id": "@rp296fj6otj065jl7qv6d68vil",
+      "@u8kuqqvjtl8r9ehvbfj19qn4au": {
+        "id": "@u8kuqqvjtl8r9ehvbfj19qn4au",
         "kind": "def",
-        "body": "@rp296fj6otj065jl7qv6d68vil:1"
+        "body": "@u8kuqqvjtl8r9ehvbfj19qn4au:1"
       },
-      "@rp296fj6otj065jl7qv6d68vil:3": {
-        "id": "@rp296fj6otj065jl7qv6d68vil:3",
+      "@u8kuqqvjtl8r9ehvbfj19qn4au:3": {
+        "id": "@u8kuqqvjtl8r9ehvbfj19qn4au:3",
         "kind": "ref",
         "target": "@96sk016juoff6n0juepbg4imfi"
       },
-      "@rp296fj6otj065jl7qv6d68vil:2": {
-        "id": "@rp296fj6otj065jl7qv6d68vil:2",
+      "@u8kuqqvjtl8r9ehvbfj19qn4au:2": {
+        "id": "@u8kuqqvjtl8r9ehvbfj19qn4au:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@rp296fj6otj065jl7qv6d68vil:1": {
-        "id": "@rp296fj6otj065jl7qv6d68vil:1",
+      "@u8kuqqvjtl8r9ehvbfj19qn4au:1": {
+        "id": "@u8kuqqvjtl8r9ehvbfj19qn4au:1",
         "kind": "call",
-        "fn": "@rp296fj6otj065jl7qv6d68vil:2",
+        "fn": "@u8kuqqvjtl8r9ehvbfj19qn4au:2",
         "args": [
-          "@rp296fj6otj065jl7qv6d68vil:3"
+          "@u8kuqqvjtl8r9ehvbfj19qn4au:3"
         ]
       },
       "@q0em5mvhbjd4s3vr1hfu98e18e": {
@@ -27587,27 +27587,27 @@
           "@q0em5mvhbjd4s3vr1hfu98e18e:6"
         ]
       },
-      "@ss9dkfm0putidq2fcvchou8fkk": {
-        "id": "@ss9dkfm0putidq2fcvchou8fkk",
+      "@43e84mulun04uc9ke9lqrb49cc": {
+        "id": "@43e84mulun04uc9ke9lqrb49cc",
         "kind": "def",
-        "body": "@ss9dkfm0putidq2fcvchou8fkk:1"
+        "body": "@43e84mulun04uc9ke9lqrb49cc:1"
       },
-      "@ss9dkfm0putidq2fcvchou8fkk:3": {
-        "id": "@ss9dkfm0putidq2fcvchou8fkk:3",
+      "@43e84mulun04uc9ke9lqrb49cc:3": {
+        "id": "@43e84mulun04uc9ke9lqrb49cc:3",
         "kind": "ref",
         "target": "@p9dmg49k9bkj42t4eem85gcbfh"
       },
-      "@ss9dkfm0putidq2fcvchou8fkk:2": {
-        "id": "@ss9dkfm0putidq2fcvchou8fkk:2",
+      "@43e84mulun04uc9ke9lqrb49cc:2": {
+        "id": "@43e84mulun04uc9ke9lqrb49cc:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@ss9dkfm0putidq2fcvchou8fkk:1": {
-        "id": "@ss9dkfm0putidq2fcvchou8fkk:1",
+      "@43e84mulun04uc9ke9lqrb49cc:1": {
+        "id": "@43e84mulun04uc9ke9lqrb49cc:1",
         "kind": "call",
-        "fn": "@ss9dkfm0putidq2fcvchou8fkk:2",
+        "fn": "@43e84mulun04uc9ke9lqrb49cc:2",
         "args": [
-          "@ss9dkfm0putidq2fcvchou8fkk:3"
+          "@43e84mulun04uc9ke9lqrb49cc:3"
         ]
       },
       "@mpduies4gc5j06l4bjadft9ul4": {
@@ -27651,27 +27651,27 @@
           "@mpduies4gc5j06l4bjadft9ul4:6"
         ]
       },
-      "@s2hhpi9o3oqtkhgl6tvfj2vt05": {
-        "id": "@s2hhpi9o3oqtkhgl6tvfj2vt05",
+      "@ilnpg8kga8ntibl158qk43g1et": {
+        "id": "@ilnpg8kga8ntibl158qk43g1et",
         "kind": "def",
-        "body": "@s2hhpi9o3oqtkhgl6tvfj2vt05:1"
+        "body": "@ilnpg8kga8ntibl158qk43g1et:1"
       },
-      "@s2hhpi9o3oqtkhgl6tvfj2vt05:3": {
-        "id": "@s2hhpi9o3oqtkhgl6tvfj2vt05:3",
+      "@ilnpg8kga8ntibl158qk43g1et:3": {
+        "id": "@ilnpg8kga8ntibl158qk43g1et:3",
         "kind": "ref",
         "target": "@asqle3vb7ssita7kpfj5vf6v6r"
       },
-      "@s2hhpi9o3oqtkhgl6tvfj2vt05:2": {
-        "id": "@s2hhpi9o3oqtkhgl6tvfj2vt05:2",
+      "@ilnpg8kga8ntibl158qk43g1et:2": {
+        "id": "@ilnpg8kga8ntibl158qk43g1et:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@s2hhpi9o3oqtkhgl6tvfj2vt05:1": {
-        "id": "@s2hhpi9o3oqtkhgl6tvfj2vt05:1",
+      "@ilnpg8kga8ntibl158qk43g1et:1": {
+        "id": "@ilnpg8kga8ntibl158qk43g1et:1",
         "kind": "call",
-        "fn": "@s2hhpi9o3oqtkhgl6tvfj2vt05:2",
+        "fn": "@ilnpg8kga8ntibl158qk43g1et:2",
         "args": [
-          "@s2hhpi9o3oqtkhgl6tvfj2vt05:3"
+          "@ilnpg8kga8ntibl158qk43g1et:3"
         ]
       },
       "@lqb89d5scvmjsf57qfmaor4239": {
@@ -27715,50 +27715,50 @@
           "@lqb89d5scvmjsf57qfmaor4239:6"
         ]
       },
-      "@g9q5jlp5kg108qsl8loqhv15gc": {
-        "id": "@g9q5jlp5kg108qsl8loqhv15gc",
+      "@fe4uuc9g439jcre12b2785ktj2": {
+        "id": "@fe4uuc9g439jcre12b2785ktj2",
         "kind": "def",
-        "body": "@g9q5jlp5kg108qsl8loqhv15gc:1"
+        "body": "@fe4uuc9g439jcre12b2785ktj2:1"
       },
-      "@g9q5jlp5kg108qsl8loqhv15gc:3": {
-        "id": "@g9q5jlp5kg108qsl8loqhv15gc:3",
+      "@fe4uuc9g439jcre12b2785ktj2:3": {
+        "id": "@fe4uuc9g439jcre12b2785ktj2:3",
         "kind": "ref",
         "target": "@d4jv39li5kqrkf76j4ao7bgh56"
       },
-      "@g9q5jlp5kg108qsl8loqhv15gc:2": {
-        "id": "@g9q5jlp5kg108qsl8loqhv15gc:2",
+      "@fe4uuc9g439jcre12b2785ktj2:2": {
+        "id": "@fe4uuc9g439jcre12b2785ktj2:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@g9q5jlp5kg108qsl8loqhv15gc:1": {
-        "id": "@g9q5jlp5kg108qsl8loqhv15gc:1",
+      "@fe4uuc9g439jcre12b2785ktj2:1": {
+        "id": "@fe4uuc9g439jcre12b2785ktj2:1",
         "kind": "call",
-        "fn": "@g9q5jlp5kg108qsl8loqhv15gc:2",
+        "fn": "@fe4uuc9g439jcre12b2785ktj2:2",
         "args": [
-          "@g9q5jlp5kg108qsl8loqhv15gc:3"
+          "@fe4uuc9g439jcre12b2785ktj2:3"
         ]
       },
-      "@k8mice5ebistb8hbuqbvhrm8hj": {
-        "id": "@k8mice5ebistb8hbuqbvhrm8hj",
+      "@nbjpd52dsrm932r8bree1r7vcg": {
+        "id": "@nbjpd52dsrm932r8bree1r7vcg",
         "kind": "def",
-        "body": "@k8mice5ebistb8hbuqbvhrm8hj:1"
+        "body": "@nbjpd52dsrm932r8bree1r7vcg:1"
       },
-      "@k8mice5ebistb8hbuqbvhrm8hj:3": {
-        "id": "@k8mice5ebistb8hbuqbvhrm8hj:3",
+      "@nbjpd52dsrm932r8bree1r7vcg:3": {
+        "id": "@nbjpd52dsrm932r8bree1r7vcg:3",
         "kind": "ref",
         "target": "builtin.text.less"
       },
-      "@k8mice5ebistb8hbuqbvhrm8hj:2": {
-        "id": "@k8mice5ebistb8hbuqbvhrm8hj:2",
+      "@nbjpd52dsrm932r8bree1r7vcg:2": {
+        "id": "@nbjpd52dsrm932r8bree1r7vcg:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@k8mice5ebistb8hbuqbvhrm8hj:1": {
-        "id": "@k8mice5ebistb8hbuqbvhrm8hj:1",
+      "@nbjpd52dsrm932r8bree1r7vcg:1": {
+        "id": "@nbjpd52dsrm932r8bree1r7vcg:1",
         "kind": "call",
-        "fn": "@k8mice5ebistb8hbuqbvhrm8hj:2",
+        "fn": "@nbjpd52dsrm932r8bree1r7vcg:2",
         "args": [
-          "@k8mice5ebistb8hbuqbvhrm8hj:3"
+          "@nbjpd52dsrm932r8bree1r7vcg:3"
         ]
       },
       "@la3u29sp8b0rqu6kv7gkpi8ar8": {
@@ -27823,6 +27823,29 @@
         "fn": "@n8ior373arqngll2f4m2rr0c96:2",
         "args": [
           "@n8ior373arqngll2f4m2rr0c96:3"
+        ]
+      },
+      "@1ptkquco6ah5f37t8fn9fmsopg": {
+        "id": "@1ptkquco6ah5f37t8fn9fmsopg",
+        "kind": "def",
+        "body": "@1ptkquco6ah5f37t8fn9fmsopg:1"
+      },
+      "@1ptkquco6ah5f37t8fn9fmsopg:3": {
+        "id": "@1ptkquco6ah5f37t8fn9fmsopg:3",
+        "kind": "ref",
+        "target": "builtin.real.lessForever"
+      },
+      "@1ptkquco6ah5f37t8fn9fmsopg:2": {
+        "id": "@1ptkquco6ah5f37t8fn9fmsopg:2",
+        "kind": "ref",
+        "target": "std.ordered.ordered"
+      },
+      "@1ptkquco6ah5f37t8fn9fmsopg:1": {
+        "id": "@1ptkquco6ah5f37t8fn9fmsopg:1",
+        "kind": "call",
+        "fn": "@1ptkquco6ah5f37t8fn9fmsopg:2",
+        "args": [
+          "@1ptkquco6ah5f37t8fn9fmsopg:3"
         ]
       },
       "@r9ictm8koh1973tk5o5uf4b73e": {
@@ -91918,21 +91941,22 @@
       "@mjepml6vqs6t0ll1qgvecjb5re",
       "@978o1pot245hpvgj5oa13l1rtb",
       "@jr5si7ikdc37v36qn6u5qkl7dc",
-      "@kik872v9ijd2d13c7og30l8ks0",
-      "@nvgioq87hl9063tsf06a2heb9m",
-      "@9c1rkiahlhi0c3fk4gpts9o1jq",
+      "@j6e6ue0jp6k05suc5ubdbbmcf1",
+      "@t082tb34ioudh4epbe4b8dis7r",
+      "@h9tl1jsdct46d41d666gc2gj72",
       "@c9t5mf6jqlcm89ni5ti15ghl95",
       "@lrbmnueqk3h5mlmtcvdtp9j1l4",
-      "@rp296fj6otj065jl7qv6d68vil",
+      "@u8kuqqvjtl8r9ehvbfj19qn4au",
       "@q0em5mvhbjd4s3vr1hfu98e18e",
-      "@ss9dkfm0putidq2fcvchou8fkk",
+      "@43e84mulun04uc9ke9lqrb49cc",
       "@mpduies4gc5j06l4bjadft9ul4",
-      "@s2hhpi9o3oqtkhgl6tvfj2vt05",
+      "@ilnpg8kga8ntibl158qk43g1et",
       "@lqb89d5scvmjsf57qfmaor4239",
-      "@g9q5jlp5kg108qsl8loqhv15gc",
-      "@k8mice5ebistb8hbuqbvhrm8hj",
+      "@fe4uuc9g439jcre12b2785ktj2",
+      "@nbjpd52dsrm932r8bree1r7vcg",
       "@la3u29sp8b0rqu6kv7gkpi8ar8",
       "@n8ior373arqngll2f4m2rr0c96",
+      "@1ptkquco6ah5f37t8fn9fmsopg",
       "@8996sj4dfpsvpqdvasnr3cgmsp",
       "@rbst2omgv93upbl5olfb7g36u8",
       "@0llqo3hc2frri343kejl2p4c4k",
@@ -92040,6 +92064,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@jhtpq3g298okp8rpfbapiu6h8b": {
@@ -92248,6 +92280,14 @@
       ],
       "ordered": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@o23bs5963k78egfk0fbeiufo5h": {
@@ -92291,6 +92331,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@j2l46vo86qe30486u8ch7evfh2": {
@@ -92334,6 +92382,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@31u9lao3nsinfas8l79mbl5i5j": {
@@ -93874,6 +93930,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@ms51ccsn4d3kn3v0lpdq6cfbre": {
@@ -93910,6 +93974,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@i6fegek8k300348mgag5spc82m": {
@@ -93946,6 +94018,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@2cffeb22vf6lq91e33uel1np1h": {
@@ -93981,6 +94061,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@7oqrouv1btl6kt56s12kr7t7k0": {
@@ -94016,6 +94104,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@ilortmfvkbjt9bs8q02goksirf": {
@@ -96249,6 +96345,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@dikfj810b1uob7ovc5f0940o4b": {
@@ -96292,6 +96396,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@97bq4lh05s05m059hrdnlrgnf1": {
@@ -107422,7 +107534,7 @@
       },
       "plain": []
     },
-    "@kik872v9ijd2d13c7og30l8ks0": {
+    "@j6e6ue0jp6k05suc5ubdbbmcf1": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107438,7 +107550,7 @@
       },
       "plain": []
     },
-    "@nvgioq87hl9063tsf06a2heb9m": {
+    "@t082tb34ioudh4epbe4b8dis7r": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107454,7 +107566,7 @@
       },
       "plain": []
     },
-    "@9c1rkiahlhi0c3fk4gpts9o1jq": {
+    "@h9tl1jsdct46d41d666gc2gj72": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107502,7 +107614,7 @@
       },
       "plain": []
     },
-    "@rp296fj6otj065jl7qv6d68vil": {
+    "@u8kuqqvjtl8r9ehvbfj19qn4au": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107534,7 +107646,7 @@
       },
       "plain": []
     },
-    "@ss9dkfm0putidq2fcvchou8fkk": {
+    "@43e84mulun04uc9ke9lqrb49cc": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107566,7 +107678,7 @@
       },
       "plain": []
     },
-    "@s2hhpi9o3oqtkhgl6tvfj2vt05": {
+    "@ilnpg8kga8ntibl158qk43g1et": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107598,7 +107710,7 @@
       },
       "plain": []
     },
-    "@g9q5jlp5kg108qsl8loqhv15gc": {
+    "@fe4uuc9g439jcre12b2785ktj2": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107614,7 +107726,7 @@
       },
       "plain": []
     },
-    "@k8mice5ebistb8hbuqbvhrm8hj": {
+    "@nbjpd52dsrm932r8bree1r7vcg": {
       "vars": [],
       "rows": [],
       "type": {
@@ -107652,6 +107764,22 @@
       "type": {
         "t": "con",
         "id": "std.literal",
+        "args": [
+          {
+            "t": "con",
+            "id": "std.real",
+            "args": []
+          }
+        ]
+      },
+      "plain": []
+    },
+    "@1ptkquco6ah5f37t8fn9fmsopg": {
+      "vars": [],
+      "rows": [],
+      "type": {
+        "t": "con",
+        "id": "std.ordered",
         "args": [
           {
             "t": "con",
@@ -108065,9 +108193,7 @@
           "v": 0
         },
         "eff": {
-          "effs": [
-            "effect.choice"
-          ],
+          "effs": [],
           "tail": 1
         }
       },
@@ -108081,6 +108207,14 @@
         [
           0,
           "std.trig"
+        ]
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.trig",
+          4,
+          1
         ]
       ]
     },
@@ -108104,9 +108238,7 @@
           "v": 0
         },
         "eff": {
-          "effs": [
-            "effect.choice"
-          ],
+          "effs": [],
           "tail": 1
         }
       },
@@ -108120,6 +108252,14 @@
         [
           0,
           "std.trig"
+        ]
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.trig",
+          4,
+          1
         ]
       ]
     },
@@ -109878,21 +110018,22 @@
     "@mjepml6vqs6t0ll1qgvecjb5re": "arithmetic at float64",
     "@978o1pot245hpvgj5oa13l1rtb": "arithmetic at int",
     "@jr5si7ikdc37v36qn6u5qkl7dc": "arithmetic at algebraic",
-    "@kik872v9ijd2d13c7og30l8ks0": "ordered at float64",
-    "@nvgioq87hl9063tsf06a2heb9m": "ordered at int",
-    "@9c1rkiahlhi0c3fk4gpts9o1jq": "ordered at algebraic",
+    "@j6e6ue0jp6k05suc5ubdbbmcf1": "ordered at float64",
+    "@t082tb34ioudh4epbe4b8dis7r": "ordered at int",
+    "@h9tl1jsdct46d41d666gc2gj72": "ordered at algebraic",
     "@c9t5mf6jqlcm89ni5ti15ghl95": "literal at algebraic",
     "@lrbmnueqk3h5mlmtcvdtp9j1l4": "arithmetic at word8",
-    "@rp296fj6otj065jl7qv6d68vil": "ordered at word8",
+    "@u8kuqqvjtl8r9ehvbfj19qn4au": "ordered at word8",
     "@q0em5mvhbjd4s3vr1hfu98e18e": "arithmetic at word16",
-    "@ss9dkfm0putidq2fcvchou8fkk": "ordered at word16",
+    "@43e84mulun04uc9ke9lqrb49cc": "ordered at word16",
     "@mpduies4gc5j06l4bjadft9ul4": "arithmetic at word32",
-    "@s2hhpi9o3oqtkhgl6tvfj2vt05": "ordered at word32",
+    "@ilnpg8kga8ntibl158qk43g1et": "ordered at word32",
     "@lqb89d5scvmjsf57qfmaor4239": "arithmetic at word64",
-    "@g9q5jlp5kg108qsl8loqhv15gc": "ordered at word64",
-    "@k8mice5ebistb8hbuqbvhrm8hj": "ordered at text",
+    "@fe4uuc9g439jcre12b2785ktj2": "ordered at word64",
+    "@nbjpd52dsrm932r8bree1r7vcg": "ordered at text",
     "@la3u29sp8b0rqu6kv7gkpi8ar8": "arithmetic at real",
     "@n8ior373arqngll2f4m2rr0c96": "literal at real",
+    "@1ptkquco6ah5f37t8fn9fmsopg": "ordered at real",
     "@r9ictm8koh1973tk5o5uf4b73e": "division at float64",
     "@qnk9v8aglbvsfje1g0c84k0h1n": "division at algebraic",
     "@occ9qiqbunndfmpdt9vpcl2jov": "show extended",
@@ -111571,21 +111712,22 @@
     "@mjepml6vqs6t0ll1qgvecjb5re": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@978o1pot245hpvgj5oa13l1rtb": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@jr5si7ikdc37v36qn6u5qkl7dc": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@kik872v9ijd2d13c7og30l8ks0": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@nvgioq87hl9063tsf06a2heb9m": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@9c1rkiahlhi0c3fk4gpts9o1jq": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@j6e6ue0jp6k05suc5ubdbbmcf1": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@t082tb34ioudh4epbe4b8dis7r": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@h9tl1jsdct46d41d666gc2gj72": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@c9t5mf6jqlcm89ni5ti15ghl95": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@lrbmnueqk3h5mlmtcvdtp9j1l4": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@rp296fj6otj065jl7qv6d68vil": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@u8kuqqvjtl8r9ehvbfj19qn4au": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@q0em5mvhbjd4s3vr1hfu98e18e": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@ss9dkfm0putidq2fcvchou8fkk": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@43e84mulun04uc9ke9lqrb49cc": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@mpduies4gc5j06l4bjadft9ul4": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@s2hhpi9o3oqtkhgl6tvfj2vt05": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@ilnpg8kga8ntibl158qk43g1et": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@lqb89d5scvmjsf57qfmaor4239": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@g9q5jlp5kg108qsl8loqhv15gc": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
-    "@k8mice5ebistb8hbuqbvhrm8hj": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@fe4uuc9g439jcre12b2785ktj2": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@nbjpd52dsrm932r8bree1r7vcg": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@la3u29sp8b0rqu6kv7gkpi8ar8": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@n8ior373arqngll2f4m2rr0c96": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
+    "@1ptkquco6ah5f37t8fn9fmsopg": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@8996sj4dfpsvpqdvasnr3cgmsp": "How this number type does + − · −x (Arithmetic) or < (Ordered): its own operations. Found by its type, so not offered: + and < are.",
     "@e9fsfaqqmkbqi45m9thp36ep42": "The same ticket with what it gives forgotten (a Ticket Unit), so tickets of different types can go in one list for any of.",
     "@s80979s95urnfent649ge9ikvu": "A ticket for whichever of these tickets is ready first: await(any of(tickets)) gives its position, from 0.",
@@ -111860,7 +112002,7 @@
     "std.open file": "tabi4a58qldokc82rktrbahqi5",
     "std.optional": "mg9rf79fffmtc854o0k3rg26rb",
     "std.order": "5onfchl95mf48ivk5nagfbcrl4",
-    "std.ordered": "l5kgjdofic2jhlrpheoq459cie",
+    "std.ordered": "gbrk5i02v2a017fjp834gr409h",
     "std.outcome": "lmi44oakeqlfmpprr2vvpgh9un",
     "std.pipe": "ik42jbjsg6nunt58ng7tptmi65",
     "std.priority queue": "fieirru9rfgi0876dcf1nbapu0",

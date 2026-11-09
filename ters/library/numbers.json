@@ -39212,27 +39212,27 @@
           "@mneb6oh55lqeblikg2lcqdmli8:6"
         ]
       },
-      "@gsbj5fk08f9r6hdnq69vd01307": {
-        "id": "@gsbj5fk08f9r6hdnq69vd01307",
+      "@qdp3fnonm1narlhr1f6a4fm14e": {
+        "id": "@qdp3fnonm1narlhr1f6a4fm14e",
         "kind": "def",
-        "body": "@gsbj5fk08f9r6hdnq69vd01307:1"
+        "body": "@qdp3fnonm1narlhr1f6a4fm14e:1"
       },
-      "@gsbj5fk08f9r6hdnq69vd01307:3": {
-        "id": "@gsbj5fk08f9r6hdnq69vd01307:3",
+      "@qdp3fnonm1narlhr1f6a4fm14e:3": {
+        "id": "@qdp3fnonm1narlhr1f6a4fm14e:3",
         "kind": "ref",
         "target": "@182j6c81nfun7a5sadds2plafu"
       },
-      "@gsbj5fk08f9r6hdnq69vd01307:2": {
-        "id": "@gsbj5fk08f9r6hdnq69vd01307:2",
+      "@qdp3fnonm1narlhr1f6a4fm14e:2": {
+        "id": "@qdp3fnonm1narlhr1f6a4fm14e:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@gsbj5fk08f9r6hdnq69vd01307:1": {
-        "id": "@gsbj5fk08f9r6hdnq69vd01307:1",
+      "@qdp3fnonm1narlhr1f6a4fm14e:1": {
+        "id": "@qdp3fnonm1narlhr1f6a4fm14e:1",
         "kind": "call",
-        "fn": "@gsbj5fk08f9r6hdnq69vd01307:2",
+        "fn": "@qdp3fnonm1narlhr1f6a4fm14e:2",
         "args": [
-          "@gsbj5fk08f9r6hdnq69vd01307:3"
+          "@qdp3fnonm1narlhr1f6a4fm14e:3"
         ]
       },
       "@t6e7mk7b3m18ghb5r568vnrqh7": {
@@ -39642,27 +39642,27 @@
           "@qqfpda7kjgoffsqtlcg8vjntnl:3"
         ]
       },
-      "@h6conab4d51jqp04vnbf18i6e8": {
-        "id": "@h6conab4d51jqp04vnbf18i6e8",
+      "@s09i3nmqpo4v2tobr10bp3nktk": {
+        "id": "@s09i3nmqpo4v2tobr10bp3nktk",
         "kind": "def",
-        "body": "@h6conab4d51jqp04vnbf18i6e8:1"
+        "body": "@s09i3nmqpo4v2tobr10bp3nktk:1"
       },
-      "@h6conab4d51jqp04vnbf18i6e8:3": {
-        "id": "@h6conab4d51jqp04vnbf18i6e8:3",
+      "@s09i3nmqpo4v2tobr10bp3nktk:3": {
+        "id": "@s09i3nmqpo4v2tobr10bp3nktk:3",
         "kind": "ref",
         "target": "@86p35ajg9ehfnssldf7ldc2r6u"
       },
-      "@h6conab4d51jqp04vnbf18i6e8:2": {
-        "id": "@h6conab4d51jqp04vnbf18i6e8:2",
+      "@s09i3nmqpo4v2tobr10bp3nktk:2": {
+        "id": "@s09i3nmqpo4v2tobr10bp3nktk:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@h6conab4d51jqp04vnbf18i6e8:1": {
-        "id": "@h6conab4d51jqp04vnbf18i6e8:1",
+      "@s09i3nmqpo4v2tobr10bp3nktk:1": {
+        "id": "@s09i3nmqpo4v2tobr10bp3nktk:1",
         "kind": "call",
-        "fn": "@h6conab4d51jqp04vnbf18i6e8:2",
+        "fn": "@s09i3nmqpo4v2tobr10bp3nktk:2",
         "args": [
-          "@h6conab4d51jqp04vnbf18i6e8:3"
+          "@s09i3nmqpo4v2tobr10bp3nktk:3"
         ]
       },
       "@hf2e9f0sak3ja92aq2tbb61akj": {
@@ -39803,7 +39803,7 @@
       "@ub0q9rs5ueslvltp68n4uir06e",
       "@mneb6oh55lqeblikg2lcqdmli8",
       "@182j6c81nfun7a5sadds2plafu",
-      "@gsbj5fk08f9r6hdnq69vd01307",
+      "@qdp3fnonm1narlhr1f6a4fm14e",
       "@1oifcj7epdceiptk7pi6dqjm7d",
       "@t6e7mk7b3m18ghb5r568vnrqh7",
       "@0p0sbgebatsa353k3sice2jumo",
@@ -39854,7 +39854,7 @@
       "@nq039dom8j47l644mhtajio4pu",
       "@qqfpda7kjgoffsqtlcg8vjntnl",
       "@86p35ajg9ehfnssldf7ldc2r6u",
-      "@h6conab4d51jqp04vnbf18i6e8",
+      "@s09i3nmqpo4v2tobr10bp3nktk",
       "@5jvkmi56jd9tst41r4feh0f86j",
       "@hf2e9f0sak3ja92aq2tbb61akj",
       "@c80rodj4euanl6hcacl8e1eio9",
@@ -40349,6 +40349,14 @@
       ],
       "less": [
         0
+      ],
+      "effectsAt": [
+        [
+          0,
+          "std.ordered",
+          0,
+          1
+        ]
       ]
     },
     "@9sdsc53mrrub8rpe0p487s037u": {
@@ -42957,7 +42965,7 @@
       },
       "plain": []
     },
-    "@gsbj5fk08f9r6hdnq69vd01307": {
+    "@qdp3fnonm1narlhr1f6a4fm14e": {
       "vars": [],
       "rows": [],
       "type": {
@@ -44262,7 +44270,7 @@
       },
       "plain": []
     },
-    "@h6conab4d51jqp04vnbf18i6e8": {
+    "@s09i3nmqpo4v2tobr10bp3nktk": {
       "vars": [],
       "rows": [],
       "type": {
@@ -45804,7 +45812,7 @@
     "@vlnpkhncfe1u68v85cqiqpp0tv": "rational in float64",
     "@ma9gib5l782ambegs8eeidem89": "float64 in complex",
     "@mneb6oh55lqeblikg2lcqdmli8": "arithmetic at rational",
-    "@gsbj5fk08f9r6hdnq69vd01307": "ordered at rational",
+    "@qdp3fnonm1narlhr1f6a4fm14e": "ordered at rational",
     "@t6e7mk7b3m18ghb5r568vnrqh7": "literal at rational",
     "@eppi8bavb8gbmspqqqjtepfmj1": "division at rational",
     "@vo7dka4u2q1vjets5pglck5r25": "shown at rational",
@@ -45818,7 +45826,7 @@
     "@ign8iv833e3hjd1fo3r139kenk": "arithmetic at mat4",
     "@l57ht6234i4d906hjnr85g9t67": "arithmetic at fixed",
     "@qqfpda7kjgoffsqtlcg8vjntnl": "literal at fixed",
-    "@h6conab4d51jqp04vnbf18i6e8": "ordered at fixed",
+    "@s09i3nmqpo4v2tobr10bp3nktk": "ordered at fixed",
     "@hf2e9f0sak3ja92aq2tbb61akj": "division at fixed",
     "@sfp5irbkrb6nep6ojrrrd3eui0": "shown at fixed"
   },
@@ -45979,7 +45987,7 @@
     "std.literal": "7dcvc79ld19gqtm284v12ik2gb",
     "std.optional": "mg9rf79fffmtc854o0k3rg26rb",
     "std.order": "5onfchl95mf48ivk5nagfbcrl4",
-    "std.ordered": "l5kgjdofic2jhlrpheoq459cie",
+    "std.ordered": "gbrk5i02v2a017fjp834gr409h",
     "std.shown": "aspvcoq99v60efgutidn1jvk8r",
     "std.tableEntry": "occvq4bnhivirq6092mjk0h8ju",
     "std.trig": "3lgfcdq42prnmov3o81qte7bd5",

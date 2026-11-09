@@ -62,6 +62,11 @@ export function canonical(sc: Scheme): Pin {
   if (noWorld.length) out.noWorld = noWorld;
   const subs = (sc.subs ?? []).filter(([f, t]) => rows.has(f) && rows.has(t)).map(([f, t]): [number, number] => [rows.get(f)!, rows.get(t)!]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   if (subs.length) out.subs = subs;
+  // Uses of an interface's operation at its variables (Ordered's <, which
+  // may not finish at Real, L88), the same way; a row it doesn't own is
+  // kept closed, so a use that would need it to do more is an error.
+  const effectsAt = (sc.effectsAt ?? []).filter(([v]) => vars.has(v)).map(([v, i, f, r]): [number, Id, number, number | null] => [vars.get(v)!, i, f, r === null ? null : rows.get(r) ?? null]);
+  if (effectsAt.length) out.effectsAt = effectsAt;
   return out;
 }
 
@@ -90,7 +95,8 @@ export function fresh(p: Pin, s: Subst): Scheme {
   return { vars: p.vars.map((v) => m.get(v)!), rows: p.rows.map((r) => m.get(r)!), type: go(p.type), plain: (p.plain ?? []).map((v) => m.get(v)!), numbers: (p.numbers ?? []).map((v) => m.get(v)!),
     ...(p.arith ? { arith: p.arith.map((v) => m.get(v)!) } : {}), ...(p.less ? { less: p.less.map((v) => m.get(v)!) } : {}), ...(p.ordered ? { ordered: p.ordered.map((v) => m.get(v)!) } : {}),
     ...(p.noWorld ? { noWorld: p.noWorld.map((r) => m.get(r)!) } : {}), ...(p.subs ? { subs: p.subs.map(([f, t]): [number, number] => [m.get(f)!, m.get(t)!]) } : {}),
-    ...(p.needs ? { needs: p.needs.map(([v, i]): [number, Id] => [m.get(v)!, i]) } : {}) };
+    ...(p.needs ? { needs: p.needs.map(([v, i]): [number, Id] => [m.get(v)!, i]) } : {}),
+    ...(p.effectsAt ? { effectsAt: p.effectsAt.map(([v, i, f, r]): [number, Id, number, number | null] => [m.get(v)!, i, f, r === null ? null : m.get(r) ?? null]) } : {}) };
 }
 
 // The pin's type with its variables made rigid: each one a type of its own
