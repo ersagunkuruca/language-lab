@@ -17,6 +17,8 @@ import { equal, pageProblem, runMain } from "./run.ts";
 import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
+import { LIBRARY } from "./library.ts";
+import { withLibraryRepresentations } from "./library-reps.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
 import { heardInto, logged, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
 
@@ -169,7 +171,13 @@ export function corePageFile(title: string, runtime: string, code: Code, info: I
 export const coreWorkletFile = (runtime: string, ir: CoreIR, name: string): string => `${runtime}\n${coreSoundScript(ir, name, "$core")}`;
 // The same for the preview's page (showPage), or why main isn't compiled
 // through the core IR.
-function soundFile(runtime: string, code: Code, info: Info, names: Names, main: Id): string {
+// Its lists stored as `lab build-web` stores them (C197): a page splits,
+// its sound's lists arrays beside the page's Html lists as written (C196).
+// The page itself still runs as written, here, while it is edited.
+export function soundFile(runtime: string, code0: Code, info0: Info, names0: Names, main: Id): string {
+  const c = withLibraryRepresentations(code0, info0, names0, main, code0.defs.filter((d) => !LIBRARY.code.nodes[d]), [], { hostMaps: true });
+  const stored = c.chosen.length && c.info && !c.info.errors.length;
+  const [code, info, names] = stored ? [c.code, c.info!, c.names] : [code0, info0, names0];
   const ir = lowerCore(code, info, names, [main]);
   const why = ir.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"}'s sound isn't compiled through the core IR: it ${why}`);

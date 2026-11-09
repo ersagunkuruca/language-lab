@@ -21,7 +21,7 @@ import { runMain } from "../src/lang/run.ts";
 import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, webCorePage } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { emitCoreJs, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
-import { corePageFile, coreWorkletFile } from "../src/lang/page.ts";
+import { corePageFile, coreWorkletFile, soundFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
 import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
@@ -296,6 +296,16 @@ test("the audio thread's answers: the page's, in order, then seeded random numbe
   assert.deepEqual([w.now(), w.now()], [10, 20]);
   assert.deepEqual(made, [10]);
   assert.throws(() => w.now(), /read the clock/);
+});
+
+// The preview's sound (C197): the audio thread's program has its lists
+// stored as `lab build-web` stores them, the pedal's sound on arrays
+// beside its page's Html lists as written (C196).
+test("the preview's audio thread plays the pedal's sound on arrays", () => {
+  const pr = loadProgram(join(import.meta.dirname, "../examples/pedal"));
+  const info = infer(pr.code, pr.pres.names, undefined, pr.options);
+  const file = soundFile("", pr.code, info, pr.pres.names, pr.named("main"));
+  assert.match(file, /array\.pushFront/);
 });
 
 test("a page with sound copies its recording beside it, and carries its program for the audio thread", () => {
