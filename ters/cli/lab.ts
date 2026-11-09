@@ -251,8 +251,8 @@ function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
   });
 }
 
-function represented(p: Program, main: Id, hostMaps: boolean, tables = false): Program {
-  try { return representedOr(p, main, hostMaps, tables); } catch (e) { fail((e as Error).message); }
+function represented(p: Program, main: Id, hostMaps: boolean, tables = false, sound = false): Program {
+  try { return representedOr(p, main, hostMaps, tables, sound); } catch (e) { fail((e as Error).message); }
 }
 
 // The program lowered for C and WebAssembly (lab native, lab wasi):
@@ -576,8 +576,9 @@ switch (command) {
   case "render": {
     const named = loaded.own.find((d) => loaded.names[d] === mainName) ?? fail(`${loaded.title} has no definition named ${mainName}`);
     // Stored as `lab compile` stores it, with the sound as the root (C137 s1).
-    const p = rest.includes("--compiled") && defined < 0 ? represented(loaded, named, true) : loaded, def = named;
-    const problem = audioProblem(p.info, def, p.names);
+    const p = rest.includes("--compiled") && defined < 0 ? represented(loaded, named, true, false, true) : loaded, def = named;
+    // Checked as written: stored, its blocks may be arrays (C196).
+    const problem = audioProblem(loaded.info, def, loaded.names);
     if (problem) fail(`${mainName} can't be a sound: ${problem}`);
     const option = (flag: string) => { const at = rest.indexOf(flag); if (at < 0) return undefined; const v = rest[at + 1] ?? fail(`${flag} needs a value`); rest.splice(at, 2); return v; };
     const out = option("-o"), size = Number(option("--block") ?? BLOCK), compiled = rest.includes("--compiled");

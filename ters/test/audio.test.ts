@@ -29,6 +29,7 @@ import { replaying } from "../src/lang/sound-thread.ts";
 import type { World } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
 import { soundOf } from "../cli/sound.ts";
+import { represented } from "../cli/represented.ts";
 import { readWav, writeWav } from "../cli/wav.ts";
 
 const lab = join(import.meta.dirname, "../cli/lab.ts");
@@ -139,6 +140,20 @@ test("lab render: the pedal over a WAV file, written as one; a program whose mai
   const bad = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/wc"), input], { encoding: "utf8" });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /main can't be a sound/);
+});
+
+// A sound's lists as arrays (C196): stored for `lab render --compiled`,
+// the pedal's blocks are arrays, built and read with no cons cell, and it
+// plays the samples its lists as written play.
+test("the pedal stored as a sound keeps its blocks as arrays, and plays what its lists play", async () => {
+  const pr = loadProgram(join(import.meta.dirname, "../examples/pedal"));
+  const p = { code: pr.code, info: infer(pr.code, pr.pres.names, undefined, pr.options), names: pr.pres.names };
+  const pedal = pr.named("pedal");
+  const stored = represented({ title: "pedal", ...p, own: pr.own.defs, reps: [], options: pr.options }, pedal, true, false, true);
+  assert.deepEqual(stored.chosen, ["List as array of List"]);
+  const block = sine(128, 0.4);
+  const [lists, arrays] = [await soundOf(p, pedal, "core"), await soundOf(stored, pedal, "core")];
+  for (let i = 0; i < 3; i++) assert.deepEqual(arrays(block), lists(block));
 });
 
 // A page's HTML as its scripts draw it.
