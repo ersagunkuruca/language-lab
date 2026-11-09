@@ -4,7 +4,7 @@
 // output, one JSON-RPC message a line; written out here rather than taken
 // from the SDK, since it is three methods.
 //
-//   node mcp/server.ts [program]     or   lab mcp [program]
+//   node mcp/server.ts [program]     or   ters mcp [program]
 //
 // Responses are kept short on purpose: the text asked for, an error, no
 // explanations around it. The one explanation is `instructions`, sent once.
@@ -159,31 +159,31 @@ export const TOOLS: Tool[] = [
     inputSchema: obj({}),
     call: () => program().undo(),
   },
-  // Sharing (SHARING.md), as lab does it: the same command run on the
+  // Sharing (SHARING.md), as ters does it: the same command run on the
   // program, which is opened again after (I186).
   {
     name: "publish",
     description: "Publish definitions as their next versions in a module file (default: <program>.module.json beside it), each version signed in its log.",
     inputSchema: obj({ names: { type: "array", items: { type: "string" }, description: "definitions to publish" }, out: str("optional: the module file") }, ["names"]),
-    call: (a) => lab("publish", [...((a.names as string[]) ?? []), ...(a.out ? ["-o", String(a.out)] : [])]),
+    call: (a) => ters("publish", [...((a.names as string[]) ?? []), ...(a.out ? ["-o", String(a.out)] : [])]),
   },
   {
     name: "fetch",
     description: "Fetch a module (a URL or a path) into the program's modules folder, every definition checked by hash and its log by its author's key.",
     inputSchema: obj({ from: str("URL or path of a .module.json") }, ["from"]),
-    call: (a) => lab("fetch", [String(a.from)]),
+    call: (a) => ters("fetch", [String(a.from)]),
   },
   {
     name: "upgrade",
     description: "Move the program onto its modules' newest versions, kept only if it still checks and its tests pass; take_names takes the author's renames.",
     inputSchema: obj({ take_names: { type: "boolean" } }),
-    call: (a) => lab("upgrade", a.take_names === true ? ["--take-names"] : []),
+    call: (a) => ters("upgrade", a.take_names === true ? ["--take-names"] : []),
   },
   {
     name: "downgrade",
     description: "Move one thing the program uses back to the version before, kept only if it still checks and its tests pass.",
     inputSchema: obj({ name: str("what to move back") }, ["name"]),
-    call: (a) => lab("downgrade", [String(a.name)]),
+    call: (a) => ters("downgrade", [String(a.name)]),
   },
   {
     name: "eval",
@@ -193,17 +193,17 @@ export const TOOLS: Tool[] = [
   },
 ];
 
-// lab itself on the open program, its answer (or why not) given back, and
-// the program opened again since lab may have changed it.
-function lab(command: string, args: string[]): string {
+// ters itself on the open program, its answer (or why not) given back, and
+// the program opened again since ters may have changed it.
+function ters(command: string, args: string[]): string {
   const p = program();
   const r = spawnSync(process.execPath, [LAB, command, p.path, ...args], { encoding: "utf8" });
   session = new Session(p.path);
-  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().replace(/^lab: /gm, "");
-  if (r.status !== 0) throw new Error(out || `lab ${command} failed`);
+  const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim().replace(/^ters: /gm, "");
+  if (r.status !== 0) throw new Error(out || `ters ${command} failed`);
   return out || "ok";
 }
-const LAB = fileURLToPath(new URL("../cli/lab.ts", import.meta.url));
+const LAB = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
 
 export function call(name: string, args: Args): { text: string; error: boolean } {
   const tool = TOOLS.find((t) => t.name === name);

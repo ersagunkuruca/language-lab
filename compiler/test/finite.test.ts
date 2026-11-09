@@ -118,7 +118,7 @@ test("WebAssembly stops where the evaluator does, with the same reason", async (
 });
 
 // Under WASI the stop writes its reason to standard error and exits with 1,
-// after what the program printed: as `lab run` does. It says the
+// after what the program printed: as `ters run` does. It says the
 // definition after the reason too (C143b).
 test("a WASI program stops with the evaluator's reason and exit code", async () => {
   const k = new Lang();

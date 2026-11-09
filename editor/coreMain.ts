@@ -22,12 +22,12 @@ import { representationsIn } from "../ters/src/lang/represent.ts";
 // command line's words, and what it gives (an exit code when it does).
 export type CoreMain = { printed: Printed; at: number; args: boolean; result: "int" | "f64" | "other" };
 
-// The program checked for running main, stored as `lab run` stores it
+// The program checked for running main, stored as `ters run` stores it
 // (C197): the program's own representations and the library's (std's Map,
 // lists) chosen by their costs, Map and Set as hash tables where they can
 // be (hostMaps: the evaluator and JavaScript have std's Table), in the
 // program's own types' fields too (GAPS.md M2). A choice the rewrite
-// can't make, which `lab run` refuses, runs as written.
+// can't make, which `ters run` refuses, runs as written.
 export function checkedForRun(code: Code, names: Names, def: Id): { code: Code; names: Names; info: Info; chosen: string[] } {
   const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
   const first = infer(code, names);
@@ -58,7 +58,7 @@ export function coreMain(code: Code, info: Info, names: Names, def: Id, args: bo
 // Whether anything main reaches, the library's definitions included, runs
 // a function backwards by the relational interpreter, the one that says
 // where a reading stopped. A solve the equation solver plans (impact's and
-// break's first touch, given a gap function) lowers as `lab run` lowers it
+// break's first touch, given a gap function) lowers as `ters run` lowers it
 // (I191: break's Run main took 30 s in the evaluator, 10 compiled).
 export function runsBackwards(code: Code, main: Id): boolean {
   const seen = new Set<Id>([main]), todo = [main];

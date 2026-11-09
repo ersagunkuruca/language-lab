@@ -118,7 +118,7 @@ The compiler's loop is the fold of `cells` (values linked as written). A
 list made by `characters` or `range` is folded on the string or the count,
 without building the list. Peano `Nat` has an `int` representation,
 written in the language, whose fold is a fold over `range(n)` and so a
-counted loop: `factorial` still says `zero` and `succ`, and `lab run
+counted loop: `factorial` still says `zero` and `succ`, and `ters run
 examples/numbers` runs it on Ints. Linked lists in general (arrays, ropes)
 and fusing a user's own list producer with its consumer are still open
 (NUMBERS.md, "Folds run the way their value is stored").

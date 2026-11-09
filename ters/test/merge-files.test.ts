@@ -72,7 +72,7 @@ test("names merge on their own; a definition removed on one side goes", () => {
   assert.equal((r.merged as typeof gone).nodes.one, undefined);
 });
 
-test("lab diff says what changed by definition; lab merge is git's driver", () => {
+test("ters diff says what changed by definition; ters merge is git's driver", () => {
   const ours = withDef(base, "one");
   ours.nodes.f.target = "builtin.add";
   assert.deepEqual(diffLines(base, ours), ["added one", "changed area (1 node)"]);

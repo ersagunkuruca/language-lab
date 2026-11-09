@@ -45,14 +45,14 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
-// L123), which takes the evaluator minutes, stored as lab run stores it or
+// L123), which takes the evaluator minutes, stored as ters run stores it or
 // not (the evaluator's speed is L118c, BACKLOG I195).
 const skip = new Set(["agent"]);
 // numbers counts in Peano Nat as defined: the evaluator runs out of memory
-// and the printer's recursion out of stack. It is checked as `lab run`
+// and the printer's recursion out of stack. It is checked as `ters run`
 // stores it (cli/represented.ts: Nat as an Int), in both, which is what
 // either runs (I195); each representation's jobs are checked against the
-// type's own by `lab test`.
+// type's own by `ters test`.
 const asRun = new Set(["numbers"]);
 const stored = (name: string, p: ReturnType<typeof load>, main: Id): ReturnType<typeof load> => {
   if (!asRun.has(name)) return p;
@@ -96,7 +96,7 @@ function world(files: Record<string, string>): { rt: Runtime; out: { printed: st
   return { rt: { print: (s) => out.printed.push(s), world: w }, out };
 }
 
-// A process run to its end (T14): each lab run spends seconds checking the
+// A process run to its end (T14): each ters run spends seconds checking the
 // library, so a test starts the ones it needs side by side.
 const spawn = (args: string[], cwd?: string): Promise<[string, string, number]> =>
   new Promise((done) => { execFile(process.execPath, args, { cwd, encoding: "utf8" }, (e, out, err) => done([out, err, e ? Number(e.code ?? 1) : 0])).stdin?.end(); });
@@ -128,11 +128,11 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
   assert.deepEqual(refused, [], "every example lowers since C137c24");
 });
 
-// lab compile --core (C137c5): a module that runs main in Node, printed
-// from the core IR, says what lab run says, standard error and exit
+// ters compile --core (C137c5): a module that runs main in Node, printed
+// from the core IR, says what ters run says, standard error and exit
 // code too.
-test("lab compile --core writes a module that runs main as lab run does", async () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(examples, "wc"), relations = join(examples, "relations");
+test("ters compile --core writes a module that runs main as ters run does", async () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), wc = join(examples, "wc"), relations = join(examples, "relations");
   const dir = mkdtempSync(join(tmpdir(), "core-"));
   writeFileSync(join(dir, "a.txt"), "two words\nand three more\n");
   const run = (args: string[]) => spawn(args, dir);
@@ -146,7 +146,7 @@ test("lab compile --core writes a module that runs main as lab run does", async 
     run([lab, "compile", unlowered(), "--core", "-o", "hole.mjs"]), run([lab, "run", wc, ...args]), run([lab, "run", relations]),
     run([lab, "compile", counts, "--core", "-o", "counts.mjs"]), run([lab, "run", counts]),
   ]);
-  // C181: waiting inside count, as lab run has it.
+  // C181: waiting inside count, as ters run has it.
   assert.equal(madeCounts[2], 0, madeCounts[1]);
   assert.deepEqual(await run(["counts.mjs"]), wantCounts);
   assert.equal(wantCounts[0].trim(), "2");
@@ -197,7 +197,7 @@ test("the pages whose main lowers show the same HTML, before and after their han
   console.log(`pages ${ran.join(", ")}`);
 });
 
-// Lowered as lab build-web lowers it, main alone: dice's Roll draws from
+// Lowered as ters build-web lowers it, main alone: dice's Roll draws from
 // the world though main's own row has no Random (it rolled 1 and 1 every
 // time, the generator's unseeded zeros).
 test("a page lowered from main alone draws its handlers' randomness from the world", () => {
@@ -223,11 +223,11 @@ function handlersOf(v: Value, call: (f: Value, ...xs: Value[]) => Value): Value[
   return [...own, ...fromList(d.fields[2]).flatMap((c) => handlersOf(c, call))];
 }
 
-// lab build-web --core (C137c9): the page's script, printed from the core
+// ters build-web --core (C137c9): the page's script, printed from the core
 // IR, draws what compile.ts's page draws, in a fake document, and again
 // after each element with a click handler is clicked, in order.
-test("lab build-web --core writes a page that draws and reacts as lab build-web's", async () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), compass = join(examples, "compass");
+test("ters build-web --core writes a page that draws and reacts as ters build-web's", async () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), compass = join(examples, "compass");
   const dir = mkdtempSync(join(tmpdir(), "core-page-"));
   const build = (flags: string[]) => spawn([lab, "build-web", compass, ...flags, "-o", join(dir, `${flags.length}.html`)]);
   const page = ([, err, status]: [string, string, number], flags: string[]) => {

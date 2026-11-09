@@ -4,7 +4,7 @@ GAPS.md round 11's program (docs/reports/GAPS.md): a plan of tasks run by
 a crew of workers in simulated minutes.
 
 ```
-lab run compiler/gaps/crew plan.txt
+ters run compiler/gaps/crew plan.txt
 ```
 
 A plan has one task per line, its minutes and what it waits for

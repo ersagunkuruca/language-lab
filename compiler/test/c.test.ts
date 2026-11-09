@@ -188,7 +188,7 @@ test("equal on data in C, and folds over nested data: a rose tree's List of chil
 });
 
 // The functions of name that are in C, by name.
-// A program as `lab native` lowers it: inverse(f, …) of a named f written
+// A program as `ters native` lowers it: inverse(f, …) of a named f written
 // out (inverses.ts), which C can't solve (calc's reader, C110).
 const native = (code: Code, info: Info, names: Names, roots: Id[]) => { const q = withInverses(code, info, names); return lowerScalar(q.code, q.info, q.names, roots, { data: true }); };
 function inC(name: string) {

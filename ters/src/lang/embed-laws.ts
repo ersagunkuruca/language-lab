@@ -5,7 +5,7 @@
 //   ι(−x) = −ι(x)             x < y exactly when ι(x) < ι(y)
 //
 // each written as a test over the program (a definition that performs
-// Check), so lab test runs it on small values like any test. A law whose
+// Check), so ters test runs it on small values like any test. A law whose
 // operation one of the types hasn't got doesn't type, and is left out.
 // Into Float64 an equation holds only as closely as Float64 rounds, so it
 // is checked with near (L197).

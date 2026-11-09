@@ -731,7 +731,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // The person's settings too (L214b2), where the program answers them: an
   // ask no handler of the program's answers is the world's.
   if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); }
-  // Check too, where the program handles it (T7e2: `lab test --compiled`
+  // Check too, where the program handles it (T7e2: `ters test --compiled`
   // runs a test under a handler of its expects).
   if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
   // A program's own effect whose operations are answered later (step 3:
@@ -1437,7 +1437,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // For JavaScript from the core IR (C137c10), a draw nothing seeded
           // is the world's, as the evaluator's is (rt.world.random). Asked
           // whatever main's row says: a page's handlers draw though main
-          // doesn't (lab build-web lowers main alone, and dice rolled 1 and
+          // doesn't (ters build-web lowers main alone, and dice rolled 1 and
           // 1 every time).
           if (opts.host) return { k: "if", cond: { k: "rt", fn: "rand.unset", args: [] }, then: { k: "world", op: "random", aborts: false, args: [], t: "f64" }, else: next, t: "f64" };
           if (!worldRandom) return next;

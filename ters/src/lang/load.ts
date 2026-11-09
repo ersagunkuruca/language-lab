@@ -36,7 +36,7 @@ export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidde
 export const optionsWith = (pins: Pins | undefined): Options => (pins && Object.keys(pins).length ? { ...checkOptions, pins: { ...LIBRARY.pins, ...pins } } : checkOptions);
 
 // The modules a program folder uses beyond the library: every file in its
-// `modules` folder, such as `lab publish` writes (SHARING.md, L111), each
+// `modules` folder, such as `ters publish` writes (SHARING.md, L111), each
 // checked to be what it says.
 export function programModules(dir: string): Module[] {
   const at = join(dir, "modules");

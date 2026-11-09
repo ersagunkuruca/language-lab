@@ -141,7 +141,7 @@ merge to live (the deploy step itself is 1.3 min). A separate workflow,
 **Check main**, runs on the same push, after it, and *reports*: a red
 check on the commit, which the next PR fixes (or reverts). It never blocks
 the site. Trade-off: a broken change is live for the few minutes until
-someone sees the red check. For a lab with one user who wants to see the
+someone sees the red check. For a ters with one user who wants to see the
 change, that beats a correct site 20 minutes late, and today's failure
 shows the other risk is real too: one red check freezes every change.
 

@@ -1,7 +1,7 @@
 // A page program shown live, the way the editor previews one (WEB.md): its
 // `main` run by the evaluator against the browser's world (browser.ts) and
 // its Html mounted (html.ts) into whatever element the caller gives it.
-// What `lab build-web` does with compiled code, without compiling, so the
+// What `ters build-web` does with compiled code, without compiling, so the
 // preview can follow every edit. Files go to localStorage under the
 // program's name, like the built page's; the clock runs on the frames the
 // caller hands out, and stops when the preview does.
@@ -115,7 +115,7 @@ export function replayEvents(root: Node_, log: LogEntry[]): void {
   });
 }
 
-// A page as one HTML file around its scripts: what `lab build-web` writes,
+// A page as one HTML file around its scripts: what `ters build-web` writes,
 // and what the editor's "Save page" gives you. Nothing is loaded from
 // anywhere else.
 export function pageShell(title: string, ...scripts: string[]): string {
@@ -134,7 +134,7 @@ export const PAGE_BASE = [
   ":where(img, svg, canvas, video) { max-width: 100%; }",
 ].join("\n");
 
-// The same document with `body` already drawn in it: `lab run` on a page
+// The same document with `body` already drawn in it: `ters run` on a page
 // gives this with no scripts, the page as static HTML.
 export function pageDocument(title: string, body: string, ...scripts: string[]): string {
   const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -171,7 +171,7 @@ export function corePageFile(title: string, runtime: string, code: Code, info: I
 export const coreWorkletFile = (runtime: string, ir: CoreIR, name: string): string => `${runtime}\n${coreSoundScript(ir, name, "$core")}`;
 // The same for the preview's page (showPage), or why main isn't compiled
 // through the core IR.
-// Its lists stored as `lab build-web` stores them (C197): a page splits,
+// Its lists stored as `ters build-web` stores them (C197): a page splits,
 // its sound's lists arrays beside the page's Html lists as written (C196).
 // The page itself still runs as written, here, while it is edited.
 export function soundFile(runtime: string, code0: Code, info0: Info, names0: Names, main: Id): string {

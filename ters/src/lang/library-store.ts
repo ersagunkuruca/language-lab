@@ -1,6 +1,6 @@
 // The library's check, kept on disk between processes (I193). Checking
 // the library takes about 1.4 s and every process did it first: each
-// `lab run`, `lab check`, the MCP and every test file. The first process
+// `ters run`, `ters check`, the MCP and every test file. The first process
 // to check it writes the result to .lab/ (git ignores it), and the others
 // read it back in about 0.2 s.
 //

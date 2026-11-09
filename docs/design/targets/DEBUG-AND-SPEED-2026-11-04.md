@@ -13,7 +13,7 @@ compiler can work it out ahead of time by inlining or precomputing.
 - **A map beside the output, not in it.** The map takes output positions to
   node ids, and says which node's value a variable holds. It holds ids only,
   and the editor joins it with the names file. The map is for our own tools
-  (the editor, `lab`). Browser devtools source maps come later, and are a
+  (the editor, `ters`). Browser devtools source maps come later, and are a
   plus, not a necessity (Ersagun 2026-11-04: "We are not trying to create a
   language that just spits out JS").
 - **Pausing and stepping happen in the evaluator.** A compiled run records
@@ -22,14 +22,14 @@ compiler can work it out ahead of time by inlining or precomputing.
 - **Profiling** is the only other setting, added when someone needs it. A
   profile keeps chosen call boundaries so time has somewhere to land.
 
-## What compiled output carried (lab compile, 2026-11-04, core IR)
+## What compiled output carried (ters compile, 2026-11-04, core IR)
 
 1. **Solves ask the evaluator's solver at run time** and ship the program's
    whole node table (calc: 337 KB of escaped JSON, 2,529 nodes). compile.ts
    printed the closed form instead, for example relations' `split` as
    `(s + d) / 2` and `(s - d) / 2`. Row C167.
 2. **Every definition is lowered**, not only what main reaches:
-   `lowerCore(p.code, p.info, p.names, p.own)` in ters/cli/lab.ts. calc's
+   `lowerCore(p.code, p.info, p.names, p.own)` in ters/cli/ters.ts. calc's
    unreached `inverse` is its only solve, so it alone brings in the node
    table. calculus: 31 of 41 functions unreached. Row C168, done
    (calc 1,049 KB → 203 KB).

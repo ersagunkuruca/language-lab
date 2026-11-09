@@ -26,7 +26,7 @@
 // through (inlined, up to a depth); a definition's inputs are every part
 // unless the caller says otherwise. The compiler (L43c) and the editor
 // (L43d) use the masks. `gradeMistakes` refuses one thing: reading a part
-// a value can't have (L43e's first step; `lab check` reports it).
+// a value can't have (L43e's first step; `ters check` reports it).
 //
 // Prior art: Gaalop (Dietmar Hildenbrand) finds which blades of each
 // result can be nonzero and generates code for those only; this is the
@@ -153,7 +153,7 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   found = new Map();
   cache.set(code, found);
   // Made only for a program that has an algebra (I193: making it resolves
-  // the arithmetic of the whole library, 0.9 s of every `lab check`).
+  // the arithmetic of the whole library, 0.9 s of every `ters check`).
   let runner: ReturnType<typeof makeRunner> | undefined;
   const made = () => (runner ??= makeRunner(code, info, { print: () => {} }));
   const r = { value: (d: Id) => made().value(d), call: (...a: Parameters<ReturnType<typeof makeRunner>["call"]>) => made().call(...a) };

@@ -1,15 +1,15 @@
 # Tests in the language (T7)
 
-Status (2026-10-31): T7a built: std's `Check`, `lab test`, and small
+Status (2026-10-31): T7a built: std's `Check`, `ters test`, and small
 values (src/lang/tests.ts). The small values come from the types in
 TypeScript for now: Float64 from the fixed list below, Int from −3 to 3,
 Text, Bool, lists up to three long of the first three of their items,
 the program's records and cases from their fields, and a type variable at
 Int. Running constructors backwards with relate is still the plan (§2).
-T7b built too: `lab test` reads accepted answers from `examples.json`
+T7b built too: `ters test` reads accepted answers from `examples.json`
 in the form below (the older form, a bare list of inputs, still reads as
 inputs with no answer) and checks any definition that has one, compared
-as printed. T7c's local half is built: `lab test` keeps each result in
+as printed. T7c's local half is built: `ters test` keeps each result in
 `.lab/checks.json` under the key below and skips a test whose key is
 kept (cli/checks.ts; `--fresh` runs everything). Keeping it in CI's cache,
 T7d and T7e are backlog rows.
@@ -24,7 +24,7 @@ implementation, and the target's quirks staying out of the language.
 
 A test is an ordinary definition that performs `Check`, a std effect with
 one operation, `expect(holds, what)`. Who handles `Check` decides what a
-failure means: the editor shows it on the definition, `lab test` prints
+failure means: the editor shows it on the definition, `ters test` prints
 it, and CI fails the run. The values a test runs on come from the same
 two places the editor already uses, the saved inputs in `examples.json`
 and small values of each input's type, which the language enumerates by
@@ -113,7 +113,7 @@ Unison's cached test results.
   (built). Only a test whose row is Check, search, Abort or divergence is
   kept; one that reads the clock, random numbers or the world isn't. The
   evaluator's hash is that of its source files.
-- **In CI**, `lab test` runs only tests whose key isn't in the Actions
+- **In CI**, `ters test` runs only tests whose key isn't in the Actions
   cache. CI's cost stays near zero when nothing a test uses changed,
   which fits the budget rule (ci-cost).
 - **In the editor**, a save re-checks the dependents of what changed, so
@@ -121,7 +121,7 @@ Unison's cached test results.
 
 ## 5. What runs a test
 
-`lab test <program>` runs every test and accepted answer in the program
+`ters test <program>` runs every test and accepted answer in the program
 with the evaluator, and prints each failure with its values. With
 `--compiled` it runs them compiled to JS too, and the two must agree. (T7e1: accepted answers, on the core IR's JavaScript. T7e2: each test too, as a definition written in the language that handles its Check and gives the first expect that failed, compiled like any other; a test that searches isn't run compiled yet.)
 That one flag replaces most of the TypeScript sweeps that compare the
@@ -132,7 +132,7 @@ evaluator with compiled JS.
 - **Example sweeps.** "Every example's main gives the same answer both
   ways" becomes an accepted answer per example plus `--compiled`.
   `test/agreement.test.ts` becomes laws: `inverse(f, f(x)) = x` over small
-  values. The TypeScript harness that runs `lab test` over every example
+  values. The TypeScript harness that runs `ters test` over every example
   stays, and is about ten lines.
 - **L108d**, representation laws: for each representation, the compiler
   writes the law `job(meaning(x)) = meaning(job′(x))` as a test definition,
@@ -156,8 +156,8 @@ evaluator with compiled JS.
 
 | step | what | lane | size |
 |---|---|---|---|
-| T7a | `Check` in std, the small-values enumerator, `lab test` in the evaluator | L | M |
-| T7b | Accepted answers in `examples.json`, read and checked by `lab test` (built) | L | S |
+| T7a | `Check` in std, the small-values enumerator, `ters test` in the evaluator | L | M |
+| T7b | Accepted answers in `examples.json`, read and checked by `ters test` (built) | L | S |
 | T7c | Results cached by hash, locally (built) and in CI | L, T | M |
 | T7d | The editor: a tick or the difference on Run, and an accept button; a failing law shown on its definition | E | M |
 | T7e | Example sweeps moved to accepted answers and laws; `--compiled` | T | M |

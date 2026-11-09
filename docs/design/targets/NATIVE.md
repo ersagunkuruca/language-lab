@@ -4,7 +4,7 @@ Design note for BACKLOG.md C17 (ROADMAP step 6, COMPILER.md "Targets
 beyond JavaScript", route 2). Written 2026-10-24. The last section is the
 plan.
 
-**Status.** Stages N1 to N4 are done: whole programs run natively, built by `lab native`.
+**Status.** Stages N1 to N4 are done: whole programs run natively, built by `ters native`.
 N5a is done: measured against compiled JavaScript and WebAssembly (below), and
 cells come from free lists. N5b and N5c are done: a match on a cell nobody else holds
 moves its fields out, and the cell becomes the arm's next cell of the same
@@ -104,7 +104,7 @@ holds one item on, and `first of array` has no answer when it is empty.
     so calc's 100,000 nested parentheses need no heap copy as compiled
     JavaScript's do (C21). Its Int is the exit code; an Abort nothing
     handles prints its reason to standard error and exits with 1;
-  - `lab native <program> [-o out]` writes the C and builds it with `cc`
+  - `ters native <program> [-o out]` writes the C and builds it with `cc`
     (or `$CC`).
 
   wc, ledger, chapters, calc, queens and a fixture that lists folders,
@@ -201,12 +201,12 @@ call. For those, clang's `musttail` is used where it exists. Elsewhere the
 compiler's sibling calls at -O2 handle them, and that will be measured.
 
 **Deep recursion.** A real nesting (calc's parentheses) takes C stack. As
-`lab compile` does, `main` runs on a thread with a big stack (1 GB of
+`ters compile` does, `main` runs on a thread with a big stack (1 GB of
 address space, used only as deep as the program goes).
 
 **One file.** The program and its runtime are one `.c` file. It needs the
 C library, and for the world POSIX (`sys/stat.h`, `dirent.h`) and
-threads (`-pthread`). `lab native` writes it and calls `cc`. Windows
+threads (`-pthread`). `ters native` writes it and calls `cc`. Windows
 would need `_stat` and `FindFirstFile` in their place.
 
 ## Plan
@@ -232,7 +232,7 @@ would need `_stat` and `FindFirstFile` in their place.
 4. **N4. Int, Text and the world: whole programs.**
    - Int and Text as above. Done (N4a).
    - Console, files and arguments over the C library.
-   - main on a big stack; `lab native`. Done (N4b).
+   - main on a big stack; `ters native`. Done (N4b).
    - Check: wc, ledger, chapters and calc, printing and exiting as the
      evaluator does.
 5. **N5. Reuse, then measure.**
@@ -246,7 +246,7 @@ would need `_stat` and `FindFirstFile` in their place.
 `node gaps/bench-native.ts` in compiler/ (needs a C compiler) runs each
 program as a whole process, the way a user starts it, and reads wall time
 and peak memory (ru_maxrss) from `wait4`. Compiled JavaScript is
-`lab compile` under node; WebAssembly is `wasi.ts`'s command under
+`ters compile` under node; WebAssembly is `wasi.ts`'s command under
 node:wasi (wasmtime isn't on this machine, so Node's start-up is in its
 numbers). Median of 5, one x86-64 container, gcc -O2, 2026-10-24:
 
@@ -259,7 +259,7 @@ numbers). Median of 5, one x86-64 container, gcc -O2, 2026-10-24:
 | ledger, 200,000 entries | 517 ms, 43 MB | 835 ms, 175 MB | 1268 ms, 158 MB |
 | chapters, 1000 into a folder | 213 ms, 4.1 MB | 371 ms, 68 MB | 673 ms, 71 MB |
 
-The compiled JavaScript column is after C26: the bench showed `lab compile`'s
+The compiled JavaScript column is after C26: the bench showed `ters compile`'s
 output spending about 140 ms starting a worker thread for a big stack it no
 longer needed since C21, and main now runs on Node's own (queens' start-up
 was 214 ms, Countdown 317).

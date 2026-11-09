@@ -17,10 +17,10 @@ of them parses anything.
 
 | runner | what it is | where you meet it |
 |---|---|---|
-| **evaluator** | walks the tree directly; the definition of the language | the editor's Run and Show values, `lab run` |
-| **JavaScript** | the tree compiled to plain JS | `lab compile`, every page (`lab build-web`, `lab build-app`), the audio thread |
+| **evaluator** | walks the tree directly; the definition of the language | the editor's Run and Show values, `ters run` |
+| **JavaScript** | the tree compiled to plain JS | `ters compile`, every page (`ters build-web`, `ters build-app`), the audio thread |
 | **WebAssembly** | compiled to WASM with the host's garbage collector, or as a WASI command needing no JavaScript | `npm run wasi -- wc` in compiler/, then wasmtime |
-| **native** | compiled to C, built with `cc`, memory by reference counting | `lab native` |
+| **native** | compiled to C, built with `cc`, memory by reference counting | `ters native` |
 | **GPU** | a pixel function compiled to a WGSL shader | the editor's live picture, shaders.html |
 
 The evaluator is the reference. Every compiled target is tested against
@@ -47,18 +47,18 @@ reported, and the editor shows that reason.
 
 ## From the command line
 
-In `ters/`, with `node cli/lab.ts` (or `lab` if linked):
+In `ters/`, with `node cli/ters.ts` (or `ters` if linked):
 
 ```sh
-lab run examples/wc a.txt         # main with the evaluator, the real console and files
-lab check examples/wc             # types of every definition
-lab compile examples/wc -o wc.mjs # a JavaScript module that runs main
-lab compile examples/wc --core -o wc.mjs # the same, printed from the core IR as WebAssembly and C are (C137, to replace the first)
-lab native examples/wc -o wc      # a native program through C
-lab build-web examples/dice       # one HTML file running the page
-lab build-web examples/compass --core # the same, printed from the core IR (C137; not every page lowers yet)
-lab build-app examples/dice       # the page as a phone app (PWA + Capacitor)
-lab render examples/pedal in.wav  # play a sound over a WAV file
+ters run examples/wc a.txt         # main with the evaluator, the real console and files
+ters check examples/wc             # types of every definition
+ters compile examples/wc -o wc.mjs # a JavaScript module that runs main
+ters compile examples/wc --core -o wc.mjs # the same, printed from the core IR as WebAssembly and C are (C137, to replace the first)
+ters native examples/wc -o wc      # a native program through C
+ters build-web examples/dice       # one HTML file running the page
+ters build-web examples/compass --core # the same, printed from the core IR (C137; not every page lowers yet)
+ters build-app examples/dice       # the page as a phone app (PWA + Capacitor)
+ters render examples/pedal in.wav  # play a sound over a WAV file
 ```
 
 `main` gets the arguments as a list of texts and returns the exit code. An
@@ -170,7 +170,7 @@ Generators are only for code that can give several answers.
 |---|---|---|---|
 | one `+` per type | a generic `+ − · <` at a known type | the type's own operation; a generic definition gets a copy per type (monomorphisation, as MLton does) | fixed rule |
 | ways | an interface field left to its ways (`by its ways`) | the cheapest grounded set of ways for the type and target (Knuth 1977), `src/lang/ways.ts` | cost-based |
-| representations | a type the program uses | the chooser's pick replaces its constructors, matches and jobs; `lab check` says what it picked | cost-based |
+| representations | a type the program uses | the chooser's pick replaces its constructors, matches and jobs; `ters check` says what it picked | cost-based |
 | derivatives and inverses | `derivative(f)`, `inverse(f, …)` of a known `f` | the derivative's code; a solve | fixed rule |
 | folds | `fold` of `range(n)` or `characters(t)`; a fold that only adds Ints | a counted loop; a loop over the text; an accumulator from the front | fixed rule (the table) |
 | list chains | `keep`- and `map`-shaped steps between `split` and `length` | one loop, no list between | fixed rule |

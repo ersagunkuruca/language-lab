@@ -6,9 +6,9 @@ An LLM reads, changes, runs and tests a Ters program through the
 [Model Context Protocol](https://modelcontextprotocol.io). It is also how we
 find out what working on Ters is like for an LLM.
 
-    lab mcp [program]        # or: node ters/mcp/server.ts [program]
+    ters mcp [program]        # or: node ters/mcp/server.ts [program]
 
-For Claude Code: `claude mcp add ters -- node /path/to/ters/cli/lab.ts mcp`.
+For Claude Code: `claude mcp add ters -- node /path/to/ters/cli/ters.ts mcp`.
 
 ## Principles
 
@@ -59,7 +59,7 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 | `split(at, on, find?)` | a part becomes a match on a variable, one case per variant |
 | `rename(at, name)`, `comment(at, text)` | side tables only; uses follow the id |
 | `define(name, kind, params?)`, `add_input(at, name)`, `remove(at)` | definitions |
-| `pin(at, off?)` | a definition's type held as it is now (signatures.ts), so edits inside keep it and a body can rely on its inputs' types; a folder keeps pins in signatures.json, which `lab` reads too (L173c) |
+| `pin(at, off?)` | a definition's type held as it is now (signatures.ts), so edits inside keep it and a body can rely on its inputs' types; a folder keeps pins in signatures.json, which `ters` reads too (L173c) |
 | `undo()` | the last edit |
 
 `find` picks a part inside `at` by its text, copied from `view` (the `#id`s

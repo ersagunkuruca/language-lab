@@ -182,7 +182,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
 
 // The program with its inverses expanded, checked again with its own
 // options; as it was where the expansion doesn't check (core-js.ts's
-// lowering, and `lab native` and WebAssembly's, which lower scalar.ts's
+// lowering, and `ters native` and WebAssembly's, which lower scalar.ts's
 // core IR straight).
 export function withInverses(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   const inv = expandInverses(code, names);

@@ -35,18 +35,18 @@ and the nested to-do list in [reactive.html](https://ersagunkuruca.github.io/lan
 Bounce, Constructions and Spacetime do their geometry in Clifford algebras,
 one algebra for rotations, reflections and motions.
 
-## The `lab` command
+## The `ters` command
 
-`lab` is Ters's command line, `ters/cli/lab.ts`. After `npm ci` in `ters/`,
-run it as `npm run lab -- <command>` there (or `node cli/lab.ts <command>`):
-`lab run` runs a saved program, `lab compile` turns it into a JavaScript
-module, `lab check` lists its errors and each definition's type, and
-`lab test` runs its tests. `lab` with no command lists the rest.
+`ters` is Ters's command line, `ters/cli/ters.ts`. After `npm ci` in `ters/`,
+run it as `npm run ters -- <command>` there (or `node cli/ters.ts <command>`):
+`ters run` runs a saved program, `ters compile` turns it into a JavaScript
+module, `ters check` lists its errors and each definition's type, and
+`ters test` runs its tests. `ters` with no command lists the rest.
 
 ## Building
 
 The editor has no packages of its own and uses `ters/`'s: run `npm ci` in
-`ters/`, then `npm run build-editor`. `lab build-web <program>` builds
+`ters/`, then `npm run build-editor`. `ters build-web <program>` builds
 one app as a page, and `editor/build.ts` builds every app onto the site
 (`docs/design/targets/WEB.md`). Open the built site over http (for example
 `python3 -m http.server` at the repo's root, where it is built): opened from disk, the editor can't read
@@ -85,7 +85,7 @@ Each goal says whether it's built, partly built, or a rule we hold to.
   is hosted and never change what the language means. *Targets built; the
   rule holds.*
 - **Tests in the language.** A test is a definition that checks something,
-  run by `lab test`. *Built.*
+  run by `ters test`. *Built.*
 
 ## Docs
 

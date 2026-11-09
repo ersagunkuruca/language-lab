@@ -1,4 +1,4 @@
-// Pages (WEB.md): `lab build-web` writes one HTML file, and its script, run
+// Pages (WEB.md): `ters build-web` writes one HTML file, and its script, run
 // against a fake document and a fake localStorage, draws the page and
 // reacts to events; the browser world keeps files in localStorage. The
 // evaluator-vs-compiled comparison is compiler/test/web.test.ts.
@@ -19,7 +19,7 @@ import { PAGE_HANDLER, PAGE_VIEW } from "../src/lang/std.ts";
 import { CHOICE } from "../src/lang/types.ts";
 import { RUNTIME_HANDLES } from "../src/lang/run.ts";
 
-const lab = join(import.meta.dirname, "../cli/lab.ts");
+const lab = join(import.meta.dirname, "../cli/ters.ts");
 const dir = mkdtempSync(join(tmpdir(), "web-"));
 
 const memoryStore = () => {
@@ -27,7 +27,7 @@ const memoryStore = () => {
   return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), get length() { return m.size; }, key: (i: number) => [...m.keys()][i] ?? null };
 };
 
-test("lab build-web: one HTML file whose script draws the page and reacts", () => {
+test("ters build-web: one HTML file whose script draws the page and reacts", () => {
   const p = pageProgram();
   const file = join(dir, "page.json");
   writeFileSync(file, toFile({ title: "converter", typed: true, code: p.k.code, names: p.k.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {} }, LIBRARY.code));
@@ -52,7 +52,7 @@ test("lab build-web: one HTML file whose script draws the page and reacts", () =
   assert.match(root.html(), /<li>milk<\/li><li>eggs<\/li>/);
 });
 
-test("lab build-web refuses a main that isn't a page", () => {
+test("ters build-web refuses a main that isn't a page", () => {
   const r = spawnSync(process.execPath, [lab, "build-web", join(import.meta.dirname, "../examples/wc")], { encoding: "utf8", cwd: dir });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /main can't be a page: a page's main takes nothing/);
@@ -111,10 +111,10 @@ test("the converter app: typing in any field moves the others, and text with no 
 // examples/dice, the app at apps/dice.html: a Roll button drawing from the
 // world, a hundred seeded rolls that are the same every time, and a status
 // line that reads the clock, so it runs again each frame.
-// Both ways of making the page: `lab build-web`'s bundle, and the editor's
+// Both ways of making the page: `ters build-web`'s bundle, and the editor's
 // "Save page" (page.ts corePageFile: the whole runtime prebuilt, then the
 // program printed from the core IR as a plain script), which has two scripts.
-for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
+for (const way of ["ters build-web", "Save page"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
   const { webCorePage, corePageRuntime } = await import("../cli/web.ts");
   const { corePageFile } = await import("../src/lang/page.ts");
   const { loadProgram } = await import("../src/lang/load.ts");
@@ -122,7 +122,7 @@ for (const way of ["lab build-web", "Save page"]) test(`the dice app (${way}): s
   const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.deepEqual(info.errors, []);
-  const html = way === "lab build-web" ? await webCorePage("Dice", p.code, info, p.pres.names, p.named("main"))
+  const html = way === "ters build-web" ? await webCorePage("Dice", p.code, info, p.pres.names, p.named("main"))
     : corePageFile("Dice", await corePageRuntime(), p.code, info, p.pres.names, [p.named("main")], p.named("main"));
   // nothing is loaded from anywhere: inline scripts only
   assert.doesNotMatch(html, /<script src|<link /);
@@ -176,7 +176,7 @@ test("what a page's views and handlers may do is named once, and the runtime han
   for (const e of PAGE_VIEW) assert.ok(e === CHOICE || PAGE_HANDLER.includes(e), e);
 });
 
-test("lab run on a page prints it once as static HTML: values drawn, no script", () => {
+test("ters run on a page prints it once as static HTML: values drawn, no script", () => {
   const r = spawnSync(process.execPath, [lab, "run", join(import.meta.dirname, "../examples/converter")], { encoding: "utf8", cwd: dir });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^<!doctype html>/);
@@ -205,7 +205,7 @@ test("every example app the site builds compiles to a page", async () => {
 });
 
 // A page whose program declares its own effect bundles hosts/js.js into
-// its script (FOREIGN.md, L69a3), as `lab build` does for a program run
+// its script (FOREIGN.md, L69a3), as `ters build` does for a program run
 // by node: the page asks the host and draws its answer.
 test("a page bundles its hosts/js.js and asks it", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");

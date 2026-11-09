@@ -18,7 +18,7 @@ import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { skip } from "./c-harness.ts";
 
-const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
 // effect Device = battery() → Float64 | name of(id: Int) → Text | ready() → Bool,
 // and main printing what they answer, under a handler of Abort.
@@ -81,7 +81,7 @@ test("an operation hosts/c.c doesn't answer is a refusal to build, naming it (L6
   assert.match(part.stderr, new RegExp(`hosts/c\\.c has no answer for (name of|ready)`));
 });
 
-test("lab hosts --c: a hosts/c.c to start from, which builds and fails each operation (L69b1)", { skip }, () => {
+test("ters hosts --c: a hosts/c.c to start from, which builds and fails each operation (L69b1)", { skip }, () => {
   const p = program();
   const first = built(p, "");
   const skeleton = spawnSync(process.execPath, [lab, "hosts", first.dir, "--c"], { encoding: "utf8" }).stdout;

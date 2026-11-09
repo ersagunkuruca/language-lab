@@ -23,7 +23,7 @@ embedding float64 in complex = embedding(map: (x) → complex(x, 0))
 `Embedding a b` has one field, `map : (a) → b`. With it the language
 gets three things, each a step below:
 
-1. **The laws are checked.** `lab test` checks the laws above for every
+1. **The laws are checked.** `ters test` checks the laws above for every
    operation both types have (the Arithmetic and Ordered implementations
    they share), on generated values, the way rep-laws.ts checks a
    representation's jobs through `meaning` (L108d).
@@ -87,7 +87,7 @@ ask him before E work starts.
 
 - **L208a, this note.**
 - **L208b** (done). std's `Embedding a b` and the check of a declaration: `map`'s
-  type, one per pair, both types closed. `lab test` checks its laws for
+  type, one per pair, both types closed. `ters test` checks its laws for
   every Arithmetic and Ordered operation the two types share (rep-laws.ts
   generates the values). The library declares Int into Rational, Int and
   Rational into Float64 (a lossy one: its laws hold only approximately, as

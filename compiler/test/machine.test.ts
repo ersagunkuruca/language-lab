@@ -1,6 +1,6 @@
 // machine (compiler/gaps/machine), GAPS.md round 9's program: an assembler,
 // checker, optimizer, interpreter and profiler for a small register
-// machine. The evaluator, the compiled code (as `lab compile` stores it)
+// machine. The evaluator, the compiled code (as `ters compile` stores it)
 // and the hand-written ideal must print the same and exit the same way,
 // failures included, and so must its WebAssembly (since C92, with the
 // chooser's representations since C93); the C way is in bench-machine.ts.
@@ -54,7 +54,7 @@ test("machine: as WebAssembly (WASI), the same (C92)", () => {
   all(["--profile", "h.asm", "f.asm"], { "h.asm": source("hello"), "f.asm": sized("fib", 10) }, ["wasm"]);
 });
 
-// The WebAssembly takes the chooser's representations too, as `lab native`
+// The WebAssembly takes the chooser's representations too, as `ters native`
 // does: Map and Set as its own hash tables (C63j), lists as trees. primes
 // 5000 took 5.3 s with cons lists, about 60 ms as trees (C93).
 test("machine: its WebAssembly stores lists as trees, and agrees at a bigger size (C93)", () => {

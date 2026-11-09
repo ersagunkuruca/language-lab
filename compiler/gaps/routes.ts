@@ -5,7 +5,7 @@
 // are kept in memory, and the comparison is what it printed and how it
 // exited. Used by bench-routes.ts and by test/routes.test.ts.
 //
-// `lab run` and the editor's Run refuse routes today (GAPS.md R1): the
+// `ters run` and the editor's Run refuse routes today (GAPS.md R1): the
 // chooser picks the trees, but the program's own record types keep fields
 // typed Map and Set. The "tree" ways here do what R1 proposes, rewriting
 // those types too, so the trees can be measured before R1 is fixed.

@@ -1,6 +1,6 @@
 // crew (GAPS.md round 11), a crew of workers scheduling a plan of tasks,
 // in three ways, in one process: the evaluator, the module printed from the
-// core IR (`lab compile --core`) and the hand-written ideal (crew.ideal.js).
+// core IR (`ters compile --core`) and the hand-written ideal (crew.ideal.js).
 // Each gets the same arguments and a world whose files are kept in memory,
 // and the comparison is what it printed and how it exited. Used by
 // bench-crew.ts and test/crew.test.ts.
@@ -31,7 +31,7 @@ const world = (files: Record<string, string>, err: string[]): World => ({
   fileExists: (p) => p in files, listFolder: () => [],
 });
 
-// The program with its types stored the way `lab run` and `lab compile`
+// The program with its types stored the way `ters run` and `ters compile`
 // choose: on JavaScript a Map is a hash table changed in place where it
 // has one holder (C63b), else a tree. `asDefined` keeps maps and sets as
 // the sorted lists they are defined as.

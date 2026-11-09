@@ -1,7 +1,7 @@
 // A compiled run keeps L186's log of the world's answers (C172a, and C172b
 // for a native program through C, its Random seed too: C172c): with
-// TERS_LOG set, a module from `lab compile` writes what the world answered
-// it, and `lab run --replay` gives those answers to the evaluator, which
+// TERS_LOG set, a module from `ters compile` writes what the world answered
+// it, and `ters run --replay` gives those answers to the evaluator, which
 // then does what the compiled run did, whatever the world says now.
 
 import { test } from "node:test";
@@ -22,7 +22,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 
 test("a compiled run's log of the world's answers replays on the evaluator (C172a)", () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
   const dir = mkdtempSync(join(tmpdir(), "log-"));
   const run = (args: string[], env: Record<string, string> = {}) => {
     const r = spawnSync(process.execPath, args, { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
@@ -40,7 +40,7 @@ test("a compiled run's log of the world's answers replays on the evaluator (C172
 });
 
 test("a native program's log of the world's answers replays on the evaluator, its failures too (C172b)", { skip }, () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), wc = join(import.meta.dirname, "../../ters/examples/wc");
   const dir = mkdtempSync(join(tmpdir(), "log-c-"));
   const run = (file: string, args: string[], env: Record<string, string> = {}) => {
     const r = spawnSync(file, args, { cwd: dir, encoding: "utf8", env: { ...process.env, ...env } });
@@ -57,7 +57,7 @@ test("a native program's log of the world's answers replays on the evaluator, it
 });
 
 test("a native program logs Random's seed, and the replay draws the same numbers (C172c)", { skip }, () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
   // [a world draw, a draw under seeded(7), a world draw], shown.
@@ -97,9 +97,9 @@ function draws() {
 }
 
 test("a WebAssembly run keeps the log, Random's seed too, and replays on the evaluator as a module's does (C172d)", async () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
   const { k, main, dir, run } = draws();
-  // A module from `lab compile` asks the world each draw, as the evaluator does.
+  // A module from `ters compile` asks the world each draw, as the evaluator does.
   assert.equal(run(process.execPath, [lab, "compile", dir, "--core", "-o", "p.mjs"])[2], 0);
   const js = run(process.execPath, ["p.mjs"], { TERS_LOG: "js.json" });
   assert.deepEqual((JSON.parse(readFileSync(join(dir, "js.json"), "utf8")) as { op: string }[]).map((e) => e.op), ["random", "random"]);

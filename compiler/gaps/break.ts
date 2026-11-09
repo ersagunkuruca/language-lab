@@ -1,6 +1,6 @@
 // break (GAPS.md round 12), a pool break played out event by event, in
 // three ways in one process: the evaluator, the module printed from the
-// core IR (`lab compile`) and the hand-written ideal (break.ideal.js). Each
+// core IR (`ters compile`) and the hand-written ideal (break.ideal.js). Each
 // prints main's lines; the comparison is what they print and how long main
 // takes. Used by bench-break.ts and test/break.test.ts.
 
@@ -16,7 +16,7 @@ import { main as ideal } from "./break.ideal.js";
 export type Name = "evaluator" | "core" | "ideal";
 export const folder = join(import.meta.dirname, "break");
 
-// The program with its types stored the way `lab run` and `lab compile`
+// The program with its types stored the way `ters run` and `ters compile`
 // choose (ters/cli/represented.ts).
 export function program() {
   const p = loadProgram(folder);

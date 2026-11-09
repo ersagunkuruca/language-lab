@@ -108,7 +108,7 @@ export function lawPanel(info: T.Info, box: HTMLElement, at: { code: Code; names
     m.set(key, r);
   }
   const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
-  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as lab test runs it."));
+  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as ters test runs it."));
   if (r.error) box.append(h("p", { class: "status-line bad" }, `The test stopped: ${r.error}.`));
   else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Every expect held, in ${cases}.`));
   else {

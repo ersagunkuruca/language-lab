@@ -157,7 +157,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
 }
 
 // A program moved onto the newest versions its modules have of what it
-// uses (SHARING.md §2, L111), as lab upgrade moves a folder's (E254). Kept
+// uses (SHARING.md §2, L111), as ters upgrade moves a folder's (E254). Kept
 // only if `check` finds nothing wrong with the moved program (its check
 // and its tests: it says why not); then both versions go into its store
 // (L115) and its names stay its own (L112). `own` is the program's own

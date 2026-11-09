@@ -2,12 +2,12 @@
 // A result's key is the content hash of the test's definition and
 // everything it uses (hash.ts, the hash published modules use), what
 // examples.json saves for it, and the hash of the evaluator's own source.
-// Same key, same result, so `lab test` skips it. Only a test whose row is
+// Same key, same result, so `ters test` skips it. Only a test whose row is
 // Check, search, Abort or divergence is kept: one that reads the clock,
 // random numbers or the world could answer differently. This is Unison's
 // cached test results (CREDITS.md).
 //
-// Results live in .lab/checks.json in the folder `lab test` runs from;
+// Results live in .lab/checks.json in the folder `ters test` runs from;
 // .gitignore keeps it out of commits. CI's cache of the same file is T7c's
 // testing half (lane T).
 

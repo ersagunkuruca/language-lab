@@ -1,4 +1,4 @@
-// A page as an app (cli/app.ts, `lab build-app`): the folder installs as a
+// A page as an app (cli/app.ts, `ters build-app`): the folder installs as a
 // web app and opens offline, and Capacitor finds the page in it. A real
 // browser's check (Chromium's installability and an offline reload) is in
 // the PR; here, what that rests on.
@@ -28,7 +28,7 @@ function worker(files: Record<string, string | Uint8Array>) {
   return { caches, fetched, wait };
 }
 
-test("lab build-app: the service worker keeps every file of www/, serves them with no network, and drops older builds' caches", async () => {
+test("ters build-app: the service worker keeps every file of www/, serves them with no network, and drops older builds' caches", async () => {
   const w = worker(app);
   w.caches.set("two-dice-old", new Set(["index.html"]));
   await w.wait("install");
@@ -43,7 +43,7 @@ test("lab build-app: the service worker keeps every file of www/, serves them wi
   assert.notEqual(/CACHE = "([^"]+)"/.exec(other)![1], /CACHE = "([^"]+)"/.exec(String(app["www/sw.js"]))![1]);
 });
 
-test("lab build-app: the manifest names the app and icons that are there, at the sizes it says; the page links it and is otherwise the page", () => {
+test("ters build-app: the manifest names the app and icons that are there, at the sizes it says; the page links it and is otherwise the page", () => {
   const m = JSON.parse(String(app["www/manifest.webmanifest"]));
   assert.equal(m.name, "Two dice");
   assert.equal(m.display, "standalone");
@@ -61,14 +61,14 @@ test("lab build-app: the manifest names the app and icons that are there, at the
   assert.match(cap.appId, /^[a-z][a-z0-9_]*(\.[a-z_][a-z0-9_]*)+$/);
 });
 
-// `lab build-app`'s page is `lab build-web`'s, from the core IR (C137d24),
+// `ters build-app`'s page is `ters build-web`'s, from the core IR (C137d24),
 // where it was compile.ts's.
-test("lab build-app: its page is the one lab build-web makes, from the core IR", async () => {
+test("ters build-app: its page is the one ters build-web makes, from the core IR", async () => {
   const { execFile } = await import("node:child_process");
   const { mkdtempSync, readFileSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
-  const dir = mkdtempSync(join(tmpdir(), "app-")), lab = join(import.meta.dirname, "../cli/lab.ts"), dice = join(import.meta.dirname, "../examples/dice");
+  const dir = mkdtempSync(join(tmpdir(), "app-")), lab = join(import.meta.dirname, "../cli/ters.ts"), dice = join(import.meta.dirname, "../examples/dice");
   const run = (args: string[]) => new Promise<string>((done, fail) => { execFile(process.execPath, [lab, ...args], { encoding: "utf8" }, (e, _out, err) => (e ? fail(e) : done(err))); });
   const [, made] = await Promise.all([run(["build-app", dice, "-o", join(dir, "app")]), run(["build-web", dice, "-o", join(dir, "dice.html")])]);
   assert.doesNotMatch(made, /compile\.ts/);

@@ -4,7 +4,8 @@
   "type": "module",
   "description": "AST-first language prototype: the program is a tree of IDs, everything else is a view",
   "bin": {
-    "lab": "cli/lab.ts"
+    "ters": "cli/ters.ts",
+    "lab": "cli/ters.ts"
   },
   "scripts": {
     "demo": "node src/demo.ts",
@@ -17,7 +18,8 @@
     "smoke-shaders": "node ../editor/shaders-smoke.ts",
     "lang": "node src/lang/demo.ts",
     "numbers": "node src/lang/numbers-demo.ts",
-    "lab": "node cli/lab.ts",
+    "ters": "node cli/ters.ts",
+    "lab": "node cli/ters.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "engines": {

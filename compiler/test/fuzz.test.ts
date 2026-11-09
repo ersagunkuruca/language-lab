@@ -72,7 +72,7 @@ test(`generated programs: the evaluator, compiled JavaScript, WebAssembly and C 
   type Built = { code: typeof p.code; info: typeof p.info; names: typeof p.names };
   const engines = async (q: Built, tag: string, js = true, native = true, entry = false) => {
     const roots = entry ? p.entries : p.defs.map((d) => d.def), name = (i: number) => `${entry ? "e" : "g"}${i}`;
-    // JavaScript printed from the core IR (C137c), lowered as `lab compile
+    // JavaScript printed from the core IR (C137c), lowered as `ters compile
     // --core` lowers it (`host`: the evaluator's builtins where the core IR
     // has none). What it can't run yet throws Unsupported, and isn't compared.
     if (js) {

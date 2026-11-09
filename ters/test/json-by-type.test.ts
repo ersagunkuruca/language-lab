@@ -45,7 +45,7 @@ function program(build: (k: Lang, t: ReturnType<typeof types>) => Id, pin?: (k: 
 async function both(p: ReturnType<typeof program>, way: "core" | "evaluator" = "core") {
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const v = runMain(p.code, p.info, p.main, { print: () => {}, names: p.names });
-  // The core IR's JavaScript, as the editor and `lab build` run it: it
+  // The core IR's JavaScript, as the editor and `ters build` run it: it
   // reads JSON through json read's written reader (L72f).
   // A core IR gap (C137): a Map, a Set or Bytes needs the library's
   // bytes of base64 in the program; until then the evaluator's alone.

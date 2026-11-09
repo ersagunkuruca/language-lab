@@ -1,7 +1,7 @@
 // Bigger-program round 9 (docs/reports/GAPS.md): machine in each way on
 // its programs at growing sizes. Checks that every way prints and exits
 // the same, then times each (median of three; the evaluator once, on the
-// small sizes only). The C way is `lab native`'s program, run as a process
+// small sizes only). The C way is `ters native`'s program, run as a process
 // on files in a temporary folder, when it builds.
 //   node gaps/bench-machine.ts [--profile]
 
@@ -16,12 +16,12 @@ const w = await ways();
 console.log(`chosen: ${w.chosen.join(", ") || "nothing"}`);
 if (w.wasmProblem) console.log(`wasm: ${w.wasmProblem}`);
 
-// The C way: lab native, once.
+// The C way: ters native, once.
 const dir = mkdtempSync(join(tmpdir(), "machine-bench-"));
-// MACHINE_NATIVE: a binary built by hand while lab native's own doesn't build.
+// MACHINE_NATIVE: a binary built by hand while ters native's own doesn't build.
 let native: string | undefined = process.env.MACHINE_NATIVE;
 if (!native) try {
-  execFileSync("node", [join(import.meta.dirname, "../../ters/cli/lab.ts"), "native", join(import.meta.dirname, "machine"), "-o", join(dir, "machine")], { stdio: "pipe" });
+  execFileSync("node", [join(import.meta.dirname, "../../ters/cli/ters.ts"), "native", join(import.meta.dirname, "machine"), "-o", join(dir, "machine")], { stdio: "pipe" });
   native = join(dir, "machine");
 } catch (e) { console.log(`native: ${String((e as { stderr?: Buffer }).stderr ?? e).split("\n").find((l) => l.includes("error")) ?? "doesn't build"}`); }
 

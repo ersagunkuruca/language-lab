@@ -31,7 +31,7 @@ model, so each feature has been written twice in the compiler
   (`runCoreMain`), checked on wc, ledger, chapters and calc's mains.
   Step c4 runs every example whose main lowers (11 of them) against the
   evaluator (compiler/test/core-js.test.ts), which lists the others with
-  the reason they don't lower. Step c5 is `lab compile --core`, a module
+  the reason they don't lower. Step c5 is `ters compile --core`, a module
   that runs main in Node printed this way. Step c6 gives it the
   evaluator's values (`{ tag, fields }`, closures as functions), so pages
   and cells can take them as they are. Step c7: a builtin the core IR
@@ -44,7 +44,7 @@ model, so each feature has been written twice in the compiler
   a cell or a place in one is an opaque value (`host`), and a function's
   type may name a page's effects (View, Handler, Sound). bounce, compass
   and constructions show the same HTML as in the evaluator, before and
-  after their handlers run (core-js.test.ts). Step c9: `lab build-web
+  after their handlers run (core-js.test.ts). Step c9: `ters build-web
   --core`, a page whose script is printed this way and drawn by
   compiler/src/core-page.ts (the evaluator's cells and mount, the
   browser's world); compass's draws and reacts to clicks as compile.ts's
@@ -62,7 +62,7 @@ model, so each feature has been written twice in the compiler
   closure calling the evaluator's; a solve given a function is refused by
   name (the solver looks inside it, and a printed closure carries no
   nodes yet: inverse's five examples). The fuzz test lowers for this
-  printer as `lab compile --core` does. Step c13: a printed closure
+  printer as `ters compile --core` does. Step c13: a printed closure
   carries where it came from (the core IR's `closure.src`: its lambda and
   the binders its captures are, or the builtin), as the evaluator's
   closures do (run.ts META), so the solver looks inside one it is given:

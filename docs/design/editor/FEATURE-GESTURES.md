@@ -3,7 +3,7 @@
 **Status (2026-11-02).** Ways built (E210), directions built (E210b). Private cases built (E209), after L165 made a program's own private case the program's to build.
 
 REVIEW-2026-11-02b §3 found four things in the model that the editor
-draws but no gesture makes: text (the DSL, `lab`) is the only way to write
+draws but no gesture makes: text (the DSL, `ters`) is the only way to write
 them. This note says which belong in the editor, and how, so each can be one
 row. The test for "belongs": would someone writing a program in the editor
 from nothing need it, as they need inputs, cases and type parameters (E198)?

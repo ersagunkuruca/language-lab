@@ -103,7 +103,7 @@ test("for each keeps the row of an item that's still there, cells and all; new i
 });
 
 // C140 (BLIND-SPOTS-2026-11-03 §2): data can't make a page run script
-// through an attribute, live or in the static HTML lab run prints.
+// through an attribute, live or in the static HTML ters run prints.
 test("an attribute that would run script is left off: on… names, javascript: and data: addresses, srcdoc, a name that isn't one", () => {
   const prop = (name: string, value: string) => ({ tag: HTML_V.property, fields: [name, (() => value) as never] });
   const attrs = [

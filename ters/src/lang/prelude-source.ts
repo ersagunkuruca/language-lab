@@ -293,7 +293,7 @@ export function buildPrelude(): Module {
   const trigF = k.def("trig at float64");
   k.define(trigF, k.call(TRIG_V, ...[B.sin, B.cos, B.tan, B.exp, B.log, polarF, unpolarF, asinF, acosF].map((b) => k.x(b))));
 
-  // Laws, tests in the language (T7): each performs Check, so `lab test`
+  // Laws, tests in the language (T7): each performs Check, so `ters test`
   // and test/prelude-laws.test.ts run them on small values. Complex's are
   // the numbers module's (L207b).
   const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
@@ -306,7 +306,7 @@ export function buildPrelude(): Module {
   k.define(near, k.fn(["a", "b"], (a, b) => k.let("gap", k.call(S.abs, n.sub(a, b)), (gap) =>
     k.call(S.not, k.call(S.less, n.mul(k.lit(1e-9), n.add(n.add(k.lit(1), k.call(S.abs, a)), k.call(S.abs, b))), gap)))));
   // Ways agree (WAYS.md step 4, BACKLOG L96d): each way of a Trig field
-  // against Float64's own field on small values, as T7 laws, so `lab test`
+  // against Float64's own field on small values, as T7 laws, so `ters test`
   // and test/prelude-laws.test.ts run them, with `near`: the ways are other
   // roundings of one real function. asin and acos are
   // given a sine and a cosine, which are in their domain.
@@ -2110,7 +2110,7 @@ export function buildPrelude(): Module {
   );
   // Embeddings (EMBEDDINGS.md, L208b): the one canonical map from a type
   // into a larger one that keeps + − · and <. Into Float64 it holds only
-  // as closely as Float64 rounds, so lab test checks those with near.
+  // as closely as Float64 rounds, so ters test checks those with near.
   const embed = (name: string, map: Id) => { const d = k.def(name); k.define(d, k.call(EMBEDDING_V, map)); return d; };
   const embeddings = [
     embed("int in float64", k.x(INT_OPS.toNumber)),
