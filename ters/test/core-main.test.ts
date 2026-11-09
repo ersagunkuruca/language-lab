@@ -97,3 +97,16 @@ test("crew's Run main, opened as the editor opens it, runs its plan", async () =
   assert.equal(end.error, undefined, String(end.error));
   assert.ok(printedLines(said).includes("critical path: fetch → compile-core → test → package (23 minutes)"), printedLines(said).join("\n"));
 });
+
+// break's main asks for each ball's first touch by solving a gap function
+// it is given: the equation solver's, which the core IR lowers as `lab run`
+// does. It ran in the evaluator, 30 s against well under a second (I191).
+test("break's Run main runs compiled, as lab run does", async () => {
+  const { code, names, pins, files, def, run } = example("break");
+  const said = await inWorker({ code, names, pins, def, title: "break", files, args: run?.args });
+  const end = said.at(-1)!;
+  assert.equal(end.error, undefined, String(end.error));
+  assert.equal(end.core, true, "compiled");
+  const out = printedLines(said).join("\n");
+  assert.ok(out.includes("\n45 events in 4.658 s; pocketed: 11, 15.\n"), out);
+});

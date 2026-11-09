@@ -6,12 +6,13 @@
 // no checking or lowering. The worker (runWorker.ts) and the build lower
 // the same way, here.
 import type { Code, Id } from "../ters/src/model.ts";
-import { isUse, subtree } from "../ters/src/model.ts";
+import { isUse, subtree, type Use } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../ters/src/lang/library-reps.ts";
 import { mainProblem } from "../ters/src/lang/run.ts";
+import { planSolve } from "../ters/src/lang/solve.ts";
 import { lowerCore, printed, type Printed } from "../compiler/src/core-js.ts";
 import { infer } from "./typed.ts";
 
@@ -44,7 +45,10 @@ export function coreMain(code: Code, info: Info, names: Names, def: Id, args: bo
 }
 
 // Whether anything main reaches, the library's definitions included, runs
-// a function backwards.
+// a function backwards by the relational interpreter, the one that says
+// where a reading stopped. A solve the equation solver plans (impact's and
+// break's first touch, given a gap function) lowers as `lab run` lowers it
+// (I191: break's Run main took 30 s in the evaluator, 10 compiled).
 export function runsBackwards(code: Code, main: Id): boolean {
   const seen = new Set<Id>([main]), todo = [main];
   while (todo.length) {
@@ -52,7 +56,7 @@ export function runsBackwards(code: Code, main: Id): boolean {
     if (n?.kind !== "def" || !n.body) continue;
     for (const x of subtree(code, n.body)) {
       const m = code.nodes[x];
-      if (isUse(m)) return true;
+      if (isUse(m) && relational(code, m)) return true;
       if (m?.kind === "ref" && code.nodes[m.target]?.kind === "def" && !seen.has(m.target)) { seen.add(m.target); todo.push(m.target); }
     }
   }
@@ -67,3 +71,4 @@ export function unitAction(info: Info, def: Id): boolean {
   const r = info.subst.zonk(t.ret);
   return r.t === "con" && r.id === "std.unit";
 }
+const relational = (code: Code, n: Use): boolean => { try { return planSolve(code, n).mode === "relational"; } catch { return false; } };
