@@ -17,6 +17,7 @@ import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts"
 import { load } from "../src/program.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
+import { ownedArrays } from "../src/owned-arrays.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { machine as ideal } from "./machine.ideal.js";
 
@@ -72,7 +73,9 @@ export async function wasmModule(): Promise<WebAssembly.Module | string> {
   const { p, own, main } = programs();
   try {
     const c = chosenFor(p, own, main, false);
-    const m = emitWasm(lowerScalar(c.code, c.info, c.names, own, { data: true }), { wasi: true });
+    const lowered = lowerScalar(c.code, c.info, c.names, own, { data: true });
+    ownedArrays(lowered, c.code, c.info, c.names, main);
+    const m = emitWasm(lowered, { wasi: true });
     return await WebAssembly.compile(m.bytes);
   } catch (e) { return (e as Error).message; }
 }

@@ -6630,7 +6630,7 @@ ${drop}
 
 // A byte a slot (L189f2b, as L189f1 in JS and L189f2a in C): an Array of
 // Ints made by `array.of` with 16 or more items, all 0 to 255, keeps them
-// in a $bytes beside its buffer (the buffer's field 3) and none in $items.
+// in a $bytes beside its buffer (the buffer's field 4) and none in $items.
 // Reads go through `array.slot`; anything that writes widens the buffer
 // back to $items first (`array.widen`), the same values. `byteSlots`
 // writes an Int array's functions that way; wasm.ts calls it.
@@ -6644,7 +6644,7 @@ export function byteSlots(f: RtFn): RtFn {
     // The buffer kept where its items were, and each item read from it.
     body = body.replace(/struct\.get \$arr 0\s*struct\.get \$buf 0([\s\S]*?)array\.get \$items/, `$1call $array.slot.a${a}`);
     uses.push(`array.slot.a${a}`);
-  } else if (["array.replaceAt", "array.pushFront", "array.push"].includes(base)) {
+  } else if (["array.replaceAt", "array.replaceOwned", "array.pushFront", "array.push"].includes(base)) {
     body = `local.get $a\ncall $array.widen.a${a}\n${body}`;
     uses.push(`array.widen.a${a}`);
   } else if (base === "array.of") {
@@ -6661,6 +6661,64 @@ export function byteSlots(f: RtFn): RtFn {
 // push writes into the free slot past the view's end when no other view
 // has taken it, and copies the view into a new buffer otherwise, so an
 // array never changes. One copy of each per item type: `array.push.a0`.
+// The copy with item k replaced (C93c), with room on both sides; the
+// array as it is where k is outside it.
+const REPLACE_COPY = `
+      local.get $k
+      i64.const 0
+      i64.lt_s
+      local.get $k
+      local.get $a
+      struct.get $arr 2
+      i64.extend_i32_s
+      i64.ge_s
+      i32.or
+      if void
+        local.get $a
+        return
+      end
+      local.get $a
+      struct.get $arr 2
+      local.set $n
+      local.get $n
+      i32.const 4
+      local.get $n
+      i32.const 4
+      i32.gt_u
+      select
+      local.set $room
+      local.get $n
+      local.get $room
+      i32.const 1
+      i32.shl
+      i32.add
+      array.new_default $items
+      local.tee $it
+      local.get $room
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 0
+      local.get $a
+      struct.get $arr 1
+      local.get $n
+      array.copy $items $items
+      local.get $it
+      local.get $room
+      local.get $k
+      i32.wrap_i64
+      i32.add
+      local.get $x
+      array.set $items
+      local.get $it
+      local.get $room
+      local.get $room
+      local.get $n
+      i32.add
+      i32.const 0
+      struct.new $buf
+      local.get $room
+      local.get $n
+      struct.new $arr`;
 const ARRAYS: Record<string, Omit<RtFn, "name">> = {
   // An Int array's item i, from its bytes when it has them (L189f2b).
   "array.slot": {
@@ -6669,7 +6727,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $a
       struct.get $arr 0
       local.tee $b
-      struct.get $buf 3
+      struct.get $buf 4
       ref.is_null
       if item
         local.get $b
@@ -6678,7 +6736,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
         array.get $items
       else
         local.get $b
-        struct.get $buf 3
+        struct.get $buf 4
         local.get $i
         array.get_u $bytes
         ref.i31
@@ -6691,7 +6749,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $a
       struct.get $arr 0
       local.tee $b
-      struct.get $buf 3
+      struct.get $buf 4
       local.tee $y
       ref.is_null
       br_if 0
@@ -6725,7 +6783,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       struct.set $buf 0
       local.get $b
       ref.null $bytes
-      struct.set $buf 3`,
+      struct.set $buf 4`,
   },
   // A new Int array of 16 or more items, all 0 to 255, kept as bytes
   // (L189f2b); the slots outside lo to hi are 0.
@@ -6815,7 +6873,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       end
       local.get $b
       local.get $y
-      struct.set $buf 3
+      struct.set $buf 4
       local.get $b
       ref.null $items
       struct.set $buf 0
@@ -6828,6 +6886,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       array.new_default $items
       i32.const 4
       i32.const 4
+      i32.const 0
       struct.new $buf
       i32.const 4
       i32.const 0
@@ -6901,6 +6960,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $room
       local.get $n
       i32.add
+      i32.const 0
       struct.new $buf
       local.get $room
       local.get $n
@@ -6990,61 +7050,43 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
   // as it is outside it.
   "array.replaceAt": {
     params: [["a", "array"], ["k", "int"], ["x", "item"]], result: "array", locals: [["n", "i32"], ["it", "items"], ["room", "i32"]], uses: [],
+    body: REPLACE_COPY,
+  },
+  // The replace on an array nobody else holds (C56, compiler/src/
+  // owned-arrays.ts): the slot written in place, unless another view was
+  // made on its buffer (a rest, a push into its room: field 3), where it
+  // is the copy replaceAt makes.
+  "array.replaceOwned": {
+    params: [["a", "array"], ["k", "int"], ["x", "item"]], result: "array", locals: [["n", "i32"], ["it", "items"], ["room", "i32"]], uses: [],
     body: `
+      local.get $a
+      struct.get $arr 0
+      struct.get $buf 3
+      i32.eqz
       local.get $k
       i64.const 0
-      i64.lt_s
+      i64.ge_s
+      i32.and
       local.get $k
       local.get $a
       struct.get $arr 2
       i64.extend_i32_s
-      i64.ge_s
-      i32.or
+      i64.lt_s
+      i32.and
       if void
         local.get $a
+        struct.get $arr 0
+        struct.get $buf 0
+        local.get $a
+        struct.get $arr 1
+        local.get $k
+        i32.wrap_i64
+        i32.add
+        local.get $x
+        array.set $items
+        local.get $a
         return
-      end
-      local.get $a
-      struct.get $arr 2
-      local.set $n
-      local.get $n
-      i32.const 4
-      local.get $n
-      i32.const 4
-      i32.gt_u
-      select
-      local.set $room
-      local.get $n
-      local.get $room
-      i32.const 1
-      i32.shl
-      i32.add
-      array.new_default $items
-      local.tee $it
-      local.get $room
-      local.get $a
-      struct.get $arr 0
-      struct.get $buf 0
-      local.get $a
-      struct.get $arr 1
-      local.get $n
-      array.copy $items $items
-      local.get $it
-      local.get $room
-      local.get $k
-      i32.wrap_i64
-      i32.add
-      local.get $x
-      array.set $items
-      local.get $it
-      local.get $room
-      local.get $room
-      local.get $n
-      i32.add
-      struct.new $buf
-      local.get $room
-      local.get $n
-      struct.new $arr`,
+      end` + REPLACE_COPY,
   },
   // Item k where k is known to be in the array (equal and compare's loop).
   "array.get": {
@@ -7095,6 +7137,11 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
         local.get $a
         return
       end
+      ;; another view on the buffer: a replace in place no longer may
+      local.get $a
+      struct.get $arr 0
+      i32.const 1
+      struct.set $buf 3
       local.get $a
       struct.get $arr 0
       local.get $a
@@ -7144,6 +7191,9 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
         i32.sub
         struct.set $buf 1
         local.get $b
+        i32.const 1
+        struct.set $buf 3
+        local.get $b
         local.get $s
         i32.const 1
         i32.sub
@@ -7187,6 +7237,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $room
       local.get $n
       i32.add
+      i32.const 0
       struct.new $buf
       local.get $room
       i32.const 1
@@ -7235,6 +7286,9 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
         i32.add
         struct.set $buf 2
         local.get $b
+        i32.const 1
+        struct.set $buf 3
+        local.get $b
         local.get $s
         local.get $n
         i32.const 1
@@ -7276,6 +7330,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       i32.add
       i32.const 1
       i32.add
+      i32.const 0
       struct.new $buf
       local.get $room
       local.get $n
@@ -7327,6 +7382,7 @@ const shaderOf = (k: number): Omit<RtFn, "name"> => ({
       array.new_fixed $items ${k}
       i32.const 0
       i32.const ${k}
+      i32.const 0
       struct.new $buf
       i32.const 0
       i32.const ${k}

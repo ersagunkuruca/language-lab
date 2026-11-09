@@ -140,6 +140,12 @@ grown to 1,000 items: the path copies are about 2% of adding and ticking,
 so this isn't built. The time was an each keeping copies of every edit
 (fixed there) and a write looking at every reader of the cell.
 
+WebAssembly writes an owned array's replace in place too (C56 step,
+2026-11-09): owned-arrays.ts marks it as for JavaScript, and a buffer keeps
+whether another view was made on it (a rest, a push into its room), so
+`array.replaceOwned` writes the slot unless one was. machine's primes
+20000 as a WASI command went from 15.5 s to 76 ms.
+
 ### 4. Counting at run time, where the compiler can't tell
 
 In C the counts exist (N5b), so steps 1 and 2 in C can fall back to
