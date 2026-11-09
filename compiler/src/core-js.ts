@@ -38,7 +38,7 @@ import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type U
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, kids, listSteps, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -607,6 +607,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // An array a function walks by its rests, read by position (C196).
   if (!envSet("NO_OFFSETS")) arrayOffsets(ir);
   if (!envSet("NO_SHARE")) shareCalls(ir);
+  // An array of a written list made from its items, with no list between
+  // (C196: agent's triangle corners, three points an array each call).
+  writtenArrays(ir);
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
   if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0]);
@@ -617,6 +620,18 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
+}
+
+// `array of` a written list: `array.ofItems`, its items handed as they
+// are, so no cons cell is made for each to be read back.
+function writtenArrays(ir: CoreIR): void {
+  const go = (e: SExpr): SExpr => {
+    const x = mapKids(e, go);
+    const m = x.k === "rt" ? /^array\.of\.(a\d+)$/.exec(x.fn) : null;
+    if (!m || x.k !== "rt" || x.args.length !== 1 || x.args[0].k !== "list") return x;
+    return { ...x, fn: `array.ofItems.${m[1]}`, args: x.args[0].items };
+  };
+  for (const f of ir.funcs) f.body = go(f.body);
 }
 
 // What a variable starts as.

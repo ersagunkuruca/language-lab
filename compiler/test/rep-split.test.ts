@@ -39,3 +39,18 @@ test("machine split: the step loop on arrays, the rest as written, the evaluator
     assert.deepEqual(got.join("\n"), want.join("\n"));
   }
 });
+
+// A definition of main's side reading a list field of a type the seeds'
+// side makes, where no list crosses in or out of it, is a seed too
+// (C196): agent's `point(mesh, i)`, item at of mesh.points, read the
+// stored points by position rather than converting all of them each call.
+test("agent split: a reader of the mesh's points is on the arrays' side (C196)", async () => {
+  const { loadProgram } = await import("../../ters/src/lang/load.ts");
+  const p = loadProgram(new URL("../../ters/examples/agent", import.meta.url).pathname);
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const own = p.own.defs, named = (n: string) => own.find((d) => p.pres.names[d] === n)!;
+  const rep = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List")!;
+  const s = splitLists(p.code, info, p.pres.names, own, named("main"), ["time of", "place at", "speeds", "path", "trip"].map(named), rep, true);
+  assert.ok(s, "split");
+  assert.ok(s.seeds.includes(named("point")), "point is a seed");
+});
