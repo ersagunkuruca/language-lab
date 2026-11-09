@@ -44,9 +44,13 @@ const flatten = (t: LType, v: Value): (number | boolean)[] =>
 // Inputs that f32 holds exactly, so only the computation differs.
 const GRID = [-2.5, -1.75, -1, -0.5, -0.125, 0, 0.25, 0.5, 1, 1.5, 2, 3.75];
 
-interface Case { label: string; code: Code; info: Info; names: Names; roots: Id[]; inputs?: (f: ShaderFunc) => number[][] | undefined; shader?: true }
+// skip: grid rows outside where a function is used, as the program
+// calls it (raymarch's shadow divides by how far it has travelled, which
+// it never is at 0: there the evaluator has no answer and the GPU's x / 0
+// is ∞, which the next `smaller` hides).
+interface Case { label: string; code: Code; info: Info; names: Names; roots: Id[]; inputs?: (f: ShaderFunc) => number[][] | undefined; skip?: (f: ShaderFunc, xs: number[]) => boolean; shader?: true }
 const cases: Case[] = [
-  ...["calculus", "physics", "shaders", "raymarch"].map((name) => { const p = load(name); return { label: name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs }; }),
+  ...["calculus", "physics", "shaders", "raymarch"].map((name) => { const p = load(name); return { label: name, code: p.code, info: p.info, names: p.pres.names, roots: p.own.defs, ...(name === "raymarch" ? { skip: (f: ShaderFunc, xs: number[]) => f.name === "shadow" && xs[7] === 0 } : {}) }; }),
   (() => {
     const a = area();
     // A loop under a budget: ∫ from x in `steps` strips of width w. capped
@@ -143,7 +147,7 @@ for (const c of cases) {
     const isExact = exact(lowered.funcs, i, shader.matrices, lowered.rounded);
     // Records go in and out as their numbers, in field order.
     const width = f.params.reduce((n, t) => n + size(t), 0), outWidth = size(f.result);
-    const inputs = c.inputs?.(f) ?? GRID.map((_, k) => Array.from({ length: width }, (_, j) => (scalars(f.params)[j] === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])));
+    const inputs = (c.inputs?.(f) ?? GRID.map((_, k) => Array.from({ length: width }, (_, j) => (scalars(f.params)[j] === "i32" ? (k + j) % 2 : GRID[(k + 3 * j) % GRID.length])))).filter((xs) => !c.skip?.(f, xs));
     let at = 0;
     const arg = (t: LType): string => {
       if (t === "i32") return `(inp[b + ${at++}u] > 0.5)`;

@@ -65,8 +65,8 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, A
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
-import { oncePlan } from "./relation.ts";
-import { cleanBody, NotWritten, writtenSteps } from "./solved.ts";
+import { writablePlan } from "./relation.ts";
+import { cleanBody, NotWritten, roundedKey, writtenSteps } from "./solved.ts";
 import { solveMode, determinism } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -1685,8 +1685,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return { k: "let", i: all, value: solved, body };
   }
   // A solve where nothing runs the solver at run time (WebAssembly, C):
-  // its plan written out, when it has one way to an answer (solved.ts,
-  // C195a). Its answer rounded as the solver rounds it (number.clean).
+  // its plan written out (solved.ts, C195), each answer rounded as the
+  // solver rounds it (number clean). One way to an answer is written as
+  // it is (C195a). Several ways (C195b): where the first answer is the
+  // answer, each way is tried in the solver's order, the next where one
+  // gives none; in a search, a way is chosen, as `one of` chooses, and an
+  // answer an earlier way gave too is given once, as the solver's key
+  // tells them apart.
   function writtenSolve(n: Use, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
     const name = nm(useTarget(code.nodes, n));
     const no = new Refused("solves a relation (not in this profile yet)");
@@ -1695,16 +1700,22 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (p.mode !== "solver" || p.status !== "solved" || !p.rel) throw no;
     const binds = bindsOf(n), keys = Object.keys(binds);
     if (keys.join() !== answerKeys(code, n).join()) throw no;
-    const steps = oncePlan(p.rel as never, [...p.known]);
-    if (!steps) throw new Refused(`solves ${name} by a plan with more than one way, or numbers searched for (not in this profile yet)`);
+    const steps = writablePlan(p.rel as never, [...p.known]);
+    if (!steps) throw new Refused(`solves ${name} by a plan with numbers searched for (not in this profile yet)`);
     if (p.known.some((k) => !n.given[k] || stype(zonk(n.given[k])) !== "f64") || keys.some((k) => stype(zonk(binds[k])) !== "f64")) throw new Refused(`solves ${name} for something other than Float64s`);
+    let planned: boolean;
+    try { planned = solvesOnce(code, n); } catch (e) { throw new Refused(`solves ${name}: ${(e as Error).message}`); }
+    const once = planned || (!f.partial && !searching.get(f));
+    const many = steps.filter((s) => s.type === "solve" && s.branches.length > 1).length;
+    if (many && !opts.data) throw new Refused(`solves ${name} with several ways, which a shader can't try`);
+    if (many > 1 && !once) throw new Refused(`solves ${name} with several ways at more than one step, in a search (not in this profile yet)`);
     const vars = new Map<string, number>();
     const at = (v: string) => { let i = vars.get(v); if (i === undefined) vars.set(v, (i = f.locals.push("f64") - 1)); return i; };
     const known = p.known.map((k) => ({ i: at(k), value: expr(n.given[k], env, f, false) }));
     let inner = new Map(env);
     const answers = keys.map((k) => { const i = f.locals.push("f64") - 1; inner = new Map(inner).set(binds[k], i); return { i, v: at(k) }; });
-    // Where it gives no answer: none here, in a search; otherwise the
-    // checker found it always answers, and the evaluator stops saying so.
+    const clean = (x: SExpr): SExpr => ({ k: "call", fn: cleanFn(), args: [x], tail: false });
+    const answered = (): SExpr => answers.reduceRight<SExpr>((e, a) => ({ k: "let", i: a.i, value: clean({ k: "local", i: a.v }), body: e }), expr(bodyOf(n), inner, f, tail));
     // Where a way gives no answer: none, in a search or a partial function;
     // otherwise the evaluator's abort, which a shader (no data) can't print.
     const fail = (): SExpr => {
@@ -1712,9 +1723,38 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       if (!opts.data) throw new Refused(`solves ${name}, which may give no answer, and a shader can't stop`);
       return { k: "abort", reason: { k: "text", v: `solving ${name} this way gives exactly one answer, and it gave none` } };
     };
+    const t = stype(zonk(n.id))!;
+    const NONE: SExpr = { k: "fail" };
+    const attempt = (body: SExpr, ok: (res: number) => SExpr, otherwise: SExpr, at: LType): SExpr => { const res = f.locals.push("f64") - 1; return { k: "attempt", body, res, ok: ok(res), otherwise, t: at }; };
     let written: SExpr;
     try {
-      written = writtenSteps(steps, at, () => answers.reduceRight<SExpr>((e, a) => ({ k: "let", i: a.i, value: { k: "call", fn: cleanFn(), args: [{ k: "local", i: a.v }], tail: false }, body: e }), expr(bodyOf(n), inner, f, tail)), fail, stype(zonk(n.id))!);
+      if (!many) written = writtenSteps(steps, at, answered, fail, t);
+      else if (once) {
+        // The ways tried in order, to the first that gets to the end.
+        const tried = writtenSteps(steps, at, () => ({ k: "num", v: 1 }), () => NONE, "f64",
+          (_, each) => each.reduceRight<SExpr>((otherwise, body) => attempt(body, (r) => ({ k: "local", i: r }), otherwise, "f64"), NONE));
+        written = attempt(tried, () => answered(), fail(), t);
+      } else {
+        // One way chosen; an answer is the solver's only where no earlier
+        // way gets to the end with the same key.
+        const ports = (p.rel as { ports: string[] }).ports.filter((x) => !p.known.includes(x));
+        const fresh = () => f.locals.push("f64") - 1;
+        const earlier = (path: number[]): SExpr[] => Array.from({ length: path[0] }, (_, w) => {
+          const mine = new Map<string, number>(p.known.map((k) => [k, at(k)]));
+          const again = (v: string) => { let i = mine.get(v); if (i === undefined) mine.set(v, (i = fresh())); return i; };
+          const same = (): SExpr => ports.map((x) => (rest: SExpr) => roundedKey(clean({ k: "local", i: at(x) }), fresh, (a) => roundedKey(clean({ k: "local", i: again(x) }), fresh, (b) => ({ k: "if", cond: { k: "op", op: "equal", args: [a, b] }, then: rest, else: NONE, t: "f64" }))))
+            .reduceRight<SExpr>((rest, test) => test(rest), { k: "num", v: 1 });
+          return attempt(writtenSteps(steps, again, same, () => NONE, "f64", undefined, [w]), () => ({ k: "num", v: 1 }), { k: "num", v: 0 }, "f64");
+        });
+        const LF = stype({ t: "con", id: LIST, args: [{ t: "con", id: NUMBER, args: [] }] }) as DType;
+        const c = LF.cases.findIndex((x) => x.variant === CONS);
+        written = writtenSteps(steps, at, (path) => earlier(path).reduceRight<SExpr>((rest, seen) => ({ k: "if", cond: { k: "op", op: "equal", args: [seen, { k: "num", v: 1 }] }, then: NONE, else: rest, t }), answered()), fail, t, (_, each) => {
+          const w = f.locals.push("f64") - 1;
+          const list: SExpr = { k: "list", t: LF, c, items: each.map((_, k) => ({ k: "num", v: k })), item: f.locals.push("f64") - 1, acc: f.locals.push(LF) - 1 };
+          const pick = each.slice(0, -1).reduceRight<SExpr>((rest, e, k) => ({ k: "if", cond: { k: "op", op: "equal", args: [{ k: "local", i: w }, { k: "num", v: k }] }, then: e, else: rest, t }), each.at(-1)!);
+          return { k: "let", i: w, value: { k: "choose", list, t: LF }, body: pick };
+        });
+      }
     } catch (e) { if (e instanceof NotWritten) throw new Refused(`solves ${name} with ${e.message} (not in this profile yet)`); throw e; }
     return known.reduceRight<SExpr>((e, k) => ({ k: "let", i: k.i, value: k.value, body: e }), written);
   }

@@ -145,6 +145,9 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   }
   return byCost.get(costOf) ?? null;
 }
+// The library's resolving made now, ahead of a program's (the editor's
+// warm-up does it in a task of its own: I189e).
+export function seedArithmetic(code: Code, info: Info, names: Names = {}): void { seedFor(code, info, names, NEUTRAL); }
 type Snapshot = Omit<Seed, "layer">;
 function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, seed: Seed | null, snapshot = false): { code: Code; info: Info; names: Names } | (Snapshot & { layer: true }) {
   const given = { code, info };
