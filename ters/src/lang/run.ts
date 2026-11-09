@@ -265,11 +265,13 @@ const lookup = (env: Env, b: Id): Value | undefined => {
 };
 // What a closure says it is (META): its lambda, and its scope as a map,
 // made only when asked. A class, not an object with a getter per closure:
-// making those was most of the cost of making a closure (L118c).
+// making those was most of the cost of making a closure (L118c). It is
+// also what the evaluator runs the closure by: its node and its scope.
 class LambdaMeta {
   readonly lambda: Id;
-  private readonly scope: Env;
-  constructor(lambda: Id, scope: Env) { this.lambda = lambda; this.scope = scope; }
+  readonly node: NodeOf<"lambda">;
+  readonly scope: Env;
+  constructor(node: NodeOf<"lambda">, scope: Env) { this.lambda = node.id; this.node = node; this.scope = scope; }
   get env() { return toMap(this.scope); }
 }
 const toMap = (env: Env) => {
@@ -500,7 +502,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const one = (x: Value): Iterable<Value> => [x];
   // Closures made by this runner, so the machine can enter them directly
   // instead of calling them as JS functions.
-  const closures = new WeakMap<Fn, { lambda: NodeOf<"lambda">; env: Env }>();
+  const closureOf = (f: Value): LambdaMeta | undefined => { const m = typeof f === "function" ? (f as unknown as Record<symbol, unknown>)[META] : undefined; return m instanceof LambdaMeta ? m : undefined; };
   // The innermost `with fuel` frame, for code the machine calls out to (a
   // builtin that calls back in): each machine starts from it.
   let ambient: Fuel | null = null;
@@ -717,18 +719,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // they act.
   let directDepth = 0;
   const builtinFns = new Set<Fn>(Object.values(builtins));
-  const enter = (c: { lambda: NodeOf<"lambda">; env: Env }, args: Value[]): Value => {
-    const t = tries.get(c.lambda.id);
-    if (t) t.n++; else tries.set(c.lambda.id, { n: 1, stops: 0 });
-    rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args, c.lambda.id);
+  const enter = (c: LambdaMeta, args: Value[]): Value => {
+    const t = tries.get(c.lambda);
+    if (t) t.n++; else tries.set(c.lambda, { n: 1, stops: 0 });
+    rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
     directDepth++;
-    try { return direct(c.lambda.body, bind(c.env, c.lambda.params, args)); }
-    catch (e) { if (e === NEED || e instanceof RangeError) stopped(c.lambda.id); throw e; }
+    try { return direct(c.node.body, bind(c.scope, c.node.params, args)); }
+    catch (e) { if (e === NEED || e instanceof RangeError) stopped(c.lambda); throw e; }
     finally { directDepth--; }
   };
   const callDirect = (f: Value, args: Value[]): Value => {
-    const c = closures.get(f as Fn);
-    if (c && directly(c.lambda)) return enter(c, args);
+    const c = closureOf(f);
+    if (c && directly(c.node)) return enter(c, args);
     if (pureFns.has(f as Fn) || pureJets.has(f as Fn) || HANDLED.has(f as Fn)) {
       let r: Iterable<Value>;
       try { r = (f as Fn)(...args); } catch (e) { if (e instanceof OutOfSteps || e instanceof Aborted) throw e; throw NEED; }
@@ -771,8 +773,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   }
 
   const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
-    const f = tag((...args: Value[]) => run((m) => m.apply(f, args)), new LambdaMeta(n.id, env));
-    closures.set(f, { lambda: n, env });
+    const f = (...args: Value[]) => run((m) => m.apply(f, args));
+    (f as unknown as Record<symbol, unknown>)[META] = new LambdaMeta(n, env);
     return f;
   };
 
@@ -829,14 +831,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     apply(f: Value, args: Value[]): void {
       const rest = rests.get(f as Fn);
       if (rest) return this.resumeRest(rest, args[0]);
-      const c = closures.get(f as Fn);
+      const c = closureOf(f);
       if (c) {
         // Directly first, where nothing counts fuel (L118c).
-        if (!this.fuel && directly(c.lambda)) {
+        if (!this.fuel && directly(c.node)) {
           try { return this.ret(enter(c, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; }
         }
-        rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args, c.lambda.id);
-        return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
+        rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
+        return this.eval(c.node.body, bind(c.scope, c.node.params, args));
       }
       const h = HANDLED.get(f as Fn);
       if (h) return this.handle(h, args);
