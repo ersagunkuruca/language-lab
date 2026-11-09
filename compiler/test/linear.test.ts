@@ -14,7 +14,8 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { ARITH } from "../../ters/src/lang/std.ts";
 import { INT, NUMBER } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { compiledDefs } from "../src/core-js.ts";
+import { compiledDefs, lowerCore } from "../src/core-js.ts";
+import { kids, type SExpr } from "../src/scalar.ts";
 
 
 test("linear functions composed: one product, the evaluator's answers; Ints and bottlenecks stay calls", async () => {
@@ -57,6 +58,12 @@ test("linear functions composed: one product, the evaluator's answers; Ints and 
     assert.equal(got.length, w.length, n);
     got.forEach((g, i) => assert.ok(typeof g === "number" ? Math.abs(g - (w[i] as number)) <= 1e-12 * Math.max(1, Math.abs(w[i] as number)) : g === w[i], `${n}: ${got} vs ${w}`));
   }
-  // compile.ts folded a chain of linear calls into one product (C30b);
-  // the core IR doesn't yet (C137's gaps), so only the answers are checked.
+  // A chain of linear calls is one product, with no call left; Ints, and
+  // a Float64 between two records (more multiply-adds folded), stay calls.
+  const ir = lowerCore(code, info, names, exports.map((n) => code.defs.find((d) => names[d] === n)!));
+  const calls = (n: string) => { const f = ir.funcs.find((g) => g.def === code.defs.find((d) => names[d] === n) && !g.inner)!; let c = 0; const go = (e: SExpr) => { if (e.k === "call") c++; kids(e).forEach(go); }; go(f.body); return c; };
+  assert.equal(calls("two"), 0);
+  assert.equal(calls("three"), 0);
+  assert.equal(calls("numbers"), 0);
+  assert.ok(calls("ints") > 0);
 });
