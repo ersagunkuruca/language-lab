@@ -70,6 +70,14 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
     const fn = code.nodes[n.fn];
     return fn?.kind === "ref" && code.nodes[fn.target]?.kind === "variant" && holders.has(fn.target) ? [holders.get(fn.target)!] : [];
   }));
+  // The program's types with a list in a field that a definition reads a
+  // field of.
+  const readBy = (d: Id) => new Set(subtree(code, d).flatMap((x) => {
+    const n = code.nodes[x];
+    if (!isCall(n)) return [];
+    const fn = code.nodes[n.fn];
+    return fn?.kind === "ref" && code.nodes[fn.target]?.kind === "field" && holders.has(fn.target) ? [holders.get(fn.target)!] : [];
+  }));
   // A definition of the other side making a type the seeds' side makes is
   // a seed too: the other side calls it, converting.
   const seedSet = new Set(seeds);
@@ -119,6 +127,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
     }
     return seen;
   };
+  const listedT = (t: Type): boolean => (t.t === "con" ? t.id === LIST || t.args.some(listedT) : t.t === "fn" ? [...t.params, t.ret].some(listedT) : false);
   let aw: Set<Id>, bw: Set<Id>, aTypes: Set<Id>;
   for (;;) {
     asWritten.clear();
@@ -127,7 +136,13 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
     // basis) are on main's side: a seed they read converts there.
     bw = reach([main, ...[...asWritten].filter((d) => !aw.has(d) && ownSet0.has(d))], seedSet);
     aTypes = new Set([...aw].flatMap((d) => [...madeBy(d)]));
-    const more = [...bw].filter((d) => [...madeBy(d)].some((t) => aTypes.has(t)));
+    // So is one reading fields of such types and no other's, where no list
+    // crosses in or out of it (agent's `point`, mesh.points by position):
+    // on the other side each read converted the whole list (C196).
+    // Reading and making only types of the seeds' side.
+    const reader = (d: Id) => { const r = [...readBy(d)], m = [...madeBy(d)]; return r.length > 0 && r.every((t) => aTypes.has(t)) && m.every((t) => aTypes.has(t)) && crossFree(d); };
+    const crossFree = (d: Id) => { const b = (code.nodes[d] as NodeOf<"def">).body, t = b ? info.typeOf.get(b) : undefined; return !!t && !listedT(info.subst.zonk(t)); };
+    const more = [...bw].filter((d) => [...madeBy(d)].some((t) => aTypes.has(t)) || (d !== main && reader(d)));
     if (!more.length) break;
     if (more.includes(main)) return null;
     more.forEach((d) => seedSet.add(d));

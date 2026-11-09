@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, ArrayView, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
@@ -64,6 +64,9 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // The first item, read in place (C196: an array's match reads it once
   // an item), not a list of its answers.
   "array.first": (a: Parameters<typeof arrayView>[0]) => { const v = arrayView(a); if (v.n === 0) throw FAIL; return v.buf.items[v.start]; },
+  // An array of a written list, from its items (core-js.ts writtenArrays):
+  // as `array of` makes it, a byte a slot where 16 or more are bytes.
+  "array.ofItems": (...xs: unknown[]) => (xs.length >= 16 ? arrayOfItems(toList(xs as Value[]) as never) : arrayOf(xs)),
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).
