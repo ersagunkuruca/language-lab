@@ -8,12 +8,12 @@ cells, and the browser is one more world, like the command line's.
 Two-way binding is the language's own running backwards. Mobile is the
 same app, packaged.
 
-**Status (2026-10-30): built.** Pages are `Html` values, `lab build-web`
+**Status (2026-10-30): built.** Pages are `Html` values, `ters build-web`
 builds them, and the demos are the converter, two dice, Pig, Tumble, the
 nested to-do and the guitar pedal, restyled in one look on 2026-10-30.
 The "later" items at the end are done too: keyed lists, `inverse` over
-function values, static output from `lab run`, time, randomness and HTTP,
-and the editor's Run showing a page live. `lab build-app` packages a page
+function values, static output from `ters run`, time, randomness and HTTP,
+and the editor's Run showing a page live. `ters build-app` packages a page
 as a phone app (RUNNING.md). Open page work is in BACKLOG.md (L59, L98,
 L99).
 
@@ -82,7 +82,7 @@ L99).
   Solid's side. An app that wants one model and pure updates writes one
   cell holding a record and handlers that `write(model, step(read(model),
   …))`: Elm's shape, as a style, with no runtime support needed.
-- **What is the browser?** A world, the way Node is for `lab run`
+- **What is the browser?** A world, the way Node is for `ters run`
   (`src/lang/world.ts`). Its handler implements the same world operations
   with the browser's means: `print` appends to the browser console,
   `read file`/`write file` read and write `localStorage` keys (so a todo
@@ -91,7 +91,7 @@ L99).
   input"). No new effects in this step; time, randomness and HTTP come
   later as world effects for every target at once (ROADMAP item 3's open
   list).
-- **What comes out?** `lab build-web <program> -o app.html`: one HTML file
+- **What comes out?** `ters build-web <program> -o app.html`: one HTML file
   with the compiled program, its runtime and the mount in one `<script>`.
   No server, no build step for the reader, opens from `file://`.
 - **And two-way binding?** A field shows `view(read(c))` and, when edited,
@@ -103,14 +103,14 @@ L99).
   produces, so the field just keeps what was typed, marked invalid, and
   the cell doesn't change. Validation is free.
 - **Static sites?** The same value, printed. Rendering an `Html` with
-  every function called once is a fold to text, and `lab run` on a page
+  every function called once is a fold to text, and `ters run` on a page
   program prints that: a whole HTML document, every text, part and
   attribute drawn once, handlers left out (server-side rendering without
   a server; `htmlText` in html.ts). Text inside `<style>` and `<script>`
   goes in as it is, since entities aren't read there.
 - **Mobile?** Packaging, not language: the HTML file plus a web manifest is
   an installable PWA, and Capacitor (Ionic) wraps the same file as an iOS
-  or Android app. `lab build-app <program> -o folder` (cli/app.ts) writes
+  or Android app. `ters build-app <program> -o folder` (cli/app.ts) writes
   both: `folder/www` holds the page, a web app manifest, a service worker
   that keeps every file so it opens offline (its cache named by what it
   keeps, so a new build replaces it), and two icons in the program's
@@ -243,9 +243,9 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 - **Browser world** (`src/lang/browser.ts`): the `World` for a page. Files
   are `localStorage` under a prefix named after the program, so two apps
   on one origin don't share files by accident.
-- **`lab build-web`** (cli/lab.ts): compiles the program, bundles it with
+- **`ters build-web`** (cli/ters.ts): compiles the program, bundles it with
   the runtime, the mount and the browser world by esbuild (already a dev
-  dependency, as for `lab compile`), and writes one HTML file. There is
+  dependency, as for `ters compile`), and writes one HTML file. There is
   no stylesheet of its own: a program's styles are a `style` element in
   its page, like any other element.
 - **Preview** (`src/lang/page.ts`): `showPage` runs a page's `main` with
@@ -263,7 +263,7 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   `src/lang/page-runtime.ts` (runtime, mount, browser world, startPage) as
   a script that sets `$lab`; the program is compiled with
   `link: "global"`, a plain script taking its helpers from `$lab`. About
-  100 KB more than `lab build-web`'s, which keeps only what it uses.
+  100 KB more than `ters build-web`'s, which keeps only what it uses.
 - **What `main` may do**: return `Html`; take no arguments; use `Cells`,
   `Update`, `Console`, `Files` (run.ts `pageProblem` says why not).
 
@@ -272,7 +272,7 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 1. This document.
 1. (bug, before the rest) Effect rows on function types inside data types.
 2. `Html`, `Attribute`, `Event` in std; mount over them for both calling
-   conventions; the browser world; `lab build-web`; differential tests
+   conventions; the browser world; `ters build-web`; differential tests
    (evaluator and compiled draw the same page and react the same to the
    same events in a fake document).
 3. An original app in the language, built by `editor/build.ts` to
@@ -284,7 +284,7 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
 
 Later, each on its own: reactive.html's programs moved onto `Html`; keyed
 lists (done: `for each`); `solve` over function values (done: the
-prelude's `inverse`); static output (done: `lab run`); time, randomness
+prelude's `inverse`); static output (done: `ters run`); time, randomness
 and HTTP world effects (done); the editor showing a page program live,
 like its shader picture (done: Run shows the page).
 

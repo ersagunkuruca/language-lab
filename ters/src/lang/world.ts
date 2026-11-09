@@ -1,5 +1,5 @@
 // Node's World (run.ts): the console, the file system, the clock and the
-// web, for programs run from the command line (cli/lab.ts) by the evaluator
+// web, for programs run from the command line (cli/ters.ts) by the evaluator
 // or compiled. Every operation is synchronous, like the rest of the
 // language; a failure throws with a message, which becomes the reason of
 // the program's Abort. `fetch text` is synchronous too: a child Node does
@@ -201,14 +201,14 @@ fetch(url).then(async (r) => {
 }, (e) => done(String(e.cause?.message ?? e.message)));
 `;
 
-// A world that answers only what it's allowed (E229b, `lab run --allow`):
+// A world that answers only what it's allowed (E229b, `ters run --allow`):
 // "network", "files", or "fetch=host" (the network, for that host only).
 // What isn't allowed fails with the reason, as an Abort the program can
 // handle where the answer can fail, and as an error where it can't.
 export function allowedOnly(world: World, allow: string[]): World {
   const network = allow.includes("network"), files = allow.includes("files");
   const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
-  const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: lab run was given --allow ${allow.join(",") || "nothing"}`); };
+  const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: ters run was given --allow ${allow.join(",") || "nothing"}`); };
   const out: World = { ...world };
   if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes", "openFile"] as const) out[k] = refuse("Files") as never;
   if (!network) {

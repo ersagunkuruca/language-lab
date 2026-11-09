@@ -1,4 +1,4 @@
-// `lab compile` writes the compiled module's map beside it (C143c): each
+// `ters compile` writes the compiled module's map beside it (C143c): each
 // printed function's node by its name, and each stop site's node and
 // definition, and which binder each local holds (C143d), ids only, which
 // the module itself no longer carries, and each function's lines in the
@@ -30,7 +30,7 @@ test("the compiled module's map names each function's node and each stop's (C143
     for (const [l, id] of Object.entries(ls)) { assert.match(l, /^l\d+$/); assert.equal(ir.code.nodes[id]?.kind, "binder", `${fn}.${l}`); }
   }
   const dir = mkdtempSync(join(tmpdir(), "map-"));
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "compile", join(import.meta.dirname, "../../ters/examples/calc"), "-o", "calc.mjs"], { cwd: dir, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "compile", join(import.meta.dirname, "../../ters/examples/calc"), "-o", "calc.mjs"], { cwd: dir, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   const { lines, ...written } = JSON.parse(readFileSync(join(dir, "calc.mjs.map.json"), "utf8"));
   // calc's written reader is made with fresh ids each time (inverses.ts,
@@ -73,7 +73,7 @@ test("a compiled module carries no node ids: its own cases by number, its stops 
   assert.ok(m.tags && Object.keys(m.tags).length > 0);
   for (const [n, id] of Object.entries(m.tags)) { assert.match(n, /^\d+$/); assert.ok(id.startsWith("box:") || ir.code.nodes[id]?.kind === "variant", id); }
   const dir = mkdtempSync(join(tmpdir(), "ids-"));
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "compile", join(import.meta.dirname, "../../ters/examples/chapters"), "-o", "chapters.mjs"], { cwd: dir, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "compile", join(import.meta.dirname, "../../ters/examples/chapters"), "-o", "chapters.mjs"], { cwd: dir, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   const js = readFileSync(join(dir, "chapters.mjs"), "utf8");
   const ours = js.slice(js.search(/^(?:var|const|let) defs = \(function/m));

@@ -494,9 +494,9 @@ A Time of day is an hour, a minute and a second, counted as seconds from midnigh
 
 ## Embeddings
 
-An Embedding a b is the one map from a type into a larger one that keeps + − · and <, written embedding(map: …), at most one for a pair. lab test checks its laws. EMBEDDINGS.md.
+An Embedding a b is the one map from a type into a larger one that keeps + − · and <, written embedding(map: …), at most one for a pair. ters test checks its laws. EMBEDDINGS.md.
 
-- **Embedding** (type). An embedding of a in b: a map from a into b that keeps the operations (ι(x + y) = ι(x) + ι(y), ι(x · y) = ι(x) · ι(y), ι(−x) = −ι(x), and x < y exactly when ι(x) < ι(y)), written embedding(map: …), at most one for a pair of types. lab test checks those laws. EMBEDDINGS.md.
+- **Embedding** (type). An embedding of a in b: a map from a into b that keeps the operations (ι(x + y) = ι(x) + ι(y), ι(x · y) = ι(x) · ι(y), ι(−x) = −ι(x), and x < y exactly when ι(x) < ι(y)), written embedding(map: …), at most one for a pair of types. ters test checks those laws. EMBEDDINGS.md.
 - **int in rational** : `Embedding Int Rational` (numbers module). Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.
 - **int in float64** : `Embedding Int Float64`. Int in Float64: n as the Float64 nearest it, exact up to 2⁵³; + − · agree as closely as Float64 rounds.
 - **rational in float64** : `Embedding Rational Float64` (numbers module). Rational in Float64: top ÷ bottom, the Float64 nearest the fraction; + − · agree as closely as Float64 rounds.
@@ -602,7 +602,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **Settings** (type). An effect: my locale() is the language of the person running the program, as a Locale, for uppercase, lowercase and collated, and my time zone() their time zone's IANA name ("Europe/Istanbul"), for zone offset and instant text in zone. A match with a case for each answers them (a test picks them); with nothing around it, the computer's settings answer.
 - **Release** (type). The marker of a handler's release case: release → body runs once when the match ends, by any exit (finished, a case that does not resume, a failure), after the handlers inside it. Its body gives Unit and may only log.
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
-- **Check** (type). An effect for tests: expect(holds, what) says what should hold. A definition that performs it is a test, and lab test runs it on its saved inputs and on small values, reporting every expect that failed with the inputs it failed on.
+- **Check** (type). An effect for tests: expect(holds, what) says what should hold. A definition that performs it is a test, and ters test runs it on its saved inputs and on small values, reporting every expect that failed with the inputs it failed on.
 - **Console** (type). An effect: print, print error, read input and read line. A match with a case for each answers them (a test collects what was printed); with nothing around it, the console answers.
 - **Files** (type). An effect: read file, write file, add to file, file exists, list folder, read bytes and write bytes. A match with a case for each answers them (a test gives a file of its own); with nothing around it, the file system answers.
 - **Network** (type). An effect: fetch text, start fetch and send request. A match with a fetch text(url) or send request(request) case answers it; with nothing around it, the web answers.

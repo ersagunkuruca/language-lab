@@ -94,7 +94,7 @@ test("routes: what goes wrong, and the exit codes", () => {
 
 // GAPS.md M2: the chooser is handed the program's types too, so the
 // records' Map and Set fields hold the trees the code builds.
-test("routes: the trees chosen the way lab chooses them check", () => {
+test("routes: the trees chosen the way ters chooses them check", () => {
   const p = load("routes");
   const own: string[] = JSON.parse(readFileSync(join(examples, "routes/code.json"), "utf8")).defs;
   const main = own.find((d) => p.pres.names[d] === "main")!;

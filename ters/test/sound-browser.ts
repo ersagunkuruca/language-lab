@@ -1,5 +1,5 @@
 // A page with sound in a real browser (AUDIO.md, A2): examples/pedal built
-// as `lab build-web` builds it, served, and played in Chromium from its
+// as `ters build-web` builds it, served, and played in Chromium from its
 // fake microphone (a beep) and from its recording. What reaches the
 // speakers is tapped with an analyser: it must be sound, as loud as what
 // came in (loudness matched) but driven (peaks squashed), and the Clean
@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "sound-"));
-const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/lab.ts"), "build-web", join(import.meta.dirname, "../examples/pedal"), "-o", join(dir, "pedal.html")], { encoding: "utf8" });
+const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, "../examples/pedal"), "-o", join(dir, "pedal.html")], { encoding: "utf8" });
 if (built.status !== 0) throw new Error(built.stderr);
 const server = createServer((q, r) => {
   try { r.end(readFileSync(join(dir, (q.url ?? "/").split("?")[0]))); } catch { r.statusCode = 404; r.end(); }

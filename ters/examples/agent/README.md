@@ -23,7 +23,7 @@ The mesh's hole is the pillar grown by the agent's radius on every side
 path's corners are where the agent's middle turns.
 
 ```
-$ lab build-web examples/agent -o agent.html
+$ ters build-web examples/agent -o agent.html
 ```
 
 The page writes each trip's line too:

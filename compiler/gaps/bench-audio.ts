@@ -14,7 +14,7 @@ import { represented, type Program } from "../../ters/cli/represented.ts";
 
 const p = loadProgram(join(import.meta.dirname, "../../ters/examples/pedal"));
 const prog = { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names };
-// Stored as `lab render --compiled` stores a sound: its blocks as arrays
+// Stored as `ters render --compiled` stores a sound: its blocks as arrays
 // (C196), the lists as written beside them for comparison.
 const stored = represented<Program>({ title: "pedal", ...prog, own: p.own.defs, reps: [], options: p.options }, p.named("pedal"), true, false, true);
 console.log(`stored: ${stored.chosen?.join(", ") || "as written"}`);

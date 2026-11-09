@@ -238,11 +238,11 @@ type's parameter names, read from the type the field already has.
 4. **Agreement checked (T7). Built (L96d)** for the prelude's ways: each
    way of a Trig field is a law against Float64's own field ("cos by sin
    agrees at Float64", and polar by sincos holding of Float64's polar),
-   run by `lab test` and test/prelude-laws.test.ts, which also checks that
+   run by `ters test` and test/prelude-laws.test.ts, which also checks that
    every way the prelude gives has a law that runs it. The inputs stay
    within [−3, 3]: far out, x + π/2 rounds away more than `=`'s tolerance,
    a disagreement of floats rather than of the ways. A program's own ways
-   get laws the same way; caching by hash is `lab test`'s.
+   get laws the same way; caching by hash is `ters test`'s.
 5. **The editor** shows the pick per field. There is no explicit
    selection: the compiler chooses (Ersagun 2026-10-30).
 

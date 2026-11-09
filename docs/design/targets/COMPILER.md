@@ -418,7 +418,7 @@ What isn't a loop yet:
   runs out of stack at a few thousand levels (calc's nested parentheses,
   GAPS.md G1). The evaluator has no such limit. The fix is the
   evaluator's (continuations on the heap) for the functions the checker
-  finds recursive, or a bigger stack for the program. `lab compile`
+  finds recursive, or a bigger stack for the program. `ters compile`
   does the second: its output runs `main` on a worker thread with a 1 GB
   stack. Mutual tail calls aren't loops either.
 - **A fold with `Choice`** is a recursive generator, one per level.
@@ -761,7 +761,7 @@ program outside a JS host, and the C route covers that too.
    ray marcher (REVIEW.md's stage 7), with `derivative` in the source.
    Left to do: native vector types and `Float32`.
 3. **Single-file executables** from the JS output, with the CLI target
-   (effects thread). A first step is done: `lab compile` writes one
+   (effects thread). A first step is done: `ters compile` writes one
    bundled `.mjs` with its runtime (esbuild), which runs on any Node. A
    binary with Node inside (single executable applications) is the next.
 4. **Grow the scalar profile** towards the heap: fixed-size records
@@ -783,7 +783,7 @@ program outside a JS host, and the C route covers that too.
 | 1b | mode analysis, so relational directions compile (`det` and `semidet` modes do, `compiler/src/modes.ts`; several answers still go to relate.ts); `derivative` at compile time when the function is known (done for WASM, WGSL and JS) | done (MODES.md, L11e) |
 | 2 | compile in the editor: a "run compiled" button using a blob module, with a cache keyed by each definition's content hash, so only changed definitions recompile | a program in the editor is too slow to run live, or someone wants to share a runnable program |
 | 2½ | self tail calls as loops in the JS backend (the scalar benchmark overflowed at 10,000 steps, compiled calc at 5,000 lines: GAPS.md G1); then tail recursion modulo cons, so `cons(x, self(rest))` is a loop that fills the cell's last field (GAPS.md G22; Friedman and Wise 1975, OCaml's `[@tail_mod_cons]`) | done |
-| 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops); the world through the runtime's `World`; `lab compile` (ters/cli/lab.ts); `Cells` as calls on one runtime `Cells` instance | done |
+| 3 | user-defined effects and handlers: answered operations as calls to a handler stack, aborting ones as exceptions; `Choice` stays special (loops); the world through the runtime's `World`; `ters compile` (ters/cli/ters.ts); `Cells` as calls on one runtime `Cells` instance | done |
 | 4 | containment instead of equality for effect rows at call sites, so pure lambdas inside `Choice` code stay plain functions | a profile shows generator overhead from it |
 | 5 | other targets: WASM scalar profile, WGSL, single-file executables, native via C, WasmGC | done (WASM.md W1 to W4, NATIVE.md N1 to N5, shaders.html); Int past 64 bits on WASM is W5 |
 
@@ -802,7 +802,7 @@ compiler/src/wasm.ts       the core IR as a WebAssembly module (binary and text)
 compiler/src/c.ts          the core IR as C (NATIVE.md)
 compiler/src/wgsl.ts       the core IR's scalar profile as a WGSL shader
 compiler/src/core-js.ts    the core IR as JavaScript (C137c), to replace compile.ts; run by the fuzz test
-compiler/src/core-page.ts  a page from it (`lab build-web --core`): the evaluator's cells and mount, the browser's world
+compiler/src/core-page.ts  a page from it (`ters build-web --core`): the evaluator's cells and mount, the browser's world
 compiler/src/fixtures.ts   small programs for the tests and the benchmark
 compiler/src/program.ts    load, check and compile an example
 compiler/build.ts          writes compiler/out/*.js

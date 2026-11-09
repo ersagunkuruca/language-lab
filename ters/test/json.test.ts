@@ -26,7 +26,7 @@ const ran = (p: ReturnType<typeof program>) => runMain(p.code, p.info, p.main, {
 async function both(body: (k: Lang) => Id) {
   const p = program(body);
   const v = ran(p);
-  // The core IR's JavaScript, as the editor and `lab build` run it: it
+  // The core IR's JavaScript, as the editor and `ters build` run it: it
   // reads JSON through json read's written reader where compile.ts would
   // search (L72f).
   const core = lowerCore(p.code, p.info, p.names, [p.main]);

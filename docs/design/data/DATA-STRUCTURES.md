@@ -98,7 +98,7 @@ prints; in the evaluator a word count of 1,200 words (400 different) runs
 about 3.5 times faster, and of 3,000 words about 15 times (the list is
 quadratic, the tree n log n).
 
-Done as C47 (src/lang/library-reps.ts): `lab` and the editor's Run choose the
+Done as C47 (src/lang/library-reps.ts): `ters` and the editor's Run choose the
 tree when the costs say so, and equal, show and compare on a map are given
 its meaning. The trees are library data since C51: the trees module
 (src/lang/trees-source.ts, library/trees.json) holds a tree for Map and one
@@ -111,7 +111,7 @@ One given to a generic definition (C53), or among a map's keys or a set's
 items, keeps the definition. The trees module isn't part of the library every
 program is checked on, only merged in when a tree is chosen (C53): checking
 it is about 700 ms, and the editor checks after every edit. Before that, representations were applied
-only by `lab run` and `lab compile` with a representations.json (#97). A
+only by `ters run` and `ters compile` with a representations.json (#97). A
 std or library type's representation has to be chosen automatically by the
 evaluator, the compiler and the editor, from the costs of the jobs the
 program uses. That is a Compiler lane change (C47). It must also send `equal`, `show`

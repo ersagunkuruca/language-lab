@@ -788,7 +788,7 @@ export function coreMain(ir: CoreIR, name: string, rt: Runtime): (args: string[]
   return (args) => runCoreFn(f, m, args, rt);
 }
 
-// The program as a module that runs main in Node (C137c5, `lab compile
+// The program as a module that runs main in Node (C137c5, `ters compile
 // --core`): the printed functions, with the runtime imported from
 // `runtime` (this file, which a bundler takes in) and Node's world.
 // `hosts`: the program's hosts/js.js, imported, and its operations
@@ -804,7 +804,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     // With TERS_LOG set, the world's answers are logged to that file
-    // (L186's log, C172a), for \`lab run --replay\` to give the evaluator.
+    // (L186's log, C172a), for \`ters run --replay\` to give the evaluator.
     `import { logged, logText } from ${JSON.stringify(world.replace(/[^/]*$/, "worldlog.ts"))};`,
     `import { writeFileSync as $writeLog } from "node:fs";`,
     "const $logTo = process.env.TERS_LOG, $logged = $logTo ? logged(nodeWorld()) : null;",
@@ -1026,7 +1026,7 @@ const solverFor = (code: string, beside: string, js: string) => {
 const using = (names: string, from: string) => (from.startsWith("$") ? `const { ${names} } = ${from};` : `import { ${names} } from ${JSON.stringify(from)};`);
 const wrapped = (from: string, lines: string[]) => (from.startsWith("$") ? ["(() => {", ...lines, "})();"] : lines).join("\n");
 
-// A page's script (C137c9, `lab build-web --core`): the printed functions,
+// A page's script (C137c9, `ters build-web --core`): the printed functions,
 // with core-page.ts (`page`, which a bundler takes in, or the global of
 // a prebuilt core-page-runtime.ts) drawing main.
 // `worklet`: a page with sound, its audio thread's script (coreSoundScript

@@ -156,7 +156,7 @@ export function buildNumbers(pre: Module): Module {
   k.define(complexTable, k.list(...([[1, 0, 1, 0, 1, 0], [1, 0, 0, 1, 0, 1], [0, 1, 1, 0, 0, 1], [0, 1, 0, 1, -1, 0]] as const).map(([a, b, c, d, e, f]) =>
     k.call(TIMES_V, C(k.lit(a), k.lit(b)), C(k.lit(c), k.lit(d)), C(k.lit(e), k.lit(f))))));
   // Complex laws (POLAR.md L97e), tests in the language (T7): each performs
-  // Check, so `lab test` and test/prelude-laws.test.ts run them on small
+  // Check, so `ters test` and test/prelude-laws.test.ts run them on small
   // complex numbers. The first is from polar against modulus and angle
   // of; the second is Trig's polar and unpolar fields, one direction
   // undoing the other.

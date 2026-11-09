@@ -88,7 +88,7 @@ export const RANDOM = typedef("std.random", "Random", [], [["random", [], () => 
 export const RANDOM_OP = "std.random.random";
 // Check (TESTS-IN-THE-LANGUAGE.md, BACKLOG T7a): a test is a definition
 // that performs `expect(holds, what)`. Its handler decides what a failure
-// means: `lab test` collects every one (a failing expect doesn't stop the
+// means: `ters test` collects every one (a failing expect doesn't stop the
 // test), the editor shows them on the definition. Not a world effect, so a
 // test may search (Choice) and is checked on every path.
 export const CHECK = typedef("std.check", "Check", [], [["expect", [["holds", () => tref(BOOL)], ["what", () => tref(STRING)]], () => tref(UNIT)]], true);
@@ -1543,7 +1543,7 @@ SMART[INSTANT_V] = "instant of";
 (nodes.find((x) => x.id === INSTANT_V) as NodeOf<"variant">).private = true;
 // An embedding of a in b (EMBEDDINGS.md, L208b): a map from a into b that
 // keeps the operations, ι(x + y) = ι(x) + ι(y) and so on, declared at most
-// once for a pair of types, `embedding(map: (x) → complex(x, 0))`. lab test
+// once for a pair of types, `embedding(map: (x) → complex(x, 0))`. ters test
 // checks its laws (embed-laws.ts). After Instant, so ids above don't move.
 export const EMBEDDING = typedef("std.embedding", "Embedding", ["a", "b"], [
   ["embedding", [["map", ([a, b]) => tfun([tref(a)], tref(b), [])]]],

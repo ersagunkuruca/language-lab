@@ -263,7 +263,7 @@ test("R3 §2.2 a fraction made with ratio keeps the fraction's rule (lowest term
 // The library is about 43,000 nodes now (the cases module's Unicode tables
 // alone are about 10,000), and checking any program types all of it first:
 // a main that prints one text types 40,000 nodes, which takes 2.5 s in a
-// fresh process. Every `lab run`, `lab check` and test file pays it. The
+// fresh process. Every `ters run`, `ters check` and test file pays it. The
 // library's definitions are pinned (their types are known by hash), so a
 // program should only need the types of what it reaches.
 test("R10 §2 checking a main that prints one text doesn't type the whole library", { todo: "infer types every library node before the program's own" }, () => {

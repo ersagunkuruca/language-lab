@@ -44,7 +44,7 @@ export async function ways(): Promise<Record<"evaluator" | "core" | "stored" | "
   // Printed from the core IR (C137d13).
   const rt: { print: (s: string) => void; world?: World } = { print: () => {} };
   const core = coreMain(lowerCore(p.code, p.info, p.pres.names, [main]), "main", rt);
-  // The core IR of the program as `lab compile` stores it: its lists as
+  // The core IR of the program as `ters compile` stores it: its lists as
   // the chooser picks (arrays, C30), not as written.
   const prog = { title: "chapters", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: representationsIn(p.code, p.info, p.pres.names, p.own.defs), options: p.options };
   const r = represented(prog, main, true);

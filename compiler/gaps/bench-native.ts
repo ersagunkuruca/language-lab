@@ -1,5 +1,5 @@
-// Whole programs as processes: native (lab native, through C), compiled
-// JavaScript (lab compile, under node) and WebAssembly (wasi.ts, under
+// Whole programs as processes: native (ters native, through C), compiled
+// JavaScript (ters compile, under node) and WebAssembly (wasi.ts, under
 // node:wasi), on the same files, timed from start to exit with the peak
 // memory the process held. The numbers in NATIVE.md, N5, come from this.
 // Run: node gaps/bench-native.ts   (needs $CC, default cc)
@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { book as ledgerBook } from "./ledger.ts";
 import { book as chaptersBook } from "./chapters.ts";
 
-const root = join(import.meta.dirname, "../.."), lab = join(root, "ters/cli/lab.ts");
+const root = join(import.meta.dirname, "../.."), lab = join(root, "ters/cli/ters.ts");
 const dir = mkdtempSync(join(tmpdir(), "bench-native-"));
 const cc = process.env.CC ?? "cc";
 

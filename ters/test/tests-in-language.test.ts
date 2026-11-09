@@ -40,7 +40,7 @@ test("a test is a definition whose row has Check, and nothing else marks it", ()
   assert.deepEqual(testsIn(p.info, Object.values(p.defs)).sort(), [p.defs.twice, p.defs.short, p.defs.both, p.defs.swap].sort());
 });
 
-test("lab test: every failure, with the smallest inputs first; a law that holds passes", () => {
+test("ters test: every failure, with the smallest inputs first; a law that holds passes", () => {
   const p = program();
   const results = new Map(runTests(p.code, p.info, p.names, Object.values(p.defs)).map((r) => [r.def, r]));
   assert.equal(results.get(p.defs.plain), undefined);
@@ -151,11 +151,11 @@ test("main's accepted answer is checked in its recorded world", async () => {
   assert.deepEqual(Object.values(wc)[0][1].main!.printed, ["       2       5      28 notes.txt", "       0       0       0 empty.txt", "       2       5      28 total"]);
 });
 
-// And compiled (T7e16): `lab test --compiled` runs main compiled to
+// And compiled (T7e16): `ters test --compiled` runs main compiled to
 // JavaScript through the core IR in each recorded world.
-test("lab test --compiled checks main's accepted answers compiled", async () => {
+test("ters test --compiled checks main's accepted answers compiled", async () => {
   const { spawnSync } = await import("node:child_process");
   const { join } = await import("node:path");
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/lab.ts"), "test", join(import.meta.dirname, "../examples/calc"), "--compiled"], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "test", join(import.meta.dirname, "../examples/calc"), "--compiled"], { encoding: "utf8" });
   assert.match(r.stdout, /✓ main compiled \(2 cases\)/, r.stdout + r.stderr);
 });

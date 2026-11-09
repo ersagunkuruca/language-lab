@@ -1,4 +1,4 @@
-// WAV files for `lab render` (AUDIO.md): read the first channel of PCM
+// WAV files for `ters render` (AUDIO.md): read the first channel of PCM
 // (8, 16, 24 or 32-bit integers, or 32 or 64-bit floats) as samples in -1
 // to 1, and write samples as one channel of 32-bit floats, so a render
 // keeps what the program computed. The format is Microsoft's RIFF WAVE
@@ -25,7 +25,7 @@ export function readWav(bytes: Uint8Array): Wav {
         : format === 1 ? (bits === 8 ? (p: number) => (v.getUint8(p) - 128) / 128 : bits === 16 ? (p: number) => v.getInt16(p, true) / 32768
           : bits === 24 ? (p: number) => ((v.getUint8(p) | (v.getUint8(p + 1) << 8) | (v.getInt8(p + 2) << 16)) / 8388608) : bits === 32 ? (p: number) => v.getInt32(p, true) / 2147483648 : null)
         : null;
-      if (!read) throw new Error(`a WAV file of format ${format} with ${bits}-bit samples isn't one lab reads (PCM or float)`);
+      if (!read) throw new Error(`a WAV file of format ${format} with ${bits}-bit samples isn't one ters reads (PCM or float)`);
       const samples = new Float64Array(len);
       for (let i = 0; i < len; i++) samples[i] = read(body + i * step);
       return { rate: fmt.rate, samples };

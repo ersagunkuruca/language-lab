@@ -1,6 +1,6 @@
 // sheet in five ways, in one process: the evaluator and the core IR's
 // JavaScript on the program as defined (maps as their sorted lists), the
-// same two on the program as `lab run` and `lab compile` store it (the chooser's
+// same two on the program as `ters run` and `ters compile` store it (the chooser's
 // representations, Map as a hash table where it may be one), and the
 // hand-written ideal (sheet.ideal.js). Each gets the same arguments and a
 // world whose files are kept in memory, and the comparison is what it

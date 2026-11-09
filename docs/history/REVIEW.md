@@ -158,7 +158,7 @@ as JS's own `String(x)` does.
 
 > **Status (2026-10-22, evening): fixed** for the evaluator (a heap
 > machine) and compiled folds (loops); compiled self tail calls are loops,
-> and `lab compile` runs `main` with a 1 GB stack. A page built by `lab
+> and `ters compile` runs `main` with a 1 GB stack. A page built by `lab
 > build-web` still runs compiled non-tail recursion on the browser's stack.
 
 | | largest list summed | after the real-data work |

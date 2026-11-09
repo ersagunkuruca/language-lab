@@ -44,7 +44,7 @@ compiler takes the cheapest for each (WAYS.md): the ball's own, and the
 stick's way. The solve is written once for both.
 
 ```
-$ lab run examples/impact
+$ ters run examples/impact
 At 60 m/s, spinning 20 rad/s: a step a frame finds it in the wall at frame 5 (0.0833 s); conservative advancement finds it touching at 0.0826 s, in 12 steps.
 At 80 m/s, spinning 15 rad/s: a step a frame never finds it in the wall; conservative advancement finds it touching at 0.0611 s, in 11 steps.
 At 60 m/s at a plank turning 1.0 rad/s: a step a frame finds them overlapping at frame 5 (0.0833 s); conservative advancement finds them touching at 0.0825 s, in 14 steps.
@@ -54,7 +54,7 @@ Credits: …
 ```
 
 Both times match a JavaScript prototype that turns the corners with
-cos and sin rather than a motor. `lab test examples/impact` checks main's
+cos and sin rather than a motor. `ters test examples/impact` checks main's
 answer, and with `--compiled` checks it compiled too.
 
 Every turning body must spin: a frame's motion with no turn is a slide,

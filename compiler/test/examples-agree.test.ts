@@ -1,19 +1,19 @@
 // Every example, run three ways, says the same (I111, REVIEW-2026-11-01
-// §7): the evaluator on the program as defined (`lab run --as-defined`),
-// the evaluator after the chooser has picked representations (`lab run`),
-// and compiled JavaScript after the chooser and staging (`lab compile`).
+// §7): the evaluator on the program as defined (`ters run --as-defined`),
+// the evaluator after the chooser has picked representations (`ters run`),
+// and compiled JavaScript after the chooser and staging (`ters compile`).
 // What each prints, writes to stderr and exits with must agree, and so must
-// the files a program writes. A page is compared as `lab run` prints it,
+// the files a program writes. A page is compared as `ters run` prints it,
 // static HTML, evaluated both ways; its compiled form is a page module
 // with nothing to print, so the compiled side is left to the page tests.
 // Would have caught I105 (the chooser broke chapters) and I107.
 //
 // An example whose main has accepted answers (examples.json, T7e15) is
-// checked through them instead (T7e16b): `lab test --compiled` runs main
-// after the chooser and compiled against them, and `lab test --as-defined`
+// checked through them instead (T7e16b): `ters test --compiled` runs main
+// after the chooser and compiled against them, and `ters test --as-defined`
 // runs it as defined against them, each in the world the answer records.
 //
-// It spawns `lab` two or three times per example, so it is a sweep: an
+// It spawns `ters` two or three times per example, so it is a sweep: an
 // eighth of the examples per change, all of them nightly (helpers.ts).
 
 import { test } from "node:test";
@@ -27,7 +27,7 @@ import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
 
 const ters = join(import.meta.dirname, "../../ters");
-const lab = join(ters, "cli/lab.ts");
+const lab = join(ters, "cli/ters.ts");
 const examples = join(ters, "examples");
 const dir = mkdtempSync(join(tmpdir(), "agree-"));
 
@@ -68,7 +68,7 @@ test("every example says the same evaluated as defined, after the chooser, and c
     if (answered(name)) {
       // `--fresh`: no kept result stands in for a run.
       const compiled = run([lab, "test", ex, "--compiled", "--fresh"], 300);
-      assert.ok(compiled, `${name}: lab test --compiled finished`);
+      assert.ok(compiled, `${name}: ters test --compiled finished`);
       assert.equal(compiled!.code, 0, `${name}: main's accepted answers, after the chooser and compiled:\n${compiled!.out}${compiled!.err}`);
       assert.match(compiled!.out, /✓ main compiled/, `${name}: main ran compiled`);
       // As defined can be far slower (numbers counts in Peano Nat); one
@@ -78,7 +78,7 @@ test("every example says the same evaluated as defined, after the chooser, and c
       continue;
     }
     const chosen = run([lab, "run", ex, ...args], 60);
-    assert.ok(chosen, `${name}: lab run finished`);
+    assert.ok(chosen, `${name}: ters run finished`);
     // As defined can be far slower (numbers counts in Peano Nat); one that
     // doesn't finish in time isn't compared.
     const defined = run([lab, "run", "--as-defined", ex, ...args], 60);
@@ -86,7 +86,7 @@ test("every example says the same evaluated as defined, after the chooser, and c
     if (chosen!.out.startsWith("<!doctype html>")) continue;
     const mjs = join(dir, `${name}.mjs`);
     const made = run([lab, "compile", ex, "-o", mjs], 120);
-    // A program lab can't compile says why, the same way lab run does.
+    // A program ters can't compile says why, the same way ters run does.
     if (made?.code !== 0) { assert.equal(chosen!.code, made?.code, `${name}: compiling fails only where running does (${made?.err})`); continue; }
     const compiled = run([mjs, ...args], 60);
     assert.deepEqual(compiled, chosen, `${name}: compiled says what the evaluator says`);

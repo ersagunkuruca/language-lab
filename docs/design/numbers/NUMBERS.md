@@ -42,7 +42,7 @@ value, with the cost of converting between them counted.
 - The layer itself: representations written in the language as ordinary
   definitions (`representation int of Nat = representation(…)`,
   REPRESENTATIONS.md, #679 to #681), the rewrite (`represent`), the chooser
-  by declared costs (`choose`), and `lab check` saying what it chose
+  by declared costs (`choose`), and `ters check` saying what it chose
   (#682). Laws are checked by running the meaning beside the
   representation. Peano `Nat` runs as
   `Int`; `Map` and `Set` become balanced trees when their jobs' costs say
@@ -372,7 +372,7 @@ roadmap replaces declared costs with worked-out ones:
 **Where the choice lives.** With the compiler: the chooser picks per
 program and nothing in the program can override it (Ersagun, 2026-10-30:
 "I want the compiler to choose"; the `store as` pin was removed in #682).
-`lab check` says what it chose, and the editor will show it next to the
+`ters check` says what it chose, and the editor will show it next to the
 type (BACKLOG E159). Later, per value flow instead of per
 type: one part of a program might keep a number in unary because it only
 ever counts down from 3, while another needs binary. Conversions at the
@@ -556,9 +556,9 @@ from one entry in the table. The program still says `zero` and `succ`.
 The chooser now picks `int` for `numbers`' `main` (its `number` job is 1,
 against binary's log n). `main` (18!, 2⁵⁰, is 100 even) takes about 6 ms
 evaluated, against about 13 to 45 ms on binary, and about 0.03 ms compiled,
-against 0.09 ms. `lab run` and `lab compile` choose too: a program that
+against 0.09 ms. `ters run` and `ters compile` choose too: a program that
 writes representations runs on the chooser's pick for each type `main`
-uses (`lab run examples/numbers` prints 18! instead of running out of
+uses (`ters run examples/numbers` prints 18! instead of running out of
 memory), and `--as-defined` runs the definitions as written.
 
 ## Number systems, one by one

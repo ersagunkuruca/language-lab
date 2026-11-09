@@ -1,11 +1,11 @@
 # Audio: a sound is a function on blocks, the speaker is a world
 
 **Status (2026-10-30).** All five stages are built: sounds offline
-(`lab render`), live in a page (apps/pedal.html), the compressor, the
+(`ters render`), live in a page (apps/pedal.html), the compressor, the
 editor's preview, and the measurements (39× real time compiled). What
 follows is how each stage went.
 
-A1 is done: `lab render` plays a sound over a WAV file, and
+A1 is done: `ters render` plays a sound over a WAV file, and
 `examples/pedal` makes sound, the evaluator and compiled to the same bits.
 Compiled, it played 17 blocks a second of the 375 real time needs: both ways
 back (atanh's, Haar's) ran in the relational interpreter for each call.
@@ -16,7 +16,7 @@ in lifting steps (one unknown each run backwards), a match whose arms build
 its result with different cases has one answer run backwards, and the join
 compiles to arithmetic: the pedal plays 3258 blocks a second compiled,
 nearly nine times real time. A2 is done: `listen(microphone, pedal)` on a
-button plays live in a page (`lab build-web examples/pedal`, and
+button plays live in a page (`ters build-web examples/pedal`, and
 apps/pedal.html on the site), from the microphone or a recording, with
 Softer and Harder turning the drive as it plays and Clean/Driven to compare; test/sound-browser.ts
 plays it in Chromium from a fake microphone. A3 is done: the pedal ends in
@@ -152,7 +152,7 @@ real program.
   them with the processor's options, and the worklet's world gives them
   back in order (record and replay, EFFECTS-REVIEW §1.4, L60). A page with
   sound may roll a die or read the clock in `main` like any other page.
-- **And offline?** `lab render <program> --main pedal in.wav -o out.wav`
+- **And offline?** `ters render <program> --main pedal in.wav -o out.wav`
   runs the block function over a WAV file (16-bit or float PCM, mono, or
   the first channel), block by block, with the evaluator or compiled. This
   is how the tests hear it: a sine through `drive(1)` is the sine, and
@@ -165,12 +165,12 @@ real program.
   bigger window (an FFT of 1024) keeps its own buffer in a cell and pays its
   latency in the open, as a delay line does. The block size is the
   runtime's, not the program's: 128 in the browser, any multiple of 2 in
-  `lab render`, so a program must not depend on it, and the tests render
+  `ters render`, so a program must not depend on it, and the tests render
   with two sizes and compare.
 - **Which compiler?** The JavaScript one first: the worklet scope runs
   JavaScript, and compiled JS already turns maps and folds over lists into
   loops over arrays. WebAssembly (WASM.md) next if the profile asks for it,
-  since a worklet can instantiate a module too; and natively (`lab native`,
+  since a worklet can instantiate a module too; and natively (`ters native`,
   NATIVE.md) when the pedal wants to be a plugin, because a C function from
   a block to a block is exactly what LV2, VST3 and CLAP host. Native comes
   for nothing only once cells are in C, so it waits.
@@ -179,13 +179,13 @@ real program.
 
 ## Stages, one PR each
 
-1. **A1. Blocks offline.** `AUDIO_BLOCK` in std.ts; `lab render` with a WAV
+1. **A1. Blocks offline.** `AUDIO_BLOCK` in std.ts; `ters render` with a WAV
    reader and writer; the drive and Haar pedal as `examples/pedal`;
    evaluator and compiled render the same bits, at block sizes 128 and 256.
    The pedal first makes sound here, in a file.
 2. **A2. Live in a page.** `listen` and `Input` in std.ts; the page runtime's
    worklet (compiled program in a Blob module), microphone and file input,
-   cell writes over the port; `lab build-web` pages play. Checked in
+   cell writes over the port; `ters build-web` pages play. Checked in
    Chromium with a fake microphone (`--use-fake-device-for-media-stream`)
    and an OfflineAudioContext.
 3. **A3. A real pedal.** Envelope follower and compressor; knobs. (A
@@ -220,7 +220,7 @@ ready for the Run panel:
   - the preview's cell writes reach the audio thread by creation order,
     so the evaluator's cells and the compiled program's line up.
 - "Save page": `pageFile(title, PAGE_RUNTIME, code, info, names, main,
-  WORKLET_RUNTIME)` gives a page that plays, as `lab build-web`'s does.
+  WORKLET_RUNTIME)` gives a page that plays, as `ters build-web`'s does.
 
 test/audio.test.ts checks that a worklet made this way plays the same
 samples as the bundled one.

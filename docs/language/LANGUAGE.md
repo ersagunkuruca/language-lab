@@ -154,7 +154,7 @@ a page's view writing a cell, is a type error, not a surprise at run time.
   ("`Outcome`: the data form of Abort".)
 - **Maps and sets**: `Map k v` and `Set k`, kept sorted so equal maps
   print the same, with 21 operations (`put`, `value at`, `has item`, …).
-  When `lab` runs a program, a map can be stored as a balanced tree,
+  When `ters` runs a program, a map can be stored as a balanced tree,
   which is faster, without the program changing.
   ("Maps and sets".)
 - **Effects fixes**: a page's button whose handler fetches now does what
@@ -199,7 +199,7 @@ a page's view writing a cell, is a type error, not a surprise at run time.
   representations, written in the language as ordinary definitions, say
   how it may be stored and what each job costs. The compiler picks one
   from the jobs the program uses; a program never names one, and
-  `lab check` says what was picked (REPRESENTATIONS.md).
+  `ters check` says what was picked (REPRESENTATIONS.md).
 - **Can the editor stop type errors?** Holes have types, and the palette
   offers only fillings that keep the whole program error-free. A test punches
   holes all over both programs, tries every option the palette offers (over
@@ -1312,7 +1312,7 @@ What is deliberately not there, and why:
 `Check` is std's effect for tests, with one operation, `expect(holds,
 what)`. A definition that performs it is a test, and its type says so
 (`reverse twice : (List a) -[Check]-> Unit`): no attribute, no naming
-rule. `lab test <program>` runs each one on the inputs saved with it
+rule. `ters test <program>` runs each one on the inputs saved with it
 (`examples.json`, the editor's Run), then on small values of its inputs'
 types, smallest first and never random, so the first failure it prints is
 the smallest one and the same every run. A failing `expect` doesn't stop
@@ -1320,11 +1320,11 @@ the test: every one is reported with the inputs it failed on. A law for
 any type (`a`) is tried at Int. A test may search (each path is checked)
 and may handle any other effect itself. Any definition, not only a test,
 can keep accepted answers in `examples.json`
-(`{ "inputs": ["2"], "answer": "3" }`): `lab test` runs it on those
+(`{ "inputs": ["2"], "answer": "3" }`): `ters test` runs it on those
 inputs and compares what it prints with the answer, first, as if it
 were `expect(f(2) = 3)`. A result is kept under the hash of the test and
 everything it uses (`.lab/checks.json`), so a test nothing changed under
-isn't run again; `lab test --fresh` runs them all. Design and later steps:
+isn't run again; `ters test --fresh` runs them all. Design and later steps:
 TESTS-IN-THE-LANGUAGE.md (T7).
 
 ### Where effects go
@@ -1346,7 +1346,7 @@ builtin's type takes away exactly what its row says.
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
 | a sound's maker | Cells, Diverge | the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells |
-| a test run by lab test | Check, Choice | the test runner handles Check, collecting every expect that failed, and runs each path a search takes |
+| a test run by ters test | Check, Choice | the test runner handles Check, collecting every expect that failed, and runs each path a search takes |
 | all, count | Choice | every answer, collected into a list or counted |
 | first | Choice | the first answer, or the default when there's none |
 | formula, each | Diverge | a formula runs when it's read, so read has Diverge instead |
@@ -1395,16 +1395,16 @@ mechanism covers:
   obvious next step.
 
 
-### The command line: `lab`
+### The command line: `ters`
 
-`cli/lab.ts` (also `npm run lab --`) runs a program saved by the editor,
+`cli/ters.ts` (also `npm run ters --`) runs a program saved by the editor,
 or a folder of side tables like `examples/wc`:
 
 ```
-node cli/lab.ts run examples/wc notes.txt todo.txt     # the evaluator
-node cli/lab.ts compile examples/wc -o wc.mjs          # a JavaScript module
+node cli/ters.ts run examples/wc notes.txt todo.txt     # the evaluator
+node cli/ters.ts compile examples/wc -o wc.mjs          # a JavaScript module
 node wc.mjs -l notes.txt                               # same output, same exit code
-node cli/lab.ts check examples/wc                      # errors, and each definition's type
+node cli/ters.ts check examples/wc                      # errors, and each definition's type
 ```
 
 `examples/wc` is the proof: a word count written in the language, after
@@ -1484,8 +1484,8 @@ same hundred rolls every time (`seeded`), and the status line counts the
 seconds since the last roll by reading `now()`.
 
 ```
-node cli/lab.ts build-web examples/converter -o converter.html   # one HTML file, nothing else
-node cli/lab.ts run examples/converter > static.html             # the page drawn once, as static HTML
+node cli/ters.ts build-web examples/converter -o converter.html   # one HTML file, nothing else
+node cli/ters.ts run examples/converter > static.html             # the page drawn once, as static HTML
 ```
 
 `examples/converter`, live at
@@ -1798,12 +1798,12 @@ yet.
 
 **Updates.** A new version is a new hash. A definition keeps the id it
 had as a draft as its lineage, and a module lists each lineage's versions,
-oldest first (`lineages`; `lab publish` adds the next ones, and the old
+oldest first (`lineages`; `ters publish` adds the next ones, and the old
 stay). What replaces what is read from there (`replacing`), and `upgrade(code, old, new)`
 moves a program over: every ref, and the ports of every place it's run
 backwards. It does it only when the new pin is at least as general as the
 old, so nothing that uses it can break; a narrower type is refused with
-both types named. `lab upgrade` does it for a program folder, from the
+both types named. `ters upgrade` does it for a program folder, from the
 modules in its `modules` folder, and keeps the result only if its tests
 still pass. Data type upgrades (where constructors and
 fields move too) need a migration, which is a next step. How others share and version code (a lineage id kept
@@ -2033,7 +2033,7 @@ back into the group being hashed is named by its position.
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.
 - **More of the world.** Time, randomness and HTTP GET are done (see
-  "Random", "Time", "The web"), and `lab compile` bundles the runtime into
+  "Random", "Time", "The web"), and `ters compile` bundles the runtime into
   one portable file. Still missing: environment variables and HTTP beyond
   GET. (Handlers for `Console`, `Files` and `Network` written in the
   program are done, L55.)

@@ -8,7 +8,7 @@ Bounce's algebra arrives inside a `Space`, so it needs the per-space
 copies stage.ts makes (I86) before masks reach it. L43c to L43e are on
 the row. Ersagun answered the question at the end (2026-10-31): a wrong
 grade is a type error, each blade combination its own type. L43e's first
-step is built: `lab check` refuses reading a part a value can't have
+step is built: `ters check` refuses reading a part a value can't have
 (`gradeMistakes` in grades.ts), since that part is always 0.
 
 ## The problem
@@ -92,7 +92,7 @@ rule falls back to the product rule.
 | L43b | `src/lang/grades.ts`: blade masks over a program whose algebras are known before running, the table above; tested on Bounce, Constructions and Spacetime | L | M |
 | L43c | Compiled JS (then WGSL) stores and multiplies only the masked parts, with L41 (built so far: the mask tables from the blades, #942; staging multiplies only the masked parts, see "In the compiler" below; next, storing only them) | C | M |
 | L43d | The editor shows a value's mask in words | E | S |
-| L43e | Masks are types (built: a part read outside a value's mask is refused by `lab check`; named masks `Scalar of`, `Vector of`, `Bivector of`, `Trivector of` and `Rotor of` on record fields, checked where a value is put in and known where it is read): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
+| L43e | Masks are types (built: a part read outside a value's mask is refused by `ters check`; named masks `Scalar of`, `Vector of`, `Bivector of`, `Trivector of` and `Rotor of` on record fields, checked where a value is put in and known where it is read): named masks (`Vector of`, `Rotor of`, ...) in std, checked where a definition or a field names one, and a part read outside a value's mask refused (Ersagun's answer) | L | M |
 
 ## Any library's algebra (L203, plan 2026-11-05)
 

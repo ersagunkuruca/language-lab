@@ -1,7 +1,7 @@
 // Sounds (AUDIO.md, stage A1): a sound is what its maker returns, a
 // function on blocks of samples with its state in cells. Played over the
 // same samples, the evaluator and the core IR's JavaScript give the same
-// numbers, at any block size a sound mustn't depend on; `lab render` writes what it
+// numbers, at any block size a sound mustn't depend on; `ters render` writes what it
 // played to a WAV file.
 
 import { test } from "node:test";
@@ -32,7 +32,7 @@ import { soundOf } from "../cli/sound.ts";
 import { represented, type Program } from "../cli/represented.ts";
 import { readWav, writeWav } from "../cli/wav.ts";
 
-const lab = join(import.meta.dirname, "../cli/lab.ts");
+const lab = join(import.meta.dirname, "../cli/ters.ts");
 const dir = mkdtempSync(join(tmpdir(), "audio-"));
 const peak = (xs: ArrayLike<number>) => Math.max(...Array.from(xs, Math.abs));
 const rms = (xs: ArrayLike<number>) => Math.sqrt(Array.from(xs, (x) => x * x).reduce((a, b) => a + b, 0) / xs.length);
@@ -129,7 +129,7 @@ test("WAV files: 16-bit PCM read as -1 to 1, floats written and read back as the
   assert.throws(() => readWav(new Uint8Array(12)), /not a WAV file/);
 });
 
-test("lab render: the pedal over a WAV file, written as one; a program whose main isn't a sound is refused", () => {
+test("ters render: the pedal over a WAV file, written as one; a program whose main isn't a sound is refused", () => {
   const input = join(dir, "in.wav"), out = join(dir, "out.wav");
   writeFileSync(input, writeWav({ rate: 48000, samples: Float64Array.from(sine(300, 0.3)) }));
   const r = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/pedal"), "--main", "pedal", input, "-o", out, "--compiled"], { encoding: "utf8" });
@@ -142,7 +142,7 @@ test("lab render: the pedal over a WAV file, written as one; a program whose mai
   assert.match(bad.stderr, /main can't be a sound/);
 });
 
-// A sound's lists as arrays (C196): stored for `lab render --compiled`,
+// A sound's lists as arrays (C196): stored for `ters render --compiled`,
 // the pedal's blocks are arrays, built and read with no cons cell, and it
 // plays the samples its lists as written play.
 test("the pedal stored as a sound keeps its blocks as arrays, and plays what its lists play", async () => {
@@ -187,7 +187,7 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   node.port.onmessage!({ data: { cell: 1, value: 0 } });
   assert.deepEqual([...play(128)], input.slice(128));
   assert.deepEqual(said, []);
-  // And `lab build-web` makes the pedal's page from the core IR, carrying
+  // And `ters build-web` makes the pedal's page from the core IR, carrying
   // it.
   const html = await webCorePage("Pedal", p.code, p.info, p.names, page);
   assert.match(html, /registerProcessor/);

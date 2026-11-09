@@ -26,7 +26,7 @@
 // through (inlined, up to a depth); a definition's inputs are every part
 // unless the caller says otherwise. The compiler (L43c) and the editor
 // (L43d) use the masks. `gradeMistakes` refuses one thing: reading a part
-// a value can't have (L43e's first step; `lab check` reports it).
+// a value can't have (L43e's first step; `ters check` reports it).
 //
 // Prior art: Gaalop (Dietmar Hildenbrand) finds which blades of each
 // result can be nonzero and generates code for those only; this is the

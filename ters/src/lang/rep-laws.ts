@@ -6,7 +6,7 @@
 //   f′(x′, …)          = f(meaning(x′), …)    otherwise,
 //
 // for every input x′ an R value is built from. Inputs are small values,
-// as in lab test (tests.ts): a T is built by T's own jobs that give one
+// as in ters test (tests.ts): a T is built by T's own jobs that give one
 // (zero, succ; nil, cons; empty map, put), each run twice, once at T and
 // once at R, so both sides hold the same value and R's stays inside what
 // R's jobs make (an Int representing Nat is never negative). match and fold

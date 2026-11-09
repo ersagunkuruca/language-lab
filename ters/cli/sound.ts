@@ -1,6 +1,6 @@
 // A sound (AUDIO.md) made ready to play from Node: its maker run once, by
 // the evaluator or as the core IR's JavaScript, and its block function wrapped
-// to take and give arrays. `lab render` plays it over a WAV file; the tests
+// to take and give arrays. `ters render` plays it over a WAV file; the tests
 // compare the two ways on the same samples.
 
 import type { Code, Id } from "../src/model.ts";

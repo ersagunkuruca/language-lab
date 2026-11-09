@@ -1,4 +1,4 @@
-// `lab test --compiled` (T7e): each accepted answer in examples.json is
+// `ters test --compiled` (T7e): each accepted answer in examples.json is
 // checked again on the core IR's JavaScript, called on the evaluator's
 // values, and must print the same.
 
@@ -13,7 +13,7 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { CHECK_OP, INT_OPS, S } from "../../ters/src/lang/std.ts";
 import { INT } from "../../ters/src/lang/types.ts";
 
-test("lab test --compiled checks each accepted answer on the compiled program too (T7e)", () => {
+test("ters test --compiled checks each accepted answer on the compiled program too (T7e)", () => {
   const k = new Lang(LIBRARY.code);
   const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
   type Id = string;
@@ -35,7 +35,7 @@ test("lab test --compiled checks each accepted answer on the compiled program to
     [both]: [{ inputs: ["true", "false"], answer: "false" }, { inputs: ["true", "true"], answer: "true" }],
     [flags]: [{ inputs: ["true"], answer: "[true, true]" }],
   }));
-  const lab = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "test", dir, "--fresh", ...args], { encoding: "utf8" });
+  const lab = (...args: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "test", dir, "--fresh", ...args], { encoding: "utf8" });
   examples(false);
   const ok = lab("--compiled");
   assert.equal(ok.status, 0, ok.stdout + ok.stderr);
@@ -53,7 +53,7 @@ test("lab test --compiled checks each accepted answer on the compiled program to
 // T7e2: a test's Check runs compiled too, under a handler of its expects
 // written in the language (tests.ts checkedTests), on the same inputs as
 // the evaluator's run.
-test("lab test --compiled runs each test's Check on the compiled program too (T7e2)", () => {
+test("ters test --compiled runs each test's Check on the compiled program too (T7e2)", () => {
   type Id = string;
   const k = new Lang(LIBRARY.code);
   const def = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
@@ -64,7 +64,7 @@ test("lab test --compiled runs each test's Check on the compiled program too (T7
   const dir = mkdtempSync(join(tmpdir(), "lab-test-"));
   writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
   writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
-  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/lab.ts"), "test", dir, "--fresh", "--compiled"], { encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "test", dir, "--fresh", "--compiled"], { encoding: "utf8" });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^✓ double is even compiled \(\d+ cases\)$/m, r.stdout);
   // n < 2n fails at 0 (and below) both ways, with the same text.

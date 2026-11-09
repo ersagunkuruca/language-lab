@@ -1,6 +1,6 @@
 // A program that waits, native through C (C44a): `wait` sleeps, a timer is
 // a ticket at its deadline on the world's clock, and `await` of one sleeps
-// until then, so the run prints what `lab run` prints, as long after.
+// until then, so the run prints what `ters run` prints, as long after.
 // Waiting on several tickets at once (together, race) needs fibers (C44).
 
 import { test } from "node:test";
@@ -15,8 +15,8 @@ import { AWAIT_OP, NOW_OP, S, SHOW_ANY, START_TIMER_OP, WAIT_OP } from "../../te
 import { B } from "../../ters/src/prelude.ts";
 import { skip } from "./c-harness.ts";
 
-test("a native program waits, starts a timer and awaits it, as lab run does (C44a)", { skip }, () => {
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+test("a native program waits, starts a timer and awaits it, as ters run does (C44a)", { skip }, () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
   // a, a 30 ms wait, b, a 20 ms timer awaited, c, then whether 50 ms passed.

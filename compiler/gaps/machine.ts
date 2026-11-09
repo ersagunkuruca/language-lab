@@ -1,10 +1,10 @@
 // machine in its ways, in one process: the evaluator on the program as
-// defined; the core IR's JavaScript on the program as `lab compile` stores
+// defined; the core IR's JavaScript on the program as `ters compile` stores
 // it (the chooser's representations); the WebAssembly the program lowers
 // to, run as a WASI command; and the hand-written ideal
 // (machine.ideal.js). Each gets the same arguments and the same files,
 // and the comparison is what it printed and how it exited. Used by
-// bench-machine.ts and test/machine.test.ts. The C way (lab native) is in
+// bench-machine.ts and test/machine.test.ts. The C way (ters native) is in
 // bench-machine.ts, since it builds with $CC.
 
 import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
@@ -50,7 +50,7 @@ const lines = (printed: string[]) => printed.join("").split("\n").filter((l, i, 
 
 // The program with the representations the chooser picks: `hostMaps` where
 // std's Table is (compiled JavaScript), not for WebAssembly and C, which
-// take what `lab native` takes (C93): their own tables (C63h to C63k).
+// take what `ters native` takes (C93): their own tables (C63h to C63k).
 function chosenFor(p: ReturnType<typeof load>, own: string[], main: string, hostMaps: boolean) {
   const options = p.options as Parameters<typeof infer>[3];
   const lib = withLibraryRepresentations(p.code, p.info, p.pres.names, main, own, [], { hostMaps, tables: !hostMaps });

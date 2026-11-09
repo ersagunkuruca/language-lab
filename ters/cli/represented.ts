@@ -1,5 +1,5 @@
 // A program with each type it uses stored as the chooser picks (lab.ts's
-// `lab compile`, `lab run`, and a sound's `lab render`, C137 s1).
+// `ters compile`, `ters run`, and a sound's `ters render`, C137 s1).
 
 import { dependencies, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
@@ -51,7 +51,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
 // The program cut to what `main` reaches, with its types and its own
 // representations (whose jobs main reaches only once they're chosen): a
 // definition main never runs (a page's style sheet, beside the sound
-// `lab render` plays) doesn't hold the choice back (C196), nor is
+// `ters render` plays) doesn't hold the choice back (C196), nor is
 // rewritten.
 function reachedFrom<P extends Program>(p: P, main: Id): P {
   const isType = (d: Id) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return !!b && p.code.nodes[b]?.kind === "typedef"; };

@@ -1,5 +1,5 @@
 // The library checks itself (TESTS-IN-THE-LANGUAGE.md): the prelude's
-// laws are definitions that perform Check, run here as `lab test` runs a
+// laws are definitions that perform Check, run here as `ters test` runs a
 // program's. First laws: the complex ones (POLAR.md L97e); Bytes' round
 // trips through Base64, hex and UTF-8 (T7e4); dates', instants' and
 // durations' text read back (T7e5); times of day (T7e6); sort and

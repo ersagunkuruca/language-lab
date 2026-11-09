@@ -5,7 +5,7 @@ words once, prints a summary, and then answers each question from the
 index, in the order the file asks them.
 
 ```
-$ node ters/cli/lab.ts run ters/examples/notebook ters/examples/notebook/notes.txt
+$ node ters/cli/ters.ts run ters/examples/notebook ters/examples/notebook/notes.txt
 6 notes, 58 terms, 48 different terms
 most common: tide 6, bay 2, harbour 2, make 2, moon 2
 longest: ferries, 12 terms

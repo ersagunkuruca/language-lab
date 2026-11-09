@@ -100,7 +100,7 @@ export function pagePanels(host: PageHost) {
       h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
       h("label", { class: "hint", title: "Outline each text, attribute or part of the page when it runs again, so you can see that only what read a changed cell does" }, page.flashBox, " Outline updates"),
       h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
-      h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like lab build-web" }, "Save page"),
+      h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like ters build-web" }, "Save page"),
       h("button", { class: "btn", type: "button", "data-act": "page-log", title: "This run's log as a JSON file: every event the page's handlers were given and every answer of the world, in order" }, "Save run log")));
   // The program version a page will run for once the edit has drawn.
   let pageSoon: Code | null = null;
@@ -321,7 +321,7 @@ export function pagePanels(host: PageHost) {
   }
 
   // The page compiled, saved or opened in a tab: printed from the core IR
-  // (page.ts corePageFile, E244), as lab build-web does. Throws with why
+  // (page.ts corePageFile, E244), as ters build-web does. Throws with why
   // when main doesn't lower there.
   function pageHtml(): { html: string; name: string } | null {
     const info = typesOf();
@@ -330,7 +330,7 @@ export function pagePanels(host: PageHost) {
     const title = titleOf(doc()), name = `${slug(title)}.html`;
     const core = corePageRuntimeText();
     if (!core) throw new Error("this editor has no core IR runtime");
-    // Stored as lab build-web stores it (C197): its lists and Maps chosen.
+    // Stored as ters build-web stores it (C197): its lists and Maps chosen.
     const r = checkedForRun(prog(), pres().names, main);
     const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     return { html: corePageFile(title, core, r.code, r.info, r.names, own, main, coreWorkletRuntimeText()), name };

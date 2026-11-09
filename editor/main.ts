@@ -219,7 +219,7 @@ const BUILT: Record<Program, () => Doc> = { outline: () => outlineDoc() };
 const initialFor = (program: Program): Doc => {
   const m = manifest.programs.find((p) => p.program === program && p.editor !== false) ?? manifest.programs[0];
   if (m.built) return BUILT[m.program]();
-  // With today's ids, as lab run reads a folder (load.ts): sheet still says
+  // With today's ids, as ters run reads a folder (load.ts): sheet still says
   // std's Pair, which is Tuple2 now (L139), and pointed at nothing (E212).
   const fs = (m.folders ?? []).map((f) => onTodaysIds(FILES(f)));
   const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
@@ -621,7 +621,7 @@ function upgrades(): string[] {
 }
 const ownCode = (): Code => { const c = prog(), b = baseOf(doc); return { nodes: Object.fromEntries(Object.entries(c.nodes).filter(([id]) => !b.nodes[id])), defs: c.defs.filter((d) => !b.nodes[d]) }; };
 
-// The program onto its modules' newest versions, as lab upgrade does
+// The program onto its modules' newest versions, as ters upgrade does
 // (L111): kept only if it still checks and its tests pass; every version
 // it had goes into its store.
 function upgradeModules() {
@@ -913,7 +913,7 @@ let graphLater = false;
 
 // A descriptive name is a second name. A node that has only its short
 // one is renamed there, so the name you give is the one the program has
-// (lab and the compiler read the short names) and not a second one.
+// (ters and the compiler read the short names) and not a second one.
 const nameLayer = (id: Id): Layer => (ui.layer === "descriptive" && doc.names.descriptive[id] === undefined ? "short" : ui.layer);
 
 function rename(id: Id, value: string) {
@@ -1431,14 +1431,14 @@ function programPanel(): HTMLElement {
   ta.addEventListener("change", () => { if (ta.value !== noteOf(doc)) setComment(PROGRAM, ta.value); });
   out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", {}, "Comment · comments.json"), ta));
   // The program's own effects are answered by a host file outside a
-  // handler (FOREIGN.md, L69c): what it gives, read-only, as lab hosts
+  // handler (FOREIGN.md, L69c): what it gives, read-only, as ters hosts
   // writes it.
   const effects = ownEffects();
   if (effects.length) {
     const host = h("textarea", { id: "f-host", rows: "8", readonly: "", spellcheck: "false" }) as HTMLTextAreaElement;
     host.value = hostSkeleton(doc.code, pres().names, effects);
     out.append(h("label", { class: "field", for: "f-host" }, h("span", {}, "Host · hosts/js.js"), host),
-      h("p", { class: "hint" }, `What this program's own ${effects.length === 1 ? "effect" : "effects"} (${effects.map((e) => pres().names[e] ?? e).join(", ")}) ${effects.length === 1 ? "does" : "do"} outside a handler is answered by hosts/js.js beside the program, when it runs with lab run or is built with lab build-web. The editor keeps no host file: this is the one lab hosts writes, to fill in.`));
+      h("p", { class: "hint" }, `What this program's own ${effects.length === 1 ? "effect" : "effects"} (${effects.map((e) => pres().names[e] ?? e).join(", ")}) ${effects.length === 1 ? "does" : "do"} outside a handler is answered by hosts/js.js beside the program, when it runs with ters run or is built with ters build-web. The editor keeps no host file: this is the one ters hosts writes, to fill in.`));
   }
   return out;
 }
@@ -1840,7 +1840,7 @@ function graphHooks(info: T.Info) {
 
 
 // The values a definition is given: a main's accepted answers in their
-// recorded worlds (T7e15) are for lab test, not for the editor's runs.
+// recorded worlds (T7e15) are for ters test, not for the editor's runs.
 function givenOf(d: Id): unknown[] | undefined {
   const v = (doc.examples?.[d] ?? undefined) as unknown[] | undefined;
   if (!v) return undefined;
@@ -1858,7 +1858,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const value = !!z && z.t !== "fn";
   const body = defBody(ui.def);
   if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.interface ? "An interface doesn't run; each implementation says how its type does the operations, and functions call them." : body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
-  // A test (its row has Check) runs as lab test runs it: on its saved
+  // A test (its row has Check) runs as ters test runs it: on its saved
   // inputs, then on small values, and a failing expect shows here with the
   // inputs it failed on (T7d).
   if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box, { code: prog(), names: pres().names, def: ui.def, examples: doc.examples ?? {}, world: quietWorld() });
@@ -1878,7 +1878,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     // The program's own effect is the host's to answer outside a handler
     // (FOREIGN.md, L69c), and the editor has no host file.
     const own = needs.filter((e) => ownEffects().includes(e));
-    if (own.length === needs.length) box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} needs its host: it performs ${effs}, this program's own effect, which hosts/js.js beside the program answers when it runs with lab run. The editor has no host file, so it doesn't run here; the Program tab shows what one gives. Or call it inside `, h("code", {}, `handle ${effs}`), "."));
+    if (own.length === needs.length) box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} needs its host: it performs ${effs}, this program's own effect, which hosts/js.js beside the program answers when it runs with ters run. The editor has no host file, so it doesn't run here; the Program tab shows what one gives. Or call it inside `, h("code", {}, `handle ${effs}`), "."));
     else box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
   } else if (choice) {
     box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} may give no answer, or more than one (Choice), so it doesn't run as it is. To run it, say which you want: call it inside `,
@@ -1889,10 +1889,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     const going = ui.output?.def === ui.def && ui.output.running;
     const given = action || value ? null : runGiven();
     const label = [namer.name(ui.def), ...given?.args ?? []].join(" ");
-    if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox(), h("p", { class: "hint" }, `What ${namer.name(ui.def)} reads as standard input, as lab run reads what is piped to it.`));
+    if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox(), h("p", { class: "hint" }, `What ${namer.name(ui.def)} reads as standard input, as ters run reads what is piped to it.`));
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
-    if (given) box.append(h("p", { class: "hint" }, `As lab run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
+    if (given) box.append(h("p", { class: "hint" }, `As ters run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
     if (ui.output?.def === ui.def) {
       // What it prints is read out as it comes (a log), and a failure at once.
       box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
@@ -1904,7 +1904,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
       if (ui.output.paused !== undefined) box.append(h("p", { class: "hint", role: "status" }, `Paused after answer ${ui.output.paused} of ${ui.output.answers?.filter((e) => !e.write).length ?? 0}: what it printed by then. Step on, or Run again with these answers for the rest.`));
       if (ui.output.answers?.some((e) => !e.write)) box.append(answersView(ui.output.answers, ui.output.replayed, ui.output.paused));
-      if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and lab compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
+      if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and ters compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
     // Run backwards is a search, and a search would touch the world once

@@ -2,7 +2,7 @@
 
 **Decided** (Ersagun, 2026-11-04): (A) and (i). **Built** in the evaluator
 (C40i): steps 1 to 3 and the test (ters/test/page-waits.test.ts). Step 4
-**built** on the core IR (`lab build-web --core`), not as a generator
+**built** on the core IR (`ters build-web --core`), not as a generator
 but with C137c22's continuations: a handler's type with Wait or Await
 takes the rest of its run last (scalar.ts FType `waits`), and the world's
 wait keeps that rest in its Pending, so html.ts lands the stretch and runs

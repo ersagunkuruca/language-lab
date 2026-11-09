@@ -35,7 +35,7 @@ import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
 
-// A saved folder read as lab reads it (load.ts): older ids and shapes
+// A saved folder read as ters reads it (load.ts): older ids and shapes
 // brought up to today's (std.ts onTodaysIds, I185).
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
 const STYLE: Style = read(join(root, "styles", "blocks.json"), { view: "blocks", notation: {} });
@@ -695,7 +695,7 @@ export class Session {
     let result: string;
     try {
       result = withSteps(STEPS, () => {
-        // A page prints once, as static HTML (as lab run does).
+        // A page prints once, as static HTML (as ters run does).
         if (t?.t === "fn" && !pageProblem(this.info, def, this.allNames)) return `page, as text:\n${pageText(htmlText(runMain(this.code, this.info, def, { ...rt, cells: new Cells(equal) }), evaluatorCall))}`;
         if (!problem) return `exit ${runProgram(this.code, this.info, def, args, rt)}`;
         return `= ${showerFor(this.code, this.info, this.allNames)(runMain(this.code, this.info, def, rt))}`;
