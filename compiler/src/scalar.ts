@@ -67,8 +67,9 @@ import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { writablePlan } from "./relation.ts";
 import { cleanBody, NotWritten, roundedKey, writtenSteps } from "./solved.ts";
-import { solveMode, determinism } from "../../ters/src/lang/modes.ts";
+import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
@@ -949,6 +950,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
 
   const funcs: SFunc[] = [];
   const index = new Map<Id, number>();
+  // Relational solves written out (modeSolve).
+  let modeAn: ReturnType<typeof analyzer> | null = null;
+  // While a mode function is written, the nodes whose slots hold a value
+  // are read from their locals (expr at the top), so a call whose inputs
+  // are known runs forward as any call does.
+  let pinned: ((id: Id) => SExpr | undefined) | null = null;
+  const modeOrder = (ps: string[]) => [...ps].sort((a, b) => (a === "out" ? 1 : b === "out" ? -1 : Number(a) - Number(b)));
+  class ModeUnsupported extends Error {}
   const refused = new Map<Id, string>();
   const showns = shownImplementations(info), ordereds = implementationsOf(info, ORDERED);
   const inProgress = new Set<Id>();
@@ -1075,6 +1084,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   }
 
   function expr(id: Id, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    if (pinned) { const v = pinned(id); if (v) return v; }
     const was = here;
     here = { node: id, def: f.def };
     try { return exprAt(id, env, f, tail); } finally { here = was; }
@@ -1697,6 +1707,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const no = new Refused("solves a relation (not in this profile yet)");
     let p: ReturnType<typeof planSolve>;
     try { p = planSolve(code, n); } catch { throw no; }
+    if (p.mode === "relational") return modeSolve(n, env, f, tail);
     if (p.mode !== "solver" || p.status !== "solved" || !p.rel) throw no;
     const binds = bindsOf(n), keys = Object.keys(binds);
     if (keys.join() !== answerKeys(code, n).join()) throw no;
@@ -1757,6 +1768,207 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       }
     } catch (e) { if (e instanceof NotWritten) throw new Refused(`solves ${name} with ${e.message} (not in this profile yet)`); throw e; }
     return known.reduceRight<SExpr>((e, k) => ({ k: "let", i: k.i, value: k.value, body: e }), written);
+  }
+  // A solve the relational interpreter runs, in a mode with one answer or
+  // none (det, semidet) whose plan is fixed before it runs (compiler/src/
+  // modes.ts writes the same plan as JavaScript; C195): a function per
+  // definition and known ports, taking them and giving the others, with
+  // no answer where the plan's way fails. Each goal is a value worked out,
+  // a test, or a value taken apart.
+  function modeSolve(n: Use, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const name = nm(useTarget(code.nodes, n));
+    const no = (why: string) => new Refused(`solves ${name} by the relational interpreter (${why}; not in this profile yet)`);
+    if (!opts.data) throw no("a shader");
+    modeAn ??= analyzer(code, names);
+    const v = modeAn.ofSolve(n);
+    if (!v || !v.ends || v.stuck.length || v.dynamic.length) throw no("its plan isn't fixed before it runs");
+    const d = determinism(v.answers);
+    if (d !== "det" && d !== "semidet") throw no("it may have several answers");
+    const def = code.nodes[useTarget(code.nodes, n)];
+    if (def?.kind !== "def") throw no("not a definition");
+    const lam = code.nodes[def.body!] as NodeOf<"lambda">;
+    const portOf = (k: string) => (k === "out" ? "out" : String(lam.params.indexOf(k)));
+    const known = givenInOrder(code, n);
+    const ins = modeOrder(known.map(portOf));
+    if (ins.includes("-1")) throw no("a port it doesn't have");
+    let m: { fn: number; outs: string[] };
+    try { m = modeFn(def.id, ins); } catch (e) { if (e instanceof ModeUnsupported) throw no(e.message); throw e; }
+    const res = f.locals.push(funcs[m.fn].result) - 1;
+    let inner = new Map(env);
+    const binds = bindsOf(n);
+    const lets = Object.entries(binds).map(([k, b]) => {
+      const j = m.outs.indexOf(portOf(k)), t = m.outs.length === 1 ? funcs[m.fn].result : (funcs[m.fn].result as RType).fields[j].t;
+      const i = f.locals.push(t) - 1;
+      inner = new Map(inner).set(b, i);
+      const r: SExpr = { k: "local", i: res };
+      return { i, value: m.outs.length === 1 ? r : { k: "get", rec: r, t: funcs[m.fn].result as RType, i: j } as SExpr };
+    });
+    const t = stype(zonk(n.id))!;
+    const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(bodyOf(n), inner, f, tail));
+    const call: SExpr = { k: "call", fn: m.fn, args: ins.map((p) => expr(n.given[known[known.map(portOf).indexOf(p)]], env, f, false)), tail: false };
+    if (d === "det") return { k: "let", i: res, value: call, body };
+    const none: SExpr = f.partial || searching.get(f) ? { k: "fail" } : { k: "abort", reason: { k: "text", v: `solving ${name} this way gives exactly one answer, and it gave none` } };
+    return { k: "attempt", body: call, res, ok: body, otherwise: none, t };
+  }
+  // The mode function for def with these ports known: its index, and the
+  // ports it gives, in order (one as itself, several as a tuple).
+  function modeFn(def: Id, ins: string[]): { fn: number; outs: string[] } {
+    const lam = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+    if (lam?.kind !== "lambda") throw new ModeUnsupported("not a function");
+    const portNode = (p: string) => (p === "out" ? lam.body : lam.params[Number(p)]);
+    const outs = [...lam.params.map((_, i) => String(i)), "out"].filter((p) => !ins.includes(p));
+    const key = `mode:${def}|${ins.join(",")}`;
+    if (index.has(key)) return { fn: index.get(key)!, outs };
+    const typeOf = (x: Id) => { const t = stype(zonk(x)); if (!t || t === "host") throw new ModeUnsupported(`a port of type ${whyNot(zonk(x))}`); return t; };
+    const params = ins.map((p) => typeOf(portNode(p)));
+    const result: LType = outs.length === 1 ? typeOf(portNode(outs[0])) : stype({ t: "con", id: tupleType(outs.length), args: outs.map((p) => zonk(portNode(p))) })!;
+    if (!result) throw new ModeUnsupported("its answers as a tuple");
+    const g: SFunc = { def: "", name: `${nm(def)} backwards`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+    const at = funcs.push(g) - 1;
+    index.set(key, at);
+    try {
+      const an = modeAn!;
+      const plan = an.planOf({ k: "def", id: def }, { known: ins, spec: [] });
+      const env0 = new Map<Id, number>(ins.map((p, i) => [an.slot(portNode(p)), i]));
+      const done = (env: Map<Id, number>): SExpr => {
+        const vs = outs.map((p) => env.get(an.slot(portNode(p))));
+        if (vs.some((x) => x === undefined)) throw new ModeUnsupported("a port is never found");
+        const ls = vs.map((i) => ({ k: "local", i: i! }) as SExpr);
+        return outs.length === 1 ? ls[0] : { k: "make", t: result as RType, args: ls };
+      };
+      g.body = modePlan(an, plan, env0, done, g);
+    } catch (e) { funcs.pop(); index.delete(key); throw e; }
+    return { fn: at, outs };
+  }
+  // A plan's goals in order, then its choice of arms, then done; a way
+  // that fails is no answer (the function is partial).
+  function modePlan(an: ReturnType<typeof analyzer>, plan: ModePlanT, env0: Map<Id, number>, done: (env: Map<Id, number>) => SExpr, g: SFunc): SExpr {
+    const NONE: SExpr = { k: "fail" };
+    const failsHere = plan.steps.some((e) => { const h = e.k === "call" ? code.nodes[(code.nodes[e.node] as Call).fn] : undefined; return h?.kind === "ref" && h.target === S.fail; });
+    if (failsHere) return NONE;
+    const rt = g.result;
+    const typeOf = (x: Id) => { const t = stype(zonk(x)); if (!t || t === "host") throw new ModeUnsupported(`a value of type ${whyNot(zonk(x))}`); return t; };
+    const test = (cond: SExpr, then: SExpr): SExpr => ({ k: "if", cond, then, else: NONE, t: rt });
+    const local = (i: number): SExpr => ({ k: "local", i });
+    // A slot gets a value: where it has one, the two must be equal.
+    const bind = (env: Map<Id, number>, s: Id, value: SExpr, k: (env: Map<Id, number>) => SExpr): SExpr => {
+      const slot = an.slot(s), was = env.get(slot), t = typeOf(s);
+      if (was !== undefined) return test(same(local(was), value, t, g, false), k(env));
+      if (value.k === "local") return k(new Map(env).set(slot, value.i));
+      const i = g.locals.push(t) - 1;
+      return { k: "let", i, value, body: k(new Map(env).set(slot, i)) };
+    };
+    const binds = (env: Map<Id, number>, xs: [Id, SExpr][], k: (env: Map<Id, number>) => SExpr): SExpr =>
+      xs.length ? bind(env, xs[0][0], xs[0][1], (e) => binds(e, xs.slice(1), k)) : k(env);
+    // A value taken apart: its case, then its fields.
+    const apart = (env: Map<Id, number>, val: SExpr, valNode: Id, variant: Id, fields: Id[], k: (env: Map<Id, number>) => SExpr): SExpr => {
+      const t = typeOf(valNode);
+      if (isRecord(t)) return binds(env, fields.map((b, i) => [b, { k: "get", rec: val, t, i }]), k);
+      if (!isData(t)) throw new ModeUnsupported("a case of a value that isn't data");
+      const c = t.cases.findIndex((x) => x.variant === variant);
+      if (c < 0) throw new ModeUnsupported("a case of another type");
+      return { k: "case", scrut: val, s: g.locals.push(t) - 1, t, arms: t.cases.map((_, j) => (j === c ? binds(env, fields.map((b, i) => [b, { k: "field", rec: val, t, c, i }]), k) : NONE)), result: rt };
+    };
+    const made = (valNode: Id, variant: Id, fields: SExpr[]): SExpr => {
+      const t = typeOf(valNode);
+      if (isRecord(t)) return { k: "make", t, args: fields };
+      if (!isData(t)) throw new ModeUnsupported("a value built of a type that isn't data");
+      return { k: "new", t, c: t.cases.findIndex((x) => x.variant === variant), args: fields };
+    };
+    // A node whose inputs are known, run forward as the program would.
+    const forward = (env: Map<Id, number>, node: Id): SExpr => {
+      const was = pinned;
+      pinned = (x) => { if (x === node) return undefined; const i = env.get(an.slot(x)); return i === undefined ? undefined : local(i); };
+      try { return expr(node, new Map(), g, false); } finally { pinned = was; }
+    };
+    const int = (v: number): SExpr => ({ k: "int", v: BigInt(v) });
+    const steps = (i: number, env: Map<Id, number>): SExpr => {
+      if (i === plan.steps.length) return plan.branch ? arms(plan.branch, env) : done(env);
+      const e = plan.steps[i], next = (env: Map<Id, number>) => steps(i + 1, env);
+      if (e.waits) throw new ModeUnsupported("a goal waits");
+      const get = (x: Id) => env.get(an.slot(x));
+      switch (e.k) {
+        case "given": return bind(env, e.node, forward(env, e.node), next);
+        case "same": {
+          if (an.slot(e.a) === an.slot(e.b)) return next(env);
+          const a = get(e.a), b = get(e.b);
+          if (a !== undefined) return bind(env, e.b, local(a), next);
+          if (b !== undefined) return bind(env, e.a, local(b), next);
+          throw new ModeUnsupported("two unknowns made one");
+        }
+        case "case": {
+          const val = get(e.value);
+          if (val !== undefined) return apart(env, local(val), e.value, e.variant, e.binds, next);
+          const fs = e.binds.map(get);
+          if (fs.some((x) => x === undefined)) throw new ModeUnsupported("a value built from unknowns");
+          return bind(env, e.value, made(e.value, e.variant, fs.map((x) => local(x!))), next);
+        }
+        case "call": {
+          const n = code.nodes[e.node] as Call, head = code.nodes[n.fn];
+          if (head?.kind !== "ref" || code.nodes[head.target]?.kind === "binder") throw new ModeUnsupported("a function known only when it runs");
+          const t = code.nodes[head.target], args = n.args.map(get), res = get(n.id);
+          if (args.every((x) => x !== undefined)) return bind(env, n.id, forward(env, n.id), next);
+          if (t.kind === "def") {
+            if (!e.callee || e.callee.spec.length) throw new ModeUnsupported("a call in a mode not planned");
+            const lam = code.nodes[t.body!] as NodeOf<"lambda">;
+            const ins = modeOrder(e.callee.known);
+            const port = (p: string) => (p === "out" ? n.id : n.args[Number(p)]);
+            const vals = ins.map((p) => get(port(p)));
+            if (vals.some((x) => x === undefined)) throw new ModeUnsupported("a mode's input not known");
+            const m = modeFn(head.target, ins);
+            const r = g.locals.push(funcs[m.fn].result) - 1;
+            const outs = m.outs.map((p, j): [Id, SExpr] => [port(p), m.outs.length === 1 ? local(r) : { k: "get", rec: local(r), t: funcs[m.fn].result as RType, i: j }]);
+            void lam;
+            return { k: "let", i: r, value: { k: "call", fn: m.fn, args: vals.map((x) => local(x!)), tail: false }, body: binds(env, outs, next) };
+          }
+          if (t.kind === "variant" && res !== undefined) return apart(env, local(res), n.id, head.target, n.args, next);
+          if (t.kind === "builtin" && res !== undefined) {
+            const [a, b] = args, R = local(res);
+            const len = (x: SExpr): SExpr => ({ k: "rt", fn: "text.length", args: [x] });
+            // Text joined: one side known, the other what's left.
+            if (head.target === S.concat && (a !== undefined || b !== undefined)) {
+              const k0 = a ?? b!, la = g.locals.push("int") - 1, lr = g.locals.push("int") - 1;
+              const start: SExpr = a !== undefined ? int(0) : { k: "rt", fn: "int.sub", args: [local(lr), local(la)] };
+              const piece: SExpr = { k: "rt", fn: "text.slice", args: [R, start, a !== undefined ? local(la) : local(lr)] };
+              const rest: SExpr = a !== undefined ? { k: "rt", fn: "text.slice", args: [R, local(la), local(lr)] } : { k: "rt", fn: "text.slice", args: [R, int(0), start] };
+              const fits: SExpr = { k: "op", op: "not", args: [{ k: "rt", fn: "int.less", args: [local(lr), local(la)] }] };
+              return { k: "let", i: la, value: len(local(k0)), body: { k: "let", i: lr, value: len(R), body:
+                test(fits, test({ k: "rt", fn: "text.equal", args: [piece, local(k0)] }, bind(env, n.args[a !== undefined ? 1 : 0], rest, next))) } };
+            }
+            // Numbers: one unknown, by + − and negation (relate.ts does the same).
+            const isInt = INT_OPS.add === head.target || INT_OPS.sub === head.target || INT_OPS.neg === head.target;
+            const sub = (x: SExpr, y: SExpr): SExpr => (isInt ? { k: "rt", fn: "int.sub", args: [x, y] } : { k: "op", op: "sub", args: [x, y] });
+            const add = (x: SExpr, y: SExpr): SExpr => (isInt ? { k: "rt", fn: "int.add", args: [x, y] } : { k: "op", op: "add", args: [x, y] });
+            const plus = head.target === B.add || head.target === INT_OPS.add, minus = head.target === B.sub || head.target === INT_OPS.sub;
+            if (plus && a !== undefined) return bind(env, n.args[1], sub(R, local(a)), next);
+            if (plus && b !== undefined) return bind(env, n.args[0], sub(R, local(b)), next);
+            if (minus && a !== undefined) return bind(env, n.args[1], sub(local(a), R), next);
+            if (minus && b !== undefined) return bind(env, n.args[0], add(R, local(b)), next);
+            if (head.target === B.neg) return bind(env, n.args[0], { k: "op", op: "neg", args: [R] }, next);
+            if (head.target === INT_OPS.neg) return bind(env, n.args[0], { k: "rt", fn: "int.neg", args: [R] }, next);
+          }
+          throw new ModeUnsupported("a call with no backwards reading here");
+        }
+        default: throw new ModeUnsupported(`a ${e.k} goal`);
+      }
+    };
+    // A choice of arms: the value known, its arm; else each arm in turn,
+    // the next where one gives none.
+    const arms = (c: NonNullable<ModePlanT["branch"]>, env: Map<Id, number>): SExpr => {
+      const val = env.get(an.slot(c.value));
+      if (val !== undefined) {
+        const other = c.arms.find((a) => a.variant === null), t = typeOf(c.value);
+        const plan = (a: (typeof c.arms)[number]) => apart(env, local(val), c.value, a.variant!, a.binds, (e) => modePlan(an, a.plan, e, done, g));
+        if (isRecord(t)) { const a = c.arms.find((x) => x.variant !== null); return a ? plan(a) : other ? modePlan(an, other.plan, env, done, g) : NONE; }
+        if (!isData(t)) throw new ModeUnsupported("a choice on a value that isn't data");
+        // Each case's arm: its fields bound (apart tests the case again, which the printer may keep).
+        const rest = other ? modePlan(an, other.plan, env, done, g) : NONE;
+        return { k: "case", scrut: local(val), s: g.locals.push(t) - 1, t, arms: t.cases.map((x) => { const a = c.arms.find((y) => y.variant === x.variant); return a ? plan(a) : rest; }), result: rt };
+      }
+      if (c.arms.some((a) => a.variant === null)) throw new ModeUnsupported("otherwise, for a value not known");
+      return c.arms.reduceRight<SExpr>((rest, a) => { const r = g.locals.push(rt) - 1; return { k: "attempt", body: modePlan(an, a.plan, env, done, g), res: r, ok: local(r), otherwise: rest, t: rt }; }, NONE);
+    };
+    return steps(0, env0);
   }
   function cleanFn(): number {
     const key = "number.clean";

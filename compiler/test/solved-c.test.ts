@@ -10,7 +10,7 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { SHOW_ANY, S } from "../../ters/src/lang/std.ts";
+import { INT_OPS, NONE, SHOW_ANY, S, SOME } from "../../ters/src/lang/std.ts";
 import { spawnSync } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -123,4 +123,25 @@ test("a relation with several ways gives the solver's answers on WebAssembly and
   const main = k.def("main");
   k.define(main, k.call(SHOW_ANY, k.listOf(...[9, 0, -1, 2, 1e-20].map((v) => k.call(roots, k.lit(v))), k.listOf(first(16), first(-16)))));
   assert.equal(await throughLab(k), "[[3, -3], [0], [], [1.414213562, -1.414213562], [1e-10], [40, -1]]\n");
+});
+
+// A solve the relational interpreter runs, in a mode with one answer or
+// none: its plan as functions. Text joined run backwards (a greeting's
+// name), Int + and − (det), and a case built backwards (some(t + "!")).
+test("a relational solve with one answer or none runs on WebAssembly and C as lab run does", async () => {
+  const k = new Lang(LIBRARY.code);
+  const param = (d: string) => firstParam(k, d);
+  const greet = k.def("greet"), shifted = k.def("shifted"), said = k.def("said");
+  k.define(greet, k.fn(["name"], (x) => k.call(S.concat, k.lit("hello, "), x)));
+  k.define(shifted, k.fn(["n"], (x) => k.call(INT_OPS.sub, k.call(INT_OPS.add, x, k.int(3)), k.int(1))));
+  k.define(said, k.fn(["o"], (o) => k.call(SOME, k.call(S.concat, o, k.lit("!")))));
+  const who = k.def("who was greeted"), unshift = k.def("unshift"), heard = k.def("heard");
+  const [g, n, o] = [param(greet), param(shifted), param(said)];
+  k.define(who, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.solve(greet, { out: t }, { [g]: "name" }, ({ [g]: y }) => y)), k.thunk(() => k.lit("nobody")))));
+  k.define(unshift, k.fn(["t"], (t) => k.solve(shifted, { out: t }, { [n]: "n" }, ({ [n]: y }) => y)));
+  k.define(heard, k.fn(["t"], (t) => k.call(S.first, k.thunk(() => k.solve(said, { out: t }, { [o]: "o" }, ({ [o]: y }) => y)), k.thunk(() => k.lit("?")))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.listOf(...["hello, Ada", "goodbye", "hello, ", "hello, Çağrı ✨"].map((t) => k.call(who, k.lit(t))),
+    k.call(S.show, k.call(unshift, k.int(10))), k.call(heard, k.call(SOME, k.lit("hi!"))), k.call(heard, k.call(SOME, k.lit("hi"))), k.call(heard, k.x(NONE)))));
+  assert.equal(await throughLab(k), '["Ada", "nobody", "", "Çağrı ✨", "8", "hi", "?", "?"]\n');
 });
