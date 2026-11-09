@@ -22,6 +22,7 @@
 import { shareCalls } from "./share-calls.ts";
 import { inlineSmall } from "./inline-small.ts";
 import { ownedArrays } from "./owned-arrays.ts";
+import { linearCalls } from "./linear-calls.ts";
 import { arrayOffsets } from "./array-offsets.ts";
 import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
@@ -597,6 +598,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   ({ code, info, names } = withInverses(code, info, names));
   const f = fusedProgram(code, info, names);
   let ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
+  // A linear function of a linear function, one matrix (linear-calls.ts, L44).
+  if (!envSet("NO_LINEAR")) linearCalls(ir);
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
   // function for each set of parts its callers give (zero-parts.ts, L43).
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;

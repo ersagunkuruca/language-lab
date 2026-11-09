@@ -36,7 +36,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { SIGS, ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, pureEffect, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
@@ -44,7 +44,7 @@ import * as T from "./text.ts";
 import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
-import { CELLS, CHOICE, DIVERGE, INT, NETWORK, WORLD, type Type } from "./types.ts";
+import { CELLS, CHOICE, DIVERGE, INT, NETWORK, Subst, WORLD, type Type } from "./types.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
@@ -263,6 +263,15 @@ const lookup = (env: Env, b: Id): Value | undefined => {
   for (let e = env; e; e = e.up) if (e.b === b) return e.v;
   return undefined;
 };
+// What a closure says it is (META): its lambda, and its scope as a map,
+// made only when asked. A class, not an object with a getter per closure:
+// making those was most of the cost of making a closure (L118c).
+class LambdaMeta {
+  readonly lambda: Id;
+  private readonly scope: Env;
+  constructor(lambda: Id, scope: Env) { this.lambda = lambda; this.scope = scope; }
+  get env() { return toMap(this.scope); }
+}
 const toMap = (env: Env) => {
   const out = new Map<Id, Value>(), cells: { b: Id; v: Value }[] = [];
   for (let e = env; e; e = e.up) cells.push(e);
@@ -655,8 +664,114 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     return f;
   };
 
+  // ---- running directly (L118c)
+  //
+  // A function that, as it is called, does nothing but compute (no search,
+  // no operation, no handler, nothing of the world) runs as plain
+  // JavaScript on the JavaScript stack, not step by step on the machine
+  // below: tens of times fewer allocations. It is tried first, and the
+  // moment it would need the machine (a choice, a failure, an operation, a
+  // handler, a solve, a fold, a builtin that acts on the world, the
+  // JavaScript stack running out) it stops, having done nothing anyone can
+  // see, and the call starts again on the machine. A function whose type
+  // says it does more than compute never tries, and one that keeps
+  // stopping stops trying.
+  const NEED = new Error("needs the machine");
+  // The builtins that only compute (their type's row has at most a choice
+  // and diverging: one that gives no value or several stops the run), and
+  // the library's host ways, which are pure.
+  const pureFns = new Set<Fn>(), pureJets = new WeakSet<Fn>();
+  for (const [id, f] of Object.entries(builtins)) {
+    const t = SIGS[id]?.(new Subst());
+    if (t?.t === "fn" && t.eff.effs.every((e) => e === CHOICE || e === DIVERGE) && !HANDLED.has(f) && !worldOps.has(f)) pureFns.add(f);
+  }
+  const statically = new Map<Id, boolean>();
+  // Whether a lambda's type says it does something besides compute.
+  const acts = (n: NodeOf<"lambda">): boolean => {
+    let a = statically.get(n.id);
+    if (a === undefined) {
+      const t0 = info.typeOf.get(n.id), t = t0 && info.subst.resolve(t0);
+      a = !t || t.t !== "fn" || info.subst.resolveRow(t.eff).effs.some((e) => e !== DIVERGE);
+      statically.set(n.id, a);
+    }
+    return a;
+  };
+  // Tries and stops of each lambda: one that stops often stays on the machine.
+  const tries = new Map<Id, { n: number; stops: number }>();
+  const machineOnly = new Set<Id>();
+  const stopped = (lambda: Id) => {
+    const t = tries.get(lambda) ?? { n: 0, stops: 0 };
+    t.stops++;
+    if (t.stops > 4 && t.stops * 4 > t.n) machineOnly.add(lambda);
+  };
+  const directly = (n: NodeOf<"lambda">) => !machineOnly.has(n.id) && !acts(n);
+  const single = (r: Iterable<Value>): Value => {
+    if (Array.isArray(r)) { if (r.length === 1) return r[0]; throw NEED; }
+    const it = r[Symbol.iterator](), a = it.next();
+    if (a.done || !it.next().done) throw NEED;
+    return a.value;
+  };
+  // How deep in direct runs this is: a machine started inside one (a
+  // builtin or host way calling a function back) may act on nothing
+  // either, so its world builtins and operations stop the run too, before
+  // they act.
+  let directDepth = 0;
+  const builtinFns = new Set<Fn>(Object.values(builtins));
+  const enter = (c: { lambda: NodeOf<"lambda">; env: Env }, args: Value[]): Value => {
+    const t = tries.get(c.lambda.id);
+    if (t) t.n++; else tries.set(c.lambda.id, { n: 1, stops: 0 });
+    rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args, c.lambda.id);
+    directDepth++;
+    try { return direct(c.lambda.body, bind(c.env, c.lambda.params, args)); }
+    catch (e) { if (e === NEED || e instanceof RangeError) stopped(c.lambda.id); throw e; }
+    finally { directDepth--; }
+  };
+  const callDirect = (f: Value, args: Value[]): Value => {
+    const c = closures.get(f as Fn);
+    if (c && directly(c.lambda)) return enter(c, args);
+    if (pureFns.has(f as Fn) || pureJets.has(f as Fn) || HANDLED.has(f as Fn)) {
+      let r: Iterable<Value>;
+      try { r = (f as Fn)(...args); } catch (e) { if (e instanceof OutOfSteps || e instanceof Aborted) throw e; throw NEED; }
+      return single(r);
+    }
+    // Another function on a machine of its own; nothing else (a rest of
+    // an operation runs once, so it can't be tried).
+    if (c) return single(run((m) => m.apply(f, args)));
+    throw NEED;
+  };
+  function direct(id: Id, env: Env): Value {
+    const n = code.nodes[id];
+    switch (n.kind) {
+      case "lit": return n.of === INT ? intLit(n.value) : n.value;
+      case "ref": return refValue(n.target, env);
+      case "lambda": return closure(n, env);
+      case "call": {
+        if (isUse(n)) throw NEED;
+        const head = code.nodes[n.fn];
+        if (head.kind === "ref" && info.divergent.has(head.target)) spendStep();
+        const args = new Array<Value>(n.args.length);
+        if (head.kind === "lambda") {
+          for (let i = 0; i < args.length; i++) args[i] = direct(n.args[i], env);
+          return direct(head.body, bind(env, head.params, args));
+        }
+        const f = direct(n.fn, env);
+        for (let i = 0; i < args.length; i++) args[i] = direct(n.args[i], env);
+        return callDirect(f, args);
+      }
+      case "match": {
+        if (handlerOf(n)) throw NEED;
+        const d = direct(n.scrutinee, env) as Data, arm = matchArms(n).get(d.tag);
+        if (arm) return direct(arm.body, bind(env, arm.binds, d.fields));
+        return direct(n.otherwise!, env);
+      }
+      // The rest (a fold, a solve, ...) on a machine of its own, which
+      // stops this run if it would act.
+      default: return single(run((m) => m.eval(id, env)));
+    }
+  }
+
   const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
-    const f = tag((...args: Value[]) => run((m) => m.apply(f, args)), { lambda: n.id, get env() { return toMap(env); } });
+    const f = tag((...args: Value[]) => run((m) => m.apply(f, args)), new LambdaMeta(n.id, env));
     closures.set(f, { lambda: n, env });
     return f;
   };
@@ -716,11 +831,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (rest) return this.resumeRest(rest, args[0]);
       const c = closures.get(f as Fn);
       if (c) {
+        // Directly first, where nothing counts fuel (L118c).
+        if (!this.fuel && directly(c.lambda)) {
+          try { return this.ret(enter(c, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; }
+        }
         rt.entered?.(copyOf?.get(c.lambda.id) ?? c.lambda.id, args, c.lambda.id);
         return this.eval(c.lambda.body, bind(c.env, c.lambda.params, args));
       }
       const h = HANDLED.get(f as Fn);
       if (h) return this.handle(h, args);
+      if (directDepth && builtinFns.has(f as Fn) && !pureFns.has(f as Fn)) throw NEED;
       const op = operations.get(f as Fn);
       if (op) return this.perform(op, args);
       // A builtin that acts on the world performs its effect's operation
@@ -762,6 +882,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
 
     perform(op: Id, args: Value[]) {
+      if (directDepth) throw NEED;
       const effect = effectOf(op)!;
       let f = this.k;
       // Given a handler's name first, that handler answers it; otherwise
@@ -1054,7 +1175,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       for (; i < ids.length; i++) {
         const a = this.atom(ids[i], env);
         if (a === undefined) {
-          this.push({ t: "parts", ids, i, vals: [...vals], env, n, next: null });
+          // (Not copied: resuming copies, and nothing here adds to vals after.)
+          this.push({ t: "parts", ids, i, vals, env, n, next: null });
           return this.eval(ids[i], env);
         }
         vals.push(a);
@@ -1073,7 +1195,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         case "parts": return this.parts(f.ids, f.i + 1, [...f.vals, v], f.env, f.n);
         case "match": {
           const d = v as Data;
-          const arm = f.n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a.variant === d.tag);
+          const arm = matchArms(f.n).get(d.tag);
           if (arm) return this.eval(arm.body, bind(f.env, arm.binds, d.fields));
           return this.eval(f.n.otherwise!, f.env);
         }
@@ -1204,6 +1326,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     };
   };
 
+  // Each match's arms by case, found once (L118c: a list of them made at
+  // every match was a good part of the machine's garbage).
+  const armsKept = new Map<Id, Map<Id, NodeOf<"arm">>>();
+  const matchArms = (n: NodeOf<"match">) => {
+    let m = armsKept.get(n.id);
+    if (!m) {
+      m = new Map();
+      for (const a of n.arms) { const arm = code.nodes[a] as NodeOf<"arm">; if (!m.has(arm.variant)) m.set(arm.variant, arm); }
+      armsKept.set(n.id, m);
+    }
+    return m;
+  };
   const ev = (id: Id, env: Map<Id, Value>): Generator<Value> => run((m) => m.eval(id, fromMap(env)));
 
   // Constructors and projections as function values, made once each.
@@ -1226,7 +1360,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           for (const v of run((m) => m.eval(t.body!, null))) { defs.set(target, v); if (typeof v === "function") defOf.set(v, target); break; }
           // A library definition with a host way runs it (library/hosts.ts).
           const jet = rt.libraryHosts === false ? undefined : pureHosts[target], self = defs.get(target);
-          if (jet && typeof self === "function") { const j = jet(self as Fn); defs.set(target, j); defOf.set(j, target); }
+          if (jet && typeof self === "function") { const j = jet(self as Fn); defs.set(target, j); defOf.set(j, target); pureJets.add(j); }
         }
         return defs.get(target)!;
       }
@@ -1243,14 +1377,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           return parts.get(target)!;
         }
         if (!t.fields.length) return { tag: target, fields: [] };
-        if (!parts.has(target)) parts.set(target, tag((...fields: Value[]) => one({ tag: target, fields }), { prim: target }));
+        if (!parts.has(target)) { const make = tag((...fields: Value[]) => one({ tag: target, fields }), { prim: target }); parts.set(target, make); pureJets.add(make); }
         return parts.get(target)!;
       case "field": {
         if (!parts.has(target)) {
           const v = info.owner.get(target)!;
           const variant = (code.nodes[(code.nodes[v] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
           const i = (code.nodes[variant] as NodeOf<"variant">).fields.indexOf(target);
-          parts.set(target, tag((d) => one((d as Data).fields[i]), { prim: target }));
+          const get = tag((d) => one((d as Data).fields[i]), { prim: target });
+          parts.set(target, get);
+          pureJets.add(get);
         }
         return parts.get(target)!;
       }
