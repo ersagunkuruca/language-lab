@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ArrayView, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, ArrayView, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
@@ -338,6 +338,9 @@ const forwardBuiltin = (id: Id) => {
       return NO_ANSWER;
     };
   }
+  // An array's first item read in place, no list of answers made (C196:
+  // a push run backwards).
+  if (id === ARRAY_OPS.first) return (a: unknown) => { const v = arrayView(a as Parameters<typeof arrayView>[0]); return v.n > 0 ? v.buf.items[v.start] : NO_ANSWER; };
   const one = STD_IMPL[id], many = STD_MANY[id];
   if (one) return (...xs: unknown[]) => one(...(xs as Value[]));
   if (many) return (...xs: unknown[]) => { const r = many(...(xs as Value[])); return r.length ? r[0] : NO_ANSWER; };

@@ -46,7 +46,10 @@ test("mode plans are printed, with builtins run forward (C167b)", () => {
 // Stored as a sound, the pedal's lists are arrays (C196), and its bands
 // solve takes them apart and builds them with the array's own builtins
 // (front, push, the empty array): those are called as themselves, by id,
-// so the plan is printed still, not run by the evaluator.
+// so the plan is printed still, not run by the evaluator. A push run
+// backwards reads the first item and the rest in place, and the option
+// and pair it builds to run `front` backwards aren't made: what they hold
+// is pushed (no `front` called, no option made).
 test("a mode plan calling an array's builtins is printed too (C196)", () => {
   const pedal = load("pedal"), sound = pedal.named("pedal");
   const p = { title: "pedal", code: pedal.code, info: pedal.info, names: pedal.pres.names, own: pedal.own.defs, reps: [], options: pedal.options };
@@ -56,6 +59,9 @@ test("a mode plan calling an array's builtins is printed too (C196)", () => {
   const { js } = emitCoreJs(ir);
   assert.match(js, /R\.moded\([\s\S]*\{"\$builtin":"builtin\.array\./);
   assert.doesNotMatch(js, /R\.rt\("solve/);
+  const plan = js.slice(js.indexOf("R.moded("), js.indexOf("\n}, [", js.indexOf("R.moded(")));
+  assert.doesNotMatch(js, /builtin\.array\.front"/);
+  assert.doesNotMatch(plan, /new K\d+\(/);
 });
 
 // Where the evaluator's solver still runs, it gets only the nodes it reads

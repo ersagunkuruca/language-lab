@@ -27,7 +27,7 @@ import type { Code, Id, NodeOf, Use } from "../../ters/src/model.ts";
 import { useTarget, type Call } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
 import { analyzer, determinism, wrapperOf, type Exec, type Plan } from "../../ters/src/lang/modes.ts";
-import { ARRAY_OPS, CONS, INT_OPS, NIL, NONE, S, SOME } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, CONS, INT_OPS, NIL, NONE, PAIR_V, S, SOME } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -159,6 +159,10 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   const fresh = (sc: Scope, js: string) => { const t = `m$${temps++}`; sc.lines.push(`const ${t} = ${js};`); return t; };
   // The temps that hold a case with no fields (a nil), by its variant.
   const bare = new Map<string, Id>();
+  // The temps that hold a case this plan built, with its fields: a match
+  // on it reads them as they were given (C196: an array's front run
+  // backwards on the option and pair just made).
+  const builtHere = new Map<string, { variant: Id; fields: string[] }>();
   // A slot gets a value: if it has one, they must be equal (for a case
   // with no fields, the same tag).
   const bind = (sc: Scope, s: Id, js: string, variant?: Id) => {
@@ -214,13 +218,15 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
       case "case": {
         const val = get(sc, e.value);
         if (val !== undefined) {
-          sc.lines.push(`if (${val}.tag !== ${sc.emit.tag(e.variant)}) ${sc.fail}`);
-          e.binds.forEach((b, i) => bind(sc, b, `${val}.fields[${i}]`));
+          const m0 = builtHere.get(val), m = m0?.variant === e.variant ? m0 : undefined;
+          if (!m) sc.lines.push(`if (${val}.tag !== ${sc.emit.tag(e.variant)}) ${sc.fail}`);
+          e.binds.forEach((b, i) => bind(sc, b, m ? m.fields[i] : `${val}.fields[${i}]`));
         } else {
           const fs = e.binds.map((b) => get(sc, b));
           if (fs.some((f) => f === undefined)) throw new Unsupported("a value built from unknowns");
           bind(sc, e.value, `{ tag: ${sc.emit.tag(e.variant)}, fields: [${fs.join(", ")}] }`);
           built?.set(get(sc, e.value)!, { variant: e.variant, fields: fs as string[] });
+          builtHere.set(get(sc, e.value)!, { variant: e.variant, fields: fs as string[] });
         }
         break;
       }
@@ -304,18 +310,35 @@ export function modeCompiler(code: Code, names: Record<Id, string>) {
   function arrayBack(id: Id, argNodes: Id[], res: string, sc: Scope): boolean {
     const run = (b: Id, xs: string[]) => sc.emit.builtin?.(b, xs) ?? null;
     if (id === ARRAY_OPS.front) {
+      // The option and pair just made here: the push of what they hold.
+      const o = builtHere.get(res), p = o?.variant === SOME ? builtHere.get(o.fields[0]) : undefined;
+      if (bare.get(res) === NONE || o?.variant === NONE) {
+        const empty = run(ARRAY_OPS.empty, []);
+        if (!empty) return false;
+        bind(sc, argNodes[0], empty);
+        return true;
+      }
+      if (p?.variant === PAIR_V) {
+        const push = run(ARRAY_OPS.pushFront, [p.fields[1], p.fields[0]]);
+        if (!push) return false;
+        bind(sc, argNodes[0], push);
+        return true;
+      }
       const push = run(ARRAY_OPS.pushFront, [`${res}.fields[0].fields[1]`, `${res}.fields[0].fields[0]`]), empty = run(ARRAY_OPS.empty, []);
       if (!push || !empty) return false;
       bind(sc, argNodes[0], `(${res}.tag === ${sc.emit.tag(SOME)} ? ${push} : ${empty})`);
       return true;
     }
     if (id === ARRAY_OPS.pushFront) {
-      const front = run(ARRAY_OPS.front, [res]);
-      if (!front) return false;
-      const f = fresh(sc, front);
-      sc.lines.push(`if (${f} === $no || ${f}.tag !== ${sc.emit.tag(SOME)}) ${sc.fail}`);
-      bind(sc, argNodes[1], `${f}.fields[0].fields[0]`);
-      bind(sc, argNodes[0], `${f}.fields[0].fields[1]`);
+      // Its length, first item and the rest read in place, with no option
+      // or pair made for them (C196).
+      const n = run(ARRAY_OPS.length, [res]);
+      if (!n) return false;
+      sc.lines.push(`if (${n} === 0) ${sc.fail}`);
+      const first = run(ARRAY_OPS.first, [res]), rest = run(ARRAY_OPS.rest, [res]);
+      if (!first || !rest) return false;
+      bind(sc, argNodes[1], first);
+      bind(sc, argNodes[0], rest);
       return true;
     }
     if (id === ARRAY_OPS.empty) {
