@@ -2656,8 +2656,23 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     try { params.forEach((x, i) => t.unify(x, want.params[i])); return true; } catch (e) { if (e instanceof TypeError) return false; throw e; }
   });
   const keepsPin = (s: Subst) => pinRows.every((p) => p.tails.every((tail) => s.resolveRow({ effs: [], tail }).effs.every((e) => p.lets.has(e))));
+  // A definition of the group solved where it is used, in a definition the
+  // check reads, may do nothing but search (the use's check, "performs …,
+  // and a function that acts can't be run backwards"). A filling that
+  // brings it another effect is refused there, since effects a row has
+  // stay in it: refused without the check (BACKLOG E103: 162 of fall's
+  // 707 checks). Only where the program has no such refusal already,
+  // which the check would find again.
+  const acting = (s: Subst, d: Id) => {
+    const t = s.resolve(info.schemes.get(d)!.type);
+    return t.t === "fn" && s.resolveRow(t.eff).effs.some((e) => e !== CHOICE && e !== DIVERGE);
+  };
+  const read = solves.length ? new Set([...affected].flatMap((d) => subtree(code, d))) : new Set<Id>();
+  const solvedAt = new Set(solves.filter((n) => read.has(n.id)).map((n) => useTarget(code.nodes, n)));
+  const solvedPure = [...solvedAt].filter((d) => info.schemes.has(d) && !acting(info.subst, d));
   const safe = (s: Subst, f: Filling, risky: boolean | "field", mix?: string, brings = "") => {
     if (pinRows.length && !keepsPin(s)) return false;
+    if (solvedPure.some((d) => acting(s, d))) return false;
     // (A literal's type is settled by the whole check, which may take it
     // as the pin's: it is left to that check.)
     if (pinInputs.length && f.kind !== "lit" && !keepsPinInputs(s)) return false;
