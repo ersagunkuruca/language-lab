@@ -177,6 +177,11 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   const label = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, c: number) => { if (!stack(t)) noted(t.cases[c].variant, c); return String(c); };
   const caseOf = (t: { cases: { variant: string }[] }, x: string) => `(${x}.$c ?? R.caseOf(${x}, ${constName(JSON.stringify(t.cases.map((c) => c.variant)))}))`;
   const scrutOf = (t: { inner?: boolean; key: string; cases: { variant: string }[] }, x: string) => (stack(t) ? `(${x}.length === 0 ? 0 : 1)` : caseOf(t, x));
+  // The budget, only where one is set or spent from (C171). Only read (a
+  // together or map run side by side, C41/C42), it is Infinity: nothing
+  // sets one.
+  const fuelUsed = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.") && e.fn !== "fuel.get") || kids(e).some(fuelUsed);
+  const fuel = ir.funcs.some((f) => f.spends || fuelUsed(f.body));
   // Deep recursion on the heap (C137c18, compile.ts's C21): a function in
   // a cycle of calls that aren't all its own tail calls (`x + sum(rest)`)
   // takes a JavaScript frame per call, and the stack holds some thousands.
@@ -197,9 +202,6 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
     return [`function ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, func(f, i, deep.get(i)!)];
   });
-  // The budget, only where one is set or spent from (C171).
-  const fuelUsed = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.")) || kids(e).some(fuelUsed);
-  const fuel = ir.funcs.some((f) => f.spends || fuelUsed(f.body));
   // A mode plan's data as this program's own (C137d23): made with its
   // classes and read by their fields, so the program's loops over what
   // a plan gives see one shape of cons, not two, and reading a field
@@ -399,7 +401,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         case "rt": {
           const xs = e.args.map((a) => ex(a, pre, d));
           // The fuel is this module's own (C137c21).
-          if (e.fn === "fuel.get") return "fuel";
+          if (e.fn === "fuel.get") return fuel ? "fuel" : "Infinity";
           // One of an answer's values (core-rt.ts pick), read where it is used.
           { const m = /^pick:(\d+)$/.exec(e.fn); if (m && xs.length === 1) return `(${xs[0]})[${m[1]}]`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
@@ -819,7 +821,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   // A together run side by side (C41, branches-rt.ts): the module is
   // started again on worker threads, which find each branch's code by
   // name, and run no main.
-  const branches = js.includes('R.rt("together.pure"');
+  const branches = /R\.rt\("(together|map)\.pure"/.test(js);
   const body = branches ? withFunctionsNamed(js) : js;
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,

@@ -77,7 +77,7 @@ import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
-import { parallelTogethers } from "../../ters/src/lang/pure-branches.ts";
+import { parallelMaps, parallelTogethers } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -744,7 +744,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
   const fibers = !!opts.handlers && !opts.host;
-  let parallel: Set<Id> | undefined;
+  let parallel: Set<Id> | undefined, parallelMap: Set<Id> | undefined;
+  // A call's inputs already worked out, as locals (a map that may be shared, C42).
+  const given = new Map<Id, SExpr[]>();
+  let mapSites = 0;
   for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1167,7 +1170,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           return { k: "apply", fn: expr(n.fn, env, f, false), t, args: n.args.map((a) => expr(a, env, f, false)), tail, tmp: f.locals.push(t) - 1 };
         }
         if (head.kind !== "ref") throw new Refused("calls a computed function (that needs closures)");
-        const args = () => n.args.map((a) => expr(a, env, f, false));
+        const args = () => given.get(n.id) ?? n.args.map((a) => expr(a, env, f, false));
         const target = (!tailOps.has(head.target) && !laterOps.has(head.target) && builtinOf.get(head.target)) || head.target;
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
@@ -1334,6 +1337,25 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // by side on worker threads where there are any (branches-rt.ts,
         // C41), given the fuel, since under a budget they stay in order.
         if (opts.host && !fibers && target === TOGETHER && (parallel ??= parallelTogethers(code, info)).has(n.id)) return { k: "rt", fn: "together.pure", args: [...args(), { k: "rt", fn: "fuel.get", args: [] }] };
+        // A map of a function that only computes, likewise by its items
+        // (C42), where its items are worth sharing by what each took the
+        // last time (map.worth); otherwise the map as compiled, which is
+        // the faster for the small maps a loop makes many of.
+        if (opts.host && !fibers && !given.has(n.id) && (parallelMap ??= parallelMaps(code, info)).has(n.id)) {
+          const tx = stype(zonk(n.args[0])), t = stype(zonk(id));
+          if (tx && t) {
+            // The list once, as a local; the function as written, made
+            // only on the way taken (lowered for each, as passes after
+            // may change a node in place), so the compiled map is its own
+            // copy for it. The call site is a number the runtime keeps its
+            // measure under.
+            const l = f.locals.push(tx) - 1, xs: SExpr = { k: "local", i: l }, [items, by] = args(), site: SExpr = { k: "num", v: mapSites++ };
+            given.set(n.id, [xs, by]);
+            let plain: SExpr;
+            try { plain = expr(id, env, f, tail); } finally { given.delete(n.id); }
+            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: { k: "rt", fn: "map.pure", args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] }, else: plain, t } };
+          }
+        }
         if (fibers && (target === TOGETHER || target === RACE)) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);

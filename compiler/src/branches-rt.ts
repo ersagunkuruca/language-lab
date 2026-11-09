@@ -100,18 +100,21 @@ export function branchesFrom(url: string, fns: Record<string, Fn>, closure: Modu
   names = new Map(Object.entries(fns).map(([k, f]) => [f, k]));
 }
 
-// In a worker started for branches: answer each together's claims, and
-// say so. True there, so the module doesn't run its main.
+// In a worker started for branches: answer each job's claims, and say
+// so. True there, so the module doesn't run its main. A unit is a
+// together's branch, or a run of a map's items.
 export function branchWorker(): boolean {
   const w = wt();
   if (!w || w.isMainThread || !(w.workerData as { tersBranches?: boolean })?.tersBranches || !mod) return false;
   const { port } = w.workerData as { port: import("node:worker_threads").MessagePort };
-  port.on("message", (m: { job: number; branches: unknown[]; claims: Int32Array }) => {
-    for (let i = 0; i < m.branches.length; i++) {
+  port.on("message", (m: Job) => {
+    let unit: ((i: number) => unknown) | undefined;
+    for (let i = 0; i < m.units; i++) {
       if (Atomics.compareExchange(m.claims, 2 + i, 0, 1) !== 0) continue;
-      let out: { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true };
+      let out: Answer;
       try {
-        const v = encode((decode(m.branches[i], mod!.fns, mod!.closure) as Fn)(), names!);
+        unit ??= unitsOf(m);
+        const v = encode(unit(i), names!);
         out = v === NO ? { job: m.job, i, again: true } : { job: m.job, i, v };
       } catch (e) {
         const reason = e instanceof mod!.Aborted ? encode((e as { reason: unknown }).reason, names!) : NO;
@@ -124,76 +127,144 @@ export function branchWorker(): boolean {
   });
   return true;
 }
+// What a job sends, and what comes back for each unit.
+interface Job { job: number; units: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number }
+interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
+const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
+function unitsOf(m: Job): (i: number) => unknown {
+  if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
+  const f = dec(m.f) as Fn, items = m.items!.map(dec);
+  return (i) => items.slice(i * m.size!, (i + 1) * m.size!).map((x) => f(x));
+}
 
 // The list of actions, and the list of their values in the same kind.
 const itemsOf = (l: unknown): unknown[] => {
   if (l instanceof ArrayView) { const xs = []; for (let i = 0; i < l.n; i++) xs.push(l.buf.items[l.start + i]); return xs; }
   const xs: unknown[] = [];
-  for (let c = l as { tag: unknown; fields: unknown[] }; c.tag === CONS; c = c.fields[1] as typeof c) xs.push(c.fields[0]);
+  // A cell of the module's own class has its fields as f0, f1 (fields is
+  // made on each read).
+  for (let c = l as { tag: unknown; fields: unknown[]; f0?: unknown; f1?: unknown }; c.tag === CONS; c = (c.f1 ?? c.fields[1]) as typeof c) xs.push(c.f0 ?? c.fields[0]);
   return xs;
 };
-const sameKind = (l: unknown, xs: unknown[]): unknown => (l instanceof ArrayView ? arrayOf(xs) : xs.length ? toList(xs as never[]) : { tag: NIL, fields: [] });
+// A cons list is rebuilt from the cells it came in, of the module's own
+// classes, which compiled code reads by their fields (f0, f1, $c).
+function sameKind(l: unknown, xs: unknown[]): unknown {
+  if (l instanceof ArrayView) return arrayOf(xs);
+  type Cell = { tag: unknown; fields: unknown[]; f1?: unknown; constructor: new (x: unknown, rest: unknown) => Cell };
+  let end = l as Cell, cell: Cell | undefined;
+  while (end.tag === CONS) { cell = end; end = (end.f1 ?? end.fields[1]) as Cell; }
+  if (!cell) return xs.length ? toList(xs as never[]) : { tag: NIL, fields: [] };
+  const make = (cell.constructor as unknown) === Object ? (x: unknown, rest: unknown) => ({ tag: CONS, fields: [x, rest] }) : (x: unknown, rest: unknown) => new cell!.constructor(x, rest);
+  let out: unknown = end;
+  for (let i = xs.length - 1; i >= 0; i--) out = make(xs[i], out);
+  return out;
+}
 
 // Each action in order, on this thread.
 export const inOrder = (actions: unknown): unknown => sameKind(actions, (itemsOf(actions) as Fn[]).map((a) => a()));
 
-// What a branch run here threw, kept till its turn in order.
+// What a unit run here threw, kept till its turn in order.
 class Thrown { e: unknown; constructor(e: unknown) { this.e = e; } }
-const run = (a: Fn): unknown => { try { return a(); } catch (e) { return new Thrown(e); } };
+const attempt = (go: () => unknown): unknown => { try { return go(); } catch (e) { return new Thrown(e); } };
 // Starting workers costs a quick program about 45 ms at its exit (Node
 // tears down the ones still loading), so they are started only once a
-// branch has taken this long, and from then on kept.
+// unit has taken this long, and from then on kept.
 const WORTH = 20;
 
-export function togetherPure(actions: unknown): unknown {
-  const as = itemsOf(actions) as Fn[], n = as.length, values: unknown[] = new Array(n);
-  // The main thread starts with the last action; the ones before it may
-  // go to workers, if there are any or it is worth starting them.
+// A job's units shared out: `here(i)` runs unit i on this thread, `send()`
+// is what workers need to run them (NO where something can't cross),
+// `site` the code that marks it quick. Each unit's value, or Thrown, or
+// AGAIN where a worker failed for another reason.
+const AGAIN = Symbol("again");
+let inJob = false;
+function shared(n: number, here: (i: number) => unknown, send: () => Omit<Job, "job" | "units" | "claims"> | typeof NO, site: Fn | undefined): unknown[] {
+  const values: unknown[] = new Array(n);
+  // The main thread starts with the last unit; the ones before it may go
+  // to workers, if there are any or it is worth starting them. Never from
+  // a worker: a job met on one stays there.
+  // A job met while one is shared (an inner map) too: the workers are on
+  // the outer one.
   let left = n;
-  const site = (as[0] as Closure | undefined)?.code;
-  if (!pool || (site && quick.has(site))) {
+  const main = !!wt()?.isMainThread && !inJob;
+  if (!pool || !main || (site && quick.has(site))) {
     const t0 = performance.now();
     while (left > 0) {
-      values[--left] = run(as[left]);
-      if (left > 0 && !pool && mod && performance.now() - t0 > WORTH) { pool = startPool(); break; }
+      values[--left] = attempt(() => here(left));
+      // Started here, or by a job inside this unit (a map in a branch).
+      if (left > 0 && main && mod && (pool || performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
     }
   }
-  const helpers = pool ?? [], sent = left > 0 && helpers.length ? as.slice(0, left).map((a) => encode(a, names!)) : [];
-  if (sent.includes(NO)) for (; left > 0; left--) values[left - 1] = run(as[left - 1]);
+  const helpers = pool ?? [], payload = left > 0 && helpers.length ? send() : NO;
+  if (payload === NO) for (; left > 0; left--) values[left - 1] = attempt(() => here(left - 1));
   const mine = new Set<number>(), id = ++job;
   let theirs = 0;
   if (left > 0) {
-    // claims[0] unused, [1] how many branches workers finished, [2 + i]
-    // whether branch i is taken.
+    // claims[0] unused, [1] how many units workers finished, [2 + i]
+    // whether unit i is taken.
     const claims = new Int32Array(new SharedArrayBuffer(4 * (2 + left))), t0 = performance.now();
-    for (const h of helpers) h.port.postMessage({ job: id, branches: sent, claims });
-    for (let i = left - 1; i >= 0; i--) if (Atomics.compareExchange(claims, 2 + i, 0, 1) === 0) { mine.add(i); values[i] = run(as[i]); }
+    for (const h of helpers) h.port.postMessage({ ...(payload as object), job: id, units: left, claims });
+    inJob = true;
+    try { for (let i = left - 1; i >= 0; i--) if (Atomics.compareExchange(claims, 2 + i, 0, 1) === 0) { mine.add(i); values[i] = attempt(() => here(i)); } } finally { inJob = false; }
     theirs = left - mine.size;
-    // A together the main thread did alone in under a millisecond: its
-    // branches are worth less than sending them, so they stay here.
+    // A job the main thread did alone in under a millisecond: its units
+    // are worth less than sending them, so they stay here.
     if (!theirs && site && performance.now() - t0 < 1) quick.add(site);
     for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
   }
-  const again = new Set<number>();
   if (theirs) {
     const w = wt()!;
     for (const h of helpers) {
       for (let m = w.receiveMessageOnPort(h.port); m; m = w.receiveMessageOnPort(h.port)) {
-        const r = m.message as { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true };
+        const r = m.message as Answer;
         if (r.job !== id) continue;
-        if (r.again) again.add(r.i);
-        else if ("abort" in r) values[r.i] = new Thrown(new mod!.Aborted(decode(r.abort, mod!.fns, mod!.closure), r.esc!));
-        else values[r.i] = decode(r.v, mod!.fns, mod!.closure);
+        if (r.again) values[r.i] = AGAIN;
+        else if ("abort" in r) values[r.i] = new Thrown(new mod!.Aborted(dec(r.abort), r.esc!));
+        else values[r.i] = dec(r.v);
         if (!r.again) onWorkers++;
       }
     }
   }
-  // In the actions' order, as running them in order would have: the first
-  // to abort or fail is the together's. One that failed on a worker for
-  // any other reason runs here, to fail as it would have.
+  // In order, as running them in order would have: the first to abort or
+  // fail is the job's. One that failed on a worker for any other reason
+  // runs here, to fail as it would have.
   for (let i = 0; i < n; i++) {
-    if (again.has(i)) values[i] = as[i]();
+    if (values[i] === AGAIN) values[i] = here(i);
     else if (values[i] instanceof Thrown) throw (values[i] as Thrown).e;
   }
+  return values;
+}
+
+export function togetherPure(actions: unknown): unknown {
+  const as = itemsOf(actions) as Fn[];
+  const values = shared(as.length, (i) => as[i](), () => { const b = as.map((a) => encode(a, names!)); return b.includes(NO) ? NO : { branches: b }; }, (as[0] as Closure | undefined)?.code);
   return sameKind(actions, values);
 }
+
+// A map of a function that only computes (C42): its items in runs, as
+// many as a together's branches would be worth sharing. A map is often
+// small and called often (a vector's parts), so each call site keeps what
+// an item took the last time, and a map that would take under a
+// millisecond by that is the compiled one (map.worth, scalar.ts).
+const RUNS = 32, perItem: number[] = [];
+// Whether a map is worth sharing: never met, or as many items as would
+// take a millisecond by the last measure, counted no further than that.
+export function mapWorth(xs: unknown, site: number): boolean {
+  const est = perItem[site];
+  if (est === undefined) return true;
+  const enough = 1 / est;
+  if (xs instanceof ArrayView) return xs.n >= enough;
+  let n = 0;
+  for (let c = xs as { tag: unknown; fields: unknown[]; f1?: unknown }; c.tag === CONS && n < enough; c = (c.f1 ?? c.fields[1]) as typeof c) n++;
+  return n >= enough;
+}
+export function mapPure(xs: unknown, f: Fn, site: number): unknown {
+  const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
+  const runs = shared(n, (i) => items.slice(i * size, (i + 1) * size).map((x) => f(x)), () => {
+    const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
+    return es.includes(NO) ? NO : { f: g, items: es, size };
+  }, (f as Closure).code);
+  perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
+  return sameKind(xs, (runs as unknown[][]).flat());
+}
+// A map in order, under a budget.
+export const mapInOrder = (xs: unknown, f: Fn): unknown => sameKind(xs, itemsOf(xs).map((x) => f(x)));

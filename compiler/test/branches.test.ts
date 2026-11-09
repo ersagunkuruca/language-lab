@@ -1,7 +1,7 @@
 // Pure branches of together on worker threads (C41, branches-rt.ts): a
-// compiled module shares a together's branches with workers, and says
-// what it says run in order: the same values, and the first abort in the
-// actions' order.
+// compiled module shares a together's branches with workers, and a map's
+// items (C42), and says what it says run in order: the same values, and
+// the first abort in the actions' or items' order.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -32,7 +32,7 @@ function module(dir: string, make: (k: Lang) => Id): string {
   const lowered = lowerCore(code, info, names, [main]);
   assert.equal(lowered.refused.get(main), undefined);
   const js = coreModule(lowered, "main", join(here, "../src/core-rt.ts"), join(here, "../../ters/src/lang/world.ts"));
-  assert.match(js, /R\.rt\("together\.pure"/);
+  assert.match(js, /R\.rt\("(together|map)\.pure"/);
   const file = join(dir, `${names[main]}.mjs`);
   writeFileSync(file, js);
   return file;
@@ -67,7 +67,9 @@ test("values cross back as they were, lists and what the branches captured (C41)
   assert.equal(many[2], 0, many[1]);
   assert.equal(many[0], one[0]);
   assert.match(many[0], /^\[\[1124999250000, 0\.5, 1\], \[2249998500000, 1, 2\], /);
-  assert.match(many[1], /branches on workers: [1-5]\n/);
+  // Units on workers: branches, or runs of the maps inside one run before
+  // the workers were there (C42).
+  assert.match(many[1], /branches on workers: [1-9]\d*\n/);
 });
 
 test("the first abort in the actions' order is the together's, wherever each ran (C41)", async () => {
@@ -81,5 +83,41 @@ test("the first abort in the actions' order is the together's, wherever each ran
   for (const workers of ["2", "0"]) {
     const [out, err, code] = await run([file], { TERS_WORKERS: workers });
     assert.deepEqual([out, err, code], ["", "first\n", 1], `with ${workers} workers`);
+  }
+});
+
+test("mandelbrot-rows draws its rows by one map on workers, the same picture in order and in the evaluator (C42)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/mandelbrot-rows"), "-o", "mandelbrot-rows.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/mandelbrot-rows"), "40", "60"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  const [side, alone, small] = await Promise.all([run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_WORKERS: "0" }, dir), run(["mandelbrot-rows.mjs", "40", "60"], { TERS_BRANCHES: "say" }, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.equal(small[0], inEvaluator[0]);
+  assert.equal(small[1], "branches on workers: 0\n");
+});
+
+test("a map's items cross with what its function captured, and its first abort is the item order's (C42)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const file = module(dir, (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.let("scale", k.lit(0.5), (scale) => k.call(S.print, k.call(SHOW_ANY, k.call(lib("map"), k.call(INT_OPS.range, k.int(12)),
+      k.fn(["i"], (i) => k.list(work(k, 600000, 1), k.call(B.mul, scale, k.call(INT_OPS.toNumber, i))))))))));
+    return main;
+  });
+  const [many, one] = await Promise.all([run([file], { TERS_BRANCHES: "say", TERS_WORKERS: "2" }), run([file], { TERS_WORKERS: "0" })]);
+  assert.equal(many[2], 0, many[1]);
+  assert.equal(many[0], one[0]);
+  assert.match(many[0], /^\[\[179999700000, 0\], \[179999700000, 0\.5\], /);
+  assert.match(many[1], /branches on workers: [1-9]\d*\n/);
+  const aborts = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(lib("map"), k.call(INT_OPS.range, k.int(8)),
+      k.fn(["i"], (i) => k.if(k.call(S.less, k.call(B.add, work(k, 400000, 1), k.call(INT_OPS.toNumber, i)), k.lit(79999800005)), k.lit(0), k.call(ABORT_OP, k.call(SHOW_ANY, i)))))))));
+    return main;
+  });
+  for (const workers of ["2", "0"]) {
+    const [out, err, code] = await run([aborts], { TERS_WORKERS: workers });
+    assert.deepEqual([out, err, code], ["", "5\n", 1], `with ${workers} workers`);
   }
 });

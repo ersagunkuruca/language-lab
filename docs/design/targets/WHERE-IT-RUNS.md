@@ -2,8 +2,11 @@
 
 Status: design note, C61's first step (2026-11-06). Built since: a
 together's pure branches on worker threads on Node (C41, 2026-11-09,
-compiler/src/branches-rt.ts, examples/area), with the threshold measured as
-it runs (a branch past 20 ms starts the workers) rather than priced.
+compiler/src/branches-rt.ts, examples/area), and a `map` of a function
+that only computes by runs of its items (C42's first step, examples/mandelbrot-rows),
+with the threshold measured as it runs (a branch past 20 ms starts the
+workers; a map site keeps what an item took, and a map under a
+millisecond by that is the compiled one) rather than priced.
 The goal is in [STABLE-REFERENCES.md](../data/STABLE-REFERENCES.md) §6:
 every processing environment a target has (on the web: the main thread,
 Web Workers, WebAssembly, the GPU through WebGPU compute) used without the

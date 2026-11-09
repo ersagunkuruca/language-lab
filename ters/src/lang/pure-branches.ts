@@ -80,6 +80,23 @@ export function parallelTogethers(code: Code, info: Info): Set<Id> {
   return out;
 }
 
+// The calls of `map` a target may share out by items (C42): the function
+// written in place, doing nothing but compute, as a together's action may.
+// Run in order, an item that aborts stops the ones after it, so a function
+// that may abort may not also run long.
+export function parallelMaps(code: Code, info: Info): Set<Id> {
+  // List's map, and the array's that a split puts in its place (C196).
+  const maps = new Set([preludeDef("map"), preludeDef("array map")]), out = new Set<Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (!isCall(n) || n.args.length !== 2) continue;
+    const f = code.nodes[n.fn], l = code.nodes[n.args[1]];
+    if (f?.kind !== "ref" || !maps.has((f as NodeOf<"ref">).target) || l?.kind !== "lambda" || l.params.length !== 1) continue;
+    const own = ownEffects(code, info, l.body);
+    if (own && [...own].every((e) => ALONE.has(e)) && !(own.has(ABORT) && own.has(DIVERGE))) out.add(n.id);
+  }
+  return out;
+}
+
 // Each marked call, with each action's own effects.
 function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {
   const together = preludeDef("together");

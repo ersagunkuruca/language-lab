@@ -9,7 +9,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
+import { parallelMaps, parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
 import { ABORT_OP, AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 
@@ -62,4 +62,27 @@ test("a together runs at once unless an action that may abort comes before one t
   assert.equal(together, false);
   assert.equal(marked((k) => { const f = forever(k); return [k.thunk(() => k.call(f, k.lit(1))), k.thunk(() => k.call(ABORT_OP, k.lit("no")))]; }), true);
   assert.equal(together, true);
+});
+
+// A map shares out its items (C42) when its function, written in place,
+// only computes; one that may abort may not also run long, as above.
+function mapMarked(by: (k: Lang, x: Id) => Id): boolean {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main"), forever = k.def("forever");
+  k.define(forever, k.fn(["n"], (n) => k.call(forever, n)));
+  let call = "";
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, (call = k.call(lib("map"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => by(k, x))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  return parallelMaps(code, info).has(call);
+}
+
+test("a map shares out its items when its function only computes, or aborts, or runs long (C42)", () => {
+  assert.equal(mapMarked((k, x) => k.call(B.mul, x, k.lit(2))), true);
+  assert.equal(mapMarked((k, x) => k.if(k.call(S.less, x, k.lit(2)), x, k.call(ABORT_OP, k.lit("no")))), true);
+  assert.equal(mapMarked((k, x) => k.seq(k.call(S.print, k.lit("hi")), x)), false);
+  const forever = (k: Lang) => Object.keys(k.names).find((d) => k.names[d] === "forever")!;
+  assert.equal(mapMarked((k, x) => k.call(forever(k), x)), true);
+  assert.equal(mapMarked((k, x) => k.if(k.call(S.less, x, k.lit(2)), k.call(forever(k), x), k.call(ABORT_OP, k.lit("no")))), false);
 });

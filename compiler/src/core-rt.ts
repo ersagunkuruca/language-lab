@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, inOrder, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, inOrder, mapInOrder, mapPure, mapWorth, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -170,6 +170,9 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // A together whose actions only compute (C41): side by side on worker
   // threads, in order under a budget.
   if (name === "together.pure") return (actions: unknown, fuel: unknown) => (fuel === Infinity || fuel === undefined ? togetherPure(actions) : inOrder(actions));
+  // And a map of a function that only computes, by runs of its items (C42).
+  if (name === "map.worth") return mapWorth as (...xs: unknown[]) => unknown;
+  if (name === "map.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? mapPure(xs, f as (x: unknown) => unknown, site as number) : mapInOrder(xs, f as (x: unknown) => unknown));
   // A replace where every array of its type has one holder (C93 s4,
   // core-js.ts lowerCore): written in place.
   if (name.startsWith("array.replaceOwned.")) return replaceOwned as (...xs: unknown[]) => unknown;
