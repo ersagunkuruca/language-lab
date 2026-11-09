@@ -7,7 +7,7 @@ import { infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 
-export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown }
+export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[] }
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -43,7 +43,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   const options = p.options as Parameters<typeof infer>[3];
   const info = infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
-  return { ...p, code, names, info };
+  return { ...p, code, names, info, chosen };
 }
 
 

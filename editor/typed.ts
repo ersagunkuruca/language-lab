@@ -218,6 +218,9 @@ export const infer = (code: Code, names: Names = {}): Info => {
   if (!same) lastOptions = { pins: programPins, own, options: { pins: { ...LIBRARY.pins, ...Object.fromEntries(own) }, hidden: LIBRARY.hidden, insiders: INSIDERS, library: LIBRARY.code.defs, cache: CACHE } };
   return check(code, names, undefined, lastOptions!.options);
 };
+// The options the last check above was given (pins, the library's hidden
+// and private cases), for a check made elsewhere to match (coreMain.ts).
+export const programOptions = () => lastOptions?.options;
 
 // A published definition is named by its content, so it can't change: an
 // edit that would change one is refused.

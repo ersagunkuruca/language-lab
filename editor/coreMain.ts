@@ -14,19 +14,30 @@ import { withLibraryRepresentations } from "../ters/src/lang/library-reps.ts";
 import { mainProblem } from "../ters/src/lang/run.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { lowerCore, printed, type Printed } from "../compiler/src/core-js.ts";
-import { infer } from "./typed.ts";
+import { infer, programOptions } from "./typed.ts";
+import { represented, type Program } from "../ters/cli/represented.ts";
+import { representationsIn } from "../ters/src/lang/represent.ts";
 
 // main as printed, where it is among the functions, whether it takes the
 // command line's words, and what it gives (an exit code when it does).
 export type CoreMain = { printed: Printed; at: number; args: boolean; result: "int" | "f64" | "other" };
 
-// The program checked for running main: std's Map stored the way the
-// chooser picks (library-reps.ts, C47), in the program's own types' fields
-// too (GAPS.md M2).
-export function checkedForRun(code: Code, names: Names, def: Id): { code: Code; names: Names; info: Info } {
+// The program checked for running main, stored as `lab run` stores it
+// (C197): the program's own representations and the library's (std's Map,
+// lists) chosen by their costs, Map and Set as hash tables where they can
+// be (hostMaps: the evaluator and JavaScript have std's Table), in the
+// program's own types' fields too (GAPS.md M2). A choice the rewrite
+// can't make, which `lab run` refuses, runs as written.
+export function checkedForRun(code: Code, names: Names, def: Id): { code: Code; names: Names; info: Info; chosen: string[] } {
   const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-  const first = infer(code, names), lib = withLibraryRepresentations(code, first, names, def, own);
-  return { code: lib.code, names: lib.names, info: lib.chosen.length ? infer(lib.code, lib.names) : first };
+  const first = infer(code, names);
+  try {
+    const p: Program = represented<Program>({ title: "this program", code, own, names, info: first, reps: representationsIn(code, first, names, own), options: programOptions() }, def, true);
+    return { code: p.code, names: p.names, info: p.info, chosen: p.chosen ?? [] };
+  } catch {
+    const lib = withLibraryRepresentations(code, first, names, def, own);
+    return { code: lib.code, names: lib.names, info: lib.chosen.length ? infer(lib.code, lib.names) : first, chosen: lib.chosen };
+  }
 }
 
 // main lowered to the core IR and printed, or null where it runs another
