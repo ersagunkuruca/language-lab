@@ -32,7 +32,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I192 | A few definitions still freeze 0.5 to 1 s on opening: machine `all digits` 1.0 s, break `shifted` 1.0 s, ray marcher `shadow`, Spacetime `rapidity picture`, Constructions `is picked`, calc `blank` 0.83. Editor lane is measuring them (2026-11-09) and will fold the row into I189 or fix what's new. | QA 11-09 L1 | 2026-11-09 |
+| I192 | A few definitions still freeze 0.5 to 1 s on opening: machine `all digits` 1.0 s, break `shifted` 1.0 s, ray marcher `shadow`, Spacetime `rapidity picture`, Constructions `is picked`, calc `blank` 0.83. Measured 2026-11-09 18:00 (Editor lane, twice each, the click to the next frame and the long tasks): `all digits` 0.36 s (one task of 0.30), `shifted` 0.26 (0.22), `is picked` 0.46 (0.41), `blank` 0.34 (0.27): I189's remainder, the long run's piece and one view. `shadow` 1.24 s (0.42 + 0.63): the long run's pieces too, its views each a call of the evaluator, then the drawing. New: `rapidity picture` 1.15 s in one task of 1.0, all drawing, no evaluator: the graph laid out and routed 0.32 s (tidyScene, arrange, route, crossings), the blocks 0.17, the graph's hooks 0.13 (Spacetime's algebras found once, 0.06, and the trace), the page laid out when scrolls are put back 0.15. Next: the graph of a big definition drawn in less (what is shown first, the layout kept between opens). | QA 11-09 L1 | 2026-11-09 |
 
 ## E: Editor
 
