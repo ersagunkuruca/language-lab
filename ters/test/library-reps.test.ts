@@ -466,6 +466,30 @@ test("a representation the program doesn't check on is dropped, not reported; ch
   assert.deepEqual(c.chosen, []);
 });
 
+// A page's Html holds lists the rewrite can't change, which refused the
+// whole program; now the definitions that never see one take the row and
+// main keeps its lists as written, converted where they cross: the
+// pedal's `pedal on` gives main a function on arrays, which main hands
+// `listen` as a function on lists (C196, rep-split.ts deep).
+test("a page's Html lists stay as written while the rest take the chooser's row (C196)", async () => {
+  const { join } = await import("node:path");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples/pedal"));
+  const names = p.pres.names, info = infer(p.code, names, undefined, p.options);
+  const main = p.named("main");
+  const c = withLibraryRepresentations(p.code, info, names, main, p.own.defs, [], { hostMaps: true });
+  assert.deepEqual(c.chosen, ["List as array of List beside main's lists as written"]);
+  assert.deepEqual(c.info?.errors.map((e) => e.message), []);
+  // The page as static HTML, the same either way (`lab run`).
+  const { htmlText, evaluatorCall } = await import("../src/lang/html.ts");
+  const { Cells } = await import("../src/lang/cells.ts");
+  const { equal } = await import("../src/lang/run.ts");
+  const shown = (code: typeof p.code, i: typeof info, n: typeof names) => htmlText(runMain(code, i, main, { print: () => {}, names: n, cells: new Cells(equal) } as never), evaluatorCall);
+  const page = shown(p.code, info, names);
+  assert.ok(page.includes("Pedal"));
+  assert.equal(shown(c.code, c.info!, c.names), page);
+});
+
 // A priced function of one list (`length`) on a list a call has just
 // made costs no more steps than making it, so it isn't weighed by a loop
 // it is in, and isn't a job when every use is so.
