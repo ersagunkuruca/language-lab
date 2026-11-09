@@ -33,6 +33,7 @@
 // test/modes.test.ts compares what it says with what relate.ts does.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
+import steadyModes from "../../library/steady-modes.json" with { type: "json" };
 import { children, dependencies, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
@@ -190,9 +191,23 @@ const keptModes = new WeakMap<Record<Id, string>, Map<string, Kept>>();
 const keptFor = (names: Record<Id, string>, plansOnly: boolean) => {
   const k = Object.keys(names).length ? names : KEPT_NAMES;
   let m = keptModes.get(k);
-  if (!m) keptModes.set(k, (m = new Map()));
+  if (!m) keptModes.set(k, (m = k === KEPT_NAMES && seeding ? seeded() : new Map()));
   return { m, prefix: plansOnly ? "plans|" : "" };
 };
+// steady's modes, worked out when the library is built (library/
+// steady-modes.ts, BACKLOG E103): a palette offering steady sin where only
+// its value is known worked steady's helpers out backwards on its first
+// offer, 1.4 s of thousands of paths. Kept without their plans, which only
+// relate.ts reads, through an analyzer of plans whose verdicts are kept
+// apart ("plans|"). A published definition's id is its content, so one
+// changed is a new id and its old entries are never asked; a change to
+// this analysis is caught by modes-seed.test.ts.
+let seeding = true;
+export const unseeded = () => { seeding = false; keptModes.delete(KEPT_NAMES); keptAnswers.delete(KEPT_NAMES); };
+type SeedRow = [string, Omit<Verdict, "plan">, Kept["graphs"]];
+const seeded = () => new Map((steadyModes as unknown as SeedRow[]).map(([k, v, graphs]) => [k, { v: v as Verdict, graphs }]));
+// The kept entries without their plans, as steady-modes.json has them.
+export const keptRows = (): SeedRow[] => [...(keptModes.get(KEPT_NAMES) ?? [])].map(([k, e]) => { const { plan: _, ...v } = e.v; return [k, v, e.graphs]; });
 const fixedFn = (f: Fn) => f.k === "builtin" || isPublished(f.id);
 // The checker's questions about a published definition given only
 // published functions (ofMode, ofReturned), answered with recursion
