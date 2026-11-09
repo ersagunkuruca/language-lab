@@ -496,9 +496,9 @@ test("a page's Html lists stay as written while the rest take the chooser's row 
 // Space holds an Algebra: bounce's and spacetime's physics passes it to
 // the library's clifford code, which now stays as written, the Algebra's
 // lists with it, since no list crosses in what they're given (C196).
-// spacetime's lists are arrays, bounce's trees (its cheapest), and each
-// page is the same.
-for (const [example, row] of [["spacetime", "array of List"], ["bounce", "tree of List"]]) {
+// spacetime's lists are arrays, bounce's, impact's and compass's trees
+// (their cheapest), and each page or printout is the same.
+for (const [example, row] of [["spacetime", "array of List"], ["bounce", "tree of List"], ["impact", "tree of List"], ["compass", "tree of List"]]) {
   test(`${example}'s lists take the chooser's row beside its Algebra's (C196)`, async () => {
     const { join } = await import("node:path");
     const { loadProgram } = await import("../src/lang/load.ts");
@@ -511,7 +511,12 @@ for (const [example, row] of [["spacetime", "array of List"], ["bounce", "tree o
     const { htmlText, evaluatorCall } = await import("../src/lang/html.ts");
     const { Cells } = await import("../src/lang/cells.ts");
     const { equal } = await import("../src/lang/run.ts");
-    const shown = (code: typeof p.code, i: typeof info, n: typeof names) => htmlText(runMain(code, i, main, { print: () => {}, names: n, cells: new Cells(equal) } as never), evaluatorCall);
+    // A page's Html, or what a program prints (impact).
+    const shown = (code: typeof p.code, i: typeof info, n: typeof names) => {
+      const out: string[] = [];
+      const v = runMain(code, i, main, { print: (x: string) => out.push(x), names: n, cells: new Cells(equal) } as never);
+      return out.length ? out.join("\n") : htmlText(v, evaluatorCall);
+    };
     assert.equal(shown(c.code, c.info!, c.names), shown(p.code, info, names));
   });
 }

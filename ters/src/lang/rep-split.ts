@@ -123,7 +123,9 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   for (;;) {
     asWritten.clear();
     aw = deep ? reachSeeds([...seedSet]) : reach([...seedSet], new Set());
-    bw = reach([main], seedSet);
+    // The program's own kept as written (impact's pga, given its plane
+    // basis) are on main's side: a seed they read converts there.
+    bw = reach([main, ...[...asWritten].filter((d) => !aw.has(d) && ownSet0.has(d))], seedSet);
     aTypes = new Set([...aw].flatMap((d) => [...madeBy(d)]));
     const more = [...bw].filter((d) => [...madeBy(d)].some((t) => aTypes.has(t)));
     if (!more.length) break;
@@ -153,7 +155,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   seeds = [...seedSet];
 
   const outNames: Names = { ...names, ...Object.fromEntries(shared.map((d) => [f(d), names[d] ?? d])) };
-  const wrapped = new Map<Id, Id>();
+  const wrapped = new Map<Id, Id>(), innerOf = new Map<Id, Id>();
   // A copy's node has its original's type.
   const typed = { ...info, typeOf: { get: (id: Id) => info.typeOf.get(origin.get(id) ?? id) } as Info["typeOf"] };
   const typeOf = (id: Id): Type | undefined => { const t = typed.typeOf.get(wrapped.get(id) ?? id); return t && info.subst.zonk(t); };
@@ -233,13 +235,19 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
     const inner = freshId();
     nodes[inner] = { ...nodes[id], id: inner } as Node;
     wrapped.set(inner, wrapped.get(id) ?? id);
+    const was = innerOf.get(id);
+    innerOf.set(id, inner);
+    if (was) innerOf.set(inner, was);
     nodes[id] = { id, kind: "call", fn: ref(conv), args: [inner] } as Node;
   };
   // On side `a` (the seeds') or not: what's read from the other side's
   // types, and what goes into them.
   const convert = (defs: Id[], a: boolean) => {
     const other = (t: Id) => (a ? !aTypes.has(t) : aTypes.has(t));
-    for (const d of defs) for (const id of subtree({ nodes, defs: [] }, d)) {
+    for (const d of defs) for (let id of subtree({ nodes, defs: [] }, d)) {
+      // A node already wrapped, as what a seed's call is given (build's
+      // steps, given on to place of in compass): what it was.
+      while (innerOf.has(id)) id = innerOf.get(id)!;
       const n = nodes[id];
       if (n.kind === "arm" && holders.has(n.variant) && other(holders.get(n.variant)!)) {
         // A match on one: its list binders converted, by a let.

@@ -668,6 +668,9 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     if (!at || !hasList(at)) continue;
     // A builtin with a list in its type: only called, by the rules above.
     const c = calledBy.get(id);
+    // A field an implementation leaves to its interface's ways is filled
+    // in by the compiler, never run as itself (impact's colliders, C196).
+    if (!c && target === S.byItsWays) continue;
     if (!c) return null;
     if (target in BY_VALUE) { if (program.has(d)) continue; return null; }
     // `fail` makes nothing and `one of` gives one of what it's given: an
