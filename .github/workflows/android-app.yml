@@ -1,0 +1,53 @@
+# A program's page as an Android app (C198, WEB.md "Mobile"): `lab
+# build-app`, then the Capacitor project it makes built into a debug APK,
+# kept as the run's artifact to install on a phone. Run by hand only
+# (Actions tab, "Android app", Run workflow), since containers can't reach
+# Google's Android SDK and a run costs build minutes.
+name: Android app
+
+on:
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Example to build (a folder in ters/examples)"
+        default: dice
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        working-directory: ters
+      - name: lab build-app
+        working-directory: ters
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: node cli/lab.ts build-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app"
+      - name: Capacitor project
+        working-directory: ${{ runner.temp }}/app
+        run: |
+          npm install @capacitor/core@8 @capacitor/cli@8 @capacitor/android@8
+          npx cap add android
+      - name: Debug APK
+        working-directory: ${{ runner.temp }}/app/android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.program }}-android
+          path: ${{ runner.temp }}/app/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
