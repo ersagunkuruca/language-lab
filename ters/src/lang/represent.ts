@@ -391,7 +391,9 @@ export interface Choice {
 // definition as written, since a rewrite has to buy something. A job a
 // representation doesn't implement is done by its definition, which costs what it costs
 // in T's own terms; one with no cost at all is NEVER.
-export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
+// prefer: between representations whose costs tie, the one to take
+// before the definition as written (a sound's lists as arrays, C196).
+export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean): Choice {
   const jobs = uses(code, entry, reps, true);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   // Building a v onto a field taken out of another value costs v's
@@ -416,7 +418,7 @@ export function choose(code: Code, entry: Id, reps: Representation[]): Choice {
   const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(inLoop.has(j) ? times(c[j]) : c[j]))), space: step(c.space) }; };
   const best = reps.filter((r) => !r.approximate).sort((a, b) => {
     const [x, y] = [score(a), score(b)];
-    return compare(x.jobs, y.jobs) || compare(x.space, y.space) || Number(b === spec) - Number(a === spec);
+    return compare(x.jobs, y.jobs) || compare(x.space, y.space) || Number(!!prefer?.(b)) - Number(!!prefer?.(a)) || Number(b === spec) - Number(a === spec);
   })[0];
   return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };
 }

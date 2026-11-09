@@ -10,9 +10,14 @@ import { join } from "node:path";
 import { soundOf, type Play } from "../../ters/cli/sound.ts";
 import { loadProgram } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
+import { represented, type Program } from "../../ters/cli/represented.ts";
 
 const p = loadProgram(join(import.meta.dirname, "../../ters/examples/pedal"));
 const prog = { code: p.code, info: infer(p.code, p.pres.names, undefined, p.options), names: p.pres.names };
+// Stored as `lab render --compiled` stores a sound: its blocks as arrays
+// (C196), the lists as written beside them for comparison.
+const stored = represented<Program>({ title: "pedal", ...prog, own: p.own.defs, reps: [], options: p.options }, p.named("pedal"), true, false, true);
+console.log(`stored: ${stored.chosen?.join(", ") || "as written"}`);
 
 // By hand: Haar's split in lifting steps, tanh(32 atanh x) on the slow
 // band, the join, the compressor (4 to 1 over 0.5, level falling by
@@ -44,7 +49,8 @@ const blocks = Array.from({ length: 64 }, (_, b) => Array.from({ length: 128 }, 
 const ways: [string, Play, number][] = [
   // The core IR's JavaScript (C137d3), its solves' plans written out when
   // the program loads (C137d8).
-  ["core IR", await soundOf(prog, p.named("pedal"), "core"), 1000],
+  ["core IR", await soundOf(stored, p.named("pedal"), "core"), 1000],
+  ["as lists", await soundOf(prog, p.named("pedal"), "core"), 1000],
   ["evaluator", await soundOf(prog, p.named("pedal"), "evaluator"), 4],
   ["by hand", ideal(), 20000],
 ];

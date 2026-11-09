@@ -51,7 +51,12 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // `hostMaps` is (JavaScript): WebAssembly's arrays copy on every replace,
 // and machine split took 26 s there for primes 20000 against its trees'
 // 0.3 s (C93 s5).
-export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean }
+// `sound`: the program is a sound, played a block at a time (AUDIO.md):
+// a list made in its audio loop is an object an item as written, which
+// the garbage collector takes back while blocks are due, so where lists
+// as arrays cost what the definition does, arrays (C196: "pedal is
+// creating cons lists in the audio loop. That's just wrong").
+export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
@@ -96,7 +101,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
-    const tree = choose(code, main, [spec, ...rows]).rep;
+    const tree = choose(code, main, [spec, ...rows], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
     // Lists as trees for the whole, where parts of it would have arrays
     // (machine's step loop): those parts as arrays, the rest as written,

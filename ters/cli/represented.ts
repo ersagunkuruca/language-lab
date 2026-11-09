@@ -16,7 +16,8 @@ function fail(message: string): never { throw new Error(message); }
 // the choices). Library types (std's Map) are chosen for too, unless the
 // table has a row for them (library-reps.ts, C47). The rewrite is checked
 // again, like any program.
-export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolean, tables = false): P {
+// `sound`: main is a sound played in blocks (library-reps.ts).
+export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolean, tables = false, sound = false): P {
   const p = reachedFrom(p0, main);
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are for its own representations.
@@ -26,7 +27,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   // it is read, not rewritten or run, so the represented program leaves it out.
   const reps = new Set(p.reps.map((r) => r.def));
   const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return (!b || p.code.nodes[b]?.kind !== "typedef") && !reps.has(d); });
-  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps, { hostMaps, tables });
+  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps, { hostMaps, tables, sound });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
   for (const of of new Set(p.reps.map((r) => r.of))) {
