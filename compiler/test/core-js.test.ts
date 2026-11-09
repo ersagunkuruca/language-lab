@@ -26,6 +26,9 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
+import { represented } from "../../ters/cli/represented.ts";
+import { representationsIn } from "../../ters/src/lang/represent.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { FAIL, loadCoreJs, loadPrinted, lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
@@ -41,12 +44,21 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
   wc: () => [["a.txt"], { "a.txt": "two words\nand three more\n" }],
 };
 
+// agent's page works its coupled search out (A* over place and velocity,
+// L123), which takes the evaluator minutes, stored as lab run stores it or
+// not (the evaluator's speed is L118c, BACKLOG I195).
+const skip = new Set(["agent"]);
 // numbers counts in Peano Nat as defined: the evaluator runs out of memory
-// and the printer's recursion out of stack (`lab run` runs it through the
-// chooser's representations instead). agent's page works its coupled
-// search out (A* over place and velocity, L123), which takes the evaluator
-// minutes (the evaluator's speed is L118c).
-const skip = new Set(["numbers", "agent"]);
+// and the printer's recursion out of stack. It is checked as `lab run`
+// stores it (cli/represented.ts: Nat as an Int), in both, which is what
+// either runs (I195); each representation's jobs are checked against the
+// type's own by `lab test`.
+const asRun = new Set(["numbers"]);
+const stored = (name: string, p: ReturnType<typeof load>, main: Id): ReturnType<typeof load> => {
+  if (!asRun.has(name)) return p;
+  const r = represented({ title: name, code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: representationsIn(p.code, p.info, p.pres.names, p.own.defs), options: p.options }, main, true);
+  return { ...p, code: r.code, info: r.info, pres: { ...p.pres, names: r.names }, own: { ...p.own, defs: r.code.defs.filter((d) => !LIBRARY.code.nodes[d]) } };
+};
 
 // A program saved as the editor saves one.
 function saved(k: Lang): string {
@@ -92,9 +104,10 @@ const spawn = (args: string[], cwd?: string): Promise<[string, string, number]> 
 test("the examples whose main lowers to the core IR say the same in JavaScript printed from it as in the evaluator (C137c4)", () => {
   const ran: string[] = [], refused: string[] = [];
   for (const name of sweep(readdirSync(examples, { withFileTypes: true }).filter((d) => d.isDirectory() && !skip.has(d.name)).map((d) => d.name).sort())) {
-    const p = load(name);
-    const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d));
+    const p0 = load(name);
+    const main = p0.code.defs.find((d) => p0.pres.names[d] === "main" && p0.own.defs.includes(d));
     if (!main) continue;
+    const p = stored(name, p0, main);
     const l = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
     if (l.refused.has(main)) { refused.push(`${name}: ${l.refused.get(main)}`); continue; }
     const mt = p.info.typeOf.get(main);
