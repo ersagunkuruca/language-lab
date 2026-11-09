@@ -371,19 +371,21 @@ test("a program that reads a list by position and takes it apart gets arrays in 
   const lowered = lowerScalar(c.code, info2, c.names, [at, head], { data: true });
   assert.deepEqual([...lowered.refused.values()], []);
   assert.deepEqual([...emitC(lowered).refused.values()], []);
-  // The match is the array's front (its first item and rest, C137 s3e), as
-  // an Optional, put in place in head plus (C93: a match job that isn't
-  // recursive is inlined).
+  // The match is the array's length, then its first item read in place
+  // (C196: no Optional nor pair made for it), put in place in head plus
+  // (C93: a match job that isn't recursive is inlined).
   const seen = new Set<unknown>();
+  let attempts = 0;
   const finds = (e: unknown): boolean => {
     if (!e || typeof e !== "object" || seen.has(e)) return false;
     seen.add(e);
-    const x = e as { k?: string; body?: { k?: string; fn?: unknown; args?: { k?: string; fn?: unknown }[] } };
-    const first = (b?: { k?: string; fn?: unknown }) => b?.k === "rt" && typeof b.fn === "string" && b.fn.startsWith("array.first");
-    if (x.k === "attempt" && (first(x.body) || (x.body?.k === "make" && first(x.body.args?.[0])))) return true;
-    return Object.entries(e).some(([key, v]) => key !== "t" && key !== "bt" && finds(v));
+    const x = e as { k?: string; fn?: unknown };
+    if (x.k === "attempt") attempts++;
+    const here = x.k === "rt" && typeof x.fn === "string" && x.fn.startsWith("array.first");
+    return Object.entries(e).map(([key, v]) => key !== "t" && key !== "bt" && finds(v)).some(Boolean) || here;
   };
   assert.ok(lowered.funcs.some((g) => g.def === head && finds(g.body)));
+  assert.equal(attempts, 0);
   const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (x: number) => unknown>;
   const fn = (d: Id) => w[lowered.funcs.find((g) => g.def === d)!.name];
   const one = (v: unknown) => (Array.isArray(v) ? v[0] : v);

@@ -1586,6 +1586,24 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const arm: SExpr = { k: "case", scrut: { k: "local", i: reason }, s, t: et, arms: cases, result: t };
           return { k: "handle", body, reason, arm, t, save, esc };
         }
+        // A match on an array's front (`array of List`'s match, C137 s3e)
+        // whose some case takes the pair apart at once: an if on the
+        // length, and the first item and the rest read as lets, with no
+        // option or pair made and no search (C196: the pedal's reads).
+        const front = frontMatch(n);
+        if (opts.data && front) {
+          const a = stype(zonk(front.array)), t = stype(zonk(id));
+          if (a && isArray(a) && t) {
+            const arr = f.locals.push(a) - 1, at: SExpr = { k: "local", i: arr };
+            const inner = new Map(env), lets: { i: number; value: SExpr }[] = [];
+            const [x, r] = front.pair.binds;
+            if (x) { const i = f.locals.push(a.item) - 1; inner.set(x, i); lets.push({ i, value: { k: "rt", fn: `array.first.a${a.index}`, args: [at] } }); }
+            if (r) { const i = f.locals.push(a) - 1; inner.set(r, i); lets.push({ i, value: { k: "rt", fn: `array.rest.a${a.index}`, args: [at] } }); }
+            const some = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(front.pair.body, inner, f, tail));
+            const cond: SExpr = { k: "rt", fn: "int.less", args: [{ k: "int", v: 0n }, { k: "rt", fn: `array.length.a${a.index}`, args: [at] }] };
+            return { k: "let", i: arr, value: expr(front.array, env, f, false), body: { k: "if", cond, then: some, else: expr(front.none.body, env, f, tail), t } };
+          }
+        }
         const st = opts.records ? stype(zonk(n.scrutinee)) : null;
         if (st && isData(st)) {
           // Each case's arm, its fields as lets read from the scrutinee's local.
@@ -1639,6 +1657,26 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       case "hole": throw new Refused("has a hole");
       default: throw new Refused(`has a ${n.kind}`);
     }
+  }
+
+  // `match front(array) { none → …; some(p) → match p { pair(x, r) → … } }`
+  // with p read nowhere else: the array, the none case and the pair's case.
+  function frontMatch(n: NodeOf<"match">): { array: Id; none: NodeOf<"arm">; pair: NodeOf<"arm"> } | null {
+    const sc = code.nodes[n.scrutinee];
+    if (!isCall(sc) || n.otherwise || n.arms.length !== 2) return null;
+    const fn = code.nodes[sc.fn];
+    if (fn?.kind !== "ref" || fn.target !== ARRAY_OPS.front) return null;
+    const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    const none = arms.find((a) => a.variant === NONE), some = arms.find((a) => a.variant === SOME);
+    const p = some?.binds[0];
+    const m = some && code.nodes[some.body];
+    if (!none || !p || m?.kind !== "match" || m.otherwise || m.arms.length !== 1) return null;
+    const ms = code.nodes[m.scrutinee];
+    if (ms?.kind !== "ref" || ms.target !== p) return null;
+    const pair = code.nodes[m.arms[0]] as NodeOf<"arm">;
+    if (pair.variant !== PAIR_V) return null;
+    if (subtree(code, pair.body).some((x) => { const r = code.nodes[x]; return r.kind === "ref" && r.target === p; })) return null;
+    return { array: sc.args[0], none, pair };
   }
 
   // A builtin with no lowering of its own, for JavaScript from the core IR

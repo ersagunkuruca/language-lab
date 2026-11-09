@@ -61,6 +61,9 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // `item at` read in the buffer too, with no answer thrown, not a list
   // of answers made for each read (C93: machine's registers and memory).
   "array.at": (a: Parameters<typeof arrayView>[0], k: I.Int) => { const v = arrayView(a), i = Number(k); if (!(Number.isInteger(i) && i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
+  // The first item, read in place (C196: an array's match reads it once
+  // an item), not a list of its answers.
+  "array.first": (a: Parameters<typeof arrayView>[0]) => { const v = arrayView(a); if (v.n === 0) throw FAIL; return v.buf.items[v.start]; },
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).
