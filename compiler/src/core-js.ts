@@ -816,6 +816,11 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   const { names, worlds } = emitCoreJs(ir);
   const { js } = moduleTags(ir, !!hosts);
   const code = codeFor(ir, js);
+  // A together run side by side (C41, branches-rt.ts): the module is
+  // started again on worker threads, which find each branch's code by
+  // name, and run no main.
+  const branches = js.includes('R.rt("together.pure"');
+  const body = branches ? withFunctionsNamed(js) : js;
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
     ...solverFor(code, runtime, js),
@@ -830,10 +835,18 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     `const rt = { print: (s) => console.log(s), world: $logged ? $logged.world : nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
     `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${code}${hosts ? `, undefined, ${JSON.stringify(hosts.ops)}` : ""});`,
     "const defs = (function (R) {",
-    js,
+    body,
     "})(R);",
-    `process.exitCode = runCoreFn(defs.${names[fi]}, ${JSON.stringify(m)}, process.argv.slice(2), rt);`,
+    `${branches ? "if (!R.branchWorker()) " : ""}process.exitCode = runCoreFn(defs.${names[fi]}, ${JSON.stringify(m)}, process.argv.slice(2), rt);`,
   ].join("\n");
+}
+
+// The module's functions given to branches-rt.ts by name, before its
+// definitions are handed out (its last line, `return {`).
+function withFunctionsNamed(js: string): string {
+  const fns = [...new Set([...js.matchAll(/^\s*function\*?\s+(f[\w$]*)\s*\(/gm)].map((m) => m[1]))];
+  const at = js.lastIndexOf("\nreturn {");
+  return `${js.slice(0, at)}\nR.branchesFrom(import.meta.url, { ${fns.join(", ")} }, R.closure, R.Aborted);${js.slice(at)}`;
 }
 
 // What a tool needs to go from the printed JavaScript back to the program

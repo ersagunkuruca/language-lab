@@ -63,8 +63,27 @@ function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
 // The calls of `together` whose actions, written in place as a list of
 // lambdas, may run on other cores.
 export function pureTogethers(code: Code, info: Info): Set<Id> {
-  const together = preludeDef("together");
+  return new Set(pureActions(code, info).keys());
+}
+
+// Those a target may run at once with nothing to tell (C41): run in order,
+// an action that aborts stops the ones after it, so none after one that
+// may abort may run long (Diverge), where at once it would keep the
+// together waiting. Then every action's answer, or the first abort in
+// order, is the together's either way.
+export function parallelTogethers(code: Code, info: Info): Set<Id> {
   const out = new Set<Id>();
+  for (const [call, effs] of pureActions(code, info)) {
+    const firstAbort = effs.findIndex((e) => e.has(ABORT));
+    if (firstAbort < 0 || !effs.slice(firstAbort + 1).some((e) => e.has(DIVERGE))) out.add(call);
+  }
+  return out;
+}
+
+// Each marked call, with each action's own effects.
+function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {
+  const together = preludeDef("together");
+  const out = new Map<Id, Set<Id>[]>();
   if (!together) return out;
   for (const n of Object.values(code.nodes)) {
     if (!isCall(n) || n.args.length !== 1) continue;
@@ -72,12 +91,12 @@ export function pureTogethers(code: Code, info: Info): Set<Id> {
     if (f?.kind !== "ref" || (f as NodeOf<"ref">).target !== together) continue;
     // The actions written in place, each a lambda of nothing.
     const list: Id[] = writtenItems(code.nodes, n.args[0]) ?? [""];
-    const alone = list.length > 0 && list.every((a) => {
+    const effs = list.map((a) => {
       const l = code.nodes[a];
       const own = l?.kind === "lambda" && !l.params.length ? ownEffects(code, info, l.body) : null;
-      return own !== null && [...own].every((e) => ALONE.has(e));
+      return own !== null && [...own].every((e) => ALONE.has(e)) ? own : null;
     });
-    if (alone) out.add(n.id);
+    if (list.length > 0 && effs.every((e) => e)) out.set(n.id, effs as Set<Id>[]);
   }
   return out;
 }
