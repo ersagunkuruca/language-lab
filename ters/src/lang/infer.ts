@@ -147,6 +147,17 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 let underAll: { codes: Code[]; names: Names } | null = null;
 const underChecks: { lib: Code; opts: Options; info: Info }[] = [];
 export function checkOnce(code: Code | null, names: Names = {}, also: Code[] = []) { underAll = code && { codes: [code, ...also], names }; underChecks.length = 0; }
+// Where a process keeps the library's check between runs (I193): lab, the
+// MCP and the tests, in Node, keep it on disk (library-store.ts), so each
+// reads it rather than checking the library again; the editor keeps none.
+// `lib` and `pins` are what the check was of: the library's code and the
+// pins of its own definitions.
+export interface LibraryStore {
+  load(lib: Code, opts: Options, pins: [Id, unknown][]): Info | undefined;
+  save(lib: Code, opts: Options, pins: [Id, unknown][], info: Info): void;
+}
+let libraryStore: LibraryStore | null = null;
+export function keepLibraryChecks(store: LibraryStore | null) { libraryStore = store; underChecks.length = 0; }
 let checkingUnder = false;
 // On its layer (E253b), the nodes that aren't the layer's are known: the
 // program is on the library just when none of them is one of its.
@@ -172,8 +183,13 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
   const same = (a: Options) => a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library && samePins(a);
   let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
-    checkingUnder = true;
-    try { kept = { lib, opts, info: infer(lib, underAll.names, undefined, opts) }; } finally { checkingUnder = false; }
+    const stored = libraryStore?.load(lib, opts, mine);
+    if (stored) kept = { lib, opts, info: stored };
+    else {
+      checkingUnder = true;
+      try { kept = { lib, opts, info: infer(lib, underAll.names, undefined, opts) }; } finally { checkingUnder = false; }
+      if (!kept.info.errors.length) libraryStore?.save(lib, opts, mine, kept.info);
+    }
     // A few kept, the latest first: a caller that makes its options anew
     // each time would otherwise keep a library check for each.
     underChecks.unshift(kept);

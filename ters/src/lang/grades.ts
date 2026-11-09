@@ -152,7 +152,11 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
   if (found) return found;
   found = new Map();
   cache.set(code, found);
-  const r = makeRunner(code, info, { print: () => {} });
+  // Made only for a program that has an algebra (I193: making it resolves
+  // the arithmetic of the whole library, 0.9 s of every `lab check`).
+  let runner: ReturnType<typeof makeRunner> | undefined;
+  const made = () => (runner ??= makeRunner(code, info, { print: () => {} }));
+  const r = { value: (d: Id) => made().value(d), call: (...a: Parameters<ReturnType<typeof makeRunner>["call"]>) => made().call(...a) };
   const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
   for (const d of code.defs) {
     const def = code.nodes[d] as NodeOf<"def">;
