@@ -145,6 +145,10 @@ WebAssembly writes an owned array's replace in place too (C56 step,
 whether another view was made on it (a rest, a push into its room), so
 `array.replaceOwned` writes the slot unless one was. machine's primes
 20000 as a WASI command went from 15.5 s to 76 ms.
+So are records rebuilt from one nobody else holds: each `make` written
+into a local becomes its changed fields, computed first into new locals,
+then written with `set` (owned-records.ts `intoAsSets`), about a fifth
+faster on machine.
 
 ### 4. Counting at run time, where the compiler can't tell
 

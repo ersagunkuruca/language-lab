@@ -18,6 +18,7 @@ import { load } from "../src/program.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
 import { ownedArrays } from "../src/owned-arrays.ts";
+import { intoAsSets, ownedRecords } from "../src/owned-records.ts";
 import { coreMain, lowerCore } from "../src/core-js.ts";
 import { machine as ideal } from "./machine.ideal.js";
 
@@ -75,6 +76,7 @@ export async function wasmModule(): Promise<WebAssembly.Module | string> {
     const c = chosenFor(p, own, main, false);
     const lowered = lowerScalar(c.code, c.info, c.names, own, { data: true });
     ownedArrays(lowered, c.code, c.info, c.names, main);
+    if (!process.env.NO_OWN_RECORDS) { ownedRecords(lowered, c.code, c.info, c.names, main); intoAsSets(lowered); }
     const m = emitWasm(lowered, { wasi: true });
     return await WebAssembly.compile(m.bytes);
   } catch (e) { return (e as Error).message; }
