@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { bindsOf, dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
+import { bindsOf, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -58,7 +58,14 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
   for (;;) {
     const r = choiceOf(code, info, names, main, defs, asked, skip, options);
     if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
-    const checked = infer(r.code, r.names, undefined, { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] });
+    // The program's own options where nothing is added, so the check reads
+    // through to the library's, kept for those options (infer.ts `under`):
+    // checked anew, the library is most of a second (C196's splits).
+    // On the library's layer as the program was (load.ts base), so the
+    // check scans only what isn't the library's (model.ts onLayer).
+    const layer = layerOf(code);
+    if (layer && layer !== r.code) onLayer(r.code, layer);
+    const checked = infer(r.code, r.names, undefined, r.insiders.length ? { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : info.options);
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as
@@ -104,8 +111,16 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       if (s) return s;
     }
     // Lists as arrays (C30d3b): alone, and only where every list the
-    // program reaches can be one (listBoundary).
-    if (tree.of === LIST && (chosen.length || !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked))) continue;
+    // program reaches can be one (listBoundary); otherwise each of the
+    // program's definitions that never sees a library type holding lists
+    // (a page's Html) takes them, and the rest keep lists as written,
+    // converted where they cross (C196: the pedal's sound beside its page).
+    if (tree.of === LIST && !chosen.length && !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked)) {
+      const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
+      if (s) return s;
+      continue;
+    }
+    if (tree.of === LIST && chosen.length) continue;
     if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue;
     chosen.push(tree);
   }
@@ -241,6 +256,28 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
   }
   if (!s) return null;
   return { code: s.code, names: s.names, chosen: [`List as array of List from ${s.seeds.filter((d) => roots.includes(d)).map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array] };
+}
+
+// Lists as `rep` in each of the program's definitions that never sees a
+// value of a library type holding lists (Html, Algebra), nor of a type
+// that isn't data with lists among its arguments (a Cell of lists): the
+// seeds of a split (rep-split.ts), main and the rest keeping lists as
+// written. Null where the split is refused.
+function splitByHolders(code: Code, info: Info, names: Names, main: Id, defs: Id[], rep: Representation): (Chosen & { reps: Representation[] }) | null {
+  const own = new Set(defs), holds = holdsType(code, LIST);
+  const isData = (id: Id) => code.nodes[(code.nodes[id] as NodeOf<"def"> | undefined)?.body ?? ""]?.kind === "typedef";
+  const lists = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || t.args.some(lists) : t.t === "fn" ? [...t.params, t.ret].some(lists) : false; };
+  const held = (t: Type): boolean => {
+    t = info.subst.zonk(t);
+    if (t.t === "fn") return [...t.params, t.ret].some(held);
+    if (t.t !== "con") return false;
+    return (t.id !== LIST && !own.has(t.id) && (holds(t.id) || (!isData(t.id) && t.args.some(lists)))) || t.args.some(held);
+  };
+  const seeds = defs.filter((d) => d !== main && !isData(d) && code.nodes[d]?.kind === "def" && !subtree(code, d).some((x) => { const t = info.typeOf.get(x); return !!t && held(t); }));
+  if (!seeds.length) return null;
+  const s = splitLists(code, info, names, defs, main, seeds, rep, true);
+  if (!s) return null;
+  return { code: s.code, names: s.names, chosen: [`List as ${rep.name} beside ${names[main] ?? "main"}'s lists as written`], insiders: [], reps: [rep] };
 }
 
 // A list as written, stored: the row's own way (`store by`), else one
