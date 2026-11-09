@@ -32,6 +32,8 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I191 | break's Run main takes 26 to 32 s in the editor (through the evaluator: "Where the run went: 8 of 54 definitions"), against 7 s for `lab run examples/impact`. The page stays live and the output is right. Why isn't it compiled, and why is the worker's evaluator 4× slower than the CLI? | QA 11-09 M1 | 2026-11-09 |
+| I192 | A few definitions still freeze 0.5 to 1 s on opening: machine `all digits` 1.0 s, break `shifted` 1.0 s, ray marcher `shadow`, Spacetime `rapidity picture`, Constructions `is picked`, calc `blank` 0.83 s. | QA 11-09 L1 | 2026-11-09 |
 
 ## E: Editor
 
