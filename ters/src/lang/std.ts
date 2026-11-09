@@ -841,7 +841,9 @@ export const ARRAY_TAG = "std.array";
 type Buffer = { items: unknown[]; lo: number; hi: number };
 // The newest version holds the buffer; an older one, the change from the
 // version after it: `slot` held `old`.
-type Version = { cur: Buffer | null; next: Version | null; slot: number; old: unknown };
+// `shared`: another view was made on this version's buffer (a rest, a
+// push into its room), so it is never written in place (replaceOwned).
+type Version = { cur: Buffer | null; next: Version | null; slot: number; old: unknown; shared?: true };
 const versionOf = (b: Buffer): Version => ({ cur: b, next: null, slot: 0, old: undefined });
 function rerootArray(t: Version) {
   if (t.cur) return;
@@ -899,14 +901,14 @@ export const arrayOfItems = (l: { tag: Id; fields: unknown[] }): ArrayView => {
 export const arrayView = (a: ArrayValue): ArrayView => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));
 const pushBack = (a: ArrayValue, x: unknown): ArrayView => {
   const v = arrayView(a), b = v.buf, end = v.start + v.n;
-  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; return new ArrayView(v.ver, v.start, v.n + 1); }
+  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; v.ver.shared = true; return new ArrayView(v.ver, v.start, v.n + 1); }
   const w = arrayOf(b.items, v.start, end);
   w.buf.items[w.start + w.n] = x; w.buf.hi++;
   return new ArrayView(w.ver, w.start, w.n + 1);
 };
 const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
   const v = arrayView(a), b = v.buf;
-  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; return new ArrayView(v.ver, v.start - 1, v.n + 1); }
+  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; v.ver.shared = true; return new ArrayView(v.ver, v.start - 1, v.n + 1); }
   const w = arrayOf(b.items, v.start, v.start + v.n);
   w.buf.items[w.start - 1] = x; w.buf.lo--;
   return new ArrayView(w.ver, w.start - 1, w.n + 1);
@@ -923,6 +925,7 @@ const restOf = (a: ArrayValue): ArrayView => {
   if (v.rest) return v.rest;
   const size = v.ver.cur ? v.ver.cur.items.length : v.buf.items.length;
   if (size > 256 && (v.n - 1) * 4 < size) return (v.rest = arrayOf(v.buf.items, v.start + 1, v.start + v.n));
+  v.ver.shared = true;
   return new ArrayView(v.ver, v.start + 1, v.n - 1);
 };
 // The item at position i replaced by x (C93c), or the array as it is
@@ -934,11 +937,26 @@ const replaceIn = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
   const t = v.ver;
   if (!t.cur) rerootArray(t);
   const b = t.cur!, slot = v.start + k, items = b.items;
-  const newest: Version = { cur: b, next: null, slot: 0, old: undefined };
+  // Views on the older version may reroot through this one.
+  const newest: Version = t.shared ? { cur: b, next: null, slot: 0, old: undefined, shared: true } : { cur: b, next: null, slot: 0, old: undefined };
   t.cur = null; t.next = newest; t.slot = slot; t.old = items[slot];
   if (items instanceof Uint8Array && !isByte(x)) b.items = Array.from(items);
   b.items[slot] = x;
   return new ArrayView(newest, v.start, v.n);
+};
+// replaceIn where nobody else holds the array (C93 s4): one-holder.ts found
+// every array of its item type has one holder, so the view given is read
+// no more and its slot is written in place; unless another view shares the
+// buffer (a rest, a push into its room), when it is replaceIn.
+export const replaceOwned = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
+  const v = a instanceof ArrayView ? a : arrayView(a), t = v.ver;
+  if (t.shared || !t.cur || v.rest) return replaceIn(a, i, x);
+  const k = typeof i === "number" ? i : Number(i);
+  if (!(k >= 0 && k < v.n && Math.floor(k) === k)) return v;
+  const b = t.cur;
+  if (b.items instanceof Uint8Array && !isByte(x)) b.items = Array.from(b.items);
+  b.items[v.start + k] = x;
+  return new ArrayView(t, v.start, v.n);
 };
 const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
 const arrayOf_ = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });

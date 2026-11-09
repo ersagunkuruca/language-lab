@@ -45,8 +45,12 @@ export interface OneHolder { ok: boolean; problems: string[] }
 // `jobs`: the definitions the representation does (put, value at, keys
 // of…), read as it does them, not as they are written: each only reads its
 // map, except `changes` (put, update at, remove key), which change the map
-// at that position; whatever else they are given they may keep.
-export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}): OneHolder {
+// at that position; whatever else they are given they may keep. A builtin
+// job (Array's) reads every other input.
+// `item`: only the values of `types` whose first argument is this type
+// (Array Int, of machine's registers and memory: C93 s4), the others not
+// followed.
+export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id): OneHolder {
   const nodes = code.nodes;
   const nm = (id: Id) => names[id] ?? id;
   const problems: string[] = [];
@@ -60,7 +64,8 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     const d = nodes[id], td = d?.kind === "def" && d.body ? nodes[d.body] : null;
     let got = false;
     if (td?.kind === "typedef" && !td.effect) {
-      const trefMentions = (t: Id): boolean => { const x = nodes[t]; return x?.kind === "tref" ? dataMentions(x.target) || x.args.some(trefMentions) : x?.kind === "tfun" ? false : false; };
+      const itemOk = (x: NodeOf<"tref">) => item === undefined || (nodes[x.args[0]] as { target?: Id } | undefined)?.target === item;
+      const trefMentions = (t: Id): boolean => { const x = nodes[t]; return x?.kind === "tref" ? (types.has(x.target) ? itemOk(x) : dataMentions(x.target)) || x.args.some(trefMentions) : x?.kind === "tfun" ? false : false; };
       got = td.variants.some((v) => (nodes[v] as NodeOf<"variant">).fields.some((f) => trefMentions((nodes[f] as NodeOf<"field">).type)));
     }
     memo.set(id, got);
@@ -69,7 +74,9 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
   const mentions = (t: Type | undefined): boolean => {
     if (!t) return false;
     const z = info.subst.zonk(t);
-    return z.t === "con" ? dataMentions(z.id) || z.args.some(mentions) : false;
+    if (z.t !== "con") return false;
+    if (types.has(z.id) && item !== undefined) { const a = z.args[0] && info.subst.zonk(z.args[0]); if (a?.t === "con" && a.id === item) return true; return z.args.some(mentions); }
+    return dataMentions(z.id) || z.args.some(mentions);
   };
   const linearBinder = (b: Id) => mentions(info.typeOf.get(b));
   const open = (t: Type | undefined): boolean => {
@@ -233,6 +240,9 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
       const modeAt = (i: number): Mode => {
         if (tn?.kind === "def") return modeOf(target!, i);
         if (tn?.kind === "variant") return TAKE;
+        // A builtin that is one of the jobs (Array's, C93 s4) changes or
+        // keeps what `changes` says and reads the rest.
+        if (tn?.kind === "builtin" && jobs.has(target!)) return changes.get(target!) === i ? TAKE : READ;
         if (tn?.kind === "builtin") return target === S.equal || target === SHOW_ANY || target === COMPARE ? READ : generic(n.fn, i) ? TAKE : READ;
         return TAKE;
       };
@@ -302,6 +312,15 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
   for (const d of reached) for (const id of subtree(code, d)) {
     const t = info.typeOf.get(id), z = t && info.subst.zonk(t);
     if (z?.t === "con" && types.has(z.id) && z.args.some(mentions)) { problems.push(`${nm(d)} has a ${nm(z.id)} that holds another`); break; }
+  }
+
+  // A definition that is a value, not a function, is one value wherever it
+  // is named (a printer works it out once, core-js.ts C137d17): two names
+  // for one value of these types.
+  for (const d of reached) {
+    const def = nodes[d] as NodeOf<"def">;
+    if (!def.body || jobs.has(d) || lambdaOf(d) || nodes[def.body]?.kind === "typedef") continue;
+    if (mentions(info.typeOf.get(d))) problems.push(`${nm(d)} is one value wherever it is named`);
   }
 
   // The program: every definition main reaches that holds one of these

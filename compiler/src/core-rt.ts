@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ArrayView, arrayView, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ArrayView, arrayView, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
@@ -64,7 +64,7 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).
-  "array.from": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i <= v.n)) throw FAIL; return new ArrayView(v.ver, v.start + i, v.n - i); },
+  "array.from": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i <= v.n)) throw FAIL; (v.ver as { shared?: true }).shared = true; return new ArrayView(v.ver, v.start + i, v.n - i); },
   "text.before": (t: string, i: number) => { if (ascii(t)) return i - 1; const b = utf8Of(t); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
 };
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a
@@ -160,6 +160,9 @@ function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown
 }
 function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers: Frame[] = [], hostOps?: HostOps): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  // A replace where every array of its type has one holder (C93 s4,
+  // core-js.ts lowerCore): written in place.
+  if (name.startsWith("array.replaceOwned.")) return replaceOwned as (...xs: unknown[]) => unknown;
   // A program's own effect whose cases answer in place (scalar.ts
   // handleOps, C137): a handler pushes its cases while the code it handles
   // runs, and a perform calls the nearest one's, with it popped while the

@@ -21,6 +21,7 @@
 
 import { shareCalls } from "./share-calls.ts";
 import { inlineSmall } from "./inline-small.ts";
+import { ownedArrays } from "./owned-arrays.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -77,9 +78,11 @@ export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntim
 // needn't know scalar.ts (C149).
 const BUILTIN = new Map<string, Id>([...Object.entries(RT), ...Object.entries(ARRAY_RT), [ARRAY_OPS.replaceAt, "array.replaceAt"]].map(([id, n]) => [n, id]));
 function builtinOf(name: string): BuiltinOf | undefined {
-  const base = name.replace(/\.a\d+$/, "");
+  // An owned replace (C93 s4) is the replace's builtin, written in place.
+  const plain = name.replace(/^array\.replaceOwned\./, "array.replaceAt.");
+  const base = plain.replace(/\.a\d+$/, "");
   const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
-  return id ? [id, runtime(name).result === "i32"] : undefined;
+  return id ? [id, runtime(plain).result === "i32"] : undefined;
 }
 export const tableSpec = (t: TType): TableSpec => ({ set: t.set });
 
@@ -581,6 +584,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // once (C189).
   if (!envSet("NO_INLINE")) inlineSmall(ir);
   if (!envSet("NO_SHARE")) shareCalls(ir);
+  // A replace in an array of a type whose every value has one holder,
+  // written in place (owned-arrays.ts, C93 s4).
+  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0]);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
