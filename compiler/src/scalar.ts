@@ -66,7 +66,8 @@ import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
 import { writablePlan } from "./relation.ts";
-import { cleanBody, NotWritten, roundedKey, writtenSteps } from "./solved.ts";
+import { cleanBody, NotWritten, roundedKey, writtenExpr, writtenSteps } from "./solved.ts";
+import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { B } from "../../ters/src/prelude.ts";
@@ -1781,7 +1782,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const attempt = (body: SExpr, ok: (res: number) => SExpr, otherwise: SExpr, at: LType): SExpr => { const res = f.locals.push("f64") - 1; return { k: "attempt", body, res, ok: ok(res), otherwise, t: at }; };
     let written: SExpr;
     try {
-      if (!many) written = writtenSteps(steps, at, answered, fail, t);
+      if (!many) written = writtenSteps(steps, at, answered, fail, t, undefined, undefined, once || !opts.data ? undefined : (s, ks, values) => {
+        // A tear (torn.ts): one of its roots, closest to 0 first.
+        const LF = stype({ t: "con", id: LIST, args: [{ t: "con", id: NUMBER, args: [] }] }) as DType;
+        const key = `torn ${JSON.stringify([s.residual, s.tear, ks])}`;
+        let fn = index.get(key);
+        if (fn === undefined) index.set(key, (fn = tornRoots(s, ks, LF, writtenExpr, (g) => funcs.push(g) - 1, (x) => `${x} isn't known before the tear`)));
+        return { k: "choose", list: { k: "call", fn, args: values, tail: false }, t: LF };
+      });
       else if (once) {
         // The ways tried in order, to the first that gets to the end.
         const tried = writtenSteps(steps, at, () => ({ k: "num", v: 1 }), () => NONE, "f64",

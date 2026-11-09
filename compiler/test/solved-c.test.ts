@@ -145,3 +145,20 @@ test("a relational solve with one answer or none runs on WebAssembly and C as te
     k.call(S.show, k.call(unshift, k.int(10))), k.call(heard, k.call(SOME, k.lit("hi!"))), k.call(heard, k.call(SOME, k.lit("hi"))), k.call(heard, k.x(NONE)))));
   assert.equal(await throughLab(k), '["Ada", "nobody", "", "Çağrı ✨", "8", "hi", "?", "?"]\n');
 });
+
+// A torn plan (C195, torn.ts): a quadratic in time, which the solver
+// searches for numerically, gives its roots on WebAssembly and C as the
+// solver's search does: two, one where they touch (a dip, not a sign
+// change), none.
+test("a relation solved by searching for a number gives the solver's roots on WebAssembly and C", async () => {
+  const k = new Lang(LIBRARY.code);
+  const fall = k.def("fall");
+  k.define(fall, k.fn(["speed", "time"], (v, t) => k.call(B.add, k.call(B.mul, v, t), k.call(B.mul, k.lit(4.905), k.call(B.mul, t, t)))));
+  const body = k.code.nodes[(k.code.nodes[fall] as { body: string }).body] as { params: string[] };
+  const [sp, tm] = body.params;
+  const times = k.def("times");
+  k.define(times, k.fn(["h", "v"], (h, v) => k.call(S.all, k.thunk(() => k.solve(fall, { out: h, [sp]: v }, { [tm]: "t" }, ({ [tm]: y }) => y)))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.listOf(...[[29.62, 5], [0, 0], [-100, 0], [1, -3], [1e4, 1]].map(([h, v]) => k.call(times, k.lit(h), k.lit(v))))));
+  assert.equal(await throughLab(k), "[[2, -3.019367992], [0], [], [-0.239527661, 0.851148456], [45.050542366, -45.254415965]]\n");
+});

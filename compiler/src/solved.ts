@@ -32,15 +32,28 @@ const UNARY = new Set(["sqrt", "abs", "sin", "cos", "tan", "exp", "log", "neg"])
 // (its value, its guards, then the steps after it), in the solver's order,
 // and `ways` says how one is taken; `done` is told the way taken at each,
 // and `fixed` takes those ways and no other.
-export function writtenSteps(steps: Step[], local0: (name: string) => number, done: (path: number[]) => SExpr, fail: () => SExpr, t: LType, ways: (step: number, each: SExpr[]) => SExpr = () => { throw new NotWritten("a plan with more than one way"); }, fixed?: number[]): SExpr {
-  const ex = (e: Expr): SExpr => {
-    if (e.k === "num") return num(e.v!);
-    if (e.k === "var") return local(local0(e.name!));
-    const a = e.args!.map(ex);
-    if (INFIX[e.f!] && a.length === 2) return op(INFIX[e.f!], a[0], a[1]);
-    if (UNARY.has(e.f!) && a.length === 1) return op(e.f!, a[0]);
-    throw new NotWritten(`the solver's ${e.f}`);
-  };
+// A solver expression, each variable at the local `at` gives.
+export function writtenExpr(e: Expr, at: (name: string) => number): SExpr {
+  if (e.k === "num") return num(e.v!);
+  if (e.k === "var") return local(at(e.name!));
+  const a = e.args!.map((x) => writtenExpr(x, at));
+  if (INFIX[e.f!] && a.length === 2) return op(INFIX[e.f!], a[0], a[1]);
+  if (UNARY.has(e.f!) && a.length === 1) return op(e.f!, a[0]);
+  throw new NotWritten(`the solver's ${e.f}`);
+}
+
+// The variables an expression reads, in the order first read.
+export function readIn(e: Expr, out: string[] = []): string[] {
+  if (e.k === "var" && !out.includes(e.name!)) out.push(e.name!);
+  for (const a of e.args ?? []) readIn(a, out);
+  return out;
+}
+
+// `torn` (C195, torn.ts): a tear's root taken, given its residual's known
+// variables (names, and their values); without it, a tear isn't written.
+// The root is checked as the solver checks its answers (1e-9 relative).
+export function writtenSteps(steps: Step[], local0: (name: string) => number, done: (path: number[]) => SExpr, fail: () => SExpr, t: LType, ways: (step: number, each: SExpr[]) => SExpr = () => { throw new NotWritten("a plan with more than one way"); }, fixed?: number[], torn?: (s: Extract<Step, { type: "tear" }>, ks: string[], values: SExpr[]) => SExpr): SExpr {
+  const ex = (e: Expr): SExpr => writtenExpr(e, local0);
   const gen = (i: number, path: number[]): SExpr => {
     if (i === steps.length) return done(path);
     const s = steps[i];
@@ -51,6 +64,11 @@ export function writtenSteps(steps: Step[], local0: (name: string) => number, do
       const is = s.xs.map((x) => local0(x));
       const ok = is.map((j) => finite(local(j))).reduce((a, b) => and(a, b));
       return is.reduceRight<SExpr>((body, j, k) => let_(j, values[k], body), iff(ok, gen(i + 1, path), fail(), t));
+    }
+    if (s.type === "tear" && torn && s.xs.length === 1 && s.inner.length === 0) {
+      const ks = readIn(s.residual.rhs, readIn(s.residual.lhs)).filter((x) => x !== s.tear);
+      const j = local0(s.tear);
+      return let_(j, torn(s, ks, ks.map((k) => local(local0(k)))), iff(close(ex(s.residual.lhs), ex(s.residual.rhs)), gen(i + 1, path), fail(), t));
     }
     if (s.type !== "solve" || s.branches.some((b) => b.params.length)) throw new NotWritten("a plan with numbers searched for");
     const j = local0(s.x), many = s.branches.length > 1;
