@@ -117,7 +117,11 @@ L99).
   colour; `folder` itself is a Capacitor project whose config points at
   www/, so `npx cap add android` and `npx cap run android` make the app
   (its README.md has the steps). Chromium finds the dice app installable
-  and reloads it offline. Device features (camera, location, notifications) become
+  and plays it offline once its service worker has kept the files
+  (checked again 2026-11-09, C198). The Actions workflow "Android app"
+  (.github/workflows/android-app.yml, run by hand with an example's name)
+  builds the Capacitor project into a debug APK, kept as the run's
+  artifact to install on a phone. Device features (camera, location, notifications) become
   world operations in that world's handler. Nothing mobile-specific enters
   the language (REVIEW.md §7.4).
 
