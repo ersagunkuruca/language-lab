@@ -62,6 +62,7 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { emitWasm } from "../../compiler/src/wasm.ts";
 import { ownedArrays } from "../../compiler/src/owned-arrays.ts";
+import { intoAsSets, ownedRecords } from "../../compiler/src/owned-records.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
 import { withInverses } from "../../compiler/src/inverses.ts";
@@ -262,15 +263,20 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // a main that is a value prints it, as ters run does; the host answers an
 // effect the program never handles itself, and one it handles is on the
 // handler stack (L213c4), as effects' Ask is. In WebAssembly a replace in
-// an array nobody else holds is written in place (C56), as in compiled
-// JavaScript; C knows that from its counts.
+// an array nobody else holds, and a record rebuilt from one nobody else
+// holds, are written in place (C56), as in compiled JavaScript; C knows
+// arrays from its counts.
 function nativeLowered(main: Id, wasm = false) {
   const q0 = withInverses(p.code, p.info, p.names);
   const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
   const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted });
-  if (wasm) ownedArrays(lowered, q.code, q.info, q.names, root);
+  if (wasm) {
+    ownedArrays(lowered, q.code, q.info, q.names, root);
+    ownedRecords(lowered, q.code, q.info, q.names, root);
+    intoAsSets(lowered);
+  }
   return { lowered, root };
 }
 

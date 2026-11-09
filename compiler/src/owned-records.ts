@@ -139,3 +139,25 @@ function snapshot(f: SFunc, d: RType): void {
   for (let y = f.params.length - 1; y >= 0; y--) body = bindings(y, body);
   f.body = body;
 }
+
+// For a target whose records are structs with no classes (WebAssembly, C56):
+// each `make` written into a local becomes its changed fields, every input
+// first (into new locals), then each written with `set`, the local its
+// value; the record's fields become mutable. Gives how many it wrote so.
+export function intoAsSets(ir: CoreIR): number {
+  let n = 0;
+  for (const f of ir.funcs) {
+    const go = (e: SExpr): SExpr => {
+      const x = mapKids(e, go);
+      if (x.k !== "make" || x.into === undefined) return x;
+      n++;
+      const changed = x.args.flatMap((a, i) => (x.same?.includes(i) ? [] : [{ a, i, at: (f.locals.push(x.t.fields[i].t), f.locals.length - 1) }]));
+      const into: SExpr = { k: "local", i: x.into };
+      const sets = changed.reduceRight<SExpr>((acc, c) => ({ k: "set", rec: into, t: x.t, i: c.i, value: { k: "local", i: c.at }, then: acc }), into);
+      return changed.reduceRight<SExpr>((acc, c) => ({ k: "let", i: c.at, value: c.a, body: acc }), sets);
+    };
+    f.body = go(f.body);
+  }
+  for (const d of ir.records) if (d.owned) d.mutable = true;
+  return n;
+}
