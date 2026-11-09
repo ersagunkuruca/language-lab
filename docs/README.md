@@ -157,13 +157,13 @@ Kept as written; the newer document is named in each.
 |---|---|---|
 | [ROADMAP.md](history/ROADMAP.md) | The plan of 2026-10-22 and its Done table | BACKLOG.md |
 | [NOTES.md](history/NOTES.md) | Ideas Ersagun raised in chat to 2026-10-23, with the answer at the time; its standing rules still hold | BACKLOG.md and the design notes |
-| [REVIEW.md](history/REVIEW.md) | The first whole-project review | REVIEW-2026-11-02c.md |
+| [REVIEW.md](history/REVIEW.md) | The first whole-project review | REVIEW-2026-11-09.md |
 
 ## Dated reports
 
 | kind | documents |
 |---|---|
-| Whole-project reviews | [PROGRESS-2026-11-05](reports/reviews/PROGRESS-2026-11-05.md) (is progress slowing, and why), [FOUNDATIONS-2026-11-03](reports/reviews/FOUNDATIONS-2026-11-03.md) (foundations and maintainability), [BLIND-SPOTS-2026-11-03](reports/reviews/BLIND-SPOTS-2026-11-03.md) (aspects not thought about yet), [OUTSIDER-READ-2026-11-03](reports/reviews/OUTSIDER-READ-2026-11-03.md) (a cold reader marks what it can't follow), [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md), [REVIEW-2026-11-01b](reports/reviews/REVIEW-2026-11-01b.md), [REVIEW-2026-11-02](reports/reviews/REVIEW-2026-11-02.md), [REVIEW-2026-11-02b](reports/reviews/REVIEW-2026-11-02b.md) (the editor), [REVIEW-2026-11-02c](reports/reviews/REVIEW-2026-11-02c.md), [REVIEW-2026-11-02d](reports/reviews/REVIEW-2026-11-02d.md) (the language as machine and board use it) |
+| Whole-project reviews | [PROGRESS-2026-11-05](reports/reviews/PROGRESS-2026-11-05.md) (is progress slowing, and why), [FOUNDATIONS-2026-11-03](reports/reviews/FOUNDATIONS-2026-11-03.md) (foundations and maintainability), [BLIND-SPOTS-2026-11-03](reports/reviews/BLIND-SPOTS-2026-11-03.md) (aspects not thought about yet), [OUTSIDER-READ-2026-11-03](reports/reviews/OUTSIDER-READ-2026-11-03.md) (a cold reader marks what it can't follow), [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md), [REVIEW-2026-11-01b](reports/reviews/REVIEW-2026-11-01b.md), [REVIEW-2026-11-02](reports/reviews/REVIEW-2026-11-02.md), [REVIEW-2026-11-02b](reports/reviews/REVIEW-2026-11-02b.md) (the editor), [REVIEW-2026-11-02c](reports/reviews/REVIEW-2026-11-02c.md), [REVIEW-2026-11-02d](reports/reviews/REVIEW-2026-11-02d.md) (the language as machine and board use it), [REVIEW-2026-11-09](reports/reviews/REVIEW-2026-11-09.md) (a week of 1,060 PRs) |
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |
