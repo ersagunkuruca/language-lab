@@ -1,9 +1,9 @@
-// Holes found by the reviews (REVIEW.md, REVIEW-2026-10-22b.md, then
-// REVIEW-2026-10-26.md). Each test states what *should* happen. One still
-// open is marked todo, so it runs and reports without failing the suite;
-// when a fix lands, the todo is dropped and the test guards it. Every hole
-// from the first two reviews is fixed; the open ones are the third
-// review's ("R3"), at the end.
+// Holes found by the reviews (REVIEW.md, REVIEW-2026-10-22b.md,
+// REVIEW-2026-10-26.md, then REVIEW-2026-11-09.md). Each test states what
+// *should* happen. One still open is marked todo, so it runs and reports
+// without failing the suite; when a fix lands, the todo is dropped and the
+// test guards it. Every hole from the first three reviews is fixed; the
+// open ones are the tenth review's ("R10"), at the end.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -256,4 +256,23 @@ test("R3 §2.2 a fraction made with ratio keeps the fraction's rule (lowest term
   // Before L79: no error, and ["false", "same"]: compare says 2/4 is 1/2 and
   // equal says it isn't, and 1/0 is the same as −7/0.
   assert.ok(errors.length > 0 || (out[0] === "true" && out[1] !== "same"), `printed ${out.join(", ")}`);
+});
+
+// ---------------------------------------------------------------- the tenth review (REVIEW-2026-11-09.md)
+
+// The library is about 43,000 nodes now (the cases module's Unicode tables
+// alone are about 10,000), and checking any program types all of it first:
+// a main that prints one text types 40,000 nodes, which takes 2.5 s in a
+// fresh process. Every `lab run`, `lab check` and test file pays it. The
+// library's definitions are pinned (their types are known by hash), so a
+// program should only need the types of what it reaches.
+test("R10 §2 checking a main that prints one text doesn't type the whole library", { todo: "infer types every library node before the program's own" }, () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.lit("hi"))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  // Today: about 40,000 of 43,500.
+  assert.ok(info.typeOf.size < 2000, `typed ${info.typeOf.size} nodes of ${Object.keys(code.nodes).length}`);
 });
