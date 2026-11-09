@@ -13,7 +13,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { oneHolder } from "../src/lang/one-holder.ts";
-import { MAP, PAIR_V, S, SET_TYPE, SHOW_ANY } from "../src/lang/std.ts";
+import { ARRAY_OPS, MAP, PAIR_V, S, SET_TYPE, SHOW_ANY } from "../src/lang/std.ts";
+import { ARRAY, INT, STRING } from "../src/lang/types.ts";
 import type { Code, Id } from "../src/model.ts";
 import type { Info } from "../src/lang/infer.ts";
 
@@ -89,4 +90,25 @@ test("routes' sets have one holder, a fold walked twice included", () => {
   const setChanges = new Map([[L("add item"), 0], [L("remove item"), 0], [L("set union"), 0]]);
   const r = oneHolder(p.code, info, p.named("main"), new Set([SET_TYPE]), new Set(Object.keys(setRow.impl)), setChanges, p.pres.names);
   assert.deepEqual(r.problems, []);
+});
+
+// Only the arrays of one item type (C93 s4): machine's registers and memory
+// are Array Int, and every one has one holder, though its arrays of arrays
+// don't.
+test("an Array Int changed and passed on has one holder; one kept after it was changed doesn't; an Array Text isn't asked", () => {
+  const arrays = (body: (k: Lang, a: Id) => Id, item: Id = INT) => {
+    const k = new Lang(LIBRARY.code);
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.let("a", k.call(ARRAY_OPS.of, k.listOf(...(item === INT ? [k.int(1), k.int(2)] : [k.lit("x"), k.lit("y")]))), (a) => body(k, a))));
+    const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    const ops = ARRAY_OPS as Record<string, Id>;
+    return oneHolder(code, info, main, new Set([ARRAY]), new Set(Object.values(ops)), new Map([[ops.replaceAt, 0], [ops.push, 0], [ops.pushFront, 0], [ops.rest, 0], [ops.front, 0]]), names, INT);
+  };
+  const at = (k: Lang, a: Id, v: Id) => k.call(ARRAY_OPS.replaceAt, a, k.int(0), v);
+  assert.equal(arrays((k, a) => show(k, at(k, a, k.int(5)))).ok, true);
+  const old = arrays((k, a) => k.let("b", at(k, a, k.int(5)), (b) => k.call(PAIR_V, show(k, b), show(k, a))));
+  assert.equal(old.ok, false);
+  assert.match(old.problems.join("; "), /a is used after it was changed or kept/);
+  assert.equal(arrays((k, a) => k.let("b", at(k, a, k.lit("z")), (b) => k.call(PAIR_V, show(k, b), show(k, a))), STRING).ok, true);
 });
