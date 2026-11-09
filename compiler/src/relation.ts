@@ -16,14 +16,14 @@
 
 import { plan } from "../../invertible/src/relation.js";
 
-interface Expr { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: Expr[] }
+export interface Expr { k: "num" | "var" | "call"; v?: number; name?: string; f?: string; args?: Expr[] }
 interface Branch { expr: Expr; guards: Expr[]; free: Expr[][]; params: string[] }
-type Step =
+export type Step =
   | { type: "solve"; x: string; branches: Branch[] }
   | { type: "linear"; xs: string[]; exprs: Record<string, Expr> }
   | { type: "check"; eq: { lhs: Expr; rhs: Expr } }
   | { type: "tear" | "newton" };
-interface Relation { name: string; ports: string[]; vars: string[] }
+export interface Relation { name: string; ports: string[]; vars: string[] }
 
 const INFIX: Record<string, string> = { add: "+", sub: "-", mul: "*", div: "/", pow: "**" };
 const MATH = new Set(["sqrt", "abs", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan", "atan2"]);
@@ -89,4 +89,16 @@ export function compileSolve(name: string, rel: Relation, known: string[], binds
   const one = once ? `\nfunction ${name}$one(${params.join(", ")}) {\n${gen(0, `return ${single};`)}\nreturn $no;\n}` : "";
   return { code: `${doc}\n${fallback}\nfunction ${name}$direct(${params.join(", ")}) {\nconst out = []${ways === 1 ? "" : ", seen = new Set()"};\n${gen(0)}\nreturn out;\n}\n` +
     `function ${name}(${params.join(", ")}) {\nreturn ${name}$direct(${params.join(", ")}) ?? ${viaSolver};\n}` + one, once };
+}
+
+// The plan's steps where the scalar profile can write them out (solved.ts,
+// C195): checks, linear blocks and solves whose ways have no whole-number
+// parameter (a periodic family) and no case the solver must take over (a
+// variable the equations leave free); null otherwise.
+export function writablePlan(rel: Relation, known: string[]): Step[] | null {
+  const p = (plan as (r: Relation, k: string[]) => { steps: Step[] })(rel, known);
+  const simple = p.steps.every((s) => s.type === "check" || s.type === "linear" || (s.type === "solve" && s.branches.every((b) => !b.params.length)));
+  const live = (g: Expr[]) => !g.some((e) => e.k === "num" && Math.abs(e.v!) > 1e-9);
+  if (!simple || p.steps.some((s) => s.type === "solve" && s.branches.some((b) => b.free.some(live)))) return null;
+  return p.steps;
 }
