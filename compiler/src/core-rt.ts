@@ -20,6 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
+import { branchesFrom, branchWorker, inOrder, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -166,6 +167,9 @@ function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown
 }
 function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers: Frame[] = [], hostOps?: HostOps): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  // A together whose actions only compute (C41): side by side on worker
+  // threads, in order under a budget.
+  if (name === "together.pure") return (actions: unknown, fuel: unknown) => (fuel === Infinity || fuel === undefined ? togetherPure(actions) : inOrder(actions));
   // A replace where every array of its type has one holder (C93 s4,
   // core-js.ts lowerCore): written in place.
   if (name.startsWith("array.replaceOwned.")) return replaceOwned as (...xs: unknown[]) => unknown;
@@ -357,7 +361,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };
 export const RUNTIME = {
-  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
+  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded, branchesFrom, branchWorker,
   fail: (): never => { throw FAIL; },
   // A step of a definition that may not finish: free, except under a
   // page's budget (run.ts withSteps), where running out is the part's
