@@ -32,6 +32,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I192 | A few definitions still freeze 0.5 to 1 s on opening: machine `all digits` 1.0 s, break `shifted` 1.0 s, ray marcher `shadow`, Spacetime `rapidity picture`, Constructions `is picked`, calc `blank` 0.83. Editor lane is measuring them (2026-11-09) and will fold the row into I189 or fix what's new. | QA 11-09 L1 | 2026-11-09 |
 
 ## E: Editor
 
@@ -39,7 +40,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I189 | Opening some definitions still freezes the page for a second or more. Measured 2026-11-06 03:00 after I179: Spacetime `scalar part` 1.75 s (its longest task 0.93), machine `all digits` 1.6 s (1.5). After I189a (03:20): `all digits` 0.37 s (0.32). After I189b (04:00, the long run's drawing yields between views): `scalar part`'s longest task 0.40 s (was 0.82). After I189c (`table product`'s host 3.2× faster): the views 0.33 to 0.37 s. After I189e (05:20): the warm-up after opening Numbers, one task of 0.49 s, is three of 0.30, 0.21 and 0.17. Left: the long run's first piece is its 0.4 s main budget, and each view is one call that a piece can't cut, most of it the evaluator's own steps (run.ts step, parts, apply); the evaluator faster, or the long run stopping once the opened definition has its value. Measured again 2026-11-07: still 0.40 then views of 0.30 s, each one call of the evaluator's CEK machine (step, apply, going, parts), so what's left waits on L118c (the evaluator compiled to closures). QA 2026-11-09 (I192, folded in here): machine `all digits` 1.0 s, break `shifted` 1.0 s (longest task 0.53), ray marcher `shadow` 0.89, Spacetime `rapidity picture` 0.89, Constructions `is picked` 0.85, calc `blank` 0.83. Example: Spacetime `scalar part` opens in tasks of at most 0.3 s | I179 (QA-2026-11-05b M1) | P2 | M | a to c, e done |
+| I189 | Opening some definitions still freezes the page for a second or more. Measured 2026-11-06 03:00 after I179: Spacetime `scalar part` 1.75 s (its longest task 0.93), machine `all digits` 1.6 s (1.5). After I189a (03:20): `all digits` 0.37 s (0.32). After I189b (04:00, the long run's drawing yields between views): `scalar part`'s longest task 0.40 s (was 0.82). After I189c (`table product`'s host 3.2× faster): the views 0.33 to 0.37 s. After I189e (05:20): the warm-up after opening Numbers, one task of 0.49 s, is three of 0.30, 0.21 and 0.17. Left: the long run's first piece is its 0.4 s main budget, and each view is one call that a piece can't cut, most of it the evaluator's own steps (run.ts step, parts, apply); the evaluator faster, or the long run stopping once the opened definition has its value. Measured again 2026-11-07: still 0.40 then views of 0.30 s, each one call of the evaluator's CEK machine (step, apply, going, parts), so what's left waits on L118c (the evaluator compiled to closures). Example: Spacetime `scalar part` opens in tasks of at most 0.3 s | I179 (QA-2026-11-05b M1) | P2 | M | a to c, e done |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 
