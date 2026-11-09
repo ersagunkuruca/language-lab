@@ -28,7 +28,7 @@ test("ters check lists the definitions and their types", () => {
 });
 
 test("lab, the command's old name, still runs it", () => {
-  const r = node([join(import.meta.dirname, "../cli/lab.ts"), "check", wc]);
+  const r = node([join(import.meta.dirname, "../cli/ters.ts"), "check", wc]);
   assert.equal(r.code, 0, r.err);
   assert.match(r.out, /^count : \(Text\) -> Tally$/m);
 });

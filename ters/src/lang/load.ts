@@ -12,6 +12,8 @@ import type { Pins } from "./signatures.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "./library.ts";
 import { onTodaysIds } from "./std.ts";
 import { verify, type Module } from "./modules.ts";
+// The library's check kept on disk between processes (I193).
+import "./library-store.ts";
 
 // A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);

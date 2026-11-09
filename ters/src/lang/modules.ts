@@ -25,6 +25,7 @@ import { children, collect, freshId, isPublished, mapIds, merge, subtree, type C
 import { defDeps, defGroups, hashes, RECIPE, recipeOf } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
+import { keptAcrossRuns } from "./kept.ts";
 import type { Representation } from "./represent.ts";
 import { atLeastAsGeneral, pinKey, pinsOf, type Pin, type Pins } from "./signatures.ts";
 import { schemeArith, showType, type Type } from "./types.ts";
@@ -355,9 +356,12 @@ const valueDef = (code: Code, d: Id) => { const n = code.nodes[d]; return n?.kin
 function indexOf(lib: Library) {
   let found = libraryIndex.get(lib.code);
   if (!found) {
-    const index = new Map<string, Id[]>(), memo = hashes(lib.code, lib.code.defs.filter((d) => lib.code.nodes[d]?.kind === "def"));
-    for (const d of lib.code.defs) if (valueDef(lib.code, d) && !lib.hidden.has(d)) { const k = memo.get(d)!; index.set(k, [...(index.get(k) ?? []), d]); }
-    libraryIndex.set(lib.code, (found = { index, memo }));
+    found = keptAcrossRuns("library-hashes", lib.code, () => {
+      const index = new Map<string, Id[]>(), memo = hashes(lib.code, lib.code.defs.filter((d) => lib.code.nodes[d]?.kind === "def"));
+      for (const d of lib.code.defs) if (valueDef(lib.code, d) && !lib.hidden.has(d)) { const k = memo.get(d)!; index.set(k, [...(index.get(k) ?? []), d]); }
+      return { index, memo };
+    });
+    libraryIndex.set(lib.code, found);
   }
   return found;
 }
@@ -439,12 +443,15 @@ export function sameUpToOrder(code: Code, lib: Library): Map<Id, Same> {
   const { index: exact, memo: libMemo } = indexOf(lib);
   let index = reorderIndex.get(lib.code);
   if (!index) {
-    index = new Map();
-    for (const d of lib.code.defs) {
-      if (!valueDef(lib.code, d) || lib.hidden.has(d)) continue;
-      const k = orderFreeHash(lib.code, d, libMemo);
-      if (k) index.set(k, [...(index.get(k) ?? []), d]);
-    }
+    index = keptAcrossRuns("library-order-free-hashes", lib.code, () => {
+      const out = new Map<string, Id[]>();
+      for (const d of lib.code.defs) {
+        if (!valueDef(lib.code, d) || lib.hidden.has(d)) continue;
+        const k = orderFreeHash(lib.code, d, libMemo);
+        if (k) out.set(k, [...(out.get(k) ?? []), d]);
+      }
+      return out;
+    });
     reorderIndex.set(lib.code, index);
   }
   const memo = new Over(libMemo);
