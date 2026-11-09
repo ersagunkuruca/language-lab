@@ -1,6 +1,7 @@
 # The tests a merge to main can reach, beside the deploy instead of before
 # it (docs/process/TESTING.md, T1 and T2): ters/test/affected.ts
-# picks them from what changed since the last commit this workflow passed.
+# picks them from what changed since the last commit this workflow finished
+# testing (green or red).
 # The browser tests (the editor, shaders, sound, WGSL on a GPU) took 8.5
 # of a run's 10 minutes, so they run in nightly.yml instead (T8). A red run
 # doesn't stop the site; it is main's to fix, by the next pull request. A
@@ -44,14 +45,19 @@ jobs:
           cache-dependency-path: ters/package-lock.json
       - run: npm ci
         working-directory: ters
-      # Since the last green run; with none, everything.
+      # Since the last run that finished its tests, green or red (a red
+      # one's failures are main's to fix by the next pull request, and the
+      # nightly run tests everything again). Not since the last green one:
+      # with none for a while, every run tested everything, ran into the
+      # timeout (shown as cancelled), and so never went green either
+      # (I110: 38 of 40 runs cancelled). With none at all, the last merge.
       - name: What changed
         id: base
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          base=$(gh run list -R "$GITHUB_REPOSITORY" -w check-main.yml -b main -s success -L 1 --json headSha -q '.[0].headSha' || true)
-          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then echo "base=$base" >> "$GITHUB_OUTPUT"; else echo "base=--all" >> "$GITHUB_OUTPUT"; fi
+          base=$(gh run list -R "$GITHUB_REPOSITORY" -w check-main.yml -b main -L 100 --json headSha,conclusion -q '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].headSha // ""' || true)
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then echo "base=$base" >> "$GITHUB_OUTPUT"; else echo "base=HEAD^" >> "$GITHUB_OUTPUT"; fi
       # Every file the change reaches, the slow ones too: before the merge
       # only the fast set ran (T13, ters/test/slow.json).
       # The big sweeps check one eighth of their cases, a different eighth

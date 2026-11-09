@@ -314,8 +314,10 @@ on average, nightly full run about 11 once a day. On a busy day of 30
 merges that is roughly 90 to 150 runner minutes, against roughly 150 to
 200 today, so within the cost rule. The extra job start per merge is
 about 20 s. If a week's numbers come out higher, Check main batches:
-newest pending commit only, diffing from the last green one, so a
-cancelled run loses nothing.
+newest pending commit only, diffing from the last run that finished its
+tests, green or red, so a cancelled run loses nothing. (From the last green
+one, until I110: with none for a while, each run tested everything, ran
+into the 20-minute timeout and so never went green.)
 
 ## 5. What we give up
 
