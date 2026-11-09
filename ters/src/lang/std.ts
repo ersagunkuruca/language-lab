@@ -909,9 +909,26 @@ const pushBack = (a: ArrayValue, x: unknown): ArrayView => {
 const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
   const v = arrayView(a), b = v.buf;
   if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; v.ver.shared = true; return new ArrayView(v.ver, v.start - 1, v.n + 1); }
-  const w = arrayOf(b.items, v.start, v.start + v.n);
-  w.buf.items[w.start - 1] = x; w.buf.lo--;
-  return new ArrayView(w.ver, w.start - 1, w.n + 1);
+  // Copied with its room in front, where the pushes are going: twice as
+  // many again, and 16 from empty, so an array built item by item from
+  // the back (a block of samples) is copied a few times, not at 4, 8, 16….
+  const n = v.n, room = Math.max(16, 2 * n), items = new Array(room + n + 4).fill(undefined);
+  for (let i = 0; i < n; i++) items[room + i] = b.items[v.start + i];
+  items[room - 1] = x;
+  return new ArrayView(versionOf({ items, lo: room - 1, hi: room + n }), room - 1, n + 1);
+};
+// pushFront on a view nobody else holds (C196, compiler/src/
+// owned-pushes.ts): its start moved back into the free slot in front, no
+// new view made. The plain push where it is empty (the empty array is
+// shared) or has no room there.
+export const pushFrontOwned = (a: ArrayValue, x: unknown): ArrayView => {
+  if (!(a instanceof ArrayView) || a.n === 0 || a.rest) return pushFront(a, x);
+  const b = a.ver.cur;
+  if (!b || a.start !== b.lo || a.start === 0) return pushFront(a, x);
+  b.items[a.start - 1] = x; b.lo--;
+  const v = a as unknown as { start: number; n: number; f: unknown };
+  v.start--; v.n++; v.f = null;
+  return a;
 };
 // A rest is a view on the same buffer, so a list taken apart item by item
 // would keep its whole first buffer however little is left (Go's slices
@@ -967,8 +984,12 @@ STD_MANY[arrayItem] = (arr: ArrayValue, i: I.Int) => { const v = arrayView(arr),
 // after it (empty of an empty array) and an item added at the front.
 const arrayFirst = builtin("array.first", "first of array", ofItem((a) => [[arrayOf_(a)], a], [CHOICE]));
 STD_MANY[arrayFirst] = (arr: ArrayValue) => { const v = arrayView(arr); return v.n > 0 ? [v.buf.items[v.start]] : []; };
+let EMPTY_ARRAY: ArrayView | undefined;
 export const ARRAY_OPS = {
-  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)]), () => arrayOf([])),
+  // One empty array for all (C196: a solve's every step made its own):
+  // it has no items to read, and a push onto it writes into its room once,
+  // then copies, as onto any array whose room another took.
+  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)]), () => (EMPTY_ARRAY ??= arrayOf([]))),
   of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)]), (l: { tag: Id; fields: unknown[] }) => arrayOfItems(l)),
   // A list read from a copy of the items as it is walked (L189e3).
   items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)]), (arr: ArrayValue) => new ItemsList(itemsIn(arr), 0)),

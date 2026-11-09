@@ -129,3 +129,48 @@ test("a fold over an array list whose arms read the rest gets views of the array
   const fn = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === weighted && !g.inner)];
   for (const n of [0, 5]) assert.equal(fn(n), [...r.call(r.value(weighted), n)][0]);
 });
+
+// An array built item by item, rest first (C196: the pedal's `following`,
+// a block a call): each push moves the start of the view the call just
+// gave back, nobody else holding it (owned-pushes.ts), and a map's loop
+// pushes onto the array it carries. One pushed onto twice, a value still
+// held, is still copied: each answer as the evaluator's.
+test("an array built rest first pushes onto the view it was given back, and one held twice is still copied", () => {
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(40)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  const doubled = k.def("doubled");
+  k.define(doubled, k.fn(["list"], (l) => k.match(l, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, k.call(B.add, x, x), k.call(doubled, rest)) },
+  ])));
+  // The doubled list with 1 and with 2 in front, read at n and its length.
+  const both = k.def("both");
+  k.define(both, k.fn(["n"], (n) => k.call(B.add,
+    k.call(B.add, k.call(L("item at"), k.call(CONS, k.lit(1), k.call(doubled, k.x(xs))), n, k.lit(-1)), k.call(L("item at"), k.call(L("map"), k.call(doubled, k.x(xs)), k.fn(["y"], (y) => k.call(B.add, y, k.lit(1)))), n, k.lit(-1))),
+    k.call(L("item at"), k.call(CONS, k.lit(2), k.call(doubled, k.call(CONS, k.lit(3), k.x(xs)))), k.int(0), k.lit(-1)))));
+  const once = k.def("once");
+  k.define(once, k.fn(["n"], (n) => k.call(L("item at"), k.call(L("map"), k.call(doubled, k.x(xs)), k.fn(["y"], (y) => k.call(B.add, y, k.lit(0.5)))), n, k.lit(-1))));
+  const twice = k.def("twice");
+  k.define(twice, k.fn(["n"], (n) => k.match(k.call(doubled, k.x(xs)), [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["x", "rest"], body: ([, rest]) => k.call(B.add,
+      k.call(L("item at"), k.call(CONS, k.lit(7), rest), n, k.lit(-1)),
+      k.call(L("item at"), k.call(CONS, k.lit(9), rest), k.int(0), k.lit(-1))) },
+  ])));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const ours = [xs, doubled, both, once, twice];
+  const c = withLibraryRepresentations(code, info, names, both, ours);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  assert.deepEqual(info2.errors.map((e) => e.message), []);
+  const core = lowerCore(c.code, info2, c.names, [both, once, twice]);
+  assert.deepEqual([...core.refused.entries()], []);
+  assert.ok(emitCoreJs(core).js.includes("array.pushFrontOwned"));
+  const fs = loadCoreJs(core);
+  const fn = (d: string) => fs[core.funcs.findIndex((g) => g.def === d && !g.inner)];
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const ev = (d: string, x: number) => { for (const v of r.call(r.value(d), x)) return v; };
+  for (const n of [0, 1, 5, 39, 40]) for (const d of [both, once, twice]) assert.equal(fn(d)(n), ev(d, n), `${names[d]} ${n}`);
+});
