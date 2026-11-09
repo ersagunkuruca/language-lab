@@ -73,9 +73,56 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   // A definition of the other side making a type the seeds' side makes is
   // a seed too: the other side calls it, converting.
   const seedSet = new Set(seeds);
+  // A value no list can cross in, the program's types aside that hold
+  // lists only inside the library's own (Space's Algebra, whose lists stay
+  // as written whatever the program's are).
+  const ownSet0 = new Set(own);
+  const ownHolds = new Map<Id, boolean>();
+  const treeLists = (n: Node | undefined): boolean => {
+    if (n?.kind === "tfun") return [...n.params, n.result].some((x) => treeLists(code.nodes[x]));
+    if (n?.kind !== "tref") return false;
+    return n.target === LIST || (ownSet0.has(n.target) && holdsOwn(n.target)) || n.args.some((x) => treeLists(code.nodes[x]));
+  };
+  const holdsOwn = (d: Id): boolean => {
+    if (ownHolds.has(d)) return ownHolds.get(d)!;
+    ownHolds.set(d, false);
+    const t = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""] as NodeOf<"typedef"> | undefined;
+    const r = !!t && t.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((fl) => treeLists(code.nodes[(code.nodes[fl] as NodeOf<"field">).type])));
+    ownHolds.set(d, r);
+    return r;
+  };
+  const free = (t: Type | undefined): boolean => {
+    if (!t) return false;
+    t = info.subst.zonk(t);
+    if (t.t === "fn") return [...t.params, t.ret].every(free);
+    if (t.t !== "con") return true;
+    if (t.id === LIST || (ownSet0.has(t.id) && holdsOwn(t.id))) return false;
+    return t.args.every(free);
+  };
+  // The seeds' side reaches what it calls, but for a definition it only
+  // ever calls with values no list crosses in (geometric product, given
+  // bounce's Space and two multivectors): that one stays as written, its
+  // lists (the Algebra's) too, and serves both sides.
+  const asWritten = new Set<Id>();
+  const reachSeeds = (roots: Id[]) => {
+    const seen = new Set<Id>(), todo = [...roots];
+    while (todo.length) {
+      const d = todo.pop()!;
+      if (seen.has(d)) continue;
+      seen.add(d);
+      for (const x of subtree(code, d)) {
+        const n = code.nodes[x];
+        if (n.kind !== "ref" || !isDef(n.target) || isType(n.target) || repOwn.has(n.target) || rep.impl[n.target]) continue;
+        if (!seedSet.has(n.target) && free(info.typeOf.get(x))) { asWritten.add(n.target); continue; }
+        todo.push(n.target);
+      }
+    }
+    return seen;
+  };
   let aw: Set<Id>, bw: Set<Id>, aTypes: Set<Id>;
   for (;;) {
-    aw = reach([...seedSet], new Set());
+    asWritten.clear();
+    aw = deep ? reachSeeds([...seedSet]) : reach([...seedSet], new Set());
     bw = reach([main], seedSet);
     aTypes = new Set([...aw].flatMap((d) => [...madeBy(d)]));
     const more = [...bw].filter((d) => [...madeBy(d)].some((t) => aTypes.has(t)));
@@ -246,9 +293,9 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   // Builtins on lists the seeds' side calls: given its lists as written
   // and theirs stored, as with one representation (library-reps.ts).
   const types = [...aTypes];
-  const boundary = listBoundary(out, typed, aDefs, rep, [], new Set(own.filter(isType)));
+  const boundary = listBoundary(out, typed, aDefs, rep, [], new Set(own.filter(isType)), new Set([...[...asWritten].filter((d) => !aw.has(d)), rep.meaning, rep.store, ...k.code.defs]));
   if (!boundary) return null;
   out = { nodes: { ...out.nodes, ...boundary.nodes }, defs: [...out.defs, ...boundary.made] };
-  out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...k.code.defs, ...bDefs, ...own.filter((d) => isType(d) && !aTypes.has(d))]);
+  out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...k.code.defs, ...bDefs, ...[...asWritten].filter((d) => !aw.has(d)), ...own.filter((d) => isType(d) && !aTypes.has(d))]);
   return { code: out, names: { ...outNames, ...k.names, ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) }, seeds: seedsNow, copies: shared.map(f), types };
 }
