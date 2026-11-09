@@ -1,7 +1,7 @@
 // A program's own handlers whose cases keep the rest, native through C
 // (C44b): the code handled runs on a fiber, a perform goes out to the
 // handler's driver, and the rest goes back in. Each program is later.test's,
-// and the native run prints what `lab run` prints.
+// and the native run prints what `ters run` prints.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -17,11 +17,11 @@ import { CONSOLE, DIVERGE, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { skip } from "./c-harness.ts";
 
-const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 const say = (k: Lang, ...parts: Id[]) => k.call(S.print, parts.length === 1 ? parts[0] : k.text(...parts));
 
-// main built, made native, and run beside lab run: both outputs.
+// main built, made native, and run beside ters run: both outputs.
 function native(build: (k: Lang) => void) {
   const k = new Lang(LIBRARY.code);
   build(k);
@@ -34,7 +34,7 @@ function native(build: (k: Lang) => void) {
   return { want: run(process.execPath, [lab, "run", dir]), got: run(join(dir, "p"), []) };
 }
 
-test("a generator, a case that drops the rest, and nested handlers, native as lab run (C44b)", { skip }, () => {
+test("a generator, a case that drops the rest, and nested handlers, native as ters run (C44b)", { skip }, () => {
   const programs: [string, (k: Lang) => void][] = [
     ["start\ngot 1\ngot 2\ngot 3\nend\n[1, 2, 3]\n", (k) => {
       const Y = k.effect("Yield", [["yield", [["item", () => k.tref(NUMBER)]], () => k.tref(UNIT), "later"]]);
@@ -70,7 +70,7 @@ test("a generator, a case that drops the rest, and nested handlers, native as la
   }
 });
 
-test("a scheduler of two fibers, round robin: each rest kept in a list and resumed later, native as lab run (C44b)", { skip }, () => {
+test("a scheduler of two fibers, round robin: each rest kept in a list and resumed later, native as ters run (C44b)", { skip }, () => {
   const { want, got } = native((k) => {
     const Y = k.effect("Yield", [["yield", [], () => k.tref(UNIT), "later"]]);
     const Step = k.type("Step", [], [
@@ -99,7 +99,7 @@ test("a scheduler of two fibers, round robin: each rest kept in a list and resum
 
 // C44: together and race native, each action on a fiber of its own that an
 // await parks till its ticket is ready (branch-effects.test's programs).
-test("together, race, within, an aborting branch and together inside a branch, native as lab run (C44)", { skip }, () => {
+test("together, race, within, an aborting branch and together inside a branch, native as ters run (C44)", { skip }, () => {
   const chatty = (k: Lang, name: string, ms: number) => k.thunk(() => k.seq(
     k.call(S.print, k.lit(`${name} starts`)),
     k.let("t", k.call(START_TIMER_OP, k.lit(ms)), (t) => k.seq(k.call(AWAIT_OP, t), k.call(S.print, k.lit(`${name} ends`)), k.lit(name)))));

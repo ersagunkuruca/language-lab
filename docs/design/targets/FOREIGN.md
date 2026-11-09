@@ -2,16 +2,16 @@
 
 **Status (2026-11-06): done** (BACKLOG L69 closed; see DONE.md). BACKLOG L69 (from LANGUAGE-NEEDS-2026-10-24
 §5). L69a's evaluator half is built (src/lang/hosts.ts, test/hosts.test.ts):
-`lab run` and `lab test` load `hosts/js.js` beside the program, an
+`ters run` and `ters test` load `hosts/js.js` beside the program, an
 operation of the program's own effect that nothing handles is answered
 by the host function under its id, the answer is checked against the
 operation's result type (Int, Float64, Text, Bool, Unit, lists and
 records of them), and a missing or wrong answer is an Abort with the
-reason. `lab hosts` prints the skeleton. A host answers at once for now;
+reason. `ters hosts` prints the skeleton. A host answers at once for now;
 one that answers later (a promise) waits for L59. Compiled JavaScript
 does the same (L69a2): the module imports `hosts/js.js` and the runtime's
-`$perform` answers from it with the same border checks, and `lab compile`
-bundles it in. A page does too (L69a3): `lab build-web` and `lab build-app`
+`$perform` answers from it with the same border checks, and `ters compile`
+bundles it in. A page does too (L69a3): `ters build-web` and `ters build-app`
 bundle the program's `hosts/js.js` into the page's script. A page's main
 may ask the host while it builds the page; its views and handlers may
 perform only the page's own effects (Cells, Time, …), so asking a host
@@ -75,7 +75,7 @@ the host file's entry.
 
 1. **Keyed by id, not by name.** A host file names an operation by its
    id, so renaming or translating `take photo` changes nothing (names are
-   presentation, as everywhere else). `lab hosts <program>` prints a
+   presentation, as everywhere else). `ters hosts <program>` prints a
    skeleton host file with each operation's id, name and type in a
    comment, to start from.
 2. **Checked at the border.** What a host gives back is checked against
@@ -104,7 +104,7 @@ the host file's entry.
 
 ## In a native program (L69b1)
 
-`lab native` reads `hosts/c.c` beside the program and puts it in the C
+`ters native` reads `hosts/c.c` beside the program and puts it in the C
 file. Each operation is a C function named by its id, `host_<id>`, and
 what crosses is C's own:
 
@@ -120,7 +120,7 @@ A host fails by calling `lab_host_fail(reason)`; the program sees an
 Abort, "the host's ‹name› failed: ‹reason›", as it does for a wrong
 answer. Lists and records don't cross to C yet. An operation with no
 `host_<id>` in the file is a refusal to build that names it, and
-`lab hosts <program> --c` prints a file with each one, to start from.
+`ters hosts <program> --c` prints a file with each one, to start from.
 In WebAssembly (L69b2) each such operation is an import from "world",
 `host:<effect>:<number>`, which `instantiate` answers from the
 Runtime's `hosts` (hosts/js.js) through hosts.ts's border, as the
@@ -151,7 +151,7 @@ export default { "std.time.now": () => 1234 }   // a fixed clock
 The answer is checked at the same border (a NaN is an Abort with the
 reason), and the effect stays in every row: the clock is Time whoever
 reads it. Abort and Check are the language's own and never a host's.
-The evaluator does this (hosts.ts `stdHosted`), so `lab run` and `lab
+The evaluator does this (hosts.ts `stdHosted`), so `ters run` and `lab
 test`, which run a program with its own hosts on the evaluator, do; so
 does the core IR's JavaScript (core-rt.ts worldFn's `now`, #2016). L69
 is closed with this (2026-11-06); std's own host files stay optional.
@@ -160,7 +160,7 @@ is closed with this (2026-11-06); std's own host files stay optional.
 
 | step | what | lane | size |
 |---|---|---|---|
-| L69a | An effect's unhandled operations answered from `hosts/js.js` in the evaluator and the compiled JS, results checked at the border; `lab hosts` writes the skeleton | L | M |
+| L69a | An effect's unhandled operations answered from `hosts/js.js` in the evaluator and the compiled JS, results checked at the border; `ters hosts` writes the skeleton | L | M |
 | L69b | The same from `hosts/c.c` for native C (L69b1, done), and WebAssembly imports from `hosts/js.js` (L69b2, done) | C | M |
 | L69c | The editor: "needs its host" on a definition whose host side is missing; the host file shown read-only in the Program tab | E | S |
 | L69d | Optional: std's world operations move to std's own host files | L | M |

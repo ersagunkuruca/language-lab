@@ -175,7 +175,7 @@ export function ownOperations(code: Code): Id[] {
 
 const showShape = (s: Shape): string => s.k === "list" ? `Array<${showShape(s.of)}>` : s.k === "record" ? `{ ${s.fields.map(([n, f]) => `${JSON.stringify(n)}: ${showShape(f)}`).join(", ")} }` : ({ int: "number | bigint", float: "number", text: "string", bool: "boolean", unit: "undefined", any: "unknown" } as const)[s.k];
 
-// `lab hosts`: a hosts/js.js to start from, one entry per operation of
+// `ters hosts`: a hosts/js.js to start from, one entry per operation of
 // each effect the program declares, with its name and types in a comment.
 export function hostSkeleton(code: Code, names: Names, own: Id[]): string {
   const lines = ["// Answers for this program's own effects (FOREIGN.md), keyed by each", "// operation's id: renaming an operation changes nothing here.", "export default {"];
@@ -199,7 +199,7 @@ export function hostSkeleton(code: Code, names: Names, own: Id[]): string {
 export const hostCName = (op: Id) => `host_${op.replace(/[^A-Za-z0-9_]/g, "_")}`;
 const C_TYPE: Partial<Record<Shape["k"], string>> = { int: "int64_t", float: "double", text: "const char *", bool: "int", unit: "void" };
 
-// `lab hosts --c`: a hosts/c.c to start from. What crosses is C's own: an
+// `ters hosts --c`: a hosts/c.c to start from. What crosses is C's own: an
 // Int is int64_t, a Float64 a double, a Text a C string (the program's
 // copy, freed after the call; a Text given back is copied, so it may be
 // the host's own), a Bool 0 or 1. A host fails with lab_host_fail(reason),

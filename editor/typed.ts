@@ -2420,7 +2420,7 @@ export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, n
 
 // How a data type is stored when main runs (REPRESENTATIONS.md step 3,
 // E159): the compiler's choice among the representations the program
-// writes for it, the cheapest for the jobs main uses, as `lab check`
+// writes for it, the cheapest for the jobs main uses, as `ters check`
 // says it. Shown, never chosen here. Null without a choice to show.
 export function storedAs(code: Code, info: Info, names: Names, own: Id[], type: Id, main: Id | null): { rep: string; jobs: string[] } | null {
   if (!main || info.errors.length) return null;

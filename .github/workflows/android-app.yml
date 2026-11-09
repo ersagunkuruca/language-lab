@@ -1,4 +1,4 @@
-# A program's page as an Android app (C198, WEB.md "Mobile"): `lab
+# A program's page as an Android app (C198, WEB.md "Mobile"): `ters
 # build-app`, then the Capacitor project it makes built into a debug APK,
 # kept as the run's artifact to install on a phone. Run by hand only
 # (Actions tab, "Android app", Run workflow), since containers can't reach
@@ -33,11 +33,11 @@ jobs:
           java-version: 21
       - run: npm ci
         working-directory: ters
-      - name: lab build-app
+      - name: ters build-app
         working-directory: ters
         env:
           PROGRAM: ${{ inputs.program }}
-        run: node cli/lab.ts build-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app"
+        run: node cli/ters.ts build-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app"
       - name: Capacitor project
         working-directory: ${{ runner.temp }}/app
         run: |

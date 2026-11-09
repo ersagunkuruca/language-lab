@@ -58,7 +58,7 @@ export function runPanel(host: RunHost) {
     running = null;
     if (ui.output?.running) { ui.output = { ...ui.output, running: false, error: why ?? ui.output.error }; render(); }
   }
-  // What `lab run` would be given for an example whose main reads the
+  // What `ters run` would be given for an example whose main reads the
   // command line (examples.json "run", E212): its arguments, and its files,
   // shipped beside it. Only for main as the example has it: a program of
   // one's own, or main taking other inputs, gets none.
@@ -90,7 +90,7 @@ export function runPanel(host: RunHost) {
       h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-allow-run" }, `Run ${namer.name(ui.def)}`)));
   }
   // Does the program read standard input (calc's sums)? Run gives it what
-  // is typed in a box, as lab run gives it a pipe (I168).
+  // is typed in a box, as ters run gives it a pipe (I168).
   const reading = new WeakMap<Code, boolean>();
   function readsInput(): boolean {
     const code = doc().code;

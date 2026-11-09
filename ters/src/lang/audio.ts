@@ -1,6 +1,6 @@
 // Sounds (AUDIO.md): a function from a block of samples to the block to
 // play, made by a function that takes nothing. What checks a sound's type,
-// and what plays one over samples block by block, for `lab render` and the
+// and what plays one over samples block by block, for `ters render` and the
 // browser's worklet alike.
 
 import type { Id } from "../model.ts";
@@ -12,7 +12,7 @@ import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST } from "./std.ts";
 import { NUMBER, type Type } from "./types.ts";
 
 // The browser's render quantum (Web Audio API, AudioWorklet): the block a
-// sound gets, unless `lab render` is told another size.
+// sound gets, unless `ters render` is told another size.
 export const BLOCK = 128;
 
 // Why `def` can't be a sound, or null: it takes nothing, may only make

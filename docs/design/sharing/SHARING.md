@@ -5,11 +5,11 @@ versioning". **Status (2026-10-31):** proposal, nothing built. The steps
 are BACKLOG rows L109 to L115, which take over L17 and L68.
 **2026-11-05:** §3 built (L109): std's versions kept by lineage, modules
 saying which std they were published on, ids saying their recipe.
-§1 built (L110): a module's `lineages`, `lab publish`, `replacing`.
-§2 built (L111): upgrades by pin generality, `lab upgrade`, a program's `modules` folder.
+§1 built (L110): a module's `lineages`, `ters publish`, `replacing`.
+§2 built (L111): upgrades by pin generality, `ters upgrade`, a program's `modules` folder.
 §5 built (L112): names kept per program on upgrade, `--take-names`.
-§4b built (L115): a program's store.json, `lab downgrade`.
-§4 built (L114a, L114): signed logs beside module files, `lab broken`, `lab fetch`.
+§4b built (L115): a program's store.json, `ters downgrade`.
+§4 built (L114a, L114): signed logs beside module files, `ters broken`, `ters fetch`.
 
 **In one sentence:** a definition (or a library) keeps one **lineage id**
 for its whole life and gets a **version hash** each time it's published;
@@ -55,7 +55,7 @@ Two ids, two jobs:
 | comes from | the draft's born id, kept when published | SHA-256 of the content, as now |
 | like | a git branch, an IPNS name | a git commit, an IPFS CID |
 
-Built (L110, 2026-11-05): `lab publish <program> <name…>` publishes into a
+Built (L110, 2026-11-05): `ters publish <program> <name…>` publishes into a
 module file whose `lineages` list each lineage's versions, oldest first;
 the old versions stay and only the newest is offered; `replacing(module)`
 reads what replaces what. A program's ref is the exact version (its `@`
@@ -93,12 +93,12 @@ the lineage has a newer version:
 - **the type changed**: the editor shows both types and where Bob's
   program uses it. Data-type changes need a migration (L17's half that
   stays). Built (L17, 2026-11-05): the author publishes a function from
-  the old type to the new, and `lab upgrade` moves what the program builds
+  the old type to the new, and `ters upgrade` moves what the program builds
   through it and what it reads to the new fields of the same names.
 
 Built (L111, 2026-11-05): signatures.ts `atLeastAsGeneral`; a program
 folder's `modules` folder holds the modules it uses beyond the library;
-`lab upgrade <program>` moves it onto the newest versions that fit and
+`ters upgrade <program>` moves it onto the newest versions that fit and
 keeps the result only if the program checks and its tests pass. The
 editor's half is E254.
 
@@ -158,8 +158,8 @@ kind of entry. Scenarios, with Alice's `json` and Bob's program using
 
 Built (L114a, 2026-11-05): a module file's log sits beside it
 (`json.log.json`), each entry signed with Ed25519 and chained to the one
-before by its hash. `lab publish` signs new versions in, `lab broken`
-marks one, and `lab upgrade` warns about a broken version in use and never
+before by its hash. `ters publish` signs new versions in, `ters broken`
+marks one, and `ters upgrade` warns about a broken version in use and never
 moves to one. A program's store pins each lineage's author key the first
 time it takes it (trust on first use, as SSH does with host keys), which
 is how the impostor in scenario 2 is refused.
@@ -174,7 +174,7 @@ signed files hosted the same way. There is no global registry the
 language depends on; a registry is just an index of logs, and anyone can
 run one. How signing and fetching work on each host is a host detail.
 
-Built (L114, 2026-11-05): `lab fetch <program> <url or path>` takes a
+Built (L114, 2026-11-05): `ters fetch <program> <url or path>` takes a
 module from any host into the program's modules folder, rehashing every
 definition and checking its log against the program's pinned authors.
 
@@ -211,8 +211,8 @@ changed. Nothing to remember, nothing to choose.
   only way anything leaves it.
 
 Built (L115, 2026-11-05) on the command line: a program folder's
-`store.json` is filled by `lab upgrade` and `lab downgrade`, loads like a
-module, and `lab downgrade <program> <name>` goes back a version. The
+`store.json` is filled by `ters upgrade` and `ters downgrade`, loads like a
+module, and `ters downgrade <program> <name>` goes back a version. The
 editor's view of the store and dropping versions are later rows if they
 earn one.
 
@@ -236,7 +236,7 @@ version's names, and the names Bob changed himself:
   old lineage, so nothing breaks; the question shows the clash and Bob's
   old `parse` keeps its name in his program.
 
-Built (L112, 2026-11-05) on the command line: `lab upgrade` keeps the
+Built (L112, 2026-11-05) on the command line: `ters upgrade` keeps the
 program's names, says the author's renames in one line, and takes them
 with `--take-names` (modules.ts `upgradeNames`). The editor's question is
 E254's.
@@ -264,15 +264,15 @@ a stable id:
   conflict only happens when both sides changed the same field of the
   same draft node, and the driver says which node in which definition.
 
-**Built (L113).** `lab merge %O %A %B %P` is the merge driver
+**Built (L113).** `ters merge %O %A %B %P` is the merge driver
 (ters/src/merge-files.ts): objects merge key by key, `defs` and other lists
 of ids merge as ordered sets (ours' order, theirs' additions before the
 item that follows them there), and any other value that both sides
 changed differently is a conflict: ours is kept, the driver exits with 1,
 and it says "`area`: node f: both changed its target". `.gitattributes`
 names it for ters/examples and ters/library; each clone turns it on once
-with `git config merge.ters.driver "node ters/cli/lab.ts merge %O %A %B
-%P"` (until then git merges those files by line, as before). `lab diff
+with `git config merge.ters.driver "node ters/cli/ters.ts merge %O %A %B
+%P"` (until then git merges those files by line, as before). `ters diff
 before.json after.json` says what changed: definitions added, removed and
 changed (with how many nodes), renames, and side-table entries.
 

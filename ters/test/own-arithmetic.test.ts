@@ -117,7 +117,7 @@ test("a type's own show through Shown: show any shows a version as 1.9 (L205), c
 // L205c: a host shows values the way the program's show any does, so lab
 // test's accepted answers, and the editor's chips once they use it, read a
 // version as 1.9 too.
-test("showerFor and lab test show a type's own values through its Shown", () => {
+test("showerFor and ters test show a type's own values through its Shown", () => {
   let latest!: Id, version!: Id;
   const p = program((k, V) => {
     version = V.v.version;

@@ -20,7 +20,7 @@ import { B } from "../../ters/src/prelude.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { build, skip } from "./c-harness.ts";
 
-const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
 function program() {
   const k = new Lang();
@@ -69,8 +69,8 @@ test("a relation solved one way on C gives the evaluator's answer, rounded as th
   assert.equal(runMain(p.code, p.info, p.main, { print: () => {}, names: p.names }), 2.15 * 3);
 });
 
-// A program printed by lab run, then by lab wasi (Node's WASI) and, with a
-// C compiler, lab native.
+// A program printed by ters run, then by ters wasi (Node's WASI) and, with a
+// C compiler, ters native.
 async function throughLab(k: Lang): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "solved-"));
   writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
@@ -83,11 +83,11 @@ async function throughLab(k: Lang): Promise<string> {
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
   w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports));
   closeSync(fd);
-  assert.equal(readFileSync(of, "utf8"), want.stdout, "lab wasi");
+  assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (!skip) {
     const built = spawnSync(process.execPath, [lab, "native", dir, "-o", join(dir, "p")], { encoding: "utf8" });
     assert.equal(built.status, 0, built.stderr);
-    assert.equal(spawnSync(join(dir, "p"), [], { encoding: "utf8" }).stdout, want.stdout, "lab native");
+    assert.equal(spawnSync(join(dir, "p"), [], { encoding: "utf8" }).stdout, want.stdout, "ters native");
   }
   return want.stdout;
 }
@@ -95,7 +95,7 @@ const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d)
 const firstParam = (k: Lang, d: string) => (k.code.nodes[(k.code.nodes[d] as { body: string }).body] as { params: string[] }).params[0];
 
 // Each value solved for through plus nothing, against the solver's rounding.
-test("lab wasi and lab native solve a relation one way as lab run does", async () => {
+test("ters wasi and ters native solve a relation one way as ters run does", async () => {
   const k = new Lang(LIBRARY.code);
   const plus = k.def("plus nothing");
   k.define(plus, k.fn(["x"], (x) => k.call(B.add, x, k.lit(0))));
@@ -128,7 +128,7 @@ test("a relation with several ways gives the solver's answers on WebAssembly and
 // A solve the relational interpreter runs, in a mode with one answer or
 // none: its plan as functions. Text joined run backwards (a greeting's
 // name), Int + and − (det), and a case built backwards (some(t + "!")).
-test("a relational solve with one answer or none runs on WebAssembly and C as lab run does", async () => {
+test("a relational solve with one answer or none runs on WebAssembly and C as ters run does", async () => {
   const k = new Lang(LIBRARY.code);
   const param = (d: string) => firstParam(k, d);
   const greet = k.def("greet"), shifted = k.def("shifted"), said = k.def("said");

@@ -16,7 +16,7 @@ export type CompiledPage = { program: string; core: true };
 export function compilePageProgram(code: Code, names: Names, pins: Pins, main: Id): CompiledPage {
   setDisplayNames(names);
   setProgramPins(pins);
-  // Stored as lab build-web stores it (C197): its lists and Maps chosen.
+  // Stored as ters build-web stores it (C197): its lists and Maps chosen.
   const r = checkedForRun(code, names, main);
   const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
   const ir = lowerCore(r.code, r.info, r.names, own);

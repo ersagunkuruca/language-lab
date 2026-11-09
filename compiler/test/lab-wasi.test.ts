@@ -1,5 +1,5 @@
-// lab wasi: a program as a WASI command (WebAssembly with GC), lowered as
-// lab native lowers it, so it prints what lab run prints. Run here by
+// ters wasi: a program as a WASI command (WebAssembly with GC), lowered as
+// ters native lowers it, so it prints what ters run prints. Run here by
 // Node's WASI.
 
 import { test } from "node:test";
@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
 
-const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const examples = join(import.meta.dirname, "../../ters/examples");
 
 async function wasi(file: string, args: string[], dir: string): Promise<[string, number]> {
@@ -21,7 +21,7 @@ async function wasi(file: string, args: string[], dir: string): Promise<[string,
   return [readFileSync(of, "utf8"), code];
 }
 
-test("lab wasi builds examples that print what lab run prints: a value main, own handlers, files, sin and the rest (one memory, C193)", async () => {
+test("ters wasi builds examples that print what ters run prints: a value main, own handlers, files, sin and the rest (one memory, C193)", async () => {
   for (const [ex, args, files] of [["lockstep", [], {}], ["queens", [], {}], ["wc", ["a.txt"], { "a.txt": "one two\nthree\n" }], ["algebra", [], {}], ["impact", [], {}]] as [string, string[], Record<string, string>][]) {
     const dir = mkdtempSync(join(tmpdir(), "lab-wasi-"));
     for (const [f, t] of Object.entries(files)) writeFileSync(join(dir, f), t);

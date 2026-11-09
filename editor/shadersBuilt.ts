@@ -19,7 +19,7 @@ const SECTIONS = [["raymarch", "raymarch"], ["mandelbrot", "mandelbrot"], ["ripp
 export async function shadersBuilt(): Promise<ShaderBuilt[]> {
   const out: ShaderBuilt[] = [];
   for (const [where, folder] of SECTIONS) {
-    // Loaded as lab and the editor load a program (load.ts): on the
+    // Loaded as ters and the editor load a program (load.ts): on the
     // library's layer, with ids since renamed read as today's (the numbers
     // module's Complex, L207b) and the library's insiders.
     const p = loadProgram(examples + folder), own = p.own, code = p.code, names = p.pres.names;

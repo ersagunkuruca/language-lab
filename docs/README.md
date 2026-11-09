@@ -56,7 +56,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 |---|---|---|
 | [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
 | [CHECK-BY-GROUP-2026-11-03.md](design/tools/CHECK-BY-GROUP-2026-11-03.md) | Checking per definition group, cached by its hash and its dependencies' schemes, so an edit rechecks only what it changed | design (L183; steps L215) |
-| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`lab mcp`) | built: read tools, edits, eval |
+| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`ters mcp`) | built: read tools, edits, eval |
 
 ### Numbers
 
@@ -115,7 +115,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 
 | doc | what it is | status |
 |---|---|---|
-| [TESTS-IN-THE-LANGUAGE.md](design/testing/TESTS-IN-THE-LANGUAGE.md) | Tests as definitions doing a `Check` effect, small values from constructors run backwards, accepted answers in examples.json, results cached by hash, `lab test` | proposal (T7a to T7e) |
+| [TESTS-IN-THE-LANGUAGE.md](design/testing/TESTS-IN-THE-LANGUAGE.md) | Tests as definitions doing a `Check` effect, small values from constructors run backwards, accepted answers in examples.json, results cached by hash, `ters test` | proposal (T7a to T7e) |
 
 ### Compiler and targets
 
@@ -127,7 +127,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [GAPS.md](reports/GAPS.md) | Bigger-program rounds: compiled output against ideal hand-written code, gap by gap | current (rounds 1 to 5) |
 | [WASM.md](design/targets/WASM.md) | WebAssembly, with WASI | built (W1 to W4) |
 | [NATIVE.md](design/targets/NATIVE.md) | Native code through C | built (N1 to N5) |
-| [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `lab build-web` | built |
+| [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `ters build-web` | built |
 | [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | proposal (L69a to L69d), one question for Ersagun |
 | [WHERE-IT-RUNS.md](design/targets/WHERE-IT-RUNS.md) | Where code runs chosen by cost (workers, the GPU): Bend 2 read, a worker's round trip measured, one-holder arrays transferred, only a caller that can wait | design (C61), steps a to e |
 | [AUDIO.md](design/targets/AUDIO.md) | Sound as a function on blocks of samples; the guitar pedal | built (A1 to A5) |

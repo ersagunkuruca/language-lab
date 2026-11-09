@@ -482,7 +482,7 @@ test("a page's Html lists stay as written while the rest take the chooser's row 
   const c = withLibraryRepresentations(p.code, info, names, main, p.own.defs, [], { hostMaps: true });
   assert.deepEqual(c.chosen, ["List as array of List beside main's lists as written"]);
   assert.deepEqual(c.info?.errors.map((e) => e.message), []);
-  // The page as static HTML, the same either way (`lab run`).
+  // The page as static HTML, the same either way (`ters run`).
   const { htmlText, evaluatorCall } = await import("../src/lang/html.ts");
   const { Cells } = await import("../src/lang/cells.ts");
   const { equal } = await import("../src/lang/run.ts");

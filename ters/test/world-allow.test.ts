@@ -1,4 +1,4 @@
-// `lab run --allow` (E229b): the world answers only what it's allowed.
+// `ters run --allow` (E229b): the world answers only what it's allowed.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { allowedOnly } from "../src/lang/world.ts";

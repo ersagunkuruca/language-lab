@@ -1,4 +1,4 @@
-// A page from JavaScript printed from the core IR (C137c9, `lab build-web
+// A page from JavaScript printed from the core IR (C137c9, `ters build-web
 // --core`): the evaluator's cells and mount (html.ts) and the browser's
 // world (browser.ts), as page-runtime.ts gives compile.ts's pages, with
 // the printed functions called as core-js.ts calls them.

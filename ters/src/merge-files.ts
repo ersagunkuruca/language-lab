@@ -9,9 +9,9 @@
 // two different changes to the same field of the same node (or the same
 // name), and it is reported by the definition it is in.
 //
-// `lab merge` is the git merge driver (.gitattributes names it; each clone
-// says what it runs: `git config merge.ters.driver "node ters/cli/lab.ts
-// merge %O %A %B %P"`), and `lab diff` is the diff by definition. This is
+// `ters merge` is the git merge driver (.gitattributes names it; each clone
+// says what it runs: `git config merge.ters.driver "node ters/cli/ters.ts
+// merge %O %A %B %P"`), and `ters diff` is the diff by definition. This is
 // git's own custom merge driver (gitattributes(5), "Defining a custom merge
 // driver"); merging by key is what a JSON- or AST-aware merge does
 // (Asenov et al., "Precise version control of trees with line-based version

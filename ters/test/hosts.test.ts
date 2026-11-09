@@ -1,7 +1,7 @@
 // Foreign definitions (FOREIGN.md, BACKLOG L69a): a program's own effect,
 // left unhandled, is answered by its host, hosts/js.js's functions by
 // operation id. What comes back is checked at the border; a wrong or
-// missing answer is an Abort the program can catch. `lab hosts` writes the
+// missing answer is an Abort the program can catch. `ters hosts` writes the
 // skeleton.
 
 import { test } from "node:test";
@@ -96,7 +96,7 @@ test("the core IR's JavaScript asks the same host, checked at the same border", 
   assert.deepEqual(run({ [p.dev.op.battery]: () => 1 }, p.careful), [`aborted: hosts/js.js has no answer for name of (${p.dev.op["name of"]})`]);
 });
 
-test("lab hosts: a skeleton with each operation's id, name and types", () => {
+test("ters hosts: a skeleton with each operation's id, name and types", () => {
   const p = program();
   const text = hostSkeleton(p.code, p.names, p.k.code.defs as Id[]);
   assert.match(text, /^\/\/ Answers for this program's own effects/);

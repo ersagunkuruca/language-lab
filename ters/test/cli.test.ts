@@ -1,4 +1,4 @@
-// The lab command line, on the word count in examples/wc: run by the
+// The ters command line, on the word count in examples/wc: run by the
 // evaluator and compiled, the two must print, exit and fail alike, and
 // agree with what Unix wc counts.
 
@@ -9,7 +9,7 @@ import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "n
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const lab = join(import.meta.dirname, "../cli/lab.ts");
+const lab = join(import.meta.dirname, "../cli/ters.ts");
 const wc = join(import.meta.dirname, "../examples/wc");
 const dir = mkdtempSync(join(tmpdir(), "lab-"));
 writeFileSync(join(dir, "a.txt"), "hello world\nsecond  line here\n");
@@ -20,10 +20,16 @@ const node = (args: string[], input = "") => {
   return { out: r.stdout, err: r.stderr, code: r.status };
 };
 
-test("lab check lists the definitions and their types", () => {
+test("ters check lists the definitions and their types", () => {
   const r = node([lab, "check", wc]);
   assert.equal(r.code, 0, r.err);
   assert.match(r.out, /^main : \(List Text\) -\[Console, Files, Abort\]-> Int$/m);
+  assert.match(r.out, /^count : \(Text\) -> Tally$/m);
+});
+
+test("lab, the command's old name, still runs it", () => {
+  const r = node([join(import.meta.dirname, "../cli/ters.ts"), "check", wc]);
+  assert.equal(r.code, 0, r.err);
   assert.match(r.out, /^count : \(Text\) -> Tally$/m);
 });
 
@@ -42,8 +48,8 @@ test("wc, run and compiled: counts, totals, options, a missing file, standard in
 });
 
 // examples/numbers is written on Peano Nat; its representations let
-// lab store Nat as an Int (NUMBERS.md), so 18! runs, evaluated and compiled.
-test("lab runs and compiles numbers on the representation the chooser picks", () => {
+// ters store Nat as an Int (NUMBERS.md), so 18! runs, evaluated and compiled.
+test("ters runs and compiles numbers on the representation the chooser picks", () => {
   const numbers = join(import.meta.dirname, "../examples/numbers");
   const want = "18! = 6402373705728000\n2^50 = 1125899906842624\n100 is even: yes\n";
   assert.deepEqual(node([lab, "run", numbers]), { code: 0, err: "", out: want });
@@ -52,18 +58,18 @@ test("lab runs and compiles numbers on the representation the chooser picks", ()
   assert.deepEqual(node([compiled]), { code: 0, err: "", out: want });
   const small = (as: string[]) => node([lab, "run", ...as, numbers, "--main", "small"]).out;
   assert.equal(small(["--as-defined"]), small([]));
-  // lab check says what the compiler chose (REPRESENTATIONS.md, L108c).
+  // ters check says what the compiler chose (REPRESENTATIONS.md, L108c).
   assert.match(node([lab, "check", numbers]).out, /^Nat is stored as int, the cheapest for the jobs main uses$/m);
 });
 
-// A main that is a value, not a function: lab run prints what it is (T7e15).
-test("lab run prints a main that is a value: lockstep's text", () => {
+// A main that is a value, not a function: ters run prints what it is (T7e15).
+test("ters run prints a main that is a value: lockstep's text", () => {
   const r = node([lab, "run", join(import.meta.dirname, "../examples/lockstep")]);
   assert.equal(r.code, 0);
   assert.match(r.out, /^position -?\d+\.\d+, velocity -?\d+\.\d+, position in steps of 2⁻³² -?\d+\n$/);
 });
 
-test("lab refuses a program it can't run, and says why", () => {
+test("ters refuses a program it can't run, and says why", () => {
   const r = node([lab, "run", join(import.meta.dirname, "../examples/queens"), "--main", "queens"]);
   assert.equal(r.code, 2);
   assert.match(r.err, /queens can't be run from the command line: main takes the arguments|unhandled effect: Choice/);

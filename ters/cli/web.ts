@@ -1,4 +1,4 @@
-// A page as one HTML file (WEB.md): `lab build-web` and editor/build.ts.
+// A page as one HTML file (WEB.md): `ters build-web` and editor/build.ts.
 
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
@@ -18,7 +18,7 @@ const at = (path: string) => JSON.stringify(join(here, path));
 // audio thread (core-sound.ts), which runs main again there.
 const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen);
 // The recordings a page plays from files beside it (`recording("strum.wav")`):
-// `lab build-web` copies them from the program's folder next to the page.
+// `ters build-web` copies them from the program's folder next to the page.
 export function recordings(code: Code): string[] {
   const out = new Set<string>();
   for (const n of Object.values(code.nodes)) {
@@ -29,7 +29,7 @@ export function recordings(code: Code): string[] {
   return [...out];
 }
 
-// A page (WEB.md) printed from the core IR (C137c9, `lab build-web`),
+// A page (WEB.md) printed from the core IR (C137c9, `ters build-web`),
 // which WebAssembly and C print too, bundled by esbuild into one script
 // inside one HTML file: core-page.ts draws it, and a page with sound
 // plays (C137d4).

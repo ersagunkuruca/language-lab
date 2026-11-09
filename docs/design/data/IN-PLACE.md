@@ -216,10 +216,10 @@ What it is, per target:
 
 Steps, one PR each: C63h a Map table in C (Int and Text keys), C63i Set
 in C, C63j both in WebAssembly, C63k tuple and record keys. Each is
-measured on routes with `lab native` and the WebAssembly the rounds run,
+measured on routes with `ters native` and the WebAssembly the rounds run,
 and kept only if it is faster than the tree there.
 
-C63h, done: `lab native` gives a Map with Int or Text keys C's table
+C63h, done: `ters native` gives a Map with Int or Text keys C's table
 (library-reps.ts `cTables`). On routes with 20,000 towns and 60,000 roads
 the program takes 0.37 s, against 0.99 s with the trees, the same output.
 

@@ -1,5 +1,5 @@
-// A page as an app for phones (WEB.md, "Mobile"): `lab build-app`. The
-// page `lab build-web` makes, plus what makes it installable and offline:
+// A page as an app for phones (WEB.md, "Mobile"): `ters build-app`. The
+// page `ters build-web` makes, plus what makes it installable and offline:
 // a web app manifest, a service worker that keeps every file, and icons
 // (an installable PWA, W3C's Web Application Manifest). The same folder is
 // a Capacitor (Ionic) project for an Android or iOS app: its config points
@@ -43,7 +43,7 @@ export function appFolder(title: string, page: string): Record<string, string | 
   return {
     ...Object.fromEntries(Object.entries(www).map(([p, x]) => [`www/${p}`, x])),
     "capacitor.config.json": JSON.stringify({ appId: `app.lab.${slug.replace(/-/g, "_").replace(/^(\d)/, "_$1")}`, appName: title, webDir: "www" }, null, 2) + "\n",
-    "package.json": JSON.stringify({ name: slug, private: true, description: `${title}, built by lab build-app` }, null, 2) + "\n",
+    "package.json": JSON.stringify({ name: slug, private: true, description: `${title}, built by ters build-app` }, null, 2) + "\n",
     "README.md": readme(title),
   };
 }
@@ -51,7 +51,7 @@ export function appFolder(title: string, page: string): Record<string, string | 
 // Every file from the cache first, so the app opens with no network; the
 // caches of other builds go when this one takes over.
 function serviceWorker(cache: string, files: string[]): string {
-  return `// The app's files, kept for offline use (lab build-app, ters/cli/app.ts).
+  return `// The app's files, kept for offline use (ters build-app, ters/cli/app.ts).
 const CACHE = ${JSON.stringify(cache)}, FILES = ${JSON.stringify(files)};
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(caches.keys()
@@ -66,7 +66,7 @@ self.addEventListener("fetch", (e) => {
 function readme(title: string): string {
   return `# ${title}
 
-Built by \`lab build-app\` from a program in the language (docs/design/targets/WEB.md).
+Built by \`ters build-app\` from a program in the language (docs/design/targets/WEB.md).
 
 - **As a web app (PWA):** put \`www/\` on any HTTPS host. Opened in a phone's
   browser it can be installed ("Add to Home screen"), and it runs offline.
@@ -77,7 +77,7 @@ Built by \`lab build-app\` from a program in the language (docs/design/targets/W
       npx cap run android
 
   (\`@capacitor/ios\` and \`npx cap add ios\` on a Mac with Xcode). After a new
-  \`lab build-app\`, \`npx cap sync\` copies \`www/\` into the app.
+  \`ters build-app\`, \`npx cap sync\` copies \`www/\` into the app.
 `;
 }
 

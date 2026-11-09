@@ -282,7 +282,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           else e.addEventListener(name, handle);
         } else if (a.tag === HTML_V.listen) {
           if (m.listen) m.listen(e, a);
-          else console.warn("this page can't play sound here: build it with lab build-web");
+          else console.warn("this page can't play sound here: build it with ters build-web");
         } else throw new Error(`not an attribute: ${a.tag}`);
       }
       const kids = fromList(d.fields[2]).map((c) => mountHtml(c, m, inSvg));

@@ -973,7 +973,7 @@ test("a private case: the program's own definitions still build it, an effect's 
   s.fill(s.def("start"), ref(off));
   s.ok(Top.setPrivate(s.code, s.names, off, true));
   assert.equal((s.code.nodes[off] as NodeOf<"variant">).private, true);
-  // Checked as the editor and lab check it, start may still build it (L165).
+  // Checked as the editor and ters check it, start may still build it (L165).
   assert.deepEqual(infer(s.code, s.all(), undefined, checkOptions).errors.map((e) => e.message), []);
   assert.match(s.refused(Top.setPrivate(s.code, s.names, off, true)), /private already/);
   s.ok(Top.setPrivate(s.code, s.names, off, false));

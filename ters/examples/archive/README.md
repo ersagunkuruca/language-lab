@@ -7,6 +7,6 @@ open, evaluator against compiler, shaders) skip this folder because it has no
 
 - `compose`: Ersagun's first example, `a = ((d) => b(c(d, e(f, d))))(g(h))`.
   It predates the typed core: `b`, `c`, `e`, `f`, `g` and `h` are definitions
-  with no body, so `lab check` reports six "no body to check" errors. It is
+  with no body, so `ters check` reports six "no body to check" errors. It is
   still the clearest picture of one tree drawn as nested calls, lets and
   s-expressions, so `src/demo.ts` and `test/core.test.ts` use it for that.

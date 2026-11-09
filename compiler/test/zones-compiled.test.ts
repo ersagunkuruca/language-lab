@@ -61,7 +61,7 @@ test("zone offsets in a native program come from the platform's zone rules (L188
   const dir = mkdtempSync(join(tmpdir(), "zones-c-"));
   writeFileSync(join(dir, "code.json"), JSON.stringify(p.k.code));
   writeFileSync(join(dir, "names.default.json"), JSON.stringify(p.k.names));
-  const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
   const b = spawnSync(process.execPath, [lab, "native", dir, "-o", join(dir, "p")], { encoding: "utf8" });
   assert.equal(b.status, 0, b.stderr);
   assert.equal(spawnSync(join(dir, "p"), [], { encoding: "utf8" }).stdout, want);

@@ -1,4 +1,4 @@
-// The browser's World (run.ts), for a page built by `lab build-web`
+// The browser's World (run.ts), for a page built by `ters build-web`
 // (WEB.md): the same operations as Node's (world.ts) by the browser's
 // means. Printing goes to the browser console. Files are localStorage
 // entries under a prefix named after the program, so two apps on one site

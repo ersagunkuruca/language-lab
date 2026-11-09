@@ -95,12 +95,12 @@ export function backwards(host: BackHost) {
   }
 
   // Keeps this answer for these inputs (TESTS-IN-THE-LANGUAGE.md §3): from
-  // now on lab test checks that the definition still gives it.
+  // now on ters test checks that the definition still gives it.
   function acceptAnswer(inputs: string[], answer: string) {
     const same = (e: Saved) => e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]);
     const others = (savedOf(ui.def) ?? []).filter((e) => !same(e));
     commit({ examples: { ...(doc().examples ?? {}), [ui.def]: [{ inputs, answer }, ...others, ...mains(ui.def)] } }, ["examples.json"],
-      `Accepted ${answer} for these inputs. The program's tests check it from now on (lab test, on the command line).`);
+      `Accepted ${answer} for these inputs. The program's tests check it from now on (ters test, on the command line).`);
   }
 
   function setKnown(info: T.Info, port: Id, on: boolean) {
@@ -289,7 +289,7 @@ export function backwards(host: BackHost) {
       const inputs = ports.filter((p) => p !== "out").map((p) => portText(info, p));
       const acc = (savedOf(ui.def) ?? []).find((e) => e.answer !== undefined && e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]));
       const accept = (label: string) => {
-        const b = h("button", { class: "btn", type: "button", title: "Keep this answer for these inputs: the program's tests check it from now on (lab test, on the command line)" }, label);
+        const b = h("button", { class: "btn", type: "button", title: "Keep this answer for these inputs: the program's tests check it from now on (ters test, on the command line)" }, label);
         b.addEventListener("click", () => acceptAnswer(inputs, got));
         return b;
       };

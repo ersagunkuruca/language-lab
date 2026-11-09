@@ -8,7 +8,7 @@ shortest route) and each `near` (the towns within so many km, nearest
 first), in the order the file asks them.
 
 ```
-$ node ters/cli/lab.ts run --as-defined ters/examples/routes ters/examples/routes/roads.txt
+$ node ters/cli/ters.ts run --as-defined ters/examples/routes ters/examples/routes/roads.txt
 7 towns, 8 roads, 2 parts
 cheapest network: 570 km in 5 roads
 farthest from Arden: Eskar, 460 km
@@ -19,7 +19,7 @@ within 250 km of Brisk: Arden 120, Colm 150, Dunmore 200
 Gant → Fallow: 70 km
 ```
 
-`--as-defined` is needed for now: without it `lab run` picks the tree
+`--as-defined` is needed for now: without it `ters run` picks the tree
 representation for Map and Set and then refuses the program, because the
 program's own record types still say Map and Set (docs/reports/GAPS.md, round
 5, M2). The editor's Run has the same problem.

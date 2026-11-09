@@ -6,7 +6,7 @@ compiler?"
 
 **Status (2026-10-30).** Steps 1 to 3 are built (L108a to L108c, #679 to
 #682): representations are definitions in the language, the library's Map
-and Set are written that way, and the compiler chooses and `lab check`
+and Set are written that way, and the compiler chooses and `ters check`
 says what it chose. A program never picks one. Open: showing the choice in
 the editor (E159), laws checked (L108d, built), and lists as arrays as
 one more representation (C30). The "Short answer" below was written
@@ -108,7 +108,7 @@ never picks it by cost, and the shader target asks for it.
    (represent.ts) reads a program's representation definitions into the
    records the chooser and the rewrite already took. Numbers' `unary`,
    `binary` and `int` are now definitions in the example; they read back
-   identical to the old representations.json, which is gone, and lab and
+   identical to the old representations.json, which is gone, and ters and
    the tests take them from the program.
 2. **L108b, built.** The library's Map and Set representations, the
    weight-balanced tree and the sorted list for each, are published by the
@@ -120,7 +120,7 @@ never picks it by cost, and the shader target asks for it.
    meaning), and `head by(of, f)` (the first item of a job that gives a
    list, map-tree.ts).
 3. **L108c, built.** The compiler chooses, and says what it chose:
-   `lab check` prints "Nat is stored as int, the cheapest for the jobs main
+   `ters check` prints "Nat is stored as int, the cheapest for the jobs main
    uses" for each type the program writes representations for. The editor
    showing the same next to a value's type is E159. **No explicit
    selection** (Ersagun 2026-10-30: "I don't want explicit selection, I

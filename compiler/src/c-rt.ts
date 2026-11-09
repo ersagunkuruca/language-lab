@@ -712,7 +712,7 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   // L186's log of the world's answers (C172b), as worldlog.ts writes it:
   // with TERS_LOG=file set, each answer the world gives (its arguments and
   // what came back, or the failure) and each write, as JSON, for
-  // \`lab run --replay\` to give the evaluator.
+  // \`ters run --replay\` to give the evaluator.
   "world.log": {
     uses: [],
     c: `static FILE *lab_log;

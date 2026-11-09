@@ -1,6 +1,6 @@
 // clinic (GAPS.md round 10), a walk-in clinic simulation written in the
-// editor, in three ways: the evaluator (`lab run`), the module printed from
-// the core IR (`lab compile`, C137d19) and the hand-written ideal
+// editor, in three ways: the evaluator (`ters run`), the module printed from
+// the core IR (`ters compile`, C137d19) and the hand-written ideal
 // (clinic.ideal.js). Each runs in
 // a folder holding a clinic.txt that sets the hours the clinic is open (the
 // rest is the program's default config), and the comparison is what it
@@ -16,7 +16,7 @@ import { clinic, defaultConfig } from "./clinic.ideal.js";
 export type Name = "evaluator" | "core" | "ideal";
 export interface Run { out: string[]; csv: string | null; ms: number }
 export const folder = join(import.meta.dirname, "clinic");
-const lab = join(import.meta.dirname, "../../ters/cli/lab.ts");
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const dir = mkdtempSync(join(tmpdir(), "clinic-"));
 let module = "";
 

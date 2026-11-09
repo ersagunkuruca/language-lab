@@ -171,8 +171,8 @@ test("a match's cases are written through the MCP: a split by a type named, a ca
   assert.equal(text("eval", { text: "when(meets(1.5, 1, 2))" }), "= 1.5 : Float64");
 });
 
-test("a saved folder opens as lab reads it: older shapes brought up to today's (I185)", () => {
-  // crew was saved when a pair was std.pair; lab check finds nothing wrong.
+test("a saved folder opens as ters reads it: older shapes brought up to today's (I185)", () => {
+  // crew was saved when a pair was std.pair; ters check finds nothing wrong.
   text("open", { path: "../compiler/gaps/crew" });
   assert.equal(text("check"), "ok");
 });
@@ -197,7 +197,7 @@ test("eval runs what may not end, within its steps, and says a type as the view 
   assert.equal(text("eval", { text: "[1, 2]" }), "= [1, 2] : List a where a is a Number");
 });
 
-test("sharing through the MCP: publish, fetch, upgrade and downgrade, as lab does them (I186)", async () => {
+test("sharing through the MCP: publish, fetch, upgrade and downgrade, as ters does them (I186)", async () => {
   const { cpSync, existsSync, mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");

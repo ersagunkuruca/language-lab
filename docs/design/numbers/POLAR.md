@@ -150,7 +150,7 @@ the last step.
 5. **L97e, built.** The complex laws, as tests in the prelude (T7):
    `from polar undoes modulus and angle` and `polar undoes unpolar` (Trig's
    two fields at Float64) perform Check, and test/prelude-laws.test.ts runs
-   them on small complex numbers the way `lab test` runs a program's.
+   them on small complex numbers the way `ters test` runs a program's.
 
 Steps 1 to 3 (and L97c2) do not need C55; C55 only makes the polar-first types (Fixed)
 as cheap as they should be.

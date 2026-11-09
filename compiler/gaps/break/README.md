@@ -21,12 +21,12 @@ fields of the `Toucher` interface (POLAR.md, L120d).
   advancing`, conservative advancement: two rolling balls meet when a
   quartic in t is 0. The compiler takes whichever costs less (WAYS.md).
 
-It was written through the Ters MCP server's tools (`lab mcp`). Its
+It was written through the Ters MCP server's tools (`ters mcp`). Its
 types, the interface and the way's mark were made with the DSL first,
 since the MCP can't write them yet (GAPS.md round 12).
 
 ```
-$ lab run compiler/gaps/break
+$ ters run compiler/gaps/break
 Break at 6.0 m/s, the cue ball 1.0 cm off the line:
 0.178 s  the cue ball meets 1
 …

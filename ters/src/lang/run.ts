@@ -330,7 +330,7 @@ export interface Runtime {
   // values it's called with (the editor seeds a definition's Run with them).
   // `copy`: the lambda entered, when it's a copy at another number type.
   entered?: (lambda: Id, args: Value[], copy: Id) => void;
-  // Check's handler when the program has none (`lab test`, tests.ts):
+  // Check's handler when the program has none (`ters test`, tests.ts):
   // each expect, whether it held, and what it says.
   check?: (holds: boolean, what: string) => void;
   // Told when a function run backwards from a known text finds no
@@ -1269,7 +1269,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     value: (def: Id) => refValue(def, null),
     // How a value of a type with a Shown implementation shows (L205c):
     // what `show any` and a search's show any give it, for a host showing
-    // values (the editor's chips, lab test's answers) to show them the same.
+    // values (the editor's chips, ters test's answers) to show them the same.
     shown: shownBy,
     // Call a function value and stream its results. An answer handed out
     // to the host is used (SPEC §3.3, L218): one with an overflow in it
@@ -1353,7 +1353,7 @@ export function mainProblem(info: Info, def: Id, names: Names = {}, hosted: Set<
   return leftover(t, names, hosted);
 }
 
-// Can `def` be a page's main (WEB.md, `lab build-web`)? It takes nothing
+// Can `def` be a page's main (WEB.md, `ters build-web`)? It takes nothing
 // and returns the page, an Html. Null if it can, else why not.
 export function pageProblem(info: Info, def: Id, names: Names = {}): string | null {
   const t = info.typeOf.get(def);
@@ -1371,7 +1371,7 @@ export function valueMain(info: Info, def: Id): boolean {
   return !!t && t.t !== "fn";
 }
 
-// A program run from the command line (cli/lab.ts): `main` takes the
+// A program run from the command line (cli/ters.ts): `main` takes the
 // arguments as a list of texts, or nothing, and returns the exit code (an
 // Int or a Float64), or anything else for 0. An Abort that nothing handles
 // prints its reason to standard error and exits with 1. A main that is a

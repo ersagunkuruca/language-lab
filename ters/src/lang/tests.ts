@@ -22,7 +22,7 @@ import { CHOICE, instantiate, INT, NUMBER, STRING, type Type } from "./types.ts"
 import { parseValue } from "./values.ts";
 import { fractionCase } from "./prelude-ids.ts";
 
-export const TEST_HANDLES = discharge("a test run by lab test", [CHECK, CHOICE],
+export const TEST_HANDLES = discharge("a test run by ters test", [CHECK, CHOICE],
   "the test runner handles Check, collecting every expect that failed, and runs each path a search takes");
 
 // Small values of a type, smallest first; null when there are none to
@@ -177,8 +177,8 @@ export const mainCall = (m: MainAnswer) => `main(${m.arguments.map((a) => JSON.s
 // accepted answer is a test without the word, `expect(f(inputs) =
 // answer)`, compared as printed (so how a value is stored doesn't matter).
 // `mains`: the program main's accepted answers run in, when it isn't this
-// one: `lab test` gives the program as `lab run` runs it, after the
-// chooser (T7e15e), so main's answers say what `lab run` does.
+// one: `ters test` gives the program as `ters run` runs it, after the
+// chooser (T7e15e), so main's answers say what `ters run` does.
 export function runTests(code: Code, info: Info, names: Names, defs: Id[], saved: Record<Id, Saved[]> = {}, rt: Partial<Runtime> = {}, mains?: { code: Code; info: Info }): TestResult[] {
   const tests = new Set(testsIn(info, defs));
   const shower = showerFor(code, info, names);
@@ -276,7 +276,7 @@ export function testInputs(code: Code, info: Info, names: Names, d: Id, saved: R
 
 // Each test as a definition of its own that handles its Check (T7e2), for
 // a way of running the program that has no test runner around it
-// (`lab test --compiled`): `t checked(inputs)` runs t, an expect that holds
+// (`ters test --compiled`): `t checked(inputs)` runs t, an expect that holds
 // goes on, and the first that doesn't ends it with its text, as an Abort
 // does; "" when every expect held. Written in the language, so it compiles
 // like any definition.
@@ -341,7 +341,7 @@ export function checksAgain(code: Code, info: Info, names: Names, tests: Id[], s
 }
 
 // The accepted answers again, from another way of running the program
-// (`lab test --compiled`, T7e): `callOf` gives a definition's function on
+// (`ters test --compiled`, T7e): `callOf` gives a definition's function on
 // the evaluator's values, or why it has none there (it isn't compiled),
 // and its answer must print as the accepted one. A function's first
 // answer, as the evaluator's above; `none` for no answer.

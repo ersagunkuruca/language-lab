@@ -15,7 +15,7 @@
 //   prebuilt/      the shipped examples compiled ahead (prebuild.ts, E245)
 //   apps/*.html    web apps written in the language (the programs
 //                  editor/examples.json marks page: converter, dice, …),
-//                  each one file built like `lab build-web` (WEB.md)
+//                  each one file built like `ters build-web` (WEB.md)
 
 import { build } from "../ters/node_modules/esbuild/lib/main.js";
 import { copyFileSync, readFileSync, writeFileSync } from "node:fs";

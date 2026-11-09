@@ -93,10 +93,10 @@ run in parallel because they touch different files.
    the visual changes above so the screenshots stay current.
 3. ~~**Finish effects for the world.**~~ **Done** (this PR): the compiler
    handles operations, handler matches, `Optional` and the world builtins
-   (`$perform` with a handler stack, escapes as exceptions), `cli/lab.ts`
+   (`$perform` with a handler stack, escapes as exceptions), `cli/ters.ts`
    runs, compiles and checks saved programs on Node, and `examples/wc` is a
    word count in the language, after Unix `wc`. `Cells` compiles to the
-   runtime's one handler. A compiled program is one portable file (`lab compile` bundles its runtime). Time, randomness and HTTP
+   runtime's one handler. A compiled program is one portable file (`ters compile` bundles its runtime). Time, randomness and HTTP
    followed (#110, #113, #114; LANGUAGE.md "Random", "Time", "The web").
 4. ~~**Reactivity and on-demand values through effects.**~~ **Done**
    (PR "Cells"): the `Cells` effect (`cell`, `formula`, `read`) and `Update`
@@ -111,7 +111,7 @@ run in parallel because they touch different files.
    choosing a representation for one value, after Gill, Launchbury and
    Peyton Jones's foldr/build); Peano `Nat` is stored as an Int whose fold
    is a counted loop, written in the language and picked by the chooser,
-   also by `lab run` and `lab compile`. Open: `build` for user producers
+   also by `ters run` and `ters compile`. Open: `build` for user producers
    (`keep` after a fold), user representations chosen per value, folds with
    `Choice` asking the table, arrays and ropes for lists.
 6. **Compile targets.** All are profiles (REVIEW.md §5.2) plus a code
@@ -134,7 +134,7 @@ run in parallel because they touch different files.
    a page is a value of std's `Html` whose changing parts are watched
    functions, Solid-style, so no diffing is needed (WEB.md); events are
    handlers that write cells; the browser is a world (files in
-   `localStorage`); `lab build-web` writes one HTML file; two-way binding
+   `localStorage`); `ters build-web` writes one HTML file; two-way binding
    is a field's display function run backwards, and
    [apps/converter.html](https://ersagunkuruca.github.io/language-lab/apps/converter.html)
    is written that way. Pages read the clock (a part that reads `now()`
@@ -144,8 +144,8 @@ run in parallel because they touch different files.
    rolls dice. On the way, functions kept in data got their
    effect rows (#102). Open: reactive.html's programs moved onto `Html`,
    keyed lists, `solve` over a function value (one generic `bind`),
-   static output from `lab run`, a page shown
-   live in the editor. Mobile is a packaged web app: `lab build-app`
+   static output from `ters run`, a page shown
+   live in the editor. Mobile is a packaged web app: `ters build-app`
    writes an installable, offline PWA that is also a Capacitor project.
 8. **Research items** as they become blocking: costs worked out from folds,
    laws proved by fusion, fast invertible parsing, exact reals as a practical
