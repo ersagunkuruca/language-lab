@@ -50215,27 +50215,27 @@
           "@9gpe8i14r6a5fm0h5dsl0rdaql:6"
         ]
       },
-      "@ln1jbjd4ogq6l4vtkbh1aa781t": {
-        "id": "@ln1jbjd4ogq6l4vtkbh1aa781t",
+      "@cl37974ibaijnqop9ptv0m6s7j": {
+        "id": "@cl37974ibaijnqop9ptv0m6s7j",
         "kind": "def",
-        "body": "@ln1jbjd4ogq6l4vtkbh1aa781t:1"
+        "body": "@cl37974ibaijnqop9ptv0m6s7j:1"
       },
-      "@ln1jbjd4ogq6l4vtkbh1aa781t:3": {
-        "id": "@ln1jbjd4ogq6l4vtkbh1aa781t:3",
+      "@cl37974ibaijnqop9ptv0m6s7j:3": {
+        "id": "@cl37974ibaijnqop9ptv0m6s7j:3",
         "kind": "ref",
         "target": "@6ll61j6012nvqnk1c5gdqd76p3"
       },
-      "@ln1jbjd4ogq6l4vtkbh1aa781t:2": {
-        "id": "@ln1jbjd4ogq6l4vtkbh1aa781t:2",
+      "@cl37974ibaijnqop9ptv0m6s7j:2": {
+        "id": "@cl37974ibaijnqop9ptv0m6s7j:2",
         "kind": "ref",
         "target": "std.ordered.ordered"
       },
-      "@ln1jbjd4ogq6l4vtkbh1aa781t:1": {
-        "id": "@ln1jbjd4ogq6l4vtkbh1aa781t:1",
+      "@cl37974ibaijnqop9ptv0m6s7j:1": {
+        "id": "@cl37974ibaijnqop9ptv0m6s7j:1",
         "kind": "call",
-        "fn": "@ln1jbjd4ogq6l4vtkbh1aa781t:2",
+        "fn": "@cl37974ibaijnqop9ptv0m6s7j:2",
         "args": [
-          "@ln1jbjd4ogq6l4vtkbh1aa781t:3"
+          "@cl37974ibaijnqop9ptv0m6s7j:3"
         ]
       },
       "@3igl7soaerhhl0tthhmqcepbtt": {
@@ -50406,7 +50406,7 @@
       "@ndglr9kno8rsbil4nlocehfk2c",
       "@9gpe8i14r6a5fm0h5dsl0rdaql",
       "@6ll61j6012nvqnk1c5gdqd76p3",
-      "@ln1jbjd4ogq6l4vtkbh1aa781t",
+      "@cl37974ibaijnqop9ptv0m6s7j",
       "@ufrel1ue1e29qhg9f2mjpite0k",
       "@3igl7soaerhhl0tthhmqcepbtt",
       "@ug0vse4mn28gegner6no8fsfai",
@@ -51181,7 +51181,7 @@
       },
       "plain": []
     },
-    "@ln1jbjd4ogq6l4vtkbh1aa781t": {
+    "@cl37974ibaijnqop9ptv0m6s7j": {
       "vars": [],
       "rows": [],
       "type": {
@@ -52215,7 +52215,7 @@
     "@qtssugmt88pgi4rjpddpcetg4f:2": "x",
     "@qtssugmt88pgi4rjpddpcetg4f:3": "y",
     "@9gpe8i14r6a5fm0h5dsl0rdaql": "arithmetic at steady",
-    "@ln1jbjd4ogq6l4vtkbh1aa781t": "ordered at steady",
+    "@cl37974ibaijnqop9ptv0m6s7j": "ordered at steady",
     "@3igl7soaerhhl0tthhmqcepbtt": "division at steady",
     "@6nlo4ecucb4al6jorukmvpa4em": "literal at steady",
     "@koloon8deji0rl9ujoj43sdsbh": "shown at steady",
@@ -52252,7 +52252,7 @@
     "std.bool": "i9j62f4s0b1kd43c3ko5obqfg3",
     "std.division": "ckpeom5tqa3m7i72gfgp1bo852",
     "std.literal": "7dcvc79ld19gqtm284v12ik2gb",
-    "std.ordered": "l5kgjdofic2jhlrpheoq459cie",
+    "std.ordered": "gbrk5i02v2a017fjp834gr409h",
     "std.shown": "aspvcoq99v60efgutidn1jvk8r",
     "std.trig": "3lgfcdq42prnmov3o81qte7bd5",
     "std.tuple2": "v3c5mu6dk39ukgo2go20clcrlh",

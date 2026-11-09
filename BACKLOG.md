@@ -22,7 +22,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 |---|---|---|
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C93 to Language lane B; C184 with the Editor lane |
-| L Language and library | "Language lane" | L44, then L88 and L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
+| L Language and library | "Language lane" | L44, then L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
 | L Language and library | "Language lane B" | C93 (from the Compiler lane); round 12's I187 is with the Editor lane. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -175,7 +175,7 @@ all of these.
 |---|---|---|---|---|---|
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md)). Example: a program's rotation function compiled as a matrix product. Left: the compiler stores linear functions as matrices (C lane, C30b/c) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | a-g done |
 | L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code; notebook's Run takes 3.2 s for 100 notes, half of it the evaluator's own machine (GAPS.md round 6 N6) ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). For later: Ersagun stopped L118 after step 2. Measured 2026-11-05 (Editor lane): notebook with 500, 1,000 and 2,000 notes and as many queries, `lab run` against the same program compiled through the core IR (`lab compile`): the run itself (startup of 6.3 s taken off) 5.4 s against 0.25, 19.9 against 0.44, 76 against 2.0, 22 to 45 times; nearly all of it the evaluator's own machine (run.ts going, step, resume, apply). So it would earn far more than 10%. First step done (Editor lane, docs/process/DONE.md): `lab run` runs a main that lowers through the core IR's JavaScript, the evaluator for the rest; what is left is the evaluator's own speed, for what doesn't lower and for the editor's Run | Ersagun 2026-10-31 | P3 | L | for later |
-| L88 | Exact reals ([EXACT-REALS.md](docs/design/numbers/EXACT-REALS.md)). Example: `real less than` at Real answers with Diverge instead of fuel. Left: that one <, when a program asks for it | Ersagun 2026-10-26 | P2 | L | e1-e5 done |
+| L233 | A generic type shows what its interface operations may do at some types. Example: `half(x) = x / 2` shows as `(a) -> a where a has Division`, and since L88 its Choice (at Float64 and Rational, by 0) comes from the implementation at each use, so the type no longer says it may fail; show it, as `larger` should show that it may not finish at Real | L88 | P3 | S | |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 

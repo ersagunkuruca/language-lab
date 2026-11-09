@@ -727,6 +727,8 @@ export function buildPrelude(): Module {
     // its fraction, as at Algebraic.
     impl("arithmetic at real", ARITHMETIC_V, [REAL_OPS.add, REAL_OPS.sub, REAL_OPS.mul, REAL_OPS.neg]),
     impl("literal at real", LITERAL_V, [REAL_OPS.fraction]),
+    // Its < narrows until the two come apart (L88), so it may not finish.
+    impl("ordered at real", ORDERED_V, [REAL_OPS.lessForever]),
   ];
   // The one ÷ (L155): each number type's own divide, found by its type.
   // Int has none. Not offered: divide is.

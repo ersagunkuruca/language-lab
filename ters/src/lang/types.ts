@@ -211,6 +211,11 @@ export class Subst {
   // asked for one, checked once every implementation is known (infer).
   needs = new Map<number, Map<Id, Id>>();
   wanted: { t: Type; iface: Id; at: Id }[] = [];
+  // Uses of an interface's operation that may do something (Ordered's <
+  // may not finish, L88): each does what its type's own implementation
+  // does, added to the use's row once the type is known (infer's settle).
+  // `field` is the operation's place in the interface's one case.
+  effectsAt: EffectsAt[] = [];
   // The node being checked, for a want that comes from unifying (infer's
   // unifyAt sets it).
   site: Id = "";
@@ -238,6 +243,7 @@ export class Subst {
     s.subs = [...this.subs];
     s.needs = new Map([...this.needs].map(([v, m]) => [v, new Map(m)]));
     s.wanted = [...this.wanted];
+    s.effectsAt = [...this.effectsAt];
     return s;
   }
 
@@ -262,6 +268,7 @@ export class Subst {
     // Each variable's map is replaced, never changed (requireInterface).
     s.needs = new OverMap(this.needs);
     s.wanted = [...this.wanted];
+    s.effectsAt = [...this.effectsAt];
     return s;
   }
 
@@ -538,7 +545,12 @@ export class WorldError extends EffectError {
 // `noWorld` lists the row variables that may not take a world effect, and
 // `subs` pairs of row variables, the first contained in the second.
 // `fractional` those that may not be Int (a literal's with a fraction part).
-export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; less?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][]; needs?: [number, Id][] }
+export interface Scheme { vars: number[]; rows: number[]; type: Type; plain?: number[]; numbers?: number[]; arith?: number[]; less?: number[]; ordered?: number[]; fractional?: number[]; whole?: number[]; noWorld?: number[]; subs?: [number, number][]; needs?: [number, Id][]; effectsAt?: SchemeEffectsAt[] }
+// A use of an interface's operation at a type not known yet (Subst.effectsAt).
+export interface EffectsAt { t: Type; iface: Id; field: number; row: Row; at: Id }
+// One in a scheme: its type variable, and the row tail it adds to (null:
+// a closed row, which must not need to).
+export type SchemeEffectsAt = [number, Id, number, number | null];
 
 export function freeVars(t: Type, s: Subst, vars = new Set<number>(), rows = new Set<number>()) {
   t = s.resolve(t);
@@ -565,6 +577,7 @@ export function instantiate(sc: Scheme, s: Subst, at = ""): Type {
   const rm = new Map(sc.rows.map((r) => [r, s.next++]));
   for (const r of sc.noWorld ?? []) if (rm.has(r)) s.noWorld.add(rm.get(r)!);
   for (const [f, t] of sc.subs ?? []) s.subs.push({ from: { effs: [], tail: rm.get(f) ?? f }, to: { effs: [], tail: rm.get(t) ?? t } });
+  for (const [v, iface, field, r] of sc.effectsAt ?? []) s.effectsAt.push({ t: vm.get(v) ?? { t: "var", v }, iface, field, row: { effs: [], tail: r === null ? null : rm.get(r) ?? r }, at });
   const go = (t: Type): Type => {
     t = s.resolve(t);
     if (t.t === "var") return vm.get(t.v) ?? t;

@@ -27,13 +27,13 @@ import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, 
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
 import { laterOps } from "./later-ops.ts";
-import { LITERAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { LITERAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
 import { leftToWays, pickWays, waysIn, type Ways } from "./ways.ts";
 import { fresh, rigid, RIGID, type Pins } from "./signatures.ts";
-import { ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError, type Row, type Scheme, type Type, OverMap, OverSet } from "./types.ts";
+import { ALGEBRAIC_TYPE, ARRAY, MASK_TYPES, isRowCarrier, rowCarrier, BUILTIN_EFFECTS, NAMED_ROWS, writtenRow, CELL, PATH, CHOICE, CONSOLE, DIVERGE, EffectError, ArithError, FractionError, WORLD, WorldError, freeVars, instantiate, INT, NUMBER, NumbersError, PlainError, schemeArith, schemeNeeds, showType as showT, STRING, Subst, TypeError, type EffectsAt, type Row, type Scheme, type SchemeEffectsAt, type Type, OverMap, OverSet } from "./types.ts";
 const FILE_OP_IDS = new Set<Id>(Object.values(FILE_OPS));
 import { DECLARED, discharge } from "./ledger.ts";
 import type { CheckCache } from "./check-cache.ts";
@@ -271,7 +271,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // world, is an error at the call it came from.
   function settle() {
     for (let changed = true; changed; ) {
-      changed = false;
+      changed = usesDo();
       for (const c of s.subs) {
         const from = s.resolveRow(c.from), to = s.resolveRow(c.to);
         const missing = from.effs.filter((e) => !to.effs.includes(e));
@@ -287,6 +287,97 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         }
       }
     }
+  }
+
+  // An interface's operation that may do something (Ordered's < may not
+  // finish, L88): what its field's type says an implementation may do.
+  const mayDo = (iface: Id, field: number): Id[] => {
+    const td = typedefOf(iface), v = td && code.nodes[td.variants[0]] as NodeOf<"variant"> | undefined;
+    const f = v && code.nodes[v.fields[field]] as NodeOf<"field"> | undefined, ty = f && code.nodes[f.type];
+    return ty?.kind === "tfun" ? ty.effects ?? [] : [];
+  };
+  // A use of one: its row gets what the implementation at its type does,
+  // once that type is known (Subst.effectsAt). The type is the operation's
+  // first input's.
+  const usedAt = (iface: Id, fieldId: Id, t: Type, at: Id): Type => {
+    const td = typedefOf(iface), field = td ? (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(fieldId) : -1;
+    const r = s.resolve(t);
+    if (field < 0 || r.t !== "fn" || !r.params.length || !mayDo(iface, field).length) return t;
+    const row = s.freshRow();
+    s.effectsAt.push({ t: r.params[0], iface, field, row, at });
+    return { ...r, eff: row };
+  };
+  // Implementations whose operations are builtins, by key: found before
+  // the program's implementations are (implementations(), at the end).
+  let byBuiltin: Map<string, Id> | undefined;
+  const builtinImplementations = () => {
+    if (byBuiltin) return byBuiltin;
+    byBuiltin = new Map();
+    for (const d of code.defs) {
+      const body = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""];
+      const fn = isCall(body) ? code.nodes[body.fn] : null, v = fn?.kind === "ref" ? code.nodes[fn.target] : null;
+      if (v?.kind !== "variant" || !typedefOf(owner.get(v.id) ?? "")?.interface) continue;
+      const a = code.nodes[(body as Call).args[0]];
+      if (a?.kind !== "ref" || !SIGS[a.target] || code.nodes[a.target]?.kind !== "builtin") continue;
+      const t = SIGS[a.target](new Subst());
+      const at = t.t === "fn" ? t.params[0] : undefined;
+      if (at && !freeVars(at, s).vars.size) byBuiltin.set(implementationKey(owner.get(v.id)!, at), d);
+    }
+    return byBuiltin;
+  };
+  // What the implementation of iface at t does in its operation `field`:
+  // its builtin's or definition's own effects, else what the interface
+  // lets it do. Undefined while it isn't known yet; at the end (`last`),
+  // none (a type with no implementation is an error of its own).
+  const doneBy = (iface: Id, field: number, t: Type, last: boolean): Id[] | undefined => {
+    if (t.t === "con" && t.id.startsWith("pin.")) return [];
+    const key = implementationKey(iface, t);
+    const d = info.implementations!.get(key) ?? layer?.implementations?.get(key) ?? builtinImplementations().get(key)
+      ?? (t.t === "con" ? info.implementations!.get(genericKey(iface, t.id)) ?? layer?.implementations?.get(genericKey(iface, t.id)) : undefined);
+    if (!d) return last ? [] : undefined;
+    const body = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""], a = isCall(body) ? code.nodes[body.args[field]] : undefined;
+    if (a?.kind === "ref" && code.nodes[a.target]?.kind === "builtin" && SIGS[a.target]) {
+      const ft = SIGS[a.target](new Subst());
+      return ft.t === "fn" ? ft.eff.effs : [];
+    }
+    if (a?.kind === "ref" && code.nodes[a.target]?.kind === "def") {
+      const sc = info.schemes.get(a.target) ?? layer?.schemes.get(a.target);
+      if (!sc) return last ? mayDo(iface, field) : undefined;
+      const ft = s.resolve(sc.type);
+      // One whose own effects hang on a type it is given: what it may do.
+      if (sc.effectsAt?.length || ft.t !== "fn") return mayDo(iface, field);
+      return s.resolveRow(ft.eff).effs;
+    }
+    return mayDo(iface, field);
+  };
+  // Adds to each use's row what its type's implementation does, for the
+  // uses whose type is known; true if a row took something.
+  function usesDo(last = false): boolean {
+    let changed = false;
+    s.effectsAt = s.effectsAt.filter((e) => {
+      const t = s.zonk(e.t);
+      if (freeVars(t, s).vars.size) return true;
+      const effs = doneBy(e.iface, e.field, t, last);
+      if (!effs) return true;
+      if (addTo(e, effs, t)) changed = true;
+      return false;
+    });
+    return changed;
+  }
+  function addTo(e: EffectsAt, effs: Id[], t: Type): boolean {
+    const row = s.resolveRow(e.row), missing = effs.filter((x) => !row.effs.includes(x));
+    if (!missing.length) return false;
+    try {
+      if (row.tail === null) throw new EffectError(missing);
+      s.unifyRow(row, { effs: missing, tail: s.next++ });
+    } catch (x) {
+      if (!(x instanceof EffectError)) throw x;
+      const td = typedefOf(e.iface)!, op = nm((code.nodes[td.variants[0]] as NodeOf<"variant">).fields[e.field]);
+      err(e.at || current[0], missing.length === 1 && missing[0] === DIVERGE
+        ? `${op} at ${show(t)} might not finish (its implementation's does), and it is used where only something that surely finishes fits`
+        : `${op} at ${show(t)} performs ${missing.map(nm).join(", ")} (its implementation's does), which nothing here handles`);
+    }
+    return true;
   }
 
   const unifyAt = (id: Id, want: Type, got: Type, what = "") => {
@@ -730,12 +821,34 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       try { s.unifyRow(c.from, c.to); } catch (e) { if (e instanceof EffectError) err(c.at ?? group[0], worldOrEffect(e)); else throw e; }
       return false;
     });
+    // Uses of an interface's operation at the group's own type variables
+    // go into its schemes, and each use of one adds what its type's
+    // implementation does (Subst.effectsAt). One inside a type made of
+    // them (List a) adds what any implementation may do now.
+    const genVars = new Set<number>();
+    for (const d of group) freeVars(s.zonk(mono.get(d)!), s, genVars);
+    const carried: EffectsAt[] = [];
+    s.effectsAt = s.effectsAt.filter((e) => {
+      const t = s.resolve(e.t), vs = freeVars(t, s).vars;
+      if (![...vs].some((v) => genVars.has(v))) return true;
+      if (t.t === "var") carried.push(e); else addTo(e, mayDo(e.iface, e.field), t);
+      return false;
+    });
     for (const d of group) {
       const t = s.zonk(mono.get(d)!);
       const fv = freeVars(t, s);
       let sc = schemeOf(t, fv);
       const subs = kept.filter(([f, to]) => fv.rows.has(f) && fv.rows.has(to));
       if (subs.length) sc.subs = subs;
+      const at: SchemeEffectsAt[] = [];
+      for (const e of carried) {
+        const v = (s.resolve(e.t) as { v: number }).v, tail = s.resolveRow(e.row).tail;
+        if (!fv.vars.has(v)) continue;
+        // A row of another definition's in the group: what it may do, now.
+        if (tail !== null && !fv.rows.has(tail) && generalized.has(tail)) { addTo(e, mayDo(e.iface, e.field), s.resolve(e.t)); continue; }
+        if (!at.some(([v2, i, f, r]) => v2 === v && i === e.iface && f === e.field && r === tail)) at.push([v, e.iface, e.field, tail]);
+      }
+      if (at.length) sc.effectsAt = at;
       // What a definition does while a Choice it doesn't handle is open:
       // its caller handles the Choice around the whole call, so a world
       // effect anywhere in it is under the Choice.
@@ -902,7 +1015,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (info.schemes.has(target)) return opened(instantiate(info.schemes.get(target)!, s, id));
         return s.fresh();
       case "builtin":
-        if (SIGS[target]) return SIGS[target](s);
+        if (SIGS[target]) { const t = SIGS[target](s), f = ARITH_FIELD[target]; return f ? usedAt(f.iface, f.field, t, id) : t; }
         // A built-in type (Float64, Int, Text, …) used as a value.
         err(id, target.startsWith("type.") ? `${nm(target)} is a type, not a value` : `${nm(target)} has no type`);
         return s.fresh();
@@ -956,7 +1069,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           const a = (self as { args: Type[] }).args[0], op = fields(td.variants[0])[i];
           s.requireInterface(a, def, id);
           info.opAt!.set(id, a);
-          return opened(op);
+          const used = usedAt(def, target, op, id);
+          return used === op ? opened(op) : used;
         }
         return { t: "fn", params: [self], ret: fields(td.variants[0])[i], eff: s.freshRow() };
       }
@@ -1746,6 +1860,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       }
     }
     diamondRule();
+    // Every implementation is known now.
+    usesDo(true);
     for (const w of s.wanted) {
       const t = s.zonk(w.t);
       if (table.has(implementationKey(w.iface, t))) continue;
@@ -2961,7 +3077,7 @@ function fieldType(code: Code, s: Subst, def: Id, field: Id): Type | null {
   if (made.t !== "fn") return null;
   const i = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(field);
   // An interface's field is its operation (refType).
-  if (td.interface) { s.requireInterface(made.ret.t === "con" ? made.ret.args[0] : made.ret, def, ""); const op = s.resolve(made.params[i]); return op.t === "fn" ? { ...op, eff: s.freshRow(s.resolveRow(op.eff).effs) } : op; }
+  if (td.interface) { s.requireInterface(made.ret.t === "con" ? made.ret.args[0] : made.ret, def, ""); const op = s.resolve(made.params[i]); return op.t === "fn" ? { ...op, eff: s.freshRow() } : op; }
   return { t: "fn", params: [made.ret], ret: made.params[i], eff: s.freshRow() };
 }
 

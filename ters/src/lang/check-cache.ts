@@ -88,6 +88,7 @@ class Closer {
     for (const f of ["plain", "numbers", "arith", "less", "ordered", "fractional", "whole", "noWorld"] as const) if (sc[f]) out[f] = n(sc[f]);
     if (sc.needs) out.needs = sc.needs.map(([v, i]) => [this.v(v), i]);
     if (sc.subs) out.subs = sc.subs.map(([a, b]) => [this.v(a, true), this.v(b, true)]);
+    if (sc.effectsAt) out.effectsAt = sc.effectsAt.map(([v, i, f, r]) => [this.v(v), i, f, r === null ? null : this.v(r, true)]);
     return out;
   }
 }
@@ -110,6 +111,7 @@ class Opener {
     for (const f of ["plain", "numbers", "arith", "less", "ordered", "fractional", "whole", "noWorld"] as const) if (sc[f]) out[f] = sc[f]!.map(this.v);
     if (sc.needs) out.needs = sc.needs.map(([v, i]) => [this.v(v), i]);
     if (sc.subs) out.subs = sc.subs.map(([a, b]) => [this.v(a), this.v(b)]);
+    if (sc.effectsAt) out.effectsAt = sc.effectsAt.map(([v, i, f, r]) => [this.v(v), i, f, r === null ? null : this.v(r)]);
     return out;
   };
 }

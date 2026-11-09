@@ -293,8 +293,12 @@ export const ARITHMETIC = typedef("std.arithmetic", "Arithmetic", ["a"], [
   ["arithmetic", [["add", binary], ["subtract", binary], ["multiply", binary], ["negate", ([a]) => tfun([tref(a)], tref(a), [])]]],
 ], false, true);
 export const ARITHMETIC_V = "std.arithmetic.arithmetic";
+// Its < may not finish (L88): Real's narrows two numbers until they come
+// apart, which equal ones never do. That is what an implementation may do;
+// a use of < does what its type's own does (infer.ts, Subst.effectsAt), so
+// < at Int stays pure.
 export const ORDERED = typedef("std.ordered", "Ordered", ["a"], [
-  ["ordered", [["less", ([a]) => tfun([tref(a), tref(a)], tref(BOOL), [])]]],
+  ["ordered", [["less", ([a]) => tfun([tref(a), tref(a)], tref(BOOL), [DIVERGE])]]],
 ], false, true);
 export const ORDERED_V = "std.ordered.ordered";
 // Fixed is the numbers module's (numbers-source.ts, L207e): its tref
@@ -1174,6 +1178,9 @@ export const REAL_OPS = {
   // a < b, narrowing both until they come apart, to at most 2⁻ᶠᵘᵉˡ (L88e3):
   // no answer when they are still that close, which equal Reals always are.
   less: choice("real.less", "real less than", [real, real, int], bool, (a: RealData, b: RealData, fuel: I.Int) => { const c = RL.compare(toReal(a), toReal(b), Number(fuel)); return c === null ? [] : [truth(c < 0)]; }),
+  // a < b with no fuel (L88): narrowing until they come apart, which two
+  // equal Reals never do, so it may not finish. Real's <.
+  lessForever: builtin("real.lessForever", "less than at real", (s) => fn([real, real], bool, s.freshRow([DIVERGE])), (a: RealData, b: RealData) => truth(RL.compare(toReal(a), toReal(b), Infinity)! < 0)),
   // π, exactly (L88e2): as many of its digits as are asked for.
   pi: builtin("real.pi", "real pi", pure([], real), () => realOf(4, [])),
   // eˣ and the natural log, exactly (L88e4): as narrow as asked.

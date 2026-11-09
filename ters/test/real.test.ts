@@ -161,3 +161,33 @@ test("sin and cos as Reals, as close as asked", () => {
   const r = makeRunner(code, info, { print: () => {}, names });
   assert.equal(r.value(s1), "0.84147098480789650665");
 });
+
+// < at Real (L88): the same < as anywhere, narrowing until the two come
+// apart, which two equal Reals never do. So a use at Real may not finish
+// (Diverge), a use at Int stays pure, and generic code (larger, from the
+// prelude) carries what its type's < does to each caller.
+test("< at Real may not finish, and only there", () => {
+  const k = new Lang(LIBRARY.code);
+  const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
+  const frac = (n: number, d: number) => k.call(RO.fraction, k.int(n), k.int(d));
+  const larger = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "larger")!;
+  const piBelow = def("pi below", () => k.fn(["x"], (x) => k.call(ARITH.less, k.call(RO.pi), k.x(x))));
+  const intBelow = def("three below", () => k.fn(["x"], (x) => k.call(ARITH.less, k.int(3), k.x(x))));
+  const largerReal = def("larger than pi", () => k.fn(["x"], (x) => k.call(RO.digits, k.call(larger, k.call(RO.pi), k.x(x)), k.int(5))));
+  const largerInt = def("larger than three", () => k.fn(["x"], (x) => k.call(larger, k.int(3), k.x(x))));
+  const decided = def("decided", () => k.fn([], () => k.call(piBelow, frac(22, 7))));
+  const bigger = def("bigger", () => k.fn([], () => k.call(largerReal, frac(22, 7))));
+  // A value must finish, and a < at Int surely does.
+  def("as a value", () => k.call(largerInt, k.int(4)));
+  def("as a value too", () => k.call(piBelow, frac(22, 7)));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((m) => m.message), ["pi below performs Diverge, which nothing here handles"]);
+  const shown = (d: Id) => showType(info.schemes.get(d)!.type, names);
+  assert.match(shown(piBelow), /Diverge/);
+  assert.match(shown(largerReal), /Diverge/);
+  assert.doesNotMatch(shown(intBelow), /Diverge/);
+  assert.doesNotMatch(shown(largerInt), /Diverge/);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  assert.deepEqual([...r.call(r.value(decided))], [{ tag: TRUE, fields: [] }]);
+  assert.deepEqual([...r.call(r.value(bigger))], ["3.14286"]);
+});
