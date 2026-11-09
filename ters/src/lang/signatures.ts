@@ -73,7 +73,7 @@ export function canonical(sc: Scheme): Pin {
 // A named row's name (HOSTS.md, L58) is kept in a pin for showing it, and
 // isn't part of the signature: the same effects are the same type.
 export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc), (k, v) => (k === "name" ? undefined : v)) : "");
-export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p), [], schemeNeeds(p));
+export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p), [], schemeNeeds(p), p.effectsAt);
 
 // Pin these definitions at the types the checker gives them now.
 export function pinsOf(info: Info, defs: Id[]): Pins {
