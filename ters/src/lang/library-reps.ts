@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
+import { bindsOf, dependencies, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -122,7 +122,12 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   let copies: Id[] = [];
   if (boundary) {
     const withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
-    const library = boundary.reached.filter((d) => !defs.includes(d));
+    // Only those with a list somewhere in them: one generic in what it is
+    // given (conjugate, inverse, applied) the rewrite leaves as it is, and
+    // a copy would hide it from what knows it by its id (the compiler's
+    // inverses.ts, which writes the pedal's solves out, C196).
+    const listed = (t: Type | undefined): boolean => { if (!t) return false; t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || t.args.some(listed) : t.t === "fn" ? [...t.params, t.ret].some(listed) : false; };
+    const library = boundary.reached.filter((d) => !defs.includes(d) && subtree(code, d).some((x) => listed(info.typeOf.get(x))));
     const fresh = new Map<Id, Id>();
     for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, freshId());
     const f = (id: Id) => fresh.get(id) ?? id;
@@ -585,7 +590,11 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   for (const d of reached) for (const id of subtree(code, d)) { const n = code.nodes[id]; if (isCall(n)) calledBy.set(n.fn, n); }
   for (const d of reached) for (const id of subtree(code, d)) {
     const n = code.nodes[id];
-    if (isUse(n)) return null;
+    // A relation run backwards over lists stays as written; one generic in
+    // what it runs (inverse's `applied`, given the pedal's bands) runs the
+    // program's own code, which the rewrite changes with the rest, and an
+    // array runs backwards as a list does (front and push front, modes.ts).
+    if (isUse(n) && [...Object.values(n.given), ...Object.values(bindsOf(n)), n.id].some((x) => { const t = info.typeOf.get(x); return !!t && hasList(t); })) return null;
     const ty = info.typeOf.get(id);
     if (ty && libraryHolder(ty)) return null;
     const target = n.kind === "ref" ? n.target : null;
@@ -596,7 +605,9 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     const c = calledBy.get(id);
     if (!c) return null;
     if (target in BY_VALUE) { if (program.has(d)) continue; return null; }
-    const passes = PASSES_ON.has(target);
+    // `fail` makes nothing and `one of` gives one of what it's given: an
+    // array passes as it is (bands' odd sample out, C196).
+    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail;
     const sig = SIGS[target](new Subst());
     if (sig.t !== "fn") return null;
     const args = c.args.map((a, i) => {
