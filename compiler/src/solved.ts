@@ -25,11 +25,14 @@ const close = (l: SExpr, r: SExpr) => and(finite(l), and(finite(r), atMost(op("a
 const INFIX: Record<string, string> = { add: "add", sub: "sub", mul: "mul", div: "div", pow: "pow", atan2: "atan2" };
 const UNARY = new Set(["sqrt", "abs", "sin", "cos", "tan", "exp", "log", "neg"]);
 
-// The plan's steps as an expression: `vars` gives each of the relation's
+// The plan's steps as an expression: `local0` gives each of the relation's
 // variables its local (fresh ones for those the steps find), `done` the
 // expression once every step has its values, `fail` where a way gives no
-// answer.
-export function writtenSteps(steps: Step[], local0: (name: string) => number, done: () => SExpr, fail: () => SExpr, t: LType): SExpr {
+// answer. A solve with several ways gives `ways` each way's expression
+// (its value, its guards, then the steps after it), in the solver's order,
+// and `ways` says how one is taken; `done` is told the way taken at each,
+// and `fixed` takes those ways and no other.
+export function writtenSteps(steps: Step[], local0: (name: string) => number, done: (path: number[]) => SExpr, fail: () => SExpr, t: LType, ways: (step: number, each: SExpr[]) => SExpr = () => { throw new NotWritten("a plan with more than one way"); }, fixed?: number[]): SExpr {
   const ex = (e: Expr): SExpr => {
     if (e.k === "num") return num(e.v!);
     if (e.k === "var") return local(local0(e.name!));
@@ -38,23 +41,37 @@ export function writtenSteps(steps: Step[], local0: (name: string) => number, do
     if (UNARY.has(e.f!) && a.length === 1) return op(e.f!, a[0]);
     throw new NotWritten(`the solver's ${e.f}`);
   };
-  const gen = (i: number): SExpr => {
-    if (i === steps.length) return done();
+  const gen = (i: number, path: number[]): SExpr => {
+    if (i === steps.length) return done(path);
     const s = steps[i];
-    if (s.type === "check") return iff(close(ex(s.eq.lhs), ex(s.eq.rhs)), gen(i + 1), fail(), t);
+    if (s.type === "check") return iff(close(ex(s.eq.lhs), ex(s.eq.rhs)), gen(i + 1, path), fail(), t);
     if (s.type === "linear") {
       // Each x's expression reads only what is known before the block.
       const values = s.xs.map((x) => ex(s.exprs[x]));
       const is = s.xs.map((x) => local0(x));
       const ok = is.map((j) => finite(local(j))).reduce((a, b) => and(a, b));
-      return is.reduceRight<SExpr>((body, j, k) => let_(j, values[k], body), iff(ok, gen(i + 1), fail(), t));
+      return is.reduceRight<SExpr>((body, j, k) => let_(j, values[k], body), iff(ok, gen(i + 1, path), fail(), t));
     }
-    if (s.type !== "solve" || s.branches.length !== 1) throw new NotWritten("a plan with more than one way");
-    const b = s.branches[0], j = local0(s.x);
-    const ok = b.guards.reduce<SExpr>((acc, g) => and(acc, atMost(num(-1e-9), ex(g))), finite(local(j)));
-    return let_(j, ex(b.expr), iff(ok, gen(i + 1), fail(), t));
+    if (s.type !== "solve" || s.branches.some((b) => b.params.length)) throw new NotWritten("a plan with numbers searched for");
+    const j = local0(s.x), many = s.branches.length > 1;
+    const way = (k: number) => {
+      const b = s.branches[k], on = many ? [...path, k] : path;
+      const ok = b.guards.reduce<SExpr>((acc, g) => and(acc, atMost(num(-1e-9), ex(g))), finite(local(j)));
+      return let_(j, ex(b.expr), iff(ok, gen(i + 1, on), fail(), t));
+    };
+    if (!many) return way(0);
+    if (fixed) return way(fixed[path.length]);
+    return ways(i, s.branches.map((_, k) => way(k)));
   };
-  return gen(0);
+  return gen(0, []);
+}
+
+// The solver's key for an answer, Math.round(x · 1e8) of each port's
+// rounded value: two answers with the same key are one (relation.js).
+export function roundedKey(x: SExpr, fresh: () => number, then: (key: SExpr) => SExpr): SExpr {
+  const v = fresh(), r = fresh();
+  return let_(v, op("mul", x, num(1e8)), let_(r, op("floor", local(v)),
+    then(iff(atMost(num(0.5), op("sub", local(v), local(r))), op("add", local(r), num(1)), local(r), "f64"))));
 }
 
 // $clean, the solver's +x.toPrecision(12) (0 under 1e-12), as arithmetic:

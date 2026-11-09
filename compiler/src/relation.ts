@@ -91,12 +91,13 @@ export function compileSolve(name: string, rel: Relation, known: string[], binds
     `function ${name}(${params.join(", ")}) {\nreturn ${name}$direct(${params.join(", ")}) ?? ${viaSolver};\n}` + one, once };
 }
 
-// The plan's steps where it has one way to an answer and no case the
-// solver must take over (compileSolve's `once`), for writing it out as
-// the scalar profile's code (solved.ts, C195a); null otherwise.
-export function oncePlan(rel: Relation, known: string[]): Step[] | null {
+// The plan's steps where the scalar profile can write them out (solved.ts,
+// C195): checks, linear blocks and solves whose ways have no whole-number
+// parameter (a periodic family) and no case the solver must take over (a
+// variable the equations leave free); null otherwise.
+export function writablePlan(rel: Relation, known: string[]): Step[] | null {
   const p = (plan as (r: Relation, k: string[]) => { steps: Step[] })(rel, known);
-  const simple = p.steps.every((s) => s.type === "check" || s.type === "linear" || (s.type === "solve" && s.branches.length === 1 && !s.branches[0].params.length));
+  const simple = p.steps.every((s) => s.type === "check" || s.type === "linear" || (s.type === "solve" && s.branches.every((b) => !b.params.length)));
   const live = (g: Expr[]) => !g.some((e) => e.k === "num" && Math.abs(e.v!) > 1e-9);
   if (!simple || p.steps.some((s) => s.type === "solve" && s.branches.some((b) => b.free.some(live)))) return null;
   return p.steps;
