@@ -536,7 +536,28 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // `apply(x) = match x | wrap(f) → f(x)` calls itself through the data
   // with no recursion anywhere, and `apply(wrap(apply))` never ends. As an
   // output it's fine: `() → Stream` is how lazy data is written.
-  const typeDefs = code.defs.filter(isTypeDef);
+  // Under a reused check, which definitions are types and which values,
+  // and which have results, are as the earlier check found for those it
+  // doesn't recheck: found once for each set it rechecks (the palette's
+  // checks of one hole share one), and only the rechecked looked at again
+  // (E103p).
+  const kindOf = (d: Id) => (isTypeDef(d) ? "t" : code.nodes[d]?.kind === "def" ? "v" : "");
+  let kept = reuse ? defsKept.get(reuse.only) : undefined;
+  if (kept && (kept.from !== reuse!.from || kept.defs !== code.defs || [...reuse!.only].some((d) => kept!.kinds.get(d) !== kindOf(d)))) kept = undefined;
+  if (reuse && !kept) {
+    const valueDefs = code.defs.filter((d) => kindOf(d) === "v");
+    kept = {
+      from: reuse.from, defs: code.defs, kinds: new Map([...reuse.only].map((d) => [d, kindOf(d)])),
+      typeDefs: code.defs.filter(isTypeDef), valueDefs,
+      resultsOf: valueDefs.flatMap((d) => { const n = code.nodes[d] as NodeOf<"def">, rs = reuse.only.has(d) ? null : conditionResults(code.nodes, d); return rs && n.body ? [[n.body, rs] as [Id, Id[]]] : []; }),
+    };
+    defsKept.set(reuse.only, kept);
+  }
+  const typeDefs = kept ? kept.typeDefs : code.defs.filter(isTypeDef);
+  // The types whose rules (positivity, an interface's shape) are said
+  // here: under a reused check, those rechecked, unless one a type not
+  // rechecked may contain is (the library's are said by its own check).
+  const typesSaid = !reuse || (!layer && typeDefs.some((d) => reuse.only.has(d))) ? typeDefs : typeDefs.filter((d) => reuse.only.has(d));
   const trefTargets = (tid: Id) => trefTargetsIn(code, tid);
   const reach = new Map<Id, Set<Id>>();
   // The data types a T can contain, T included.
@@ -572,7 +593,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       return positive(a, is, under);
     });
   }
-  for (const def of typeDefs) {
+  for (const def of typesSaid) {
     // A pure effect (L69d2): each operation a function of its inputs, so
     // each gives an answer at once.
     const td = typedefOf(def);
@@ -595,7 +616,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // An interface is a record of functions over its one type parameter.
-  for (const def of typeDefs) {
+  for (const def of typesSaid) {
     const td = typedefOf(def)!;
     if (!td.interface) continue;
     if (td.params.length !== 1 || td.variants.length !== 1) { err(def, `${nm(def)} is an interface: it takes one type and has one case, its operations`); continue; }
@@ -605,11 +626,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   }
 
   // --- definitions, in dependency order
-  const valueDefs = code.defs.filter((d) => !isTypeDef(d) && code.nodes[d]?.kind === "def");
+  const valueDefs = kept ? kept.valueDefs : code.defs.filter((d) => !isTypeDef(d) && code.nodes[d]?.kind === "def");
   // The bodies of definitions with results, and the type each has as a
   // condition on all its ports (L128d2).
   const resultsOf = new Map<Id, Id[]>();
-  for (const d of valueDefs) { const n = code.nodes[d] as NodeOf<"def">; const rs = conditionResults(code.nodes, d); if (rs && n.body) resultsOf.set(n.body, rs); }
+  for (const d of kept ? [...reuse!.only].filter((d) => kept!.kinds.get(d) === "v") : valueDefs) { const n = code.nodes[d] as NodeOf<"def">; const rs = conditionResults(code.nodes, d); if (rs && n.body) resultsOf.set(n.body, rs); }
+  if (kept) for (const [b, rs] of kept.resultsOf) resultsOf.set(b, rs);
   const predicates = new Map<Id, Type>();
   // A definition with results' type, the function of its direction, read
   // back as the condition on all its ports, in order: what a use of it in
@@ -647,9 +669,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Embeddings are checked first (L208c), so a use anywhere after finds
   // the program's own as it finds the library's.
   const isEmbeddingDef = (d: Id) => { const b = (code.nodes[d] as NodeOf<"def">).body, n = b ? code.nodes[b] : undefined, f = isCall(n) ? code.nodes[n.fn] : undefined; return f?.kind === "ref" && f.target === EMBEDDING_V; };
-  const embeddingDefs = valueDefs.filter(isEmbeddingDef);
-  const checkOrder = [...embeddingDefs, ...valueDefs.filter((d) => !embeddingDefs.includes(d))];
-  const groups = sccs(reuse ? checkOrder.filter((d) => reuse.only.has(d)) : checkOrder, deps);
+  // (Under a reused check, those not rechecked are as they were.)
+  if (kept) kept.embeddingDefs ??= valueDefs.filter((d) => !reuse!.only.has(d) && isEmbeddingDef(d));
+  const embeddingDefs = kept ? valueDefs.filter((d) => (reuse!.only.has(d) ? isEmbeddingDef(d) : kept!.embeddingDefs!.includes(d))) : valueDefs.filter(isEmbeddingDef);
+  const checkOrder = (ds: Id[]) => [...ds.filter((d) => embeddingDefs.includes(d)), ...ds.filter((d) => !embeddingDefs.includes(d))];
+  const groups = sccs(checkOrder(reuse ? valueDefs.filter((d) => reuse.only.has(d)) : valueDefs), deps);
   // The canonical embedding of a in b, when one is declared: the library's
   // (the layer under) or one of this code's already checked.
   const embeddingOf = (a: Type, b: Type): Id | undefined => {
@@ -1827,7 +1851,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // with whatever its scheme asks of them asked of the type's own
     // (Haskell's instance contexts; Wadler and Blott, POPL 1989).
     const generic: { def: Id; iface: Id; con: Id; scheme: Scheme }[] = [];
-    for (const d of valueDefs) {
+    // A definition not rechecked keeps its scheme, so it is an
+    // implementation or an embedding just when it was: only those are
+    // looked at again (E103p: the rest were a fifth of a filling's check).
+    const could = reuse ? implementationsIn(reuse.from) : null;
+    for (const d of could ? valueDefs.filter((d) => reuse!.only.has(d) || could.has(d)) : valueDefs) {
       const sc = info.schemes.get(d);
       const t = sc && s.zonk(sc.type);
       if (t?.t === "con" && t.id === EMBEDDING) { embedding(d, t); continue; }
@@ -1899,13 +1927,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // ports are named, in order. The direction they declare must be one the
   // inputs pin down, said here at the definition rather than at a use.
   function results() {
-    for (const d of valueDefs) {
+    // Not rechecked: its direction is as it was. (The palette's check of
+    // each filling looked again at every definition with results, 25 ms
+    // a filling: adding a value on physics fall took 18 s, I69.)
+    if (reuse) for (const [d, was] of reuse.from.directions ?? []) if (!reuse.only.has(d) && valueDefs.includes(d)) (info.directions ??= new Map()).set(d, was);
+    for (const d of reuse ? valueDefs.filter((d) => reuse.only.has(d)) : valueDefs) {
       const def = code.nodes[d] as NodeOf<"def">, defResults = conditionResults(code.nodes, d);
       if (!defResults) continue;
-      // Not rechecked: its direction is as it was. (The palette's check of
-      // each filling looked again at every definition with results, 25 ms
-      // a filling: adding a value on physics fall took 18 s, I69.)
-      if (reuse && !reuse.only.has(d)) { const was = reuse.from.directions?.get(d); if (was) (info.directions ??= new Map()).set(d, was); continue; }
       const lam = def.body ? code.nodes[def.body] : null;
       if (lam?.kind !== "lambda") { err(d, `${nm(d)} has results, so it is a function of its ports`); continue; }
       const odd = defResults.filter((r, i) => !lam.params.includes(r) || defResults.indexOf(r) !== i);
@@ -1951,12 +1979,19 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   settle();
   implementations();
   results();
+  // The nodes a scan below looks at: under a reused check only those of
+  // the definitions it rechecks, since the others' are as the earlier
+  // check found them (E103p: every call of the program, each filling).
+  const rechecked = (kind: string, keep: (n: Node) => boolean): Id[] => {
+    if (!reuse) return nodesWhere(code, kind, keep);
+    return [...reuse.only].flatMap((d) => subtree(code, d)).filter((id) => { const n = code.nodes[id]; return !!n && keep(n); });
+  };
   // A number written where a type of the program's own goes (L204b) is
   // spelled by its Literal's from fraction; with none, only a record of
   // Float64s takes it, in every part.
   // These scans start from a base program's (model.ts nodesWhere, E248):
   // a palette's offers each scanned every node three times.
-  for (const id of nodesWhere(code, "number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number")) {
+  for (const id of rechecked("number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number")) {
     const n = code.nodes[id] as NodeOf<"lit">;
     const t0 = info.typeOf.get(n.id), t = t0 && s.zonk(t0);
     if (t?.t !== "con" || t.id.startsWith("std.") || t.id.startsWith("type.") || t.id.startsWith("pin.") || !typedefOf(t.id) || implementationOf(info, LITERAL, t)) continue;
@@ -1968,7 +2003,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // found in one pass over the calls (E250: three passes were most of a
   // palette offer's check).
   const callsOf = new Map<Id, Id[]>();
-  for (const id of nodesWhere(code, "call", (n) => isCall(n))) {
+  for (const id of rechecked("call", (n) => isCall(n))) {
     const f = code.nodes[(code.nodes[id] as Call).fn];
     if (f?.kind === "ref" && (f.target === FIELDS.mapped || f.target === FIELDS.listed || f.target === JSON_OPS.of || f.target === JSON_OPS.from || f.target === JOBS.job)) (callsOf.get(f.target) ?? callsOf.set(f.target, []).get(f.target)!).push(id);
   }
@@ -2058,7 +2093,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   if (again) return infer(code, names, reuse, opts);
   // Under a layer only this check's own are zonked: the layer's are already.
   const own = <V>(m: Map<Id, V>) => [...(m instanceof OverMap ? m.own() : m.entries())];
-  for (const [id, t] of own(info.typeOf)) info.typeOf.set(id, s.zonk(t));
+  // (A definition not rechecked has its earlier scheme's type, settled.)
+  for (const [id, t] of own(info.typeOf)) if (!reuse || reuse.only.has(id) || reuse.from.schemes.get(id)?.type !== t) info.typeOf.set(id, s.zonk(t));
   for (const [id, t] of own(info.opAt!)) info.opAt!.set(id, s.zonk(t));
   for (const h of info.holes.values()) {
     h.expected = s.zonk(h.expected);
@@ -3047,6 +3083,26 @@ function dependents(code: Code, group: Id[]): Set<Id> {
 
 // The group's types under s, with variables numbered by first appearance
 // (and marked when they must be plain), so equal keys mean equal types.
+interface DefsKept { from: Info; defs: Id[]; kinds: Map<Id, string>; typeDefs: Id[]; valueDefs: Id[]; resultsOf: [Id, Id[]][]; embeddingDefs?: Id[] }
+const defsKept = new WeakMap<Set<Id>, DefsKept>();
+// The definitions a check typed as an implementation or an embedding (a
+// type of an interface or Embedding, or one that may be), found
+// once for each check that others reuse.
+const implementationsKept = new WeakMap<Info, Set<Id>>();
+function implementationsIn(info: Info): Set<Id> {
+  let out = implementationsKept.get(info);
+  if (out) return out;
+  out = new Set();
+  for (const [d, sc] of info.schemes) {
+    const t = info.subst.resolve(sc.type);
+    // (An interface takes one type and Embedding two: a function or a
+    // type of none is neither.)
+    if (t.t !== "fn" && !(t.t === "con" && !t.args.length)) out.add(d);
+  }
+  implementationsKept.set(info, out);
+  return out;
+}
+
 function groupKey(s: Subst, types: Type[]): string {
   const vars = new Map<number, number>();
   const rows = new Map<number, number>();
