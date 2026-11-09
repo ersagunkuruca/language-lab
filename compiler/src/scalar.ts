@@ -77,6 +77,7 @@ import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
+import { parallelTogethers } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -743,6 +744,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
   const fibers = !!opts.handlers && !opts.host;
+  let parallel: Set<Id> | undefined;
   for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1328,6 +1330,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // which an await parks till its ticket is ready (c.ts
         // `fbranches:`), not start branch's handler, whose await is of
         // any type.
+        // A together whose actions only compute, in JavaScript: run side
+        // by side on worker threads where there are any (branches-rt.ts,
+        // C41), given the fuel, since under a budget they stay in order.
+        if (opts.host && !fibers && target === TOGETHER && (parallel ??= parallelTogethers(code, info)).has(n.id)) return { k: "rt", fn: "together.pure", args: [...args(), { k: "rt", fn: "fuel.get", args: [] }] };
         if (fibers && (target === TOGETHER || target === RACE)) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
