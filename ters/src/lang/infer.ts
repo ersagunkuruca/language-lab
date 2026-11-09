@@ -831,7 +831,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     s.effectsAt = s.effectsAt.filter((e) => {
       const t = s.resolve(e.t), vs = freeVars(t, s).vars;
       if (![...vs].some((v) => genVars.has(v))) return true;
-      if (t.t === "var") carried.push(e); else addTo(e, mayDo(e.iface, e.field), t);
+      // Kept live too, for showIn: nothing binds a scheme's own variables.
+      if (t.t === "var") { carried.push(e); return true; }
+      addTo(e, mayDo(e.iface, e.field), t);
       return false;
     });
     for (const d of group) {
@@ -862,7 +864,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const pin = opts.pins?.[d];
       if (pin && code.nodes[d]) {
         const p = fresh(pin, s);
-        if (!fitsPin(sc, p) && !liftPinned((code.nodes[d] as NodeOf<"def">).body!, sc, p)) err(d, `${nm(d)} is pinned to ${showT(p.type, names, schemeArith(p), [], schemeNeeds(p))}, and this makes it ${showT(t, names, schemeArith(sc), [], schemeNeeds(sc))}`);
+        if (!fitsPin(sc, p) && !liftPinned((code.nodes[d] as NodeOf<"def">).body!, sc, p)) err(d, `${nm(d)} is pinned to ${showT(p.type, names, schemeArith(p), [], schemeNeeds(p), p.effectsAt)}, and this makes it ${showT(t, names, schemeArith(sc), [], schemeNeeds(sc), sc.effectsAt)}`);
         // Inside, the body's types are the pin's too: an input whose only
         // use was cleared is still the Float64 the pin says, and a hole
         // there expects what the pin does.
@@ -2882,7 +2884,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   for (const [d, sc] of info.schemes) {
     if (info.hidden.has(d)) continue;
     if (h.group.includes(d)) consider(d, sc.type, true);
-    else consider(d, instantiate(sc, info.subst), affected.has(d));
+    else consider(d, mayDoNow(code, sc, info.subst), affected.has(d));
     if (++tried % PIECE === 0) yield;
   }
   // One + for every number type (NUMBERS.md, "One `+`"): the palette
@@ -3066,6 +3068,22 @@ function groupKey(s: Subst, types: Type[]): string {
   return types.map(go).join(";");
 }
 
+// A scheme instantiated for the palette, whose uses of an interface's
+// operation at its variables (Scheme.effectsAt) do what any implementation
+// may (L88): a filling offered then fits whatever type it ends up at.
+function mayDoNow(code: Code, sc: Scheme, s: Subst): Type {
+  const before = s.effectsAt.length, t = instantiate(sc, s);
+  for (const e of s.effectsAt.splice(before)) {
+    const td = code.nodes[(code.nodes[e.iface] as NodeOf<"def"> | undefined)?.body ?? ""] as NodeOf<"typedef"> | undefined;
+    const v = td?.kind === "typedef" ? code.nodes[td.variants[0]] as NodeOf<"variant"> : undefined;
+    const f = v && code.nodes[v.fields[e.field]] as NodeOf<"field"> | undefined, ty = f && code.nodes[f.type];
+    const effs = ty?.kind === "tfun" ? ty.effects ?? [] : [];
+    const row = s.resolveRow(e.row), missing = effs.filter((x) => !row.effs.includes(x));
+    if (missing.length && row.tail !== null) s.unifyRow(row, { effs: missing, tail: s.next++ });
+  }
+  return t;
+}
+
 // A variant's constructor type with fresh variables (same as infer's refType).
 // A field as the function that reads it, for a data type with one case
 // (refType's "field"); null for an effect's input or a field of one case
@@ -3077,7 +3095,7 @@ function fieldType(code: Code, s: Subst, def: Id, field: Id): Type | null {
   if (made.t !== "fn") return null;
   const i = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.indexOf(field);
   // An interface's field is its operation (refType).
-  if (td.interface) { s.requireInterface(made.ret.t === "con" ? made.ret.args[0] : made.ret, def, ""); const op = s.resolve(made.params[i]); return op.t === "fn" ? { ...op, eff: s.freshRow() } : op; }
+  if (td.interface) { s.requireInterface(made.ret.t === "con" ? made.ret.args[0] : made.ret, def, ""); const op = s.resolve(made.params[i]); return op.t === "fn" ? { ...op, eff: s.freshRow(s.resolveRow(op.eff).effs) } : op; }
   return { t: "fn", params: [made.ret], ret: made.params[i], eff: s.freshRow() };
 }
 

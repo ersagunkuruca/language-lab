@@ -492,7 +492,7 @@ export function sameLines(code: Code, names: Names, lib: Library): string[] {
 export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names = {}, types: ReadonlyMap<Id, Id> = new Map()): Result<{ code: Code; uses: number }> {
   const a = pins[from] && types.size ? retyped(pins[from], types) : pins[from], b = pins[to];
   if (!a || !b) return { ok: false, reason: "both definitions need pins" };
-  if (pinKey(a) !== pinKey(b) && !atLeastAsGeneral(b, a)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a))} to ${showType(b.type, names, schemeArith(b))}` };
+  if (pinKey(a) !== pinKey(b) && !atLeastAsGeneral(b, a)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a), [], undefined, a.effectsAt)} to ${showType(b.type, names, schemeArith(b), [], undefined, b.effectsAt)}` };
   const old = code.nodes[from], neu = code.nodes[to];
   if (old?.kind !== "def" || neu?.kind !== "def") return { ok: false, reason: "both definitions need to be loaded" };
   const params = (d: Node) => (d.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? (code.nodes[d.body] as { params: Id[] }).params : []);

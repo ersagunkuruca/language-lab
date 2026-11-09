@@ -602,7 +602,10 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 // Rows one inside the other (`links`, from showIn) print as one: a search's
 // call and its function, keep and its test. `needs`: the interfaces each
 // variable must have (INTERFACES.md), said the same way: `where a has Trig`.
-export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = [], needs?: ReadonlyMap<number, Iterable<Id>>): string {
+// `uses`: an interface's operation used at a type variable (Scheme.effectsAt),
+// whose row then also does what that type's implementation does: shown in
+// the arrow as "a's Division" (L233).
+export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = [], needs?: ReadonlyMap<number, Iterable<Id>>, uses: readonly SchemeEffectsAt[] = []): string {
   const varNames = new Map<number, string>();
   const tailCount = new Map<number, number>();
   const root = new Map<number, number>();
@@ -646,8 +649,14 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
     if (named && named.length === t.eff.effs.length && named.every((e) => t.eff.effs.includes(e)) && !Object.keys(t.eff.args ?? {}).length)
       return `(${t.params.map((p) => go(p, false)).join(", ")}) -[${name(t.eff.name!)}]-> ${go(t.ret, false)}`;
     const effs = rowText(t.eff);
+    const params = t.params.map((p) => go(p, false)).join(", ");
+    const tail = t.eff.tail === null ? null : tailOf(t.eff.tail);
+    if (tail !== null) for (const [v, iface, , r] of uses) {
+      const by = r !== null && tailOf(r) === tail ? `${go({ t: "var", v }, true)}'s ${name(iface)}` : "";
+      if (by && !effs.includes(by)) effs.push(by);
+    }
     const arrow = effs.length ? ` -[${effs.join(", ")}]-> ` : " -> ";
-    const s = `(${t.params.map((p) => go(p, false)).join(", ")})${arrow}${go(t.ret, false)}`;
+    const s = `(${params})${arrow}${go(t.ret, false)}`;
     return nested ? s : s;
   };
   const shown = go(t, false);
@@ -670,7 +679,8 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
 export function showIn(t: Type, names: Names, s: Subst): string {
   const links: [number, number][] = [];
   for (const c of s.subs) { const f = s.resolveRow(c.from).tail, to = s.resolveRow(c.to).tail; if (f !== null && to !== null) links.push([f, to]); }
-  return showType(s.zonk(t), names, s.arith, links, new Map([...s.needs].map(([v, m]) => [v, m.keys()])));
+  const uses = s.effectsAt.flatMap((e): SchemeEffectsAt[] => { const v = s.resolve(e.t); return v.t === "var" ? [[v.v, e.iface, e.field, s.resolveRow(e.row).tail]] : []; });
+  return showType(s.zonk(t), names, s.arith, links, new Map([...s.needs].map(([v, m]) => [v, m.keys()])), uses);
 }
 
 // A scheme's interfaces, for showType.

@@ -10,7 +10,7 @@ import { makeRunner } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, REAL_OPS as RO, FALSE, S, TRUE } from "../src/lang/std.ts";
-import { showType } from "../src/lang/types.ts";
+import { schemeArith, schemeNeeds, showType } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
 import * as R from "../src/lang/real.ts";
@@ -187,6 +187,9 @@ test("< at Real may not finish, and only there", () => {
   assert.match(shown(largerReal), /Diverge/);
   assert.doesNotMatch(shown(intBelow), /Diverge/);
   assert.doesNotMatch(shown(largerInt), /Diverge/);
+  // larger's own type says what it does is its type's < (L233).
+  const sc = LIBRARY.code.defs.includes(larger) ? info.schemes.get(larger)! : undefined;
+  assert.equal(sc && showType(sc.type, names, schemeArith(sc), [], schemeNeeds(sc), sc.effectsAt), "(a, a) -[a's Ordered]-> a where a has <");
   const r = makeRunner(code, info, { print: () => {}, names });
   assert.deepEqual([...r.call(r.value(decided))], [{ tag: TRUE, fields: [] }]);
   assert.deepEqual([...r.call(r.value(bigger))], ["3.14286"]);
