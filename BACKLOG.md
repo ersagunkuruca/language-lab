@@ -13,6 +13,8 @@ never what's done (that goes to DONE.md).
 P2 next steps · P3 nice to have. Within a priority: bugs, then removing a
 special case, then what lets programs be written in the editor, then
 language, then more targets or speed (WORKFLOW.md "Priority").
+Rows once held back as later goals are open again (Ersagun 2026-11-09):
+a lane takes them when bugs and goal rows are in hand.
 **Size:** S hours · M one PR · L several PRs or a design note first.
 **Status:** ▶ running · ⏸ held · blank = waiting.
 
@@ -23,7 +25,7 @@ language, then more targets or speed (WORKFLOW.md "Priority").
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C184 with the Editor lane |
 | L Language and library | "Language lane" | L44, then L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | C60 (columns, after C196 and C93 s5); round 12's I187 is with the Editor lane. L118c waits on Ersagun, who stopped L118 after step 2. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | C60 (columns, after C196 and C93 s5); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -105,12 +107,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C56 | "Owned, in place" as a representation chosen when a value has one holder, generalising `$own` and C30 to records, maps and cell contents; reference counts (Perceus) where the compiler can't tell. Steps are C62, C63. On JavaScript, arrays (C93 s4) and records (C93 s5) of a type whose every value has one holder are written in place; WebAssembly and C still copy them | STABLE-REFERENCES.md §3 | P3 | L | |
+| C56 | "Owned, in place" as a representation chosen when a value has one holder, generalising `$own` and C30 to records, maps and cell contents; reference counts (Perceus) where the compiler can't tell. Steps are C62, C63. On JavaScript, arrays (C93 s4) and records (C93 s5) of a type whose every value has one holder are written in place; WebAssembly and C still copy them | STABLE-REFERENCES.md §3 | P2 | L | |
 | C57 | A region per scope: temporaries of one page update, audio block or frame freed at once (Tofte–Talpin) | STABLE-REFERENCES.md §4 | P3 | L | |
 | C58 | Keyed collections as a grow-only array with a free list and generational keys (ECS) | STABLE-REFERENCES.md §4 | P3 | M | |
 | C59 | Flat inline layout for data built once and read, doubling as a file format (FlatBuffers). Measured on notebook after C71/C72 (GAPS.md round 6, N3: about 10% left for it there, 4.4× the ideal with no one hotspot): its index is built once with one holder (8.5× the ideal on trees) and then only read by every question (8×); a frozen map as sorted key and value arrays makes `entries of` free and `value at` a binary search. 2026-11-06 at 3000 notes (nb profile): questions are 43% of the run (seen with, like line, any scores), the index 22%; `value at` read without a list or a throw took the table way from about 365 to 300 ms against an ideal of about 83 (4.4× to 3.6×), texts compared where they differ (#2095). A frozen map would buy notebook little now: `value at` on the hash table is one lookup and `entries of` a version is sorted once (C72). What's left is spread: `credit`'s `update at` per word makes a new table version and a closure (made as `{ caps }` instead of a function, no change measured), GC 12% | STABLE-REFERENCES.md §4, GAPS.md round 6 N3 | P3 | M | after C70, C71 |
-| C60 | **Later goal**: a list of records stored as columns when its loops read few fields. Step 1 measured 2026-11-09 by hand in plain JavaScript (100,000 records of six Float64s, median of 9): summing one field 68 ms as objects against 13 ms as a column (Float64Array or plain array alike); moving each (x += vx, y += vy) 179 ms making new records, 9.7 ms changing them in place, 3.6 ms as columns. So columns pay 2.7 to 5 times, but only once three things hold, none of which does today: the list is an array (of the 39 examples only pedal keeps a list of records as one, its pairs: C196), an array read makes no object (C196 (a): today a view, an option and a pair each), and a record is changed in place rather than rebuilt (C93 s5, C56), which is the 18 times. Do those first; then the example is a physics program's bodies moved each frame (impact or physics), chosen as columns on JavaScript, WebAssembly and C | STABLE-REFERENCES.md §5 | P3 | L | |
-| C61 | **Later goal**: where code runs chosen by cost, never written (workers, GPU compute, main thread). Designed: [WHERE-IT-RUNS.md](docs/design/targets/WHERE-IT-RUNS.md) (Bend 2 read; a worker measured: a copy is about 20 ns an item there and back, a transfer of a one-holder array nearly free; leaving the main thread is asynchronous, so only a caller that can wait). (a) done: WebGPU measured (compiler/gaps/bench-places.ts; about 3 ms a dispatch and 20 ns an item to move, so only work well above that per item pays: 8× at a million items of 100 steps, even emulated). Next: (b) a price list per target, (c) workers for a pure map, (d) the GPU for a map, (e) divide and conquer | STABLE-REFERENCES.md §6 | P3 | L | |
+| C60 | A list of records stored as columns when its loops read few fields. Step 1 measured 2026-11-09 by hand in plain JavaScript (100,000 records of six Float64s, median of 9): summing one field 68 ms as objects against 13 ms as a column (Float64Array or plain array alike); moving each (x += vx, y += vy) 179 ms making new records, 9.7 ms changing them in place, 3.6 ms as columns. So columns pay 2.7 to 5 times, but only once three things hold, none of which does today: the list is an array (of the 39 examples only pedal keeps a list of records as one, its pairs: C196), an array read makes no object (C196 (a): today a view, an option and a pair each), and a record is changed in place rather than rebuilt (C93 s5, C56), which is the 18 times. Do those first; then the example is a physics program's bodies moved each frame (impact or physics), chosen as columns on JavaScript, WebAssembly and C | STABLE-REFERENCES.md §5 | P2 | L | |
+| C61 | Where code runs chosen by cost, never written (workers, GPU compute, main thread). Designed: [WHERE-IT-RUNS.md](docs/design/targets/WHERE-IT-RUNS.md) (Bend 2 read; a worker measured: a copy is about 20 ns an item there and back, a transfer of a one-holder array nearly free; leaving the main thread is asynchronous, so only a caller that can wait). (a) done: WebGPU measured (compiler/gaps/bench-places.ts; about 3 ms a dispatch and 20 ns an item to move, so only work well above that per item pays: 8× at a million items of 100 steps, even emulated). Next: (b) a price list per target, (c) workers for a pure map, (d) the GPU for a map, (e) divide and conquer | STABLE-REFERENCES.md §6 | P3 | L | |
 
 ### Mobile (Ersagun 2026-11-09: a goal; native compilation per platform a stretch goal, instead of a webview)
 
@@ -177,13 +179,13 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L44 | Linear maps, geometry and matrices ([MATRICES.md](docs/design/numbers/MATRICES.md)). Example: a program's rotation function compiled as a matrix product. Left: the compiler stores linear functions as matrices (C lane, C30b/c) | LANGUAGE-REVIEW-2026-10-24 | P1 | M | a-g done |
-| L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code; notebook's Run takes 3.2 s for 100 notes, half of it the evaluator's own machine (GAPS.md round 6 N6) ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). For later: Ersagun stopped L118 after step 2. Measured 2026-11-05 (Editor lane): notebook with 500, 1,000 and 2,000 notes and as many queries, `lab run` against the same program compiled through the core IR (`lab compile`): the run itself (startup of 6.3 s taken off) 5.4 s against 0.25, 19.9 against 0.44, 76 against 2.0, 22 to 45 times; nearly all of it the evaluator's own machine (run.ts going, step, resume, apply). So it would earn far more than 10%. First step done (Editor lane, docs/process/DONE.md): `lab run` runs a main that lowers through the core IR's JavaScript, the evaluator for the rest; what is left is the evaluator's own speed, for what doesn't lower and for the editor's Run | Ersagun 2026-10-31 | P3 | L | for later |
+| L118c | The evaluator compiles each definition to JavaScript closures once (closure compilation, Feeley and Lapalme 1987), keeping the heap continuation only where a search or a handler needs it; likely 3-10x on all interpreted code; notebook's Run takes 3.2 s for 100 notes, half of it the evaluator's own machine (GAPS.md round 6 N6) ([EVALUATOR-SPEED-2026-10-31.md](docs/reports/EVALUATOR-SPEED-2026-10-31.md) step 2). Ersagun stopped L118 after step 2 while the language moved fast; open again since 2026-11-09. Measured 2026-11-05 (Editor lane): notebook with 500, 1,000 and 2,000 notes and as many queries, `lab run` against the same program compiled through the core IR (`lab compile`): the run itself (startup of 6.3 s taken off) 5.4 s against 0.25, 19.9 against 0.44, 76 against 2.0, 22 to 45 times; nearly all of it the evaluator's own machine (run.ts going, step, resume, apply). So it would earn far more than 10%. First step done (Editor lane, docs/process/DONE.md): `lab run` runs a main that lowers through the core IR's JavaScript, the evaluator for the rest; what is left is the evaluator's own speed, for what doesn't lower and for the editor's Run | Ersagun 2026-10-31 | P2 | L | |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L101 | **Later goal**: multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
+| L101 | Multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 
@@ -200,10 +202,10 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 
-### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md), later goals)
+### Physics and planning ([PHYSICS-AND-PLANNING.md](docs/design/physics/PHYSICS-AND-PLANNING.md))
 
 Ersagun 2026-11-01: fast bodies passing through each other, and A* for an
-agent with inertia. All later goals.
+agent with inertia: built as L119 to L124 (DONE.md).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
