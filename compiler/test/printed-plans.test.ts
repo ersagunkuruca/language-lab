@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { load } from "../src/program.ts";
 import { coreModule, emitCoreJs, loadPrinted, lowerCore, printed, solverCode, usesSolver } from "../src/core-js.ts";
 import { runProgram } from "../../ters/src/lang/run.ts";
+import { represented, type Program } from "../../ters/cli/represented.ts";
 
 test("relations' solves are printed plans: no node table, no evaluator (C167a)", () => {
   const p = load("relations"), main = p.named("main");
@@ -40,6 +41,21 @@ test("mode plans are printed, with builtins run forward (C167b)", () => {
   assert.equal(usesSolver(ir), false);
   const b = load("backwards"), main = b.named("main");
   assert.match(emitCoreJs(lowerCore(b.code, b.info, b.pres.names, [main])).js, /R\.moded\([\s\S]*"hello, "/);
+});
+
+// Stored as a sound, the pedal's lists are arrays (C196), and its bands
+// solve takes them apart and builds them with the array's own builtins
+// (front, push, the empty array): those are called as themselves, by id,
+// so the plan is printed still, not run by the evaluator.
+test("a mode plan calling an array's builtins is printed too (C196)", () => {
+  const pedal = load("pedal"), sound = pedal.named("pedal");
+  const p = { title: "pedal", code: pedal.code, info: pedal.info, names: pedal.pres.names, own: pedal.own.defs, reps: [], options: pedal.options };
+  const s = represented<Program>(p, sound, true, false, true);
+  assert.deepEqual(s.chosen, ["List as array of List"]);
+  const ir = lowerCore(s.code, s.info, s.names, [sound]);
+  const { js } = emitCoreJs(ir);
+  assert.match(js, /R\.moded\([\s\S]*\{"\$builtin":"builtin\.array\./);
+  assert.doesNotMatch(js, /R\.rt\("solve/);
 });
 
 // Where the evaluator's solver still runs, it gets only the nodes it reads
