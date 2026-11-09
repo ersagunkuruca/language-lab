@@ -63,11 +63,11 @@ test("uses with no body give the evaluator's answers on the core IR's JavaScript
   assert.deepEqual(p.defs.map((d) => inputs.map((x) => fn(d)(x))), want);
 });
 
-// WebAssembly and C solve no relation yet (scalar.ts: a solve needs the
-// host's solver): a use with no body is refused there for that reason, as
-// the filled one is, not for its shape.
-test("in WebAssembly and C a use with no body is refused as a filled one is: they solve no relation yet", () => {
+// WebAssembly and C don't write out this relation's plan yet (scalar.ts
+// modeSolve: a solve inside it): a use with no body is refused there for
+// that reason, as the filled one is, not for its shape.
+test("in WebAssembly and C a use with no body is refused as a filled one is: for the relation's plan", () => {
   const p = program();
   const lowered = lowerScalar(p.code, p.info, p.names, p.defs, { data: true });
-  assert.deepEqual([...new Set(lowered.refused.values())], ["solves a relation (not in this profile yet)"]);
+  assert.deepEqual([...new Set(lowered.refused.values())], ["solves rest of ten by the relational interpreter (a solve goal; not in this profile yet)"]);
 });
