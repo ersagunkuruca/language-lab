@@ -21,7 +21,12 @@ const listed = (t: Table) => {
 // What a list says, as a Map, with no key twice.
 const asMap = (xs: unknown[][]) => { const m = new Map(xs as [unknown, unknown][]); assert.equal(m.size, xs.length); return m; };
 
-test("a table's versions each keep their entries, however they branch and are read", () => {
+// A table's keys are all of one type (the checker's Map k v), so Ints and
+// Texts are each run on their own: listing a table sorts its keys, and a
+// Text is never compared with an Int (text.ts less reads the second as a
+// text since C59, #2095).
+for (const [kind, keyOf] of [["Int", (r: number) => r], ["Text", (r: number) => `k${r}`]] as const)
+test(`a table's versions each keep their entries, however they branch and are read (${kind} keys)`, () => {
   let seed = 7;
   const rand = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
   const versions: { t: Table; want: Map<unknown, unknown> }[] = [{ t: empty(), want: new Map() }];
@@ -29,7 +34,7 @@ test("a table's versions each keep their entries, however they branch and are re
     // Mostly the newest (one holder), sometimes an old one.
     const at = rand(4) ? versions.length - 1 : rand(versions.length);
     const { t, want } = versions[at];
-    const key = rand(3) ? rand(40) : `k${rand(10)}`;
+    const key = keyOf(rand(3) ? rand(40) : 40 + rand(10));
     if (rand(5) === 0) {
       const w = new Map(want); w.delete(key);
       versions.push({ t: remove(t, key), want: w });
