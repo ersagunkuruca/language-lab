@@ -22,6 +22,7 @@
 import { shareCalls } from "./share-calls.ts";
 import { inlineSmall } from "./inline-small.ts";
 import { ownedArrays } from "./owned-arrays.ts";
+import { arrayOffsets } from "./array-offsets.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -583,6 +584,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // them (C194); then a pure call made twice with the same inputs, made
   // once (C189).
   if (!envSet("NO_INLINE")) inlineSmall(ir);
+  // An array a function walks by its rests, read by position (C196).
+  if (!envSet("NO_OFFSETS")) arrayOffsets(ir);
   if (!envSet("NO_SHARE")) shareCalls(ir);
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).

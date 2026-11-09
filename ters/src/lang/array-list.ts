@@ -60,9 +60,14 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   ]), [{ variant: PAIR_V, names: ["answer", "array"], body: ([answer]) => answer }]));
   const length = def("array length of", ["array"], (a) => k.call(ARRAY_OPS.length, a));
   const append = def("array append", ["front", "back"], (a, b) => array(k.call(prelude("append"), items(a), items(b))));
-  // A map: the items mapped as a list, stored again (C93), linear as the
-  // tree's map is.
-  const mapped = def("array map", ["array", "by"], (a, f) => array(k.call(prelude("map"), items(a), f)));
+  // A map: a fold from the back, each item mapped and pushed into the
+  // free slot in front of what the rest made, as the list's map runs
+  // `by`: no list made on the way (C196: the pedal's driven band, a block
+  // a call).
+  const mapped = def("array map", ["array", "by"], (a, f) => k.fold(items(a), [
+    { variant: NIL, names: [], body: () => k.call(ARRAY_OPS.empty) },
+    { variant: CONS, names: ["item", "rest"], results: [null, "the rest mapped"], body: ([x], [, r]) => k.call(ARRAY_OPS.pushFront, r!, k.call(f, x)) },
+  ]));
   // An item by its Int position, read in place, and `otherwise` outside
   // the array.
   const itemAt = def("array item at", ["array", "position", "otherwise"], (a, i, o) => k.call(S.first,
