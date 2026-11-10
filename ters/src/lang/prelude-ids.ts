@@ -20,6 +20,7 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "keep": "@17uq2ffqdsbb6kikljtkeco9v1",
  "any pass": "@7nfnenoqt4fflsckoqd4d37ei9",
  "all pass": "@ku5ojesmoico158dp65r5o0q8f",
+ "first where": "@v6mnt13ndlbrsgos2r5ntqt875",
  "is letter": "@3ghl6cjivv5vaeuti6ht2gip8a",
  "is digit": "@kns2kgot84jr2lfre0vbl00j9q",
 };

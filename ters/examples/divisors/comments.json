@@ -1,0 +1,6 @@
+{
+  "qm8rjlikfumuhpa6ie3jn3epgu": "How many numbers from 1 to m divide m, each tried in turn (division may fail, by zero, so its first answer, j never being 0 here).",
+  "ifima08fksnuaihrvon0b5qf02": "How many divisors the n-th triangular number n(n + 1)/2 has. n and n + 1 share no factor, so it is the count of one's times the other's, the even one halved first.",
+  "9onfjgd57rv3a8hbep5isuo7a9": "The first n below `below` (the first argument, 10000 when there is none) whose triangular number 1 + 2 + … + n has more than `more than` divisors (the second, 400), or none. It is one first where, whose test only computes and ends, so on Node the compiled program tests runs of the ns on worker threads from the front, every thread stopping past the first n that passes; the answer is the same as testing in turn.",
+  "program": "The first triangular number with many divisors, found by one first where (C43).\nPrior art: the divisor function d(n), multiplicative over coprime factors (Euler); this search is Project Euler problem 12."
+}

@@ -36,6 +36,7 @@ const setup: Record<string, () => string[]> = {
   // The evaluator's pace: its default is sized for workers (C43).
   collatz: () => ["3000", "100"],
   nicomachus: () => ["200"],
+  divisors: () => ["1000", "100"],
   chapters: () => { writeFileSync(join(dir, "book.md"), chaptersBook(3, 5)); return ["book.md", "out"]; },
   ledger: () => { writeFileSync(join(dir, "book.csv"), ledgerBook(60, 6)); return ["book.csv"]; },
   notebook: () => [join(examples, "notebook/notes.txt")],
