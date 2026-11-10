@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, tablePutOwned, tableRemoveOwned, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
@@ -95,6 +95,9 @@ function tableFn(op: string, t: TableSpec): (...xs: unknown[]) => unknown {
     case "empty": return () => impl(TABLE_OPS.empty)();
     case "put": return (m, k, v) => impl(TABLE_OPS.put)(m, k, v);
     case "remove": return (m, k) => impl(TABLE_OPS.remove)(m, k);
+    // Where every table has one holder (owned-tables.ts): changed in place.
+    case "putOwned": return (m, k, v) => tablePutOwned(m as Table, k, v);
+    case "removeOwned": return (m, k) => tableRemoveOwned(m as Table, k);
     case "has": return (m, k) => bool(impl(TABLE_OPS.has)(m, k));
     case "size": return (m) => impl(TABLE_OPS.size)(m);
     case "at": return (m, k) => { const v = tableRead(m as Table, k, FAIL); if (v === FAIL) throw FAIL; return v; };

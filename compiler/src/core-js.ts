@@ -26,6 +26,7 @@ import { linearCalls } from "./linear-calls.ts";
 import { arrayOffsets } from "./array-offsets.ts";
 import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
+import { ownedTables } from "./owned-tables.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, STD_IMPL, STD_MANY, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -619,6 +620,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
   if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0], true);
+  // And puts and removes on tables nobody else holds (owned-tables.ts).
+  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, code, info, names, roots[0]);
   // A push onto an array a call just made, on its view (C196).
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).
