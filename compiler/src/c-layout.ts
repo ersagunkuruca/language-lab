@@ -8,6 +8,8 @@
 // looks. Text is measured by the platform. What isn't in the subset is
 // left out: a page's look on a phone is close to a browser's, not equal.
 
+import { PAGE_BASE } from "../../ters/src/lang/page-base.ts";
+
 export const LAYOUT_C = String.raw`
 // The page's screen (C199d): boxes and texts the platform draws where
 // they're placed, painted and in the fonts given; it measures texts.
@@ -60,6 +62,8 @@ typedef struct {
   // min-height, as a border box (a set height wins over it, as here no
   // page sets both).
   int set_minh, set_maxh; double minh, maxh;
+  // The font it is in (font: inherit).
+  double up_size, up_line; int up_bold;
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -238,13 +242,20 @@ static int tl_compound(const char *a, const char *b, char *tag, char *id, char (
   }
   return 1;
 }
+// The sheet a page has before its own (ters/src/lang/page-base.ts).
+static const char *tl_base = ${JSON.stringify(PAGE_BASE)};
+// Inside :where(…), whose selectors weigh nothing (the page's base sheet).
+static int tl_light;
 static void tl_add(const char *sel, const char *se, const char *d, const char *de, int order) {
   // Each selector of the list: compounds joined by ' ' or '>' (:root is
-  // the page's root; any other :, [ or + ~, left out).
+  // the page's root; :where(list) is list with no weight; any other :, [
+  // or + ~, left out).
   const char *p = sel;
   while (p < se) {
-    const char *q = p; while (q < se && *q != ',') q++;
+    const char *q = p; int depth = 0;
+    while (q < se && (*q != ',' || depth)) { if (*q == '(') depth++; else if (*q == ')') depth--; q++; }
     const char *a = tl_ws(p, q), *b = q; while (b > a && (b[-1] == ' ' || b[-1] == '\n')) b--;
+    if (b - a > 8 && !memcmp(a, ":where(", 7) && b[-1] == ')') { int was = tl_light; tl_light = 1; tl_add(a + 7, b - 1, d, de, order); tl_light = was; p = q + 1; continue; }
     tl_rule r; memset(&r, 0, sizeof r); r.decl = d; r.end = de; r.order = order;
     int ok = a < b;
     if (b - a == 5 && !memcmp(a, ":root", 5)) { strcpy(r.tag, ":root"); r.spec = 10; }
@@ -267,6 +278,7 @@ static void tl_add(const char *sel, const char *se, const char *d, const char *d
         }
       } else ok = 0;
     }
+    if (tl_light) r.spec = 0;
     if (ok) { tl_rules = realloc(tl_rules, sizeof *tl_rules * (size_t)(tl_nrules + 1)); tl_rules[tl_nrules++] = r; }
     p = q + 1;
   }
@@ -440,6 +452,7 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("font")) {
     // font: [weight] size[/line] family: the size and line height.
     const char *p = v;
+    if (TL_V("inherit")) { c->size = c->up_size; c->line = c->up_line; c->bold = c->up_bold; p = e; }
     while ((p = tl_ws(p, e)) < e) {
       if (TL_V("bold") || (p[0] >= '6' && p[0] <= '9' && p + 3 <= e && p[1] == '0' && p[2] == '0')) c->bold = 1;
       int o2 = 1; const char *a; double s = tl_len(p, e, c->size, &o2, &a);
@@ -526,7 +539,8 @@ static void tl_decls(tl_css *c, const char *d, const char *de) {
       if (colon) {
         const char *kb = colon; while (kb > a && kb[-1] == ' ') kb--;
         const char *v = tl_ws(colon + 1, s), *z = s; while (z > v && (z[-1] == ' ' || z[-1] == '\n')) z--;
-        int fs = (size_t)(kb - a) == 9 && !memcmp(a, "font-size", 9);
+        // font-size and font first, so the ems after them are of the box's own.
+        int fs = ((size_t)(kb - a) == 9 && !memcmp(a, "font-size", 9)) || ((size_t)(kb - a) == 4 && !memcmp(a, "font", 4));
         if (fs == (pass == 0) && !(kb - a > 1 && a[0] == '-' && a[1] == '-')) tl_decl(c, a, (size_t)(kb - a), v, z);
       }
       p = s + 1;
@@ -540,6 +554,7 @@ static void tl_defaults(tl_css *c, const char *t, const tl_css *up) {
   memset(c, 0, sizeof *c);
   c->size = up ? up->size : 16; c->color = up ? up->color : (tl_dark ? 0xFFECECEAu : 0xFF000000u);
   c->bold = up ? up->bold : 0; c->align = up ? up->align : 0; c->line = up ? up->line : 1.2;
+  c->up_size = c->size; c->up_line = c->line; c->up_bold = c->bold;
   c->display = tl_inline(t) ? TL_INLINE : TL_BLOCK;
   // SVG's paint is inherited: black fill, no stroke, 1 wide.
   if (up) { c->fill = up->fill; c->stroke = up->stroke; c->sw = up->sw; c->fop = up->fop; c->sop = up->sop; c->dash[0] = up->dash[0]; c->dash[1] = up->dash[1]; c->join = up->join; c->pe = up->pe; }
@@ -1016,7 +1031,10 @@ static void tl_layout(void) {
     free(tl_sheet); tl_sheet = sheet; tl_sheet_n = n;
     free(tl_rules); tl_rules = 0; tl_nrules = 0;
     free(tl_kfs); tl_kfs = 0; tl_nkf = 0;
+    // The page's base sheet first, as a page from build-web has it
+    // (ters/src/lang/page-base.ts), then the page's own.
     int order = 0;
+    tl_parse(tl_base, tl_base + strlen(tl_base), &order);
     if (sheet) tl_parse(sheet, sheet + n, &order);
   } else free(sheet);
   // body, around the page, with the sheet's body rules.
