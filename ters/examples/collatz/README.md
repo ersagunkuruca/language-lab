@@ -2,7 +2,8 @@
 
 The numbers below `below` whose way to 1 under the Collatz map (halve an
 even number, take 3n + 1 of an odd one) is longer than `longer than`
-steps: how many there are, the first five, and the last.
+steps: how many there are, the first five, the last, and how many steps
+all the numbers below take together.
 
     ters run examples/collatz 3000 100
     ters compile examples/collatz -o collatz.mjs && node collatz.mjs 1000000 300
@@ -16,6 +17,13 @@ numbers kept are the same, in the same order. Measured 2026-11-10 on 4
 cores: the default 0.8 s in turn and 0.5 s with three workers; below
 1000000, 2.9 s and 1.5 s. The defaults are sized for the compiled program;
 the evaluator is better given a smaller `below`.
+
+`steps of all` adds every number's steps by a fold whose arm adds one
+number's steps to the rest's, which only computes, so the compiled program
+works them out for runs of the numbers on worker threads and adds the runs'
+sums (C42): Ints add up the same in any order. Measured 2026-11-10 on 4
+cores, the whole program at its default: 2.6 to 2.9 s in turn, 1.6 s with
+three workers.
 
 The walk is in Int: halving is `shifted down` by one bit and evenness is
 `int bits and` 1. Compiled, these are JavaScript's own 32-bit operations
