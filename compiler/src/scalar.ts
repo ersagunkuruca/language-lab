@@ -2774,19 +2774,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // (map.worth), from the last as the fold meets them, their Ints
       // added or compared (exact, so in any order) after the empty list's.
       // Otherwise as below.
-      const each = result === "int" && !underBudget && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f) : null;
-      if (each) {
+        // Or a record of Ints (C42d).
+      const each = (result === "int" || isRecord(result)) && !underBudget && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f, result) : null;
+      if (each && !(each.join && waitsIn(f))) {
         const arr = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn);
         // In C (C202d), an array's, on the threads, which time it themselves.
-        if (opts.threads) { if (arr) return { k: "rt", fn: `par:fold:${each.how}`, args: [s.args[0], each.fn, each.nil], host: { t: "int", partial: true } }; }
+        if (opts.threads) { if (arr) return { k: "rt", fn: `par:fold:${each.how}`, args: [s.args[0], each.fn, each.nil, ...(each.join ? [each.join] : [])], host: { t: res, partial: true } }; }
         else {
         const whole = arr ? s.args[0] : s, lt = arr ? [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])] : st;
         const l = f.locals.push(lt) - 1, xs: SExpr = { k: "local", i: l }, site: SExpr = { k: "num", v: mapSites++ };
         // In a function that may wait, on a page's workers too (C61 c′).
         const shared: SExpr = waitsIn(f)
           ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil], t: "int", suspends: true }
-          : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site] };
-        return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: "int" } };
+          : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : [])] };
+        return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: res } };
         }
       }
       return inTurn(s);
@@ -2889,57 +2890,94 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // smaller of the two (`if r < d then d else r`): that Int as a closure
   // of the item, the empty list's arm, and how they go together, for
   // sharing the items out (C42). Null where the arms aren't so.
-  function itemFold(st: DType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc): { fn: SExpr; nil: SExpr; how: "add" | "max" | "min" } | null {
+  // Or a record of Ints, each field the rest's field added to or compared
+  // with an Int of the item's (C42d): the item's record, and a function
+  // putting two together field by field, which the runtime uses (`with`).
+  function itemFold(st: DType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, result: LType): { fn: SExpr; nil: SExpr; how: string; join?: SExpr } | null {
     const ci = st.cases.findIndex((c) => c.variant === CONS), ni = st.cases.findIndex((c) => c.variant === NIL);
     const cons = arms.find((a) => a.variant === CONS), nil = arms.find((a) => a.variant === NIL);
     if (st.cases.length !== 2 || ci < 0 || ni < 0 || !cons || !nil || cons.binds.length !== 2 || !cons.results[1] || cons.results[0]) return null;
-    if (refsIn(cons.body).includes(cons.binds[1]) || refsIn(nil.body).some((b) => !env.has(b))) return null;
-    const item = st.cases[ci].fields[0].t, ft = fnOf([item], "int");
+    // The empty list's value from around the fold (a binder's), or made of
+    // constants and definitions.
+    if (refsIn(cons.body).includes(cons.binds[1]) || refsIn(nil.body).some((b) => !env.has(b) && code.nodes[b]?.kind === "binder")) return null;
+    const rec = isRecord(result) && result.fields.length > 0 && result.fields.every((x) => x.t === "int") ? result : null;
+    if (result !== "int" && !rec) return null;
+    const item = st.cases[ci].fields[0].t, ft = fnOf([item], result);
     const caps = free.map((b) => f.locals[env.get(b)!]);
     const shape = shapes.push({ t: ft, caps }) - 1;
-    const g: SFunc = { def: cons.id, name: `${f.name}.fold.each`, params: [ft, item], result: "int", locals: [ft, item], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
-    const R = g.locals.push("int") - 1;
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.each`, params: [ft, item], result, locals: [ft, item], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const R = g.locals.push(result) - 1;
     let inner = new Map<Id, number>([[cons.binds[0], 1], [cons.results[1]!, R]]);
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t: ft, shape, i: j } as SExpr }; });
     const fn = funcs.push(g) - 1;
     const has = (e: SExpr): boolean => (e.k === "local" && e.i === R) || kids(e).some(has);
     const zero = (e: SExpr) => e.k === "int" && e.v === 0n;
     const plus = (a: SExpr, b: SExpr): SExpr => (zero(a) ? b : zero(b) ? a : { k: "rt", fn: "int.add", args: [a, b] });
-    const added = (e: SExpr): SExpr | null => {
-      if (e.k === "local" && e.i === R) return { k: "int", v: 0n };
-      if (e.k === "let" && !has(e.value)) { const b = added(e.body); return b && { ...e, body: b }; }
-      if (e.k === "if" && !e.check && !has(e.cond)) { const a = added(e.then), b = added(e.else); return a && b && { ...e, then: a, else: b }; }
+    // The rest's result (an Int), or its field i (a record's).
+    const isR = (i: number) => (e: SExpr) => rec ? e.k === "get" && e.i === i && e.rec.k === "local" && e.rec.i === R : e.k === "local" && e.i === R;
+    const added = (e: SExpr, isT: (e: SExpr) => boolean): SExpr | null => {
+      if (isT(e)) return { k: "int", v: 0n };
+      if (e.k === "let" && !has(e.value)) { const b = added(e.body, isT); return b && { ...e, body: b }; }
+      if (e.k === "if" && !e.check && !has(e.cond)) { const a = added(e.then, isT), b = added(e.else, isT); return a && b && { ...e, then: a, else: b }; }
       if (e.k === "rt" && e.fn === "int.add" && e.args.length === 2) {
         const [x, y] = e.args;
-        if (has(x) && !has(y)) { const d = added(x); return d && plus(d, y); }
-        if (has(y) && !has(x)) { const d = added(y); return d && plus(x, d); }
+        if (has(x) && !has(y)) { const d = added(x, isT); return d && plus(d, y); }
+        if (has(y) && !has(x)) { const d = added(y, isT); return d && plus(x, d); }
       }
       return null;
     };
     // The larger (or smaller) of the rest's result and an Int d without it,
     // compared by Int less, as d and how.
-    const isR = (e: SExpr) => e.k === "local" && e.i === R;
     const same = (a: SExpr, b: SExpr) => JSON.stringify(a, (_, v) => (typeof v === "bigint" ? `${v}n` : v)) === JSON.stringify(b, (_, v) => (typeof v === "bigint" ? `${v}n` : v));
-    const kept = (e: SExpr): { d: SExpr; how: "max" | "min" } | null => {
-      if (e.k === "let" && !has(e.value)) { const b = kept(e.body); return b && { d: { ...e, body: b.d }, how: b.how }; }
+    const kept = (e: SExpr, isT: (e: SExpr) => boolean): { d: SExpr; how: "max" | "min" } | null => {
+      if (e.k === "let" && !has(e.value)) { const b = kept(e.body, isT); return b && { d: { ...e, body: b.d }, how: b.how }; }
       if (e.k !== "if" || e.check || e.cond.k !== "rt" || e.cond.fn !== "int.less" || e.cond.args.length !== 2) return null;
-      const [p, q] = e.cond.args, other = isR(p) ? q : isR(q) ? p : null, d = isR(e.then) ? e.else : isR(e.else) ? e.then : null;
+      const [p, q] = e.cond.args, other = isT(p) ? q : isT(q) ? p : null, d = isT(e.then) ? e.else : isT(e.else) ? e.then : null;
       if (!other || !d || has(d) || !same(d, other)) return null;
       // r < d then d is the larger; d < r then r too.
-      return { d, how: isR(p) !== isR(e.then) ? "max" : "min" };
+      return { d, how: isT(p) !== isT(e.then) ? "max" : "min" };
+    };
+    const either = (e: SExpr, isT: (e: SExpr) => boolean): { d: SExpr; how: "add" | "max" | "min" } | null => {
+      const k = kept(e, isT);
+      if (k) return k;
+      const d = added(e, isT);
+      return d && { d, how: "add" };
     };
     // Only where the item's Int calls something: reading and comparing is
     // quicker in the loop than any hop.
     const calls = (e: SExpr): boolean => e.k === "call" || e.k === "apply" || kids(e).some(calls);
-    const body = expr(cons.body, inner, g, false), k = kept(body), how = k ? k.how : "add" as const;
-    const d = k ? k.d : added(body);
+    const body = expr(cons.body, inner, g, false);
+    let d: SExpr | null = null, how = "add", hows: ("add" | "max" | "min")[] = [];
+    if (!rec) { const k = either(body, isR(0)); if (k) ({ d, how } = k); }
+    else {
+      // Steps first (without the rest's), then the record made of fields.
+      const wrap: Extract<SExpr, { k: "let" }>[] = [];
+      let e = body;
+      while (e.k === "let" && !has(e.value)) { wrap.push(e); e = e.body; }
+      const each = e.k === "make" && e.t.key === rec.key && e.args.length === rec.fields.length ? e.args.map((x, i) => either(x, isR(i))) : null;
+      if (each && each.every((x) => x)) {
+        hows = each.map((x) => x!.how);
+        d = wrap.reduceRight<SExpr>((body, l) => ({ ...l, body }), { k: "make", t: rec, args: each.map((x) => x!.d) });
+        how = "with";
+      }
+    }
     // Not so: what lowering the arm made stays, unused, as summed's.
-    if (!d || has(d) || !calls(d)) { g.body = { k: "int", v: 0n }; return null; }
+    if (!d || has(d) || !calls(d)) { g.body = rec ? { k: "make", t: rec, args: rec.fields.map((): SExpr => ({ k: "int", v: 0n })) } : { k: "int", v: 0n }; return null; }
     g.body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), d);
     if (fails(g.body, funcs)) g.partial = true;
     closureCode.add(fn);
-    return { fn: { k: "closure", t: ft, fn, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) }, nil: expr(nil.body, env, f, false), how };
+    const out = { fn: { k: "closure", t: ft, fn, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) } as SExpr, nil: expr(nil.body, env, f, false), how };
+    if (!rec) return out;
+    // Two records put together, field by field, as the fold would.
+    const jt = fnOf([rec, rec], rec), jshape = shapes.push({ t: jt, caps: [] }) - 1;
+    const j: SFunc = { def: nil.id, name: `${f.name}.fold.join`, params: [jt, rec, rec], result: rec, locals: [jt, rec, rec], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const x = (i: number): SExpr => ({ k: "get", rec: { k: "local", i: 1 }, t: rec, i }), y = (i: number): SExpr => ({ k: "get", rec: { k: "local", i: 2 }, t: rec, i });
+    j.body = { k: "make", t: rec, args: hows.map((h, i): SExpr => h === "add" ? { k: "rt", fn: "int.add", args: [x(i), y(i)] } : { k: "if", cond: { k: "rt", fn: "int.less", args: [x(i), y(i)] }, then: h === "max" ? y(i) : x(i), else: h === "max" ? x(i) : y(i), t: "int" }) };
+    const ji = funcs.push(j) - 1;
+    closureCode.add(ji);
+    return { ...out, join: { k: "closure", t: jt, fn: ji, shape: jshape, caps: [] } };
   }
+
   // A fold to an Int whose arms that fold a child each add something to
   // the child's result (count, a length, a sum: `if p(x) then r + 1 else
   // r`), run as one loop that adds as it goes down, with no stack

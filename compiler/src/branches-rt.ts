@@ -139,14 +139,14 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; join?: unknown; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
   if (m.search) { const c = dec(m.search); return (i) => answers(c, piece(i + 1, m.ways ?? 1), m.how!); }
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
-  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items.slice(i * m.size!, (i + 1) * m.size!), f, m.fold!) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
+  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items.slice(i * m.size!, (i + 1) * m.size!), f, m.fold!, m.join === undefined ? undefined : dec(m.join) as Fn) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
 
 // The list of actions, and the list of their values in the same kind.
@@ -361,22 +361,24 @@ export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameK
 // the one it meets first, each run's Ints put together, then the runs',
 // then the empty list's Int z. Int addition and comparing are exact, so
 // the answer is the fold's.
-type FoldHow = "add" | "max" | "min";
-const both = (how: FoldHow) => (a: Int, b: Int): Int => (how === "add" ? add(a, b) : how === "max" ? (b > a ? b : a) : (b < a ? b : a));
-const together = (items: unknown[], f: Fn, how: FoldHow): Int => { const by = both(how); let s = f(items[0]) as Int; for (let i = 1; i < items.length; i++) s = by(s, f(items[i]) as Int); return s; };
-export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number): Int {
-  if (!canShare()) return foldInOrder(xs, f, z, how);
+// A record of Ints (C42d) is put together field by field by the compiled
+// function `join` (how "with"), each field's added or compared.
+type FoldHow = "add" | "max" | "min" | "with";
+const both = (how: FoldHow, join?: Fn) => (a: Int, b: Int): Int => (how === "with" ? (join as unknown as (x: Int, y: Int) => Int)(a, b) : how === "add" ? add(a, b) : how === "max" ? (b > a ? b : a) : (b < a ? b : a));
+const together = (items: unknown[], f: Fn, how: FoldHow, join?: Fn): Int => { const by = both(how, join); let s = f(items[0]) as Int; for (let i = 1; i < items.length; i++) s = by(s, f(items[i]) as Int); return s; };
+export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number, join?: Fn): Int {
+  if (!canShare()) return foldInOrder(xs, f, z, how, join);
   const items = itemsOf(xs).reverse();
   if (!items.length) return z;
   const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
-  const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how), () => {
-    const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
-    return es.includes(NO) ? NO : { f: g, items: es, size, fold: how };
+  const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how, join), () => {
+    const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
+    return es.includes(NO) ? NO : { f: g, items: es, size, fold: how, ...(j ? { join: j } : {}) };
   }, (f as Closure).code);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
-  return (runs as Int[]).reduce(both(how), z);
+  return (runs as Int[]).reduce(both(how, join), z);
 }
-export const foldInOrder = (xs: unknown, f: Fn, z: Int, how: FoldHow): Int => { const items = itemsOf(xs).reverse(); return items.length ? both(how)(z, together(items, f, how)) : z; };
+export const foldInOrder = (xs: unknown, f: Fn, z: Int, how: FoldHow, join?: Fn): Int => { const items = itemsOf(xs).reverse(); return items.length ? both(how, join)(z, together(items, f, how, join)) : z; };
 
 // all pass and any pass of a test that only computes (C43): a run's first
 // item that decides (fails the test for all, passes it for any), or -1.

@@ -301,7 +301,7 @@ const isFiber = (fn: string) => FIBER.test(fn);
 // keeps of it, and a search inside that keeps all of its own (scalar.ts).
 const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
 type SearchHow = "count" | "all" | "first";
-const folds = (job: string) => job === "add" || job === "max" || job === "min";
+const folds = (job: string) => job === "add" || job === "max" || job === "min" || job === "with";
 const isPar = (fn: string) => fn.startsWith("par:fold:") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
@@ -622,12 +622,13 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // first where (C202c), an array of the item that first passes, or empty.
   // A fold of an array adding its items' Ints, or keeping the largest or
   // smallest (C202d: add, max, min), from the empty list's Int.
-  type ParJob = "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min";
-  const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType; job: ParJob }>();
-  const parSite = (ta: AType, tf: FType, to: AType, job: ParJob = "map"): number => {
+  type ParJob = "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min" | "with";
+  const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType; job: ParJob; tj?: FType }>();
+  // tj: a record fold's (C42d) function putting two of them together.
+  const parSite = (ta: AType, tf: FType, to: AType, job: ParJob = "map", tj?: FType): number => {
     const k = `${ta.key} ${tf.key} ${to.key} ${job}`;
-    if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to, job });
-    if (folds(job)) rts.add(job === "add" ? "int.add" : "int.less");
+    if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to, job, tj });
+    if (folds(job) && job !== "with") rts.add(job === "add" ? "int.add" : "int.less");
     arrayFns.add(`array.length.a${ta.index}`).add(`array.empty.a${to.index}`);
     return pars.get(k)!.n;
   };
@@ -1525,8 +1526,8 @@ int main(int argc, char **argv) {
           const sh = /^par:(count|all|first):search$/.exec(e.fn);
           if (sh) return checked(`lab_par_search_${countSite(typeOf(e.args[0], f.locals) as FType, sh[1] as SearchHow)}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           if (isPar(e.fn)) {
-            const job = (e.fn.startsWith("par:fold:") ? e.fn.slice(9) : e.fn.slice(4)) as "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min", ta = typeOf(e.args[0], f.locals) as AType;
-            const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" || folds(job) ? ta : e.host!.t as AType, job);
+            const job = (e.fn.startsWith("par:fold:") ? e.fn.slice(9) : e.fn.slice(4)) as ParJob, ta = typeOf(e.args[0], f.locals) as AType;
+            const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" || folds(job) ? ta : e.host!.t as AType, job, job === "with" ? typeOf(e.args[3], f.locals) as FType : undefined);
             return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
           if (isPerform(e.fn)) {
@@ -2531,8 +2532,8 @@ failed:
   return 0;
 }`;
   }
-  function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min" }, stops: boolean, fuelled: boolean): string {
-    const { n, ta, tf, to, job } = p, keep = job !== "map", fold = folds(job), tests = job === "all" || job === "any" || job === "first", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
+  function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: ParJob; tj?: FType }, stops: boolean, fuelled: boolean): string {
+    const { n, ta, tf, to, job, tj } = p, keep = job !== "map", fold = folds(job), tests = job === "all" || job === "any" || job === "first", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
     const decides = (x: string) => (job === "all" ? `!${x}` : x);
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
@@ -2561,7 +2562,7 @@ static void lab_par_work_${n}(void *p) {
   }${stops ? `
   lab_stop_at = was;` : ""}
 }
-static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_${n}(lab_cell *xs, lab_cell *f${fold ? ", lab_int z" : ""}) {
+static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_${n}(lab_cell *xs, lab_cell *f${fold ? `, ${ty(tf.result)} z` : ""}${tj ? ", lab_cell *jf" : ""}) {
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;
@@ -2605,9 +2606,9 @@ found:${job === "first" ? `
     if (lab_st) goto failed;
     j.bad[k] = 0;
   }
-${fold ? `  for (k = n; k-- > 0;) z = ${job === "add" ? "lab_int_add(z, j.out[k])" : `lab_int_less(lab_int_dup(${job === "max" ? "z" : "j.out[k]"}), lab_int_dup(${job === "max" ? "j.out[k]" : "z"})) ? (lab_int_drop(z), j.out[k]) : (lab_int_drop(j.out[k]), z)`};
+${fold ? `  for (k = n; k-- > 0;) z = ${tj ? `((${fname.get(tj.key)})((lab_closure *)lab_dup(jf))->code)(jf, z, j.out[k])` : job === "add" ? "lab_int_add(z, j.out[k])" : `lab_int_less(lab_int_dup(${job === "max" ? "z" : "j.out[k]"}), lab_int_dup(${job === "max" ? "j.out[k]" : "z"})) ? (lab_int_drop(z), j.out[k]) : (lab_int_drop(j.out[k]), z)`};
   ${counted(ta.item) ? `for (k = 0; k < n; k++) ${drop(ta.item, "j.in[k]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
-  lab_drop(f);
+  lab_drop(f);${tj ? "\n  lab_drop(jf);" : ""}
   return z;` : `${keep ? `  int64_t m = 0;
   for (k = 0; k < n; k++) if (j.out[k]) m++;
   ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)m, 0);
@@ -2618,10 +2619,11 @@ ${fold ? `  for (k = n; k-- > 0;) z = ${job === "add" ? "lab_int_add(z, j.out[k]
   lab_drop(f);
   return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)${keep ? "m" : "n"});`}`}
 failed:${fold ? `
-  lab_int_drop(z);` : ""}
+  ${drop(tf.result, "z")}` : ""}${tj ? `
+  lab_drop(jf);` : ""}
   ${counted(out) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(out, "j.out[m]")}\n  ` : ""}${counted(ta.item) ? `for (int64_t m = 0; m < n; m++) ${drop(ta.item, "j.in[m]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
   lab_drop(f);
-  return 0;
+  return ${tj ? `(${ty(tf.result)}){0}` : "0"};
 }`;
   }
 
