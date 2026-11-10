@@ -65,8 +65,9 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, A
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
+import { relationFor } from "../../ters/src/lang/equations.ts";
 import { writablePlan } from "./relation.ts";
-import { cleanBody, NotWritten, roundedKey, writtenExpr, writtenSteps } from "./solved.ts";
+import { cleanBody, live, NotWritten, roundedKey, writtenExpr, writtenSteps, type Written } from "./solved.ts";
 import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
@@ -1534,6 +1535,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // evaluator's relational interpreter (relate.ts satisfiable) on the
         // closure, which carries its lambda (closure.src).
         if (opts.host && target === S.exists && n.args.length === 1) return { k: "rt", fn: "exists", args: [expr(n.args[0], env, f, false)], host: { t: "i32", partial: false } };
+        if (!opts.host && opts.data && target === S.exists && n.args.length === 1) return existsSolve(n, env, f);
         // derivative(f) and gradient(f) of a function value, for JavaScript
         // from the core IR (C137c20): the evaluator's, which looks inside
         // the closure (it carries its lambda, closure.src); what it gives
@@ -1796,13 +1798,26 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (p.mode !== "solver" || p.status !== "solved" || !p.rel) throw no;
     const binds = bindsOf(n), keys = Object.keys(binds);
     if (keys.join() !== answerKeys(code, n).join()) throw no;
-    const steps = writablePlan(p.rel as never, [...p.known]);
+    const steps = writablePlan(p.rel as never, [...p.known], true);
     if (!steps) throw new Refused(`solves ${name} by a plan with numbers searched for (not in this profile yet)`);
     if (p.known.some((k) => !n.given[k] || stype(zonk(n.given[k])) !== "f64") || keys.some((k) => stype(zonk(binds[k])) !== "f64")) throw new Refused(`solves ${name} for something other than Float64s`);
     let planned: boolean;
     try { planned = solvesOnce(code, n); } catch (e) { throw new Refused(`solves ${name}: ${(e as Error).message}`); }
-    const once = planned || (!f.partial && !searching.get(f));
-    const many = steps.filter((s) => s.type === "solve" && s.branches.length > 1).length;
+    const once = planned || (!f.partial && !searching.get(f)) || firstOnly.has(n.id);
+    // A family of answers (angle + 2πk), where only the first is taken:
+    // the solver's stream gives level 0's first answer (every k 0), or,
+    // with none there, level 1's (each k 0, 1 or −1), or none, since a
+    // level after one with nothing new isn't tried. A case the equations
+    // leave free stops, saying so.
+    const periodic = steps.some((s) => s.type === "solve" && s.branches.some((b) => b.params.length));
+    const leftFree = steps.some((s) => s.type === "solve" && s.branches.some((b) => b.free.some(live)));
+    if (periodic && !once) throw new Refused(`solves ${name} for a family of answers (plus 2πk) in a search (not in this profile yet)`);
+    if (leftFree && !opts.data) throw new Refused(`solves ${name}, which may leave a value free, and a shader can't stop`);
+    const wr: Written = periodic || leftFree ? {
+      periodic: periodic ? [0] : undefined, eqs: (p.rel as unknown as { eqs: { lhs: never; rhs: never }[] }).eqs,
+      free: leftFree ? () => ({ k: "abort", reason: { k: "text", v: `solving ${name} this way leaves a value free, which this profile can't give yet` } }) : undefined,
+    } : {};
+    const many = steps.filter((s) => s.type === "solve" && (s.branches.length > 1 || s.branches.some((b) => b.params.length))).length;
     if (many && !opts.data) throw new Refused(`solves ${name} with several ways, which a shader can't try`);
     if (many > 1 && !once) throw new Refused(`solves ${name} with several ways at more than one step, in a search (not in this profile yet)`);
     const vars = new Map<string, number>();
@@ -1824,18 +1839,19 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const attempt = (body: SExpr, ok: (res: number) => SExpr, otherwise: SExpr, at: LType): SExpr => { const res = f.locals.push("f64") - 1; return { k: "attempt", body, res, ok: ok(res), otherwise, t: at }; };
     let written: SExpr;
     try {
-      if (!many) written = writtenSteps(steps, at, answered, fail, t, undefined, undefined, once || !opts.data ? undefined : (s, ks, values) => {
+      if (!many) written = writtenSteps(steps, at, answered, fail, t, undefined, undefined, { ...wr, torn: once || !opts.data ? undefined : (s, ks, values) => {
         // A tear (torn.ts): one of its roots, closest to 0 first.
         const LF = stype({ t: "con", id: LIST, args: [{ t: "con", id: NUMBER, args: [] }] }) as DType;
         const key = `torn ${JSON.stringify([s.residual, s.tear, ks])}`;
         let fn = index.get(key);
         if (fn === undefined) index.set(key, (fn = tornRoots(s, ks, LF, writtenExpr, (g) => funcs.push(g) - 1, (x) => `${x} isn't known before the tear`)));
         return { k: "choose", list: { k: "call", fn, args: values, tail: false }, t: LF };
-      });
+      } });
       else if (once) {
         // The ways tried in order, to the first that gets to the end.
-        const tried = writtenSteps(steps, at, () => ({ k: "num", v: 1 }), () => NONE, "f64",
-          (_, each) => each.reduceRight<SExpr>((otherwise, body) => attempt(body, (r) => ({ k: "local", i: r }), otherwise, "f64"), NONE));
+        const level = (ks?: number[]) => writtenSteps(steps, at, () => ({ k: "num", v: 1 }), () => NONE, "f64",
+          (_, each) => each.reduceRight<SExpr>((otherwise, body) => attempt(body, (r) => ({ k: "local", i: r }), otherwise, "f64"), NONE), undefined, { ...wr, periodic: ks });
+        const tried = periodic ? attempt(level([0]), (r) => ({ k: "local", i: r }), level([0, 1, -1]), "f64") : level(wr.periodic);
         written = attempt(tried, () => answered(), fail(), t);
       } else {
         // One way chosen; an answer is the solver's only where no earlier
@@ -1847,7 +1863,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const again = (v: string) => { let i = mine.get(v); if (i === undefined) mine.set(v, (i = fresh())); return i; };
           const same = (): SExpr => ports.map((x) => (rest: SExpr) => roundedKey(clean({ k: "local", i: at(x) }), fresh, (a) => roundedKey(clean({ k: "local", i: again(x) }), fresh, (b) => ({ k: "if", cond: { k: "op", op: "equal", args: [a, b] }, then: rest, else: NONE, t: "f64" }))))
             .reduceRight<SExpr>((rest, test) => test(rest), { k: "num", v: 1 });
-          return attempt(writtenSteps(steps, again, same, () => NONE, "f64", undefined, [w]), () => ({ k: "num", v: 1 }), { k: "num", v: 0 }, "f64");
+          return attempt(writtenSteps(steps, again, same, () => NONE, "f64", undefined, [w], wr), () => ({ k: "num", v: 1 }), { k: "num", v: 0 }, "f64");
         });
         const LF = stype({ t: "con", id: LIST, args: [{ t: "con", id: NUMBER, args: [] }] }) as DType;
         const c = LF.cases.findIndex((x) => x.variant === CONS);
@@ -1856,10 +1872,59 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const list: SExpr = { k: "list", t: LF, c, items: each.map((_, k) => ({ k: "num", v: k })), item: f.locals.push("f64") - 1, acc: f.locals.push(LF) - 1 };
           const pick = each.slice(0, -1).reduceRight<SExpr>((rest, e, k) => ({ k: "if", cond: { k: "op", op: "equal", args: [{ k: "local", i: w }, { k: "num", v: k }] }, then: e, else: rest, t }), each.at(-1)!);
           return { k: "let", i: w, value: { k: "choose", list, t: LF }, body: pick };
-        });
+        }, undefined, wr);
       }
     } catch (e) { if (e instanceof NotWritten) throw new Refused(`solves ${name} with ${e.message} (not in this profile yet)`); throw e; }
     return known.reduceRight<SExpr>((e, k) => ({ k: "let", i: k.i, value: k.value, body: e }), written);
+  }
+  // for some(x, y => r(a, x, b, y)), r a predicate the solver reads as
+  // equations, its unknowns the lambda's own inputs (C195; physics' for
+  // some y, angle: polar(1, y, 2, angle)), on WebAssembly and C: whether
+  // r solved for them has an answer. The solver's stream has one if level
+  // 1 has (each k 0, 1 or −1, so level 0 too), since a level after one
+  // with nothing new isn't tried; a variable left free is an answer.
+  function existsSolve(n: Call, env: Map<Id, number>, f: SFunc): SExpr {
+    const no = (why: string) => new Refused(`uses for some ${why} (not in this profile yet)`);
+    // for some x: for some y: … is one search over x and y.
+    const params: Id[] = [];
+    let inner: Call = n, lam: NodeOf<"lambda"> | undefined;
+    for (;;) {
+      const l = code.nodes[inner.args[0]];
+      if (l?.kind !== "lambda") throw no("on a function not written in place");
+      lam = l; params.push(...l.params);
+      const b = code.nodes[l.body], fn = b && isCall(b) ? code.nodes[b.fn] : undefined;
+      if (!b || !isCall(b) || fn?.kind !== "ref" || fn.target !== S.exists || b.args.length !== 1) break;
+      inner = b;
+    }
+    const call = code.nodes[lam.body];
+    const callee = call && isCall(call) ? code.nodes[call.fn] : undefined;
+    if (!call || !isCall(call) || callee?.kind !== "ref") throw no("on something other than one relation's call");
+    let r: ReturnType<typeof relationFor>;
+    try { r = relationFor(code, callee.target); } catch { throw no(`on ${nm(callee.target)}, which doesn't read as equations`); }
+    const { rel } = r as unknown as { rel: { ports: string[]; eqs: { lhs: never; rhs: never }[] } };
+    if (!r.predicate || call.args.length !== rel.ports.length) throw no(`on ${nm(callee.target)}, which isn't a predicate the solver reads`);
+    const isParam = (a: Id) => { const m = code.nodes[a]; return m?.kind === "ref" && params.includes(m.target); };
+    const unknown = call.args.map(isParam);
+    const mine = call.args.filter(isParam).map((a) => (code.nodes[a] as NodeOf<"ref">).target);
+    if (new Set(mine).size !== params.length || mine.length !== params.length) throw no(`whose inputs aren't each one of ${nm(callee.target)}'s`);
+    if (call.args.some((a, i) => !unknown[i] && subtree(code, a).some((x) => { const m = code.nodes[x]; return m?.kind === "ref" && params.includes(m.target); })))
+      throw no(`reading its inputs other than as ${nm(callee.target)}'s`);
+    const known = rel.ports.filter((_, i) => !unknown[i]);
+    if (call.args.some((a, i) => !unknown[i] && stype(zonk(a)) !== "f64")) throw no(`on something other than Float64s`);
+    const steps = writablePlan(rel as never, known, true);
+    if (!steps) throw no(`on ${nm(callee.target)}, solved by a plan with numbers searched for`);
+    const vars = new Map<string, number>();
+    const at = (v: string) => { let i = vars.get(v); if (i === undefined) vars.set(v, (i = f.locals.push("f64") - 1)); return i; };
+    const values = call.args.flatMap((a, i) => (unknown[i] ? [] : [{ i: at(rel.ports[i]), value: expr(a, env, f, false) }]));
+    const NONE: SExpr = { k: "fail" }, yes: SExpr = { k: "num", v: 1 };
+    const attempt = (body: SExpr, otherwise: SExpr): SExpr => { const res = f.locals.push("f64") - 1; return { k: "attempt", body, res, ok: { k: "local", i: res }, otherwise, t: "f64" }; };
+    let found: SExpr;
+    try {
+      found = writtenSteps(steps, at, () => yes, () => NONE, "f64", (_, each) => each.reduceRight<SExpr>((otherwise, body) => attempt(body, otherwise), NONE), undefined,
+        { periodic: [0, 1, -1], free: () => yes, eqs: rel.eqs });
+    } catch (e) { if (e instanceof NotWritten) throw no(`on ${nm(callee.target)}, solved with ${e.message}`); throw e; }
+    const answer: SExpr = { k: "op", op: "equal", args: [attempt(found, { k: "num", v: 0 }), yes] };
+    return values.reduceRight<SExpr>((e, k) => ({ k: "let", i: k.i, value: k.value, body: e }), answer);
   }
   // A solve the relational interpreter runs, in a mode with one answer or
   // none (det, semidet) whose plan is fixed before it runs (compiler/src/
@@ -2935,6 +3000,32 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     : t === "int32" ? { k: "op", op: "iadd", args: [x, countOf(t, 1)] } : { k: "op", op: "add", args: [x, countOf(t, 1)] };
   // How many searches' bodies each function is lowering now.
   const searching = new Map<SFunc, number>();
+  // Solves that are a first's whole search, with nothing after them that
+  // chooses: only their first answer is ever taken (C195).
+  const firstOnly = new Set<Id>();
+  // The use x is, or the one a let (a lambda called at once) is given,
+  // where nothing else there chooses.
+  const soleSolve = (x: Id): Id | null => {
+    const m = code.nodes[x];
+    if (m && isUse(m)) return m.body !== undefined && !mayChoose(m.body) ? x : null;
+    if (!m || !isCall(m) || code.nodes[m.fn]?.kind !== "lambda") return null;
+    const uses = m.args.filter((a) => code.nodes[a] && isUse(code.nodes[a]));
+    if (uses.length !== 1 || mayChoose(m.fn) || m.args.some((a) => a !== uses[0] && mayChoose(a))) return null;
+    return soleSolve(uses[0]);
+  };
+  const mayChoose = (id: Id) => subtree(code, id).some((x) => {
+    const m = code.nodes[x];
+    if (!m) return false;
+    if (isUse(m)) return true;
+    if (!isCall(m)) return false;
+    // By what's called as declared, not as used: a use takes on the
+    // effects around it (`++` in a search has Choice in its row there).
+    const fn = code.nodes[m.fn], target = fn?.kind === "ref" ? fn.target : undefined;
+    if (fn?.kind === "lambda" || (target && (code.nodes[target]?.kind === "variant" || code.nodes[target]?.kind === "field"))) return false;
+    const declared = target === undefined ? undefined : info.schemes.get(target)?.type ?? SIGS[target]?.(new Subst());
+    const t = declared ? info.subst.zonk(declared) : zonk(m.fn);
+    return t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(CHOICE);
+  });
   function attempt(n: Call, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const target = (code.nodes[n.fn] as NodeOf<"ref">).target;
     const thunk = (x: Id | undefined) => { const l = x && code.nodes[x]; return l && l.kind === "lambda" && !l.params.length ? l.body : null; };
@@ -2943,6 +3034,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const t = stype(zonk(id)), bt = stype(zonk(search));
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
     const kind = target === S.first ? "first" : target === S.optional ? "optional" : target === S.all ? "all" : "count";
+    if (target === S.first) { const only = soleSolve(search); if (only) firstOnly.add(only); }
     searching.set(f, (searching.get(f) ?? 0) + 1);
     let body: SExpr;
     try { body = expr(search, env, f, false); } finally { searching.set(f, searching.get(f)! - 1); }

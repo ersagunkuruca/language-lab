@@ -97,8 +97,11 @@ export function compileSolve(name: string, rel: Relation, known: string[], binds
 // parameter (a periodic family) and no case the solver must take over (a
 // variable the equations leave free), and tears of one unknown with
 // nothing solved inside (torn.ts); null otherwise.
-export function writablePlan(rel: Relation, known: string[]): Step[] | null {
+// With `periodic`, also solves with such parameters or such cases
+// (solved.ts writes the first level, and a stop where one is free).
+export function writablePlan(rel: Relation, known: string[], periodic = false): Step[] | null {
   const p = (plan as (r: Relation, k: string[]) => { steps: Step[] })(rel, known);
+  if (periodic) return p.steps.every((s) => s.type !== "newton" && (s.type !== "tear" || (s.xs.length === 1 && s.inner.length === 0))) ? p.steps : null;
   const simple = p.steps.every((s) => s.type === "check" || s.type === "linear" || (s.type === "solve" && s.branches.every((b) => !b.params.length)) ||
     (s.type === "tear" && s.xs.length === 1 && s.inner.length === 0));
   const live = (g: Expr[]) => !g.some((e) => e.k === "num" && Math.abs(e.v!) > 1e-9);
