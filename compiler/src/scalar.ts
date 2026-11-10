@@ -1256,6 +1256,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           });
           return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(head.body, inner, f, tail));
         }
+        // A fold of an array's items to a function, applied (`fold placed
+        // from distance = 1`): a loop from the first item, C207f.
+        if (head.kind === "fold" && !underBudget) {
+          const ff = forwardFold(head, n.args, env, f, tail);
+          if (ff) return ff;
+        }
         // A function computed or passed in: called through its closure.
         if (opts.data && (head.kind !== "ref" || env.has(head.target) || inlined.has(head.target) || (code.nodes[head.target]?.kind === "def" && (code.nodes[(code.nodes[head.target] as NodeOf<"def">).body ?? ""]?.kind !== "lambda")))) {
           const t = stype(zonk(n.fn));
@@ -3261,6 +3267,75 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (fails(g.body, funcs)) g.partial = true;
     // The end's arm, where the fold is (it binds nothing of the list's).
     return { fn: gi, start: expr(nil.body, env, f, false) };
+  }
+  // A fold over an array's items whose arms are functions, applied at
+  // once (`fold xs from d = 1`), where the item's arm is `op(e, r(d′))` or
+  // `r(d′)`: r the rest's function, called once, last, with op `and` or
+  // `or` (exact in any grouping). The closures are a loop from the first
+  // item, the inputs carried along and op's result so far, in the order
+  // the closures ran: e, then d′, then the rest (C207f). Hand-written C's
+  // loop with an accumulator; no closure made or called per item.
+  // Null where the fold isn't so.
+  function forwardFold(n: NodeOf<"fold">, inputs: Id[], env: Map<Id, number>, f: SFunc, tail: boolean): SExpr | null {
+    const st = stype(zonk(n.scrutinee)), ft = stype(zonk(n.id));
+    if (!st || !isData(st) || !ft || !isFn(ft) || st.cases.length !== 2 || n.arms.length !== 2) return null;
+    const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    const nil = arms.find((a) => !a.results.some((x) => x)), cons = arms.find((a) => a.results.some((x) => x));
+    if (!nil || !cons) return null;
+    const c = st.cases.find((x) => x.variant === cons.variant)!;
+    const head = c.fields.findIndex((x) => x.t !== st), tl = c.fields.findIndex((x) => x.t === st);
+    if (head < 0 || tl < 0) return null;
+    const r = cons.results[tl];
+    if (!r || (cons.binds[tl] && refsIn(cons.body).includes(cons.binds[tl]!))) return null;
+    const nl = code.nodes[nil.body], cl = code.nodes[cons.body];
+    if (nl?.kind !== "lambda" || cl?.kind !== "lambda" || nl.params.length !== inputs.length || cl.params.length !== inputs.length) return null;
+    // The item's arm: op(e, r(d′)) or r(d′).
+    const callOf = (id: Id) => { const x = code.nodes[id]; return isCall(x) && x.args && code.nodes[x.fn]?.kind === "ref" ? x as Extract<typeof x, { args: Id[] }> : null; };
+    const target = (x: { fn: Id }) => (code.nodes[x.fn] as NodeOf<"ref">).target;
+    let op: "and" | "or" | null = null, e: Id | null = null, rest = callOf(cl.body);
+    if (rest && (target(rest) === S.and || target(rest) === S.or) && rest.args.length === 2) {
+      op = target(rest) === S.and ? "and" : "or";
+      e = rest.args[0];
+      rest = callOf(rest.args[1]);
+    }
+    if (!rest || target(rest) !== r || rest.args.length !== inputs.length) return null;
+    if (refsIn(cl.body).filter((x) => x === r).length !== 1) return null;
+    const s0 = expr(n.scrutinee, env, f, false);
+    if (s0.k !== "rt" || !/^array\.items\.a\d+$/.test(s0.fn)) return null;
+    const array = [...arrays.values()][Number(/\d+$/.exec(s0.fn)![0])];
+    const free = [...new Set(arms.flatMap((a) => refsIn(a.body)))].filter((b) => env.has(b));
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const ins = cl.params.map((p) => stype(zonk(p)));
+    if (ins.some((t) => !t)) return null;
+    if (ft.several || ft.chooses || ft.waits) return null;
+    const result = ft.result;
+    // g(array, k, n, inputs…, so far, captured…)
+    const params: LType[] = [array, "int", "int", ...(ins as LType[]), "i32", ...caps];
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.forward`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    const m = inputs.length, sofar: SExpr = { k: "local", i: 3 + m };
+    const capsIn = free.map((_, j): SExpr => ({ k: "local", i: 4 + m + j }));
+    const base = new Map(free.map((b, j) => [b, 4 + m + j]));
+    const withOp = (x: SExpr): SExpr => (op ? { k: "op", op, args: [sofar, x] } : x);
+    // The end: the empty list's function of the inputs.
+    let atEnd = new Map(base);
+    nl.params.forEach((p, j) => { atEnd = new Map(atEnd).set(p, 3 + j); });
+    // An item: e and d′ of it and the inputs, then on.
+    let inner = new Map(base);
+    cl.params.forEach((p, j) => { inner = new Map(inner).set(p, 3 + j); });
+    const k = g.locals.push("int") - 1, x = g.locals.push(c.fields[head].t) - 1;
+    if (cons.binds[head]) inner = new Map(inner).set(cons.binds[head]!, x);
+    const ev = op ? g.locals.push("i32") - 1 : -1;
+    const nexts = rest.args.map((a) => ({ i: g.locals.push(ins[rest!.args.indexOf(a)]!) - 1, a }));
+    let step: SExpr = { k: "call", fn: gi, args: [{ k: "local", i: 0 }, { k: "local", i: k }, { k: "local", i: 2 }, ...nexts.map((y): SExpr => ({ k: "local", i: y.i })), op ? { k: "op", op, args: [sofar, { k: "local", i: ev }] } : sofar, ...capsIn], tail: true };
+    for (const y of [...nexts].reverse()) step = { k: "let", i: y.i, value: expr(y.a, inner, g, false), body: step };
+    if (op) step = { k: "let", i: ev, value: expr(e!, inner, g, false), body: step };
+    step = { k: "let", i: x, value: { k: "rt", fn: `array.get.a${array.index}`, args: [{ k: "local", i: 0 }, { k: "local", i: 1 }] }, body: { k: "let", i: k, value: { k: "rt", fn: "int.add", args: [{ k: "local", i: 1 }, { k: "int", v: 1n }] }, body: step } };
+    g.body = { k: "if", t: result, cond: { k: "rt", fn: "int.equal", args: [{ k: "local", i: 1 }, { k: "local", i: 2 }] }, then: withOp(expr(nl.body, atEnd, g, !op)), else: step };
+    if (fails(g.body, funcs)) g.partial = true;
+    // Called: the array, 0, its length, the inputs, op's identity.
+    const al = f.locals.push(array) - 1, a: SExpr = { k: "local", i: al };
+    return { k: "let", i: al, value: s0.args[0], body: { k: "call", fn: gi, args: [a, { k: "int", v: 0n }, { k: "rt", fn: `array.length.a${array.index}`, args: [a] }, ...inputs.map((y) => expr(y, env, f, false)), { k: "bool", v: op !== "or" }, ...free.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], tail } };
   }
   // A fold over `items of array(a)` whose arms don't use the rest of the
   // list itself, as `characters` above: no list and no stack, the items

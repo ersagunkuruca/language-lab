@@ -336,3 +336,21 @@ test("a fold over a tree whose leaves abort on threads aborts at the first in or
   assert.equal(p.run("3").out, p.evaluator);
   assert.equal(p.run("0").out, p.evaluator);
 });
+
+// queens-count natively (C207f): `safe`'s fold to a function of the
+// distance, applied at once, is a loop from the first queen placed, no
+// closure per queen, and the count is the evaluator's.
+test("queens-count natively checks a column by a loop over the queens placed, and counts the evaluator's boards (C207f)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-forward-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/queens-count");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "queens")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  const c = readFileSync(join(dir, "queens.c"), "utf8");
+  assert.match(c, /lab_safe_fold_forward\(/);
+  assert.doesNotMatch(c, /lab_safe_fold_items\(/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "6"]).stdout.toString();
+  assert.match(evaluator, /boards of 6 queens: 4/);
+  for (const workers of ["3", "0"]) for (const n of ["6", "8"]) {
+    const out = spawnSync(join(dir, "queens"), [n], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString();
+    assert.equal(out, n === "6" ? evaluator : "boards of 8 queens: 92\n", `${workers} workers, ${n}`);
+  }
+});
