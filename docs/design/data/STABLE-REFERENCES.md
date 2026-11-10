@@ -229,7 +229,8 @@ before it, each as a representation:
 
 - **A region per scope** (C57). Temporaries made during one page update, one
   audio block or one frame are allocated by bumping a pointer and all freed
-  at once when it ends. Region inference: Tofte and Talpin's MLKit.
+  at once when it ends. Region inference: Tofte and Talpin's MLKit. Measured
+  in [REGIONS.md](REGIONS.md): not worth building yet.
 - **References as positions with a generation** (C58). A keyed collection
   is stored as a grow-only array with a free list; a key resolves to a slot
   plus a counter, so a reused slot never answers for an old key (generational
