@@ -28,20 +28,31 @@ typedef struct ters_ui {
   // A text's width and number of lines when it wraps at width.
   void (*measure)(void *ctx, const char *s, size_t n, double size, int bold, double width, double *w, int *lines);
   void (*page)(void *ctx, double w, double h, uint32_t bg);
+  // A picture's (an svg's) shapes, drawn over its box and cut to it, in
+  // the box's units from its top left (C199f): ops is a run of 1 x y (move
+  // to), 2 x y (line to), 3 x1 y1 x2 y2 x y (curve to), 4 (close), and 5
+  // fill stroke width dash gap join, which paints the shape so far (fill
+  // and stroke ARGB, 0 for none; join 0 miter, 1 round, 2 bevel) and
+  // starts the next.
+  void (*draw)(void *ctx, void *v, const double *ops, size_t n);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
 typedef struct { int kind; double a, b; } tl_track; // 0 px a, 1 fr a, 2 auto, 3 minmax(a px, b px)
 typedef struct {
   int display, row, wrap, pos, align, bold, ncols, border_box, set_w, set_h, set_left, set_top, set_maxw, auto_ml, auto_mr;
-  double gap_r, gap_c, pad[4], mar[4], radius, bw, w, h, maxw, left, top, size, line;
+  double gap_r, gap_c, pad[4], mar[4], radius, bw, w, h, maxw, left, top, size, line, aspect, wpct;
   uint32_t bg, color, bc;
+  // A picture's paint, which its shapes inherit.
+  uint32_t fill, stroke; double sw, fop, sop, dash[2]; int join;
   tl_track cols[8];
 } tl_css;
 typedef struct tl_n {
-  char *tag, *s, *id, *cls, *style;
+  char *tag, *s, *id, *cls, *style, **ak, **av;
   struct tl_n *parent, **kids;
-  int nk, ck;
+  int nk, ck, na;
+  // A picture's shapes as last drawn.
+  double *drawn; size_t ndrawn;
   void *view;
   tl_css c;
   double x, y, w, h;
@@ -79,11 +90,19 @@ static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const c
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = tl_dup(v, vn); }
   else if (kn == 5 && !memcmp(k, "value", 5)) tl_ui->set_value(tl_ui->ctx, e->view, v, vn);
+  else {
+    // Any other attribute, kept for pictures (d, cx, viewBox, fill …).
+    int j = 0; while (j < e->na && (strlen(e->ak[j]) != kn || memcmp(e->ak[j], k, kn))) j++;
+    if (j == e->na) { e->ak = realloc(e->ak, sizeof *e->ak * (size_t)(e->na + 1)); e->av = realloc(e->av, sizeof *e->av * (size_t)(e->na + 1)); e->ak[j] = tl_dup(k, kn); e->av[j] = 0; e->na++; }
+    free(e->av[j]); e->av[j] = tl_dup(v, vn);
+  }
 }
+static const char *tl_attr(tl_n *e, const char *k) { for (int j = 0; j < e->na; j++) if (!strcmp(e->ak[j], k)) return e->av[j]; return 0; }
 static void tl_remove_attribute(void *c, void *x, const char *k, size_t kn) {
   (void)c; tl_n *e = x;
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = 0; }
+  for (int j = 0; j < e->na; j++) if (strlen(e->ak[j]) == kn && !memcmp(e->ak[j], k, kn)) { free(e->ak[j]); free(e->av[j]); e->ak[j] = e->ak[e->na - 1]; e->av[j] = e->av[e->na - 1]; e->na--; break; }
 }
 static void tl_append(void *c, void *p, void *k) {
   (void)c; tl_n *e = p, *x = k;
@@ -97,6 +116,8 @@ static void tl_listen(void *c, void *x, const char *ev, size_t n, int h) { (void
 static void tl_gone(void *c, void *x) {
   (void)c; tl_n *e = x;
   tl_ui->gone(tl_ui->ctx, e->view);
+  for (int j = 0; j < e->na; j++) { free(e->ak[j]); free(e->av[j]); }
+  free(e->ak); free(e->av); free(e->drawn);
   free(e->tag); free(e->s); free(e->id); free(e->cls); free(e->style); free(e->kids); free(e);
 }
 
@@ -346,11 +367,22 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("box-sizing")) c->border_box = TL_V("border-box");
   else if (TL_IS("text-align")) c->align = TL_V("center") ? 1 : TL_V("right") || TL_V("end") ? 2 : 0;
   else if (TL_IS("position")) c->pos = TL_V("absolute") || TL_V("fixed") ? 2 : TL_V("relative") ? 1 : 0;
-  else if (TL_IS("width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->w = x, c->set_w = 1; }
+  else if (TL_IS("width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->w = x, c->set_w = 1, c->wpct = 0; else if (ok == 2) c->wpct = x, c->set_w = 0; }
   else if (TL_IS("height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->h = x, c->set_h = 1; }
   else if (TL_IS("max-width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->maxw = x, c->set_maxw = 1; }
   else if (TL_IS("left")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->left = x, c->set_left = 1; }
   else if (TL_IS("top")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->top = x, c->set_top = 1; }
+  else if (TL_IS("aspect-ratio")) { char *z; double a = strtod(v, &z); const char *q = tl_ws(z, e); if (q < e && *q == '/') { double b = strtod(q + 1, 0); if (b > 0) a /= b; } if (a > 0) c->aspect = a; }
+  else if (TL_IS("fill")) { uint32_t x = tl_colour(v, e); if (x != 1) c->fill = x; }
+  else if (TL_IS("stroke")) { uint32_t x = tl_colour(v, e); if (x != 1) c->stroke = x; }
+  else if (TL_IS("stroke-width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->sw = x; }
+  else if (TL_IS("fill-opacity")) c->fop = strtod(v, 0);
+  else if (TL_IS("stroke-opacity")) c->sop = strtod(v, 0);
+  else if (TL_IS("stroke-linejoin")) c->join = TL_V("round") ? 1 : TL_V("bevel") ? 2 : 0;
+  else if (TL_IS("stroke-dasharray")) {
+    if (TL_V("none")) c->dash[0] = c->dash[1] = 0;
+    else { const char *a; double x = tl_len(v, e, c->size, &ok, &a); a = tl_ws(a, e); if (a < e && *a == ',') a++; int o2 = 1; double y = tl_len(a, e, c->size, &o2, 0); if (ok == 1) { c->dash[0] = x; c->dash[1] = o2 == 1 ? y : x; } }
+  }
   else if (TL_IS("grid-template-columns")) {
     c->ncols = 0;
     for (const char *p = v; (p = tl_ws(p, e)) < e && c->ncols < 8;) {
@@ -399,6 +431,9 @@ static void tl_defaults(tl_css *c, const char *t, const tl_css *up) {
   c->size = up ? up->size : 16; c->color = up ? up->color : (tl_dark ? 0xFFECECEAu : 0xFF000000u);
   c->bold = up ? up->bold : 0; c->align = up ? up->align : 0; c->line = up ? up->line : 1.2;
   c->display = tl_inline(t) ? TL_INLINE : TL_BLOCK;
+  // SVG's paint is inherited: black fill, no stroke, 1 wide.
+  if (up) { c->fill = up->fill; c->stroke = up->stroke; c->sw = up->sw; c->fop = up->fop; c->sop = up->sop; c->dash[0] = up->dash[0]; c->dash[1] = up->dash[1]; c->join = up->join; }
+  else { c->fill = 0xFF000000u; c->sw = 1; c->fop = c->sop = 1; }
   if (!strcmp(t, "style") || !strcmp(t, "script") || !strcmp(t, "head") || !strcmp(t, "title")) c->display = TL_NONE;
   if (t[0] == 'h' && t[1] >= '1' && t[1] <= '6' && !t[2]) { static const double em[] = { 2, 1.5, 1.17, 1, .83, .67 }; c->size *= em[t[1] - '1']; c->bold = 1; c->mar[0] = c->mar[2] = c->size * .67; }
   if (!strcmp(t, "p") || !strcmp(t, "ul") || !strcmp(t, "ol")) c->mar[0] = c->mar[2] = c->size;
@@ -410,6 +445,9 @@ static void tl_defaults(tl_css *c, const char *t, const tl_css *up) {
 static void tl_style(tl_n *e, const tl_css *up, int root) {
   if (!e->tag) return;
   tl_defaults(&e->c, e->tag, up);
+  // A shape's paint attributes (fill="…"), under the sheet's rules.
+  static const char *paints[] = { "fill", "stroke", "stroke-width", "fill-opacity", "stroke-opacity", "stroke-linejoin", "stroke-dasharray" };
+  for (int j = 0; j < e->na; j++) for (int i = 0; i < 7; i++) if (!strcmp(e->ak[j], paints[i])) tl_decl(&e->c, e->ak[j], strlen(e->ak[j]), e->av[j], e->av[j] + strlen(e->av[j]));
   // The sheet's rules that match, by specificity and then order.
   int idx[512], n = 0;
   for (int i = 0; i < tl_nrules && n < 512; i++) if (tl_matches(&tl_rules[i], e, root)) idx[n++] = i;
@@ -429,6 +467,13 @@ static void tl_measure(tl_n *k, double width, double *w, int *lines) {
   k->measured = 1; k->m_size = size; k->m_bold = bold; k->m_width = width; k->m_w = *w; k->m_lines = *lines;
 }
 static void tl_lay(tl_n *e, double avail);
+// A picture's viewBox (x, y, width, height), when it has one.
+static int tl_viewbox(tl_n *e, double *vb) {
+  const char *p = tl_attr(e, "viewBox");
+  if (!p) return 0;
+  for (int i = 0; i < 4; i++) { char *z; vb[i] = strtod(p, &z); if (z == p) return 0; p = z; while (*p == ' ' || *p == ',') p++; }
+  return vb[2] > 0 && vb[3] > 0;
+}
 static double tl_line(const tl_css *c) { return c->size * c->line; }
 static int tl_blank(tl_n *k) { if (k->tag) return 0; for (const char *p = k->s; *p; p++) if (*p != ' ' && *p != '\n' && *p != '\t') return 0; return 1; }
 // The children laid out, with display: contents opened up.
@@ -452,6 +497,8 @@ static double tl_outer_h(tl_n *k) { return k->h + (k->tag ? k->c.mar[0] + k->c.m
 static double tl_fit(tl_n *k, double avail) {
   if (!k->tag) { double w; int lines; tl_measure(k, avail, &w, &lines); return w; }
   if (k->c.set_w) return tl_border_w(&k->c) + k->c.mar[1] + k->c.mar[3];
+  // A picture with no width set is 300 wide, as a browser's.
+  if (!strcmp(k->tag, "svg")) { double w = 300 + k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3]; return w < avail ? w : avail; }
   tl_n *it[256]; int n = tl_items(k, it, 256, 0);
   double inner = 0, line = 0, edge = k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3];
   int flexrow = k->c.display == TL_FLEX && k->c.row, used = 0;
@@ -594,11 +641,18 @@ static void tl_lay(tl_n *e, double avail) {
   if (!e->tag) { tl_text_lay(e, avail); return; }
   tl_css *c = &e->c;
   double edge = c->pad[1] + c->pad[3] + 2 * c->bw;
-  double w = c->set_w ? tl_border_w(c) : avail;
+  // A width in % of the box it is in (avail, its margins aside): its
+  // content box's, or its border box's with border-box sizing.
+  double w = c->set_w ? tl_border_w(c) : c->wpct > 0 ? avail * c->wpct / 100 + (c->border_box ? 0 : edge) : avail;
   double mw = c->border_box ? c->maxw : c->maxw + edge;
   if (c->set_maxw && w > mw) w = mw;
   if (w < 0) w = 0;
-  double h = tl_flow(e, w - edge) + c->pad[0] + c->pad[2] + 2 * c->bw;
+  double vb[4];
+  int pic = !strcmp(e->tag, "svg");
+  // A picture's shapes aren't boxes; with no height set it is as high as
+  // its viewBox is for its width (150 without one).
+  double h = (pic ? (tl_viewbox(e, vb) ? (w - edge) * vb[3] / vb[2] : 150) : tl_flow(e, w - edge)) + c->pad[0] + c->pad[2] + 2 * c->bw;
+  if (!c->set_h && c->aspect > 0) h = c->border_box ? w / c->aspect : (w - edge) / c->aspect + c->pad[0] + c->pad[2] + 2 * c->bw;
   if (c->set_h) h = tl_border_h(c);
   e->w = w; e->h = h;
   // Absolutely placed children: at left and top of e's padding box.
@@ -628,6 +682,153 @@ static void tl_font(tl_n *e, const tl_css *c) {
   memcpy(e->sent_font, v, sizeof v); e->sent |= 4;
   tl_ui->font(tl_ui->ctx, e->view, c->size, c->bold, c->color, c->align, c->size * c->line);
 }
+// ---- Pictures (C199f): an svg's shapes as ters_ui's draw ops, in its
+// box's units, its viewBox fitted in its content box and centred (SVG's
+// xMidYMid meet). Paths (M L H V C S Q T A Z, and their relative forms),
+// circles, ellipses, rects, lines, polylines and polygons; groups pass
+// their paint on. Text in a picture isn't drawn yet.
+typedef struct { double *o; size_t n, cap; double s, tx, ty; } tl_ops;
+static void tl_op(tl_ops *d, double x) { if (d->n == d->cap) { d->cap = d->cap ? 2 * d->cap : 256; d->o = realloc(d->o, sizeof *d->o * d->cap); } d->o[d->n++] = x; }
+static void tl_pt(tl_ops *d, double x, double y) { tl_op(d, d->tx + x * d->s); tl_op(d, d->ty + y * d->s); }
+static void tl_mv(tl_ops *d, double x, double y) { tl_op(d, 1); tl_pt(d, x, y); }
+static void tl_ln(tl_ops *d, double x, double y) { tl_op(d, 2); tl_pt(d, x, y); }
+static void tl_cu(tl_ops *d, double a, double b, double c, double e, double x, double y) { tl_op(d, 3); tl_pt(d, a, b); tl_pt(d, c, e); tl_pt(d, x, y); }
+// An arc from (x0, y0) to (x, y) as curves (SVG 1.1 F.6.5, then a curve
+// for each quarter turn or less).
+static void tl_arc(tl_ops *d, double x0, double y0, double rx, double ry, double rot, int large, int sweep, double x, double y) {
+  if (rx < 0) rx = -rx;
+  if (ry < 0) ry = -ry;
+  if ((x0 == x && y0 == y)) return;
+  if (rx == 0 || ry == 0) { tl_ln(d, x, y); return; }
+  double ph = rot * 3.14159265358979323846 / 180, cp = cos(ph), sp = sin(ph);
+  double dx = (x0 - x) / 2, dy = (y0 - y) / 2, x1 = cp * dx + sp * dy, y1 = -sp * dx + cp * dy;
+  double l = x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry);
+  if (l > 1) { rx *= sqrt(l); ry *= sqrt(l); }
+  double num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1, den = rx * rx * y1 * y1 + ry * ry * x1 * x1;
+  double k = den > 0 && num > 0 ? sqrt(num / den) : 0;
+  if (large == sweep) k = -k;
+  double cx1 = k * rx * y1 / ry, cy1 = -k * ry * x1 / rx;
+  double cx = cp * cx1 - sp * cy1 + (x0 + x) / 2, cy = sp * cx1 + cp * cy1 + (y0 + y) / 2;
+  double t1 = atan2((y1 - cy1) / ry, (x1 - cx1) / rx), t2 = atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx), dt = t2 - t1;
+  const double tau = 2 * 3.14159265358979323846;
+  if (sweep && dt < 0) dt += tau;
+  if (!sweep && dt > 0) dt -= tau;
+  int segs = (int)ceil(fabs(dt) / (tau / 4) - 1e-9); if (segs < 1) segs = 1;
+  double st = dt / segs, a = 4.0 / 3 * tan(st / 4);
+  for (int i = 0; i < segs; i++) {
+    double u = t1 + st * i, v = u + st;
+    double ex1 = cos(u) - a * sin(u), ey1 = sin(u) + a * cos(u), ex2 = cos(v) + a * sin(v), ey2 = sin(v) - a * cos(v), ex = cos(v), ey = sin(v);
+#define TL_AX(px, py) (cx + rx * (px) * cp - ry * (py) * sp)
+#define TL_AY(px, py) (cy + rx * (px) * sp + ry * (py) * cp)
+    tl_cu(d, TL_AX(ex1, ey1), TL_AY(ex1, ey1), TL_AX(ex2, ey2), TL_AY(ex2, ey2), i == segs - 1 ? x : TL_AX(ex, ey), i == segs - 1 ? y : TL_AY(ex, ey));
+#undef TL_AX
+#undef TL_AY
+  }
+}
+static void tl_ellipse(tl_ops *d, double cx, double cy, double rx, double ry) {
+  const double k = 0.5522847498307936;
+  tl_mv(d, cx + rx, cy);
+  tl_cu(d, cx + rx, cy + k * ry, cx + k * rx, cy + ry, cx, cy + ry);
+  tl_cu(d, cx - k * rx, cy + ry, cx - rx, cy + k * ry, cx - rx, cy);
+  tl_cu(d, cx - rx, cy - k * ry, cx - k * rx, cy - ry, cx, cy - ry);
+  tl_cu(d, cx + k * rx, cy - ry, cx + rx, cy - k * ry, cx + rx, cy);
+  tl_op(d, 4);
+}
+// The next number of a path or a list of points; 0 when there's none.
+static int tl_num(const char **p, double *x) {
+  const char *q = *p;
+  while (*q == ' ' || *q == ',' || *q == '\n' || *q == '\t' || *q == '\r') q++;
+  char *z; *x = strtod(q, &z);
+  if (z == q) return 0;
+  *p = z; return 1;
+}
+// An arc's flag: one character, 0 or 1, which may touch what follows.
+static int tl_flag(const char **p, int *f) {
+  const char *q = *p;
+  while (*q == ' ' || *q == ',' || *q == '\n' || *q == '\t' || *q == '\r') q++;
+  if (*q != '0' && *q != '1') return 0;
+  *f = *q == '1'; *p = q + 1; return 1;
+}
+static void tl_path(tl_ops *d, const char *p) {
+  double x = 0, y = 0, sx = 0, sy = 0, qx = 0, qy = 0; // the pen, the subpath's start, the last control point
+  char cmd = 0, last = 0;
+  for (;;) {
+    while (*p == ' ' || *p == ',' || *p == '\n' || *p == '\t' || *p == '\r') p++;
+    if (!*p) break;
+    if ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')) cmd = *p++;
+    else if (!cmd) break;
+    int rel = cmd >= 'a', C = rel ? cmd - 32 : cmd;
+    double ox = rel ? x : 0, oy = rel ? y : 0, a[7];
+    if (C == 'Z') { tl_op(d, 4); x = sx; y = sy; last = 'Z'; cmd = 0; continue; }
+    int need = C == 'M' || C == 'L' || C == 'T' ? 2 : C == 'H' || C == 'V' ? 1 : C == 'C' ? 6 : C == 'S' || C == 'Q' ? 4 : C == 'A' ? 7 : -1;
+    if (need < 0) break;
+    int ok = 1;
+    for (int i = 0; i < need && ok; i++) {
+      if (C == 'A' && (i == 3 || i == 4)) { int f; ok = tl_flag(&p, &f); a[i] = f; }
+      else ok = tl_num(&p, &a[i]);
+    }
+    if (!ok) break;
+    int curve = 0;
+    switch (C) {
+      case 'M': x = ox + a[0]; y = oy + a[1]; sx = x; sy = y; tl_mv(d, x, y); cmd = rel ? 'l' : 'L'; break;
+      case 'L': x = ox + a[0]; y = oy + a[1]; tl_ln(d, x, y); break;
+      case 'H': x = ox + a[0]; tl_ln(d, x, y); break;
+      case 'V': y = oy + a[0]; tl_ln(d, x, y); break;
+      case 'C': tl_cu(d, ox + a[0], oy + a[1], ox + a[2], oy + a[3], ox + a[4], oy + a[5]); qx = ox + a[2]; qy = oy + a[3]; x = ox + a[4]; y = oy + a[5]; curve = 'C'; break;
+      case 'S': { double c1x = last == 'C' ? 2 * x - qx : x, c1y = last == 'C' ? 2 * y - qy : y; tl_cu(d, c1x, c1y, ox + a[0], oy + a[1], ox + a[2], oy + a[3]); qx = ox + a[0]; qy = oy + a[1]; x = ox + a[2]; y = oy + a[3]; curve = 'C'; break; }
+      case 'Q': case 'T': {
+        double c1x, c1y, ex, ey;
+        if (C == 'Q') { c1x = ox + a[0]; c1y = oy + a[1]; ex = ox + a[2]; ey = oy + a[3]; }
+        else { c1x = last == 'Q' ? 2 * x - qx : x; c1y = last == 'Q' ? 2 * y - qy : y; ex = ox + a[0]; ey = oy + a[1]; }
+        tl_cu(d, x + 2.0 / 3 * (c1x - x), y + 2.0 / 3 * (c1y - y), ex + 2.0 / 3 * (c1x - ex), ey + 2.0 / 3 * (c1y - ey), ex, ey);
+        qx = c1x; qy = c1y; x = ex; y = ey; curve = 'Q'; break;
+      }
+      case 'A': tl_arc(d, x, y, a[0], a[1], a[2], (int)a[3], (int)a[4], ox + a[5], oy + a[6]); x = ox + a[5]; y = oy + a[6]; break;
+    }
+    last = (char)curve;
+  }
+}
+static double tl_at(tl_n *e, const char *k) { const char *v = tl_attr(e, k); return v ? strtod(v, 0) : 0; }
+static void tl_points(tl_ops *d, const char *p, int close) {
+  double x, y; int first = 1;
+  while (p && tl_num(&p, &x) && tl_num(&p, &y)) { if (first) tl_mv(d, x, y); else tl_ln(d, x, y); first = 0; }
+  if (close && !first) tl_op(d, 4);
+}
+static uint32_t tl_alpha(uint32_t c, double o) { if (o >= 1) return c; if (o <= 0) return 0; return (uint32_t)((c >> 24) * o + 0.5) << 24 | (c & 0xFFFFFFu); }
+static void tl_shapes(tl_n *e, tl_ops *d) {
+  if (!e->tag || e->c.display == TL_NONE) return;
+  const char *t = e->tag;
+  size_t at = d->n;
+  if (!strcmp(t, "g") || !strcmp(t, "svg") || !strcmp(t, "a")) { for (int j = 0; j < e->nk; j++) tl_shapes(e->kids[j], d); return; }
+  if (!strcmp(t, "path")) { const char *p = tl_attr(e, "d"); if (p) tl_path(d, p); }
+  else if (!strcmp(t, "circle")) { double r = tl_at(e, "r"); if (r > 0) tl_ellipse(d, tl_at(e, "cx"), tl_at(e, "cy"), r, r); }
+  else if (!strcmp(t, "ellipse")) { double rx = tl_at(e, "rx"), ry = tl_at(e, "ry"); if (rx > 0 && ry > 0) tl_ellipse(d, tl_at(e, "cx"), tl_at(e, "cy"), rx, ry); }
+  else if (!strcmp(t, "rect")) { double x = tl_at(e, "x"), y = tl_at(e, "y"), w = tl_at(e, "width"), h = tl_at(e, "height"); if (w > 0 && h > 0) { tl_mv(d, x, y); tl_ln(d, x + w, y); tl_ln(d, x + w, y + h); tl_ln(d, x, y + h); tl_op(d, 4); } }
+  else if (!strcmp(t, "line")) { tl_mv(d, tl_at(e, "x1"), tl_at(e, "y1")); tl_ln(d, tl_at(e, "x2"), tl_at(e, "y2")); }
+  else if (!strcmp(t, "polyline") || !strcmp(t, "polygon")) tl_points(d, tl_attr(e, "points"), t[4] == 'g');
+  else return;
+  if (d->n == at) return;
+  const tl_css *c = &e->c;
+  // A line has no inside to fill.
+  tl_op(d, 5); tl_op(d, strcmp(t, "line") ? tl_alpha(c->fill, c->fop) : 0); tl_op(d, tl_alpha(c->stroke, c->sop));
+  tl_op(d, c->sw * d->s); tl_op(d, c->dash[0] * d->s); tl_op(d, c->dash[1] * d->s); tl_op(d, c->join);
+}
+// A picture's shapes to the screen, when they changed.
+static void tl_picture(tl_n *e) {
+  const tl_css *c = &e->c;
+  double l = c->pad[3] + c->bw, t = c->pad[0] + c->bw, cw = e->w - c->pad[1] - c->pad[3] - 2 * c->bw, ch = e->h - c->pad[0] - c->pad[2] - 2 * c->bw, vb[4];
+  if (cw < 0) cw = 0;
+  if (ch < 0) ch = 0;
+  if (!tl_viewbox(e, vb)) { vb[0] = vb[1] = 0; vb[2] = cw > 0 ? cw : 1; vb[3] = ch > 0 ? ch : 1; }
+  tl_ops d = { 0, 0, 0, 1, 0, 0 };
+  d.s = cw / vb[2] < ch / vb[3] ? cw / vb[2] : ch / vb[3];
+  d.tx = l + (cw - vb[2] * d.s) / 2 - vb[0] * d.s; d.ty = t + (ch - vb[3] * d.s) / 2 - vb[1] * d.s;
+  for (int j = 0; j < e->nk; j++) tl_shapes(e->kids[j], &d);
+  if (e->drawn && d.n == e->ndrawn && !memcmp(d.o, e->drawn, sizeof *d.o * d.n)) { free(d.o); return; }
+  free(e->drawn); e->drawn = d.o ? d.o : malloc(sizeof(double)); e->ndrawn = d.n;
+  if (tl_ui->draw) tl_ui->draw(tl_ui->ctx, e->view, e->drawn, e->ndrawn);
+}
+static void tl_hide(tl_n *e) { tl_place(e, 0, 0, 0, 0, 0); for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); }
 // Each box to the screen: its place against its parent's view.
 static void tl_show(tl_n *e, double dx, double dy, int shown) {
   if (!e->tag) {
@@ -651,6 +852,7 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   tl_place(e, e->x + dx, e->y + dy, e->w, e->h, me);
   tl_paint(e, e->c.bg, e->c.radius, e->c.bw, e->c.bc);
   tl_font(e, &e->c);
+  if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
 }
 // The style sheets: the texts of the page's style elements.
@@ -718,7 +920,7 @@ void ters_ui_resize(double width, int dark) {
 // size wide, so places that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
 export const UI_HEADLESS_C = String.raw`
-typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold; struct uv **kids; double x, y, w, h, size, radius, border; uint32_t bg, color; } uv;
+typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
 static void *u_box(void *c, const char *t, size_t n) { (void)c; return u_new(t, n, 0, 0); }
 static void *u_text(void *c, const char *s, size_t n) { (void)c; return u_new(0, 0, s, n); }
@@ -731,7 +933,8 @@ static void u_listen(void *c, void *x, const char *ev, size_t n, int h) {
   v->ev = realloc(v->ev, sizeof *v->ev * (size_t)(v->ne + 1)); v->eh = realloc(v->eh, sizeof *v->eh * (size_t)(v->ne + 1));
   v->ev[v->ne] = tl_dup(ev, n); v->eh[v->ne++] = h;
 }
-static void u_gone(void *c, void *x) { (void)c; uv *v = x; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v); }
+static void u_gone(void *c, void *x) { (void)c; uv *v = x; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
+static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv *v = x; free(v->ops); v->ops = malloc(sizeof *ops * (n + 1)); memcpy(v->ops, ops, sizeof *ops * n); v->nops = n; }
 static void u_place(void *c, void *x, double px, double py, double w, double h, int shown) { (void)c; uv *v = x; v->x = px; v->y = py; v->w = w; v->h = h; v->shown = shown; }
 static void u_paint(void *c, void *x, uint32_t bg, double radius, double border, uint32_t bc) { (void)c; (void)bc; uv *v = x; v->bg = bg; v->radius = radius; v->border = border; }
 static void u_font(void *c, void *x, double size, int bold, uint32_t color, int align, double line) { (void)c; (void)align; (void)line; uv *v = x; v->size = size; v->bold = bold; v->color = color; }
@@ -763,6 +966,20 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && v->border) printf(" border %g", v->border);
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
   putchar('\n');
+  // A picture's shapes, one a line: the box round its points on the page
+  // (a curve's control points too), and its paint.
+  double lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 };
+  for (size_t i = 0; i < v->nops;) {
+    int op = (int)v->ops[i++], m = op == 1 || op == 2 ? 2 : op == 3 ? 6 : 0;
+    for (int k = 0; k < m; k++) { double z = v->ops[i + k] + (k % 2 ? y : x); if (z < lo[k % 2]) lo[k % 2] = z; if (z > hi[k % 2]) hi[k % 2] = z; }
+    i += m;
+    if (op == 5) {
+      printf("%*sshape %g %g %g %g fill %08X stroke %08X width %g", 2 * depth + 2, "", lo[0], lo[1], hi[0] - lo[0], hi[1] - lo[1], (unsigned)v->ops[i], (unsigned)v->ops[i + 1], v->ops[i + 2]);
+      if (v->ops[i + 3]) printf(" dash %g %g", v->ops[i + 3], v->ops[i + 4]);
+      putchar('\n');
+      i += 6; lo[0] = lo[1] = 1e300; hi[0] = hi[1] = -1e300;
+    }
+  }
   for (int j = 0; j < v->nk; j++) u_print(v->kids[j], x, y, depth + 1);
 }
 static tl_n *u_find(tl_n *e, const char *id) {
@@ -773,7 +990,7 @@ static tl_n *u_find(tl_n *e, const char *id) {
 }
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 int main(int argc, char **argv) {
-  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page };
+  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw };
   double width = 360; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
