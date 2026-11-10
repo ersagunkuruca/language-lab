@@ -23,8 +23,10 @@ const memoryStore = () => {
   return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k), get length() { return m.size; }, key: (i: number) => [...m.keys()][i] ?? null };
 };
 
-// The page, with `workers` fake workers (none: no Worker at all).
-function open(script: string, workers: number, errors: string[] = []) {
+// The page, with `workers` fake workers (none: no Worker at all), its
+// clock `fast` times the real one (so a short first map starts them).
+function open(script: string, workers: number, errors: string[] = [], fast = 1) {
+  const clock = { now: () => performance.now() * fast };
   const blobs = new Map<string, string>(), jobs = { sent: 0 };
   class FakeWorker {
     onmessage: ((e: { data: unknown }) => void) | null = null;
@@ -44,7 +46,7 @@ function open(script: string, workers: number, errors: string[] = []) {
   const body = new FakeEl("body");
   const document = { ...fakeDoc(), body, currentScript: { textContent: script } };
   const ctx: Record<string, unknown> = {
-    document, localStorage: memoryStore(), console: { ...console, error: (...xs: unknown[]) => void errors.push(xs.map(String).join(" ")) }, performance, setTimeout, queueMicrotask,
+    document, localStorage: memoryStore(), console: { ...console, error: (...xs: unknown[]) => void errors.push(xs.map(String).join(" ")) }, performance: clock, setTimeout, queueMicrotask,
     navigator: { hardwareConcurrency: workers + 1 }, requestAnimationFrame: () => 0,
     ...(workers ? { Worker: FakeWorker, Blob: class { text: string; constructor(parts: string[]) { this.text = parts.join(""); } }, URL: { createObjectURL: (b: { text: string }) => { const u = `blob:${blobs.size}`; blobs.set(u, b.text); return u; } } } : {}),
   };
@@ -89,26 +91,26 @@ test("a map in a page's handler goes to the page's workers and draws the picture
 // A page whose handler keeps the numbers below b that take over 100 steps
 // to reach 1 (collatz's), b 9000 the first time and 300000 after: the
 // first fits the handler's million steps, the second doesn't.
-function collatzPage(): string {
-  const program = join(dir, "collatz-page");
+function collatzPage(name = "collatz-page", count = '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), (i) => 100 < ‹steps to one›(i, 0)))', first = 9000): string {
+  const program = join(dir, name);
   cpSync(join(import.meta.dirname, "../../ters/examples/collatz"), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
   s.define("main", "function", []);
   s.step("main", "said", 'cell("")');
   const hole = () => /□#(\w+)/.exec(s.view("main"))![1];
-  s.replace(hole(), 'tag("main", [button("Count", (event) => ((b) => ((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), (i) => 100 < ‹steps to one›(i, 0))))(if length(read(said)) = 0 then 9000 else 300000)), p([text(() => read(said))])])');
+  s.replace(hole(), `tag("main", [button("Count", (event) => ((b) => ${count})(if length(read(said)) = 0 then ${first} else 300000)), p([text(() => read(said))])])`);
   s.save();
-  const out = join(dir, "collatz.html");
+  const out = join(dir, `${name}.html`);
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   return /<script>([\s\S]*)<\/script>/.exec(readFileSync(out, "utf8"))![1];
 }
 
-test("a keep in a page's handler goes to the workers, and their steps count against the handler's, as in turn", async () => {
-  const script = collatzPage();
-  const runs = await Promise.all([0, 3].map(async (workers) => {
-    const errors: string[] = [], page = open(script, workers, errors);
+// The page in turn and on three workers: what it says after each of two
+// presses, what it wrote to the console, and how many jobs went out.
+const twice = (script: string) => Promise.all([0, 3].map(async (workers) => {
+    const errors: string[] = [], page = open(script, workers, errors, 100);
     page.draw();
     await page.settled();
     const first = page.status();
@@ -116,12 +118,21 @@ test("a keep in a page's handler goes to the workers, and their steps count agai
     await page.settled();
     return { first, second: page.status(), errors, sent: page.jobs.sent };
   }));
-  const [alone, shared] = runs;
+
+test("a keep in a page's handler goes to the workers, and their steps count against the handler's, as in turn", async () => {
+  const [alone, shared] = await twice(collatzPage());
   assert.equal(alone.first, "9000: 3292 [27, 31, 41]");
   assert.deepEqual(shared, { ...alone, sent: shared.sent });
   // The second runs out of steps, on the workers as in turn: the handler
   // didn't finish, and the page keeps what it showed.
   assert.equal(alone.second, alone.first);
   assert.match(alone.errors.join("\n"), /click handler didn't finish/);
+  assert.ok(shared.sent > 0, "the numbers went to the workers");
+});
+
+test("a fold in a function a page's handler calls goes to the workers too: the function has a copy that waits", async () => {
+  const [alone, shared] = await twice(collatzPage("collatz-calls", 'write(said, show(b) ++ ": " ++ show(‹steps of all›(range(b))) ++ ", most " ++ show(‹most steps›(range(b))))', 1000));
+  assert.equal(alone.first, "1000: 59431, most 178");
+  assert.deepEqual(shared, { ...alone, sent: shared.sent });
   assert.ok(shared.sent > 0, "the numbers went to the workers");
 });
