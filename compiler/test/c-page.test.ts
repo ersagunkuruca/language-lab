@@ -81,8 +81,9 @@ test("dice in C rolls from the world's randomness and lands its hundred throws a
 });
 
 // On a phone's screen (C199d): c-layout.ts lays dice out from its own
-// style sheet. What doesn't hang on how wide texts are is where Chromium
-// puts it, 360 wide (measured by hand with Playwright): the chart's box,
+// style sheet, under the base sheet a built page has (page-base.ts). What
+// doesn't hang on how wide texts are is where Chromium puts it in the page
+// build-web writes, 360 wide (measured by hand with Playwright): the chart's box,
 // its rows, each bar's track, fill and fair mark; in dark, the sheet's
 // dark colours.
 test("dice laid out in C on a 360-wide screen puts the chart's bars where Chromium does (C199d)", { skip }, () => {
@@ -94,13 +95,13 @@ test("dice laid out in C on a 360-wide screen puts the chart's bars where Chromi
   const r = spawnSync(exe, ["width:360", "click:hundred"]);
   assert.equal(r.status, 0, r.stderr.toString());
   const after = r.stdout.toString().split("\x1e\n")[1].split("\n").map((s) => s.trim());
-  assert.ok(after.includes("div 16 292 328 329 bg FFFFFFFF radius 14 border 1"), after.join("\n"));
-  assert.ok(after.includes("h1 16 32 328 42"));
-  assert.ok(after.includes("p 16 255 328 21"));
+  assert.ok(after.includes("div 32 308 296 329 bg FFFFFFFF radius 14 border 1"), after.join("\n"));
+  assert.ok(after.includes("h1 32 48 296 42"));
+  assert.ok(after.includes("p 32 271 296 21"));
   const fills = after.filter((s) => s.includes("bg FF2F9E6A")), marks = after.filter((s) => s.includes("bg FFD0453A"));
   // From the page: widths 12 9 21 …, and lefts 8.33 16.67 25 ….
-  assert.deepEqual(fills.map((s) => s.split(" ").slice(1, 5).map(Number)), [12, 9, 21, 24, 42, 51, 57, 21, 42, 9, 12].map((w, j) => [77, 314.5 + 27 * j, w, 14]));
-  assert.deepEqual(marks.map((s) => s.split(" ").slice(1, 5).map((x) => Math.round(Number(x) * 100) / 100)), [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((k, j) => [Math.round((77 + 100 * k / 12) * 100) / 100, 311.5 + 27 * j, 2, 20]));
+  assert.deepEqual(fills.map((s) => s.split(" ").slice(1, 5).map(Number)), [12, 9, 21, 24, 42, 51, 57, 21, 42, 9, 12].map((w, j) => [93, 330.5 + 27 * j, w, 14]));
+  assert.deepEqual(marks.map((s) => s.split(" ").slice(1, 5).map((x) => Math.round(Number(x) * 100) / 100)), [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((k, j) => [Math.round((93 + 100 * k / 12) * 100) / 100, 327.5 + 27 * j, 2, 20]));
   const dark = spawnSync(exe, ["dark"]).stdout.toString();
   assert.match(dark, /^page 360 [\d.]+ bg FF161615\n/);
   assert.match(dark, /button [\d. ]+ bg FF7AA2FF radius 10/);
@@ -108,7 +109,7 @@ test("dice laid out in C on a 360-wide screen puts the chart's bars where Chromi
 
 // The other page examples (C199f): what C shows after the same taps, and
 // where it lays them out on a 360-wide screen against Chromium (measured
-// by hand with Playwright, the evaluator's page in a body). Texts measure
+// by hand with Playwright, in the page build-web writes). Texts measure
 // differently on the headless host, so only boxes above or beside them
 // are compared.
 test("tumble in C shows what html.ts shows after taps and hints (C199f)", { skip }, () => {
@@ -151,10 +152,10 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
   assert.equal(r.status, 0, r.stderr.toString());
   const lines = r.stdout.toString().split("\n").map((s) => s.trim());
-  // Chromium: main 32 24 296, h1 32 24 296, a lane's h2 8 below the lane's top, 272 wide.
-  assert.match(lines[1], /^main 32 24 296 /);
-  assert.match(lines[2], /^h1 32 24 296 /);
-  const lane = lines.findIndex((s) => s.startsWith("div 32") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
+  // Chromium: main 40 40 280, h1 40 40 280, a lane's h2 8 below the lane's top, 272 wide.
+  assert.match(lines[1], /^main 40 40 280 /);
+  assert.match(lines[2], /^h1 40 40 280 /);
+  const lane = lines.findIndex((s) => s.startsWith("div 40") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
   assert.equal(lines[lane + 1].split(" ")[0], "h2");
   assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);
   assert.equal(h2[3], 272);
@@ -185,19 +186,19 @@ test("compass's and bounce's pictures drawn in C where Chromium draws them (C199
     return out;
   };
   const c = shapes("compass");
-  assert.deepEqual(c[0].svg, [328, 328]);
-  const chromium = [[0, 95.66, 218.67, 218.67], [109.33, 95.66, 218.67, 218.67], [-929.33, 205, 2186.67, 0], [-405.91, -796.28, 1093.33, 1893.71], [-359.42, -796.28, 1093.33, 1893.71], [100.88, 110.31, 126.25, 126.25], [105.23, 200.9, 8.2, 8.2], [214.57, 200.9, 8.2, 8.2], [159.9, 106.21, 8.2, 8.2], [159.9, 295.58, 8.2, 8.2]];
+  assert.deepEqual(c[0].svg, [296, 296]);
+  const chromium = [[0, 86.33, 197.33, 197.33], [98.67, 86.33, 197.33, 197.33], [-838.67, 185, 1973.33, 0], [-366.31, -718.59, 986.67, 1708.96], [-324.35, -718.59, 986.67, 1708.96], [91.03, 99.55, 113.93, 113.93], [94.97, 181.3, 7.4, 7.4], [193.63, 181.3, 7.4, 7.4], [144.3, 95.85, 7.4, 7.4], [144.3, 266.75, 7.4, 7.4]];
   const last = c.slice(-10);
   last.forEach((s, j) => s.box.forEach((x, k) => assert.ok(Math.abs(x - chromium[j][k]) < 0.01, `shape ${j}: ${s.box} against ${chromium[j]}`)));
-  // A ring: no fill, its class's stroke 2 wide in 480, so 2 * 328 / 480.
-  assert.match(last[0].paint, /^fill 00000000 stroke FFF3A712 width 1.36667$/);
+  // A ring: no fill, its class's stroke 2 wide in 480, so 2 * 296 / 480.
+  assert.match(last[0].paint, /^fill 00000000 stroke FFF3A712 width 1.23333$/);
   assert.match(last[6].paint, /^fill FF6C4AB6 stroke FF6C4AB6 /);
   assert.match(last[8].paint, /^fill FFFFFFFF stroke FF6C4AB6 /);
   // bounce: a body's reach, its fill attribute at the class's 0.12, dashed 3 3.
   const b = shapes("bounce");
-  assert.deepEqual(b[0].svg, [298, 298]);
-  assert.match(b[1].paint, /^fill 1FE4572E stroke FFE4572E width 0.993333 dash 2.98 2.98$/);
-  assert.ok(Math.abs(b[1].box[0] - 58.88) < 0.01 && Math.abs(b[1].box[2] - 55.07) < 0.01, String(b[1].box));
+  assert.deepEqual(b[0].svg, [266, 266]);
+  assert.match(b[1].paint, /^fill 1FE4572E stroke FFE4572E width 0.886667 dash 2.66 2.66$/);
+  assert.ok(Math.abs(b[1].box[0] - 52.56) < 0.01 && Math.abs(b[1].box[2] - 49.16) < 0.01, String(b[1].box));
 });
 
 // A finger on a picture (C199f): the screen gives the point in the
@@ -214,7 +215,7 @@ test("dragging a point of compass's picture in C moves it under the finger (C199
   const points = (page: string) => page.split("\n").filter((s) => s.includes("stroke FF6C4AB6")).map((s) => s.trim().split(" ").slice(1, 3).map(Number));
   const before = points(spawnSync(exe, ["width:360"]).stdout.toString().split("\x1e\n")[0]);
   // The first free point's centre, on the page.
-  const [x, y] = [before[0][0] + 4.1, before[0][1] + 4.1];
+  const [x, y] = [before[0][0] + 3.7, before[0][1] + 3.7];
   const r = spawnSync(exe, ["width:360", `pointer:down:${x},${y}`, `pointer:move:${x + 10},${y}`, `pointer:move:${x + 20},${y}`, `pointer:up:${x + 20},${y}`]);
   assert.equal(r.status, 0, r.stderr.toString());
   const after = points(r.stdout.toString().split("\x1e\n")[4]);
@@ -337,7 +338,7 @@ test("pig in C plays a game, replays the very same one and a thousand quietly (C
   // a game's lines are inside it, not a page that grows and grows.
   const ui = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", "click:play"], { maxBuffer: 1 << 30 });
   assert.equal(ui.status, 0, ui.stderr.toString());
-  const [before, after] = ui.stdout.toString().split("\x1e\n"), log = (t: string) => t.match(/ div [\d.]+ [\d.]+ 328 ([\d.]+) bg FFFFFFFF radius 14 border 1 clip scroll ([\d.]+)/)!.slice(1).map(Number);
+  const [before, after] = ui.stdout.toString().split("\x1e\n"), log = (t: string) => t.match(/ div [\d.]+ [\d.]+ 296 ([\d.]+) bg FFFFFFFF radius 14 border 1 clip scroll ([\d.]+)/)!.slice(1).map(Number);
   assert.deepEqual(log(before), [14, 14]);
   const [high, inside] = log(after);
   assert.equal(high, 340);
