@@ -45,6 +45,9 @@ typedef struct ters_ui {
   // was told 2), and how high what's inside is, padding and border in.
   // May be null.
   void (*scroll)(void *ctx, void *v, double inside);
+  // A box's borders on single sides (border-bottom and the rest; top,
+  // right, bottom, left wide), in colour, inside its box. May be null.
+  void (*sides)(void *ctx, void *v, const double *wide, uint32_t colour);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -64,6 +67,9 @@ typedef struct {
   int set_minh, set_maxh; double minh, maxh;
   // The font it is in (font: inherit).
   double up_size, up_line; int up_bold;
+  // Borders on single sides (top, right, bottom, left), and their colour:
+  // laid out as padding is, drawn by ters_ui's sides.
+  double side[4]; uint32_t sidec;
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -83,7 +89,7 @@ typedef struct tl_n {
   int sent, m_bold, m_lines, measured, sent_clip;
   // How high what's inside it is (its height as nothing held it), and what
   // the screen was told of it, for a box that scrolls.
-  double inside, sent_inside;
+  double inside, sent_inside, sent_side[5];
   // The animation running on it (C199f): its name, when it started (ms),
   // whether it ended, and what it does to the box now (moved by ax, ay,
   // scaled by as round its middle, opacity ao).
@@ -442,7 +448,13 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("background") || TL_IS("background-color")) { uint32_t x = tl_colour(v, e); if (x != 1) c->bg = x; }
   else if (TL_IS("color")) { uint32_t x = tl_colour(v, e); if (x != 1) c->color = x; }
   else if (TL_IS("border-radius")) c->radius = tl_len(v, e, c->size, &ok, 0);
+  else if (TL_IS("border-top") || TL_IS("border-right") || TL_IS("border-bottom") || TL_IS("border-left")) {
+    int i = k[7] == 't' ? 0 : k[7] == 'r' ? 1 : k[7] == 'b' ? 2 : 3;
+    if (TL_V("none") || TL_V("0")) c->side[i] = 0;
+    else { const char *a; double w = tl_len(v, e, c->size, &ok, &a); if (ok) { c->side[i] = w; a = tl_ws(a, e); while (a < e && *a != ' ') a++; uint32_t x = tl_colour(a, e); c->sidec = x == 1 ? 0xFF000000u : x; } }
+  }
   else if (TL_IS("border")) {
+    memset(c->side, 0, sizeof c->side);
     if (TL_V("none") || TL_V("0")) c->bw = 0;
     else { const char *a; double w = tl_len(v, e, c->size, &ok, &a); if (ok) { c->bw = w; a = tl_ws(a, e); while (a < e && *a != ' ') a++; uint32_t x = tl_colour(a, e); c->bc = x == 1 ? 0xFF000000u : x; } }
   }
@@ -579,6 +591,8 @@ static void tl_style(tl_n *e, const tl_css *up, int root) {
   for (int i = 1; i < n; i++) for (int j = i; j > 0 && (tl_rules[idx[j]].spec < tl_rules[idx[j - 1]].spec || (tl_rules[idx[j]].spec == tl_rules[idx[j - 1]].spec && tl_rules[idx[j]].order < tl_rules[idx[j - 1]].order)); j--) { int t = idx[j]; idx[j] = idx[j - 1]; idx[j - 1] = t; }
   for (int i = 0; i < n; i++) tl_decls(&e->c, tl_rules[idx[i]].decl, tl_rules[idx[i]].end);
   if (e->style) { tl_vars_of = e; tl_decls(&e->c, e->style, e->style + strlen(e->style)); tl_vars_of = 0; }
+  // A border on one side takes room as padding does (inside the box).
+  for (int i = 0; i < 4; i++) e->c.pad[i] += e->c.side[i];
   // An animation starts when its name is new on the box, as in a browser.
   if (strcmp(e->c.anim, e->an)) { strcpy(e->an, e->c.anim); e->a0 = tl_ms(); e->aend = 0; e->ax = e->ay = 0; e->as = e->ao = 1; }
   for (int j = 0; j < e->nk; j++) tl_style(e->kids[j], &e->c, 0);
@@ -1011,6 +1025,10 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   tl_paint(e, bg, e->c.radius * as, e->c.bw * as, bc);
   tl_font(e, &e->c);
   if (tl_ui->clip && (!(e->sent & 8) || e->sent_clip != e->c.clip)) { e->sent |= 8; e->sent_clip = e->c.clip; tl_ui->clip(tl_ui->ctx, e->view, e->c.clip); }
+  if (tl_ui->sides) {
+    double sd[5] = { e->c.side[0] * as, e->c.side[1] * as, e->c.side[2] * as, e->c.side[3] * as, e->c.sidec };
+    if (((e->sent & 32) || sd[0] || sd[1] || sd[2] || sd[3]) && (!(e->sent & 32) || memcmp(sd, e->sent_side, sizeof sd))) { e->sent |= 32; memcpy(e->sent_side, sd, sizeof sd); tl_ui->sides(tl_ui->ctx, e->view, sd, e->c.sidec); }
+  }
   if (tl_ui->scroll && e->c.clip == 2 && (!(e->sent & 16) || e->sent_inside != e->inside)) { e->sent |= 16; e->sent_inside = e->inside; tl_ui->scroll(tl_ui->ctx, e->view, e->inside); }
   if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
@@ -1246,7 +1264,7 @@ void ters_ui_resize(double width, int dark) {
 // size wide, so places that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
 export const UI_HEADLESS_C = String.raw`
-typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip; double inside; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
+typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip; double inside, side[4]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
 static void *u_box(void *c, const char *t, size_t n) { (void)c; return u_new(t, n, 0, 0); }
 static void *u_text(void *c, const char *s, size_t n) { (void)c; return u_new(0, 0, s, n); }
@@ -1263,6 +1281,7 @@ static void u_gone(void *c, void *x) { (void)c; uv *v = x; for (int j = 0; j < v
 static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv *v = x; free(v->ops); v->ops = malloc(sizeof *ops * (n + 1)); memcpy(v->ops, ops, sizeof *ops * n); v->nops = n; }
 static void u_clip(void *c, void *x, int on) { (void)c; ((uv *)x)->clip = on; }
 static void u_scroll(void *c, void *x, double inside) { (void)c; ((uv *)x)->inside = inside; }
+static void u_sides(void *c, void *x, const double *w, uint32_t colour) { (void)c; uv *v = x; memcpy(v->side, w, sizeof v->side); v->sidec = colour; }
 static void u_place(void *c, void *x, double px, double py, double w, double h, int shown) { (void)c; uv *v = x; v->x = px; v->y = py; v->w = w; v->h = h; v->shown = shown; }
 static void u_paint(void *c, void *x, uint32_t bg, double radius, double border, uint32_t bc) { (void)c; (void)bc; uv *v = x; v->bg = bg; v->radius = radius; v->border = border; }
 static void u_font(void *c, void *x, double size, int bold, uint32_t color, int align, double line) { (void)c; (void)align; (void)line; uv *v = x; v->size = size; v->bold = bold; v->color = color; }
@@ -1294,6 +1313,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && v->border) printf(" border %g", v->border);
   if (v->tag && v->clip) printf(" clip");
   if (v->tag && v->clip == 2) printf(" scroll %g", v->inside);
+  if (v->tag && (v->side[0] || v->side[1] || v->side[2] || v->side[3])) printf(" sides %g %g %g %g %08X", v->side[0], v->side[1], v->side[2], v->side[3], v->sidec);
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
   putchar('\n');
   // A picture's shapes, one a line: the box round its points on the page
@@ -1334,7 +1354,7 @@ static void u_frame(uv *v, double s) {
 }
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 int main(int argc, char **argv) {
-  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll };
+  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides };
   double width = 360; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
