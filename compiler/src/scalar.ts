@@ -78,7 +78,7 @@ import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
-import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
+import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -997,7 +997,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // are known runs forward as any call does.
   let pinned: ((id: Id) => SExpr | undefined) | null = null;
   // The calls of f given two calls of f (C61 e), and the one being lowered.
-  let halves: Map<Id, [number, number]> | undefined;
+  let halves: Map<Id, [number, number]> | undefined, treeFolds: Map<Id, Set<Id>> | undefined;
   const halving = new Set<Id>();
   // A mode function giving all its answers (modeFn's `all`): the local
   // holding the answers found after the arm being written, in order.
@@ -2760,6 +2760,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], ...(src ? { src } : {}) };
   }
   const shapeOfNamed = new Map<string, number>();
+  // A fold's own function (fn) as a value, its inputs those of t (C61 e).
+  function foldValue(fn: number, t: FType): SExpr {
+    const key = `&fold${fn}|${t.key}`;
+    if (!index.has(key)) {
+      const shape = shapes.push({ t, caps: [] }) - 1;
+      const g: SFunc = { def: funcs[fn].def, name: `${funcs[fn].name}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "call", fn, args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
+      index.set(key, funcs.push(g) - 1);
+      closureCode.add(index.get(key)!);
+      shapeOfNamed.set(key, shape);
+    }
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [] };
+  }
   // A builtin used as a value, for JavaScript from the core IR (C137c12):
   // a closure that calls the evaluator's, as `host` calls it.
   function builtinValue(target: Id, t: FType): SExpr {
@@ -2878,6 +2890,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const lets: { i: number; value: SExpr }[] = [];
       const bind = (b: Id, t: LType, value: SExpr) => { const i = g.locals.push(t) - 1; inner = new Map(inner).set(b, i); lets.push({ i, value }); };
       a.binds.forEach((b, j) => bind(b, c.fields[j].t, { k: "field", rec: scrut, t: st, c: ci, i: j }));
+      // An arm given two folds of the tree's own halves, needing both
+      // (C61 e): the two worked out by the runtime, which may run them on
+      // other cores (branches-rt.ts bothPure), as a function's two calls
+      // of itself are.
+      const halves = a.results.flatMap((r, j) => (r && c.fields[j].t === st ? [j] : []));
+      if (opts.host && !fibers && !underBudget && halves.length === 2 && a.results.filter((r) => r).length === 2 && (treeFolds ??= parallelTreeFolds(code, info)).get(n.id)?.has(a.id)) {
+        const fn = foldValue(gi, fnOf(params, result));
+        const half = (j: number): SExpr[] => [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured];
+        const on = g.locals.push("i32") - 1;
+        lets.push({ i: on, value: { k: "rt", fn: "both.on", args: [] } });
+        const [j0, j1] = halves;
+        bind(a.results[j0]!, result, { k: "if", cond: local(on), then: { k: "rt", fn: "both.pure", args: [fn, { k: "num", v: params.length }, ...half(j0), ...half(j1), { k: "rt", fn: "fuel.get", args: [] }] }, else: { k: "call", fn: gi, args: half(j0), tail: false }, t: result });
+        bind(a.results[j1]!, result, { k: "if", cond: local(on), then: { k: "rt", fn: "both.second", args: [] }, else: { k: "call", fn: gi, args: half(j1), tail: false }, t: result });
+        return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
+      }
       a.results.forEach((r, j) => {
         if (!r) return;
         if (c.fields[j].t !== st) {

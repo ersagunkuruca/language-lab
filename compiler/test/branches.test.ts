@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { ABORT_OP, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { INT } from "../../ters/src/lang/types.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -330,4 +331,28 @@ test("fibonacci's two calls of itself are shared out on workers, the same number
   assert.equal(side[0], "14930352\n");
   assert.match(side[1], /branches on workers: [1-9]\d*\n/);
   assert.equal(small[0], inEvaluator[0]);
+});
+
+// A tree grown by halves (its two halves a function's two calls of itself)
+// and folded by halves, each leaf a long sum: both worked out on workers.
+test("a fold over a tree works out its two halves on workers, the same total as in turn (C61 e)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const file = module(dir, (k) => {
+    const Tree = k.type("Tree", [], [["leaf", [["n", () => k.tref(INT)]]], ["node", [["left", (self) => k.tref(self)], ["right", (self) => k.tref(self)]]]]);
+    const grow = k.def("grow"), total = k.def("total"), main = k.def("main");
+    k.define(grow, k.fn(["d", "x"], (d, x) => k.if(k.call(INT_OPS.less, d, k.int(1)), k.call(Tree.v.leaf, x),
+      k.call(Tree.v.node, k.call(grow, k.call(INT_OPS.sub, d, k.int(1)), k.call(INT_OPS.mul, x, k.int(2))), k.call(grow, k.call(INT_OPS.sub, d, k.int(1)), k.call(INT_OPS.add, k.call(INT_OPS.mul, x, k.int(2)), k.int(1)))))));
+    k.define(total, k.fn(["t"], (t) => k.fold(t, [
+      { variant: Tree.v.leaf, names: ["n"], body: ([n]) => k.call(lib("sum"), k.call(lib("map"), k.call(INT_OPS.range, k.int(60000)), k.fn(["i"], (i) => k.call(B.mul, k.call(INT_OPS.toNumber, i), k.call(INT_OPS.toNumber, n))))) },
+      { variant: Tree.v.node, names: ["l", "r"], results: ["a", "b"], body: (_, [a, b]) => k.call(B.add, a!, b!) },
+    ])));
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(total, k.call(grow, k.int(6), k.int(1)))))));
+    return main;
+  }, false);
+  const js = readFileSync(file, "utf8");
+  assert.match(js, /R\.rt\("both\.pure"/);
+  const [side, alone] = await Promise.all([run([file], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }), run([file], { TERS_WORKERS: "0" })]);
+  assert.equal(side[2], 0, side[1]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
 });

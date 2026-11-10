@@ -285,9 +285,12 @@ What this leaves, in order:
     Since f only computes, it meets the same two again.
   - **Result.** fib 38: 2.3 s before, 2.1 s in turn with it, 0.9 s with
     three workers on 4 cores.
-  - **Not yet.** Pages (no blocking wait there), C's threads, and a fold
-    over a tree (its two "with" answers), which the same runtime could
-    take.
+  - **A fold over a tree** (C61e2). A fold whose arms only compute, and
+    whose arm with two "with" answers needs both surely (not under a
+    match, an if's one side or a lambda), works the two out the same way:
+    the fold's own function given each half. A tree of 64 leaves, each
+    summing 60,000 products: 1.70 s in turn, 1.24 s on three workers.
+  - **Not yet.** Pages (no blocking wait there) and C's threads.
 - A Float32 type, if Ersagun wants float maps on the GPU: a language
   question, so a row of its own, not part of C61.
 
