@@ -85,18 +85,21 @@ export type Node =
   // each call and rigid in the case that handles it. `await(ticket: Ticket
   // a) → a` has its own a.
   | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true; params?: Id[] }
-  // `ports` (an interface's field with results, POLAR.md, L128d3): its
-  // type is a function and these name its inputs, then its results.
+  // An interface's field with results (POLAR.md, L128d3) is typed as a
+  // function whose ports are named (`tfun.ports`, below).
   // `same`: another case's field of the same type that this one is (L168,
   // SHARED-FIELDS-2026-11-02.md), so `x.to` reads it on every case that
   // has it. It names the first case's field, which names none.
-  | { id: Id; kind: "field"; type: Id; ports?: string[]; same?: Id }
+  | { id: Id; kind: "field"; type: Id; same?: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
   | { id: Id; kind: "tref"; target: Id; args: Id[] }
   // A function type. `effects` (effect defs or the builtin effects) is its
-  // row, closed: a function type with none listed is pure.
-  | { id: Id; kind: "tfun"; params: Id[]; result: Id; effects?: Id[] }
+  // row, closed: a function type with none listed is pure. `ports` names
+  // its inputs, then the parts of its result (L182c3): an interface's
+  // field with results, `polar : (length, angle) → x, y`, whose directions
+  // are paired by these names (directions.ts).
+  | { id: Id; kind: "tfun"; params: Id[]; result: Id; effects?: Id[]; ports?: string[] }
   // Case analysis. There is one arm per variant (the editor makes them from
   // the type), or arms for some and `otherwise` for the rest, so a missing
   // case can't be written down.
@@ -192,9 +195,14 @@ export const useTarget = (nodes: Record<Id, Node>, u: Use): Id => {
 // null for any other field.
 export const fieldPorts = (nodes: Record<Id, Node>, f: NodeOf<"field">): { ins: number[]; outs: number[] } | null => {
   const t = nodes[f.type];
-  if (!f.ports || t?.kind !== "tfun" || f.ports.length <= t.params.length) return null;
+  if (t?.kind !== "tfun" || !t.ports || t.ports.length <= t.params.length) return null;
   const at = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => from + i);
-  return { ins: at(0, t.params.length), outs: at(t.params.length, f.ports.length) };
+  return { ins: at(0, t.params.length), outs: at(t.params.length, t.ports.length) };
+};
+// A field's port names: its function type's (L182c3).
+export const portNames = (nodes: Record<Id, Node>, f: NodeOf<"field">): string[] | undefined => {
+  const t = nodes[f.type];
+  return t?.kind === "tfun" ? t.ports : undefined;
 };
 // A saved program's nodes as today's (L130d): a use was its own kind,
 // `solve`, naming its relation directly; it is a call whose `fn` is a ref.
@@ -226,6 +234,17 @@ function unpolarInOrder(nodes: Record<Id, unknown>): void {
     if (n.kind === "call" && n.given && n.binds && f?.kind === "ref" && f.target === "std.trig.trig.unpolar") nodes[id] = { ...n, given: re(n.given), binds: re(n.binds) };
   }
 }
+// A field's port names are its function type's (L182c3).
+function portsOnTheType(nodes: Record<Id, unknown>): void {
+  for (const [id, x] of Object.entries(nodes)) {
+    const n = x as { kind?: string; type?: Id; ports?: string[] };
+    if (n.kind !== "field" || !n.ports) continue;
+    const { ports, ...rest } = n;
+    nodes[id] = rest;
+    const t = nodes[n.type!] as { kind?: string } | undefined;
+    if (t?.kind === "tfun") nodes[n.type!] = { ...t, ports };
+  }
+}
 // A definition that was a `direction` of a relation is a way of it now.
 function directionsAsWays(nodes: Record<Id, unknown>): void {
   for (const [id, x] of Object.entries(nodes)) {
@@ -255,6 +274,7 @@ export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => 
   { what: "a use gives its produced ports, its body a let of them (L211g)", step: (nodes) => shapeHooks.usesGiveTheirPorts?.(nodes) },
   { what: "a definition's results are its lambda's, among its parameters (L225d)", step: resultsOnTheLambda },
   { what: "a direction of a relation is a way of it (L182c2)", step: directionsAsWays },
+  { what: "a field's port names are its function type's (L182c3)", step: portsOnTheType },
 ];
 export const SHAPE = SHAPE_STEPS.length;
 export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };
@@ -345,9 +365,9 @@ export const SCHEMA: Schema = {
   hole: {},
   typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref", pure: "meaning" },
   variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning" },
-  field: { type: "child", ports: "meaning", same: "ref" },
+  field: { type: "child", same: "ref" },
   tref: { target: "ref", args: "child" },
-  tfun: { params: "child", result: "child", effects: "ref" },
+  tfun: { params: "child", result: "child", effects: "ref", ports: "meaning" },
   match: { name: "child", scrutinee: "child", arms: "child", otherwise: "child" },
   fold: { scrutinee: "child", arms: "child" },
   arm: { value: "child", variant: "ref", binds: "child", results: "child", body: "child" },

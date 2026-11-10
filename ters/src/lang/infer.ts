@@ -15,7 +15,7 @@ import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, bodyOf } from "../model.ts";
+import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf } from "../model.ts";
 import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
@@ -1520,7 +1520,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (field?.kind === "field" && fp) {
       const { ins, outs } = fp;
       const given = Object.keys(n.given).filter((k) => k !== "out").map(Number);
-      const port = (i: number) => field.ports?.[i] ?? String(i);
+      const port = (i: number) => portNames(code.nodes, field)?.[i] ?? String(i);
       if (given.length !== ins.length || !ins.every((i) => given.includes(i)) || !Object.keys(bindsOf(n)).every((k) => outs.includes(Number(k))))
         err(n.id, `${nm(useTarget(code.nodes, n))} gives ${outs.map(port).join(", ")} from ${ins.map(port).join(", ")}`);
       relationalSolve(n, env, row, inner, false, undefined, true);
@@ -2057,7 +2057,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   for (const { impl, field, by } of resultsGiven) {
     const fl = code.nodes[field] as NodeOf<"field">, d = code.nodes[by];
     const lam = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
-    const port = (i: number) => fl.ports?.[i] ?? String(i);
+    const port = (i: number) => portNames(code.nodes, fl)?.[i] ?? String(i);
     const fp = fieldPorts(code.nodes, fl)!;
     const want = `${fp.outs.map(port).join(", ")} from ${fp.ins.map(port).join(", ")}`;
     // Read as functions (L128d): the same number of inputs and of results.

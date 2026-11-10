@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, type Call, bindsOf, isBound } from "../model.ts";
+import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, isBound } from "../model.ts";
 import { derivedFrom, nodesWhere, portsOf, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -51,7 +51,7 @@ export function directionProblem(code: Code, d: Id, nm: (id: Id) => string): str
 // are positions there, so only the function changes.
 function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | null {
   // Its given ports, by name where the field names them.
-  const name = (g: NodeOf<"field">, k: string) => (k === "out" ? k : g.ports?.[Number(k)] ?? k);
+  const name = (g: NodeOf<"field">, k: string) => (k === "out" ? k : portNames(code.nodes, g)?.[Number(k)] ?? k);
   const given = Object.keys(n.given).filter((k) => k !== "out").map((k) => name(f, k));
   const reads = (g: NodeOf<"field">) => {
     const ins = fieldPorts(code.nodes, g)?.ins.map((i) => name(g, String(i))) ?? [];
@@ -59,12 +59,12 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | nu
   };
   if (reads(f)) return null;
   const v = Object.values(code.nodes).find((x): x is NodeOf<"variant"> => x.kind === "variant" && x.fields.includes(f.id));
-  const ports = (g: NodeOf<"field">) => [...(g.ports ?? [])].sort().join();
+  const ports = (g: NodeOf<"field">) => [...(portNames(code.nodes, g) ?? [])].sort().join();
   for (const id of v?.fields ?? []) {
     const g = code.nodes[id];
-    if (g?.kind !== "field" || !fieldPorts(code.nodes, g) || id === f.id || !g.ports || ports(g) !== ports(f) || !reads(g)) continue;
+    if (g?.kind !== "field" || !fieldPorts(code.nodes, g) || id === f.id || !portNames(code.nodes, g) || ports(g) !== ports(f) || !reads(g)) continue;
     // The same ports, perhaps in another order: each moved to g's position.
-    const key = (k: string) => (k === "out" ? k : String(g.ports!.indexOf(name(f, k))));
+    const key = (k: string) => (k === "out" ? k : String(portNames(code.nodes, g)!.indexOf(name(f, k))));
     const re = (r: Record<string, Id>) => Object.fromEntries(Object.entries(r).map(([k, x]) => [key(k), x]));
     return { use: isBound(n) ? { ...n, given: re(n.given), binds: re(n.binds) } : { ...n, given: re(n.given) }, target: id };
   }
