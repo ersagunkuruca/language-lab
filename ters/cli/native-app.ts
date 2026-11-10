@@ -72,7 +72,7 @@ export const JNI_C = String.raw`
 #include <jni.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[13];
+static jmethodID ters_jm[14];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -112,15 +112,22 @@ static void j_measure(void *c, const char *s, size_t n, double size, int bold, d
   *w = x[0]; *lines = (int)x[1];
 }
 static void j_page(void *c, double w, double h, uint32_t bg) { (void)c; TERS_J(12, w, h, (jint)bg); }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page };
+static void j_draw(void *c, void *v, const double *ops, size_t n) {
+  (void)c;
+  jdoubleArray a = (*ters_j)->NewDoubleArray(ters_j, (jsize)n);
+  (*ters_j)->SetDoubleArrayRegion(ters_j, a, 0, (jsize)n, ops);
+  TERS_J(13, ters_id(v), a);
+  (*ters_j)->DeleteLocalRef(ters_j, a);
+}
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw };
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[13][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" } };
-  for (int i = 0; i < 13; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[14][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" } };
+  for (int i = 0; i < 14; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -160,7 +167,12 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, 
 const ACTIVITY = `package ${PACKAGE};
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Canvas;
+import android.graphics.DashPathEffect;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -274,6 +286,8 @@ public class MainActivity extends Activity {
       e.setPadding(px(2), 0, px(2), 0);
       e.setIncludeFontPadding(false);
       v = e;
+    } else if (tag.equals("svg")) {
+      v = new Picture(this, density);
     } else {
       FrameLayout f = new FrameLayout(this);
       f.setClipChildren(false);
@@ -362,6 +376,48 @@ public class MainActivity extends Activity {
     float most = 0;
     for (int i = 0; i < l.getLineCount(); i++) most = Math.max(most, l.getLineWidth(i));
     return new double[] { most / density, l.getLineCount() };
+  }
+
+  // A picture's shapes (ters_ui's draw ops, in dp from its top left).
+  void draw(int id, double[] ops) { View v = views.get(id); if (v instanceof Picture) { ((Picture) v).ops = ops; v.invalidate(); } }
+
+  static final class Picture extends FrameLayout {
+    double[] ops = new double[0];
+    private final float density;
+    private final Paint brush = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Picture(Context c, float density) { super(c); this.density = density; setWillNotDraw(false); }
+    private float f(double x) { return (float) (x * density); }
+    @Override protected void onDraw(Canvas c) {
+      super.onDraw(c);
+      c.save();
+      c.clipRect(0, 0, getWidth(), getHeight());
+      Path p = new Path();
+      double[] o = ops;
+      for (int i = 0; i < o.length;) {
+        switch ((int) o[i++]) {
+          case 1: p.moveTo(f(o[i]), f(o[i + 1])); i += 2; break;
+          case 2: p.lineTo(f(o[i]), f(o[i + 1])); i += 2; break;
+          case 3: p.cubicTo(f(o[i]), f(o[i + 1]), f(o[i + 2]), f(o[i + 3]), f(o[i + 4]), f(o[i + 5])); i += 6; break;
+          case 4: p.close(); break;
+          case 5: {
+            int fill = (int) (long) o[i], stroke = (int) (long) o[i + 1], join = (int) o[i + 5];
+            float w = f(o[i + 2]);
+            if ((fill >>> 24) != 0) { brush.reset(); brush.setAntiAlias(true); brush.setStyle(Paint.Style.FILL); brush.setColor(fill); c.drawPath(p, brush); }
+            if ((stroke >>> 24) != 0 && w > 0) {
+              brush.reset(); brush.setAntiAlias(true); brush.setStyle(Paint.Style.STROKE); brush.setColor(stroke); brush.setStrokeWidth(w);
+              brush.setStrokeJoin(join == 1 ? Paint.Join.ROUND : join == 2 ? Paint.Join.BEVEL : Paint.Join.MITER);
+              if (o[i + 3] > 0) brush.setPathEffect(new DashPathEffect(new float[] { f(o[i + 3]), f(o[i + 4] > 0 ? o[i + 4] : o[i + 3]) }, 0));
+              c.drawPath(p, brush);
+            }
+            i += 6;
+            p = new Path();
+            break;
+          }
+          default: i = o.length;
+        }
+      }
+      c.restore();
+    }
   }
 
   void page(double w, double h, int bg) {

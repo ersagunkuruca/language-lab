@@ -159,3 +159,43 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);
   assert.equal(h2[3], 272);
 });
+
+// Pictures drawn in C (C199f): each shape's box against its svg, as
+// Chromium puts it 360 wide (measured by hand with Playwright: compass's
+// two rings, three lines, a circle through three points and four points;
+// getBoundingClientRect, which for circles and straight paths is the box
+// round the curves' points the headless host prints), and its paint from
+// the sheet's classes and the shape's own attributes.
+test("compass's and bounce's pictures drawn in C where Chromium draws them (C199f)", { skip }, () => {
+  const shapes = (name: string) => {
+    const p0 = loadProgram(join(import.meta.dirname, `../../ters/examples/${name}`));
+    const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+    const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+    const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+    const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
+    assert.equal(r.status, 0, r.stderr.toString());
+    const lines = r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim());
+    const at = lines.findIndex((s) => s.startsWith("svg ")), svg = lines[at].split(" ").map(Number);
+    const out: { box: number[]; paint: string; svg: number[] }[] = [];
+    for (const s of lines.slice(at + 1)) {
+      if (!s.startsWith("shape ")) break;
+      const w = s.split(" ");
+      out.push({ box: [Number(w[1]) - svg[1], Number(w[2]) - svg[2], Number(w[3]), Number(w[4])], paint: w.slice(5).join(" "), svg: svg.slice(3, 5) });
+    }
+    return out;
+  };
+  const c = shapes("compass");
+  assert.deepEqual(c[0].svg, [328, 328]);
+  const chromium = [[0, 95.66, 218.67, 218.67], [109.33, 95.66, 218.67, 218.67], [-929.33, 205, 2186.67, 0], [-405.91, -796.28, 1093.33, 1893.71], [-359.42, -796.28, 1093.33, 1893.71], [100.88, 110.31, 126.25, 126.25], [105.23, 200.9, 8.2, 8.2], [214.57, 200.9, 8.2, 8.2], [159.9, 106.21, 8.2, 8.2], [159.9, 295.58, 8.2, 8.2]];
+  const last = c.slice(-10);
+  last.forEach((s, j) => s.box.forEach((x, k) => assert.ok(Math.abs(x - chromium[j][k]) < 0.01, `shape ${j}: ${s.box} against ${chromium[j]}`)));
+  // A ring: no fill, its class's stroke 2 wide in 480, so 2 * 328 / 480.
+  assert.match(last[0].paint, /^fill 00000000 stroke FFF3A712 width 1.36667$/);
+  assert.match(last[6].paint, /^fill FF6C4AB6 stroke FF6C4AB6 /);
+  assert.match(last[8].paint, /^fill FFFFFFFF stroke FF6C4AB6 /);
+  // bounce: a body's reach, its fill attribute at the class's 0.12, dashed 3 3.
+  const b = shapes("bounce");
+  assert.deepEqual(b[0].svg, [298, 298]);
+  assert.match(b[1].paint, /^fill 1FE4572E stroke FFE4572E width 0.993333 dash 2.98 2.98$/);
+  assert.ok(Math.abs(b[1].box[0] - 58.88) < 0.01 && Math.abs(b[1].box[2] - 55.07) < 0.01, String(b[1].box));
+});

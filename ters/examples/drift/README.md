@@ -19,3 +19,4 @@ drift.ideal.js), records rebuilt each step 2.6 s, changed in place 0.14 s,
 as columns 0.08 s. The compiled program stores the motes as an array, but
 `map` makes a new array and a new record for each mote every step; written
 in place (the map's array and the motes have one holder), 0.33 s by hand.
+Each mote is now changed in place in the map: compiled 0.47 to 0.63 s.
