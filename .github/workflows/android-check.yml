@@ -14,8 +14,8 @@ on:
         default: tumble
         required: true
       taps:
-        description: "Taps, by a view's text or square:N (a view N dp square), separated by |"
-        default: "Hint|square:44"
+        description: "Taps, by a view's text, square:N (a view N dp square) or scroll:N (N dp down), separated by |"
+        default: "Hint|scroll:300|square:44"
         required: true
 
 permissions:
