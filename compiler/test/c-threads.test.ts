@@ -112,7 +112,6 @@ test("a keep's tests run on threads, and it gives the evaluator's array of the i
   assert.equal(aborts.run("0").out, aborts.evaluator);
 });
 
-<<<<<<< HEAD
 // main prints all pass's or any pass's answer over 0 to n - 1, a list kept
 // as an array (read by position too), with `test` given each and work.
 function tested(n: number, by: "all pass" | "any pass", test: (k: Lang, x: Id, work: Id) => Id) {
@@ -141,8 +140,6 @@ test("all pass and any pass run their tests on threads, answering by the first t
   }
 });
 
-=======
->>>>>>> origin/main
 test("a together's actions run on threads, sharing a big Int, and give the evaluator's list (C201)", { skip }, () => {
   const p = togetherProgram(6, (k, i, big, w) => k.call(INT_OPS.add, w, k.call(INT_OPS.mul, big, k.int(i))));
   assert.match(p.evaluator, /^\[\d+, /);
