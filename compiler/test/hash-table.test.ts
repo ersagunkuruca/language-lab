@@ -292,3 +292,16 @@ test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records
     assert.deepEqual(got, lines);
   }
 });
+
+// C58j: in C, `array of` a table's keys fills the array from the table's
+// slots, with no list between: swarm's `keys of` each tick.
+test("in C, swarm's keys go from its table straight into an array, and it prints what it prints evaluated (C58j)", { skip }, async () => {
+  const { join } = await import("node:path");
+  const { mkdtempSync, readFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), swarm = join(import.meta.dirname, "../../ters/examples/swarm");
+  const out = join(mkdtempSync(join(tmpdir(), "swarm-")), "swarm");
+  execFileSync(process.execPath, [ters, "native", swarm, "-o", out], { encoding: "utf8" });
+  assert.match(readFileSync(`${out}.c`, "utf8"), /lab__keys_t0_e\d+_a\d+\(/);
+  assert.equal(execFileSync(out, ["40", "20"], { encoding: "utf8" }), "708 motes after 40 ticks, 800 made\n");
+});
