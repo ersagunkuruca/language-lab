@@ -26,6 +26,7 @@ itself is a small part, so an array part for small Int keys would buy
 little here; listing the keys straight from the table would buy most.
 
 Since the map's puts and removes are written in place where nobody else
-holds it (compiler/src/owned-tables.ts), compiled JavaScript takes 1.4 s.
+holds it (compiler/src/owned-tables.ts), and `keys of` lists the keys
+straight from the table, compiled JavaScript takes 0.95 s, native 1.05 s.
 A data-oriented version written by hand (compiler/gaps/swarm.ideal.js)
 takes 90 ms.

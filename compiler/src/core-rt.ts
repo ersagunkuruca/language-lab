@@ -84,11 +84,12 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a
 // Map with Baker's versions), a record key given as the evaluator's
 // record and taken back from its entries.
-const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e\d+)?$/;
+const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 // What the runtime needs of the program's tables, as plain data a module
 // can carry: whether each is a Hash set.
-export interface TableSpec { set: boolean }
-function tableFn(op: string, t: TableSpec): (...xs: unknown[]) => unknown {
+// `keys`: which of a map's entries lists are its keys alone.
+export interface TableSpec { set: boolean; keys?: boolean[] }
+function tableFn(op: string, t: TableSpec, e?: number): (...xs: unknown[]) => unknown {
   const bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
   const impl = (id: Id) => STD_IMPL[id] as (...xs: unknown[]) => unknown;
   switch (op) {
@@ -104,7 +105,7 @@ function tableFn(op: string, t: TableSpec): (...xs: unknown[]) => unknown {
     // The same, no answer given back as FAIL, not thrown: printed where
     // the caller checks it (core-js.ts, C59).
     case "atv": return (m, k) => tableRead(m as Table, k, FAIL);
-    case "entries": return t.set ? (m) => impl(HASH_SET_OPS.items)(m) : (m) => impl(TABLE_OPS.entries)(m);
+    case "entries": return t.set ? (m) => impl(HASH_SET_OPS.items)(m) : t.keys?.[e ?? -1] ? (m) => impl(TABLE_OPS.keys)(m) : (m) => impl(TABLE_OPS.entries)(m);
   }
   return () => { throw new Unsupported(`table.${op}`); };
 }
@@ -290,7 +291,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   }
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
-  if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
+  if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])], tm[3] === undefined ? undefined : Number(tm[3]));
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
   const base = name.replace(/\.a\d+$/, "");
   if (OWN[base]) return OWN[base] as (...xs: unknown[]) => unknown;
