@@ -342,5 +342,13 @@ test("pig in C plays a game, replays the very same one and a thousand quietly (C
   assert.deepEqual(log(before), [14, 14]);
   const [high, inside] = log(after);
   assert.equal(high, 340);
-  assert.ok(inside > 1000, String(inside));
+  assert.ok(inside > high, String(inside));
+  // Each line of it has a border at its bottom only, 1 wide, as Chromium
+  // lays it out: 6 + 21 a line + 6 + 1 high (34 for one line of text),
+  // each right under the one before.
+  const ruled = after.split("\n").filter((s) => s.includes(" sides 0 0 1 0 "));
+  assert.ok(ruled.length > 20, String(ruled.length));
+  const ys = ruled.map((s) => s.trim().split(" ").map(Number)).map((w) => [w[2], w[4]]);
+  for (let j = 0; j + 1 < ys.length; j++) { assert.equal((ys[j][1] - 13) % 21, 0, String(ys[j])); assert.equal(ys[j + 1][0] - ys[j][0], ys[j][1]); }
+  assert.ok(ys.some(([, h]) => h === 34));
 });
