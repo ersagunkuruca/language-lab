@@ -297,8 +297,11 @@ const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
 // A map whose function only computes, its items on threads (L101), and a
 // together whose actions only compute, its actions so (C201).
+// A search split by its first choice (C203): the item a thread's run
+// keeps of it, and a search inside that keeps all of its own (scalar.ts).
+const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
 const folds = (job: string) => job === "add" || job === "max" || job === "min";
-const isPar = (fn: string) => fn.startsWith("par:fold:") || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
+const isPar = (fn: string) => fn.startsWith("par:fold:") || fn === "par:count" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -486,7 +489,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -534,7 +537,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
       if (e.k === "rt" && isPar(e.fn)) collect(e.host!.t);
-      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn)) {
+      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn)) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -609,6 +612,16 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     arrayFns.add(`array.length.a${ta.index}`).add(`array.empty.a${to.index}`);
     return pars.get(k)!.n;
   };
+  // A count of a search split by its first choice (C203), by its closure's
+  // type, and each list type a choice splits.
+  const countPars = new Map<string, { n: number; tf: FType }>();
+  const countSite = (tf: FType): number => {
+    if (!countPars.has(tf.key)) countPars.set(tf.key, { n: countPars.size, tf });
+    rts.add("int.add");
+    return countPars.get(tf.key)!.n;
+  };
+  const splitLists = new Map<string, { n: number; t: DType }>();
+  let splits = false;
   const togethers = new Map<string, { n: number; ti: DType; to: DType }>();
   const togetherSite = (ti: DType, to: DType): number => {
     const k = `${ti.key} ${to.key}`;
@@ -834,7 +847,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(hostsUsed.size ? ["", HOST_RT, "// hosts/c.c", opts.hosts!.c!, "", ...[...hostsUsed].map(([op, n]) => hostWrapper(opts.hosts!.ops[Object.keys(opts.hosts!.ops).find((k) => opts.hosts!.ops[k].op === op)!], n, hostTypes.get(op)!))] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     ...[...tables.values()].flatMap((t) => tableC(t)),
-    ...(threads ? [POOL_C, ...[...pars.values()].map((x) => parC(x, stops, fuelled)), ...[...togethers.values()].map((x) => togetherC(x, stops, fuelled))] : []),
+    ...(splits ? [splitC(TL)] : []),
+    ...(threads ? [POOL_C, ...[...countPars.values()].map((x) => countC(x, stops, fuelled)), ...[...pars.values()].map((x) => parC(x, stops, fuelled)), ...[...togethers.values()].map((x) => togetherC(x, stops, fuelled))] : []),
     "",
     ...[...fiberGlobals].map(([n, t]) => `static ${t} ${n};`),
     ...fiberC,
@@ -1451,6 +1465,15 @@ int main(int argc, char **argv) {
             const n = togetherSite(typeOf(e.args[0], f.locals) as DType, e.host!.t as DType);
             return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
+          if (isSplit(e.fn)) {
+            splits = true;
+            const xs = args(e.args, pre, d, after);
+            if (e.fn !== "choose.split") return stated(`${cName(e.fn)}(${xs.join(", ")})`, "f64", pre, d);
+            const t = e.host!.t as DType;
+            if (!splitLists.has(t.key)) splitLists.set(t.key, { n: splitLists.size, t });
+            return stated(`lab_split_${splitLists.get(t.key)!.n}(${xs[0]})`, t, pre, d);
+          }
+          if (e.fn === "par:count") return checked(`lab_par_count_${countSite(typeOf(e.args[0], f.locals) as FType)}(${args(e.args, pre, d, after).join(", ")})`, "int", pre, d, after);
           if (isPar(e.fn)) {
             const job = (e.fn.startsWith("par:fold:") ? e.fn.slice(9) : e.fn.slice(4)) as "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min", ta = typeOf(e.args[0], f.locals) as AType;
             const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" || folds(job) ? ta : e.host!.t as AType, job);
@@ -1874,7 +1897,7 @@ int main(int argc, char **argv) {
       case "if": case "budget": case "attempt": case "handle": case "released": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
-      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) || isPar(e.fn) ? e.host!.t : rtType(e.fn);
+      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) || isPar(e.fn) || isSplit(e.fn) ? e.host!.t : rtType(e.fn);
       case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
@@ -2211,6 +2234,93 @@ failed:
   // all pass and any pass (C202b) likewise from the first item, the
   // answer the first test that decides (fails for all, passes for any),
   // or one that fails before it the failure.
+  // The split a thread's search takes the item of at its first choice (-1:
+  // all of them), and how many that choice had, then each list type's
+  // split: the list of that one item, or none past the last.
+  function splitC(TL: string): string {
+    return [`static ${TL}int64_t lab_split = -1, lab_seen = -1;
+static double lab_split_hold(void) { double j = (double)lab_split; lab_split = -1; return j; }
+static double lab_split_give(double j) { lab_split = (int64_t)j; return 0; }`, ...[...splitLists.values()].map(({ n, t }) => {
+      const c = t.cases.findIndex((x) => x.fields.length > 0), nil = `(&${cname(t, 1 - c)})`, C = cname(t, c);
+      const ri = t.cases[c].fields.findIndex((x) => x.t === t), hi = 1 - ri, h = t.cases[c].fields[hi].t;
+      return `static lab_cell *lab_split_${n}(lab_cell *l) {
+  if (lab_split < 0) return l;
+  int64_t j = lab_split, m = 0;
+  lab_cell *got = ${nil}, *p;
+  lab_split = -1;
+  for (p = l; p->tag == ${c}; p = ((${C} *)p)->f${ri}) if (m++ == j) { got = lab_new(sizeof(${C}), ${tnum.get(t.key)}, ${c}); ((${C} *)got)->f${hi} = ${dup(h, `((${C} *)p)->f${hi}`)}; ((${C} *)got)->f${ri} = ${nil}; }
+  lab_seen = m;
+  lab_drop(l);
+  return got;
+}`;
+    })].join("\n");
+  }
+  // A count of a search split by its first choice (C203), as compiled
+  // JavaScript's (branches-rt.ts searchPure): the run keeping the first
+  // item here, which says how many there are, then, when that took a
+  // millisecond, the others on the threads, each count added. An abort is
+  // the first in order's, as each run that failed runs again here in turn.
+  function countC(p: { n: number; tf: FType }, stops: boolean, fuelled: boolean): string {
+    const { n, tf } = p, J = `lab_par_cjob_${n}`, call = (f: string) => `((${fname.get(tf.key)})((lab_closure *)${f})->code)(${f})`;
+    return `typedef struct { lab_cell *f; lab_int *out; char *bad; int64_t next; } ${J};
+static void lab_par_cone_${n}(${J} *j, int64_t k) {
+  lab_cell *f = lab_dup(j->f);
+  lab_split = k + 1; lab_seen = -1;
+  j->out[k] = ${call("f")};
+  lab_split = -1;
+}
+static void lab_par_cwork_${n}(void *p) {
+  ${J} *j = p;
+  volatile int64_t k;${stops ? `
+  jmp_buf here, *was = lab_stop_at;
+  if (setjmp(here)) lab_st = 0;
+  lab_stop_at = &here;` : ""}
+  while ((k = __atomic_sub_fetch(&j->next, 1, __ATOMIC_RELAXED)) >= 0) {
+    lab_par_cone_${n}(j, k);
+    if (lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
+    else { j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED); }
+  }
+  lab_split = -1;${stops ? `
+  lab_stop_at = was;` : ""}
+}
+static lab_int lab_par_count_${n}(lab_cell *f) {
+  int64_t was = lab_split, outer = lab_seen, n, k;
+  struct timespec t0;
+  lab_cell *g = lab_dup(f);
+  lab_int r;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  lab_split = 0; lab_seen = -1;
+  r = ${call("g")};
+  n = lab_seen - 1; lab_split = was; lab_seen = outer;
+  if (lab_st) { lab_drop(f); return 0; }
+  if (n <= 0) { lab_drop(f); return r; }
+  ${J} j = { f, malloc((size_t)n * sizeof(lab_int)), malloc((size_t)n), 0 };
+  if (!j.out || !j.bad) lab_oom();
+  memset(j.bad, 1, (size_t)n);
+  if (lab_par_worth(&t0)${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
+    lab_share_no = 0;
+    lab_share(f);
+    lab_shared();
+    if (!lab_share_no) { j.next = n; lab_pool_run(lab_par_cwork_${n}, &j); }
+  }
+  for (k = 0; k < n; k++) {
+    if (!j.bad[k]) continue;
+    lab_par_cone_${n}(&j, k);
+    if (lab_st) goto failed;
+    j.bad[k] = 0;
+  }
+  for (k = 0; k < n; k++) r = lab_int_add(r, j.out[k]);
+  free(j.out); free(j.bad);
+  lab_drop(f);
+  return r;
+failed:
+  lab_int_drop(r);
+  for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) lab_int_drop(j.out[m]);
+  free(j.out); free(j.bad);
+  lab_drop(f);
+  return 0;
+}`;
+  }
   function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min" }, stops: boolean, fuelled: boolean): string {
     const { n, ta, tf, to, job } = p, keep = job !== "map", fold = folds(job), tests = job === "all" || job === "any" || job === "first", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
     const decides = (x: string) => (job === "all" ? `!${x}` : x);

@@ -197,3 +197,29 @@ test("a together whose actions abort on threads aborts at the first that does, a
   assert.ok(many.threads > 0, "no action ran on another thread");
   assert.equal(p.run("0").out, p.evaluator);
 });
+
+// main prints the count of a search over 0 to 7 for x, and for each a y of
+// those below it (an all inside, which keeps all of its own choices), the
+// even ones, after the work for x; `x` may abort.
+function searched(abortAt: number) {
+  return built(/lab_par_count_0\(/, false, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
+    k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
+      k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(8))), (x) =>
+        k.let("w", k.call(INT_OPS.mul, k.call(INT_OPS.add, work(k, x, big), work(k, x, big)), k.int(0)), (w) =>
+          k.if(k.call(S.equal, x, k.int(abortAt)), k.call(ABORT_OP, k.call(SHOW_ANY, x)),
+            k.let("ys", k.call(S.all, k.thunk(() => k.call(S.oneOf, k.call(INT_OPS.range, x)))), (ys) =>
+              k.let("y", k.call(INT_OPS.add, k.call(S.oneOf, ys), w), (y) =>
+                k.if(k.call(S.equal, k.call(INT_OPS.bitAnd, y, k.int(1)), k.int(0)), y, k.call(S.fail)))))))))))));
+}
+
+// A count of a search split by its first choice on threads (C203): the
+// evaluator's count, and the abort it meets first in order.
+test("a count of a search runs its first choice's items on threads and gives the evaluator's count, as in order (C203)", { skip }, () => {
+  for (const [want, p] of [["16\n", searched(-1)], ["aborted 3", searched(3)]] as const) {
+    assert.equal(p.evaluator, want);
+    const many = p.run("3");
+    assert.equal(many.out, want);
+    if (!want.startsWith("aborted")) assert.ok(many.threads > 0, "no item ran on another thread");
+    assert.equal(p.run("0").out, want);
+  }
+});
