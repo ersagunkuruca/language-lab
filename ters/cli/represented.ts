@@ -6,6 +6,7 @@ import type { Names } from "../src/presentation.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
+import { ownLibraryHolders } from "../src/lang/own-holders.ts";
 
 export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[] }
 
@@ -18,7 +19,11 @@ function fail(message: string): never { throw new Error(message); }
 // again, like any program.
 // `sound`: main is a sound played in blocks (library-reps.ts).
 export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolean, tables = false, sound = false): P {
-  const p = reachedFrom(p0, main);
+  const reached = reachedFrom(p0, main);
+  // A library type holding lists (std's Pool) the program's own, so its
+  // lists are stored as the program's are (own-holders.ts, C58d).
+  const held = ownLibraryHolders(reached.code, reached.info, reached.names, main, reached.own);
+  const p = held ? { ...reached, code: held.code, names: held.names, own: held.own, info: held.info } : reached;
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are for its own representations.
   // The library's are chosen over the types too, so a field typed Map
@@ -38,7 +43,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
     code = represent(code, defs, rep);
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
-  if (!chosen.length) return p0;
+  if (!chosen.length) return held ? p : p0;
   code = { ...code, defs: code.defs.filter((d) => !reps.has(d)) };
   // The library's representations may call the constructors they stand for.
   const options = p.options as Parameters<typeof infer>[3];
