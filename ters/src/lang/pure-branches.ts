@@ -112,17 +112,18 @@ export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
 }
 export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...parallelLists(code, info)].filter(([, k]) => k === "map").map(([id]) => id));
 
-// The calls of `count` a target may share out by the alternatives of its
-// search's first choice (C43): the search written in place, doing nothing
-// but compute and choose, as a map's function may.
-export function parallelCounts(code: Code, info: Info): Set<Id> {
-  const out = new Set<Id>();
+// The calls of `count` and `all` a target may share out by the
+// alternatives of their search's first choice (C43): the search written in
+// place, doing nothing but compute and choose, as a map's function may.
+export function parallelCounts(code: Code, info: Info): Map<Id, "count" | "all"> {
+  const out = new Map<Id, "count" | "all">();
   for (const n of Object.values(code.nodes)) {
     if (!isCall(n) || n.args.length !== 1) continue;
     const f = code.nodes[n.fn], l = code.nodes[n.args[0]];
-    if (f?.kind !== "ref" || (f as NodeOf<"ref">).target !== S.count || l?.kind !== "lambda" || l.params.length) continue;
+    const target = f?.kind === "ref" ? (f as NodeOf<"ref">).target : undefined;
+    if ((target !== S.count && target !== S.all) || l?.kind !== "lambda" || l.params.length) continue;
     const own = ownEffects(code, info, l.body);
-    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && own.has(ABORT))) out.add(n.id);
+    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && own.has(ABORT))) out.set(n.id, target === S.count ? "count" : "all");
   }
   return out;
 }

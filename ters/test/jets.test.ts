@@ -60,3 +60,34 @@ test("table product's host way gives the definition's bits on random multivector
   first(wrapped(table, odd, odd));
   assert.ok(called);
 });
+
+test("item at, put entry and entries have: their host ways give the definitions' answers, and hand back what they don't take (I195)", () => {
+  const p = loadProgram("examples/agent");
+  const info = infer(p.code, p.pres.names);
+  const both = [true, false].map((libraryHosts) => makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts }));
+  const lib = (n: string) => Object.keys(LIBRARY.names).find((d) => LIBRARY.code.defs.includes(d) && LIBRARY.names[d] === n)!;
+  const list = (xs: Value[]): Value => xs.reduceRight<Value>((t, x) => ({ tag: "std.list.cons", fields: [x, t] }), { tag: "std.list.nil", fields: [] });
+  const pair = (a: Value, b: Value): Value => ({ tag: "std.tuple2.tuple", fields: [a, b] });
+  const call = (n: string, ...xs: Value[]) => both.map((r) => JSON.stringify(first(r.call(r.value(lib(n)), ...xs) as Iterable<Value>)));
+  let seed = 7;
+  const rand = (k: number) => (seed = (seed * 16807) % 2147483647) % k;
+  for (let t = 0; t < 40; t++) {
+    const key = (): Value => (t % 2 ? pair(rand(4), rand(4)) : rand(12) - 3);
+    const keys = [...new Map(Array.from({ length: rand(8) }, () => { const k = key(); return [JSON.stringify(k), k] as const; })).values()];
+    const sorted = keys.sort((a, b) => (JSON.stringify(a) < JSON.stringify(b) ? -1 : 1));
+    // Kept sorted by the definitions themselves, then asked of.
+    let m: Value = list([]);
+    for (const k of sorted) m = first(both[1].call(both[1].value(lib("put entry")), m, k, rand(100)) as Iterable<Value>)!;
+    const k = key();
+    const [fast, slow] = call("put entry", m, k, -1);
+    assert.equal(fast, slow, `put entry ${t}`);
+    const [hasFast, hasSlow] = call("entries have", m, k);
+    assert.equal(hasFast, hasSlow, `entries have ${t}`);
+    const [atFast, atSlow] = call("item at", list([1, 2, 3, 4]), rand(7) - 2, 0);
+    assert.equal(atFast, atSlow, `item at ${t}`);
+  }
+  // A key of text isn't the host way's: the definition runs.
+  let called = false;
+  first(LIBRARY_HOSTS["put entry"](() => { called = true; return []; })(list([pair("a", 1)]), "b", 2));
+  assert.ok(called);
+});

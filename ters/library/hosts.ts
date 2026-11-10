@@ -14,7 +14,7 @@
 
 import type { PureHost } from "../src/lang/hosts.ts";
 import type { Value } from "../src/lang/run.ts";
-import { CONS, NIL } from "../src/lang/std.ts";
+import { CONS, FALSE, NIL, PAIR_V, TRUE } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
 
 type Data = { tag: Id; fields: Value[] };
@@ -86,7 +86,67 @@ function tableProduct(table: Value, a: Value, b: Value): Value | null {
 }
 
 // By the definition's name in the library.
+// The map and set helpers' walk down a sorted list of (key, value), where
+// every key is a finite number or a tuple of them: compared as compare
+// compares them (run.ts compareValues: numbers exactly, a tuple part by
+// part), so the same answers in a loop of JavaScript (I195: agent's search
+// keeps the cells it reached in a map, its queue by (cost, order)). Any
+// other key: as written.
+const order = (a: Value | undefined, b: Value | undefined): number | null => {
+  if (typeof a === "number" && typeof b === "number") return a - a !== 0 || b - b !== 0 ? null : a < b ? -1 : a > b ? 1 : 0;
+  const x = a as Data, y = b as Data;
+  if (x?.tag !== PAIR_V || y?.tag !== PAIR_V) return null;
+  for (let i = 0; i < 2; i++) { const c = order(x.fields[i], y.fields[i]); if (c !== 0) return c; }
+  return 0;
+};
+const keyOf = (item: Value): Value | undefined => ((item as Data)?.tag === PAIR_V ? (item as Data).fields[0] : undefined);
+function putEntry(list: Value, key: Value, value: Value): Value | null {
+  const before: Value[] = [];
+  let d = list as Data, c: number | null = 1;
+  for (; d?.tag === CONS; d = d.fields[1] as Data) {
+    c = order(key, keyOf(d.fields[0]));
+    if (c === null) return null;
+    if (c <= 0) break;
+    before.push(d.fields[0]);
+  }
+  if (d?.tag !== CONS && d?.tag !== NIL) return null;
+  if (d.tag === NIL && order(key, key) === null) return null;
+  const entry: Data = { tag: PAIR_V, fields: [key, value] };
+  let out: Data = { tag: CONS, fields: [entry, d.tag === CONS && c === 0 ? d.fields[1] : d] };
+  for (let i = before.length - 1; i >= 0; i--) out = { tag: CONS, fields: [before[i], out] };
+  return out;
+}
+function entriesHave(list: Value, key: Value): boolean | null {
+  for (let d = list as Data; ; d = d.fields[1] as Data) {
+    if (d?.tag === NIL) return false;
+    if (d?.tag !== CONS) return null;
+    const c = order(key, keyOf(d.fields[0]));
+    if (c === null) return null;
+    if (c < 0) return false;
+    if (c === 0) return true;
+  }
+}
+// A list's item at a position, as written: down the list.
+function itemAt(list: Value, position: Value, otherwise: Value): Value | null {
+  if (typeof position !== "number") return null;
+  let d = list as Data;
+  for (let i = position; d?.tag === CONS; d = d.fields[1] as Data, i--) if (i < 1) return i < 0 ? otherwise : d.fields[0];
+  return d?.tag === NIL ? otherwise : null;
+}
+
 export const LIBRARY_HOSTS: Record<string, PureHost> = {
+  "item at": (self) => (list, position, otherwise) => {
+    const v = itemAt(list, position, otherwise);
+    return v === null ? self(list, position, otherwise) : [v];
+  },
+  "put entry": (self) => (list, key, value) => {
+    const v = putEntry(list, key, value);
+    return v === null ? self(list, key, value) : [v];
+  },
+  "entries have": (self) => (list, key) => {
+    const v = entriesHave(list, key);
+    return v === null ? self(list, key) : [{ tag: v ? TRUE : FALSE, fields: [] }];
+  },
   "table product": (self) => (table, a, b) => {
     const v = tableProduct(table, a, b);
     return v === null ? self(table, a, b) : [v];

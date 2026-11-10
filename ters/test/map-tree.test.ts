@@ -50,7 +50,9 @@ const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, str
   const info = infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...insiders] });
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const lines: string[] = [];
-  runMain(code, info, main, { print: (s) => lines.push(s), names });
+  // The definitions as written, not the sorted list's host ways (I195),
+  // so the two ways of storing are compared as algorithms.
+  runMain(code, info, main, { print: (s) => lines.push(s), names, libraryHosts: false });
   return lines;
 };
 

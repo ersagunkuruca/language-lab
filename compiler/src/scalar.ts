@@ -764,7 +764,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
   const fibers = !!opts.handlers && !opts.host;
-  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, counts: Set<Id> | undefined;
+  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, counts: Map<Id, "count" | "all"> | undefined;
   const countsShared = () => (counts ??= parallelCounts(code, info));
   // A call's inputs already worked out, as locals (a map that may be shared, C42).
   const given = new Map<Id, SExpr[]>();
@@ -3178,8 +3178,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // A count of a search that only computes (C43): its first choice's
     // alternatives counted on worker threads, the search a closure the
     // runtime runs once for each (branches-rt.ts countPure).
-    if (opts.host && !fibers && kind === "count" && countsShared().has(n.id)) {
-      return { k: "rt", fn: "count.pure", args: [expr(n.args[0], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
+    if (opts.host && !fibers && (kind === "count" || kind === "all") && countsShared().has(n.id)) {
+      // all's answers as the list kind its type is: an array, or a list
+      // the compiled code reads as it reads any of the runtime's.
+      const how: SExpr[] = kind === "all" ? [{ k: "bool", v: isArray(t) }] : [];
+      return { k: "rt", fn: `${kind}.search`, args: [expr(n.args[0], env, f, false), ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
     }
     if (target === S.first) { const only = soleSolve(search); if (only) firstOnly.add(only); }
     // A first of a call of a definition that is one such solve (relations'

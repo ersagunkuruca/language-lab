@@ -135,6 +135,6 @@ test("a count of a search that only computes and chooses is shared by its first 
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const marked = parallelCounts(code, info);
-  assert.ok(marked.has(chooses));
+  assert.equal(marked.get(chooses), "count");
   assert.ok(!marked.has(abortsAndRunsLong));
 });

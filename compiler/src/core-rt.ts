@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, chooseSplit, countPure, countsBy, firstInOrder, splitGive, splitHold, firstPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -30,10 +30,12 @@ export class Unsupported extends Error {}
 export class Stopped extends Error { node?: Id; def?: Id; defName?: string; constructor(why: string, at?: { node: Id; def: Id; name?: string }, name?: string) { super(why); if (at) { this.node = at.node; this.def = at.def; if (at.name) this.defName = at.name; } else if (name) this.defName = name; } }
 export class Aborted { reason: unknown; esc: number; constructor(reason: unknown, esc: number) { this.reason = reason; this.esc = esc; } }
 export const FAIL = { fail: true }, OUT = { out: true };
-// A search's answers counted (C43): the search a closure of the rest,
-// each answer told to go on.
-const countEvery = (search: unknown): number => { let n = 0; const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, () => { n++; return FAIL; }); return n; };
-countsBy(countEvery);
+// A search's answers counted or gathered (C43): the search a closure of
+// the rest, each answer told to go on.
+const searchRun = (search: unknown, each: (v: unknown) => void): void => { const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, (v: unknown) => { each(v); return FAIL; }); };
+const countEvery = (search: unknown): number => { let n = 0; searchRun(search, () => n++); return n; };
+const allEvery = (search: unknown): unknown[] => { const out: unknown[] = []; searchRun(search, (v) => out.push(v)); return out; };
+searchesBy({ count: countEvery, all: allEvery });
 
 const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
@@ -185,7 +187,12 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
   // A count whose search's first choice is shared out (C43), and that
   // choice, which keeps one item in each run of it.
-  if (name === "count.pure") return (search: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? countPure(search, site as number) : countEvery(search));
+  if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, false) : countEvery(search));
+  // all's, an array or a list of the runtime's as its type says.
+  if (name === "all.search") return (search: unknown, array: unknown, fuel: unknown, site: unknown) => {
+    const xs = (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, true) : allEvery(search)) as Value[];
+    return array ? arrayOf(xs) : toList(xs);
+  };
   if (name === "choose.split") return chooseSplit as (...xs: unknown[]) => unknown;
   if (name === "split.hold") return splitHold;
   if (name === "split.give") return splitGive as (...xs: unknown[]) => unknown;
