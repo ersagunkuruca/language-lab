@@ -10,6 +10,7 @@ import type { Names } from "../../ters/src/presentation.ts";
 import { CASES, LIBRARY } from "../../ters/src/lang/library.ts";
 import { TEXT_OPS } from "../../ters/src/lang/std.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { reachedFrom } from "./scalar.ts";
 
 const BY_TABLE: Record<Id, string> = {
   [TEXT_OPS.uppercase]: "table uppercase", [TEXT_OPS.lowercase]: "table lowercase", [TEXT_OPS.graphemes]: "table graphemes",
@@ -26,7 +27,9 @@ export function tableText(code: Code, info: Info, names: Names): { code: Code; i
   for (const u of used({ ...code, nodes })) nodes[u.id] = { ...u, target: to[(u as { target: Id }).target] } as never;
   const defs = [...new Set([...LIBRARY.code.defs, ...code.defs])];
   const all = { ...LIBRARY.names, ...names };
-  const next = { ...code, nodes, defs };
+  // Only the library definitions the program reaches, not the whole
+  // library, are checked with it.
+  const next = reachedFrom({ ...code, nodes, defs }, code.defs);
   // Checked again as the program was (its pins, insiders and library).
   return { code: next, info: infer(next, all, undefined, info.options && { ...info.options, cache: undefined }), names: all };
 }

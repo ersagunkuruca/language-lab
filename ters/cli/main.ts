@@ -31,6 +31,7 @@ import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
 import { recordings, webCorePage } from "./web.ts";
 import { appFolder } from "./app.ts";
+import { nativeAppFolder } from "./native-app.ts";
 import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
@@ -62,6 +63,8 @@ usage:
                                         --compiled: each accepted answer again, compiled to JavaScript through the core IR
   ters build-web <program> [-o app.html]  one HTML file running the page main returns, from the core IR
   ters build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
+  ters build-native-app <program> [-o folder]  that page as a native Android app, no webview: its C and Android's
+                                        own views, a Gradle project (gradle assembleDebug builds the APK)
   ters mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
   ters publish <program> <name…> [-o module.json]
                                         publish the named definitions, and the drafts they use, as their next
@@ -229,9 +232,10 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // holds, are written in place (C56), as in compiled JavaScript; C knows
 // arrays from its counts. In C a map whose function only computes shares
 // its items out on threads (L101, c.ts `par:map`).
-function nativeLowered(main: Id, wasm = false) {
+// `page`: main gives Html, mounted rather than printed (C199c).
+function nativeLowered(main: Id, wasm = false, page = false) {
   const q0 = withInverses(p.code, p.info, p.names);
-  const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
+  const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
   const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true });
@@ -396,8 +400,8 @@ if (!command || command === "help" || command === "--help" || !path) {
 }
 
 const loaded = load(path);
-const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
-const p = main && defined < 0 ? represented(loaded, main, command !== "native" && command !== "wasi", command === "native" || command === "wasi") : loaded;
+const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
+const p = main && defined < 0 ? represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app") : loaded;
 // The host's answers to the program's own effects (FOREIGN.md, L69a):
 // hosts/js.js beside the program, if it has one.
 const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "js.js") : "";
@@ -545,6 +549,20 @@ switch (command) {
       writeFileSync(join(out, file), x);
     }
     process.stderr.write(`ters: wrote ${out}/; put ${out}/www on an HTTPS host to install it, or see ${out}/README.md for Android and iOS\n`);
+    break;
+  }
+  case "build-native-app": {
+    // The page as C (C199c, NATIVE-APPS.md), mounted on Android's views.
+    const o = rest.indexOf("-o");
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-android`;
+    const { lowered, root } = nativeLowered(main, false, true);
+    let c: string;
+    try { c = emitC(lowered, { main: root, page: "ui" }).c; } catch (e) { fail((e as Error).message); }
+    for (const [file, x] of Object.entries(nativeAppFolder(p.title, c))) {
+      mkdirSync(dirname(join(out, file)), { recursive: true });
+      writeFileSync(join(out, file), x);
+    }
+    process.stderr.write(`ters: wrote ${out}/; build the APK there with: gradle assembleDebug (see ${out}/README.md)\n`);
     break;
   }
   case "render": {

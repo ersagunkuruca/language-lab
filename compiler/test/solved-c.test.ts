@@ -187,3 +187,25 @@ test("a solve with a periodic family gives the solver's first answer on WebAssem
 test("physics prints on WebAssembly and C what ters run prints", async () => {
   assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/physics")), /for some y, angle: polar\(3, y, 2, angle\) = false\n$/);
 });
+
+// relations: to polar, a definition that is one solve with a family of
+// answers, read through first (its body written in place there).
+test("relations prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/relations")), /to polar\(0, 2\), canonical = 2, 1\.570796327\n/);
+});
+
+// A relational solve with several answers (C195, backwards' magnitude):
+// in a search, one of every answer, in the interpreter's order.
+test("a relational solve with several answers gives each on WebAssembly and C as ters run does", async () => {
+  const k = new Lang(LIBRARY.code);
+  const mag = k.def("magnitude");
+  k.define(mag, k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(0)), k.call(B.neg, x), x)));
+  const sizes = k.def("magnitudes to");
+  k.define(sizes, k.fn(["s"], (s) => k.call(S.all, k.thunk(() => k.solve(mag, { out: s }, { [firstParam(k, mag)]: "x" }, ({ [firstParam(k, mag)]: y }) => y)))));
+  // Text joined with neither side known: every cut.
+  const cuts = k.def("cuts");
+  k.define(cuts, k.fn(["t"], (t) => k.call(S.all, k.thunk(() => k.solve(S.concat, { out: t }, { 0: "a", 1: "b" }, ({ 0: a, 1: b }) => k.call(S.concat, a, k.call(S.concat, k.lit("|"), b)))))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.listOf(k.call(SHOW_ANY, k.listOf(...[5, 0, -2, 0.25].map((v) => k.call(sizes, k.lit(v))))), k.call(SHOW_ANY, k.listOf(...["abc", "", "çğ✨"].map((t) => k.call(cuts, k.lit(t))))))));
+  assert.equal(await throughLab(k), `["[[-5, 5], [0], [], [-0.25, 0.25]]", "[[\\"|abc\\", \\"a|bc\\", \\"ab|c\\", \\"abc|\\"], [\\"|\\"], [\\"|çğ✨\\", \\"ç|ğ✨\\", \\"çğ|✨\\", \\"çğ✨|\\"]]"]\n`);
+});

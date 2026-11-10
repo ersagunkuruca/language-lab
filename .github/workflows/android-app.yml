@@ -1,6 +1,8 @@
 # A program's page as an Android app (C198, WEB.md "Mobile"): `ters
 # build-app`, then the Capacitor project it makes built into a debug APK,
-# kept as the run's artifact to install on a phone. Run by hand only
+# kept as the run's artifact to install on a phone. With `kind` native
+# (C199c, NATIVE-APPS.md): `ters build-native-app`, the page's C and
+# Android's own views with no webview, built by Gradle and the NDK. Run by hand only
 # (Actions tab, "Android app", Run workflow), since containers can't reach
 # Google's Android SDK and a run costs build minutes.
 name: Android app
@@ -12,6 +14,11 @@ on:
         description: "Example to build (a folder in ters/examples)"
         default: dice
         required: true
+      kind:
+        description: "webview (Capacitor) or native (C and Android's views)"
+        type: choice
+        options: [webview, native]
+        default: webview
 
 permissions:
   contents: read
@@ -34,20 +41,37 @@ jobs:
       - run: npm ci
         working-directory: ters
       - name: ters build-app
+        if: inputs.kind == 'webview'
         working-directory: ters
         env:
           PROGRAM: ${{ inputs.program }}
         run: node cli/ters.ts build-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app"
       - name: Capacitor project
+        if: inputs.kind == 'webview'
         working-directory: ${{ runner.temp }}/app
         run: |
           npm install @capacitor/core@8 @capacitor/cli@8 @capacitor/android@8
           npx cap add android
       - name: Debug APK
+        if: inputs.kind == 'webview'
         working-directory: ${{ runner.temp }}/app/android
         run: ./gradlew assembleDebug --no-daemon
+      - name: ters build-native-app
+        if: inputs.kind == 'native'
+        working-directory: ters
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: node cli/ters.ts build-native-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app/android"
+      - uses: gradle/actions/setup-gradle@v4
+        if: inputs.kind == 'native'
+        with:
+          gradle-version: "8.11.1"
+      - name: Native debug APK
+        if: inputs.kind == 'native'
+        working-directory: ${{ runner.temp }}/app/android
+        run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.program }}-android
+          name: ${{ inputs.program }}-android-${{ inputs.kind }}
           path: ${{ runner.temp }}/app/android/app/build/outputs/apk/debug/*.apk
           retention-days: 14

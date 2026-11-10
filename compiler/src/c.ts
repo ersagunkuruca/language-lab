@@ -55,6 +55,7 @@ import { TICKET_V } from "../../ters/src/lang/std.ts";
 // that calls it.
 
 import { FDLIBM_C } from "./c-math.ts";
+import { LAYOUT_C, UI_HEADLESS_C } from "./c-layout.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
@@ -321,7 +322,114 @@ static void lab__host_abort(const char *name, const char *what, const char *deta
 
 // `hosts`: the program's own operations (core-js.ts hostOpsOf) and its
 // hosts/c.c, which answers those nothing in the program handles (L69b1).
-export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm"; hosts?: { ops: HostOps; c?: string } } = {}): CProgram {
+// A host with no screen (C199b): the page kept as a tree of nodes, printed
+// as HTML the way the tests' fake document prints it (ters/test/
+// fakedom.ts), and a main that does what its arguments say, printing the
+// page after each: click:ID, keydown:ID:KEY, input:ID:TEXT (typed into the
+// field, then "input"), frames:N:MS (N frames MS apart). ID is the first
+// element whose id attribute it is.
+// Each page printed ends with a record separator (\x1e) and a newline.
+const HEADLESS_C = String.raw`
+typedef struct tn { char *tag, *text, *value, **an, **av, **ev; int checked, na, nk, ne, *eh; struct tn **kids; } tn;
+static char *t_dup(const char *s, size_t n) { char *r = malloc(n + 1); memcpy(r, s, n); r[n] = 0; return r; }
+static void *t_element(void *c, const char *tag, size_t n) { (void)c; tn *e = calloc(1, sizeof *e); e->tag = t_dup(tag, n); e->value = t_dup("", 0); return e; }
+static void *t_text(void *c, const char *s, size_t n) { (void)c; tn *e = calloc(1, sizeof *e); e->text = t_dup(s, n); return e; }
+static void t_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tn *e = x; free(e->text); e->text = t_dup(s, n); }
+static int t_is(const char *a, const char *b, size_t n) { return strlen(a) == n && !memcmp(a, b, n); }
+static void t_set_attribute(void *c, void *x, const char *k, size_t kn, const char *v, size_t vn) {
+  (void)c; tn *e = x;
+  if (t_is("value", k, kn)) { free(e->value); e->value = t_dup(v, vn); return; }
+  if (t_is("checked", k, kn)) { e->checked = t_is("true", v, vn); return; }
+  for (int j = 0; j < e->na; j++) if (t_is(e->an[j], k, kn)) { free(e->av[j]); e->av[j] = t_dup(v, vn); return; }
+  e->an = realloc(e->an, sizeof *e->an * (size_t)(e->na + 1)); e->av = realloc(e->av, sizeof *e->av * (size_t)(e->na + 1));
+  e->an[e->na] = t_dup(k, kn); e->av[e->na++] = t_dup(v, vn);
+}
+static void t_remove_attribute(void *c, void *x, const char *k, size_t kn) {
+  (void)c; tn *e = x;
+  for (int j = 0; j < e->na; j++) if (t_is(e->an[j], k, kn)) { free(e->an[j]); free(e->av[j]); for (int i = j + 1; i < e->na; i++) { e->an[i - 1] = e->an[i]; e->av[i - 1] = e->av[i]; } e->na--; return; }
+}
+static void t_append(void *c, void *p, void *k) { (void)c; tn *e = p; e->kids = realloc(e->kids, sizeof *e->kids * (size_t)(e->nk + 1)); e->kids[e->nk++] = k; }
+static void t_clear(void *c, void *p) { (void)c; ((tn *)p)->nk = 0; }
+static void t_listen(void *c, void *x, const char *ev, size_t n, int h) {
+  (void)c; tn *e = x;
+  e->ev = realloc(e->ev, sizeof *e->ev * (size_t)(e->ne + 1)); e->eh = realloc(e->eh, sizeof *e->eh * (size_t)(e->ne + 1));
+  e->ev[e->ne] = t_dup(ev, n); e->eh[e->ne++] = h;
+}
+static void t_gone(void *c, void *x) {
+  (void)c; tn *e = x;
+  for (int j = 0; j < e->na; j++) { free(e->an[j]); free(e->av[j]); }
+  for (int j = 0; j < e->ne; j++) free(e->ev[j]);
+  free(e->an); free(e->av); free(e->ev); free(e->eh); free(e->kids); free(e->tag); free(e->text); free(e->value); free(e);
+}
+static void t_print(tn *e) {
+  if (!e->tag) { fputs(e->text, stdout); return; }
+  printf("<%s", e->tag);
+  for (int j = 0; j < e->na; j++) printf(" %s=\"%s\"", e->an[j], e->av[j]);
+  if (!strcmp(e->tag, "input")) printf(" value=\"%s\"%s", e->value, e->checked ? " checked" : "");
+  putchar('>');
+  for (int j = 0; j < e->nk; j++) t_print(e->kids[j]);
+  printf("</%s>", e->tag);
+}
+static tn *t_find(tn *e, const char *id) {
+  if (!e->tag) return 0;
+  for (int j = 0; j < e->na; j++) if (!strcmp(e->an[j], "id") && !strcmp(e->av[j], id)) return e;
+  for (int j = 0; j < e->nk; j++) { tn *r = t_find(e->kids[j], id); if (r) return r; }
+  return 0;
+}
+// Every element that listens for frames gets one, s seconds after the
+// last (a browser's frame event, html.ts everyFrame).
+static void t_frame(tn *e, double s) {
+  if (!e->tag) return;
+  for (int j = 0; j < e->ne; j++) if (!strcmp(e->ev[j], "frame")) ters_page_event(e->eh[j], "", 0, "", 0, 0, 0, s);
+  for (int j = 0; j < e->nk; j++) t_frame(e->kids[j], s);
+}
+static void t_frames(tn *root, double s) { t_frame(root, s); ters_page_frame(); }
+static void t_fire(tn *e, const char *type, const char *key) {
+  // A handler may draw this element again: what it listens to is copied
+  // first.
+  int ne = e->ne, *hs = malloc(sizeof *hs * (size_t)(ne + 1)), m = 0;
+  for (int j = 0; j < ne; j++) if (!strcmp(e->ev[j], type)) hs[m++] = e->eh[j];
+  char *value = t_dup(e->value, strlen(e->value));
+  for (int j = 0; j < m; j++) ters_page_event(hs[j], value, strlen(value), key, strlen(key), 0, 0, 0);
+  free(value); free(hs);
+}
+int main(int argc, char **argv) {
+  static ters_host h = { 0, t_element, t_text, t_set_text, t_set_attribute, t_remove_attribute, t_append, t_clear, t_listen, t_gone };
+  tn *root = ters_page_start(&h);
+  if (!root) return 1;
+  t_print(root); fputs("\x1e\n", stdout);
+  for (int a = 1; a < argc; a++) {
+    char *s = t_dup(argv[a], strlen(argv[a])), *id = strchr(s, ':'), *more;
+    if (!id) return 2;
+    *id++ = 0;
+    if ((more = strchr(id, ':'))) *more++ = 0;
+    if (!strcmp(s, "frames")) {
+      // frames:N:MS, N frames MS milliseconds apart, as the clock goes.
+      int n = atoi(id);
+      double ms = more ? atof(more) : 16;
+      for (int k = 0; k < n; k++) { struct timespec ts = { 0, (long)(ms * 1e6) }; nanosleep(&ts, 0); t_frames(root, ms / 1000); }
+      t_print(root); fputs("\x1e\n", stdout);
+      free(s);
+      continue;
+    }
+    tn *e = t_find(root, id);
+    if (!e) { fprintf(stderr, "no element with id %s\n", id); return 2; }
+    if (!strcmp(s, "input")) { free(e->value); e->value = t_dup(more ? more : "", more ? strlen(more) : 0); t_fire(e, "input", ""); }
+    else t_fire(e, s, more ? more : "");
+    t_print(root); fputs("\x1e\n", stdout);
+    free(s);
+  }
+  fflush(stdout);
+  return 0;
+}
+`;
+
+// `page` (C199b, NATIVE-APPS.md): main gives Html, mounted on a view host
+// (`ters_page_start`, `ters_page_event`) instead of run as a program;
+// "headless" adds HEADLESS_C's host and main; "ui" adds c-layout.ts's
+// style and layout over a ters_ui (C199d), and "ui-headless" a ui that
+// prints where each box went.
+export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm"; hosts?: { ops: HostOps; c?: string }; page?: "api" | "headless" | "ui" | "ui-headless" } = {}): CProgram {
   const LIBRARY = opts.math === "fdlibm" ? FDLIBM : PLATFORM;
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
@@ -672,7 +780,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   }
 
   const world = [...rts].some((x) => x.startsWith("world."));
-  const entry = opts.main === undefined ? "" : program(opts.main);
+  const entry = opts.main === undefined ? "" : opts.page ? pageC(opts.main, opts.page) : program(opts.main);
   const TL = threads ? "_Thread_local " : "";
   const stops = text.some((t) => t.includes("lab_stop(")) || rts.has("world.stopWith") || !!opts.harness;
   const fuelled = int32Used.size > 0 || text.some((t) => t.includes("lab_fuel"));
@@ -768,6 +876,234 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     }
     lines.push("}");
     return lines.join("\n");
+  }
+
+  // A page on a view host (C199b, NATIVE-APPS.md): main's Html mounted as
+  // the host's views, kept as a tree of what was drawn. After each event
+  // every text, attribute and part runs again and the host is told only
+  // what changed; a part's new Html is laid over what it drew, element by
+  // element, where the tags and attributes are the same.
+  function pageC(def: string, mode: "api" | "headless" | "ui" | "ui-headless"): string {
+    const i = kept.find((j) => funcs[j].def === def && !funcs[j].inner);
+    if (i === undefined) {
+      const j = funcs.findIndex((g) => g.def === def && !g.inner);
+      throw new Error(`main isn't in C: ${j < 0 ? lowered.refused.get(def as never) ?? "it isn't lowered" : refused.get(j)}`);
+    }
+    const H = funcs[i].result as DType;
+    const ci = (t: DType, v: string) => t.cases.findIndex((c) => c.variant === v);
+    if (!H || typeof H !== "object" || !("cases" in H) || H.def !== "std.html") throw new Error("main isn't a page: it doesn't give Html");
+    const el = ci(H, "std.html.element"), tx = ci(H, "std.html.text"), pt = ci(H, "std.html.part");
+    const LA = H.cases[el].fields[1].t as DType, LH = H.cases[el].fields[2].t as DType;
+    const consOf = (l: DType) => { const c = l.cases.findIndex((x) => x.fields.length > 0); return { c, head: l.cases[c].fields.findIndex((x) => x.t !== l), rest: l.cases[c].fields.findIndex((x) => x.t === l) }; };
+    const la = consOf(LA), lh = consOf(LH);
+    const A = LA.cases[la.c].fields[la.head].t as DType;
+    const pr = ci(A, "std.attribute.property"), on = ci(A, "std.attribute.on");
+    const TF = H.cases[tx].fields[0].t as FType, PF = H.cases[pt].fields[0].t as FType, VF = A.cases[pr].fields[1].t as FType, EF = A.cases[on].fields[1].t as FType;
+    const E = EF.params[0] as RType;
+    const call = (f: FType, c: string, xs: string[] = []) => `((${fname.get(f.key)})((lab_closure *)${c})->code)(${[c, ...xs].join(", ")})`;
+    const field = (t: DType, c: number, j: number, v: string) => `((${cname(t, c)} *)${v})->f${j}`;
+    return `// The page (C199b): main's Html on a view host.
+typedef struct ters_host {
+  void *ctx;
+  void *(*element)(void *ctx, const char *tag, size_t n);
+  void *(*text)(void *ctx, const char *s, size_t n);
+  void (*set_text)(void *ctx, void *node, const char *s, size_t n);
+  void (*set_attribute)(void *ctx, void *el, const char *name, size_t nn, const char *value, size_t vn);
+  void (*remove_attribute)(void *ctx, void *el, const char *name, size_t nn);
+  void (*append)(void *ctx, void *parent, void *kid);
+  void (*clear)(void *ctx, void *el);
+  void (*listen)(void *ctx, void *el, const char *event, size_t n, int handler);
+  void (*gone)(void *ctx, void *node);
+} ters_host;
+static ters_host *ters_h;
+// Run after the page changed (c-layout.ts lays it out again).
+static void (*ters_after)(void);
+// What was drawn: an element (its tag, attributes and children), a text,
+// or a part (what it drew). A property keeps what it showed (null: none);
+// an event keeps its handler's number.
+typedef struct ters_attr { int kind; lab_cell *name, *f, *shown; int handler; } ters_attr;
+typedef struct ters_m { int kind; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part; } ters_m;
+static lab_cell **ters_handlers;
+static int ters_nh, ters_ch;
+static ters_m *ters_root;
+static int ters_same(lab_cell *a, lab_cell *b) { return a && b && LAB_TN(a) == LAB_TN(b) && !memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)); }
+// A view's function run: its text, or null with no answer (an abort says
+// why on stderr).
+static lab_cell *ters_view(lab_cell *f) {
+  lab_dup(f);
+  lab_cell *r = ${call(VF, "f")};
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
+  return r;
+}
+static int ters_handler(lab_cell *f) {
+  if (ters_nh == ters_ch) { ters_ch = ters_ch ? 2 * ters_ch : 16; ters_handlers = realloc(ters_handlers, sizeof *ters_handlers * (size_t)ters_ch); }
+  lab_dup(f);
+  ters_handlers[ters_nh] = f;
+  return ters_nh++;
+}
+static void ters_show(ters_m *m, ters_attr *a) {
+  lab_cell *v = ters_view(a->f);
+  int live = (LAB_TN(a->name) == 5 && !memcmp(LAB_TB(a->name), "value", 5)) || (LAB_TN(a->name) == 7 && !memcmp(LAB_TB(a->name), "checked", 7));
+  // None: an attribute is taken off; a field's value or tick stays.
+  if (!v) { if (a->shown) { if (!live) ters_h->remove_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name)); lab_drop(a->shown); a->shown = 0; } return; }
+  if (ters_same(v, a->shown)) { lab_drop(v); return; }
+  ters_h->set_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name), (const char *)LAB_TB(v), LAB_TN(v));
+  if (a->shown) lab_drop(a->shown);
+  a->shown = v;
+}
+static void ters_text(ters_m *m) {
+  lab_cell *v = ters_view(m->f);
+  if (!v) v = lab__text_of("", 0);
+  if (ters_same(v, m->shown)) { lab_drop(v); return; }
+  ters_h->set_text(ters_h->ctx, m->view, (const char *)LAB_TB(v), LAB_TN(v));
+  if (m->shown) lab_drop(m->shown);
+  m->shown = v;
+}
+static ters_m *ters_mount(lab_cell *h);
+static void ters_forget(ters_m *m);
+static void ters_part(ters_m *m);
+// The attributes and children of an element, borrowed.
+static void ters_fill(ters_m *m, lab_cell *h) {
+  lab_cell *as = ${field(H, el, 1, "h")}, *ks = ${field(H, el, 2, "h")};
+  for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) m->na++;
+  for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}) m->nk++;
+  m->attrs = calloc((size_t)m->na + 1, sizeof *m->attrs);
+  m->kids = calloc((size_t)m->nk + 1, sizeof *m->kids);
+  int j = 0;
+  for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}, j++) {
+    lab_cell *a = ${field(LA, la.c, la.head, "x")};
+    ters_attr *t = &m->attrs[j];
+    t->kind = a->tag;
+    if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
+    else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
+    else fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);
+  }
+  j = 0;
+  for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) { m->kids[j] = ters_mount(${field(LH, lh.c, lh.head, "x")}); ters_h->append(ters_h->ctx, m->view, m->kids[j]->view); }
+}
+static ters_m *ters_mount(lab_cell *h) {
+  ters_m *m = calloc(1, sizeof *m);
+  m->kind = h->tag;
+  if (h->tag == ${el}) {
+    m->tag = ${field(H, el, 0, "h")}; lab_dup(m->tag);
+    m->view = ters_h->element(ters_h->ctx, (const char *)LAB_TB(m->tag), LAB_TN(m->tag));
+    ters_fill(m, h);
+  } else if (h->tag == ${tx}) {
+    m->f = ${field(H, tx, 0, "h")}; lab_dup(m->f);
+    m->view = ters_h->text(ters_h->ctx, "", 0);
+    ters_text(m);
+  } else {
+    m->f = ${field(H, pt, 0, "h")}; lab_dup(m->f);
+    m->view = ters_h->element(ters_h->ctx, "lab-part", 8);
+    ters_h->set_attribute(ters_h->ctx, m->view, "style", 5, "display: contents", 17);
+    ters_part(m);
+  }
+  return m;
+}
+static void ters_forget(ters_m *m) {
+  if (!m) return;
+  for (int j = 0; j < m->na; j++) { if (m->attrs[j].name) lab_drop(m->attrs[j].name); if (m->attrs[j].f) lab_drop(m->attrs[j].f); if (m->attrs[j].shown) lab_drop(m->attrs[j].shown); if (m->attrs[j].kind == ${on}) { lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = 0; } }
+  for (int j = 0; j < m->nk; j++) ters_forget(m->kids[j]);
+  ters_forget(m->part);
+  if (m->tag) lab_drop(m->tag);
+  if (m->f) lab_drop(m->f);
+  if (m->shown) lab_drop(m->shown);
+  ters_h->gone(ters_h->ctx, m->view);
+  free(m->attrs); free(m->kids); free(m);
+}
+// Whether drawn m can take h's place: the same kind, and for an element
+// the same tag, attributes (kinds and names) and number of children, each
+// of which can too.
+static int ters_fits(ters_m *m, lab_cell *h) {
+  if (m->kind != (int)h->tag) return 0;
+  if (h->tag != ${el}) return 1;
+  if (!ters_same(m->tag, ${field(H, el, 0, "h")})) return 0;
+  int j = 0;
+  for (lab_cell *x = ${field(H, el, 1, "h")}; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}, j++) {
+    lab_cell *a = ${field(LA, la.c, la.head, "x")};
+    if (j >= m->na || m->attrs[j].kind != (int)a->tag) return 0;
+    if (a->tag == ${pr} ? !ters_same(m->attrs[j].name, ${field(A, pr, 0, "a")}) : a->tag == ${on} ? !ters_same(m->attrs[j].name, ${field(A, on, 0, "a")}) : 1) return 0;
+  }
+  if (j != m->na) return 0;
+  j = 0;
+  for (lab_cell *x = ${field(H, el, 2, "h")}; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) if (j >= m->nk || !ters_fits(m->kids[j], ${field(LH, lh.c, lh.head, "x")})) return 0;
+  return j == m->nk;
+}
+// h laid over m, which fits it: its functions take the old ones' places.
+static void ters_lay(ters_m *m, lab_cell *h) {
+  if (h->tag == ${el}) {
+    int j = 0;
+    for (lab_cell *x = ${field(H, el, 1, "h")}; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}, j++) {
+      lab_cell *a = ${field(LA, la.c, la.head, "x")};
+      if (a->tag == ${pr}) { lab_cell *f = ${field(A, pr, 1, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_show(m, &m->attrs[j]); }
+      else { lab_cell *f = ${field(A, on, 1, "a")}; lab_dup(f); lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = f; }
+    }
+    j = 0;
+    for (lab_cell *x = ${field(H, el, 2, "h")}; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) ters_lay(m->kids[j], ${field(LH, lh.c, lh.head, "x")});
+  } else {
+    lab_cell *f = h->tag == ${tx} ? ${field(H, tx, 0, "h")} : ${field(H, pt, 0, "h")};
+    lab_dup(f); lab_drop(m->f); m->f = f;
+    if (h->tag == ${tx}) ters_text(m); else ters_part(m);
+  }
+}
+static void ters_part(ters_m *m) {
+  lab_dup(m->f);
+  lab_cell *h = ${call(PF, "m->f")};
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); return; }
+  if (m->part && ters_fits(m->part, h)) ters_lay(m->part, h);
+  else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); m->part = ters_mount(h); ters_h->append(ters_h->ctx, m->view, m->part->view); }
+  lab_drop(h);
+}
+// Everything shown, run again.
+static int ters_no_clock, ters_clock;
+static void ters_refresh(ters_m *m) {
+  if (m->kind == ${tx}) { ters_text(m); return; }
+  if (m->kind == ${pt}) { ters_part(m); return; }
+  for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${pr}) ters_show(m, &m->attrs[j]);
+  for (int j = 0; j < m->nk; j++) ters_refresh(m->kids[j]);
+}
+// main's page on host h: its root's view, or null when main has no answer.
+void *ters_page_start(ters_host *h) {
+  ters_h = h;
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+  lab_cell *html = ${names.get(i)}();
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
+  ters_root = ters_mount(html);
+  lab_drop(html);
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  return ters_root->view;
+}
+// An event given to handler n: what was typed or chosen, the key, where
+// the pointer is and the seconds since the frame before. Then the page
+// shows what changed. 0 when the handler stopped (an abort).
+int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) {
+  if (n < 0 || n >= ters_nh || !ters_handlers[n]) return 1;
+  lab_cell *f = ters_handlers[n];
+  lab_dup(f);
+  ${ty(E)} e = { lab__text_of(value, vn), lab__text_of(key, kn), x, y, seconds };
+  ${ty(EF.result)} r = ${call(EF, "f", ["e"])};
+  (void)r;
+  int ok = 1;
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ok = 0; }
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+  ters_refresh(ters_root);
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  if (ters_after) ters_after();
+  return ok;
+}
+// Whether what the page shows read the clock, so it runs again each frame.
+int ters_page_clock(void) { return ters_clock; }
+// A frame: what the page shows runs again, if it read the clock. Whether
+// it still does.
+int ters_page_frame(void) {
+  if (!ters_clock) return 0;
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+  ters_refresh(ters_root);
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  if (ters_after) ters_after();
+  return ters_clock;
+}
+${mode === "headless" ? HEADLESS_C : mode === "ui" ? LAYOUT_C : mode === "ui-headless" ? LAYOUT_C + UI_HEADLESS_C : ""}`;
   }
 
   function program(def: string): string {
