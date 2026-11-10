@@ -1,6 +1,6 @@
-// swarm, written by hand (examples/swarm): 100,000 motes moved by their
+// drift, written by hand (examples/drift): 100,000 motes moved by their
 // velocity a hundred times, three ways: each record rebuilt, changed in
-// place, and as columns (an array per field). node gaps/swarm.ideal.js [n]
+// place, and as columns (an array per field). node gaps/drift.ideal.js [n]
 const n = Number(process.argv[2] ?? 100000), K = 100;
 const made = (i) => ({ x: Math.sin(i * 1.7) * 100, y: Math.cos(i * 2.3) * 100, vx: Math.sin(i * 0.31), vy: Math.cos(i * 0.17), mass: 1 + Math.sin(i) ** 2, red: 0.5, green: 0.25, blue: 0.75, name: "mote" });
 const time = (name, f) => { const t = performance.now(); const r = f(); console.log(name.padEnd(10), (performance.now() - t).toFixed(0), "ms", r.toFixed(6)); };

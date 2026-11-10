@@ -38,7 +38,7 @@ const setup: Record<string, () => string[]> = {
   nicomachus: () => ["200"],
   divisors: () => ["1000", "100"],
   "queens-count": () => ["6"],
-  swarm: () => ["50"],
+  drift: () => ["50"],
   chapters: () => { writeFileSync(join(dir, "book.md"), chaptersBook(3, 5)); return ["book.md", "out"]; },
   ledger: () => { writeFileSync(join(dir, "book.csv"), ledgerBook(60, 6)); return ["book.csv"]; },
   notebook: () => [join(examples, "notebook/notes.txt")],
