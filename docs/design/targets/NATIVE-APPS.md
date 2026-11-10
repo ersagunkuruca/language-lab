@@ -5,7 +5,8 @@ Stretch goal is native compilation on each platform instead of webview
 stuff."). Written 2026-11-10 by Language lane B. The last section is the
 plan, as rows C199a to C199e.
 
-**Status.** Design only. Today a phone runs a Ters page in a webview:
+**Status.** Route A chosen (Ersagun, 2026-11-10). C199a is done: cells,
+formulas, reads and writes in C and WebAssembly. Today a phone runs a Ters page in a webview:
 `ters build-app` makes an installable web app that is also a Capacitor
 project (WEB.md "Mobile", C198), and the hand-run "Android app" workflow
 (#2146) builds its debug APK.
@@ -117,10 +118,14 @@ What a page's parts become under route A:
 
 ## Plan
 
-- **C199a. Cells in C.** The cells runtime in c.ts with cells.ts's meaning:
-  read, write, batch, readers rebuilt. Example: a counter program whose
-  cell is written three times gives the evaluator's reads, built by
-  `ters native`.
+- **C199a. Cells in C.** Done: the lowering makes a cell a box holding a
+  closure of nothing, one giving what was written or the formula, so C and
+  WebAssembly need no new runtime (scalar.ts `cellOp`). A formula runs at
+  each read, which gives what cells.ts's gives, since it can only read
+  cells. Knowing which readers a write wakes, so a page rebuilds only
+  those, comes with the mount (C199b), as do each, paths and edits.
+  Example: a counter written three times and a formula over it read as
+  the evaluator reads them (compiler/test/c-cells.test.ts).
 - **C199b. The Html mount in C over a view-host interface.** `mountHtml`'s
   steps printed as C calls on a host struct of function pointers, plus a
   headless host that records calls. Example: dice built as C against the
