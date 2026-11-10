@@ -66,3 +66,17 @@ test("a version's entries are listed once, however often they are read (C72)", (
   assert.deepEqual(listed(t), [[1, "a"], [2, "b"]]);
   assert.deepEqual(listed(u), [[0, "z"], [1, "a"], [2, "b"]]);
 });
+
+test("a table of Int keys lists them in order, put in order or not (C58b')", () => {
+  let seed = 11;
+  const rand = (n: number) => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+  let t = empty(), want = new Map<number, number>();
+  for (let i = 0; i < 2000; i++) {
+    // Mostly a counter's next key, as an entity store's are; sometimes an
+    // old one removed or put again, or a key from anywhere.
+    const key = rand(4) ? i : rand(3) ? rand(i + 1) : -rand(50);
+    if (rand(6) === 0) { t = remove(t, key); want.delete(key); } else { t = put(t, key, i); want.set(key, i); }
+    if (rand(20) === 0) assert.deepEqual(listed(t), [...want].sort(([a], [b]) => a - b), `step ${i}`);
+  }
+  assert.deepEqual(listed(t), [...want].sort(([a], [b]) => a - b));
+});
