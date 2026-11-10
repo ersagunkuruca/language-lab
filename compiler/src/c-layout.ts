@@ -147,12 +147,33 @@ static double tl_len(const char *p, const char *e, double size, int *ok, const c
 }
 
 // ---- The style sheet: rules of simple selectors.
-typedef struct { char tag[24], id[40], cls[4][40]; int ncls, spec, order; const char *decl, *end; } tl_rule;
+// A compound selector: a tag, an #id and .classes.
+typedef struct { char tag[24], id[40], cls[4][40]; int ncls; } tl_sel;
+// A rule's selector: its last compound in tag, id and cls, and the ones
+// before it, nearest first, each with its combinator: ' ' (inside) or '>'
+// (just inside).
+typedef struct { char tag[24], id[40], cls[4][40]; int ncls, spec, order, nup; tl_sel up[3]; char comb[3]; const char *decl, *end; } tl_rule;
 static tl_rule *tl_rules;
 static int tl_nrules;
+// One compound from a to b into s, its specificity added; 0 if it isn't
+// one this engine reads (a pseudo-class, an attribute).
+static int tl_compound(const char *a, const char *b, char *tag, char *id, char (*cls)[40], int *ncls, int *spec) {
+  for (const char *x = a; x < b;) {
+    char kind = (*x == '#' || *x == '.') ? *x++ : 't';
+    const char *y = x; while (y < b && *y != '#' && *y != '.' && *y != ':' && *y != '[') y++;
+    size_t n = (size_t)(y - x);
+    if (y < b && (*y == ':' || *y == '[')) return 0;
+    if (kind == 't' && n < 24) { memcpy(tag, x, n); tag[n] = 0; *spec += *x == '*' ? 0 : 1; }
+    else if (kind == '#' && n < 40) { memcpy(id, x, n); id[n] = 0; *spec += 100; }
+    else if (kind == '.' && n < 40 && *ncls < 4) { memcpy(cls[*ncls], x, n); cls[(*ncls)++][n] = 0; *spec += 10; }
+    else return 0;
+    x = y;
+  }
+  return 1;
+}
 static void tl_add(const char *sel, const char *se, const char *d, const char *de, int order) {
-  // Each selector of the list, if it is simple: a tag, #id and .classes
-  // (:root is the page's root; any other : or a combinator, left out).
+  // Each selector of the list: compounds joined by ' ' or '>' (:root is
+  // the page's root; any other :, [ or + ~, left out).
   const char *p = sel;
   while (p < se) {
     const char *q = p; while (q < se && *q != ',') q++;
@@ -160,16 +181,24 @@ static void tl_add(const char *sel, const char *se, const char *d, const char *d
     tl_rule r; memset(&r, 0, sizeof r); r.decl = d; r.end = de; r.order = order;
     int ok = a < b;
     if (b - a == 5 && !memcmp(a, ":root", 5)) { strcpy(r.tag, ":root"); r.spec = 10; }
-    else for (const char *x = a; x < b && ok;) {
-      char kind = (*x == '#' || *x == '.') ? *x++ : 't';
-      const char *y = x; while (y < b && *y != '#' && *y != '.' && *y != ':' && *y != ' ' && *y != '>' && *y != '[') y++;
-      size_t n = (size_t)(y - x);
-      if (y < b && (*y == ':' || *y == ' ' || *y == '>' || *y == '[')) ok = 0;
-      else if (kind == 't' && n < sizeof r.tag) { memcpy(r.tag, x, n); r.spec += *x == '*' ? 0 : 1; }
-      else if (kind == '#' && n < sizeof r.id) { memcpy(r.id, x, n); r.spec += 100; }
-      else if (kind == '.' && n < 40 && r.ncls < 4) { memcpy(r.cls[r.ncls++], x, n); r.spec += 10; }
-      else ok = 0;
-      x = y;
+    else {
+      // The compounds, left to right, and the combinator before each.
+      const char *ca[4], *cb[4]; char cc[4]; int nc = 0; char next = ' ';
+      for (const char *x = a; x < b && ok;) {
+        while (x < b && (*x == ' ' || *x == '\n' || *x == '>' || *x == '+' || *x == '~')) { if (*x == '>') next = '>'; else if (*x == '+' || *x == '~') ok = 0; x++; }
+        if (x >= b) break;
+        const char *y = x; while (y < b && *y != ' ' && *y != '\n' && *y != '>' && *y != '+' && *y != '~') y++;
+        if (nc == 4) { ok = 0; break; }
+        ca[nc] = x; cb[nc] = y; cc[nc++] = next; next = ' ';
+        x = y;
+      }
+      if (ok && nc) {
+        ok = tl_compound(ca[nc - 1], cb[nc - 1], r.tag, r.id, r.cls, &r.ncls, &r.spec);
+        for (int i = nc - 2; ok && i >= 0; i--) {
+          tl_sel *u = &r.up[r.nup]; r.comb[r.nup++] = cc[i + 1];
+          ok = tl_compound(ca[i], cb[i], u->tag, u->id, u->cls, &u->ncls, &r.spec);
+        }
+      } else ok = 0;
     }
     if (ok) { tl_rules = realloc(tl_rules, sizeof *tl_rules * (size_t)(tl_nrules + 1)); tl_rules[tl_nrules++] = r; }
     p = q + 1;
@@ -208,12 +237,27 @@ static int tl_word(const char *list, const char *w) {
   }
   return 0;
 }
+static int tl_is(const char *tag, const char *id, char (*cls)[40], int ncls, tl_n *e) {
+  if (!e || !e->tag) return 0;
+  if (tag[0] && strcmp(tag, "*") && strcmp(tag, e->tag)) return 0;
+  if (id[0] && (!e->id || strcmp(id, e->id))) return 0;
+  for (int j = 0; j < ncls; j++) if (!tl_word(e->cls, cls[j])) return 0;
+  return 1;
+}
+// Whether the compounds before r's last, from the i-th, match e's
+// ancestors from up (e's parent) outwards.
+static int tl_above(tl_rule *r, int i, tl_n *up) {
+  if (i == r->nup) return 1;
+  tl_sel *s = &r->up[i];
+  for (tl_n *a = up; a && a->tag; a = a->parent) {
+    if (tl_is(s->tag, s->id, s->cls, s->ncls, a) && tl_above(r, i + 1, a->parent)) return 1;
+    if (r->comb[i] == '>') return 0;
+  }
+  return 0;
+}
 static int tl_matches(tl_rule *r, tl_n *e, int root) {
   if (!strcmp(r->tag, ":root")) return root;
-  if (r->tag[0] && strcmp(r->tag, "*") && strcmp(r->tag, e->tag)) return 0;
-  if (r->id[0] && (!e->id || strcmp(r->id, e->id))) return 0;
-  for (int j = 0; j < r->ncls; j++) if (!tl_word(e->cls, r->cls[j])) return 0;
-  return 1;
+  return tl_is(r->tag, r->id, r->cls, r->ncls, e) && tl_above(r, 0, e->parent);
 }
 
 // ---- Custom properties: :root's, as the sheet sets them.
@@ -521,6 +565,30 @@ static double tl_flow(tl_n *e, double w) {
   if (c->align && n) for (int j = 0; j < n; j++) if (!it[j]->tag || it[j]->c.display == TL_INLINE) { double lw = it[j]->w; if (c->align == 1) it[j]->x = ox + (w - lw) / 2; else it[j]->x = ox + w - lw; }
   return y;
 }
+// A block's first child's top margin, and its last child's bottom one,
+// collapse through it where nothing (padding, a border, a set height)
+// stands between them, as CSS's margin collapsing does: a page's h1 in a
+// main with no padding starts at main's top, its margin outside main.
+static void tl_collapse(tl_n *e) {
+  if (!e->tag) return;
+  for (int j = 0; j < e->nk; j++) tl_collapse(e->kids[j]);
+  // A flex or grid item holds its children's margins (a formatting context of its own).
+  if (e->c.display != TL_BLOCK || e->c.pos == 2 || (e->parent && e->parent->tag && (e->parent->c.display == TL_FLEX || e->parent->c.display == TL_GRID))) return;
+  for (int end = 0; end < 2; end++) {
+    int side = end ? 2 : 0;
+    if (e->c.pad[side] || e->c.bw || (end && e->c.set_h)) continue;
+    tl_n *k = 0;
+    for (int j = 0; j < e->nk; j++) {
+      tl_n *x = e->kids[end ? e->nk - 1 - j : j];
+      if (x->tag && (x->c.display == TL_NONE || x->c.pos == 2)) continue;
+      if (!x->tag && tl_blank(x)) continue;
+      k = x; break;
+    }
+    if (!k || !k->tag || k->c.display != TL_BLOCK || k->c.auto_ml) continue;
+    if (k->c.mar[side] > e->c.mar[side]) e->c.mar[side] = k->c.mar[side];
+    k->c.mar[side] = 0;
+  }
+}
 // e laid out avail wide (its border box, margins outside).
 static void tl_lay(tl_n *e, double avail) {
   if (!e->tag) { tl_text_lay(e, avail); return; }
@@ -610,11 +678,16 @@ static void tl_layout(void) {
   for (int i = 0; i < tl_nrules; i++) if (!strcmp(tl_rules[i].tag, ":root") || !strcmp(tl_rules[i].tag, "html")) tl_decls(&html.c, tl_rules[i].decl, tl_rules[i].end);
   tl_style(&body, &html.c, 0);
   tl_style(tl_root, &body.c, 0);
-  tl_lay(tl_root, tl_width - body.c.mar[1] - body.c.mar[3] - body.c.pad[1] - body.c.pad[3]);
-  double mx = body.c.mar[3] + body.c.pad[3];
-  if (tl_root->c.auto_ml && tl_root->c.auto_mr) mx = (tl_width - tl_root->w) / 2;
+  // The root's own margins too (a page's main with margin: 24px), and its
+  // top margin collapsed with body's where body has no padding or border
+  // between them, as CSS does.
+  tl_collapse(tl_root);
+  int am = tl_root->c.auto_ml && tl_root->c.auto_mr;
+  tl_lay(tl_root, tl_width - body.c.mar[1] - body.c.mar[3] - body.c.pad[1] - body.c.pad[3] - (am ? 0 : tl_root->c.mar[1] + tl_root->c.mar[3]));
+  double mx = body.c.mar[3] + body.c.pad[3] + tl_root->c.mar[3];
+  if (am) mx = (tl_width - tl_root->w) / 2;
   tl_root->x = mx;
-  tl_root->y = body.c.mar[0] + body.c.pad[0] + tl_root->c.mar[0];
+  tl_root->y = body.c.pad[0] || body.c.bw ? body.c.mar[0] + body.c.pad[0] + body.c.bw + tl_root->c.mar[0] : (body.c.mar[0] > tl_root->c.mar[0] ? body.c.mar[0] : tl_root->c.mar[0]);
   tl_show(tl_root, 0, 0, 1);
   uint32_t bg = body.c.bg ? body.c.bg : html.c.bg ? html.c.bg : (tl_dark ? 0xFF121212u : 0xFFFFFFFFu);
   tl_ui->page(tl_ui->ctx, tl_width, tl_root->y + tl_root->h + tl_root->c.mar[2] + body.c.mar[2] + body.c.pad[2], bg);
