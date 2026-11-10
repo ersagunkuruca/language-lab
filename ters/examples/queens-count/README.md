@@ -20,6 +20,10 @@ Measured 2026-11-10 on 4 cores, which other work shared, so the times
 varied by a second: n = 12 (14200 boards) took 6.2 to 7.5 s in turn and
 3.4 to 3.7 s with three workers. n = 11 (2680) took 1.3 to 1.4 s either
 way, since the first column runs alone before the workers start.
+Since C43h the search runs in pieces of the first two rows' columns (a
+row's last piece takes the rest of its columns), so the first piece is
+small: measured 2026-11-10 on 4 cores, n = 12 2.3 to 1.5 s (4.8 on one
+thread), n = 11 0.67 to 0.49 s (0.97).
 
 Native (C203a) it's split the same way on C's threads (c.ts `par:count`),
 each thread keeping its own split and seen:
