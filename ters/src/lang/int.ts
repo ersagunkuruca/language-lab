@@ -49,12 +49,27 @@ export function mul(a: Int, b: Int): Int {
 }
 // floor(a / 2^n), an arithmetic shift: Fixed's product (FIXED-POINT.md)
 // rounds this way on every target. A negative n shifts up.
-export const shiftDown = (a: Int, n: Int): Int => norm(big(a) >> big(n));
+// Small numbers shift and mask as JavaScript's 32-bit operations do, which
+// are exact below 2^28 (C201: through BigInt, a Collatz walk in bits was
+// about 10 times slower than in Float64).
+export function shiftDown(a: Int, n: Int): Int {
+  if (typeof a === "number" && typeof n === "number" && n >= 0) return n > 30 ? (a < 0 ? -1 : 0) : a >> n;
+  return norm(big(a) >> big(n));
+}
 // Bits of two's complement with ones going on forever for a negative
 // (BigInt's and, or, xor): Word8 to Word64 keep the low bits (L193).
-export const bitAnd = (a: Int, b: Int): Int => norm(big(a) & big(b));
-export const bitOr = (a: Int, b: Int): Int => norm(big(a) | big(b));
-export const bitXor = (a: Int, b: Int): Int => norm(big(a) ^ big(b));
+export function bitAnd(a: Int, b: Int): Int {
+  if (typeof a === "number" && typeof b === "number") { const r = a & b; if (small(r)) return r; }
+  return norm(big(a) & big(b));
+}
+export function bitOr(a: Int, b: Int): Int {
+  if (typeof a === "number" && typeof b === "number") { const r = a | b; if (small(r)) return r; }
+  return norm(big(a) | big(b));
+}
+export function bitXor(a: Int, b: Int): Int {
+  if (typeof a === "number" && typeof b === "number") { const r = a ^ b; if (small(r)) return r; }
+  return norm(big(a) ^ big(b));
+}
 export const neg = (a: Int): Int => (typeof a === "number" ? (a === 0 ? 0 : -a) : norm(-a));
 export const abs = (a: Int): Int => (less(a, 0) ? neg(a) : a);
 export const less = (a: Int, b: Int): boolean => a < b;
