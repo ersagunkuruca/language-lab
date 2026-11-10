@@ -294,8 +294,9 @@ const isStack = (fn: string) => STACK.test(fn);
 // of one of its operations: the code handled on a fiber (c-rt "fibers").
 const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
-// A map whose function only computes, its items on threads (L101).
-const isPar = (fn: string) => fn === "par:map";
+// A map whose function only computes, its items on threads (L101), and a
+// together whose actions only compute, its actions so (C201).
+const isPar = (fn: string) => fn === "par:map" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -491,6 +492,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to });
     arrayFns.add(`array.length.a${ta.index}`).add(`array.empty.a${to.index}`);
     return pars.get(k)!.n;
+  };
+  const togethers = new Map<string, { n: number; ti: DType; to: DType }>();
+  const togetherSite = (ti: DType, to: DType): number => {
+    const k = `${ti.key} ${to.key}`;
+    if (!togethers.has(k)) togethers.set(k, { n: togethers.size, ti, to });
+    return togethers.get(k)!.n;
   };
   // The host's operations called (L69b1), each a wrapper lab_host_<n>.
   const hostsUsed = new Map<string, number>(), hostTypes = new Map<string, LType>();
@@ -711,7 +718,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(hostsUsed.size ? ["", HOST_RT, "// hosts/c.c", opts.hosts!.c!, "", ...[...hostsUsed].map(([op, n]) => hostWrapper(opts.hosts!.ops[Object.keys(opts.hosts!.ops).find((k) => opts.hosts!.ops[k].op === op)!], n, hostTypes.get(op)!))] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     ...[...tables.values()].flatMap((t) => tableC(t)),
-    ...(threads ? [POOL_C, ...[...pars.values()].map((x) => parC(x, stops, fuelled))] : []),
+    ...(threads ? [POOL_C, ...[...pars.values()].map((x) => parC(x, stops, fuelled)), ...[...togethers.values()].map((x) => togetherC(x, stops, fuelled))] : []),
     "",
     ...[...fiberGlobals].map(([n, t]) => `static ${t} ${n};`),
     ...fiberC,
@@ -1085,6 +1092,10 @@ int main(int argc, char **argv) {
             return stated(c, e.host!.t, pre, d);
           }
           if (isFiber(e.fn)) { rts.add("fibers"); return fiber(e as SExpr & { k: "rt" }, pre, d, after); }
+          if (e.fn === "par:together") {
+            const n = togetherSite(typeOf(e.args[0], f.locals) as DType, e.host!.t as DType);
+            return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+          }
           if (isPar(e.fn)) {
             const n = parSite(typeOf(e.args[0], f.locals) as AType, typeOf(e.args[1], f.locals) as FType, e.host!.t as AType);
             return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
@@ -1761,6 +1772,81 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   // (an abort, a stop, Int32 arithmetic that overflowed) is run again here
   // in its turn, as are the rest when nothing may be shared, so the map
   // fails as it would have in order: at the last item that fails.
+  // A together on threads (C201, scalar.ts `par:together`): its list of
+  // actions, each of nothing, which only compute; the list of what they
+  // give, or nothing with lab_st set. As parC's items, but in the list's
+  // order, as the evaluator runs them, and the together fails at the first
+  // action that does. Its actions are few and each may be long, so they
+  // are all shared out at once, unless the together took under a
+  // millisecond the last time (lab_together_quick): then they run here
+  // from the first till they have taken one.
+  function togetherC(p: { n: number; ti: DType; to: DType }, stops: boolean, fuelled: boolean): string {
+    const { n, ti, to } = p, J = `lab_together_job_${n}`;
+    const shape = (d: DType) => { const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d); return { cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head, rest: 1 - head, t: d.cases[tag].fields[head].t }; };
+    const i = shape(ti), o = shape(to), tf = i.t as FType, To = ty(o.t);
+    const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
+    return `typedef struct { lab_cell **in; ${To} *out; char *bad; int64_t next, n; } ${J};
+static void lab_together_one_${n}(${J} *j, int64_t k) {
+  lab_cell *f = lab_dup(j->in[k]);
+  j->out[k] = ((${fname.get(tf.key)})((lab_closure *)f)->code)(f);
+}
+static void lab_together_work_${n}(void *p) {
+  ${J} *j = p;
+  volatile int64_t k;${stops ? `
+  jmp_buf here, *was = lab_stop_at;
+  if (setjmp(here)) lab_st = 0;
+  lab_stop_at = &here;` : ""}
+  while ((k = __atomic_fetch_add(&j->next, 1, __ATOMIC_RELAXED)) < j->n) {
+    lab_together_one_${n}(j, k);
+    if (${failed}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
+    else { j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED); }
+  }${stops ? `
+  lab_stop_at = was;` : ""}
+}
+static int lab_together_quick_${n} = 0;
+static lab_cell *lab_par_together_${n}(lab_cell *l) {
+  int64_t n = 0, left = 0, k = 0;
+  int quick = __atomic_load_n(&lab_together_quick_${n}, __ATOMIC_RELAXED);
+  lab_cell *p;
+  for (p = l; p->tag == ${i.tag}; p = ((${i.cons} *)p)->f${i.rest}) n++;
+  ${J} j = { malloc((size_t)(n ? n : 1) * sizeof(lab_cell *)), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0, n };
+  struct timespec t0;
+  if (!j.in || !j.out || !j.bad) lab_oom();
+  for (p = l; p->tag == ${i.tag}; p = ((${i.cons} *)p)->f${i.rest}) j.in[k++] = lab_dup(((${i.cons} *)p)->f${i.head});
+  lab_drop(l);
+  memset(j.bad, 1, (size_t)n);
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  while (quick && left < n) {
+    lab_together_one_${n}(&j, left);
+    if (lab_st) { k = left; goto failed; }
+    j.bad[left++] = 0;
+    if (left < n && lab_par_worth(&t0)) break;
+  }
+  if (left < n${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
+    lab_share_no = 0;
+    for (k = left; k < n; k++) lab_share(j.in[k]);
+    lab_shared();
+    if (!lab_share_no) { j.next = left; lab_pool_run(lab_together_work_${n}, &j); }
+  }
+  for (k = left; k < n; k++) {
+    if (!j.bad[k]) continue;
+    lab_together_one_${n}(&j, k);
+    if (lab_st) goto failed;
+    j.bad[k] = 0;
+  }
+  __atomic_store_n(&lab_together_quick_${n}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
+  lab_cell *r = (lab_cell *)&${o.nil};
+  for (k = n; k-- > 0;) { ${o.cons} *c = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); c->f${o.head} = j.out[k]; c->f${o.rest} = r; r = (lab_cell *)c; }
+  for (k = 0; k < n; k++) lab_drop(j.in[k]);
+  free(j.in); free(j.out); free(j.bad);
+  return r;
+failed:
+  ${counted(o.t) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(o.t, "j.out[m]")}\n  ` : ""}for (int64_t m = 0; m < n; m++) lab_drop(j.in[m]);
+  free(j.in); free(j.out); free(j.bad);
+  return 0;
+}`;
+  }
+
   function parC(p: { n: number; ta: AType; tf: FType; to: AType }, stops: boolean, fuelled: boolean): string {
     const { n, ta, tf, to } = p, J = `lab_par_job_${n}`, Ti = ty(ta.item), To = ty(to.item);
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;

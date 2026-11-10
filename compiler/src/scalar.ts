@@ -1360,6 +1360,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // the counts of what they share made atomic, where the runtime
         // finds the items worth it. Its items do nothing a fiber is for. A
         // list's map stays as compiled.
+        // A together whose actions only compute, likewise in C (C201,
+        // c.ts `par:together`): on the threads, not on fibers.
+        if (opts.threads && target === TOGETHER && (parallel ??= parallelTogethers(code, info)).has(n.id)) {
+          const t = stype(zonk(id));
+          if (t && isData(t)) return { k: "rt", fn: "par:together", args: args(), host: { t, partial: true } };
+        }
         if (opts.threads && (parallelList ??= parallelLists(code, info)).get(n.id) === "map") {
           const t = stype(zonk(id));
           if (t && isArray(t)) return { k: "rt", fn: "par:map", args: args(), host: { t, partial: true } };

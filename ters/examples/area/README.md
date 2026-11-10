@@ -20,4 +20,6 @@ answer is the same as counting the bands in turn. Measured 2026-11-09 on
 thread; side 1200 558 to 353 ms. A small grid stays on the main thread,
 since starting workers would cost more than the bands (TERS_WORKERS=0
 keeps every run there; TERS_BRANCHES=say says how many bands ran on
-workers).
+workers). Built native (`ters native examples/area -o area`) the bands
+run on threads too (C201): side 2400 2.5 s one after another and 0.86 s
+on four cores, measured 2026-11-10.
