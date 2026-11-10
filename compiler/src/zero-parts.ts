@@ -153,6 +153,9 @@ function inlineLeaves(funcs: SFunc[]): SFunc[] {
     if (!kidsHaveLeafCall(g.body)) return g;
     const free = calm[gi];
     const locals = [...g.locals];
+    // Which binder each local holds goes with it (owned-records.ts reads
+    // it: a mote's `moved` put in a map's closure code, C60).
+    let binders = g.binders;
     let put_n = 0;
     const put = (e: SExpr): SExpr => {
       const r = mapKids(e, put);
@@ -162,13 +165,20 @@ function inlineLeaves(funcs: SFunc[]): SFunc[] {
       put_n++;
       const f = funcs[r.fn], at = locals.length;
       locals.push(...f.locals);
+      // An input given a local holds its binder too, as the copy goes.
+      f.binders?.forEach((b, i) => {
+        if (!b) return;
+        (binders = [...(binders ?? [])])[i + at] = b;
+        const a = i < r.args.length ? r.args[i] : undefined;
+        if (a?.k === "local" && !binders[a.i]) binders[a.i] = b;
+      });
       let body = mapLocals(f.body, (i) => i + at);
       for (let j = r.args.length - 1; j >= 0; j--) body = { k: "let", i: at + j, value: r.args[j], body };
       return body;
     };
     function kidsHaveLeafCall(e: SExpr): boolean { return (e.k === "call" && leaf[e.fn]) || kids(e).some(kidsHaveLeafCall); }
     const body = put(g.body);
-    return put_n ? { ...g, locals, body } : g;
+    return put_n ? { ...g, locals, body, ...(binders ? { binders } : {}) } : g;
   });
 }
 
