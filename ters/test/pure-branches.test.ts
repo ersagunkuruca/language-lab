@@ -97,3 +97,23 @@ test("a keep shares out its items like a map, its test written in place and only
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(parallelLists(code, info).get(pure), "keep");
 });
+
+// all pass and any pass stop at the first item that decides, so their
+// test may abort but never run long (C43).
+test("all pass and any pass share out their items only for a test that ends (C43)", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main"), forever = k.def("forever");
+  k.define(forever, k.fn(["n"], (n) => k.call(forever, n)));
+  let ends = "", aborts = "", runsLong = "";
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(
+    (ends = k.call(lib("all pass"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.call(S.less, x, k.lit(2))))),
+    (aborts = k.call(lib("any pass"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.if(k.call(S.less, x, k.lit(2)), k.call(S.less, x, k.lit(0)), k.call(ABORT_OP, k.lit("no")))))),
+    (runsLong = k.call(lib("all pass"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.call(S.less, k.call(forever, x), k.lit(2))))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const marked = parallelLists(code, info);
+  assert.equal(marked.get(ends), "all");
+  assert.equal(marked.get(aborts), "any");
+  assert.equal(marked.get(runsLong), undefined);
+});

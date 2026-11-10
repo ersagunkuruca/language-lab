@@ -2,7 +2,7 @@ import { children, type Code, type Id, type Node } from "../model.ts";
 
 // The prelude definitions the passes and the solver find by name
 // (arith.ts preludeDef): fractions' and grammars' pieces, `inverse`,
-// `together`, `map` (the trees module's for arrays too, C42) and `keep`, and the checks a printer's arms make (descent.ts). A table,
+// `together`, `map` (the trees module's for arrays too, C42), `keep` and `any pass`, and the checks a printer's arms make (descent.ts). A table,
 // so that a compiled program that solves doesn't carry the library (library/prelude.json, 4 MB) to look them up
 // (C137d2); test/prelude-ids.test.ts checks it against the prelude.
 export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
@@ -18,6 +18,7 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "map": "@9902gjnadddgv3jrh6ir29nf4q",
  "array map": "@dom7ap03ujn65jk9krb3tv2v60",
  "keep": "@17uq2ffqdsbb6kikljtkeco9v1",
+ "any pass": "@7nfnenoqt4fflsckoqd4d37ei9",
  "all pass": "@ku5ojesmoico158dp65r5o0q8f",
  "is letter": "@3ghl6cjivv5vaeuti6ht2gip8a",
  "is digit": "@kns2kgot84jr2lfre0vbl00j9q",
@@ -30,6 +31,10 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
 // Copies' ids are fresh, so one table serves every program in a process.
 export const COPIED_FROM = new Map<string, string>();
 export const originalOf = (id: string): string => COPIED_FROM.get(id) ?? id;
+// And rep-split.ts's, whose copies on a split's side may take a list one
+// way and give it another: known only where what they give is no list
+// (all pass, any pass).
+export const SPLIT_COPIED_FROM = new Map<string, string>();
 
 // Rational's case and type, read off negate fraction's own match (L207f2,
 // L207f4), so the passes that know a fraction's rule (relate.ts's fraction

@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, inOrder, mapInOrder, mapPure, mapWorth, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -172,6 +172,11 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name === "together.pure") return (actions: unknown, fuel: unknown) => (fuel === Infinity || fuel === undefined ? togetherPure(actions) : inOrder(actions));
   // And a map of a function that only computes, by runs of its items (C42).
   if (name === "map.worth") return mapWorth as (...xs: unknown[]) => unknown;
+  // all pass and any pass, stopping at the first item that decides (C43).
+  if (name === "all.pure" || name === "any.pure") {
+    const any = name === "any.pure";
+    return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? testPure(xs, f as (x: unknown) => unknown, site as number, any) : testInOrder(xs, f as (x: unknown) => unknown, any));
+  }
   if (name === "map.pure" || name === "keep.pure") {
     const keep = name === "keep.pure";
     return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
