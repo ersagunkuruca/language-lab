@@ -266,7 +266,28 @@ What this leaves, in order:
   example: collatz's `keep` (its walk is in Int, a lot of work an item; a
   number whose walk passes 32 bits gives up there and is tested again on
   the CPU).
-- **(e)** as before, after these.
+- **(e) Divide and conquer: done 2026-11-10 on Node** (examples/fibonacci,
+  pure-branches.ts `parallelHalves`, branches-rt.ts `bothPure`):
+  - **Which calls.** A call in a definition's body given two calls of
+    that definition, g(f(a), f(b)), where f only computes, as a
+    together's actions may. The two calls' inputs and the call's others
+    must do nothing at all (not even stop), since they are worked out
+    first. Nothing is written for it.
+  - **Most calls cost a question.** The compiled code asks the runtime
+    whether (`both.on`); below the top, and on a worker, it is no, and
+    the two calls run as written.
+  - **The top.** Met first on the main thread, the call's tree is unfolded
+    a few levels there, to a few dozen calls. To unfold a call, it runs
+    until it meets its own two calls (a probe, thrown out there). A call
+    that ends or stops first is one to share. Those calls are shared out
+    as a together's branches, in the order running in turn meets them. The
+    levels above are then run again, each given its two calls' answers.
+    Since f only computes, it meets the same two again.
+  - **Result.** fib 38: 2.3 s before, 2.1 s in turn with it, 0.9 s with
+    three workers on 4 cores.
+  - **Not yet.** Pages (no blocking wait there), C's threads, and a fold
+    over a tree (its two "with" answers), which the same runtime could
+    take.
 - A Float32 type, if Ersagun wants float maps on the GPU: a language
   question, so a row of its own, not part of C61.
 
