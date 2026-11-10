@@ -19,7 +19,7 @@ import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call
 import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
-import { unitProblems, UnitsBefore } from "../units.ts";
+import { constraints as unitConstraints, unitProblems, UnitsBefore } from "../units.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
@@ -2700,12 +2700,30 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // part of a check (BACKLOG E103: fall's holes asked ~1,000 whole checks
   // each, one per thing an offer names).
   const groupTypes = h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; });
-  const unitsOf = (c: Code) => new Set(unitProblems(c, {}, affected, units).map((u) => u.message));
+  const unitsOf = (c: Code, quick = false) => new Set(unitProblems(c, {}, affected, units, quick).map((u) => u.message));
   let unitsBefore: Set<string> | undefined;
   const noNewUnits = (now: Set<string>) => [...now].every((m) => (unitsBefore ??= unitsOf(code)).has(m));
   // A program with no unit declared has none to break, so the filled
   // program needn't be written (E253e: a new definition's 1,400 offers).
-  const unitsHold = (f: Filling) => !units.anyUnit || noNewUnits(unitsOf(filled(f)));
+  // What a filling does to units is what it makes of the group's own
+  // constraints: a caller's are its own with the group's inlined, so
+  // fillings that give the group the same constraints, their new nodes
+  // renumbered, give every caller the same, and one check answers for
+  // them all (E103, design (2) of INCREMENTAL-CHECK-2026-11-10.md: the
+  // worst of fall's holes asked 250 unit checks with 36 keys).
+  const unitsKept = new Map<string, boolean>();
+  const unitsKey = (c: Code) => {
+    const fresh = new Map<string, number>();
+    const term = (t: string) => t.replace(/[^/:]+/g, (id) => (code.nodes[id] !== undefined ? id : `#${fresh.get(id) ?? (fresh.set(id, fresh.size), fresh.size - 1)}`));
+    return h.group.map((d) => unitConstraints(c, d).map((x) => JSON.stringify([x.terms.map(([t, v]) => [term(t), v]), x.rhs, x.why])).join(";")).join("|");
+  };
+  const unitsHold = (f: Filling) => {
+    if (!units.anyUnit) return true;
+    const c = filled(f), k = unitsKey(c);
+    let ok = unitsKept.get(k);
+    if (ok === undefined) unitsKept.set(k, (ok = noNewUnits(unitsOf(c, true))));
+    return ok;
+  };
   const checked = new Map<string, boolean>();
   const byKind = (key: string, f: Filling): boolean => {
     let ok = checked.get(key);
