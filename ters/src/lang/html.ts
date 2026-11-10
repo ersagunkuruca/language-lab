@@ -146,6 +146,9 @@ const moved = new WeakSet<Node_>();
 const holding = new WeakMap<Node_, Node_[]>();
 const fresh = (n: Node_): Node_[] => moved.has(n) ? [] : holding.get(n)?.flatMap(fresh) ?? [n];
 
+// Held waits (C61 c′) not yet over, and the events that came meanwhile.
+const held = { n: 0, queue: [] as (() => void)[], frames: new Map<unknown, [string, string, number, number, number]>() };
+
 export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   const owner = typeof v === "object" && v !== null ? KEPT.get(v) : undefined;
   if (!owner || owner.disposed) return draw(v, m, svg);
@@ -241,6 +244,19 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             given([value, ev.key ?? "", x, y, ev.seconds ?? 0]);
           };
           const given = ([value, key, x, y, seconds]: [string, string, number, number, number]) => {
+            // While a held wait's run is away (C61 c′), an event waits its
+            // turn, and frames are one, their seconds added up: as they'd
+            // have come had the run not waited.
+            if (held.n) {
+              const q = name === "frame" ? held.frames.get(given) : undefined;
+              if (q) q[4] += seconds;
+              else {
+                const a: [string, string, number, number, number] = [value, key, x, y, seconds];
+                if (name === "frame") held.frames.set(given, a);
+                held.queue.push(() => { held.frames.delete(given); given(a); });
+              }
+              return;
+            }
             m.heard?.(name, [value, key, x, y, seconds], pathOf(e));
             // One batch per event: the page updates once, after every write.
             // A handler that fetched what hasn't come stops there, what it
@@ -262,7 +278,17 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                 // A wait (C40) can't be asked again from the start (its
                 // timer would start again), so a run that can't go on from
                 // it says so instead.
-                if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
+                if (err instanceof Pending && err.hold && err.resume) {
+                  const go = err.resume;
+                  held.n++;
+                  err.ready.then(() => {
+                    try { fire(() => { for (const v of go()) return v; }); } finally {
+                      held.n--;
+                      cells.release();
+                      while (!held.n && held.queue.length) held.queue.shift()!();
+                    }
+                  });
+                } else if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
                 else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
                 else { console.error(err); m.stopped?.(err); }

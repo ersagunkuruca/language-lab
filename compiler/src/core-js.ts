@@ -846,10 +846,10 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 
 // The module's functions given to branches-rt.ts by name, before its
 // definitions are handed out (its last line, `return {`).
-function withFunctionsNamed(js: string): string {
+function withFunctionsNamed(js: string, call = "R.branchesFrom(import.meta.url, "): string {
   const fns = [...new Set([...js.matchAll(/^\s*function\*?\s+(f[\w$]*)\s*\(/gm)].map((m) => m[1]))];
   const at = js.lastIndexOf("\nreturn {");
-  return `${js.slice(0, at)}\nR.branchesFrom(import.meta.url, { ${fns.join(", ")} }, R.closure, R.Aborted);${js.slice(at)}`;
+  return `${js.slice(0, at)}\n${call}{ ${fns.join(", ")} }, R.closure, R.Aborted);${js.slice(at)}`;
 }
 
 // What a tool needs to go from the printed JavaScript back to the program
@@ -1073,7 +1073,10 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
   const { names, worlds } = emitCoreJs(ir);
-  const js = bare ? moduleTags(ir, !!hosts || worklet !== undefined).js : emitCoreJs(ir).js;
+  const js0 = bare ? moduleTags(ir, !!hosts || worklet !== undefined).js : emitCoreJs(ir).js;
+  // A map on the page's workers (C61 c′): the functions by name, and the
+  // page's own script, which each worker runs (core-page.ts).
+  const js = worlds.includes("mapAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
   const code = codeFor(ir, js);
   return wrapped(page, [
     using("startCorePage", page),

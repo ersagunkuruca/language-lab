@@ -1,0 +1,7 @@
+{
+  "4iqjf4829efr33ru5vnkf0j41q": "How many steps z → z² + c takes, from (zr, zi), to leave the circle of radius 2: `limit` when it never does within `limit` steps, as for the points of the Mandelbrot set.",
+  "7a9csket7qmdfntd9uluc0t3aq": "The character for a point that took `steps` of `limit`: # inside, then darker the longer it stayed.",
+  "r3ppshj2df4dvcndl6oa3c98fa": "Row y of the picture from column x on, after `drawn`: the point (x, y) is −2.2 + x · step, −1.2 + y · 2 · step (a character is about twice as tall as wide).",
+  "program": "The Mandelbrot set drawn in characters, its rows made by one map (C42).\nPrior art: the Mandelbrot set (Benoit Mandelbrot, 1980); drawing it in characters is as old as line printers.",
+  "ek6e3evg22rdkiap87m3hm9c68": "The Mandelbrot set as a page: each press of Draw draws it again with 1000 more steps a point, so its edge grows finer. The picture is one map over the rows inside the button's handler. Each line only computes, so in a browser the compiled page sends the rows out to workers started from its own script, and the handler waits for them. While it waits the page shows nothing new and takes no other event, so the picture and everything around it are the same as drawing the rows in turn."
+}

@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -401,7 +401,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };
 export const RUNTIME = {
-  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded, branchesFrom, branchWorker,
+  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded, branchesFrom, branchWorker, pageBranches, pageWorker,
   fail: (): never => { throw FAIL; },
   // A step of a definition that may not finish: free, except under a
   // page's budget (run.ts withSteps), where running out is the part's
@@ -630,6 +630,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
   };
   switch (op) {
     case "startTimer": return (ms) => timers.start(clock(), ms as number);
+    // A map on a page's workers (C61 c′, branches-rt.ts), given the rest.
+    case "mapAway": return (xs, f, fuel, site, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, (v) => RUNTIME.ap(k as never, v));
     case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };
     case "await": return (t, k) => awaited(t as Data, k);
     case "randomSeed": return () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))();

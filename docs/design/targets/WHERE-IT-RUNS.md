@@ -226,7 +226,21 @@ What this leaves, in order:
 
 - **(c′) Workers on the web for a map** in a handler or waiting main, by
   postMessage, measured as Node's are. The example: mandelbrot-rows as a
-  page.
+  page. **Done 2026-11-10** (examples/mandelbrot-page, branches-rt.ts
+  `mapAway`):
+  - **Which maps.** A map written in a function whose row may wait (a
+    page's handler, a main that waits) goes on by the rest of that
+    function (scalar.ts `waitsIn`, a world op that suspends).
+  - **On a page.** Its runs go to workers started from the page's own
+    script (`pageBranches`, `pageWorker`): round robin, the main thread
+    taking every fourth.
+  - **The wait.** The handler's wait is held (Pending.hold). The batch
+    stays open (cells.ts `release`), so the page shows nothing new, and
+    events wait their turn (html.ts `held`), frames joined with their
+    seconds added. So the choice can't be seen.
+  - **Result.** 3 to 3.5 times quicker on 4 cores.
+  - **Not covered.** A map in a function called from the handler (its row
+    doesn't say Wait) stays in turn, and so do keep, folds and searches.
 - **(d′) The GPU for an Int map,** with the trial of finding 4. The
   example: collatz's `keep` (its walk is in Int, a lot of work an item; a
   number whose walk passes 32 bits gives up there and is tested again on
