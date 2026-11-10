@@ -93,9 +93,14 @@ function unique(name: string, taken: Set<string>): string {
 // that binds (a definition's lambda, a match's arms, a solve).
 // The path is found once for a program and hole (I167c: the palette fills
 // one hole with each of its offers, and each looked for it from the top).
+const hasAny = (o: object) => { for (const _ in o) return true; return false; };
 const scopePaths = new WeakMap<Code, Map<Id, Id[]>>();
 function namesInScope(code: Code, names: Names, hole: Id): Set<string> {
   const out = new Set<string>();
+  // With no names (the palette's trial fillings) nothing is taken, and the
+  // path needn't be found (E103q: a hole in a program on the library's
+  // layer was looked for through every definition, once per offer).
+  if (!hasAny(names)) return out;
   let paths = scopePaths.get(code);
   if (!paths) scopePaths.set(code, (paths = new Map()));
   const known = paths.get(hole);
