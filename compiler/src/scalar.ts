@@ -1390,8 +1390,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             // waits), a map goes on by the rest (C61 c′): on a page its runs
             // go to workers there, by postMessage (branches-rt.ts mapAway).
             const kind = parallelList.get(n.id)!;
-            const shared: SExpr = kind === "map" && waitsIn(f)
-              ? { k: "world", op: "mapAway", aborts: true, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site], t, suspends: true }
+            const shared: SExpr = (kind === "map" || kind === "keep") && waitsIn(f)
+              ? { k: "world", op: "mapAway", aborts: true, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.
@@ -2782,7 +2782,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         else {
         const whole = arr ? s.args[0] : s, lt = arr ? [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])] : st;
         const l = f.locals.push(lt) - 1, xs: SExpr = { k: "local", i: l }, site: SExpr = { k: "num", v: mapSites++ };
-        const shared: SExpr = { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site] };
+        // In a function that may wait, on a page's workers too (C61 c′).
+        const shared: SExpr = waitsIn(f)
+          ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil], t: "int", suspends: true }
+          : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site] };
         return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: "int" } };
         }
       }

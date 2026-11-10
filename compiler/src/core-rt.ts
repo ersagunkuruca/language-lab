@@ -631,7 +631,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
   switch (op) {
     case "startTimer": return (ms) => timers.start(clock(), ms as number);
     // A map on a page's workers (C61 c′, branches-rt.ts), given the rest.
-    case "mapAway": return (xs, f, fuel, site, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, (v) => RUNTIME.ap(k as never, v));
+    case "mapAway": return (xs, f, fuel, site, how, z, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, (v) => RUNTIME.ap(k as never, v));
     case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };
     case "await": return (t, k) => awaited(t as Data, k);
     case "randomSeed": return () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))();
