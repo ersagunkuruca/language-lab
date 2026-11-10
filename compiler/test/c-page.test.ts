@@ -288,6 +288,14 @@ test("tumble's swap in C, by taps or a drag, plays its animations and the chain 
   assert.deepEqual(said(4), ["Showing: clear", "Showing: clear", "Showing: clear"]);
   assert.deepEqual(said(5), ["At rest", "At rest", "At rest"]);
   assert.match(pages[5], /Steps worked out, still to show: 0\./);
+  // The line under each board says other things as the chain plays, on
+  // one line or more as a phone's font wraps it, so it keeps room for
+  // three (min-height: 4.5em) and nothing beside or below it moves up and
+  // down: Ersagun saw the text reflow.
+  const rooms = (k: number) => [...pages[k].matchAll(/ p [\d.]+ [\d.]+ [\d.]+ ([\d.]+)\n\s+text [^\n]*"(?:Showing: \w+|At rest)\./g)].map((m) => m[1]);
+  for (let k = 0; k < 6; k++) assert.deepEqual(rooms(k), ["58.5", "58.5", "58.5"]);
+  const boxes = (k: number) => pages[k].split("\n").filter((s) => /^ {0,4}(page|div) /.test(s)).join("\n");
+  for (let k = 1; k < 6; k++) assert.equal(boxes(k), boxes(0));
   // A drag from one into the other swaps them too (tumble's dragged): a
   // finger moving inside the place it went down on doesn't.
   const at = (t: string) => t.split(" ").slice(1).map(Number), [ac, ar] = at(a), [bc, br] = at(b);
