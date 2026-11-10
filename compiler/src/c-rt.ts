@@ -951,10 +951,44 @@ static lab_cell *lab_handlers_case(int e, int i) {
   // perform leaves for the handler's driver, taking its frame and those
   // above it off the stack of frames; the rest puts them back and goes
   // back in. One-shot, as Koka's and OCaml 5's effect handlers on fibers.
-  "fibers": { uses: [], c: `#include <ucontext.h>
+  // Android's libc has no ucontext (C199f): there a fiber is started by
+  // moving the stack pointer onto its stack (one instruction per
+  // processor) and switched with sigsetjmp and siglongjmp.
+  "fibers": { uses: [], c: `#if defined(__ANDROID__) || defined(LAB_FIBER_SJLJ)
+#include <setjmp.h>
+typedef struct { sigjmp_buf jb; void (*fn)(void); char *top; } lab__ctx;
+static void lab__cgo(lab__ctx *to) {
+  if (to->fn) {
+    void (*fn)(void) = to->fn; char *sp = to->top;
+    to->fn = 0;
+#if defined(__aarch64__)
+    __asm__ volatile("mov sp, %0\\n\\tblr %1" :: "r"(sp), "r"(fn) : "memory");
+#elif defined(__arm__)
+    __asm__ volatile("mov sp, %0\\n\\tblx %1" :: "r"(sp), "r"(fn) : "memory");
+#elif defined(__x86_64__)
+    __asm__ volatile("mov %0, %%rsp\\n\\tcall *%1" :: "r"(sp), "r"(fn) : "memory");
+#elif defined(__i386__)
+    __asm__ volatile("mov %0, %%esp\\n\\tcall *%1" :: "r"(sp), "r"(fn) : "memory");
+#else
+#error "no fibers for this processor"
+#endif
+    __builtin_unreachable();
+  }
+  siglongjmp(to->jb, 1);
+}
+#define LAB_CSWAP(from, to) do { if (!sigsetjmp((from)->jb, 0)) lab__cgo(to); } while (0)
+#define LAB_CSET(to) lab__cgo(to)
+#define LAB_CMAKE(c, f, stk, n) ((c)->fn = (f), (c)->top = (char *)(((uintptr_t)(stk) + (n)) & ~(uintptr_t)15))
+#else
+#include <ucontext.h>
+typedef ucontext_t lab__ctx;
+#define LAB_CSWAP(from, to) swapcontext(from, to)
+#define LAB_CSET(to) setcontext(to)
+#define LAB_CMAKE(c, f, stk, n) (getcontext(c), (c)->uc_stack.ss_sp = (stk), (c)->uc_stack.ss_size = (n), (c)->uc_link = 0, makecontext(c, f, 0))
+#endif
 typedef struct lab__frame lab__frame;
-typedef struct { ucontext_t ctx; void *stack; } lab__fiber;
-struct lab__frame { int e, op, noff; ucontext_t driver; lab__fiber *fiber, *at; void (*entry)(lab__frame *); lab__frame **off; };
+typedef struct { lab__ctx ctx; void *stack; } lab__fiber;
+struct lab__frame { int e, op, noff; lab__ctx driver; lab__fiber *fiber, *at; void (*entry)(lab__frame *); lab__frame **off; };
 typedef struct { lab_cell h; void (*code)(void); void *k; } lab__frest; // a rest: its handler's frame
 #define LAB_FIBER_STACK ((size_t)1 << 26)
 static lab__frame **lab__fs, *lab__fnew;
@@ -969,14 +1003,12 @@ static void lab__fbody(void) {
   h->entry(h);
   for (int k = lab__fn; k-- > 0;) if (lab__fs[k] == h) { lab__fn = k; break; }
   h->op = -1;
-  setcontext(&h->driver);
+  LAB_CSET(&h->driver);
 }
 static void lab__fstart(lab__frame *h, int e, void (*entry)(lab__frame *)) {
   lab__fiber *f = calloc(1, sizeof *f);
   if (!f || !(f->stack = malloc(LAB_FIBER_STACK))) lab_oom();
-  getcontext(&f->ctx);
-  f->ctx.uc_stack.ss_sp = f->stack; f->ctx.uc_stack.ss_size = LAB_FIBER_STACK; f->ctx.uc_link = 0;
-  makecontext(&f->ctx, lab__fbody, 0);
+  LAB_CMAKE(&f->ctx, lab__fbody, f->stack, LAB_FIBER_STACK);
   h->e = e; h->entry = entry; h->fiber = h->at = f;
   lab__fnew = h;
   lab__fpush(h);
@@ -986,7 +1018,7 @@ static void lab__fstart(lab__frame *h, int e, void (*entry)(lab__frame *)) {
 static int lab__fgo(lab__frame *h) {
   lab__fiber *prev = lab__fcur;
   lab__fcur = h->at;
-  swapcontext(&h->driver, &h->at->ctx);
+  LAB_CSWAP(&h->driver, &h->at->ctx);
   lab__fcur = prev;
   if (h->op < 0) { free(h->fiber->stack); free(h->fiber); h->fiber = 0; free(h->off); h->off = 0; }
   return h->op;
@@ -1001,7 +1033,7 @@ static void lab__fperform(int e, int op) {
   if (!h->off) lab_oom();
   for (int j = 0; j < h->noff; j++) h->off[j] = lab__fs[k + j];
   lab__fn = k; h->op = op; h->at = lab__fcur;
-  swapcontext(&lab__fcur->ctx, &h->driver);
+  LAB_CSWAP(&lab__fcur->ctx, &h->driver);
 }
 static int lab__fhas(int e) { for (int k = lab__fn; k-- > 0;) if (lab__fs[k]->e == e) return 1; return 0; }
 static void lab__fresume(lab__frame *h) { for (int j = 0; j < h->noff; j++) lab__fpush(h->off[j]); }` },
