@@ -78,7 +78,7 @@ export const JNI_C = String.raw`
 #include <jni.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[14];
+static jmethodID ters_jm[17];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -125,15 +125,18 @@ static void j_draw(void *c, void *v, const double *ops, size_t n) {
   TERS_J(13, ters_id(v), a);
   (*ters_j)->DeleteLocalRef(ters_j, a);
 }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw };
+static void j_clip(void *c, void *v, int on) { (void)c; TERS_J(14, ters_id(v), (jint)on); }
+static void j_scroll(void *c, void *v, double inside) { (void)c; TERS_J(15, ters_id(v), inside); }
+static void j_sides(void *c, void *v, const double *w, uint32_t colour) { (void)c; TERS_J(16, ters_id(v), w[0], w[1], w[2], w[3], (jint)colour); }
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides };
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[14][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" } };
-  for (int i = 0; i < 14; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[17][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" } };
+  for (int i = 0; i < 17; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -277,10 +280,13 @@ public class MainActivity extends Activity {
   private void tick() {
     if (ticking || nativeClock() == 0) return;
     ticking = true;
+    final long from = System.nanoTime();
     Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+      int n;
       public void doFrame(long nanos) {
+        n++;
         if (nativeFrame() != 0) Choreographer.getInstance().postFrameCallback(this);
-        else ticking = false;
+        else { ticking = false; Log.d("ters", "frames: " + n + " in " + (System.nanoTime() - from) / 1000000 + " ms"); }
       }
     });
   }
@@ -336,7 +342,7 @@ public class MainActivity extends Activity {
 
   void clear(int id) { View v = views.get(id); if (v instanceof ViewGroup) ((ViewGroup) v).removeAllViews(); }
 
-  void gone(int id) { views.remove(id); }
+  void gone(int id) { views.remove(id); inside.remove(id); painted.remove(id); sided.remove(id); }
 
   void place(int id, double x, double y, double w, double h, int shown) {
     View v = views.get(id);
@@ -351,16 +357,44 @@ public class MainActivity extends Activity {
     v.setLayoutParams(p);
   }
 
-  void paint(int id, int bg, double radius, double border, int borderColour) {
+  // A box's paint and its borders on single sides, kept so either can
+  // change without the other.
+  private final HashMap<Integer, double[]> painted = new HashMap<>(), sided = new HashMap<>();
+  void paint(int id, int bg, double radius, double border, int borderColour) { painted.put(id, new double[] { bg, radius, border, borderColour }); background(id); }
+  void sides(int id, double top, double right, double bottom, double left, int colour) { sided.put(id, new double[] { top, right, bottom, left, colour }); background(id); }
+  private void background(int id) {
     View v = views.get(id);
     if (v == null || v instanceof TextView && !(v instanceof EditText)) return;
-    if (bg == 0 && border == 0) { v.setBackground(null); return; }
+    double[] p = painted.get(id), s = sided.get(id);
+    int bg = p == null ? 0 : (int) (long) p[0];
+    double border = p == null ? 0 : p[2];
+    boolean sides = s != null && (s[0] > 0 || s[1] > 0 || s[2] > 0 || s[3] > 0);
+    if (bg == 0 && border == 0 && !sides) { v.setBackground(null); return; }
     GradientDrawable d = new GradientDrawable();
     d.setColor(bg);
-    d.setCornerRadius((float) (radius * density));
-    if (border > 0) d.setStroke(Math.max(1, px(border)), borderColour);
-    v.setBackground(d);
+    if (p != null) d.setCornerRadius((float) (p[1] * density));
+    if (border > 0) d.setStroke(Math.max(1, px(border)), (int) (long) p[3]);
+    if (!sides) { v.setBackground(d); return; }
+    v.setBackground(new Sides(d, new int[] { side(s[0]), side(s[1]), side(s[2]), side(s[3]) }, (int) (long) s[4]));
   }
+  // The box's paint, under the whole box as a browser's background is, and
+  // the sides' borders over its edges.
+  static final class Sides extends android.graphics.drawable.Drawable {
+    private final GradientDrawable under; private final int[] w; private final Paint brush = new Paint();
+    Sides(GradientDrawable under, int[] w, int colour) { this.under = under; this.w = w; brush.setColor(colour); }
+    @Override public void draw(Canvas c) {
+      android.graphics.Rect b = getBounds();
+      under.setBounds(b); under.draw(c);
+      if (w[0] > 0) c.drawRect(b.left, b.top, b.right, b.top + w[0], brush);
+      if (w[1] > 0) c.drawRect(b.right - w[1], b.top, b.right, b.bottom, brush);
+      if (w[2] > 0) c.drawRect(b.left, b.bottom - w[2], b.right, b.bottom, brush);
+      if (w[3] > 0) c.drawRect(b.left, b.top, b.left + w[3], b.bottom, brush);
+    }
+    @Override public void setAlpha(int a) {}
+    @Override public void setColorFilter(android.graphics.ColorFilter f) {}
+    @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+  }
+  private int side(double w) { return w > 0 ? Math.max(1, px(w)) : 0; }
 
   private final TextPaint paint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
 
@@ -392,6 +426,30 @@ public class MainActivity extends Activity {
   }
 
   // A picture's shapes (ters_ui's draw ops, in dp from its top left).
+  // A box that cuts what's inside it to its own outline (overflow: hidden).
+  void clip(int id, int on) { View v = views.get(id); if (v instanceof ViewGroup) { ((ViewGroup) v).setClipChildren(on != 0); v.setClipToOutline(on != 0); } }
+  // A box that scrolls what's inside it (overflow: auto), inside dp high:
+  // a finger on it moves what's inside, and while it does the page doesn't
+  // scroll.
+  private final HashMap<Integer, Double> inside = new HashMap<>();
+  void scroll(int id, double high) {
+    final View v = views.get(id);
+    if (v == null) return;
+    boolean known = inside.containsKey(id);
+    inside.put(id, high);
+    v.post(() -> v.scrollTo(0, Math.max(0, Math.min(v.getScrollY(), most(id, v)))));
+    if (known) return;
+    v.setOnTouchListener(new View.OnTouchListener() {
+      float y0; int s0;
+      @Override public boolean onTouch(View b, MotionEvent e) {
+        int a = e.getActionMasked();
+        if (a == MotionEvent.ACTION_DOWN) { y0 = e.getRawY(); s0 = b.getScrollY(); if (most(id, b) > 0) b.getParent().requestDisallowInterceptTouchEvent(true); return true; }
+        if (a == MotionEvent.ACTION_MOVE) { b.scrollTo(0, Math.max(0, Math.min(Math.round(s0 + y0 - e.getRawY()), most(id, b)))); return true; }
+        return a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL;
+      }
+    });
+  }
+  private int most(int id, View v) { Double h = inside.get(id); return h == null ? 0 : Math.max(0, px(h) - v.getHeight()); }
   void draw(int id, double[] ops) { View v = views.get(id); if (v instanceof Picture) { ((Picture) v).ops = ops; v.invalidate(); } }
 
   static final class Picture extends FrameLayout {
@@ -504,7 +562,10 @@ public class MainActivity extends Activity {
       int a = e.getActionMasked();
       String[] names = a == MotionEvent.ACTION_DOWN ? new String[] { "pointerdown" } : a == MotionEvent.ACTION_MOVE ? new String[] { "pointermove" } : a == MotionEvent.ACTION_UP ? new String[] { "pointerup", "pointerleave" } : a == MotionEvent.ACTION_CANCEL ? new String[] { "pointercancel", "pointerleave" } : new String[0];
       boolean heard = false;
-      Log.d("ters", "touch " + a + " heard by " + hs.keySet());
+      if (a != MotionEvent.ACTION_MOVE) Log.d("ters", "touch " + a + " heard by " + hs.keySet());
+      // A box that hears a finger move keeps it (CSS touch-action: none):
+      // the page doesn't scroll instead (tumble's drags).
+      if (a == MotionEvent.ACTION_DOWN && hs.containsKey("pointermove") && x.getParent() != null) x.getParent().requestDisallowInterceptTouchEvent(true);
       for (String n : names) { Integer h = hs.get(n); if (h != null) { nativeEvent(h, "", "", e.getX() / density, e.getY() / density, 0); heard = true; } }
       if (heard) tick();
       return a == MotionEvent.ACTION_DOWN ? !hs.isEmpty() : heard;

@@ -87,6 +87,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [STABLE-REFERENCES.md](design/data/STABLE-REFERENCES.md) | Cells that own their value, edits at a path, tracked reads, memory layout | partly built (L98, L99; C56 to C61) |
 | [SHARED-FIELDS-2026-11-02.md](design/data/SHARED-FIELDS-2026-11-02.md) | A field several cases of a type share: read as a Choice, set where present (L168) | design only |
 | [IN-PLACE.md](design/data/IN-PLACE.md) | Changing a value in place when it has one holder, invisibly | proposal (C62, C63) |
+| [REGIONS.md](design/data/REGIONS.md) | A region per scope (C57), measured on C: not worth building yet | measured, not built |
 
 ### Relations, patterns and effects
 

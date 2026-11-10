@@ -921,13 +921,13 @@ static void lab__kept_more(lab_kept_file *k) {
   // pushed while the code it handles runs; a perform calls the nearest
   // frame's case (given a count of it). Koka's evidence, as the core IR's
   // JavaScript keeps it.
-  "handlers": { uses: [], c: `typedef struct { int e, n; lab_cell *c[16]; } lab_hframe;
+  "handlers": { uses: [], c: `typedef struct { int e, n, busy; lab_cell *c[16]; } lab_hframe;
 static lab_hframe lab_hs[4096];
 static int lab_hn;
 static int lab_handlers_push(int e, int n, lab_cell **cs) {
   if (lab_hn == 4096 || n > 16) { fputs("too many handlers\\n", stderr); exit(3); }
   lab_hframe *f = &lab_hs[lab_hn++];
-  f->e = e; f->n = n;
+  f->e = e; f->n = n; f->busy = 0;
   for (int k = 0; k < n; k++) f->c[k] = cs[k];
   return 0;
 }
@@ -945,7 +945,19 @@ static lab_cell *lab_handlers_case(int e, int i) {
   }
   fputs("nothing handles an operation\\n", stderr);
   exit(3);
-}` },
+}
+// Where a handler's case may perform the operation it handles (Pig's
+// recorded into draws a number for each it hands on): while the case
+// runs, its frame is out of the search, so the draw is the next one's, or
+// the world's when there is none (C199f).
+static int lab_handlers_has(int e) { for (int k = lab_hn; k-- > 0;) if (lab_hs[k].e == e && !lab_hs[k].busy) return 1; return 0; }
+static int lab_htaken[4096], lab_htn;
+static lab_cell *lab_handlers_take(int e, int i) {
+  for (int k = lab_hn; k-- > 0;) if (lab_hs[k].e == e && !lab_hs[k].busy) { lab_hs[k].busy = 1; lab_htaken[lab_htn++] = k; lab_dup(lab_hs[k].c[i]); return lab_hs[k].c[i]; }
+  fputs("nothing handles an operation\\n", stderr);
+  exit(3);
+}
+static int lab_handlers_give(int e) { (void)e; if (lab_htn) lab_hs[lab_htaken[--lab_htn]].busy = 0; return 0; }` },
   // A program's own handlers whose cases keep the rest (C44b): the code
   // handled runs on a fiber of its own (a stack, ucontext), which a
   // perform leaves for the handler's driver, taking its frame and those

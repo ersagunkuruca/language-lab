@@ -64,6 +64,9 @@ public class MainActivity {
   }
   void page(double w, double h, int bg) { pw = w; ph = h; pbg = bg; }
   void draw(int id, double[] ops) {}
+  void clip(int id, int on) {}
+  void scroll(int id, double h) {}
+  void sides(int id, double t, double r, double b, double l, int c) {}
   static String g(double x) { if (x == 0) return "0"; return new BigDecimal(x).round(new MathContext(6)).stripTrailingZeros().toPlainString(); }
   static void print(StringBuilder b, N n, double dx, double dy, int depth) {
     if (!n.shown) return;
