@@ -233,6 +233,28 @@ test("a count split by its first choice counts a search inside it whole (C43)", 
   assert.deepEqual(alone, ["28\n", "", 0]);
 });
 
+// A search whose first choice has one item with answers (x = 1 has
+// none) is shared out by its second choice's items too (C43g deeper
+// splits), the last piece of each x taking the rest of them: an all's
+// answers in order, wherever each ran. (queens-count's README times it.)
+test("a search whose first choice has one item with answers shares out its second choice's items, its answers in order (C43g)", async () => {
+  const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.all, k.thunk(() =>
+      k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(2))), (x) =>
+        k.let("y", k.call(S.oneOf, k.call(INT_OPS.range, k.call(INT_OPS.mul, k.call(INT_OPS.sub, k.int(1), x), k.int(6)))), (y) =>
+          k.let("z", k.call(S.oneOf, k.call(INT_OPS.range, y)), (z) =>
+            k.call(B.add, k.call(INT_OPS.toNumber, k.call(INT_OPS.add, k.call(INT_OPS.add, x, k.call(INT_OPS.mul, y, k.int(10))), z)), k.call(B.mul, work(k, 300000, 1), k.lit(0))))))))))));
+    return main;
+  });
+  assert.match(readFileSync(file, "utf8"), /R\.rt\("all\.search"/);
+  const want = "[10, 20, 21, 30, 31, 32, 40, 41, 42, 43, 50, 51, 52, 53, 54]\n";
+  const [side, alone] = await Promise.all([run([file], { TERS_WORKERS: "3", TERS_BRANCHES: "say" }), run([file], { TERS_WORKERS: "0" })]);
+  assert.deepEqual([side[0], side[2]], [want, 0]);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.deepEqual(alone, [want, "", 0]);
+});
+
 // A search met before the split choice keeps its own choices whole, and
 // the split falls on the choice after it (C43).
 test("a count split by its first choice leaves a search before that choice whole (C43)", async () => {
