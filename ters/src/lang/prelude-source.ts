@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, SHOW_ANY, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, SHOW_ANY, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, POOL_V, POOL_KEY_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -1256,6 +1256,51 @@ export function buildPrelude(): Module {
   const priorityQueueSize = def("priority queue size", ["queue"], (q) => pqOf(q, (es) => k.call(mapSize, es)));
   const priorityQueueItems = def("priority queue items", ["queue"], (q) => pqOf(q, (es) => k.call(map, k.call(entries, es),
     k.fn(["entry"], (e) => entry(e, (key, x) => entry(key, (p) => P(p, x), ["priority", "order"]))))));
+  // A pool (C58, std.ts Pool): items in slots by position, each slot's
+  // generation, the free slots (the last one freed first) and how many
+  // items and slots there are. `next key` is the key `added` will give the
+  // item it adds, so a program can put the key in the item itself.
+  const PL = (items: Id, gens: Id, free: Id, size: Id, slots: Id) => k.call(POOL_V, items, gens, free, size, slots);
+  const poolOf = (p: Id, f: (items: Id, gens: Id, free: Id, size: Id, slots: Id) => Id) => k.match(p, [{ variant: POOL_V, names: ["items", "generations", "free", "size", "slots"], body: ([a, b, c, d, e]) => f(a, b, c, d, e) }]);
+  const keyOf = (key: Id, f: (slot: Id, gen: Id) => Id) => k.match(key, [{ variant: POOL_KEY_V, names: ["slot", "generation"], body: ([a, b]) => f(a, b) }]);
+  const pAdd1 = (n: Id) => k.call(INT_OPS.add, n, k.int(1));
+  const pSub1 = (n: Id) => k.call(INT_OPS.sub, n, k.int(1));
+  const emptyPool = k.def("empty pool");
+  k.define(emptyPool, PL(k.x(NIL), k.x(NIL), k.x(NIL), k.int(0), k.int(0)));
+  const nextKey = def("next key", ["pool"], (p) => poolOf(p, (_items, gens, free, _n, slots) => k.match(free, [
+    { variant: NIL, names: [], body: () => k.call(POOL_KEY_V, slots, k.int(0)) },
+    { variant: CONS, names: ["slot", "rest"], body: ([i]) => k.call(POOL_KEY_V, i, k.call(itemAt, gens, i, k.int(0))) },
+  ])));
+  const poolAdded = def("added to pool", ["pool", "item"], (p, x) => poolOf(p, (items, gens, free, n, slots) => k.match(free, [
+    { variant: NIL, names: [], body: () => PL(k.call(append, items, k.call(CONS, k.call(SOME, x), k.x(NIL))), k.call(append, gens, k.call(CONS, k.int(0), k.x(NIL))), k.x(NIL), pAdd1(n), pAdd1(slots)) },
+    { variant: CONS, names: ["slot", "rest"], body: ([i, rest]) => PL(k.call(replaceAt, items, i, k.call(SOME, x)), gens, rest, pAdd1(n), slots) },
+  ])));
+  // Whether key's slot holds the item it was given for: in the pool, and
+  // of the slot's generation now.
+  const live = (gens: Id, slots: Id, slot: Id, gen: Id) => k.if(lt(slot, k.int(0)), k.x(FALSE), k.if(lt(slot, slots), k.equal(k.call(itemAt, gens, slot, k.int(-1)), gen), k.x(FALSE)));
+  const poolItem = def("pool item", ["pool", "key"], (p, key) => poolOf(p, (items, gens, _f, _n, slots) => keyOf(key, (slot, gen) =>
+    k.if(live(gens, slots, slot, gen), k.match(k.call(itemAt, items, slot, k.x(NONE)), [
+      { variant: NONE, names: [], body: () => k.call(S.fail) },
+      { variant: SOME, names: ["item"], body: ([x]) => x },
+    ]), k.call(S.fail)))));
+  const replacedInPool = def("replaced in pool", ["pool", "key", "item"], (p, key, x) => poolOf(p, (items, gens, free, n, slots) => keyOf(key, (slot, gen) =>
+    k.if(live(gens, slots, slot, gen), PL(k.call(replaceAt, items, slot, k.call(SOME, x)), gens, free, n, slots), p))));
+  const removedFromPool = def("removed from pool", ["pool", "key"], (p, key) => poolOf(p, (items, gens, free, n, slots) => keyOf(key, (slot, gen) =>
+    k.if(live(gens, slots, slot, gen), PL(k.call(replaceAt, items, slot, k.x(NONE)), k.call(replaceAt, gens, slot, pAdd1(gen)), k.call(CONS, slot, free), pSub1(n), slots), p))));
+  const poolSize = def("pool size", ["pool"], (p) => poolOf(p, (_i, _g, _f, n) => n));
+  // The keys of the items in the pool, in slot order.
+  const keysFrom = k.def("pool keys from");
+  k.define(keysFrom, k.fn(["items", "generations", "slot"], (items, gens, i) => k.match(items, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.match(gens, [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["generation", "later"], body: ([g, later]) => k.match(x, [
+        { variant: NONE, names: [], body: () => k.call(keysFrom, rest, later, pAdd1(i)) },
+        { variant: SOME, names: ["it"], body: () => k.call(CONS, k.call(POOL_KEY_V, i, g), k.call(keysFrom, rest, later, pAdd1(i))) },
+      ]) },
+    ]) },
+  ])));
+  const poolKeys = def("pool keys", ["pool"], (p) => poolOf(p, (items, gens) => k.call(keysFrom, items, gens, k.int(0))));
   const iLess = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
   const iSame = (a: Id, b: Id) => k.equal(a, b);
   const iMul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
@@ -2115,7 +2160,7 @@ export function buildPrelude(): Module {
   const embeddings = [
     embed("int in float64", k.x(INT_OPS.toNumber)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows: Id[] = [showExt];
