@@ -1082,6 +1082,19 @@ function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
   t.cur = null; t.next = n; t.key = key; t.had = had; t.old = old;
   return n;
 }
+// The same where every table of the program has one holder
+// (owned-tables.ts, compiler): nobody reads the version given again, so
+// the change is written into it and it is given back, with no version
+// made for the old one. The empty table every map starts from is shared,
+// and an older version can't be one here but is still kept right.
+export function changeOwned(t: Table, key: unknown, set: boolean, v?: unknown): Table {
+  if (t.shared || !t.cur) return change(t, key, set, v);
+  if (set) t.cur.set(key, v); else if (!t.cur.delete(key)) return t;
+  t.listed = undefined;
+  return t;
+}
+export const tablePutOwned = (t: Table, key: unknown, v: unknown): Table => { const h = held(key); return changeOwned(t, h, true, h === key ? v : new Keyed(key, v)); };
+export const tableRemoveOwned = (t: Table, key: unknown): Table => changeOwned(t, held(key), false);
 const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
 const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
 // compare's order on Ints, Texts and tuples of them (run.ts

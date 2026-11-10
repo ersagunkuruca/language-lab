@@ -24,3 +24,8 @@ third, mostly the cells and pairs it makes and the collector taking them
 back; `value at` about a tenth; put and remove a few percent. Hashing
 itself is a small part, so an array part for small Int keys would buy
 little here; listing the keys straight from the table would buy most.
+
+Since the map's puts and removes are written in place where nobody else
+holds it (compiler/src/owned-tables.ts), compiled JavaScript takes 1.4 s.
+A data-oriented version written by hand (compiler/gaps/swarm.ideal.js)
+takes 90 ms.
