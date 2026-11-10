@@ -163,6 +163,67 @@ is chosen per value:
   where each part was put and why, as it says why a part can't run on the
   GPU now.
 
+## Where it stands (2026-11-10, design step before building more)
+
+Read against what C41, C42, C43, L101 and C201 built. Four findings
+change the steps below.
+
+1. **Measuring replaced the price list.** Every place built so far
+   chooses by timing as it runs: a together's branches leave past 20 ms, a
+   map site keeps what an item took and leaves past a millisecond, C's
+   pool takes a map once it has taken a millisecond. None reads a table of
+   constants, and none has needed one: a wrong first guess costs one slow
+   call, then the site knows. So (b) shrinks to what timing can't tell
+   before trying: whether a place exists here (threads, workers, an
+   adapter) and the fixed price of trying it once (a worker's start, a
+   shader's compile). A site tries a place only when what it has measured
+   is well above that price. No per-item constants are kept.
+2. **The GPU changes a Float64's answer.** WGSL has no f64 (wgsl.ts prints
+   Float64 as `f32`), so a map of Float64s moved to the GPU would give
+   different numbers, and the choice would be visible. That is against
+   this note's own rule (seen, not written, and never changing what a
+   program means). So an automatic GPU map (d) is open only to maps whose
+   answer the GPU computes exactly:
+   - **Int and Bool maps.** The shader lowering has Ints as `i32` and gives
+     up past 32 bits as a budget does (C66c); a map that gives up on the
+     GPU runs again on the CPU, as a worker's failed branch does.
+   - **Float32 maps.** A function that rounds each step with `round to
+     Float32` (std `float32`) computes on f64 what f32 computes, for + − ×
+     ÷ and √ (double rounding is harmless for these, since 53 ≥ 2·24 + 2).
+     Such programs are rare now; they are the ones a Float32 type would
+     make ordinary.
+   - **Shaders,** which already have their own written meaning (Float32,
+     platform maths). They are written for the GPU, so nothing is chosen.
+   A Float64 map stays on the CPU's cores, however much it would gain.
+3. **The web can't share memory yet.** C41's and C42's runtime shares its
+   claims through a SharedArrayBuffer and waits with Atomics.wait. A
+   browser gives SharedArrayBuffer only to a page that is cross-origin
+   isolated (COOP and COEP headers), and GitHub Pages can't set headers. So
+   on the site, (c) is the plan above, not C41's code: a map leaves by
+   postMessage only where its caller can wait (a handler, a waiting main,
+   between frames), its arrays copied, or transferred when they have one
+   holder. A service worker that adds the headers (as coi-serviceworker
+   does) would give the site Node's route; that is a choice about the
+   site's hosting, so it is Ersagun's to make, not this note's.
+4. **A GPU trial needs a wait and a budget.** A first dispatch costs a
+   pipeline's compile (tens of ms) plus about 3 ms, and the answer comes
+   back as a promise. So a GPU site tries the GPU once only after the CPU
+   has measured it above about 20 ms and 10,000 items, runs the CPU's
+   answer meanwhile where it can't wait, and keeps whichever was faster.
+
+What this leaves, in order:
+
+- **(c′) Workers on the web for a map** in a handler or waiting main, by
+  postMessage, measured as Node's are. The example: mandelbrot-rows as a
+  page.
+- **(d′) The GPU for an Int map,** with the trial of finding 4. The
+  example: collatz's `keep` (its walk is in Int, a lot of work an item; a
+  number whose walk passes 32 bits gives up there and is tested again on
+  the CPU).
+- **(e)** as before, after these.
+- A Float32 type, if Ersagun wants float maps on the GPU: a language
+  question, so a row of its own, not part of C61.
+
 ## Steps
 
 Each about an hour, measured first:
@@ -172,8 +233,8 @@ Each about an hour, measured first:
   function as WGSL), a buffer there and back plus a dispatch, at 1,000 to
   10,000,000 items, against the same loop in JavaScript. Gives the break
   even for a pure map.
-- **(b) The price list:** a per-target table of these constants beside
-  library-reps.ts's costs, read by the chooser.
+- **(b) Replaced** (finding 1): sites time themselves; only whether a
+  place exists and the price of one try are known ahead.
 - **(c) A first choice, workers for a map:** a pure `map` over an array
   with one holder, in a page's handler or a waiting main, runs on a kept
   pool when the estimate says so; the same answers as on the main thread
