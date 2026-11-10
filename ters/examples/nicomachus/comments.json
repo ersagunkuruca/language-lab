@@ -1,0 +1,6 @@
+{
+  "lf2g5gm7tfd1u7hdt8fh4bblgp": "1³ + 2³ + … + k³, added up one cube at a time.",
+  "3hflgh5b8q5el3eggj6nc2f4r8": "(1 + 2 + … + k)², which is (k(k + 1)/2)².",
+  "01mk677hlqev66a1fklpmo6dbh": "Nicomachus's theorem, checked for every k below `below` (the first argument, 4000 when there is none): the sum of the first k cubes is the square of the sum of the first k numbers. Then whether some k below it has a sum of cubes past 10¹², which the first k past about 1414 has. The check is one all pass and the question one any pass, each test only computing and ending (a sum over a range), so on Node the compiled program tests runs of the ks on worker threads from the front, every thread stopping past the first k that decides; the answers are the same as testing in turn.",
+  "program": "Nicomachus's theorem checked for every k below a bound by one all pass, and a question by one any pass (C43).\nPrior art: Nicomachus of Gerasa, Introduction to Arithmetic (about 100 AD), the sum of the first k cubes as the square of a triangular number."
+}

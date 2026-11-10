@@ -134,3 +134,31 @@ test("collatz keeps its long walks on workers, the same numbers in the same orde
   assert.match(side[1], /branches on workers: [1-9]\d*\n/);
   assert.equal(small[0], inEvaluator[0]);
 });
+
+test("nicomachus checks its ks by all pass and any pass on workers, the same answers as in turn and in the evaluator (C43)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/nicomachus"), "-o", "nicomachus.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/nicomachus"), "200"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  const [side, alone, small] = await Promise.all([run(["nicomachus.mjs", "4000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["nicomachus.mjs", "4000"], { TERS_WORKERS: "0" }, dir), run(["nicomachus.mjs", "200"], {}, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[0], /for every k below 4000: true; some sum of cubes past 10¹²: true/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.equal(small[0], inEvaluator[0]);
+});
+
+// all pass stops at the first item that fails: an abort after it isn't
+// seen, one before it is, wherever each ran (C43).
+test("all pass's first deciding item or abort in order is its answer, wherever each ran (C43)", async () => {
+  const program = (abortAt: number, failAt: number) => module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(lib("all pass"), k.call(INT_OPS.range, k.int(12)), k.fn(["i"], (i) =>
+      k.let("n", k.call(B.add, k.call(INT_OPS.toNumber, i), k.call(B.mul, work(k, 300000, 1), k.lit(0))), (n) =>
+        k.if(k.call(S.equal, n, k.lit(abortAt)), k.call(ABORT_OP, k.lit(`abort at ${abortAt}`)), k.call(S.less, n, k.lit(failAt))))))))));
+    return main;
+  });
+  const [failsFirst, abortsFirst] = [program(9, 4), program(3, 7)];
+  for (const workers of ["3", "0"]) {
+    assert.deepEqual(await run([failsFirst], { TERS_WORKERS: workers }), ["false\n", "", 0], `fails first, ${workers} workers`);
+    assert.deepEqual(await run([abortsFirst], { TERS_WORKERS: workers }), ["", "abort at 3\n", 1], `aborts first, ${workers} workers`);
+  }
+});

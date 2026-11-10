@@ -21,6 +21,7 @@
 // SETL's representation sublanguage converted where a value moved between
 // variables represented differently (Schonberg, Schwartz and Sharir, 1981).
 
+import { SPLIT_COPIED_FROM, originalOf } from "./prelude-ids.ts";
 import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
@@ -160,6 +161,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   const fresh = new Map<Id, Id>(), origin = new Map<Id, Id>();
   for (const d of shared) for (const id of subtree(code, d)) { const x = freshId(); fresh.set(id, x); origin.set(x, id); }
   const f = (id: Id) => fresh.get(id) ?? id;
+  for (const d of shared) SPLIT_COPIED_FROM.set(f(d), originalOf(d));
   for (const d of shared) for (const id of subtree(code, d)) { const n = mapIds(code.nodes[id], f); nodes[n.id] = n; }
   // The library's kept as they are: its nodes untouched, so the check
   // still reads through to the library's (infer.ts `under`).

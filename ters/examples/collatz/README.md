@@ -17,6 +17,8 @@ cores: the default 0.8 s in turn and 0.5 s with three workers; below
 1000000, 2.9 s and 1.5 s. The defaults are sized for the compiled program;
 the evaluator is better given a smaller `below`.
 
-The walk counts in Float64, halving with `· 0.5` and testing evenness
-with `floor`: Int's bit operations run through BigInt in compiled
-JavaScript, ten times slower here.
+The walk is in Int: halving is `shifted down` by one bit and evenness is
+`int bits and` 1. Compiled, these are JavaScript's own 32-bit operations
+while the numbers are small (C201), so the walk runs within 1.1 times the
+same walk in Float64 (measured 2026-11-10: the default 1.2 s against
+1.1 s, below 1000000 2.4 s against 2.2 s; the walks pass 2³¹ and agree).

@@ -116,14 +116,18 @@ export function branchWorker(): boolean {
     let unit: ((i: number) => unknown) | undefined;
     for (let i = 0; i < m.units; i++) {
       if (Atomics.compareExchange(m.claims, 2 + i, 0, 1) !== 0) continue;
+      // Past a unit that decided (all pass, any pass): taken, not run.
+      if (m.until && stopped(m.claims, i)) { Atomics.add(m.claims, 1, 1); Atomics.notify(m.claims, 1); continue; }
       let out: Answer;
       try {
         unit ??= unitsOf(m);
-        const v = encode(unit(i), names!);
+        const u = unit(m.base + i), v = encode(u, names!);
         out = v === NO ? { job: m.job, i, again: true } : { job: m.job, i, v };
+        if (m.until && (u as number) >= 0) decided(m.claims, i);
       } catch (e) {
         const reason = e instanceof mod!.Aborted ? encode((e as { reason: unknown }).reason, names!) : NO;
         out = reason !== NO ? { job: m.job, i, abort: reason, esc: (e as { esc: number }).esc } : { job: m.job, i, again: true };
+        if (m.until && reason !== NO) decided(m.claims, i);
       }
       port.postMessage(out);
       Atomics.add(m.claims, 1, 1);
@@ -133,13 +137,13 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any" }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
-  return (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
+  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any") : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
 
 // The list of actions, and the list of their values in the same kind.
@@ -184,7 +188,8 @@ const WORTH = 20;
 // AGAIN where a worker failed for another reason.
 const AGAIN = Symbol("again");
 let inJob = false;
-function shared(n: number, here: (i: number) => unknown, send: () => Omit<Job, "job" | "units" | "claims"> | typeof NO, site: Fn | undefined): unknown[] {
+type Payload = Omit<Job, "job" | "units" | "base" | "claims">;
+function shared(n: number, here: (i: number) => unknown, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
   const values: unknown[] = new Array(n);
   // The main thread starts with the last unit; the ones before it may go
   // to workers, if there are any or it is worth starting them. Never from
@@ -209,7 +214,7 @@ function shared(n: number, here: (i: number) => unknown, send: () => Omit<Job, "
     // claims[0] unused, [1] how many units workers finished, [2 + i]
     // whether unit i is taken.
     const claims = new Int32Array(new SharedArrayBuffer(4 * (2 + left))), t0 = performance.now();
-    for (const h of helpers) h.port.postMessage({ ...(payload as object), job: id, units: left, claims });
+    for (const h of helpers) h.port.postMessage({ ...(payload as object), job: id, units: left, base: 0, claims });
     inJob = true;
     try { for (let i = left - 1; i >= 0; i--) if (Atomics.compareExchange(claims, 2 + i, 0, 1) === 0) { mine.add(i); values[i] = attempt(() => here(i)); } } finally { inJob = false; }
     theirs = left - mine.size;
@@ -241,6 +246,68 @@ function shared(n: number, here: (i: number) => unknown, send: () => Omit<Job, "
   return values;
 }
 
+// A job that ends at its first unit that decides (all pass, any pass,
+// C43): its units taken from the front by every thread, the main one too,
+// and claims[0] the first that decided (or aborted), plus one, so a unit
+// past it is taken and not run. The values up to that one, in order.
+const stopped = (claims: Int32Array, i: number): boolean => { const d = Atomics.load(claims, 0); return d !== 0 && d - 1 < i; };
+function decided(claims: Int32Array, i: number): void {
+  for (let d = Atomics.load(claims, 0); d === 0 || d - 1 > i; d = Atomics.load(claims, 0)) if (Atomics.compareExchange(claims, 0, d, i + 1) === d) return;
+}
+function sharedUntil(n: number, here: (i: number) => number, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
+  const values: unknown[] = new Array(n), ends = (v: unknown) => v instanceof Thrown || (v as number) >= 0;
+  const main = !!wt()?.isMainThread && !inJob;
+  let next = 0;
+  // In turn from the front, till one decides or it is worth sharing.
+  const inTurn = (): unknown[] | null => { for (; next < n; next++) if (ends(values[next] = attempt(() => here(next)))) return values.slice(0, next + 1); return values; };
+  if (!pool || !main || (site && quick.has(site))) {
+    const t0 = performance.now();
+    for (; next < n; ) {
+      if (ends(values[next] = attempt(() => here(next)))) return values.slice(0, next + 1);
+      next++;
+      if (next < n && main && mod && (pool || performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
+    }
+    if (next >= n) return values;
+  }
+  const helpers = pool ?? [], payload = helpers.length ? send() : NO;
+  if (payload === NO) return inTurn()!;
+  const base = next, left = n - base, id = ++job, mine = new Set<number>();
+  const claims = new Int32Array(new SharedArrayBuffer(4 * (2 + left))), t0 = performance.now();
+  for (const h of helpers) h.port.postMessage({ ...(payload as object), job: id, units: left, base, claims });
+  inJob = true;
+  try {
+    for (let i = 0; i < left; i++) {
+      if (Atomics.compareExchange(claims, 2 + i, 0, 1) !== 0) continue;
+      mine.add(i);
+      if (stopped(claims, i)) continue;
+      if (ends(values[base + i] = attempt(() => here(base + i)))) decided(claims, i);
+    }
+  } finally { inJob = false; }
+  const theirs = left - mine.size;
+  if (!theirs && site && performance.now() - t0 < 1) quick.add(site);
+  for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
+  if (theirs) {
+    const w = wt()!;
+    for (const h of helpers) {
+      for (let m = w.receiveMessageOnPort(h.port); m; m = w.receiveMessageOnPort(h.port)) {
+        const r = m.message as Answer;
+        if (r.job !== id) continue;
+        if (r.again) values[base + r.i] = AGAIN;
+        else if ("abort" in r) values[base + r.i] = new Thrown(new mod!.Aborted(dec(r.abort), r.esc!));
+        else values[base + r.i] = dec(r.v);
+        if (!r.again) onWorkers++;
+      }
+    }
+  }
+  // In order: the first that decides, aborts or fails is the job's end.
+  for (let i = base; i < n; i++) {
+    if (values[i] === AGAIN) values[i] = here(i);
+    if (values[i] instanceof Thrown) throw (values[i] as Thrown).e;
+    if ((values[i] as number) >= 0) return values.slice(0, i + 1);
+  }
+  return values;
+}
+
 export function togetherPure(actions: unknown): unknown {
   if (!canShare()) return inOrder(actions);
   const as = itemsOf(actions) as Fn[];
@@ -257,7 +324,8 @@ const RUNS = 32, perItem: number[] = [];
 // Whether a map is worth sharing: never met, or as many items as would
 // take a millisecond by the last measure, counted no further than that.
 export function mapWorth(xs: unknown, site: number): boolean {
-  if (!canShare()) return false;
+  // A list the runtime reads (an array, or cons cells): anything else stays compiled.
+  if (!canShare() || !(xs instanceof ArrayView || (xs as { tag?: unknown })?.tag === CONS || (xs as { tag?: unknown })?.tag === NIL)) return false;
   const est = perItem[site];
   if (est === undefined) return true;
   const enough = 1 / est;
@@ -280,3 +348,20 @@ export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean): unkno
 }
 // A map in order, under a budget.
 export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameKind(xs, run(itemsOf(xs), f, keep));
+
+// all pass and any pass of a test that only computes (C43): a run's first
+// item that decides (fails the test for all, passes it for any), or -1.
+const deciding = (items: unknown[], f: Fn, any: boolean): number => { for (let i = 0; i < items.length; i++) if (!f(items[i]) === !any) return i; return -1; };
+export function testPure(xs: unknown, f: Fn, site: number, any: boolean): boolean {
+  if (!canShare()) return testInOrder(xs, f, any);
+  const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
+  const runs = sharedUntil(n, (i) => deciding(items.slice(i * size, (i + 1) * size), f, any), () => {
+    const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
+    return es.includes(NO) ? NO : { f: g, items: es, size, until: any ? "any" : "all" };
+  }, (f as Closure).code);
+  // A measure only of a test that ran through: one that stopped early says little of the next.
+  const found = (runs[runs.length - 1] as number) >= 0;
+  if (!found) perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
+  return any ? found : !found;
+}
+export const testInOrder = (xs: unknown, f: Fn, any: boolean): boolean => (any ? itemsOf(xs).some((x) => f(x)) : itemsOf(xs).every((x) => f(x)));
