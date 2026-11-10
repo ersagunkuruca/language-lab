@@ -289,7 +289,7 @@ const isPerform = (fn: string) => fn.startsWith("perform:");
 // A program's own handler of operations answered at once (L213c4): its
 // cases pushed while the code it handles runs, and a perform's case the
 // nearest's (scalar.ts handleOps with `handlers`).
-const STACK = /^(hpush|hpop|handler):([^:]+)(?::(\d+))?$/;
+const STACK = /^(hpush|hpop|handler|hhas|htake|hgive):([^:]+)(?::(\d+))?$/;
 const isStack = (fn: string) => STACK.test(fn);
 // A program's own handler whose cases keep the rest (C44b), and a perform
 // of one of its operations: the code handled on a fiber (c-rt "fibers").
@@ -1506,7 +1506,7 @@ int main(int argc, char **argv) {
             let n = effectNums.get(st[2]);
             if (n === undefined) effectNums.set(st[2], (n = effectNums.size));
             const xs = args(e.args, pre, d, after);
-            const c = st[1] === "hpush" ? `lab_handlers_push(${n}, ${xs.length}, (lab_cell *[]){ ${xs.join(", ")} })` : st[1] === "hpop" ? `lab_handlers_pop(${n})` : `lab_handlers_case(${n}, ${st[3]})`;
+            const c = st[1] === "hpush" ? `lab_handlers_push(${n}, ${xs.length}, (lab_cell *[]){ ${xs.join(", ")} })` : st[1] === "hpop" ? `lab_handlers_pop(${n})` : st[1] === "hhas" ? `lab_handlers_has(${n})` : st[1] === "htake" ? `lab_handlers_take(${n}, ${st[3]})` : st[1] === "hgive" ? `lab_handlers_give(${n})` : `lab_handlers_case(${n}, ${st[3]})`;
             return stated(c, e.host!.t, pre, d);
           }
           if (isFiber(e.fn)) { rts.add("fibers"); return fiber(e as SExpr & { k: "rt" }, pre, d, after); }

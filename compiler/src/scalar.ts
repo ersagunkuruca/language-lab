@@ -750,7 +750,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Random too, where the program handles it (Pig's `recorded into`): a
   // draw no handler of the program's answers is the world's, as before.
   // Not with `seeded` as well, whose draws aren't on that stack.
-  const handlesRandom = !!opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
+  const handlesRandom = (!!opts.host || !!opts.handlers) && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
   if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
   // The person's settings too (L214b2), where the program answers them: an
   // ask no handler of the program's answers is the world's.
@@ -1467,6 +1467,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             drawn = true;
             let world: SExpr;
             try { world = expr(id, env, f, false); } finally { drawn = false; }
+            if (tailOwn.has(RANDOM)) {
+              // C (C199f, Pig's recorded into): the case of the nearest
+              // handler of the program's that isn't running a case of its
+              // own (a draw in it is the next handler's, or the world's).
+              const ft = fnOf([], "f64");
+              const call: SExpr = { k: "apply", fn: { k: "rt", fn: `htake:${RANDOM}:0`, args: [], host: { t: ft, partial: false } }, t: ft, args: [], tail: false, tmp: f.locals.push(ft) - 1 };
+              return { k: "if", cond: { k: "rt", fn: `hhas:${RANDOM}`, args: [], host: { t: "i32", partial: false } }, then: { k: "released", body: call, release: { k: "rt", fn: `hgive:${RANDOM}`, args: [], host: { t: "i32", partial: false } }, t: "f64", st: f.locals.push("i32") - 1 }, else: world, t: "f64" };
+            }
             return { k: "if", cond: { k: "rt", fn: `handled:${RANDOM}`, args: [], host: { t: "i32", partial: false } }, then: { k: "rt", fn: `perform:${RANDOM}:0`, args: [], host: { t: "f64", partial: true } }, else: world, t: "f64" };
           }
           const t = stype(zonk(id));

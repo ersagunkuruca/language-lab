@@ -300,3 +300,24 @@ test("tumble's swap in C, by taps or a drag, plays its animations and the chain 
   assert.match(same[2], /Showing: swap/);
   assert.doesNotMatch(same[3], /Showing/);
 });
+
+// pig in C (C199f): it was refused, since its recorded into handles
+// Random (passing each draw on and keeping it) and only JavaScript took a
+// program's own handler of Random. In C a draw now goes to the nearest
+// handler of the program's not running its own case, else the world's
+// (c-rt.ts lab_handlers_take). Play a game, replay it from the kept
+// numbers (the very same game), and a thousand quietly.
+test("pig in C plays a game, replays the very same one and a thousand quietly (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/pig"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "headless" }).c), ["click:play", "click:replay", "click:many"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const pages = r.stdout.toString().split("\x1e\n"), lines = (k: number) => [...pages[k].matchAll(/class="line">([^<]*)/g)].map((m) => m[1]);
+  assert.deepEqual(lines(0), []);
+  assert.match(lines(1).at(-1)!, /^[AB] wins, \d+ to \d+$/);
+  assert.deepEqual(lines(2), lines(1));
+  assert.match(pages[3], /id="tally">Of 1000 games, A \(holds at 20\) won (\d+) and B \(holds at 25\) won (\d+)\./);
+});
