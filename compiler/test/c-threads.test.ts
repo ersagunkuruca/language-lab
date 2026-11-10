@@ -19,6 +19,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { ABORT_OP, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
+import { INT } from "../../ters/src/lang/types.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
@@ -285,4 +286,51 @@ test("divisors natively fills `array of` a range straight away, sums its map in 
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "300", "40"]).stdout.toString();
   assert.match(evaluator, /some\(/);
   for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "divisors"), ["300", "40"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);
+});
+
+test("fibonacci's two calls of itself run on threads natively, the evaluator's number (C61e3)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-both-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/fibonacci");
+  const made = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "fibonacci")]);
+  assert.equal(made.status, 0, made.stderr.toString());
+  assert.match(readFileSync(join(dir, "fibonacci.c"), "utf8"), /lab_both_\d+\(/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "15"]).stdout.toString();
+  assert.equal(evaluator, "610\n");
+  for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "fibonacci"), ["15"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);
+  const side = spawnSync(join(dir, "fibonacci"), ["32"], { env: { ...process.env, TERS_WORKERS: "3", TERS_BRANCHES: "say" } });
+  assert.equal(side.stdout.toString(), "2178309\n");
+  assert.ok(Number(/items on threads: (\d+)/.exec(side.stderr.toString())?.[1]) > 0, side.stderr.toString());
+});
+
+// main prints the total of a tree of 16 leaves, 16 to 31, each summing
+// 20000 products; leaves `aborts` abort instead.
+function treeProgram(aborts: number[] = []) {
+  return built(/lab_both_\d+\(/, false, (k) => {
+    const Tree = k.type("Tree", [], [["leaf", [["n", () => k.tref(INT)]]], ["node", [["left", (self) => k.tref(self)], ["right", (self) => k.tref(self)]]]]);
+    const grow = k.def("grow"), total = k.def("total");
+    k.define(grow, k.fn(["d", "x"], (d, x) => k.if(k.call(INT_OPS.less, d, k.int(1)), k.call(Tree.v.leaf, x),
+      k.call(Tree.v.node, k.call(grow, k.call(INT_OPS.sub, d, k.int(1)), k.call(INT_OPS.mul, x, k.int(2))), k.call(grow, k.call(INT_OPS.sub, d, k.int(1)), k.call(INT_OPS.add, k.call(INT_OPS.mul, x, k.int(2)), k.int(1)))))));
+    const sum = (n: Id) => k.call(lib("sum"), k.call(lib("map"), k.call(INT_OPS.range, k.int(20000)), k.fn(["i"], (i) => k.call(INT_OPS.mul, i, n))));
+    const leaf = (n: Id) => aborts.reduce<Id>((e, a) => k.if(k.call(S.equal, n, k.int(a)), k.call(ABORT_OP, k.lit(`leaf ${a}`)), e), sum(n));
+    k.define(total, k.fn(["t"], (t) => k.fold(t, [
+      { variant: Tree.v.leaf, names: ["n"], body: ([n]) => leaf(n) },
+      { variant: Tree.v.node, names: ["l", "r"], results: ["a", "b"], body: (_, [a, b]) => k.call(INT_OPS.add, a!, b!) },
+    ])));
+    return k.call(S.print, k.call(SHOW_ANY, k.call(total, k.call(grow, k.int(4), k.int(1)))));
+  });
+}
+
+test("a fold over a tree works out its two halves on threads natively, the evaluator's total (C61e3)", { skip }, () => {
+  const p = treeProgram();
+  assert.match(p.evaluator, /^\d+\n$/);
+  const side = p.run("3"), alone = p.run("0");
+  assert.equal(side.out, p.evaluator);
+  assert.equal(alone.out, p.evaluator);
+  assert.ok(side.threads > 0, `${side.threads} on threads`);
+});
+
+test("a fold over a tree whose leaves abort on threads aborts at the first in order (C61e3)", { skip }, () => {
+  const p = treeProgram([27, 20]);
+  assert.equal(p.evaluator, "aborted leaf 20");
+  assert.equal(p.run("3").out, p.evaluator);
+  assert.equal(p.run("0").out, p.evaluator);
 });

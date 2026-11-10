@@ -290,7 +290,14 @@ What this leaves, in order:
     match, an if's one side or a lambda), works the two out the same way:
     the fold's own function given each half. A tree of 64 leaves, each
     summing 60,000 products: 1.70 s in turn, 1.24 s on three workers.
-  - **Not yet.** Pages (no blocking wait there) and C's threads.
+  - **On C's threads** (C61e3, c.ts `dcC`): fork and join. The second
+    call is pushed where any thread may take it, and the first is made here.
+    The second is then waited for (this thread making others' meanwhile),
+    or made here if no thread took it. The top call starts the pool; below
+    eight levels the calls are made as written. A call that fails anywhere
+    marks the run failed, and the top makes its two calls again in turn.
+    fib 38 natively: 0.41 s before, 0.5 s in turn, 0.15 s on three threads.
+  - **Not yet.** Pages (no blocking wait there).
 - A Float32 type, if Ersagun wants float maps on the GPU: a language
   question, so a row of its own, not part of C61.
 

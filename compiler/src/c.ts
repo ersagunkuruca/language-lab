@@ -273,6 +273,72 @@ static int lab_par_worth(const struct timespec *t0) {
   return (double)(t.tv_sec - t0->tv_sec) * 1e3 + (double)(t.tv_nsec - t0->tv_nsec) / 1e6 >= 1;
 }`;
 
+// Divide and conquer on the threads (C61e3, scalar.ts `par:both`): a
+// function's two calls of itself, the second pushed where any thread may
+// take it, the first made here, then the second waited for, or made here
+// if no thread took it; while waiting, this thread makes others'. The top
+// call starts every thread of the pool (lab_pool_run) serving the pushed
+// calls till it is done; below LAB_DC_MAX levels the calls are made as
+// written. A call that failed anywhere marks the whole run failed, and the
+// top makes its two calls again here, in turn, as the evaluator would.
+const dcC = (fuelled: boolean) => `typedef struct lab_dc_task { void (*run)(struct lab_dc_task *); struct lab_dc_task *next; int state, depth; } lab_dc_task;
+#define LAB_DC_MAX 8
+static pthread_mutex_t lab_dc_m = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t lab_dc_c = PTHREAD_COND_INITIALIZER;
+static lab_dc_task *lab_dc_stack = 0;
+static int lab_dc_done = 0, lab_dc_failed = 0;
+static _Thread_local int lab_dc_depth = 0;
+static inline int lab_dc_on(void) { return lab_dc_depth ? lab_dc_depth < LAB_DC_MAX && !__atomic_load_n(&lab_dc_failed, __ATOMIC_RELAXED) : lab_pool_n != 0 && !lab_in_par${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready(); }
+static void lab_dc_push(lab_dc_task *t) {
+  pthread_mutex_lock(&lab_dc_m);
+  t->next = lab_dc_stack; lab_dc_stack = t;
+  pthread_cond_broadcast(&lab_dc_c);
+  pthread_mutex_unlock(&lab_dc_m);
+}
+static lab_dc_task *lab_dc_take(void) { lab_dc_task *t = lab_dc_stack; if (t) { lab_dc_stack = t->next; t->state = 1; } return t; }
+static void lab_dc_go(lab_dc_task *t) {
+  int d = lab_dc_depth;
+  lab_dc_depth = t->depth; t->run(t); lab_dc_depth = d;
+  if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED);
+  pthread_mutex_lock(&lab_dc_m);
+  t->state = 2;
+  pthread_cond_broadcast(&lab_dc_c);
+  pthread_mutex_unlock(&lab_dc_m);
+}
+static void lab_dc_join(lab_dc_task *t) {
+  pthread_mutex_lock(&lab_dc_m);
+  if (t->state == 0) {
+    lab_dc_task **p = &lab_dc_stack;
+    while (*p != t) p = &(*p)->next;
+    *p = t->next; t->state = 1;
+    pthread_mutex_unlock(&lab_dc_m);
+    int d = lab_dc_depth;
+    lab_dc_depth = t->depth; t->run(t); lab_dc_depth = d;
+    return;
+  }
+  while (t->state != 2) {
+    lab_dc_task *s = lab_dc_take();
+    if (s) { pthread_mutex_unlock(&lab_dc_m); lab_dc_go(s); pthread_mutex_lock(&lab_dc_m); }
+    else pthread_cond_wait(&lab_dc_c, &lab_dc_m);
+  }
+  pthread_mutex_unlock(&lab_dc_m);
+}
+static void lab_dc_serve(void) {
+  pthread_mutex_lock(&lab_dc_m);
+  while (!lab_dc_done) {
+    lab_dc_task *s = lab_dc_take();
+    if (s) { pthread_mutex_unlock(&lab_dc_m); lab_dc_go(s); pthread_mutex_lock(&lab_dc_m); }
+    else pthread_cond_wait(&lab_dc_c, &lab_dc_m);
+  }
+  pthread_mutex_unlock(&lab_dc_m);
+}
+static void lab_dc_finish(void) {
+  pthread_mutex_lock(&lab_dc_m);
+  lab_dc_done = 1;
+  pthread_cond_broadcast(&lab_dc_c);
+  pthread_mutex_unlock(&lab_dc_m);
+}`;
+
 export interface CProgram { c: string; names: Map<number, string>; refused: Map<number, string> }
 
 // Where an answer that isn't there goes: the attempt's label, the locals
@@ -310,7 +376,7 @@ const isFiber = (fn: string) => FIBER.test(fn);
 const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
 type SearchHow = "count" | "all" | "first";
 const folds = (job: string) => job === "add" || job === "max" || job === "min" || job === "with";
-const isPar = (fn: string) => fn.startsWith("par:fold:") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
+const isPar = (fn: string) => fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -624,6 +690,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // Text and big Int constants, as static cells that are never counted;
   // and the runtime functions called.
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
+  // The functions whose two calls of themselves go on the threads (C61e3).
+  const boths = new Set<number>();
   // Each map on threads, by its array types and function type (parC).
   // A keep (C202) is a map whose function's answers say which items stay.
   // all pass and any pass (C202b), whose answer is the first deciding test's;
@@ -883,6 +951,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...fiberC,
     ...kept.map((i) => `${header(i)};`),
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
+    ...(threads && boths.size ? [dcC(fuelled), ...[...boths].map((gi) => bothC(gi, stops, fuelled))] : []),
     ...[...once].map((i) => `static ${ty(funcs[i].result)} lab_m${i}; static int lab_m${i}_has = 0;`),
     ...(opts.harness ? [`static void lab_memo_clear(void) { ${[...once].map((i) => `if (lab_m${i}_has) { ${counted(funcs[i].result) ? drop(funcs[i].result, `lab_m${i}`) : ""} lab_m${i}_has = 0; }`).join(" ")} }`] : []),
     "",
@@ -1526,6 +1595,15 @@ int main(int argc, char **argv) {
             const fn = `array.${r0.fn === "int.range" ? "range" : "rangeF"}.a${ofRange[2]}`;
             arrayFns.add(fn);
             return stated(`${cName(fn)}(${args(r0.args, pre, d, after).join(", ")})`, lowered.arrays[Number(ofRange[2])], pre, d);
+          }
+          // C61e3: two calls of a function on the threads (dcC, bothC).
+          if (e.fn === "par:both.on") return stated("lab_dc_on()", "i32", pre, d);
+          const bo = /^par:both(\.second)?:(\d+)$/.exec(e.fn);
+          if (bo) {
+            const gi = Number(bo[2]);
+            boths.add(gi);
+            if (bo[1]) return stated(`lab_both_r_${gi}`, funcs[gi].result, pre, d);
+            return checked(`lab_both_${gi}(${args(e.args, pre, d, after).join(", ")})`, funcs[gi].result, pre, d, after);
           }
           if (e.fn === "par:together") {
             const n = togetherSite(typeOf(e.args[0], f.locals) as DType, e.host!.t as DType);
@@ -2329,6 +2407,104 @@ failed:
   ${counted(o.t) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(o.t, "j.out[m]")}\n  ` : ""}for (int64_t m = 0; m < n; m++) lab_drop(j.in[m]);
   free(j.in); free(j.out); free(j.bad);
   return 0;
+}`;
+  }
+
+  // A function's two calls of itself on the threads (C61e3, dcC): each a
+  // task holding its inputs and, once made, its answer. lab_both_N makes
+  // the first here and the second wherever a thread takes it; its answer
+  // is the first's, the second's in lab_both_r_N. At the top, a run that
+  // took under a millisecond the last time, or inputs that can't be
+  // shared, make the two here in turn (lab_both_alone_N), as a failed run
+  // does again with copies of the inputs kept for it.
+  function bothC(gi: number, stops: boolean, fuelled: boolean): string {
+    const g = funcs[gi], R = ty(g.result), J = `lab_both_job_${gi}`, nm = names.get(gi)!;
+    const ins = (x: string) => g.params.map((_, i) => `${x}${i}`);
+    const params = [...g.params.map((t, i) => `${ty(t)} a${i}`), ...g.params.map((t, i) => `${ty(t)} b${i}`)].join(", ");
+    const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
+    const clear = `if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""}`;
+    const dropR = (x: string) => (counted(g.result) ? drop(g.result, x) : "");
+    const dropAll = (x: string) => g.params.map((t, i) => (counted(t) ? drop(t, `${x}${i}`) : "")).join(" ");
+    return `typedef struct { lab_dc_task t; ${g.params.map((t, i) => `${ty(t)} a${i};`).join(" ")} ${R} r; int bad; } ${J};
+static _Thread_local ${R} lab_both_r_${gi};
+static int lab_both_quick_${gi} = 0;
+static void lab_both_one_${gi}(lab_dc_task *t) {
+  ${J} *j = (${J} *)t;${stops ? `
+  jmp_buf here, *was = lab_stop_at;
+  if (setjmp(here)) { lab_st = 0; lab_stop_at = was; j->bad = 1; __atomic_store_n(&lab_dc_failed, 1, __ATOMIC_RELAXED); return; }
+  lab_stop_at = &here;` : ""}
+  ${R} r = ${nm}(${ins("j->a").join(", ")});${stops ? `
+  lab_stop_at = was;` : ""}
+  if (${failed}) { ${clear} j->bad = 1; __atomic_store_n(&lab_dc_failed, 1, __ATOMIC_RELAXED); }
+  else { j->r = r; j->bad = 0; }
+}
+static ${R} lab_both_alone_${gi}(${params}) {
+  int d = lab_dc_depth;
+  lab_dc_depth = LAB_DC_MAX;
+  ${R} r0 = ${nm}(${ins("a").join(", ")});
+  if (lab_st) { lab_dc_depth = d; ${dropAll("b")} return ${zero(g.result)}; }
+  ${R} r1 = ${nm}(${ins("b").join(", ")});
+  lab_dc_depth = d;
+  if (lab_st) { ${dropR("r0")} return ${zero(g.result)}; }
+  lab_both_r_${gi} = r1;
+  return r0;
+}
+typedef struct { ${J} *a, *b; } ${J}_top;
+static void lab_both_top_${gi}(void *p) {
+  ${J}_top *c = p;
+  if (lab_on_pool) { lab_dc_serve(); return; }
+  lab_dc_depth = 1;
+  lab_both_one_${gi}(&c->a->t);
+  lab_dc_join(&c->b->t);
+  lab_dc_depth = 0;
+  lab_dc_finish();
+}
+static ${R} lab_both_${gi}(${params}) {
+  int top = !lab_dc_depth;
+  struct timespec t0;
+  ${J} ja = { { lab_both_one_${gi}, 0, 0, lab_dc_depth + 1 }, ${[...ins("a"), zero(g.result), "1"].join(", ")} }, jb = { { lab_both_one_${gi}, 0, 0, lab_dc_depth + 1 }, ${[...ins("b"), zero(g.result), "1"].join(", ")} };
+  if (top) {
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    if (__atomic_load_n(&lab_both_quick_${gi}, __ATOMIC_RELAXED)) {
+      ${R} r = lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
+      __atomic_store_n(&lab_both_quick_${gi}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
+      return r;
+    }
+  }
+  lab_share_no = 0;
+  ${g.params.map((t, i) => (counted(t) ? share(t, `b${i}`) : "")).join(" ")}
+  lab_shared();
+  if (lab_share_no) return lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
+  if (top) {
+    ${g.params.map((t, i) => `${ty(t)} ka${i} = ${dup(t, `a${i}`)}; ${ty(t)} kb${i} = ${dup(t, `b${i}`)};`).join(" ")}
+    ${J}_top c = { &ja, &jb };
+    lab_dc_done = 0; lab_dc_failed = 0;
+    lab_dc_push(&jb.t);
+    lab_pool_run(lab_both_top_${gi}, &c);
+    if (lab_dc_failed) {
+      if (!ja.bad) { ${dropR("ja.r")} }
+      if (!jb.bad) { ${dropR("jb.r")} }
+      lab_dc_failed = 0;
+      return lab_both_alone_${gi}(${[...ins("ka"), ...ins("kb")].join(", ")});
+    }
+    ${dropAll("ka")} ${dropAll("kb")}
+    __atomic_store_n(&lab_both_quick_${gi}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
+  } else {
+    int d = lab_dc_depth;
+    lab_dc_push(&jb.t);
+    lab_dc_depth = d + 1;
+    lab_both_one_${gi}(&ja.t);
+    lab_dc_depth = d;
+    lab_dc_join(&jb.t);
+    if (ja.bad || jb.bad) {
+      if (!ja.bad) { ${dropR("ja.r")} }
+      if (!jb.bad) { ${dropR("jb.r")} }
+      lab_st = 1;
+      return ${zero(g.result)};
+    }
+  }
+  lab_both_r_${gi} = jb.r;
+  return ja.r;
 }`;
   }
 
