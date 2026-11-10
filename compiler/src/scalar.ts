@@ -247,7 +247,7 @@ export function fails(e: SExpr, funcs: SFunc[]): boolean {
     case "call": return !!funcs[e.fn]?.partial || e.args.some((a) => fails(a, funcs));
     // The worker threads' runtime is JavaScript's only (branches-rt.ts):
     // what it runs may abort as the code it stands for may.
-    case "rt": return !!(e.host ? e.host.partial : e.fn === "map.worth" ? false : /\.(pure|search)$/.test(e.fn) || runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
+    case "rt": return !!(e.host ? e.host.partial : e.fn === "map.worth" || e.fn === "both.on" || e.fn === "both.second" ? false : /\.(pure|search)$/.test(e.fn) || runtime(e.fn).partial) || e.args.some((a) => fails(a, funcs));
     case "apply": return !!e.t.partial || kids(e).some((a) => fails(a, funcs));
     // An abort goes on through first and budgets, so their bodies count.
     case "attempt": case "budget": return kids(e).some((a) => fails(a, funcs));
