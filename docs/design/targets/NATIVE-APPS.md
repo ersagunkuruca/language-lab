@@ -5,9 +5,10 @@ Stretch goal is native compilation on each platform instead of webview
 stuff."). Written 2026-11-10 by Language lane B. The last section is the
 plan, as rows C199a to C199e.
 
-**Status.** Route A chosen (Ersagun, 2026-11-10). C199a and C199b are done:
-cells in C and WebAssembly, and a page's Html mounted from C on a view
-host, checked against html.ts on a headless host. Today a phone runs a Ters page in a webview:
+**Status.** Route A chosen (Ersagun, 2026-11-10). C199a to C199c are
+done: cells in C and WebAssembly, a page's Html mounted from C on a view
+host, and dice as an Android APK with no webview. C199d (layout and style
+in C) is built and waits on Ersagun's look at the APK. Today a phone runs a Ters page in a webview:
 `ters build-app` makes an installable web app that is also a Capacitor
 project (WEB.md "Mobile", C198), and the hand-run "Android app" workflow
 (#2146) builds its debug APK.
@@ -141,24 +142,34 @@ What a page's parts become under route A:
   Example: dice, and a counter with a todo list, print what html.ts's mount
   prints on the tests' fake document, before and after clicks and typing
   (compiler/test/c-page.test.ts, the headless host `page: "headless"`).
-- **C199c. The Android shell.** Built, waiting on the APK: `ters
-  build-native-app <program> -o folder` writes a Gradle project
-  (ters/cli/native-app.ts). Its C is the page's (`page: "api"`) with a JNI
-  view host after it: each `ters_host` call is a call of MainActivity's
+- **C199c. The Android shell.** Done: `ters build-native-app <program> -o
+  folder` writes a Gradle project (ters/cli/native-app.ts). Its C is the
+  page's with a JNI screen after it, each call a call of MainActivity's
   method of that name, views named by numbers, texts crossing as UTF-16.
-  MainActivity (Java, so Gradle needs no Kotlin plugin) makes Android's
-  views: block elements as vertical LinearLayouts, inline ones and
-  buttons as horizontal ones (a button's texts are its children, as in
-  HTML), inputs as EditTexts, `style` hidden; clicks, typing, Enter and
-  frames (Choreographer) come back as `ters_page_event`. The C and JNI
-  half runs on a desktop JVM against a stand-in MainActivity and prints
-  what html.ts prints (compiler/test/c-native-app.test.ts); the "Android
-  app" workflow with `kind: native` builds the APK. Example: dice as an
-  APK with no webview, installed by Ersagun.
-- **C199d. Layout and style.** Yoga for flexbox, and the style subset
-  checked at build time, with a refusal naming each property it can't map.
-  Example: dice's layout and colours on the phone match the web page, in
-  light and dark.
+  MainActivity is Java, so Gradle needs no Kotlin plugin; clicks, typing,
+  Enter and frames (Choreographer) come back as `ters_page_event`. The C and
+  JNI half runs on a desktop JVM against a stand-in MainActivity
+  (compiler/test/c-native-app.test.ts); the "Android app" workflow with
+  `kind: native` builds the APK. Example: dice as an APK, installed by
+  Ersagun.
+- **C199d. Layout and style.** Built: rather than Yoga, a style and layout
+  engine in C (compiler/src/c-layout.ts), so Android and iOS share it and it
+  needs no C++. It sits between `pageC`'s mount (a `ters_host` that keeps
+  the tree) and the platform's `ters_ui` (make a box or a text, place it,
+  paint it with a colour, rounded corners and a border, give it a font,
+  measure a text, size the page). Style comes from the page's own style
+  elements and style attributes: simple selectors (tag, #id, .class,
+  :root, *), specificity and order, custom properties, prefers-color-scheme
+  and box-sizing. Layout is block and inline flow with wrapping, flex rows
+  and columns with gap and wrap, grids of fixed, fr, auto and minmax
+  columns, absolute positions and display: contents. Texts are measured by
+  the platform (Android's StaticLayout). After each event or frame the page
+  is styled and laid out again, and the screen hears only what changed.
+  What isn't in the subset (hover, transitions, combinators) is left out,
+  not refused yet. Example: dice's chart, bars and fair marks land where
+  Chromium puts them at 360 wide (compiler/test/c-page.test.ts, the
+  headless screen `page: "ui-headless"`), and the JNI screen on the
+  stand-in tells the same places (c-native-app.test.ts).
 - **C199e. The iOS shell.** A Swift view host over UIKit. Building and
   testing it needs a macOS runner, which costs about ten times a Linux
   minute against the $20 Actions budget, so it waits for Ersagun's call.
