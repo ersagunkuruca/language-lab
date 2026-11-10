@@ -54,7 +54,7 @@ import { tableText } from "./table-text.ts";
 import { unnameHandlers } from "./handler-names.ts";
 import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
-import { preludeDef, resolveArithmetic } from "../../ters/src/lang/arith.ts";
+import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
@@ -112,7 +112,7 @@ const TABLE_RT: Record<Id, string> = {
 const LOG_EFFECT = "std.log";
 // together and race (C44): in C, each action on a fiber.
 const libDef = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
-const TOGETHER = libDef("together"), RACE = libDef("race"), ARRAY_MAP = preludeDef("array map");
+const TOGETHER = libDef("together"), RACE = libDef("race");
 
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -1358,8 +1358,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         // The same in C (L101, c.ts `par:map`), an array's: on threads,
         // the counts of what they share made atomic, where the runtime
-        // finds the items worth it. Its items do nothing a fiber is for.
-        if (opts.threads && target === ARRAY_MAP && (parallelMap ??= parallelMaps(code, info)).has(n.id)) {
+        // finds the items worth it. Its items do nothing a fiber is for. A
+        // list's map stays as compiled.
+        if (opts.threads && (parallelList ??= parallelLists(code, info)).get(n.id) === "map") {
           const t = stype(zonk(id));
           if (t && isArray(t)) return { k: "rt", fn: "par:map", args: args(), host: { t, partial: true } };
         }
