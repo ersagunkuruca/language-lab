@@ -343,7 +343,7 @@ test("a fold over a tree works out its two halves on workers, the same total as 
     k.define(grow, k.fn(["d", "x"], (d, x) => k.if(k.call(INT_OPS.less, d, k.int(1)), k.call(Tree.v.leaf, x),
       k.call(Tree.v.node, k.call(grow, k.call(INT_OPS.sub, d, k.int(1)), k.call(INT_OPS.mul, x, k.int(2))), k.call(grow, k.call(INT_OPS.sub, d, k.int(1)), k.call(INT_OPS.add, k.call(INT_OPS.mul, x, k.int(2)), k.int(1)))))));
     k.define(total, k.fn(["t"], (t) => k.fold(t, [
-      { variant: Tree.v.leaf, names: ["n"], body: ([n]) => k.call(lib("sum"), k.call(lib("map"), k.call(INT_OPS.range, k.int(60000)), k.fn(["i"], (i) => k.call(B.mul, k.call(INT_OPS.toNumber, i), k.call(INT_OPS.toNumber, n))))) },
+      { variant: Tree.v.leaf, names: ["n"], body: ([n]) => k.call(lib("sum"), k.call(lib("map"), k.call(INT_OPS.range, k.int(600000)), k.fn(["i"], (i) => k.call(B.mul, k.call(INT_OPS.toNumber, i), k.call(INT_OPS.toNumber, n))))) },
       { variant: Tree.v.node, names: ["l", "r"], results: ["a", "b"], body: (_, [a, b]) => k.call(B.add, a!, b!) },
     ])));
     k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(total, k.call(grow, k.int(6), k.int(1)))))));
