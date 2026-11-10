@@ -173,6 +173,8 @@ function filledFrom(code: Code): Code {
 // its uses with no body filled, and the nodes that made.
 let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null;
 const onBase = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
+// The library filled by fillOnce, if it has been.
+export const filledLibrary = (): Code | undefined => base?.filled;
 export function fillOnce(lib: Code): Code {
   const out: Code = { ...lib, nodes: { ...lib.nodes } };
   fillUses(out, bareIn(lib, Object.keys(lib.nodes)));
