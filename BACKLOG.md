@@ -25,7 +25,7 @@ a lane takes them when bugs and goal rows are in hand.
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C184 with the Editor lane |
 | L Language and library | "Language lane" | C43 (first where, then a Choice's answers), C42 (associative folds), then L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | L101 (on C41's workers); C60 waits for a program whose loop reads few fields; round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | C58 or C59 (stable references), agreed with the Compiler lane first; C60 waits for a program whose loop reads few fields; round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -93,6 +93,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C201 | Int arithmetic in compiled JavaScript as quick as Float64's while the numbers are small: shifts and bit operations went through BigInt (int.ts big/norm), a Collatz walk in bits about 10 times slower than the same walk in Float64 (Language lane, 2026-11-10). C201a done (DONE.md): shiftDown, bitAnd, bitOr and bitXor of small Ints are JavaScript's 32-bit operations. Example: ters/examples/collatz written with bit operations (shiftDown and bitAnd on Int) compiled runs within 1.5 times the Float64 walk. Left: that example | Language lane 2026-11-10 | P2 | S | a done |
 | C200 | tumble's lists stored as the costs choose (arrays: its board read by position), where they are kept as written today: a Cell of the program's lists (a lane's `queue`, `swaps`, its Board) is made on one side and read by the page on the other, and rep-split.ts refuses a Cell holding lists (a cell can't be converted where it is read). A cell made on the stored side could convert at each `read` and `write` on the other, as a field of a stored type converts. Measure first: tumble's boards are 8 by 8, so the gain may be small. Example: `ters compile examples/tumble` choosing `array of List` beside main's lists, the same page | C196 (its last refusal, 2026-11-09) | P3 | M | |
 
 ### Speed of compiled code
@@ -176,13 +177,12 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L118d | Functions with a choice in their type still run step by step on the evaluator's heap machine, after L118c (functions that only compute run as compiled JavaScript): about half the notebook's machine calls. Tried twice 2026-11-10 (Editor lane) and set aside: trying them directly hung json.test (a stop deep in a recursive descent reran every outer call), and finishing a stopped caller on a machine of its own was slower (notebook 4.2 s against 2.5). Needs a different idea, e.g. compiling a choice to JavaScript with its alternatives as a callback (success continuation) instead of the machine's choice points. Example: notebook's Run with 300 notes under 1 s in process (1.85 s now) | L118c (Editor lane 2026-11-10) | P3 | M | |
+| L118d | Functions with a choice in their type still run step by step on the evaluator's heap machine, after L118c (functions that only compute run as compiled JavaScript): about half the notebook's machine calls. Tried twice 2026-11-10 (Editor lane) and set aside: trying them directly hung json.test (a stop deep in a recursive descent reran every outer call), and finishing a stopped caller on a machine of its own was slower (notebook 4.2 s against 2.5). L118d1 (2026-11-10): the bodies of first, optional, all and count that only compute and choose run with success continuations; notebook 2.55 to 2.0 s. Left: a function with a choice called where nothing handles it yet (its caller's handler on the machine). Example: notebook's Run with 300 notes under 1 s in process (1.85 s now) | L118c (Editor lane 2026-11-10) | P3 | M | |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L101 | Multithreading where uniqueness allows it (rayon), effect rows deciding what runs side by side (§5) | Ersagun 2026-10-29 | P3 | L | |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 

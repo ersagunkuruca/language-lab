@@ -6,7 +6,15 @@ compiler/src/branches-rt.ts, examples/area), and a `map` of a function
 that only computes by runs of its items (C42's first step, examples/mandelbrot-rows) a `keep` likewise (C43a, examples/collatz), and `all pass` and `any pass` stopping past the first deciding item (C43b, examples/nicomachus),
 with the threshold measured as it runs (a branch past 20 ms starts the
 workers; a map site keeps what an item took, and a map under a
-millisecond by that is the compiled one) rather than priced.
+millisecond by that is the compiled one) rather than priced. In C (L101,
+2026-11-10, compiler/src/c.ts `par:map`) an array's map of a function that
+only computes runs its items on a pool of threads once they have taken a
+millisecond: mandelbrot-rows native, 1200 columns and 5000 steps, 2.8 s on
+one thread and 0.75 s on four. What the threads share (the function and
+the items) is marked shared first, and only such cells' counts change
+atomically, as Koka's and Lean's runtimes do. A together whose actions
+only compute runs them on the same threads (C201): examples/area native,
+side 2400, 2.5 s to 0.86 s.
 The goal is in [STABLE-REFERENCES.md](../data/STABLE-REFERENCES.md) §6:
 every processing environment a target has (on the web: the main thread,
 Web Workers, WebAssembly, the GPU through WebGPU compute) used without the
