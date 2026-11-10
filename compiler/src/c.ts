@@ -2181,6 +2181,36 @@ static int lab__cmp_t${i}(const void *x, const void *y) {
 ${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) return r;`).join("\n")}
   return r;
 }`);
+    // Int keys, all small and within 2^32 of each other (a counter's), are
+    // sorted by a radix sort of (key − least, slot) words: no compare
+    // called per pair (swarm's `keys of` each tick spent a third of its
+    // run in qsort and the compare). 0 where it doesn't hold.
+    if (lists.length && int) out.push(`static int lab__isort_t${i}(${S} *t, uint32_t *ix, uint32_t n) {
+  if (n < 64) return 0;
+  int64_t lo = INT64_MAX, hi = INT64_MIN;
+  for (uint32_t j = 0; j < n; j++) {
+    lab_int k = t->ks[ix[j]];
+    if (!LAB_IS_SMALL(k)) return 0;
+    int64_t v = LAB_VAL(k);
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  uint64_t span = (uint64_t)hi - (uint64_t)lo;
+  if (span >= 0xffffffffu) return 0;
+  uint64_t *base = malloc(2 * (size_t)n * sizeof(uint64_t)), *a = base, *b = base + n;
+  if (!base) lab_oom();
+  for (uint32_t j = 0; j < n; j++) a[j] = (((uint64_t)LAB_VAL(t->ks[ix[j]]) - (uint64_t)lo) << 32) | ix[j];
+  for (int shift = 32; shift < 64 && (span >> (shift - 32)); shift += 8) {
+    uint32_t c[257] = {0};
+    for (uint32_t j = 0; j < n; j++) c[((a[j] >> shift) & 255) + 1]++;
+    for (int k = 1; k < 257; k++) c[k] += c[k - 1];
+    for (uint32_t j = 0; j < n; j++) b[c[(a[j] >> shift) & 255]++] = a[j];
+    uint64_t *x = a; a = b; b = x;
+  }
+  for (uint32_t j = 0; j < n; j++) ix[j] = (uint32_t)a[j];
+  free(base);
+  return 1;
+}`);
     for (const { d, j } of lists) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
       const cons = cname(d, tag), nil = cname(d, 1 - tag), item = d.cases[tag].fields[head].t;
@@ -2199,7 +2229,7 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   if (!ix) lab_oom();
   for (uint32_t j = 0; j < t->cap; j++) if (t->st[j] == 1) ix[n++] = j;
   lab__sort_t${i} = t;
-  qsort(ix, n, sizeof(uint32_t), lab__cmp_t${i});
+  ${int ? `if (!lab__isort_t${i}(t, ix, n)) ` : ""}qsort(ix, n, sizeof(uint32_t), lab__cmp_t${i});
   lab_cell *acc = &${nil};
   for (uint32_t j = n; j-- > 0;) {
     ${cons} *e = lab_new(sizeof(${cons}), ${tnum.get(d.key)}, ${tag});

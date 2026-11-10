@@ -28,6 +28,6 @@ little here; listing the keys straight from the table would buy most.
 Since the map's puts and removes are written in place where nobody else
 holds it (compiler/src/owned-tables.ts), and `keys of` lists the keys
 straight from the table, walked by position, compiled JavaScript takes
-0.72 s, native 1.05 s.
+0.72 s, native 0.55 s.
 A data-oriented version written by hand (compiler/gaps/swarm.ideal.js)
 takes 90 ms.
