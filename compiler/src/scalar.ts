@@ -71,6 +71,8 @@ import { cleanBody, live, NotWritten, roundedKey, writtenExpr, writtenSteps, typ
 import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
+import { fuseSteps } from "./fuse-steps.ts";
+import { envSet } from "./zero-parts.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
@@ -692,6 +694,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const lets = inlineLists(code, info);
   if (lets.inlined) {
     code = lets.code;
+    info = infer(code, names);
+  }
+  // A fold of a map made one fold (fuse-steps.ts, C207c).
+  const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
+  if (fusedSteps?.fused) {
+    code = fusedSteps.code;
     info = infer(code, names);
   }
   // Each step above changes no answer, so what ended as given still ends.
