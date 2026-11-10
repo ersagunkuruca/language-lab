@@ -987,6 +987,7 @@ static void tl_sheets(tl_n *e, char **out, size_t *n) {
   for (int j = 0; j < e->nk; j++) tl_sheets(e->kids[j], out, n);
 }
 // The page laid out again, tl_width wide, and shown.
+static int tl_step(tl_n *e, double now, tl_n **out, int *nout, int most);
 static void tl_layout(void) {
   if (!tl_root) return;
   char *sheet = 0; size_t n = 0;
@@ -1016,6 +1017,9 @@ static void tl_layout(void) {
   if (am) mx = (tl_width - tl_root->w) / 2;
   tl_root->x = mx;
   tl_root->y = body.c.pad[0] || body.c.bw ? body.c.mar[0] + body.c.pad[0] + body.c.bw + tl_root->c.mar[0] : (body.c.mar[0] > tl_root->c.mar[0] ? body.c.mar[0] : tl_root->c.mar[0]);
+  // An animation that started in this layout is shown where it starts,
+  // not for a frame where it ends (Ersagun saw pieces flicker there).
+  { int none = 0; tl_step(tl_root, tl_ms(), 0, &none, -1); }
   tl_show(tl_root, 0, 0, 1);
   uint32_t bg = body.c.bg ? body.c.bg : html.c.bg ? html.c.bg : (tl_dark ? 0xFF121212u : 0xFFFFFFFFu);
   tl_ui->page(tl_ui->ctx, tl_width, tl_root->y + tl_root->h + tl_root->c.mar[2] + body.c.mar[2] + body.c.pad[2], bg);
@@ -1107,14 +1111,16 @@ static void tl_frame_of(tl_n *el, const char *d, const char *de, double *x, doub
   if (op) { const char *c = strchr(op, ':'); if (c) *o = strtod(c + 1, 0); }
   free(r);
 }
-// Each running animation moved on to now; the boxes whose ended into out.
+// Each running animation moved on to now; the boxes whose ended into out
+// (most < 0: none end, only where each is now is worked out).
 static int tl_step(tl_n *e, double now, tl_n **out, int *nout, int most) {
   if (!e->tag || e->c.display == TL_NONE) return 0;
   int any = 0;
   tl_kf *k = e->an[0] && !e->aend ? tl_kf_of(e->an) : 0;
   if (k) {
     double p = e->c.adur > 0 ? (now - e->a0 - e->c.adelay) / e->c.adur : 1;
-    if (p >= 1) { e->aend = 1; if (*nout < most) out[(*nout)++] = e; }
+    if (p >= 1 && most < 0) any = 1;
+    else if (p >= 1) { e->aend = 1; if (*nout < most) out[(*nout)++] = e; }
     else if (p < 0) { e->ax = e->ay = 0; e->as = e->ao = 1; any = 1; }
     else {
       double x0, y0, s0, o0, x1, y1, s1, o1, q = tl_ease(p);

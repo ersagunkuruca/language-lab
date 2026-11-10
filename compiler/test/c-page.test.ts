@@ -280,6 +280,11 @@ test("tumble's swap in C, by taps or a drag, plays its animations and the chain 
   // are neither where they were nor where they end.
   const pieces = (k: number) => pages[k].split("\n").filter((s) => / 36 36 bg /.test(s)).join("\n");
   assert.notEqual(pieces(3), pieces(2));
+  // And as the swap starts, before any frame, each piece is where it
+  // slides from (where it was), not for a frame where it ends: Ersagun saw
+  // pieces flicker to their places.
+  const placed = (k: number) => pages[k].split("\n").filter((s) => / 36 36 bg /.test(s)).map((s) => s.trim()).sort().join("\n");
+  assert.equal(placed(2), placed(1));
   assert.deepEqual(said(4), ["Showing: clear", "Showing: clear", "Showing: clear"]);
   assert.deepEqual(said(5), ["At rest", "At rest", "At rest"]);
   assert.match(pages[5], /Steps worked out, still to show: 0\./);
