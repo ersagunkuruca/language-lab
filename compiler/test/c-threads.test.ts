@@ -270,3 +270,17 @@ test("collatz's fold of a record of Ints runs on threads natively and prints the
   assert.match(many.stderr.toString(), /items on threads: [1-9]/);
   assert.equal(many.stdout.toString(), runs(["300000", "300"], "0").stdout.toString());
 });
+
+// divisors natively (C207b): `array of` a range is the array filled at
+// once, no list made, and the answer is the evaluator's.
+test("divisors natively fills `array of` a range straight away and prints the evaluator's (C207b)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-range-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/divisors");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "divisors")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  const c = readFileSync(join(dir, "divisors.c"), "utf8");
+  assert.match(c, /lab_array_range_a\d+\(/);
+  assert.doesNotMatch(c, /lab_int_range\(/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "300", "40"]).stdout.toString();
+  assert.match(evaluator, /some\(/);
+  for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "divisors"), ["300", "40"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);
+});

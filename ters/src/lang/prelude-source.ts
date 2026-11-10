@@ -1256,51 +1256,56 @@ export function buildPrelude(): Module {
   const priorityQueueSize = def("priority queue size", ["queue"], (q) => pqOf(q, (es) => k.call(mapSize, es)));
   const priorityQueueItems = def("priority queue items", ["queue"], (q) => pqOf(q, (es) => k.call(map, k.call(entries, es),
     k.fn(["entry"], (e) => entry(e, (key, x) => entry(key, (p) => P(p, x), ["priority", "order"]))))));
-  // A pool (C58, std.ts Pool): items in slots by position, each slot's
-  // generation, the free slots (the last one freed first) and how many
-  // items and slots there are. `next key` is the key `added` will give the
-  // item it adds, so a program can put the key in the item itself.
+  // A pool (C58, std.ts Pool): items in slots, each slot's generation, the
+  // free slots (the last one freed first) and how many items and slots
+  // there are. The lists hold the newest slot first, so a new slot is a
+  // push at the front and slot i is at position slots - 1 - i: as arrays,
+  // each add, read and change is one step. `next key` is the key `added to
+  // pool` will give the item it adds, so a program can put the key in the
+  // item itself.
   const PL = (items: Id, gens: Id, free: Id, size: Id, slots: Id) => k.call(POOL_V, items, gens, free, size, slots);
   const poolOf = (p: Id, f: (items: Id, gens: Id, free: Id, size: Id, slots: Id) => Id) => k.match(p, [{ variant: POOL_V, names: ["items", "generations", "free", "size", "slots"], body: ([a, b, c, d, e]) => f(a, b, c, d, e) }]);
   const keyOf = (key: Id, f: (slot: Id, gen: Id) => Id) => k.match(key, [{ variant: POOL_KEY_V, names: ["slot", "generation"], body: ([a, b]) => f(a, b) }]);
   const pAdd1 = (n: Id) => k.call(INT_OPS.add, n, k.int(1));
   const pSub1 = (n: Id) => k.call(INT_OPS.sub, n, k.int(1));
+  const slotPlace = (slots: Id, slot: Id) => pSub1(k.call(INT_OPS.sub, slots, slot));
   const emptyPool = k.def("empty pool");
   k.define(emptyPool, PL(k.x(NIL), k.x(NIL), k.x(NIL), k.int(0), k.int(0)));
   const nextKey = def("next key", ["pool"], (p) => poolOf(p, (_items, gens, free, _n, slots) => k.match(free, [
     { variant: NIL, names: [], body: () => k.call(POOL_KEY_V, slots, k.int(0)) },
-    { variant: CONS, names: ["slot", "rest"], body: ([i]) => k.call(POOL_KEY_V, i, k.call(itemAt, gens, i, k.int(0))) },
+    { variant: CONS, names: ["slot", "rest"], body: ([i]) => k.call(POOL_KEY_V, i, k.call(itemAt, gens, slotPlace(slots, i), k.int(0))) },
   ])));
   const poolAdded = def("added to pool", ["pool", "item"], (p, x) => poolOf(p, (items, gens, free, n, slots) => k.match(free, [
-    { variant: NIL, names: [], body: () => PL(k.call(append, items, k.call(CONS, k.call(SOME, x), k.x(NIL))), k.call(append, gens, k.call(CONS, k.int(0), k.x(NIL))), k.x(NIL), pAdd1(n), pAdd1(slots)) },
-    { variant: CONS, names: ["slot", "rest"], body: ([i, rest]) => PL(k.call(replaceAt, items, i, k.call(SOME, x)), gens, rest, pAdd1(n), slots) },
+    { variant: NIL, names: [], body: () => PL(k.call(CONS, k.call(SOME, x), items), k.call(CONS, k.int(0), gens), k.x(NIL), pAdd1(n), pAdd1(slots)) },
+    { variant: CONS, names: ["slot", "rest"], body: ([i, rest]) => PL(k.call(replaceAt, items, slotPlace(slots, i), k.call(SOME, x)), gens, rest, pAdd1(n), slots) },
   ])));
   // Whether key's slot holds the item it was given for: in the pool, and
   // of the slot's generation now.
-  const live = (gens: Id, slots: Id, slot: Id, gen: Id) => k.if(lt(slot, k.int(0)), k.x(FALSE), k.if(lt(slot, slots), k.equal(k.call(itemAt, gens, slot, k.int(-1)), gen), k.x(FALSE)));
+  const live = (gens: Id, slots: Id, slot: Id, gen: Id) => k.if(lt(slot, k.int(0)), k.x(FALSE), k.if(lt(slot, slots), k.equal(k.call(itemAt, gens, slotPlace(slots, slot), k.int(-1)), gen), k.x(FALSE)));
   const poolItem = def("pool item", ["pool", "key"], (p, key) => poolOf(p, (items, gens, _f, _n, slots) => keyOf(key, (slot, gen) =>
-    k.if(live(gens, slots, slot, gen), k.match(k.call(itemAt, items, slot, k.x(NONE)), [
+    k.if(live(gens, slots, slot, gen), k.match(k.call(itemAt, items, slotPlace(slots, slot), k.x(NONE)), [
       { variant: NONE, names: [], body: () => k.call(S.fail) },
       { variant: SOME, names: ["item"], body: ([x]) => x },
     ]), k.call(S.fail)))));
   const replacedInPool = def("replaced in pool", ["pool", "key", "item"], (p, key, x) => poolOf(p, (items, gens, free, n, slots) => keyOf(key, (slot, gen) =>
-    k.if(live(gens, slots, slot, gen), PL(k.call(replaceAt, items, slot, k.call(SOME, x)), gens, free, n, slots), p))));
+    k.if(live(gens, slots, slot, gen), PL(k.call(replaceAt, items, slotPlace(slots, slot), k.call(SOME, x)), gens, free, n, slots), p))));
   const removedFromPool = def("removed from pool", ["pool", "key"], (p, key) => poolOf(p, (items, gens, free, n, slots) => keyOf(key, (slot, gen) =>
-    k.if(live(gens, slots, slot, gen), PL(k.call(replaceAt, items, slot, k.x(NONE)), k.call(replaceAt, gens, slot, pAdd1(gen)), k.call(CONS, slot, free), pSub1(n), slots), p))));
+    k.if(live(gens, slots, slot, gen), PL(k.call(replaceAt, items, slotPlace(slots, slot), k.x(NONE)), k.call(replaceAt, gens, slotPlace(slots, slot), pAdd1(gen)), k.call(CONS, slot, free), pSub1(n), slots), p))));
   const poolSize = def("pool size", ["pool"], (p) => poolOf(p, (_i, _g, _f, n) => n));
-  // The keys of the items in the pool, in slot order.
+  // The keys of the items in the pool, in slot order: walked newest slot
+  // first, each put in front of the ones after it.
   const keysFrom = k.def("pool keys from");
-  k.define(keysFrom, k.fn(["items", "generations", "slot"], (items, gens, i) => k.match(items, [
-    { variant: NIL, names: [], body: () => k.x(NIL) },
+  k.define(keysFrom, k.fn(["items", "generations", "slot", "after"], (items, gens, i, after) => k.match(items, [
+    { variant: NIL, names: [], body: () => after },
     { variant: CONS, names: ["item", "rest"], body: ([x, rest]) => k.match(gens, [
-      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: NIL, names: [], body: () => after },
       { variant: CONS, names: ["generation", "later"], body: ([g, later]) => k.match(x, [
-        { variant: NONE, names: [], body: () => k.call(keysFrom, rest, later, pAdd1(i)) },
-        { variant: SOME, names: ["it"], body: () => k.call(CONS, k.call(POOL_KEY_V, i, g), k.call(keysFrom, rest, later, pAdd1(i))) },
+        { variant: NONE, names: [], body: () => k.call(keysFrom, rest, later, pSub1(i), after) },
+        { variant: SOME, names: ["it"], body: () => k.call(keysFrom, rest, later, pSub1(i), k.call(CONS, k.call(POOL_KEY_V, i, g), after)) },
       ]) },
     ]) },
   ])));
-  const poolKeys = def("pool keys", ["pool"], (p) => poolOf(p, (items, gens) => k.call(keysFrom, items, gens, k.int(0))));
+  const poolKeys = def("pool keys", ["pool"], (p) => poolOf(p, (items, gens, _f, _n, slots) => k.call(keysFrom, items, gens, pSub1(slots), k.x(NIL))));
   const iLess = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
   const iSame = (a: Id, b: Id) => k.equal(a, b);
   const iMul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
