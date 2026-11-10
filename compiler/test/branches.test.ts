@@ -184,9 +184,9 @@ test("nicomachus checks its ks by all pass and any pass on workers, the same ans
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/nicomachus"), "-o", "nicomachus.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/nicomachus"), "200"], {})]);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone, small] = await Promise.all([run(["nicomachus.mjs", "4000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["nicomachus.mjs", "4000"], { TERS_WORKERS: "0" }, dir), run(["nicomachus.mjs", "200"], {}, dir)]);
+  const [side, alone, small] = await Promise.all([run(["nicomachus.mjs", "10000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["nicomachus.mjs", "10000"], { TERS_WORKERS: "0" }, dir), run(["nicomachus.mjs", "200"], {}, dir)]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[0], /for every k below 4000: true; some sum of cubes past 10¹²: true/);
+  assert.match(side[0], /for every k below 10000: true; some sum of cubes past 10¹²: true/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/);
   assert.equal(small[0], inEvaluator[0]);
 });
@@ -196,9 +196,9 @@ test("divisors finds its n by first where on workers, the same answer as in turn
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/divisors"), "-o", "divisors.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/divisors"), "1000", "100"], {})]);
   assert.equal(made[2], 0, made[1]);
   assert.match(readFileSync(join(dir, "divisors.mjs"), "utf8"), /R\d*\.rt\("first\.pure"/);
-  const [side, alone, none, small] = await Promise.all([run(["divisors.mjs", "4000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "4000", "300"], { TERS_WORKERS: "0" }, dir), run(["divisors.mjs", "1500", "2000"], { TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "1000", "100"], {}, dir)]);
+  const [side, alone, none, small] = await Promise.all([run(["divisors.mjs", "10000", "400"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "10000", "400"], { TERS_WORKERS: "0" }, dir), run(["divisors.mjs", "1500", "2000"], { TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "1000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[0], /more than 300 divisors: some\(2079\)/);
+  assert.match(side[0], /more than 400 divisors: some\(5984\)/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/);
   assert.match(none[0], /more than 2000 divisors: none/);
   assert.equal(small[0], inEvaluator[0]);
