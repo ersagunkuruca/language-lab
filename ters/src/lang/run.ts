@@ -795,7 +795,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           let v: Value | undefined;
           return (env) => (looseScopes ? refValue(target, env) : (v ??= refValue(target, null)));
         }
-        return (env) => refValue(target, env);
+        // A constructor or a field isn't in a scope either (L118d3).
+        if (t?.kind === "variant" || t?.kind === "field") return (env) => refValue(target, looseScopes ? env : null);
+        // A binder: its scope walked here, not through refValue (L118d3).
+        return (env) => {
+          for (let e = env; e; e = e.up) if (e.b === target) return e.v;
+          return refValue(target, null);
+        };
       }
       case "lambda": return (env) => closure(n, env);
       case "call": {
@@ -815,6 +821,28 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           };
         }
         let fn: Direct | undefined;
+        // A field read or a record made, done here, not by calling the
+        // part's function value (L118d3); a scope from outside may bind
+        // the name, so then the call is made as written.
+        const target = head.kind === "ref" ? head.target : undefined, part = target ? code.nodes[target] : undefined;
+        if (part?.kind === "field" && k === 1) {
+          const v = info.owner.get(target!)!;
+          const variant = (code.nodes[(code.nodes[v] as NodeOf<"def">).body!] as NodeOf<"typedef">).variants[0];
+          const i = (code.nodes[variant] as NodeOf<"variant">).fields.indexOf(target!);
+          return (env) => {
+            if (looseScopes) return callDirect((fn ??= compiledOf(n.fn))(env), [argsOf()[0](env)]);
+            return (argsOf()[0](env) as Data).fields[i];
+          };
+        }
+        if (part?.kind === "variant" && !effectOf(target!) && part.fields.length === k && k > 0) {
+          const tg = target!;
+          return (env) => {
+            const as = argsOf(), vs = new Array<Value>(k);
+            for (let i = 0; i < k; i++) vs[i] = as[i](env);
+            if (looseScopes) return callDirect((fn ??= compiledOf(n.fn))(env), vs);
+            return { tag: tg, fields: vs };
+          };
+        }
         return (env) => {
           if (steps) spendStep();
           const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
