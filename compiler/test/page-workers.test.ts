@@ -137,10 +137,10 @@ test("a fold in a function a page's handler calls goes to the workers too: the f
   assert.ok(shared.sent > 0, "the numbers went to the workers");
 });
 
-test("a count and an all of a search in a page's handler go to the workers, by its first two choices", async () => {
-  const [alone, shared] = await twice(collatzPage("queens-page", 'write(said, show(b) ++ ": " ++ show(count(() => queens(b))) ++ " " ++ show(length(all(() => queens(b)))))', 6, "queens-count", 8));
-  assert.equal(alone.first, "6: 4 4");
-  assert.equal(alone.second, "8: 92 92");
+test("a count, an all and a first of a search in a page's handler go to the workers, by its first two choices", async () => {
+  const [alone, shared] = await twice(collatzPage("queens-page", 'write(said, show(b) ++ ": " ++ show(count(() => queens(b))) ++ " " ++ show(length(all(() => queens(b)))) ++ " " ++ show(first(() => queens(b), () => [])))', 6, "queens-count", 8));
+  assert.equal(alone.first, "6: 4 4 [4, 2, 0, 5, 3, 1]");
+  assert.equal(alone.second, "8: 92 92 [3, 1, 6, 2, 5, 7, 4, 0]");
   assert.deepEqual(shared, { ...alone, sent: shared.sent });
   assert.ok(shared.sent > 0, "the pieces went to the workers");
 });
