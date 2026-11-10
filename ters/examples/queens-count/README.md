@@ -27,4 +27,7 @@ each thread keeping its own split and seen:
     ters native examples/queens-count -o queens-count && ./queens-count 12
 
 Measured 2026-11-10 on 4 cores: n = 12 took 2.2 s on one thread
-(TERS_WORKERS=0) and 0.86 to 0.98 s on four.
+(TERS_WORKERS=0) and 0.86 to 0.98 s on four. Since C43g it splits by the
+first two choices (144 runs at n = 12, not 12) and goes on the threads
+once the search has taken a millisecond: 0.51 to 0.53 s at n = 12, 0.09 s
+at 11 (0.34 on one thread), 3.3 s at 13 (12.6), about 3.8× on four.
