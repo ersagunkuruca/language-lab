@@ -768,8 +768,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const fibers = !!opts.handlers && !opts.host;
   let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, foldsShared: Set<Id> | undefined, counts: Map<Id, "count" | "all" | "first"> | undefined;
   const countsShared = () => (counts ??= parallelCounts(code, info));
-  // In C (C203), only a count's or an all's search is split so far.
-  const splitsC = () => [...countsShared().values()].some((k) => k === "count" || k === "all");
+  // In C (C203), a count's, an all's or a first's search split.
+  const splitsC = () => countsShared().size > 0;
   const splitting = new Set<Id>();
   // A call's inputs already worked out, as locals (a map that may be shared, C42).
   const given = new Map<Id, SExpr[]>();
@@ -3296,8 +3296,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // The same count in C (C203): the search a closure of nothing giving
     // its count, which c.ts `par:count:search` runs with each item of its first
     // choice on the threads (choose.split, with each thread's own split).
-    // An all likewise (C203b), its answers a list, joined in order.
-    if (opts.threads && (kind === "count" ? t === "int" : kind === "all" && isData(t)) && countsShared().get(n.id) === kind && !splitting.has(n.id) && splitsC()) {
+    // An all likewise (C203b), its answers a list, joined in order; a
+    // first (C203c), the runs' first answer in order, the default where
+    // none has one (as JavaScript's, not of one solve or call of one).
+    const firstC = kind === "first" && !!dflt && (isData(t) || t === "int" || t === "f64") && !soleSolve(search) && !soleCall(search);
+    if (opts.threads && (kind === "count" ? t === "int" : kind === "all" ? isData(t) : firstC) && countsShared().get(n.id) === kind && !splitting.has(n.id) && splitsC()) {
       const free = [...new Set(refsIn(n.args[0]))].filter((b) => env.has(b) || inlined.has(b));
       if (!free.some((b) => inlined.has(b))) {
         const ft = fnOf([], t), caps = free.map((b) => f.locals[env.get(b)!]);
@@ -3310,10 +3313,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         splitting.add(n.id);
         let counted: SExpr;
         try { counted = attempt(n, id, inner, g); } finally { splitting.delete(n.id); }
-        if (counted.k === "search") counted = { ...counted, splits: true };
+        // A first's run has an answer or none (fails), its default given here.
+        if (counted.k === "search") counted = { ...counted, splits: true, ...(kind === "first" ? { dflt: undefined } : {}) };
         g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), counted);
         const c: SExpr = { k: "closure", t: ft, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) };
-        return { k: "rt", fn: `par:${kind}:search`, args: [c], host: { t, partial: true } };
+        const found: SExpr = { k: "rt", fn: `par:${kind}:search`, args: [c], host: { t, partial: true } };
+        if (kind !== "first") return found;
+        const res = f.locals.push(t) - 1;
+        return { k: "attempt", body: found, res, ok: { k: "local", i: res }, otherwise: expr(dflt!, env, f, false), t };
       }
     }
     if (target === S.first) { const only = soleSolve(search); if (only) firstOnly.add(only); }

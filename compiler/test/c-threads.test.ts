@@ -201,23 +201,25 @@ test("a together whose actions abort on threads aborts at the first that does, a
 // main prints the count of a search over 0 to 7 for x, and for each a y of
 // those below it (an all inside, which keeps all of its own choices), the
 // even ones, after the work for x; `x` may abort.
-function searched(abortAt: number, by: Id = S.count) {
+// count, all or first (with -1 the default) of a search.
+const searchBy = (k: Lang, by: Id, s: Id) => (by === S.first ? k.call(by, s, k.thunk(() => k.int(-1))) : k.call(by, s));
+function searched(abortAt: number, by: Id = S.count, parity = 0) {
   return built(/lab_par_search_0\(/, false, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
-    k.call(S.print, k.call(SHOW_ANY, k.call(by, k.thunk(() =>
+    k.call(S.print, k.call(SHOW_ANY, searchBy(k, by, k.thunk(() =>
       k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(8))), (x) =>
         k.let("w", k.call(INT_OPS.mul, k.call(INT_OPS.add, work(k, x, big), work(k, x, big)), k.int(0)), (w) =>
           k.if(k.call(S.equal, x, k.int(abortAt)), k.call(ABORT_OP, k.call(SHOW_ANY, x)),
             k.let("ys", k.call(S.all, k.thunk(() => k.call(S.oneOf, k.call(INT_OPS.range, x)))), (ys) =>
               k.let("y", k.call(INT_OPS.add, k.call(S.oneOf, ys), w), (y) =>
-                k.if(k.call(S.equal, k.call(INT_OPS.bitAnd, y, k.int(1)), k.int(0)), y, k.call(S.fail)))))))))))));
+                k.if(k.call(S.equal, k.call(INT_OPS.bitAnd, y, k.int(1)), k.int(parity)), y, k.call(S.fail)))))))))))));
 }
 
 // A count of a search split by its first choice on threads (C203): the
 // evaluator's count, and the abort it meets first in order.
-test("a count of a search runs its first choice's items on threads and gives the evaluator's count, as in order (C203)", { skip }, () => {
+test("a count, an all or a first of a search runs its first choice's items on threads and gives the evaluator's answer, as in order (C203)", { skip }, () => {
   // An all's answers (C203b), in order.
   const all = "[0, 0, 0, 2, 0, 2, 0, 2, 4, 0, 2, 4, 0, 2, 4, 6]\n";
-  for (const [want, p] of [["16\n", searched(-1)], ["aborted 3", searched(3)], [all, searched(-1, S.all)], ["aborted 5", searched(5, S.all)]] as const) {
+  for (const [want, p] of [["16\n", searched(-1)], ["aborted 3", searched(3)], [all, searched(-1, S.all)], ["aborted 5", searched(5, S.all)], ["0\n", searched(-1, S.first)], ["aborted 1", searched(1, S.first)], ["-1\n", searched(-1, S.first, 2)]] as const) {
     assert.equal(p.evaluator, want);
     const many = p.run("3");
     assert.equal(many.out, want);
