@@ -973,6 +973,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // are read from their locals (expr at the top), so a call whose inputs
   // are known runs forward as any call does.
   let pinned: ((id: Id) => SExpr | undefined) | null = null;
+  // A mode function giving all its answers (modeFn's `all`): the local
+  // holding the answers found after the arm being written, in order.
+  const collecting = new Map<SFunc, number>();
   const modeOrder = (ps: string[]) => [...ps].sort((a, b) => (a === "out" ? 1 : b === "out" ? -1 : Number(a) - Number(b)));
   class ModeUnsupported extends Error {}
   const refused = new Map<Id, string>();
@@ -1947,47 +1950,90 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const v = modeAn.ofSolve(n);
     if (!v || !v.ends || v.stuck.length || v.dynamic.length) throw no("its plan isn't fixed before it runs");
     const d = determinism(v.answers);
-    if (d !== "det" && d !== "semidet") throw no("it may have several answers");
+    // Several answers (backwards' magnitude): in a search, one of the
+    // list of every answer, in the interpreter's order (C195).
+    const several = d !== "det" && d !== "semidet";
+    if (several && !(f.partial || searching.get(f))) throw no("it may have several answers, outside a search");
     const def = code.nodes[useTarget(code.nodes, n)];
-    if (def?.kind !== "def") throw no("not a definition");
+    if (def?.kind !== "def") {
+      if (useTarget(code.nodes, n) === S.concat && several && Object.keys(n.given).join() === "out") return cutsSolve(n, env, f, tail);
+      throw no("not a definition");
+    }
     const lam = code.nodes[def.body!] as NodeOf<"lambda">;
     const portOf = (k: string) => (k === "out" ? "out" : String(lam.params.indexOf(k)));
     const known = givenInOrder(code, n);
     const ins = modeOrder(known.map(portOf));
     if (ins.includes("-1")) throw no("a port it doesn't have");
     let m: { fn: number; outs: string[] };
-    try { m = modeFn(def.id, ins); } catch (e) { if (e instanceof ModeUnsupported) throw no(e.message); throw e; }
-    const res = f.locals.push(funcs[m.fn].result) - 1;
+    try { m = modeFn(def.id, ins, several); } catch (e) { if (e instanceof ModeUnsupported) throw no(e.message); throw e; }
+    const listed = several ? funcs[m.fn].result as DType : undefined;
+    const one = listed ? listed.cases.find((x) => x.variant === CONS)!.fields[0].t : funcs[m.fn].result;
+    const res = f.locals.push(one) - 1;
     let inner = new Map(env);
     const binds = bindsOf(n);
     const lets = Object.entries(binds).map(([k, b]) => {
-      const j = m.outs.indexOf(portOf(k)), t = m.outs.length === 1 ? funcs[m.fn].result : (funcs[m.fn].result as RType).fields[j].t;
+      const j = m.outs.indexOf(portOf(k)), t = m.outs.length === 1 ? one : (one as RType).fields[j].t;
       const i = f.locals.push(t) - 1;
       inner = new Map(inner).set(b, i);
       const r: SExpr = { k: "local", i: res };
-      return { i, value: m.outs.length === 1 ? r : { k: "get", rec: r, t: funcs[m.fn].result as RType, i: j } as SExpr };
+      return { i, value: m.outs.length === 1 ? r : { k: "get", rec: r, t: one as RType, i: j } as SExpr };
     });
     const t = stype(zonk(n.id))!;
     const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(bodyOf(n), inner, f, tail));
     const call: SExpr = { k: "call", fn: m.fn, args: ins.map((p) => expr(n.given[known[known.map(portOf).indexOf(p)]], env, f, false)), tail: false };
+    if (listed) return { k: "let", i: res, value: { k: "choose", list: call, t: listed }, body };
     if (d === "det") return { k: "let", i: res, value: call, body };
     const none: SExpr = f.partial || searching.get(f) ? { k: "fail" } : { k: "abort", reason: { k: "text", v: `solving ${name} this way gives exactly one answer, and it gave none` } };
     return { k: "attempt", body: call, res, ok: body, otherwise: none, t };
   }
+  // Text joined run backwards with neither side known (backwards' cuts),
+  // in a search: one of every cut of the text in two, the shortest first
+  // side first, as the relational interpreter gives them.
+  function cutsSolve(n: Use, env: Map<Id, number>, f: SFunc, tail: boolean): SExpr {
+    const pair = stype({ t: "con", id: tupleType(2), args: [{ t: "con", id: STRING, args: [] }, { t: "con", id: STRING, args: [] }] });
+    const lt = stype({ t: "con", id: LIST, args: [{ t: "con", id: tupleType(2), args: [{ t: "con", id: STRING, args: [] }, { t: "con", id: STRING, args: [] }] }] });
+    if (!pair || !isRecord(pair) || !lt || !isData(lt)) throw new Refused("solves join text for its cuts, as a list of pairs of texts (not in this profile yet)");
+    const key = "text.cuts";
+    let fn = index.get(key);
+    if (fn === undefined) {
+      // cuts(t, i, later): the cuts at i and before, before later.
+      const g: SFunc = { def: "", name: "join text backwards, every answer", params: ["text", "int", lt], result: lt, locals: ["text", "int", lt], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+      index.set(key, (fn = funcs.push(g) - 1));
+      const t: SExpr = { k: "local", i: 0 }, i: SExpr = { k: "local", i: 1 };
+      const cut: SExpr = { k: "make", t: pair, args: [{ k: "rt", fn: "text.slice", args: [t, { k: "int", v: 0n }, i] }, { k: "rt", fn: "text.slice", args: [t, i, { k: "rt", fn: "text.length", args: [t] }] }] };
+      g.body = { k: "if", cond: { k: "rt", fn: "int.less", args: [i, { k: "int", v: 0n }] }, then: { k: "local", i: 2 },
+        else: { k: "call", fn, args: [t, { k: "rt", fn: "int.sub", args: [i, { k: "int", v: 1n }] }, { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === CONS), args: [cut, { k: "local", i: 2 }] }], tail: true }, t: lt };
+    }
+    const text = f.locals.push("text") - 1, res = f.locals.push(pair) - 1;
+    const all: SExpr = { k: "call", fn, args: [{ k: "local", i: text }, { k: "rt", fn: "text.length", args: [{ k: "local", i: text }] }, { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }], tail: false };
+    let inner = new Map(env);
+    const lets = Object.entries(bindsOf(n)).map(([k, b]) => {
+      const i = f.locals.push("text") - 1;
+      inner = new Map(inner).set(b, i);
+      return { i, value: { k: "get", rec: { k: "local", i: res }, t: pair, i: Number(k) } as SExpr };
+    });
+    if (lets.length !== Object.keys(bindsOf(n)).length || Object.keys(bindsOf(n)).some((k) => k !== "0" && k !== "1")) throw new Refused("solves join text for something other than its two sides (not in this profile yet)");
+    const body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(bodyOf(n), inner, f, tail));
+    return { k: "let", i: text, value: expr(n.given.out, env, f, false), body: { k: "let", i: res, value: { k: "choose", list: all, t: lt }, body } };
+  }
   // The mode function for def with these ports known: its index, and the
   // ports it gives, in order (one as itself, several as a tuple).
-  function modeFn(def: Id, ins: string[]): { fn: number; outs: string[] } {
+  function modeFn(def: Id, ins: string[], all = false): { fn: number; outs: string[] } {
     const lam = code.nodes[(code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
     if (lam?.kind !== "lambda") throw new ModeUnsupported("not a function");
     const portNode = (p: string) => (p === "out" ? lam.body : lam.params[Number(p)]);
     const outs = [...lam.params.map((_, i) => String(i)), "out"].filter((p) => !ins.includes(p));
-    const key = `mode:${def}|${ins.join(",")}`;
+    const key = `mode${all ? "s" : ""}:${def}|${ins.join(",")}`;
     if (index.has(key)) return { fn: index.get(key)!, outs };
     const typeOf = (x: Id) => { const t = stype(zonk(x)); if (!t || t === "host") throw new ModeUnsupported(`a port of type ${whyNot(zonk(x))}`); return t; };
     const params = ins.map((p) => typeOf(portNode(p)));
-    const result: LType = outs.length === 1 ? typeOf(portNode(outs[0])) : stype({ t: "con", id: tupleType(outs.length), args: outs.map((p) => zonk(portNode(p))) })!;
-    if (!result) throw new ModeUnsupported("its answers as a tuple");
-    const g: SFunc = { def: "", name: `${nm(def)} backwards`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+    const one: LType = outs.length === 1 ? typeOf(portNode(outs[0])) : stype({ t: "con", id: tupleType(outs.length), args: outs.map((p) => zonk(portNode(p))) })!;
+    if (!one) throw new ModeUnsupported("its answers as a tuple");
+    const oneT: Type = outs.length === 1 ? zonk(portNode(outs[0])) : { t: "con", id: tupleType(outs.length), args: outs.map((p) => zonk(portNode(p))) };
+    const listed = all ? stype({ t: "con", id: LIST, args: [oneT] }) : undefined;
+    if (all && (!listed || !isData(listed))) throw new ModeUnsupported("its answers as a list");
+    const result: LType = all ? listed! : one;
+    const g: SFunc = { def: "", name: `${nm(def)} backwards${all ? ", every answer" : ""}`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: !all };
     const at = funcs.push(g) - 1;
     index.set(key, at);
     try {
@@ -1998,9 +2044,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const vs = outs.map((p) => env.get(an.slot(portNode(p))));
         if (vs.some((x) => x === undefined)) throw new ModeUnsupported("a port is never found");
         const ls = vs.map((i) => ({ k: "local", i: i! }) as SExpr);
-        return outs.length === 1 ? ls[0] : { k: "make", t: result as RType, args: ls };
+        const answer: SExpr = outs.length === 1 ? ls[0] : { k: "make", t: one as RType, args: ls };
+        if (!all) return answer;
+        // Every answer: this one before those after it.
+        const lt = listed as DType;
+        return { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === CONS), args: [answer, { k: "local", i: collecting.get(g)! }] };
       };
-      g.body = modePlan(an, plan, env0, done, g);
+      if (!all) g.body = modePlan(an, plan, env0, done, g);
+      else {
+        const lt = listed as DType, none = g.locals.push(lt) - 1, r = g.locals.push(lt) - 1;
+        collecting.set(g, none);
+        g.body = { k: "let", i: none, value: { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }, body: { k: "attempt", body: modePlan(an, plan, env0, done, g), res: r, ok: { k: "local", i: r }, otherwise: { k: "local", i: none }, t: lt } };
+      }
     } catch (e) { funcs.pop(); index.delete(key); throw e; }
     return { fn: at, outs };
   }
@@ -2028,6 +2083,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const apart = (env: Map<Id, number>, val: SExpr, valNode: Id, variant: Id, fields: Id[], k: (env: Map<Id, number>) => SExpr): SExpr => {
       const t = typeOf(valNode);
       if (isRecord(t)) return binds(env, fields.map((b, i) => [b, { k: "get", rec: val, t, i }]), k);
+      // A Bool (an i32): true or false, no fields.
+      if (t === "i32" && (variant === TRUE || variant === FALSE)) return test(variant === TRUE ? val : { k: "op", op: "not", args: [val] }, k(env));
       if (!isData(t)) throw new ModeUnsupported("a case of a value that isn't data");
       const c = t.cases.findIndex((x) => x.variant === variant);
       if (c < 0) throw new ModeUnsupported("a case of another type");
@@ -2036,6 +2093,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const made = (valNode: Id, variant: Id, fields: SExpr[]): SExpr => {
       const t = typeOf(valNode);
       if (isRecord(t)) return { k: "make", t, args: fields };
+      if (t === "i32" && (variant === TRUE || variant === FALSE)) return { k: "bool", v: variant === TRUE };
       if (!isData(t)) throw new ModeUnsupported("a value built of a type that isn't data");
       return { k: "new", t, c: t.cases.findIndex((x) => x.variant === variant), args: fields };
     };
@@ -2130,6 +2188,19 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return { k: "case", scrut: local(val), s: g.locals.push(t) - 1, t, arms: t.cases.map((x) => { const a = c.arms.find((y) => y.variant === x.variant); return a ? plan(a) : rest; }), result: rt };
       }
       if (c.arms.some((a) => a.variant === null)) throw new ModeUnsupported("otherwise, for a value not known");
+      // Every answer: each arm's before the next's, an arm that gives none
+      // adding nothing.
+      const after = collecting.get(g);
+      if (after !== undefined) {
+        const out = c.arms.reduceRight<SExpr>((later, a) => {
+          const l = g.locals.push(rt) - 1, r = g.locals.push(rt) - 1;
+          collecting.set(g, l);
+          const body = modePlan(an, a.plan, env, done, g);
+          return { k: "let", i: l, value: later, body: { k: "attempt", body, res: r, ok: local(r), otherwise: local(l), t: rt } };
+        }, local(after));
+        collecting.set(g, after);
+        return out;
+      }
       return c.arms.reduceRight<SExpr>((rest, a) => { const r = g.locals.push(rt) - 1; return { k: "attempt", body: modePlan(an, a.plan, env, done, g), res: r, ok: local(r), otherwise: rest, t: rt }; }, NONE);
     };
     return steps(0, env0);
