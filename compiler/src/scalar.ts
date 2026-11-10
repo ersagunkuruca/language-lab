@@ -3020,6 +3020,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (uses.length !== 1 || mayChoose(m.fn) || m.args.some((a) => a !== uses[0] && mayChoose(a))) return null;
     return soleSolve(uses[0]);
   };
+  // x a call of a definition (not recursive: its body is one solve of
+  // something else) whose body is a sole solve, given inputs that don't
+  // choose: the definition's inputs, body and that solve.
+  const soleCall = (x: Id): { params: Id[]; args: Id[]; body: Id; use: Id } | null => {
+    const m = code.nodes[x];
+    if (!m || !isCall(m)) return null;
+    const fn = code.nodes[m.fn], d = fn?.kind === "ref" ? code.nodes[fn.target] : undefined;
+    const lam = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+    if (lam?.kind !== "lambda" || lam.params.length !== m.args.length || m.args.some(mayChoose)) return null;
+    const use = soleSolve(lam.body);
+    const u = use ? code.nodes[use] : undefined;
+    if (!use || !u || !isUse(u) || useTarget(code.nodes, u) === (fn as NodeOf<"ref">).target) return null;
+    return { params: lam.params, args: m.args, body: lam.body, use };
+  };
   const mayChoose = (id: Id) => subtree(code, id).some((x) => {
     const m = code.nodes[x];
     if (!m) return false;
@@ -3042,9 +3056,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
     const kind = target === S.first ? "first" : target === S.optional ? "optional" : target === S.all ? "all" : "count";
     if (target === S.first) { const only = soleSolve(search); if (only) firstOnly.add(only); }
+    // A first of a call of a definition that is one such solve (relations'
+    // to polar, a family of answers): the definition's body written in
+    // place, its inputs bound to the call's, so that solve's first answer
+    // is the one taken here too.
+    const sole = target === S.first ? soleCall(search) : null;
     searching.set(f, (searching.get(f) ?? 0) + 1);
     let body: SExpr;
-    try { body = expr(search, env, f, false); } finally { searching.set(f, searching.get(f)! - 1); }
+    try {
+      if (sole) {
+        firstOnly.add(sole.use);
+        let inner = new Map(env);
+        const lets = sole.args.map((a, j) => { const t = stype(zonk(a)); if (!t) throw new Refused(`searches over a call given ${whyNot(zonk(a))}`); const i = f.locals.push(t) - 1; inner = new Map(inner).set(sole.params[j], i); return { i, value: expr(a, env, f, false) }; });
+        body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(sole.body, inner, f, false));
+      } else body = expr(search, env, f, false);
+    } finally { searching.set(f, searching.get(f)! - 1); }
     return { k: "search", kind, body, res: f.locals.push(bt) - 1, t, bt, ...(dflt ? { dflt: expr(dflt, env, f, false) } : {}) };
   }
 

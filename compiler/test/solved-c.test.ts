@@ -187,3 +187,9 @@ test("a solve with a periodic family gives the solver's first answer on WebAssem
 test("physics prints on WebAssembly and C what ters run prints", async () => {
   assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/physics")), /for some y, angle: polar\(3, y, 2, angle\) = false\n$/);
 });
+
+// relations: to polar, a definition that is one solve with a family of
+// answers, read through first (its body written in place there).
+test("relations prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/relations")), /to polar\(0, 2\), canonical = 2, 1\.570796327\n/);
+});
