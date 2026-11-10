@@ -275,7 +275,7 @@ test("collatz's fold of a record of Ints runs on threads natively and prints the
 // divisors natively (C207b, C207c): `array of` a range is the array filled
 // at once, no list made; the sum of a map is one fold, no mapped array
 // made (fuse-steps.ts); and the answer is the evaluator's.
-test("divisors natively fills `array of` a range straight away, sums its map in one fold, and prints the evaluator's (C207b, C207c)", { skip }, () => {
+test("divisors natively fills `array of` a range straight away, sums its map in one fold, and prints the evaluator's (C207b to C207d)", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "c-range-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/divisors");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "divisors")]);
   assert.equal(built.status, 0, built.stderr.toString());
@@ -283,6 +283,8 @@ test("divisors natively fills `array of` a range straight away, sums its map in 
   assert.match(c, /lab_array_range_a\d+\(/);
   assert.doesNotMatch(c, /lab_int_range\(/);
   assert.doesNotMatch(c, /lab_array_map\(/);
+  // C207d: its fold over the range counts down, no array filled.
+  assert.match(c, /double lab_divisors_at_Float64_fold_items\(lab_int p0, lab_int p1/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "300", "40"]).stdout.toString();
   assert.match(evaluator, /some\(/);
   for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "divisors"), ["300", "40"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);

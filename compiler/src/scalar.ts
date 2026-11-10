@@ -2886,6 +2886,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       }
       // The same over an array's items (`array of List`'s fold, C30 s2):
       // the items read in place by position, from the last back.
+      // Over `array of` a range of Ints (C207d): no array, the items the
+      // count itself, from n − 1 down (represent.ts's counted fold).
+      const arr0 = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? s.args[0] : null;
+      const range = arr0?.k === "rt" && /^array\.of\.a\d+$/.test(arr0.fn) && arr0.args[0]?.k === "rt" && arr0.args[0].fn === "int.range" ? arr0.args[0].args[0] : null;
+      const ci = range && s.k === "rt" ? arrayItems(st, result, arms, free, env, f, [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])], true) : null;
+      if (ci && range) {
+        const nl = f.locals.push("int") - 1, n: SExpr = { k: "local", i: nl };
+        const atLeast0: SExpr = { k: "if", t: "int", cond: { k: "rt", fn: "int.less", args: [n, { k: "int", v: 0n }] }, then: { k: "int", v: 0n }, else: n };
+        return { k: "let", i: nl, value: range, body: { k: "call", fn: ci.fn, args: [{ k: "int", v: 0n }, atLeast0, ci.start, ...outside], tail } };
+      }
       const ai = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? arrayItems(st, result, arms, free, env, f, [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])]) : null;
       if (ai && s.k === "rt") {
         const al = f.locals.push(ai.array) - 1, a: SExpr = { k: "local", i: al };
@@ -3256,7 +3266,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // list itself, as `characters` above: no list and no stack, the items
   // read from the array by position, the last first. One function: the
   // array, how many items are still to go, the result so far.
-  function arrayItems(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, array: AType): { fn: number; start: SExpr; array: AType } | null {
+  function arrayItems(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, array: AType, counted = false): { fn: number; start: SExpr; array: AType } | null {
     const nil = arms.find((a) => !a.results.some((x) => x)), cons = arms.find((a) => a.results.some((x) => x));
     if (!nil || !cons || arms.length !== 2 || st.cases.length !== 2) return null;
     const c = st.cases.find((x) => x.variant === cons.variant)!;
@@ -3264,7 +3274,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (head < 0 || tail < 0) return null;
     if (cons.binds[tail] && refsIn(cons.body).includes(cons.binds[tail]!)) return null;
     const caps = free.map((b) => f.locals[env.get(b)!]);
-    const params: LType[] = [array, "int", result, ...caps];
+    // Counted: the first input is unused, the item at k being k.
+    const params: LType[] = [counted ? "int" : array, "int", result, ...caps];
     const g: SFunc = { def: cons.id, name: `${f.name}.fold.items`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const gi = funcs.push(g) - 1;
     let inner = new Map(free.map((b, j) => [b, 3 + j]));
@@ -3277,14 +3288,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       else: {
         k: "let", i: k, value: { k: "rt", fn: "int.sub", args: [left, { k: "int", v: 1n }] },
         body: {
-          k: "let", i: x, value: { k: "rt", fn: `array.get.a${array.index}`, args: [a, { k: "local", i: k }] },
+          k: "let", i: x, value: counted ? { k: "local", i: k } : { k: "rt", fn: `array.get.a${array.index}`, args: [a, { k: "local", i: k }] },
           body: { k: "call", fn: gi, args: [a, { k: "local", i: k }, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 3 + j }))], tail: true },
         },
       },
     };
     if (fails(g.body, funcs)) g.partial = true;
     const start = expr(nil.body, env, f, false);
-    if (opts.host) restAsView((g.body as Extract<SExpr, { k: "if" }>).else, start, array, k, x);
+    if (opts.host && !counted) restAsView((g.body as Extract<SExpr, { k: "if" }>).else, start, array, k, x);
     return { fn: gi, start, array };
   }
   // `array of List`'s own fold hands each arm the rest of the array as it
