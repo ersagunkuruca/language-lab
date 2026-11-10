@@ -3343,6 +3343,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const c = searchClosure();
       if (c) {
         const res = f.locals.push(t) - 1;
+        // In a function that may wait, on a page's workers (C61 c′5): its
+        // answer, or none (FAIL) for the default, given to the rest.
+        if (waitsIn(f)) {
+          const got = f.locals.push(t) - 1;
+          const away: SExpr = { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: false }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: "first" }], t, suspends: true };
+          return { k: "let", i: got, value: away, body: { k: "attempt", body: { k: "rt", fn: "first.one", args: [local(got)] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t } };
+        }
         return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
       }
     }
