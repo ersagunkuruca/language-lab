@@ -1093,6 +1093,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // caller's, its handler again at their bottom (deep), its choice points
     // back on the stack. A rest runs once.
     resumeRest(r: Rest, answer: Value) {
+      // Under a direct try (a machine of its own for a closure the direct
+      // run called), the try may yet fall back and run again: the rest
+      // waits for the machine that runs once (crew's scheduler).
+      if (directDepth) throw NEED;
       if (r.used) throw new Error(`the rest of ${rt.names?.[r.op] ?? stdNames[r.op] ?? r.op} was resumed a second time: a rest runs once`);
       r.used = true;
       const shift = this.cps.length - r.h.base;
