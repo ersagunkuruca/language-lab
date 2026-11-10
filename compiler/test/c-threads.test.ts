@@ -30,10 +30,11 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // main prints the map of `item` over 0 to n - 1, a list kept as an array
 // (`array map`); `item` is given the item, a big Int and a list that
 // every item reads (both shared between the threads), and some work.
-function program(n: number, item: (k: Lang, x: Id, big: Id, list: Id, work: Id) => Id) {
+// With `keep`, the keep of `item` as its test (C202).
+function program(n: number, item: (k: Lang, x: Id, big: Id, list: Id, work: Id) => Id, by = "map") {
   return built(/lab_par_map_0\(/, true, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
     k.let("list", k.call(INT_OPS.range, k.int(50)), (list) =>
-      k.let("ys", k.call(lib("map"), k.call(INT_OPS.range, k.int(n)), k.fn(["x"], (x) => item(k, x, big, list, work(k, x, big)))), (ys) =>
+      k.let("ys", k.call(lib(by), k.call(INT_OPS.range, k.int(n)), k.fn(["x"], (x) => item(k, x, big, list, work(k, x, big)))), (ys) =>
         // Read by position too, so the list is kept as an array (C30).
         k.seq(k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), ys, k.int(1), k.int(-1)))), k.call(S.print, k.call(SHOW_ANY, ys)))))));
 }
@@ -91,6 +92,24 @@ test("a map whose items abort on other threads aborts as in order: at the last i
   assert.equal(many.out, p.evaluator);
   assert.ok(many.threads > 0, "no item ran on another thread");
   assert.equal(p.run("0").out, p.evaluator);
+});
+
+// Even items pass, worked out with the work: the keep's array is the
+// evaluator's, the items that passed in order.
+test("a keep's tests run on threads, and it gives the evaluator's array of the items that passed (C202)", { skip }, () => {
+  const even = (k: Lang, x: Id, work: Id) => k.call(S.equal, k.call(INT_OPS.bitAnd, k.call(INT_OPS.add, k.call(INT_OPS.mul, work, k.int(0)), x), k.int(1)), k.int(0));
+  const p = program(13, (k, x, _big, _list, work) => even(k, x, work), "keep");
+  assert.equal(p.evaluator, "2\n[0, 2, 4, 6, 8, 10, 12]\n");
+  const many = p.run("3");
+  assert.equal(many.out, p.evaluator);
+  assert.ok(many.threads > 0, "no item ran on another thread");
+  assert.equal(p.run("0").out, p.evaluator);
+  // The library's keep tests its items from the first: one whose tests
+  // abort on threads aborts at the first item that does, as in order.
+  const aborts = program(12, (k, x, _big, _list, work) => k.if(k.call(INT_OPS.less, x, k.int(4)), k.call(ABORT_OP, k.call(SHOW_ANY, x)), even(k, x, work)), "keep");
+  assert.equal(aborts.evaluator, "aborted 0");
+  assert.equal(aborts.run("3").out, aborts.evaluator);
+  assert.equal(aborts.run("0").out, aborts.evaluator);
 });
 
 test("a together's actions run on threads, sharing a big Int, and give the evaluator's list (C201)", { skip }, () => {
