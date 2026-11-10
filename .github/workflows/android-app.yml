@@ -40,6 +40,10 @@ jobs:
           java-version: 21
       - run: npm ci
         working-directory: ters
+      # One debug key for every run (a debug key, not a secret), so a new
+      # build installs over the one on the phone instead of being refused.
+      - name: Debug key
+        run: mkdir -p ~/.android && cp .github/android/debug.keystore ~/.android/debug.keystore
       - name: ters build-app
         if: inputs.kind == 'webview'
         working-directory: ters
@@ -55,7 +59,11 @@ jobs:
       - name: Debug APK
         if: inputs.kind == 'webview'
         working-directory: ${{ runner.temp }}/app/android
-        run: ./gradlew assembleDebug --no-daemon
+        env:
+          RUN: ${{ github.run_number }}
+        run: |
+          sed -i "s/versionCode 1\b/versionCode $RUN/" app/build.gradle
+          ./gradlew assembleDebug --no-daemon
       - name: ters build-native-app
         if: inputs.kind == 'native'
         working-directory: ters
@@ -69,6 +77,8 @@ jobs:
       - name: Native debug APK
         if: inputs.kind == 'native'
         working-directory: ${{ runner.temp }}/app/android
+        env:
+          TERS_VERSION_CODE: ${{ github.run_number }}
         run: gradle assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
