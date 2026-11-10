@@ -176,7 +176,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L118d | Functions with a choice in their type still run step by step on the evaluator's heap machine, after L118c (functions that only compute run as compiled JavaScript): about half the notebook's machine calls. Tried twice 2026-11-10 (Editor lane) and set aside: trying them directly hung json.test (a stop deep in a recursive descent reran every outer call), and finishing a stopped caller on a machine of its own was slower (notebook 4.2 s against 2.5). Needs a different idea, e.g. compiling a choice to JavaScript with its alternatives as a callback (success continuation) instead of the machine's choice points. Example: notebook's Run with 300 notes under 1 s in process (1.85 s now) | L118c (Editor lane 2026-11-10) | P3 | M | |
+| L118d | Functions with a choice in their type still run step by step on the evaluator's heap machine, after L118c (functions that only compute run as compiled JavaScript): about half the notebook's machine calls. Tried twice 2026-11-10 (Editor lane) and set aside: trying them directly hung json.test (a stop deep in a recursive descent reran every outer call), and finishing a stopped caller on a machine of its own was slower (notebook 4.2 s against 2.5). L118d1 (2026-11-10): the bodies of first, optional, all and count that only compute and choose run with success continuations; notebook 2.55 to 2.0 s. Left: a function with a choice called where nothing handles it yet (its caller's handler on the machine). Example: notebook's Run with 300 notes under 1 s in process (1.85 s now) | L118c (Editor lane 2026-11-10) | P3 | M | |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
