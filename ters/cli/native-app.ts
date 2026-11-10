@@ -78,7 +78,7 @@ export const JNI_C = String.raw`
 #include <jni.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[14];
+static jmethodID ters_jm[15];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -125,15 +125,16 @@ static void j_draw(void *c, void *v, const double *ops, size_t n) {
   TERS_J(13, ters_id(v), a);
   (*ters_j)->DeleteLocalRef(ters_j, a);
 }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw };
+static void j_clip(void *c, void *v, int on) { (void)c; TERS_J(14, ters_id(v), (jint)on); }
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip };
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[14][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" } };
-  for (int i = 0; i < 14; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[15][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" } };
+  for (int i = 0; i < 15; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -395,6 +396,8 @@ public class MainActivity extends Activity {
   }
 
   // A picture's shapes (ters_ui's draw ops, in dp from its top left).
+  // A box that cuts what's inside it to its own outline (overflow: hidden).
+  void clip(int id, int on) { View v = views.get(id); if (v instanceof ViewGroup) { ((ViewGroup) v).setClipChildren(on != 0); v.setClipToOutline(on != 0); } }
   void draw(int id, double[] ops) { View v = views.get(id); if (v instanceof Picture) { ((Picture) v).ops = ops; v.invalidate(); } }
 
   static final class Picture extends FrameLayout {
