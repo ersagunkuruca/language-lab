@@ -3,7 +3,7 @@
 Status: design note, C61's first step (2026-11-06). Built since: a
 together's pure branches on worker threads on Node (C41, 2026-11-09,
 compiler/src/branches-rt.ts, examples/area), and a `map` of a function
-that only computes by runs of its items (C42's first step, examples/mandelbrot-rows) a `keep` likewise (C43a, examples/collatz), `all pass` and `any pass` stopping past the first deciding item (C43b, examples/nicomachus), `first where` likewise (C43c, examples/divisors), and a `count` of a search by its first choice's items (C43d, examples/queens-count),
+that only computes by runs of its items (C42's first step, examples/mandelbrot-rows) a `keep` likewise (C43a, examples/collatz), `all pass` and `any pass` stopping past the first deciding item (C43b, examples/nicomachus), `first where` likewise (C43c, examples/divisors), and a `count` or `all` of a search by its first choice's items (C43d, C43e, examples/queens-count, examples/queens),
 with the threshold measured as it runs (a branch past 20 ms starts the
 workers; a map site keeps what an item took, and a map under a
 millisecond by that is the compiled one) rather than priced. In C (L101,

@@ -137,12 +137,12 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any"; search?: unknown }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any"; search?: unknown; all?: boolean }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
-  if (m.search) { const c = dec(m.search); return (i) => answers(c, i + 1); }
+  if (m.search) { const c = dec(m.search); return (i) => answers(c, i + 1, !!m.all); }
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
   return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
@@ -401,22 +401,27 @@ export function chooseSplit(l: unknown): unknown {
 // A search inside the one split: its choices whole, then the split as it was.
 export const splitHold = (): number => { const j = split; split = -1; return j; };
 export const splitGive = (j: unknown): void => { split = j as number; };
-// How a search's answers are counted, given by core-rt.ts, which has FAIL.
-let countAll: (search: unknown) => number = () => 0;
-export const countsBy = (f: (search: unknown) => number): void => { countAll = f; };
+// How a search's answers are counted or gathered (in an array), given by
+// core-rt.ts, which has FAIL.
+type Runs = { count: (search: unknown) => number; all: (search: unknown) => unknown[] };
+let runs: Runs = { count: () => 0, all: () => [] };
+export const searchesBy = (r: Runs): void => { runs = r; };
 // The search's answers with item j of its first choice (all of them for
-// j < 0).
-function answers(search: unknown, j: number): number {
+// j < 0), the split of a search this one is inside kept for it.
+function answers(search: unknown, j: number, all: boolean): unknown {
+  const held = split;
   split = j;
-  try { return countAll(search); } finally { split = -1; }
+  try { return all ? arrayOf(runs.all(search)) : runs.count(search); } finally { split = held; }
 }
-export function countPure(search: unknown, site: number): number {
-  if (!canShare()) return countAll(search);
+export function searchPure(search: unknown, site: number, all: boolean): unknown {
+  if (!canShare()) { const v = answers(search, -1, all); return all ? itemsOf(v) : v; }
+  const outer = seen;
+  let first: unknown, k: number;
   seen = -1;
-  const first = answers(search, 0), k = seen;
-  if (k <= 1) return first;
+  try { first = answers(search, 0, all); k = seen; } finally { seen = outer; }
+  if (k <= 1) return all ? itemsOf(first) : first;
   const t0 = performance.now();
-  const rest = shared(k - 1, (i) => answers(search, i + 1), () => { const g = encode(search, names!); return g === NO ? NO : { search: g }; }, (search as Closure).code);
+  const rest = shared(k - 1, (i) => answers(search, i + 1, all), () => { const g = encode(search, names!); return g === NO ? NO : { search: g, all }; }, (search as Closure).code);
   perItem[site] = (performance.now() - t0) / (k - 1);
-  return rest.reduce((a: number, b) => a + (b as number), first);
+  return all ? [first, ...rest].flatMap((a) => itemsOf(a)) : rest.reduce((a: number, b) => a + (b as number), first as number);
 }
