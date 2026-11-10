@@ -1,0 +1,58 @@
+# Installing "Android app" builds one after another on an emulator (I198),
+# as a phone would: each run's APK fetched by its run id, its app id,
+# version code and signing key printed, then installed in the order given,
+# each over what is there (adb install -r, a phone's update). A build that
+# can't replace the one before fails the run with Android's reason, and
+# the packages installed at the end are listed. Run by hand only, since a
+# run costs build minutes.
+name: Android install check
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Android app run ids, in install order, separated by spaces"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: The builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          mkdir -p apks
+          k=0
+          for run in $RUNS; do
+            k=$((k + 1))
+            id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" --jq '.artifacts[0].id')
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "apks/$k.zip"
+            unzip -q -o "apks/$k.zip" -d "apks/$k"
+            apk=$(ls apks/$k/*.apk | head -1)
+            mv "$apk" "apks/$k.apk"
+            echo "== $k: run $run"
+            "$tools/aapt2" dump badging "apks/$k.apk" | head -1
+            "$tools/apksigner" verify --print-certs "apks/$k.apk" | grep -i "SHA-256"
+          done
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Installed one after another
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: sh .github/android/install.sh
