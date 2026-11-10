@@ -33,6 +33,11 @@ adb("shell", "am", "start", "-W", "-n", f"{app}/app.ters.page.MainActivity")
 time.sleep(6)
 before = dump("before")
 print(f"started: {len(nodes(before))} views")
+# Every view the activity has, shown or not (V visible, G gone, I invisible), with its place.
+top = adb("shell", "dumpsys", "activity", "top")
+views = [l for l in top.splitlines() if re.search(r"(FrameLayout|TextView|EditText|Picture|ScrollView)\{", l)]
+print(f"---- the activity's views ({len(views)})")
+print("\n".join(views[:400]))
 print("\n".join(lines(before)[:60]))
 for i, t in enumerate(taps):
     ns = nodes(before)
