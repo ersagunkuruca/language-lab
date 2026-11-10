@@ -42,6 +42,7 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
   notebook: () => [["notes.txt"], { "notes.txt": readFileSync(join(examples, "notebook/notes.txt"), "utf8") }],
   routes: () => [["roads.txt"], { "roads.txt": readFileSync(join(examples, "routes/roads.txt"), "utf8") }],
   wc: () => [["a.txt"], { "a.txt": "two words\nand three more\n" }],
+  swarm: () => [["20", "10"], {}],
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
