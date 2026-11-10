@@ -4,7 +4,8 @@
 # "Android check" workflow inside the emulator; args: the app's id, then
 # taps (or TAPS, split at |), each a text (the view showing it), "square:N" (a view N dp
 # square, as tumble's tiles are; the first one, or the k-th with #k), "scroll:N" (N dp down)
-# or "drag:N#k:DX,DY" (a finger down on that square, moved DX, DY dp, and up).
+# or "drag:N#k:DX,DY" (a finger down on that square, moved DX, DY dp, and up), or
+# "swipe:X,Y,DX,DY" (from that point on the screen, in px).
 import os, re, subprocess, sys, time, difflib
 
 def adb(*a):
@@ -48,6 +49,17 @@ for i, t in enumerate(taps):
         adb("shell", "input", "swipe", str(W // 2), str(H * 3 // 4), str(W // 2), str(int(H * 3 // 4 - float(t[7:]) * density)), "800")
         time.sleep(2); before = dump(f"after{i}"); print(f"scrolled {t[7:]} dp"); print("\n".join(lines(before)[:60])); continue
     drag = None
+    if t.startswith("swipe:"):
+        x, y, dx, dy = [int(v) for v in t[6:].split(",")]
+        print(f"swipe from {x},{y} by {dx},{dy}")
+        adb("shell", "input", "swipe", str(x), str(y), str(x + dx), str(y + dy), "400")
+        time.sleep(3)
+        after = dump(f"after{i}")
+        d = list(difflib.unified_diff(lines(before), lines(after), lineterm="", n=0))
+        print(f"after {t}: {len(d)} lines changed")
+        print("\n".join(d[:40]))
+        before = after
+        continue
     if t.startswith("drag:"):
         spec, _, by = t[5:].partition(":")
         drag = [float(v) * density for v in by.split(",")]
