@@ -753,6 +753,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const compiled = new Map<Id, Direct>();
   const direct = (id: Id, env: Env): Value => (compiled.get(id) ?? compile(id))(env);
   const needs: Direct = () => { throw NEED; };
+  // Whether a scope given from outside (ev) binds something besides binders.
+  let looseScopes = false;
   const compile = (id: Id): Direct => {
     const d = compileNode(id);
     compiled.set(id, d);
@@ -763,7 +765,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     const n = code.nodes[id];
     switch (n.kind) {
       case "lit": { const v = n.of === INT ? intLit(n.value) : n.value; return () => v; }
-      case "ref": { const target = n.target; return (env) => refValue(target, env); }
+      case "ref": {
+        const target = n.target, t = code.nodes[target];
+        // A definition or a builtin isn't in a scope (only binders are,
+        // unless a caller's map put one there): not looked for in it, and
+        // its value kept here. Looking through the whole scope and missing
+        // was most of agent's own time.
+        if (t?.kind === "def" || t?.kind === "builtin") {
+          let v: Value | undefined;
+          return (env) => (looseScopes ? refValue(target, env) : (v ??= refValue(target, null)));
+        }
+        return (env) => refValue(target, env);
+      }
       case "lambda": return (env) => closure(n, env);
       case "call": {
         if (isUse(n)) return needs;
@@ -1374,7 +1387,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
     return m;
   };
-  const ev = (id: Id, env: Map<Id, Value>): Generator<Value> => run((m) => m.eval(id, fromMap(env)));
+  const ev = (id: Id, env: Map<Id, Value>): Generator<Value> => {
+    for (const b of env.keys()) if (code.nodes[b]?.kind !== "binder") looseScopes = true;
+    return run((m) => m.eval(id, fromMap(env)));
+  };
 
   // Constructors and projections as function values, made once each.
   const parts = new Map<Id, Fn>();
