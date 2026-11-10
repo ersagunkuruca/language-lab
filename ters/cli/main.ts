@@ -239,7 +239,7 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: !wasm });
+  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: true });
   // A map writes into the array it was given (C60 c2): in place where
   // nothing else counts it.
   if (!wasm) {
@@ -254,6 +254,7 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   if (wasm) {
     ownedArrays(lowered, q.code, q.info, q.names, root, true);
     ownedRecords(lowered, q.code, q.info, q.names, root);
+    columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
     intoAsSets(lowered);
   }
   return { lowered, root };

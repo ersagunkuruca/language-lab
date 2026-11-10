@@ -7445,6 +7445,9 @@ export const runtime = (name: string): RtFn => {
   }
   // An array function's copy for one item type (C66): the template, told which.
   const at = /^(array\.\w+)\.a(\d+)(\.i64)?$/.exec(name);
+  // columns.ts's ops (C60 w2): only their shapes here; wasm.ts writes
+  // each, knowing the item's fields. None is partial.
+  if (at && /^array\.c(new|length|get\d+|set[\d_]+)$/.test(at[1])) return { name, params: [], result: "void", locals: [], uses: [], body: "unreachable", array: Number(at[2]), native: true };
   const of = at && /^array\.of(\d+)$/.exec(at[1]);
   if (at && (of || SHADER_ARRAYS[at[1]])) return { ...(of ? shaderOf(Number(of[1])) : SHADER_ARRAYS[at[1]]), name, array: Number(at[2]) };
   if (at) {
