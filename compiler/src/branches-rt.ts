@@ -123,7 +123,7 @@ export function branchWorker(): boolean {
         unit ??= unitsOf(m);
         const u = unit(m.base + i), v = encode(u, names!);
         out = v === NO ? { job: m.job, i, again: true } : { job: m.job, i, v };
-        if (m.until && (u as number) >= 0) decided(m.claims, i);
+        if (m.until && decides(u)) decided(m.claims, i);
       } catch (e) {
         const reason = e instanceof mod!.Aborted ? encode((e as { reason: unknown }).reason, names!) : NO;
         out = reason !== NO ? { job: m.job, i, abort: reason, esc: (e as { esc: number }).esc } : { job: m.job, i, again: true };
@@ -137,12 +137,12 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any"; search?: unknown; all?: boolean }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any" | "first"; search?: unknown; how?: How }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
-  if (m.search) { const c = dec(m.search); return (i) => answers(c, i + 1, !!m.all); }
+  if (m.search) { const c = dec(m.search); return (i) => answers(c, i + 1, m.how!); }
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
   return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
@@ -255,8 +255,11 @@ const stopped = (claims: Int32Array, i: number): boolean => { const d = Atomics.
 function decided(claims: Int32Array, i: number): void {
   for (let d = Atomics.load(claims, 0); d === 0 || d - 1 > i; d = Atomics.load(claims, 0)) if (Atomics.compareExchange(claims, 0, d, i + 1) === d) return;
 }
-function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => number, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
-  const values: unknown[] = new Array(n), ends = (v: unknown) => v instanceof Thrown || (v as number) >= 0;
+// A unit that decides: a run's index of its deciding item, or a search's
+// answer found (an array of it).
+const decides = (v: unknown): boolean => (v instanceof ArrayView ? v.n > 0 : (v as number) >= 0);
+function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => unknown, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
+  const values: unknown[] = new Array(n), ends = (v: unknown) => v instanceof Thrown || decides(v);
   const main = !!wt()?.isMainThread && !inJob;
   let next = 0;
   // In turn from the front, till one decides or it is worth sharing.
@@ -304,7 +307,7 @@ function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => numbe
   for (let i = base; i < n; i++) {
     if (values[i] === AGAIN) values[i] = here(i);
     if (values[i] instanceof Thrown) throw (values[i] as Thrown).e;
-    if ((values[i] as number) >= 0) return values.slice(0, i + 1);
+    if (decides(values[i])) return values.slice(0, i + 1);
   }
   return values;
 }
@@ -401,27 +404,31 @@ export function chooseSplit(l: unknown): unknown {
 // A search inside the one split: its choices whole, then the split as it was.
 export const splitHold = (): number => { const j = split; split = -1; return j; };
 export const splitGive = (j: unknown): void => { split = j as number; };
-// How a search's answers are counted or gathered (in an array), given by
-// core-rt.ts, which has FAIL.
-type Runs = { count: (search: unknown) => number; all: (search: unknown) => unknown[] };
-let runs: Runs = { count: () => 0, all: () => [] };
+// How a search's answers are counted, gathered (in an array), or its first
+// found (an array of it, or empty), given by core-rt.ts, which has FAIL.
+type How = "count" | "all" | "first";
+type Runs = Record<How, (search: unknown) => unknown>;
+let runs: Runs = { count: () => 0, all: () => [], first: () => [] };
 export const searchesBy = (r: Runs): void => { runs = r; };
 // The search's answers with item j of its first choice (all of them for
 // j < 0), the split of a search this one is inside kept for it.
-function answers(search: unknown, j: number, all: boolean): unknown {
+function answers(search: unknown, j: number, how: How): unknown {
   const held = split;
   split = j;
-  try { return all ? arrayOf(runs.all(search)) : runs.count(search); } finally { split = held; }
+  try { const v = runs[how](search); return how === "count" ? v : arrayOf(v as unknown[]); } finally { split = held; }
 }
-export function searchPure(search: unknown, site: number, all: boolean): unknown {
-  if (!canShare()) { const v = answers(search, -1, all); return all ? itemsOf(v) : v; }
+// count's number, all's answers or first's (one or none), as an array.
+export function searchPure(search: unknown, site: number, how: How): unknown {
+  const out = (v: unknown) => (how === "count" ? v : itemsOf(v));
+  if (!canShare()) return out(answers(search, -1, how));
   const outer = seen;
   let first: unknown, k: number;
   seen = -1;
-  try { first = answers(search, 0, all); k = seen; } finally { seen = outer; }
-  if (k <= 1) return all ? itemsOf(first) : first;
-  const t0 = performance.now();
-  const rest = shared(k - 1, (i) => answers(search, i + 1, all), () => { const g = encode(search, names!); return g === NO ? NO : { search: g, all }; }, (search as Closure).code);
+  try { first = answers(search, 0, how); k = seen; } finally { seen = outer; }
+  if (k <= 1 || (how === "first" && decides(first))) return out(first);
+  const t0 = performance.now(), send = () => { const g = encode(search, names!); return g === NO ? NO : { search: g, how, ...(how === "first" ? { until: "first" as const } : {}) }; };
+  const rest = how === "first" ? sharedUntil(k - 1, (i) => answers(search, i + 1, how), send, (search as Closure).code) : shared(k - 1, (i) => answers(search, i + 1, how), send, (search as Closure).code);
   perItem[site] = (performance.now() - t0) / (k - 1);
-  return all ? [first, ...rest].flatMap((a) => itemsOf(a)) : rest.reduce((a: number, b) => a + (b as number), first as number);
+  if (how === "first") { const found = rest[rest.length - 1]; return found instanceof ArrayView && decides(found) ? itemsOf(found) : []; }
+  return how === "all" ? [first, ...rest].flatMap((a) => itemsOf(a)) : rest.reduce((a: number, b) => a + (b as number), first as number);
 }
