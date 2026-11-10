@@ -22,9 +22,14 @@ function namesOf(code: Code, names: Names): Named {
   // Cases of one name in several types (a program's own done, std's
   // done(value)) are told apart by how many values they take (E188).
   // An effect's operation (random) is a call, not a value (E188).
-  const ops = new Set(Object.values(code.nodes).flatMap((n) => n.kind === "typedef" && n.effect ? n.variants : []));
+  // Read off the definitions' types, not every node (I192: 54 ms of
+  // opening machine's `all digits`, scanning the library's 43,000 twice).
   const variants = new Map<string, Id[]>();
-  for (const n of Object.values(code.nodes)) if (n.kind === "variant" && names[n.id] !== undefined && !ops.has(n.id)) variants.set(names[n.id], [...(variants.get(names[n.id]) ?? []), n.id]);
+  for (const d of code.defs) {
+    const def = code.nodes[d], t = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+    if (t?.kind !== "typedef" || t.effect) continue;
+    for (const v of t.variants) if (code.nodes[v]?.kind === "variant" && names[v] !== undefined) variants.set(names[v], [...(variants.get(names[v]) ?? []), v]);
+  }
   // A definition by its name is that function (newton's f: cubic). It
   // stands for the definition until a run looks it up (trace.ts).
   const defs = new Map<string, Id>();

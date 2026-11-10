@@ -5,10 +5,10 @@ Stretch goal is native compilation on each platform instead of webview
 stuff."). Written 2026-11-10 by Language lane B. The last section is the
 plan, as rows C199a to C199e.
 
-**Status.** Route A chosen (Ersagun, 2026-11-10). C199a to C199c are
+**Status.** Route A chosen (Ersagun, 2026-11-10). C199a to C199d are
 done: cells in C and WebAssembly, a page's Html mounted from C on a view
-host, and dice as an Android APK with no webview. C199d (layout and style
-in C) is built and waits on Ersagun's look at the APK. Today a phone runs a Ters page in a webview:
+host, dice as an Android APK with no webview, and its layout and style in
+C. C199e (iOS) waits on Ersagun's call. Today a phone runs a Ters page in a webview:
 `ters build-app` makes an installable web app that is also a Capacitor
 project (WEB.md "Mobile", C198), and the hand-run "Android app" workflow
 (#2146) builds its debug APK.
@@ -152,7 +152,7 @@ What a page's parts become under route A:
   (compiler/test/c-native-app.test.ts); the "Android app" workflow with
   `kind: native` builds the APK. Example: dice as an APK, installed by
   Ersagun.
-- **C199d. Layout and style.** Built: rather than Yoga, a style and layout
+- **C199d. Layout and style.** Done: rather than Yoga, a style and layout
   engine in C (compiler/src/c-layout.ts), so Android and iOS share it and it
   needs no C++. It sits between `pageC`'s mount (a `ters_host` that keeps
   the tree) and the platform's `ters_ui` (make a box or a text, place it,

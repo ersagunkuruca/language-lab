@@ -3,13 +3,17 @@
   "6psf1pea7fit3ue672j8ien5ca": "The sum of two dice. 7 comes up six ways out of 36, 2 and 12 one way each, so the bars below grow into a triangle.",
   "6k9al9mjin9lqkhsmis2bbuebb": "A hundred rolls with the same numbers every time for the same seed: seeded answers Random with xoshiro128** (Blackman and Vigna, adapted in src/lang/random.ts).",
   "r1rdcen0sol0621mbd6hq70cn0": "How many of the rolls came to this total.",
-  "rfbsr07rh30ndv6447j293upib": "The row for one total (i + 2): the total, a green bar as long as the number of rolls that came to it, a red tick where fair dice would put it on average (they make that total 6 − |i − 5| ways out of 36), and that number. unit is how many pixels one roll is worth.",
-  "uncf9n02jf7hgbs509kt4tlcaa": "One row per total from 2 to 12. A roll is worth 3 px until the longest bar or tick would pass 300 px; after that every bar shrinks together, so the shape stays and only the scale changes.",
+  "rfbsr07rh30ndv6447j293upib": "The row for one total (i + 2): the total, a green bar as long as the number of rolls that came to it, a red tick where fair dice would put it on average (they make that total 6 − |i − 5| ways out of 36), and that number. counts has one number per total; unit is how many pixels one roll is worth.",
+  "uncf9n02jf7hgbs509kt4tlcaa": "One row per total from 2 to 12, from how many rolls came to each. A roll is worth 3 px until the longest bar or tick would pass 300 px; after that every bar shrinks together, so the shape stays and only the scale changes.",
   "pski1cvcgseb9dtdrshheqstt4": "Who this page borrows from, shown on the page (docs/language/CREDITS.md).",
-  "58fhcc83p852dgdt2te1t1brbo": "The page: Roll draws two dice from the world's randomness; Throw 100 draws a hundred and lets them land one every 20 ms; Roll 100 with seed 7 adds the same hundred every time. landed reads now(), so the bars and the status line run again each frame while a throw is landing.",
+  "58fhcc83p852dgdt2te1t1brbo": "The page: Roll draws two dice from the world's randomness; Throw 100 draws a hundred and lets them land one every 20 ms; Roll 100 with seed 7 adds the same hundred every time. counts keeps how many rolls came to each total, 2 to 12, rather than every roll, so a click costs the same after twenty thousand rolls as after one. landed reads now(), so the bars and the status line run again each frame while a throw is landing.",
   "program": "Adapted: seeded rolls use xoshiro128** by David Blackman and Sebastiano Vigna (2018, public domain): https://prng.di.unimi.it/\nPrior art: the clock that runs again each frame follows Fran (Conal Elliott and Paul Hudak, \"Functional reactive animation\", ICFP 1997) and Elm's time subscriptions.\nPrior art: randomness as an effect with a handler you choose is in Koka and Eff.\nPrior art: the page is written with the html module, each tag a function as in Elm's Html module (Evan Czaplicki).\nOur own: the dice page; the triangular spread of two dice is textbook.",
   "2im4e0li9jgbfu9afonuimq951": "The first n items of a list, or all of them if it has fewer. The page uses it to let a throw of a hundred land a few at a time.",
   "if74m49le5el4g81651fpc36jr": "The largest number in a list, 0 for an empty one.",
-  "7tf7i3ev626f8ubigbihls2spd": "The rolls so far, and as many of the hundred in flight as have landed by now, one every 20 ms. It reads now(), so whatever shows it runs again every frame.",
-  "p0taaipaibvrnhk9n04m1miunt": "The page's style sheet: the colours (and their dark versions), the buttons, and the chart's rows, bars and ticks. Every element names its class; only a bar's length and a tick's place are worked out inline."
+  "7tf7i3ev626f8ubigbihls2spd": "The counts so far, with as many of the hundred in flight as have landed by now, one every 20 ms. It reads now(), so whatever shows it runs again every frame.",
+  "p0taaipaibvrnhk9n04m1miunt": "The page's style sheet: the colours (and their dark versions), the buttons, and the chart's rows, bars and ticks. Every element names its class; only a bar's length and a tick's place are worked out inline.",
+  "h570v4ib9v7gitrrqni9hkmtc3": "counts with one more at place k (0 for the first).",
+  "0i5p6fcnoj7l1svb9dmm79apqv": "counts with each roll added at its total: place 0 for 2, up to place 10 for 12.",
+  "4068b2ks5vigskkdqnihau9o3n": "The numbers of a list added up, 0 for an empty one.",
+  "l94dhjdns91ite72lgf2o10hmu": "The item at place k (0 for the first), 0 past the end."
 }
