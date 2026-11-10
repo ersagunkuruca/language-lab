@@ -78,7 +78,7 @@ export const JNI_C = String.raw`
 #include <jni.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[16];
+static jmethodID ters_jm[17];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -127,15 +127,16 @@ static void j_draw(void *c, void *v, const double *ops, size_t n) {
 }
 static void j_clip(void *c, void *v, int on) { (void)c; TERS_J(14, ters_id(v), (jint)on); }
 static void j_scroll(void *c, void *v, double inside) { (void)c; TERS_J(15, ters_id(v), inside); }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll };
+static void j_sides(void *c, void *v, const double *w, uint32_t colour) { (void)c; TERS_J(16, ters_id(v), w[0], w[1], w[2], w[3], (jint)colour); }
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides };
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[16][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" } };
-  for (int i = 0; i < 16; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[17][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" } };
+  for (int i = 0; i < 17; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -341,7 +342,7 @@ public class MainActivity extends Activity {
 
   void clear(int id) { View v = views.get(id); if (v instanceof ViewGroup) ((ViewGroup) v).removeAllViews(); }
 
-  void gone(int id) { views.remove(id); inside.remove(id); }
+  void gone(int id) { views.remove(id); inside.remove(id); painted.remove(id); sided.remove(id); }
 
   void place(int id, double x, double y, double w, double h, int shown) {
     View v = views.get(id);
@@ -356,16 +357,44 @@ public class MainActivity extends Activity {
     v.setLayoutParams(p);
   }
 
-  void paint(int id, int bg, double radius, double border, int borderColour) {
+  // A box's paint and its borders on single sides, kept so either can
+  // change without the other.
+  private final HashMap<Integer, double[]> painted = new HashMap<>(), sided = new HashMap<>();
+  void paint(int id, int bg, double radius, double border, int borderColour) { painted.put(id, new double[] { bg, radius, border, borderColour }); background(id); }
+  void sides(int id, double top, double right, double bottom, double left, int colour) { sided.put(id, new double[] { top, right, bottom, left, colour }); background(id); }
+  private void background(int id) {
     View v = views.get(id);
     if (v == null || v instanceof TextView && !(v instanceof EditText)) return;
-    if (bg == 0 && border == 0) { v.setBackground(null); return; }
+    double[] p = painted.get(id), s = sided.get(id);
+    int bg = p == null ? 0 : (int) (long) p[0];
+    double border = p == null ? 0 : p[2];
+    boolean sides = s != null && (s[0] > 0 || s[1] > 0 || s[2] > 0 || s[3] > 0);
+    if (bg == 0 && border == 0 && !sides) { v.setBackground(null); return; }
     GradientDrawable d = new GradientDrawable();
     d.setColor(bg);
-    d.setCornerRadius((float) (radius * density));
-    if (border > 0) d.setStroke(Math.max(1, px(border)), borderColour);
-    v.setBackground(d);
+    if (p != null) d.setCornerRadius((float) (p[1] * density));
+    if (border > 0) d.setStroke(Math.max(1, px(border)), (int) (long) p[3]);
+    if (!sides) { v.setBackground(d); return; }
+    v.setBackground(new Sides(d, new int[] { side(s[0]), side(s[1]), side(s[2]), side(s[3]) }, (int) (long) s[4]));
   }
+  // The box's paint, under the whole box as a browser's background is, and
+  // the sides' borders over its edges.
+  static final class Sides extends android.graphics.drawable.Drawable {
+    private final GradientDrawable under; private final int[] w; private final Paint brush = new Paint();
+    Sides(GradientDrawable under, int[] w, int colour) { this.under = under; this.w = w; brush.setColor(colour); }
+    @Override public void draw(Canvas c) {
+      android.graphics.Rect b = getBounds();
+      under.setBounds(b); under.draw(c);
+      if (w[0] > 0) c.drawRect(b.left, b.top, b.right, b.top + w[0], brush);
+      if (w[1] > 0) c.drawRect(b.right - w[1], b.top, b.right, b.bottom, brush);
+      if (w[2] > 0) c.drawRect(b.left, b.bottom - w[2], b.right, b.bottom, brush);
+      if (w[3] > 0) c.drawRect(b.left, b.top, b.left + w[3], b.bottom, brush);
+    }
+    @Override public void setAlpha(int a) {}
+    @Override public void setColorFilter(android.graphics.ColorFilter f) {}
+    @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+  }
+  private int side(double w) { return w > 0 ? Math.max(1, px(w)) : 0; }
 
   private final TextPaint paint = new TextPaint(TextPaint.ANTI_ALIAS_FLAG);
 
