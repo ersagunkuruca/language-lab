@@ -557,7 +557,7 @@ switch (command) {
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-android`;
     const { lowered, root } = nativeLowered(main, false, true);
     let c: string;
-    try { c = emitC(lowered, { main: root, page: "api" }).c; } catch (e) { fail((e as Error).message); }
+    try { c = emitC(lowered, { main: root, page: "ui" }).c; } catch (e) { fail((e as Error).message); }
     for (const [file, x] of Object.entries(nativeAppFolder(p.title, c))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);

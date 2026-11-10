@@ -79,3 +79,29 @@ test("dice in C rolls from the world's randomness and lands its hundred throws a
   assert.match(t[1], /Rolls: 0</);
   assert.match(t[2], /Rolls: 100;/);
 });
+
+// On a phone's screen (C199d): c-layout.ts lays dice out from its own
+// style sheet. What doesn't hang on how wide texts are is where Chromium
+// puts it, 360 wide (measured by hand with Playwright): the chart's box,
+// its rows, each bar's track, fill and fair mark; in dark, the sheet's
+// dark colours.
+test("dice laid out in C on a 360-wide screen puts the chart's bars where Chromium does (C199d)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/dice"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const exe = compile(emitC(l, { main, page: "ui-headless" }).c);
+  const r = spawnSync(exe, ["width:360", "click:hundred"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const after = r.stdout.toString().split("\x1e\n")[1].split("\n").map((s) => s.trim());
+  assert.ok(after.includes("div 16 292 328 329 bg FFFFFFFF radius 14 border 1"), after.join("\n"));
+  assert.ok(after.includes("h1 16 32 328 42"));
+  assert.ok(after.includes("p 16 255 328 21"));
+  const fills = after.filter((s) => s.includes("bg FF2F9E6A")), marks = after.filter((s) => s.includes("bg FFD0453A"));
+  // From the page: widths 12 9 21 …, and lefts 8.33 16.67 25 ….
+  assert.deepEqual(fills.map((s) => s.split(" ").slice(1, 5).map(Number)), [12, 9, 21, 24, 42, 51, 57, 21, 42, 9, 12].map((w, j) => [77, 314.5 + 27 * j, w, 14]));
+  assert.deepEqual(marks.map((s) => s.split(" ").slice(1, 5).map((x) => Math.round(Number(x) * 100) / 100)), [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1].map((k, j) => [Math.round((77 + 100 * k / 12) * 100) / 100, 311.5 + 27 * j, 2, 20]));
+  const dark = spawnSync(exe, ["dark"]).stdout.toString();
+  assert.match(dark, /^page 360 [\d.]+ bg FF161615\n/);
+  assert.match(dark, /button [\d. ]+ bg FF7AA2FF radius 10/);
+});

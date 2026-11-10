@@ -55,6 +55,7 @@ import { TICKET_V } from "../../ters/src/lang/std.ts";
 // that calls it.
 
 import { FDLIBM_C } from "./c-math.ts";
+import { LAYOUT_C, UI_HEADLESS_C } from "./c-layout.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
@@ -425,8 +426,10 @@ int main(int argc, char **argv) {
 
 // `page` (C199b, NATIVE-APPS.md): main gives Html, mounted on a view host
 // (`ters_page_start`, `ters_page_event`) instead of run as a program;
-// "headless" adds HEADLESS_C's host and main.
-export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm"; hosts?: { ops: HostOps; c?: string }; page?: "api" | "headless" } = {}): CProgram {
+// "headless" adds HEADLESS_C's host and main; "ui" adds c-layout.ts's
+// style and layout over a ters_ui (C199d), and "ui-headless" a ui that
+// prints where each box went.
+export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm"; hosts?: { ops: HostOps; c?: string }; page?: "api" | "headless" | "ui" | "ui-headless" } = {}): CProgram {
   const LIBRARY = opts.math === "fdlibm" ? FDLIBM : PLATFORM;
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
@@ -777,7 +780,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   }
 
   const world = [...rts].some((x) => x.startsWith("world."));
-  const entry = opts.main === undefined ? "" : opts.page ? pageC(opts.main, opts.page === "headless") : program(opts.main);
+  const entry = opts.main === undefined ? "" : opts.page ? pageC(opts.main, opts.page) : program(opts.main);
   const TL = threads ? "_Thread_local " : "";
   const stops = text.some((t) => t.includes("lab_stop(")) || rts.has("world.stopWith") || !!opts.harness;
   const fuelled = int32Used.size > 0 || text.some((t) => t.includes("lab_fuel"));
@@ -880,7 +883,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // every text, attribute and part runs again and the host is told only
   // what changed; a part's new Html is laid over what it drew, element by
   // element, where the tags and attributes are the same.
-  function pageC(def: string, headless: boolean): string {
+  function pageC(def: string, mode: "api" | "headless" | "ui" | "ui-headless"): string {
     const i = kept.find((j) => funcs[j].def === def && !funcs[j].inner);
     if (i === undefined) {
       const j = funcs.findIndex((g) => g.def === def && !g.inner);
@@ -913,6 +916,8 @@ typedef struct ters_host {
   void (*gone)(void *ctx, void *node);
 } ters_host;
 static ters_host *ters_h;
+// Run after the page changed (c-layout.ts lays it out again).
+static void (*ters_after)(void);
 // What was drawn: an element (its tag, attributes and children), a text,
 // or a part (what it drew). A property keeps what it showed (null: none);
 // an event keeps its handler's number.
@@ -1083,6 +1088,7 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
   ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   ters_refresh(ters_root);
   ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  if (ters_after) ters_after();
   return ok;
 }
 // Whether what the page shows read the clock, so it runs again each frame.
@@ -1094,9 +1100,10 @@ int ters_page_frame(void) {
   ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   ters_refresh(ters_root);
   ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  if (ters_after) ters_after();
   return ters_clock;
 }
-${headless ? HEADLESS_C : ""}`;
+${mode === "headless" ? HEADLESS_C : mode === "ui" ? LAYOUT_C : mode === "ui-headless" ? LAYOUT_C + UI_HEADLESS_C : ""}`;
   }
 
   function program(def: string): string {
