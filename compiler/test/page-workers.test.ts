@@ -91,15 +91,15 @@ test("a map in a page's handler goes to the page's workers and draws the picture
 // A page whose handler keeps the numbers below b that take over 100 steps
 // to reach 1 (collatz's), b 9000 the first time and 300000 after: the
 // first fits the handler's million steps, the second doesn't.
-function collatzPage(name = "collatz-page", count = '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), (i) => 100 < ‹steps to one›(i, 0)))', first = 9000): string {
+function collatzPage(name = "collatz-page", count = '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), (i) => 100 < ‹steps to one›(i, 0)))', first = 9000, example = "collatz", second = 300000): string {
   const program = join(dir, name);
-  cpSync(join(import.meta.dirname, "../../ters/examples/collatz"), program, { recursive: true });
+  cpSync(join(import.meta.dirname, `../../ters/examples/${example}`), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
   s.define("main", "function", []);
   s.step("main", "said", 'cell("")');
   const hole = () => /□#(\w+)/.exec(s.view("main"))![1];
-  s.replace(hole(), `tag("main", [button("Count", (event) => ((b) => ${count})(if length(read(said)) = 0 then ${first} else 300000)), p([text(() => read(said))])])`);
+  s.replace(hole(), `tag("main", [button("Count", (event) => ((b) => ${count})(if length(read(said)) = 0 then ${first} else ${second})), p([text(() => read(said))])])`);
   s.save();
   const out = join(dir, `${name}.html`);
   const r = spawnSync(process.execPath, [lab, "build-web", program, "-o", out], { encoding: "utf8" });
@@ -135,4 +135,12 @@ test("a fold in a function a page's handler calls goes to the workers too: the f
   assert.equal(alone.first, "1000: 59431, most 178");
   assert.deepEqual(shared, { ...alone, sent: shared.sent });
   assert.ok(shared.sent > 0, "the numbers went to the workers");
+});
+
+test("a count and an all of a search in a page's handler go to the workers, by its first two choices", async () => {
+  const [alone, shared] = await twice(collatzPage("queens-page", 'write(said, show(b) ++ ": " ++ show(count(() => queens(b))) ++ " " ++ show(length(all(() => queens(b)))))', 6, "queens-count", 8));
+  assert.equal(alone.first, "6: 4 4");
+  assert.equal(alone.second, "8: 92 92");
+  assert.deepEqual(shared, { ...alone, sent: shared.sent });
+  assert.ok(shared.sent > 0, "the pieces went to the workers");
 });

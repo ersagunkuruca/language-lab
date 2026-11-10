@@ -1076,7 +1076,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const js0 = bare ? moduleTags(ir, !!hosts || worklet !== undefined).js : emitCoreJs(ir).js;
   // A map on the page's workers (C61 c′): the functions by name, and the
   // page's own script, which each worker runs (core-page.ts).
-  const js = worlds.includes("mapAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
+  const js = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
   const code = codeFor(ir, js);
   return wrapped(page, [
     using("startCorePage", page),

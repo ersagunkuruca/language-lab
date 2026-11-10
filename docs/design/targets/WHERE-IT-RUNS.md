@@ -249,7 +249,16 @@ What this leaves, in order:
     of its own lowered as if it may wait (scalar.ts `func`'s `away`,
     `reachesShared`), so its map goes to the workers too. Called
     anywhere else, it is the one in turn.
-  - **Not covered.** Searches stay in turn.
+  - **Searches (c′4).** A count or an all of a search there goes the
+    same way, split as on Node (`searchAway`, as `searchPure`): the first
+    piece here says how many items the first two choices have, and the
+    other pieces go to the workers. The pieces spend more steps together
+    than the search in turn, since each goes through the choices before
+    its own again. Where they run out, the search runs in turn from the
+    steps it was given, to say whether it does. queens-count in a page's
+    handler, in Chromium: 10 queens 133 to 46 ms, 11 queens 715 to 313 ms
+    on 4 cores.
+  - **Not covered.** A first of a search stays in turn.
 - **(d′) The GPU for an Int map,** with the trial of finding 4. The
   example: collatz's `keep` (its walk is in Int, a lot of work an item; a
   number whose walk passes 32 bits gives up there and is tested again on
