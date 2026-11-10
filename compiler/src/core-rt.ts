@@ -202,7 +202,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   };
   // A fold of a list adding an Int for each item, or keeping the largest
   // or the smallest, after the empty list's z (C42).
-  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add"));
+  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, join?: unknown) => (fuel === Infinity || fuel === undefined ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join as (x: unknown) => unknown) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join as (x: unknown) => unknown));
   if (name === "choose.split") return chooseSplit as (...xs: unknown[]) => unknown;
   if (name === "split.hold") return splitHold;
   if (name === "split.give") return splitGive as (...xs: unknown[]) => unknown;

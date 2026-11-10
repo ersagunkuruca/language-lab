@@ -139,14 +139,14 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; until?: "all" | "any" | "first"; search?: unknown; how?: How }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; join?: unknown; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
-  if (m.search) { const c = dec(m.search); return (i) => answers(c, i + 1, m.how!); }
+  if (m.search) { const c = dec(m.search); return (i) => answers(c, piece(i + 1, m.ways ?? 1), m.how!); }
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
-  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items.slice(i * m.size!, (i + 1) * m.size!), f, m.fold!) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
+  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items.slice(i * m.size!, (i + 1) * m.size!), f, m.fold!, m.join === undefined ? undefined : dec(m.join) as Fn) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
 
 // The list of actions, and the list of their values in the same kind.
@@ -361,22 +361,24 @@ export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameK
 // the one it meets first, each run's Ints put together, then the runs',
 // then the empty list's Int z. Int addition and comparing are exact, so
 // the answer is the fold's.
-type FoldHow = "add" | "max" | "min";
-const both = (how: FoldHow) => (a: Int, b: Int): Int => (how === "add" ? add(a, b) : how === "max" ? (b > a ? b : a) : (b < a ? b : a));
-const together = (items: unknown[], f: Fn, how: FoldHow): Int => { const by = both(how); let s = f(items[0]) as Int; for (let i = 1; i < items.length; i++) s = by(s, f(items[i]) as Int); return s; };
-export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number): Int {
-  if (!canShare()) return foldInOrder(xs, f, z, how);
+// A record of Ints (C42d) is put together field by field by the compiled
+// function `join` (how "with"), each field's added or compared.
+type FoldHow = "add" | "max" | "min" | "with";
+const both = (how: FoldHow, join?: Fn) => (a: Int, b: Int): Int => (how === "with" ? (join as unknown as (x: Int, y: Int) => Int)(a, b) : how === "add" ? add(a, b) : how === "max" ? (b > a ? b : a) : (b < a ? b : a));
+const together = (items: unknown[], f: Fn, how: FoldHow, join?: Fn): Int => { const by = both(how, join); let s = f(items[0]) as Int; for (let i = 1; i < items.length; i++) s = by(s, f(items[i]) as Int); return s; };
+export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number, join?: Fn): Int {
+  if (!canShare()) return foldInOrder(xs, f, z, how, join);
   const items = itemsOf(xs).reverse();
   if (!items.length) return z;
   const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
-  const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how), () => {
-    const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
-    return es.includes(NO) ? NO : { f: g, items: es, size, fold: how };
+  const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how, join), () => {
+    const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
+    return es.includes(NO) ? NO : { f: g, items: es, size, fold: how, ...(j ? { join: j } : {}) };
   }, (f as Closure).code);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
-  return (runs as Int[]).reduce(both(how), z);
+  return (runs as Int[]).reduce(both(how, join), z);
 }
-export const foldInOrder = (xs: unknown, f: Fn, z: Int, how: FoldHow): Int => { const items = itemsOf(xs).reverse(); return items.length ? both(how)(z, together(items, f, how)) : z; };
+export const foldInOrder = (xs: unknown, f: Fn, z: Int, how: FoldHow, join?: Fn): Int => { const items = itemsOf(xs).reverse(); return items.length ? both(how, join)(z, together(items, f, how, join)) : z; };
 
 // all pass and any pass of a test that only computes (C43): a run's first
 // item that decides (fails the test for all, passes it for any), or -1.
@@ -413,47 +415,58 @@ export function firstPure(xs: unknown, f: Fn, site: number): unknown {
 }
 export const firstInOrder = (xs: unknown, f: Fn): unknown => { const items = itemsOf(xs), i = items.findIndex((x) => f(x)); return sameKind(xs, i < 0 ? [] : [items[i]]); };
 
-// A count of a search that only computes (C43): the search run once for
-// each alternative of the first choice it makes, the first here, which
-// says how many there are, and the others shared out. Each run keeps one
-// item of that choice (choose.split), so its answers are the ones the
-// whole search gives with that item, and their counts add up to its.
-let split = -1, seen = -1;
+// A count of a search that only computes (C43): the search run in
+// pieces, each keeping some items of its first two choices
+// (choose.split), so its answers are the ones the whole search gives with
+// those items, and their answers in order are the whole search's. The
+// first piece runs here and says how many items the first choice has, and
+// the second in it; the others are shared out (C43g deeper splits).
+// The items a piece keeps at its next choice, [lo, hi), and at the one
+// after; seen and seen2 how many the first two had.
+let split = -1, splitHi = -1, split2 = -1, split2Hi = -1, seen = -1, seen2 = -1;
 export function chooseSplit(l: unknown): unknown {
   if (split < 0) return l;
-  const items = itemsOf(l), j = split;
-  split = -1;
-  seen = items.length;
-  return sameKind(l, j < items.length ? [items[j]] : []);
+  const items = itemsOf(l), lo = split, hi = splitHi;
+  split = split2; splitHi = split2Hi; split2 = -1; split2Hi = -1;
+  if (seen < 0) seen = items.length; else seen2 = items.length;
+  return sameKind(l, items.slice(lo, hi));
 }
 // A search inside the one split: its choices whole, then the split as it was.
-export const splitHold = (): number => { const j = split; split = -1; return j; };
-export const splitGive = (j: unknown): void => { split = j as number; };
+export const splitHold = (): unknown => { const j = [split, splitHi]; split = -1; return j; };
+export const splitGive = (j: unknown): void => { [split, splitHi] = j as number[]; };
 // How a search's answers are counted, gathered (in an array), or its first
 // found (an array of it, or empty), given by core-rt.ts, which has FAIL.
 type How = "count" | "all" | "first";
 type Runs = Record<How, (search: unknown) => unknown>;
 let runs: Runs = { count: () => 0, all: () => [], first: () => [] };
 export const searchesBy = (r: Runs): void => { runs = r; };
-// The search's answers with item j of its first choice (all of them for
-// j < 0), the split of a search this one is inside kept for it.
-function answers(search: unknown, j: number, how: How): unknown {
-  const held = split;
-  split = j;
-  try { const v = runs[how](search); return how === "count" ? v : arrayOf(v as unknown[]); } finally { split = held; }
+// A piece: the first choice's items [a, b), the second's [c, d), or the
+// whole search (null); the split of a search this one is inside kept for it.
+type Piece = [number, number, number, number] | null;
+function answers(search: unknown, p: Piece, how: How): unknown {
+  const held = [split, splitHi, split2, split2Hi];
+  [split, splitHi, split2, split2Hi] = p ?? [-1, -1, -1, -1];
+  try { const v = runs[how](search); return how === "count" ? v : arrayOf(v as unknown[]); } finally { [split, splitHi, split2, split2Hi] = held; }
 }
+// Piece p of a search whose second choice is split m ways: the first
+// choice's item p / m, and the second's p mod m, the last of them taking
+// every item from there on.
+const piece = (p: number, m: number): Piece => { const i = Math.floor(p / m), j = p % m; return [i, i + 1, j, j === m - 1 ? Infinity : j + 1]; };
 // count's number, all's answers or first's (one or none), as an array.
 export function searchPure(search: unknown, site: number, how: How): unknown {
   const out = (v: unknown) => (how === "count" ? v : itemsOf(v));
-  if (!canShare()) return out(answers(search, -1, how));
-  const outer = seen;
-  let first: unknown, k: number;
-  seen = -1;
-  try { first = answers(search, 0, how); k = seen; } finally { seen = outer; }
-  if (k <= 1 || (how === "first" && decides(first))) return out(first);
-  const t0 = performance.now(), send = () => { const g = encode(search, names!); return g === NO ? NO : { search: g, how, ...(how === "first" ? { until: "first" as const } : {}) }; };
-  const rest = how === "first" ? sharedUntil(k - 1, (i) => answers(search, i + 1, how), send, (search as Closure).code) : shared(k - 1, (i) => answers(search, i + 1, how), send, (search as Closure).code);
-  perItem[site] = (performance.now() - t0) / (k - 1);
+  if (!canShare()) return out(answers(search, null, how));
+  const outer = [seen, seen2];
+  let first: unknown, k: number, m: number;
+  seen = -1; seen2 = -1;
+  try { first = answers(search, piece(0, 2), how); k = seen; m = seen2; } finally { [seen, seen2] = outer; }
+  // The second choice split as many ways as it had items in the first
+  // piece; with one or none, that piece already had all of them.
+  m = Math.max(1, m);
+  if (k <= 1 && m <= 1 || (how === "first" && decides(first))) return out(first);
+  const n = Math.max(1, k) * m - 1, t0 = performance.now(), send = () => { const g = encode(search, names!); return g === NO ? NO : { search: g, how, ways: m, ...(how === "first" ? { until: "first" as const } : {}) }; };
+  const rest = how === "first" ? sharedUntil(n, (i) => answers(search, piece(i + 1, m), how), send, (search as Closure).code) : shared(n, (i) => answers(search, piece(i + 1, m), how), send, (search as Closure).code);
+  perItem[site] = (performance.now() - t0) / n;
   if (how === "first") { const found = rest[rest.length - 1]; return found instanceof ArrayView && decides(found) ? itemsOf(found) : []; }
   return how === "all" ? [first, ...rest].flatMap((a) => itemsOf(a)) : rest.reduce((a: number, b) => a + (b as number), first as number);
 }
