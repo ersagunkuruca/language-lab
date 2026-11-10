@@ -35,7 +35,8 @@ export const FAIL = { fail: true }, OUT = { out: true };
 const searchRun = (search: unknown, each: (v: unknown) => void): void => { const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, (v: unknown) => { each(v); return FAIL; }); };
 const countEvery = (search: unknown): number => { let n = 0; searchRun(search, () => n++); return n; };
 const allEvery = (search: unknown): unknown[] => { const out: unknown[] = []; searchRun(search, (v) => out.push(v)); return out; };
-searchesBy({ count: countEvery, all: allEvery });
+const firstOf = (search: unknown): unknown[] => { let out: unknown[] = []; const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, (v: unknown) => { out = [v]; return true; }); return out; };
+searchesBy({ count: countEvery, all: allEvery, first: firstOf });
 
 const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
@@ -187,11 +188,17 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
   // A count whose search's first choice is shared out (C43), and that
   // choice, which keeps one item in each run of it.
-  if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, false) : countEvery(search));
+  if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, "count") : countEvery(search));
   // all's, an array or a list of the runtime's as its type says.
   if (name === "all.search") return (search: unknown, array: unknown, fuel: unknown, site: unknown) => {
-    const xs = (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, true) : allEvery(search)) as Value[];
+    const xs = (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, "all") : allEvery(search)) as Value[];
     return array ? arrayOf(xs) : toList(xs);
+  };
+  // first's: its answer, or FAIL for the default.
+  if (name === "first.search") return (search: unknown, fuel: unknown, site: unknown) => {
+    const xs = (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, "first") : firstOf(search)) as unknown[];
+    if (!xs.length) throw FAIL;
+    return xs[0];
   };
   if (name === "choose.split") return chooseSplit as (...xs: unknown[]) => unknown;
   if (name === "split.hold") return splitHold;

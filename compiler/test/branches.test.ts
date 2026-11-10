@@ -25,14 +25,14 @@ const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] ===
 
 // A module of a main written here, unbundled: it imports the runtime from
 // this checkout, as `ters compile` without esbuild does.
-function module(dir: string, make: (k: Lang) => Id): string {
+function module(dir: string, make: (k: Lang) => Id, shares = true): string {
   const k = new Lang(LIBRARY.code), main = make(k);
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const lowered = lowerCore(code, info, names, [main]);
   assert.equal(lowered.refused.get(main), undefined);
   const js = coreModule(lowered, "main", join(here, "../src/core-rt.ts"), join(here, "../../ters/src/lang/world.ts"));
-  assert.match(js, /R\.rt\("(together|map)\.pure"/);
+  if (shares) assert.match(js, /R\.rt\("(together|map)\.pure"/);
   const file = join(dir, `${names[main]}.mjs`);
   writeFileSync(file, js);
   return file;
@@ -193,15 +193,48 @@ test("a count split by its first choice counts a search inside it whole (C43)", 
 // the split falls on the choice after it (C43).
 test("a count split by its first choice leaves a search before that choice whole (C43)", async () => {
   const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
-    const main = k.def("main");
+    // The first inside may run long (pick recurses), so it is the
+    // compiled search here, not shared itself.
+    const main = k.def("main"), pick = k.def("pick");
+    k.define(pick, k.fn(["n"], (n) => k.if(k.call(INT_OPS.less, n, k.int(3)), k.call(pick, n), k.call(S.oneOf, k.list(k.int(3), k.int(4), k.int(5))))));
     k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
-      k.let("z", k.call(S.first, k.thunk(() => k.call(S.oneOf, k.list(k.int(3), k.int(4), k.int(5)))), k.thunk(() => k.int(0))), (z) =>
+      k.let("z", k.call(S.first, k.thunk(() => k.call(pick, k.int(5))), k.thunk(() => k.int(0))), (z) =>
         k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.call(INT_OPS.add, z, k.int(5)))), (x) =>
           k.call(B.add, k.call(INT_OPS.toNumber, x), k.call(B.mul, work(k, 300000, 1), k.lit(0)))))))))));
     return main;
   });
   assert.match(readFileSync(file, "utf8"), /R\.rt\("count\.search"[\s\S]*R\.rt\("split\.hold"/);
   for (const workers of ["3", "0"]) assert.deepEqual((await run([file], { TERS_WORKERS: workers })).slice(0, 1), ["8\n"], `${workers} workers`);
+});
+
+// first of a search split by its first choice: the answer under the
+// first item that has one, in order, wherever each ran (C43).
+test("a first split by its first choice gives the answer under the first item with one, wherever each ran (C43)", async () => {
+  const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.first, k.thunk(() =>
+      k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(12))), (x) =>
+        k.let("w", k.call(B.add, k.call(INT_OPS.toNumber, x), k.call(B.mul, work(k, 300000, 1), k.lit(0))), (w) =>
+          k.let("y", k.call(S.oneOf, k.list(k.lit(100), k.lit(200))), (y) =>
+            k.if(k.call(S.less, w, k.lit(7)), k.call(S.fail), k.call(B.add, w, y)))))), k.thunk(() => k.lit(-1)))))));
+    return main;
+  });
+  assert.match(readFileSync(file, "utf8"), /R\.rt\("first\.search"/);
+  for (const workers of ["3", "0"]) assert.deepEqual((await run([file], { TERS_WORKERS: workers })).slice(0, 1), ["107\n"], `${workers} workers`);
+});
+
+// A search of one answer or none has no choice to split: count and first
+// of it stay the compiled search's (C43).
+test("a count and a first of a search of one answer or none stay as compiled (C43)", async () => {
+  const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.text(
+      k.call(SHOW_ANY, k.call(S.count, k.thunk(() => k.call(INT_OPS.read, k.lit("12"))))), k.lit(" "),
+      k.call(SHOW_ANY, k.call(S.first, k.thunk(() => k.call(INT_OPS.read, k.lit("x"))), k.thunk(() => k.int(7))))))));
+    return main;
+  }, false);
+  assert.doesNotMatch(readFileSync(file, "utf8"), /\.search"/);
+  assert.deepEqual(await run([file], {}), ["1 7\n", "", 0]);
 });
 
 // all pass stops at the first item that fails: an abort after it isn't

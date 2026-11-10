@@ -115,15 +115,18 @@ export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...par
 // The calls of `count` and `all` a target may share out by the
 // alternatives of their search's first choice (C43): the search written in
 // place, doing nothing but compute and choose, as a map's function may.
-export function parallelCounts(code: Code, info: Info): Map<Id, "count" | "all"> {
-  const out = new Map<Id, "count" | "all">();
+// first stops at the first item with an answer, so as all pass's test its
+// search may abort, never run long.
+export function parallelCounts(code: Code, info: Info): Map<Id, "count" | "all" | "first"> {
+  const out = new Map<Id, "count" | "all" | "first">();
   for (const n of Object.values(code.nodes)) {
-    if (!isCall(n) || n.args.length !== 1) continue;
+    if (!isCall(n) || !n.args.length) continue;
     const f = code.nodes[n.fn], l = code.nodes[n.args[0]];
     const target = f?.kind === "ref" ? (f as NodeOf<"ref">).target : undefined;
-    if ((target !== S.count && target !== S.all) || l?.kind !== "lambda" || l.params.length) continue;
+    const kind = target === S.count ? "count" : target === S.all ? "all" : target === S.first ? "first" : undefined;
+    if (!kind || n.args.length !== (kind === "first" ? 2 : 1) || l?.kind !== "lambda" || l.params.length) continue;
     const own = ownEffects(code, info, l.body);
-    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && own.has(ABORT))) out.set(n.id, target === S.count ? "count" : "all");
+    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && (kind === "first" || own.has(ABORT)))) out.set(n.id, kind);
   }
   return out;
 }

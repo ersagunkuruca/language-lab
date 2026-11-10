@@ -764,7 +764,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
   const fibers = !!opts.handlers && !opts.host;
-  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, counts: Map<Id, "count" | "all"> | undefined;
+  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, counts: Map<Id, "count" | "all" | "first"> | undefined;
   const countsShared = () => (counts ??= parallelCounts(code, info));
   // A call's inputs already worked out, as locals (a map that may be shared, C42).
   const given = new Map<Id, SExpr[]>();
@@ -3178,11 +3178,23 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // A count of a search that only computes (C43): its first choice's
     // alternatives counted on worker threads, the search a closure the
     // runtime runs once for each (branches-rt.ts countPure).
+    // first's, its answer or none (FAIL), the default then given.
+    // Not a first of one solve (C195), whose plan takes only the first answer.
+    // Only a search with several answers, its closure taking the rest
+    // (a search of one answer or none has no choice to split).
+    const searchClosure = (): SExpr | null => { const c = expr(n.args[0], env, f, false); return c.k === "closure" && c.t.several ? c : null; };
+    if (opts.host && !fibers && kind === "first" && dflt && countsShared().get(n.id) === "first" && !soleSolve(search) && !soleCall(search)) {
+      const c = searchClosure();
+      if (c) {
+        const res = f.locals.push(t) - 1;
+        return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
+      }
+    }
     if (opts.host && !fibers && (kind === "count" || kind === "all") && countsShared().has(n.id)) {
       // all's answers as the list kind its type is: an array, or a list
       // the compiled code reads as it reads any of the runtime's.
-      const how: SExpr[] = kind === "all" ? [{ k: "bool", v: isArray(t) }] : [];
-      return { k: "rt", fn: `${kind}.search`, args: [expr(n.args[0], env, f, false), ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
+      const how: SExpr[] = kind === "all" ? [{ k: "bool", v: isArray(t) }] : [], c = searchClosure();
+      if (c) return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
     }
     if (target === S.first) { const only = soleSolve(search); if (only) firstOnly.add(only); }
     // A first of a call of a definition that is one such solve (relations'
