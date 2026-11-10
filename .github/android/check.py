@@ -53,6 +53,9 @@ for i, t in enumerate(taps):
         x, y, dx, dy = [int(v) for v in t[6:].split(",")]
         print(f"swipe from {x},{y} by {dx},{dy}")
         adb("shell", "input", "swipe", str(x), str(y), str(x + dx), str(y + dy), "400")
+        # What the texts say at once, while the page may still be moving.
+        soon = dump(f"soon{i}")
+        print("soon:", [l for l in lines(soon) if "TextView" in l and ("Showing" in l or "rest" in l)])
         time.sleep(3)
         after = dump(f"after{i}")
         d = list(difflib.unified_diff(lines(before), lines(after), lineterm="", n=0))
