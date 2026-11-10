@@ -76,12 +76,14 @@ static lab_int lab__int(int neg, const uint32_t *d, uint32_t n) {
   memcpy(b->d, d, 4 * (size_t)n);
   return (lab_int)(intptr_t)b;
 }
-static lab_int lab__int64(int64_t v) {
-  if (v >= lab__min && v <= lab__max) return LAB_SMALL(v);
+// Each Int operation is a small inline part for two small Ints, which a
+// loop compiles to a few machine instructions, and a call for the rest.
+static lab_int lab__int64_big(int64_t v) {
   uint64_t u = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
   uint32_t d[2] = { (uint32_t)u, (uint32_t)(u >> 32) };
   return lab__int(v < 0, d, 2);
 }
+static inline lab_int lab__int64(int64_t v) { return v >= lab__min && v <= lab__max ? LAB_SMALL(v) : lab__int64_big(v); }
 static uint32_t *lab__limbs(size_t n) { uint32_t *d = calloc(n ? n : 1, 4); if (!d) lab_oom(); return d; }
 static int lab__cmp(const uint32_t *a, uint32_t an, const uint32_t *b, uint32_t bn) {
   while (an && !a[an - 1]) an--;
@@ -287,21 +289,13 @@ static uint32_t lab__at(const uint8_t *b, uint32_t n, int64_t k) {
 static int64_t lab__clamp(lab_int x) { return LAB_IS_SMALL(x) ? LAB_VAL(x) : LAB_BIG(x)->neg ? INT64_MIN : INT64_MAX; }`;
 
 const FNS: Record<string, Fn> = {
-  "int.add": { uses: [], c: `static lab_int lab_int_add(lab_int a, lab_int b) { if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return lab__int64(LAB_VAL(a) + LAB_VAL(b)); return lab__addsub(a, b, 0); }` },
-  "int.sub": { uses: [], c: `static lab_int lab_int_sub(lab_int a, lab_int b) { if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return lab__int64(LAB_VAL(a) - LAB_VAL(b)); return lab__addsub(a, b, 1); }` },
-  "int.neg": { uses: [], c: `static lab_int lab_int_neg(lab_int a) { if (LAB_IS_SMALL(a)) return lab__int64(-LAB_VAL(a)); return lab__addsub(LAB_SMALL(0), a, 1); }` },
+  "int.add": { uses: [], c: `static inline lab_int lab_int_add(lab_int a, lab_int b) { if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return lab__int64(LAB_VAL(a) + LAB_VAL(b)); return lab__addsub(a, b, 0); }` },
+  "int.sub": { uses: [], c: `static inline lab_int lab_int_sub(lab_int a, lab_int b) { if (LAB_IS_SMALL(a) && LAB_IS_SMALL(b)) return lab__int64(LAB_VAL(a) - LAB_VAL(b)); return lab__addsub(a, b, 1); }` },
+  "int.neg": { uses: [], c: `static inline lab_int lab_int_neg(lab_int a) { if (LAB_IS_SMALL(a)) return lab__int64(-LAB_VAL(a)); return lab__addsub(LAB_SMALL(0), a, 1); }` },
   "int.abs": { uses: ["int.neg"], c: `static lab_int lab_int_abs(lab_int a) { return (LAB_IS_SMALL(a) ? LAB_VAL(a) < 0 : LAB_BIG(a)->neg) ? lab_int_neg(a) : a; }` },
   "int.mul": {
     uses: [],
-    c: `static lab_int lab_int_mul(lab_int x, lab_int y) {
-  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) {
-    int64_t a = LAB_VAL(x), b = LAB_VAL(y), r;
-#if defined(__GNUC__) || defined(__clang__)
-    if (!__builtin_mul_overflow(a, b, &r)) return lab__int64(r);
-#else
-    if (a > -2147483648LL && a < 2147483648LL && b > -2147483648LL && b < 2147483648LL) return lab__int64(a * b);
-#endif
-  }
+    c: `static lab_int lab__mul_big(lab_int x, lab_int y) {
   lab__mag a, b;
   lab__mag_of(x, &a); lab__mag_of(y, &b);
   uint32_t *r = lab__limbs(a.n + b.n);
@@ -310,26 +304,38 @@ const FNS: Record<string, Fn> = {
   free(r);
   lab_int_drop(x); lab_int_drop(y);
   return out;
+}
+static inline lab_int lab_int_mul(lab_int x, lab_int y) {
+  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) {
+    int64_t a = LAB_VAL(x), b = LAB_VAL(y), r;
+#if defined(__GNUC__) || defined(__clang__)
+    if (!__builtin_mul_overflow(a, b, &r)) return lab__int64(r);
+#else
+    if (a > -2147483648LL && a < 2147483648LL && b > -2147483648LL && b < 2147483648LL) return lab__int64(a * b);
+#endif
+  }
+  return lab__mul_big(x, y);
 }` },
   "int.less": {
     uses: [],
-    c: `static int32_t lab_int_less(lab_int x, lab_int y) {
-  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) return LAB_VAL(x) < LAB_VAL(y);
+    c: `static int32_t lab__less_big(lab_int x, lab_int y) {
   lab__mag a, b;
   lab__mag_of(x, &a); lab__mag_of(y, &b);
   int r = a.neg != b.neg ? a.neg : a.neg ? lab__cmp(b.d, b.n, a.d, a.n) < 0 : lab__cmp(a.d, a.n, b.d, b.n) < 0;
   lab_int_drop(x); lab_int_drop(y);
   return r;
-}` },
+}
+static inline int32_t lab_int_less(lab_int x, lab_int y) { return LAB_IS_SMALL(x) && LAB_IS_SMALL(y) ? LAB_VAL(x) < LAB_VAL(y) : lab__less_big(x, y); }` },
   "int.equal": {
     uses: [],
-    c: `static int32_t lab_int_equal(lab_int x, lab_int y) {
+    c: `static int32_t lab__equal_big(lab_int x, lab_int y) {
   if (LAB_IS_SMALL(x) || LAB_IS_SMALL(y)) { int r = x == y; lab_int_drop(x); lab_int_drop(y); return r; }
   lab_big *a = LAB_BIG(x), *b = LAB_BIG(y);
   int r = a->neg == b->neg && lab__cmp(a->d, a->n, b->d, b->n) == 0;
   lab_int_drop(x); lab_int_drop(y);
   return r;
-}` },
+}
+static inline int32_t lab_int_equal(lab_int x, lab_int y) { return LAB_IS_SMALL(x) && LAB_IS_SMALL(y) ? x == y : lab__equal_big(x, y); }` },
   // The greatest common divisor, at least 0 (gcd(0, 0) is 0): Euclid's
   // algorithm (textbook), on int64s once both are small. For std.ts's
   // lowest terms, which the lowering writes with this and int.exact.
@@ -340,8 +346,7 @@ const FNS: Record<string, Fn> = {
   // negative, as BigInt's (int.ts bitAnd, C150): on the words when both
   // are small, else limb by limb, each turned to two's complement
   // (~m + 1) as it is read, and back.
-  "int.bits": { uses: [], c: `static lab_int lab__int_bits(lab_int x, lab_int y, int op) {
-  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y); return lab__int64(op == 0 ? (a & b) : op == 1 ? (a | b) : (a ^ b)); }
+  "int.bits": { uses: [], c: `static lab_int lab__bits_big(lab_int x, lab_int y, int op) {
   lab__mag a, b;
   lab__mag_of(x, &a); lab__mag_of(y, &b);
   uint32_t n = (a.n > b.n ? a.n : b.n) + 1, *r = lab__limbs(n);
@@ -359,10 +364,14 @@ const FNS: Record<string, Fn> = {
   free(r);
   lab_int_drop(x); lab_int_drop(y);
   return out;
+}
+static inline lab_int lab__int_bits(lab_int x, lab_int y, int op) {
+  if (LAB_IS_SMALL(x) && LAB_IS_SMALL(y)) { int64_t a = LAB_VAL(x), b = LAB_VAL(y); return LAB_SMALL(op == 0 ? (a & b) : op == 1 ? (a | b) : (a ^ b)); }
+  return lab__bits_big(x, y, op);
 }` },
-  "int.bitAnd": { uses: ["int.bits"], c: `static lab_int lab_int_bitAnd(lab_int a, lab_int b) { return lab__int_bits(a, b, 0); }` },
-  "int.bitOr": { uses: ["int.bits"], c: `static lab_int lab_int_bitOr(lab_int a, lab_int b) { return lab__int_bits(a, b, 1); }` },
-  "int.bitXor": { uses: ["int.bits"], c: `static lab_int lab_int_bitXor(lab_int a, lab_int b) { return lab__int_bits(a, b, 2); }` },
+  "int.bitAnd": { uses: ["int.bits"], c: `static inline lab_int lab_int_bitAnd(lab_int a, lab_int b) { return lab__int_bits(a, b, 0); }` },
+  "int.bitOr": { uses: ["int.bits"], c: `static inline lab_int lab_int_bitOr(lab_int a, lab_int b) { return lab__int_bits(a, b, 1); }` },
+  "int.bitXor": { uses: ["int.bits"], c: `static inline lab_int lab_int_bitXor(lab_int a, lab_int b) { return lab__int_bits(a, b, 2); }` },
   // A 32-bit machine word (C150e, machine-words.ts) held in an int32_t,
   // read unsigned: as an Int, from an Int known to fit, and shifted down
   // by an Int n (up when n is negative), kept to 32 bits.
@@ -397,7 +406,7 @@ const FNS: Record<string, Fn> = {
   // 2ⁿ (or · 2⁻ⁿ); past a's last limb only its sign is left.
   "int.shiftDown": {
     uses: ["int.quotient", "int.power", "int.mul"],
-    c: `static lab_int lab_int_shiftDown(lab_int a, lab_int n) {
+    c: `static lab_int lab__shift_big(lab_int a, lab_int n) {
   int neg = LAB_IS_SMALL(a) ? LAB_VAL(a) < 0 : LAB_BIG(a)->neg;
   if (!LAB_IS_SMALL(n)) { if (LAB_BIG(n)->neg) lab_oom(); lab_int_drop(a); lab_int_drop(n); return LAB_SMALL(neg ? -1 : 0); }
   int64_t k = LAB_VAL(n);
@@ -405,7 +414,8 @@ const FNS: Record<string, Fn> = {
   if (LAB_IS_SMALL(a)) return lab__int64(LAB_VAL(a) >> (k < 63 ? k : 63));
   if ((uint64_t)k > 32 * (uint64_t)LAB_BIG(a)->n) { lab_int_drop(a); return LAB_SMALL(neg ? -1 : 0); }
   return lab_int_quotient(a, lab_int_power(LAB_SMALL(2), n));
-}`,
+}
+static inline lab_int lab_int_shiftDown(lab_int a, lab_int n) { return LAB_IS_SMALL(a) && LAB_IS_SMALL(n) && LAB_VAL(n) >= 0 ? LAB_SMALL(LAB_VAL(a) >> (LAB_VAL(n) < 63 ? LAB_VAL(n) : 63)) : lab__shift_big(a, n); }`,
   },
   "int.quotient": { uses: [], c: `static lab_int lab_int_quotient(lab_int x, lab_int y) { lab_int q; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, &q, 0); lab_int_drop(x); lab_int_drop(y); return q; }` },
   "int.remainder": { uses: [], c: `static lab_int lab_int_remainder(lab_int x, lab_int y) { lab_int r; if (y == LAB_SMALL(0)) { lab_int_drop(x); lab_st = 1; return LAB_SMALL(0); } lab__floordiv(x, y, 0, &r); lab_int_drop(x); lab_int_drop(y); return r; }` },
