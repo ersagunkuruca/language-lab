@@ -199,3 +199,26 @@ test("compass's and bounce's pictures drawn in C where Chromium draws them (C199
   assert.match(b[1].paint, /^fill 1FE4572E stroke FFE4572E width 0.993333 dash 2.98 2.98$/);
   assert.ok(Math.abs(b[1].box[0] - 58.88) < 0.01 && Math.abs(b[1].box[2] - 55.07) < 0.01, String(b[1].box));
 });
+
+// A finger on a picture (C199f): the screen gives the point in the
+// picture's box, and C finds the shape under it (here a free point of
+// compass, by its fill) and runs its handlers and the picture's, with the
+// point in the picture's units. Dragging the point 20 px moves it 20 px,
+// and the points built on it follow.
+test("dragging a point of compass's picture in C moves it under the finger (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/compass"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const exe = compile(emitC(l, { main, page: "ui-headless" }).c);
+  const points = (page: string) => page.split("\n").filter((s) => s.includes("stroke FF6C4AB6")).map((s) => s.trim().split(" ").slice(1, 3).map(Number));
+  const before = points(spawnSync(exe, ["width:360"]).stdout.toString().split("\x1e\n")[0]);
+  // The first free point's centre, on the page.
+  const [x, y] = [before[0][0] + 4.1, before[0][1] + 4.1];
+  const r = spawnSync(exe, ["width:360", `pointer:down:${x},${y}`, `pointer:move:${x + 10},${y}`, `pointer:move:${x + 20},${y}`, `pointer:up:${x + 20},${y}`]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const after = points(r.stdout.toString().split("\x1e\n")[4]);
+  assert.ok(Math.abs(after[0][0] - before[0][0] - 20) < 0.01 && after[0][1] === before[0][1], `${before[0]} to ${after[0]}`);
+  assert.deepEqual(after[1], before[1]);
+  assert.ok(after[2][0] > before[2][0] + 5, "the built point follows");
+});
