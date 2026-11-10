@@ -543,7 +543,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`)])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -692,6 +692,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   // The functions whose two calls of themselves go on the threads (C61e3).
   const boths = new Set<number>();
+  // `array of` a table's keys (C58j): [table, entries list, array] each.
+  const keyArrays: [number, number, number][] = [];
   // Each map on threads, by its array types and function type (parC).
   // A keep (C202) is a map whose function's answers say which items stay.
   // all pass and any pass (C202b), whose answer is the first deciding test's;
@@ -1591,6 +1593,20 @@ int main(int argc, char **argv) {
           // `array of` a range (C207b): the array filled with 0 to n − 1
           // straight away, no list made to be copied in and freed.
           const ofRange = ARRAY_FN.exec(e.fn), r0 = e.args[0];
+          // `array of` a table's keys (`keys of`, C58j): the array filled
+          // from its slots, no list made to be copied in and freed (swarm's
+          // every tick, a fifth of its native run).
+          const ofKeys = ofRange?.[1] === "of" && r0?.k === "rt" ? TABLE_FN.exec(r0.fn) : null;
+          if (ofKeys?.[1] === "entries" && ofKeys[3] !== undefined && r0?.k === "rt") {
+            const t = lowered.tables[Number(ofKeys[2])], a = lowered.arrays[Number(ofRange![2])];
+            const sameKey = a.item === t.keyT || (isRecord(a.item) && isRecord(t.keyT) && a.item.key === t.keyT.key);
+            if (!t.set && keyList(t, t.entries[Number(ofKeys[3])]) && sameKey) {
+              arrayFns.add(e.fn).add(r0.fn);
+              const at: [number, number, number] = [t.index, Number(ofKeys[3]), a.index];
+              if (!keyArrays.some((x) => x.join() === at.join())) keyArrays.push(at);
+              return stated(`lab__keys_t${at[0]}_e${at[1]}_a${at[2]}(${args(r0.args, pre, d, after).join(", ")})`, a, pre, d);
+            }
+          }
           if (ofRange?.[1] === "of" && r0?.k === "rt" && (r0.fn === "int.range" && lowered.arrays[Number(ofRange[2])].item === "int" || r0.fn === "number.range" && lowered.arrays[Number(ofRange[2])].item === "f64")) {
             const fn = `array.${r0.fn === "int.range" ? "range" : "rangeF"}.a${ofRange[2]}`;
             arrayFns.add(fn);
@@ -2322,6 +2338,27 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   free(ix);
   lab_drop(c);
   return acc;
+}`);
+    }
+    // `array of` its keys (C58j): sorted as the entries are, straight into
+    // the array's buffer.
+    for (const [, j, ai] of keyArrays.filter(([x]) => x === i)) {
+      const a = lowered.arrays[ai], B = aname.get(a.key)!.buf;
+      const wr = (x: string) => (a.item === "int" ? `lab__wr_a${ai}(b, k, ${x});` : `b->it[k] = ${x};`);
+      out.push(`static lab_cell *lab__keys_t${i}_e${j}_a${ai}(lab_cell *c) {
+  lab__reroot_t${i}((${T} *)c);
+  ${S} *t = ((${T} *)c)->cur;
+  uint32_t *ix = malloc((t->n ? t->n : 1) * sizeof(uint32_t)), n = 0;
+  if (!ix) lab_oom();
+  for (uint32_t j = 0; j < t->cap; j++) if (t->st[j] == 1) ix[n++] = j;
+  lab__sort_t${i} = t;
+  ${int ? `if (!lab__isort_t${i}(t, ix, n)) ` : ""}qsort(ix, n, sizeof(uint32_t), lab__cmp_t${i});
+  ${B} *b = lab__buf_a${ai}(n, 0);
+  for (uint32_t j = 0, k = b->lo; j < n; j++, k++) { ${wr(dupK("t->ks[ix[j]]"))} }
+  lab_cell *r = lab__view_a${ai}((lab_cell *)b, b->lo, n);
+  free(ix);
+  lab_drop(c);
+  return r;
 }`);
     }
     return out;
