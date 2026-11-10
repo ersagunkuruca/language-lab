@@ -922,7 +922,10 @@ static void (*ters_after)(void);
 // or a part (what it drew). A property keeps what it showed (null: none);
 // an event keeps its handler's number.
 typedef struct ters_attr { int kind; lab_cell *name, *f, *shown; int handler; } ters_attr;
-typedef struct ters_m { int kind; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part; } ters_m;
+typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part; } ters_m;
+// Whether what is mounted now is inside an svg element: a part there is an
+// SVG group, as html.ts makes it, not a lab-part.
+static int ters_svg;
 static lab_cell **ters_handlers;
 static int ters_nh, ters_ch;
 static ters_m *ters_root;
@@ -986,16 +989,24 @@ static ters_m *ters_mount(lab_cell *h) {
   m->kind = h->tag;
   if (h->tag == ${el}) {
     m->tag = ${field(H, el, 0, "h")}; lab_dup(m->tag);
+    int was = ters_svg;
+    if (LAB_TN(m->tag) == 3 && !memcmp(LAB_TB(m->tag), "svg", 3)) ters_svg = 1;
+    m->svg = ters_svg;
     m->view = ters_h->element(ters_h->ctx, (const char *)LAB_TB(m->tag), LAB_TN(m->tag));
     ters_fill(m, h);
+    ters_svg = was;
   } else if (h->tag == ${tx}) {
     m->f = ${field(H, tx, 0, "h")}; lab_dup(m->f);
     m->view = ters_h->text(ters_h->ctx, "", 0);
     ters_text(m);
   } else {
     m->f = ${field(H, pt, 0, "h")}; lab_dup(m->f);
-    m->view = ters_h->element(ters_h->ctx, "lab-part", 8);
-    ters_h->set_attribute(ters_h->ctx, m->view, "style", 5, "display: contents", 17);
+    m->svg = ters_svg;
+    if (m->svg) m->view = ters_h->element(ters_h->ctx, "g", 1);
+    else {
+      m->view = ters_h->element(ters_h->ctx, "lab-part", 8);
+      ters_h->set_attribute(ters_h->ctx, m->view, "style", 5, "display: contents", 17);
+    }
     ters_part(m);
   }
   return m;
@@ -1051,7 +1062,7 @@ static void ters_part(ters_m *m) {
   lab_cell *h = ${call(PF, "m->f")};
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); return; }
   if (m->part && ters_fits(m->part, h)) ters_lay(m->part, h);
-  else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); m->part = ters_mount(h); ters_h->append(ters_h->ctx, m->view, m->part->view); }
+  else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
   lab_drop(h);
 }
 // Everything shown, run again.
