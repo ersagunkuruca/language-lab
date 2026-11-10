@@ -93,6 +93,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C201 | Int arithmetic in compiled JavaScript as quick as Float64's while the numbers are small: shifts and bit operations went through BigInt (int.ts big/norm), a Collatz walk in bits about 10 times slower than the same walk in Float64 (Language lane, 2026-11-10). C201a done (DONE.md): shiftDown, bitAnd, bitOr and bitXor of small Ints are JavaScript's 32-bit operations. Example: ters/examples/collatz written with bit operations (shiftDown and bitAnd on Int) compiled runs within 1.5 times the Float64 walk. Left: that example | Language lane 2026-11-10 | P2 | S | a done |
 | C200 | tumble's lists stored as the costs choose (arrays: its board read by position), where they are kept as written today: a Cell of the program's lists (a lane's `queue`, `swaps`, its Board) is made on one side and read by the page on the other, and rep-split.ts refuses a Cell holding lists (a cell can't be converted where it is read). A cell made on the stored side could convert at each `read` and `write` on the other, as a field of a stored type converts. Measure first: tumble's boards are 8 by 8, so the gain may be small. Example: `ters compile examples/tumble` choosing `array of List` beside main's lists, the same page | C196 (its last refusal, 2026-11-09) | P3 | M | |
 
 ### Speed of compiled code
