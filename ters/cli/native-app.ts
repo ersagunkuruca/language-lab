@@ -154,6 +154,9 @@ static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
   (*env)->ReleaseStringChars(env, s, u);
   *out = b; *n = k;
 }
+// A finger on a picture (C199f), in dp from its top left: kind 0 down, 1
+// move, 2 up, 3 cancelled. Whether the page listened.
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePointer(JNIEnv *env, jobject self, jint id, jint kind, jdouble x, jdouble y) { (void)self; ters_j = env; return ters_ui_pointer(ters_view_of(id), kind, x, y); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeClock(JNIEnv *env, jobject self) { (void)env; (void)self; return ters_page_clock(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeFrame(JNIEnv *env, jobject self) { (void)self; ters_j = env; return ters_page_frame(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, jobject self, jint h, jstring value, jstring key, jdouble x, jdouble y, jdouble seconds) {
@@ -173,7 +176,6 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, 
 const ACTIVITY = `package ${PACKAGE};
 
 import android.app.Activity;
-import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.DashPathEffect;
@@ -192,6 +194,7 @@ import android.util.TypedValue;
 import android.view.Choreographer;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -211,6 +214,7 @@ public class MainActivity extends Activity {
   native int nativeEvent(int handler, String value, String key, double x, double y, double seconds);
   // Whether what the page shows read the clock, and a frame that shows it
   // again (whether it still reads it).
+  native int nativePointer(int picture, int kind, double x, double y);
   native int nativeClock();
   native int nativeFrame();
 
@@ -293,7 +297,9 @@ public class MainActivity extends Activity {
       e.setIncludeFontPadding(false);
       v = e;
     } else if (tag.equals("svg")) {
-      v = new Picture(this, density);
+      Picture p = new Picture(this, density);
+      p.id = next;
+      v = p;
     } else {
       FrameLayout f = new FrameLayout(this);
       f.setClipChildren(false);
@@ -391,7 +397,20 @@ public class MainActivity extends Activity {
     double[] ops = new double[0];
     private final float density;
     private final Paint brush = new Paint(Paint.ANTI_ALIAS_FLAG);
-    Picture(Context c, float density) { super(c); this.density = density; setWillNotDraw(false); }
+    int id;
+    private final MainActivity page;
+    Picture(MainActivity c, float density) { super(c); page = c; this.density = density; setWillNotDraw(false); }
+    // A finger on the picture goes to the page, which finds the shape under
+    // it; while the page follows it, the page doesn't scroll.
+    @Override public boolean onTouchEvent(MotionEvent e) {
+      int a = e.getActionMasked();
+      int kind = a == MotionEvent.ACTION_DOWN ? 0 : a == MotionEvent.ACTION_MOVE ? 1 : a == MotionEvent.ACTION_UP ? 2 : a == MotionEvent.ACTION_CANCEL ? 3 : -1;
+      if (kind < 0) return true;
+      int heard = page.nativePointer(id, kind, e.getX() / density, e.getY() / density);
+      page.tick();
+      if (kind == 0) { if (heard == 0) return false; getParent().requestDisallowInterceptTouchEvent(true); }
+      return true;
+    }
     private float f(double x) { return (float) (x * density); }
     @Override protected void onDraw(Canvas c) {
       super.onDraw(c);
@@ -460,9 +479,32 @@ public class MainActivity extends Activity {
           return true;
         });
         break;
+      case "pointerdown": case "pointermove": case "pointerup": case "pointercancel": case "pointerleave":
+        // A picture finds the shape under the finger itself (Picture).
+        if (!(v instanceof Picture)) pointers(v).put(event, handler);
+        break;
       case "frame": frames(v, handler); break;
       default: break;
     }
+  }
+
+  // A box's pointer events (C199f, tumble's taps): a finger down, moving
+  // and up on it, at dp from its top left, as a browser's are in CSS px.
+  private final HashMap<View, HashMap<String, Integer>> pointing = new HashMap<>();
+  private HashMap<String, Integer> pointers(View v) {
+    HashMap<String, Integer> m = pointing.get(v);
+    if (m != null) return m;
+    final HashMap<String, Integer> hs = new HashMap<>();
+    pointing.put(v, hs);
+    v.setOnTouchListener((x, e) -> {
+      int a = e.getActionMasked();
+      String[] names = a == MotionEvent.ACTION_DOWN ? new String[] { "pointerdown" } : a == MotionEvent.ACTION_MOVE ? new String[] { "pointermove" } : a == MotionEvent.ACTION_UP ? new String[] { "pointerup", "pointerleave" } : a == MotionEvent.ACTION_CANCEL ? new String[] { "pointercancel", "pointerleave" } : new String[0];
+      boolean heard = false;
+      for (String n : names) { Integer h = hs.get(n); if (h != null) { nativeEvent(h, "", "", e.getX() / density, e.getY() / density, 0); heard = true; } }
+      if (heard) tick();
+      return a == MotionEvent.ACTION_DOWN ? !hs.isEmpty() : heard;
+    });
+    return hs;
   }
 
   private String valueOf(View v) { return v instanceof EditText ? ((EditText) v).getText().toString() : ""; }
