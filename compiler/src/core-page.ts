@@ -9,6 +9,7 @@ import { browserWorld, pageStorage, type Store } from "../../ters/src/lang/brows
 import { mountHtml, type Doc, type Node_ } from "../../ters/src/lang/html.ts";
 import { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
 import { coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
+import { pageWorker } from "./branches-rt.ts";
 import type { Hosts } from "../../ters/src/lang/hosts.ts";
 import type { Code } from "../../ters/src/model.ts";
 import { heardInto, logged, type LogEntry } from "../../ters/src/lang/worldlog.ts";
@@ -22,6 +23,13 @@ type Defs = Record<string, (...xs: unknown[]) => unknown>;
 // (core-sound.ts), which plays its `listen` nodes (C137d4).
 // `hosts`: its hosts/js.js's answers and the operations they answer.
 export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code?: Code, worklet?: string, hosts?: { answers: Hosts; ops: HostOps }): void {
+  // A worker the page started for its maps (C61 c′, branches-rt.ts): the
+  // functions made, answering the runs it is sent, and no page drawn.
+  if (typeof document === "undefined") {
+    defs(coreRuntime(tables, worlds, { print: (line: string) => console.log(line) }, code, undefined, hosts?.ops));
+    pageWorker();
+    return;
+  }
   const cells = new Cells(equal);
   // What main is answered is kept for the audio thread's run of it (L60).
   // The run's log (C172f), as the editor's preview keeps it (C172e), when

@@ -1386,7 +1386,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             given.set(n.id, [xs, by]);
             let plain: SExpr;
             try { plain = expr(id, env, f, tail); } finally { given.delete(n.id); }
-            const shared: SExpr = { k: "rt", fn: `${parallelList.get(n.id)}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
+            // In a function that may wait (a page's handler, a main that
+            // waits), a map goes on by the rest (C61 c′): on a page its runs
+            // go to workers there, by postMessage (branches-rt.ts mapAway).
+            const kind = parallelList.get(n.id)!;
+            const shared: SExpr = kind === "map" && waitsIn(f)
+              ? { k: "world", op: "mapAway", aborts: true, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site], t, suspends: true }
+              : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.
             let then: SExpr = shared;
@@ -3432,6 +3438,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (e.k === "handle" && several(e.body)) { if (!opts.host) throw new Refused("handles Abort around a search with several answers (not in WebAssembly yet)"); return true; }
     return kids(e).some(several);
   }
+  // Whether the function being lowered may wait by its row (a page's
+  // handler, a main that waits): a lambda's, or a definition's, row
+  // saying Wait.
+  const waitsIn = (f: SFunc): boolean => {
+    if (!opts.host || !f.def) return false;
+    const d = code.nodes[f.def], at = d?.kind === "def" ? d.body : d?.kind === "lambda" ? f.def : undefined;
+    const t0 = at && info.typeOf.get(at), t = t0 && info.subst.resolve(t0);
+    // Wait, not Await: a together's actions say Await, and are no rest.
+    return !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(WAIT);
+  };
   // Whether e may wait (C40 step 4): a search or a budget around a wait
   // isn't lowered, since the rest it's given would run after it's gone.
   const waiting = new Set<number>();

@@ -315,6 +315,10 @@ export class Pending extends Error {
   // Whether asking again from the start gets further: a fetch's reply is
   // kept, so it does; a timer (C40) would start again, so it doesn't.
   again: boolean;
+  // Held (C61 c′, a map on a page's workers): the page shows nothing and
+  // takes no other event till the run goes on and ends, as if it hadn't
+  // waited.
+  hold?: boolean;
   constructor(ready: Promise<unknown>, what: string, again = true) {
     super(`still waiting for ${what}`);
     this.ready = ready;
@@ -665,12 +669,16 @@ export class Cells {
       this.journal = null;
       if (back(e)) for (const g of j.undo.reverse()) g();
       else for (const g of j.later) g();
+      // A held wait keeps the batch open till its run ends (release).
+      if (e instanceof Pending && e.hold) this.batching++;
       throw e;
     } finally {
       this.journal = null;
       if (--this.batching === 0) this.flush();
     }
   }
+  // A held wait's run has ended (C61 c′): the page shows what it did.
+  release(): void { if (--this.batching === 0) this.flush(); }
   // Undone if the attempt this runs in is taken back.
   undo(g: () => void): void { this.journal?.undo.push(g); }
   // Now, or when the attempt this runs in is kept.
