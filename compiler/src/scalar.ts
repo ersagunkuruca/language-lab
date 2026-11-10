@@ -2139,6 +2139,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (args.every((x) => x !== undefined)) return bind(env, n.id, forward(env, n.id), next);
           if (t.kind === "def") {
             if (!e.callee || e.callee.spec.length) throw new ModeUnsupported("a call in a mode not planned");
+            // Every answer in the interpreter's order holds while nothing
+            // suspends (relate.ts mplus takes the next arm's first answer
+            // at a suspension); a call may.
+            if (collecting.has(g)) throw new ModeUnsupported("a call where every answer is wanted, whose order may interleave");
             const lam = code.nodes[t.body!] as NodeOf<"lambda">;
             const ins = modeOrder(e.callee.known);
             const port = (p: string) => (p === "out" ? n.id : n.args[Number(p)]);
@@ -2194,21 +2198,37 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const rest = other ? modePlan(an, other.plan, env, done, g) : NONE;
         return { k: "case", scrut: local(val), s: g.locals.push(t) - 1, t, arms: t.cases.map((x) => { const a = c.arms.find((y) => y.variant === x.variant); return a ? plan(a) : rest; }), result: rt };
       }
-      if (c.arms.some((a) => a.variant === null)) throw new ModeUnsupported("otherwise, for a value not known");
+      // otherwise, for a value not known: its arm, then the value, known
+      // by its end, must be none of the other arms' cases.
+      const arm = (a: (typeof c.arms)[number]): SExpr => {
+        if (a.variant !== null) return modePlan(an, a.plan, env, done, g);
+        const others = c.arms.filter((x) => x.variant !== null).map((x) => x.variant!);
+        return modePlan(an, a.plan, env, (e) => {
+          const at = e.get(an.slot(c.value));
+          if (at === undefined) throw new ModeUnsupported("otherwise, for a value not found in its arm");
+          const t = typeOf(c.value);
+          if (!isData(t)) throw new ModeUnsupported("otherwise, for a value that isn't data");
+          const tag: SExpr = { k: "tag", rec: local(at), t };
+          const none = others.reduce<SExpr>((acc, v) => ({ k: "op", op: "and", args: [acc, { k: "op", op: "not", args: [{ k: "op", op: "equal", args: [tag, { k: "num", v: t.cases.findIndex((x) => x.variant === v) }] }] }] }), { k: "bool", v: true });
+          return test(none, done(e));
+        }, g);
+      };
       // Every answer: each arm's before the next's, an arm that gives none
-      // adding nothing.
+      // adding nothing (as relate.ts gives them while nothing suspends; an
+      // unfold suspends at each level).
       const after = collecting.get(g);
+      if (after !== undefined && code.nodes[c.node]?.kind === "fold") throw new ModeUnsupported("unfolding where every answer is wanted, whose order may interleave");
       if (after !== undefined) {
         const out = c.arms.reduceRight<SExpr>((later, a) => {
           const l = g.locals.push(rt) - 1, r = g.locals.push(rt) - 1;
           collecting.set(g, l);
-          const body = modePlan(an, a.plan, env, done, g);
+          const body = arm(a);
           return { k: "let", i: l, value: later, body: { k: "attempt", body, res: r, ok: local(r), otherwise: local(l), t: rt } };
         }, local(after));
         collecting.set(g, after);
         return out;
       }
-      return c.arms.reduceRight<SExpr>((rest, a) => { const r = g.locals.push(rt) - 1; return { k: "attempt", body: modePlan(an, a.plan, env, done, g), res: r, ok: local(r), otherwise: rest, t: rt }; }, NONE);
+      return c.arms.reduceRight<SExpr>((rest, a) => { const r = g.locals.push(rt) - 1; return { k: "attempt", body: arm(a), res: r, ok: local(r), otherwise: rest, t: rt }; }, NONE);
     };
     return steps(0, env0);
   }
