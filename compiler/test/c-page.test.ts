@@ -119,6 +119,21 @@ test("tumble in C shows what html.ts shows after taps and hints (C199f)", { skip
   assert.deepEqual(p.c, p.evaluator);
 });
 
+// Android's libc has no ucontext, so there tumble's fibers start with a
+// move of the stack pointer and switch with sigsetjmp (C199f). glibc's
+// fortified longjmp refuses to jump between stacks, so it is off here
+// (and GCC then sees a false null in lab_stop's message).
+test("tumble's fibers without ucontext, as on Android, show what they show with it (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/tumble"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const c = emitC(l, { main, page: "headless" }).c, actions = ["click:hint", "click:tap 0 0", "click:tap 0 1", "click:two"];
+  assert.match(c, /lab__fstart/);
+  const run = (src: string) => { const r = spawnSync(compile(src), actions); assert.equal(r.status, 0, r.stderr.toString()); return r.stdout.toString(); };
+  assert.equal(run("#undef _FORTIFY_SOURCE\n#define LAB_FIBER_SJLJ 1\n#pragma GCC diagnostic ignored \"-Wformat-overflow\"\n" + c), run(c));
+});
+
 test("a part inside a picture is an SVG group in C, as html.ts makes it: compass (C199f)", { skip }, () => {
   const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/compass"));
   const info = infer(p0.code, p0.pres.names, undefined, p0.options);
