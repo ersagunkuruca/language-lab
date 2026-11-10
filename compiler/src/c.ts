@@ -100,6 +100,12 @@ const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // on C its items stay structs in the buffer, each field read or written in
 // its slot.
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
+// untagged-ints.ts's ops on a loop's counts (C207e).
+const I64_FN = /^i64\.(eq|less|add|sub|toNumber|box|unbox|small|lit)$/;
+// A count stepped past the small Ints: some 2^62 steps, never in practice.
+const I64_C = `static void lab__i64_past(void) { fflush(stdout); fputs("a count went past 2^62\\n", stderr); exit(1); }
+static inline int64_t lab__i64_add(int64_t a, int64_t b) { int64_t r = a + b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
+static inline int64_t lab__i64_sub(int64_t a, int64_t b) { int64_t r = a - b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }`;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
@@ -547,6 +553,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
+  let i64Used = false;
   const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -586,7 +593,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn) && !I64_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -955,6 +962,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(text.some((t) => t.includes("lab_none")) ? [`static ${TL}int lab_none = 0; // no answer inside a search (C166)`] : []),
     ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? [`static ${TL}double lab_fuel = INFINITY; // outside any budget, as much as it takes`] : []),
     ...[...int32Used].map((op) => INT32_C[op]!),
+    ...(i64Used ? [I64_C] : []),
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
     // A Float64 with no answer or too big (L125c2, stops.ts): the reason
     // to standard error and exit 1, as an Abort nothing handled does.
@@ -1671,6 +1679,25 @@ int main(int argc, char **argv) {
             if (n === undefined) hostsUsed.set(h.op, (n = hostsUsed.size));
             hostTypes.set(h.op, e.host!.t);
             return checked(`lab_host_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+          }
+          // A loop's counts untagged (C207e, untagged-ints.ts): int64_ts
+          // compared and stepped as they are; an Int given is lent.
+          const i64 = I64_FN.exec(e.fn);
+          if (i64) {
+            const gone: number[] = [];
+            const xs = e.args.map((a, k) => {
+              if (a.k === "int") return `INT64_C(${a.v})`;
+              if (a.k === "rt" && a.fn === "i64.lit" && a.args[0].k === "int") return `INT64_C(${a.args[0].v})`;
+              if (a.k !== "local") throw new Error(`${e.fn} takes locals and literals`);
+              if (isCounted(a.i) && !after.has(a.i) && !e.args.slice(k + 1).some((b) => b.k === "local" && b.i === a.i)) gone.push(a.i);
+              return local(a.i);
+            });
+            if (i64[1] === "add" || i64[1] === "sub") i64Used = true;
+            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0] } as Record<string, string>)[i64[1]];
+            if (!gone.length) return c;
+            const v = stated(c, rtType(e.fn), pre, d);
+            pre.push(...gone.map((j) => `${d}${drop(f.locals[j], local(j))}`));
+            return v;
           }
           // A column read (C60 c2b) borrows its array and index, as a field
           // read borrows its record: no count taken and given back per read,
