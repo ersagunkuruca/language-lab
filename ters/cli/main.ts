@@ -249,8 +249,10 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     ownedRecords(lowered, q.code, q.info, q.names, root);
     columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
   }
+  // On WebAssembly (no counts), a map writes into its array where every
+  // array of its type has one holder, as on JavaScript (owned-arrays.ts).
   if (wasm) {
-    ownedArrays(lowered, q.code, q.info, q.names, root);
+    ownedArrays(lowered, q.code, q.info, q.names, root, true);
     ownedRecords(lowered, q.code, q.info, q.names, root);
     intoAsSets(lowered);
   }
