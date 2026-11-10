@@ -822,7 +822,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   // A together run side by side (C41, branches-rt.ts): the module is
   // started again on worker threads, which find each branch's code by
   // name, and run no main.
-  const branches = /R\.rt\("(together|map|keep|all|any|first|count)\.pure"/.test(js);
+  const branches = /R\.rt\("((together|map|keep|all|any|first)\.pure|(count|all)\.search)"/.test(js);
   const body = branches ? withFunctionsNamed(js) : js;
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
