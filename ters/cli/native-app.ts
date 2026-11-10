@@ -11,6 +11,10 @@ import { icon, rgb } from "./app.ts";
 
 export const PACKAGE = "app.ters.page";
 
+// The app's own id on the phone, one per program, so apps don't replace
+// each other (the Java package stays PACKAGE, which the JNI names hang on).
+export const nativeAppId = (title: string) => `app.ters.${title.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^(\d)/, "_$1") || "page"}`;
+
 // The project, as paths and contents. `c` is the page's C.
 export function nativeAppFolder(title: string, c: string): Record<string, string | Uint8Array> {
   const hue = parseInt(createHash("sha256").update(title).digest("hex").slice(0, 4), 16) % 360;
@@ -23,7 +27,9 @@ export function nativeAppFolder(title: string, c: string): Record<string, string
 android {
   namespace "${PACKAGE}"
   compileSdk 35
-  defaultConfig { applicationId "${PACKAGE}"; minSdk 24; targetSdk 35; versionCode 1; versionName "1" }
+  // TERS_VERSION_CODE: each build numbered higher (the "Android app"
+  // workflow gives its run number), so a new build installs over the old.
+  defaultConfig { applicationId "${nativeAppId(title)}"; minSdk 24; targetSdk 35; versionCode((System.getenv("TERS_VERSION_CODE") ?: "1").toInteger()); versionName "1" }
   compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
   externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
 }
