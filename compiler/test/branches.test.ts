@@ -226,7 +226,7 @@ test("a count split by its first choice counts a search inside it whole (C43)", 
         k.let("ys", k.call(S.all, k.thunk(() => k.call(S.oneOf, k.call(INT_OPS.range, x)))), (ys) =>
           k.call(B.add, k.call(INT_OPS.toNumber, k.call(S.oneOf, ys)), k.call(B.mul, work(k, 300000, 1), k.lit(0)))))))))));
     return main;
-  });
+  }, false);
   assert.match(readFileSync(file, "utf8"), /R\.rt\("count\.search"[\s\S]*R\.rt\("all\.search"/);
   const [side, alone] = await Promise.all([run([file], { TERS_WORKERS: "3", TERS_BRANCHES: "say" }), run([file], { TERS_WORKERS: "0" })]);
   assert.deepEqual([side[0], side[2]], ["28\n", 0]);
@@ -247,7 +247,7 @@ test("a search whose first choice has one item with answers shares out its secon
           k.let("z", k.call(S.oneOf, k.call(INT_OPS.range, y)), (z) =>
             k.call(B.add, k.call(INT_OPS.toNumber, k.call(INT_OPS.add, k.call(INT_OPS.add, x, k.call(INT_OPS.mul, y, k.int(10))), z)), k.call(B.mul, work(k, 300000, 1), k.lit(0))))))))))));
     return main;
-  });
+  }, false);
   assert.match(readFileSync(file, "utf8"), /R\.rt\("all\.search"/);
   const want = "[10, 20, 21, 30, 31, 32, 40, 41, 42, 43, 50, 51, 52, 53, 54]\n";
   const [side, alone] = await Promise.all([run([file], { TERS_WORKERS: "3", TERS_BRANCHES: "say" }), run([file], { TERS_WORKERS: "0" })]);
@@ -269,7 +269,7 @@ test("a count split by its first choice leaves a search before that choice whole
         k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.call(INT_OPS.add, z, k.int(5)))), (x) =>
           k.call(B.add, k.call(INT_OPS.toNumber, x), k.call(B.mul, work(k, 300000, 1), k.lit(0)))))))))));
     return main;
-  });
+  }, false);
   assert.match(readFileSync(file, "utf8"), /R\.rt\("count\.search"[\s\S]*R\.rt\("split\.hold"/);
   for (const workers of ["3", "0"]) assert.deepEqual((await run([file], { TERS_WORKERS: workers })).slice(0, 1), ["8\n"], `${workers} workers`);
 });
@@ -285,7 +285,7 @@ test("a first split by its first choice gives the answer under the first item wi
           k.let("y", k.call(S.oneOf, k.list(k.lit(100), k.lit(200))), (y) =>
             k.if(k.call(S.less, w, k.lit(7)), k.call(S.fail), k.call(B.add, w, y)))))), k.thunk(() => k.lit(-1)))))));
     return main;
-  });
+  }, false);
   assert.match(readFileSync(file, "utf8"), /R\.rt\("first\.search"/);
   for (const workers of ["3", "0"]) assert.deepEqual((await run([file], { TERS_WORKERS: workers })).slice(0, 1), ["107\n"], `${workers} workers`);
 });
@@ -313,7 +313,7 @@ test("all pass's first deciding item or abort in order is its answer, wherever e
       k.let("n", k.call(B.add, k.call(INT_OPS.toNumber, i), k.call(B.mul, work(k, 300000, 1), k.lit(0))), (n) =>
         k.if(k.call(S.equal, n, k.lit(abortAt)), k.call(ABORT_OP, k.lit(`abort at ${abortAt}`)), k.call(S.less, n, k.lit(failAt))))))))));
     return main;
-  });
+  }, false);
   const [failsFirst, abortsFirst] = [program(9, 4), program(3, 7)];
   for (const workers of ["3", "0"]) {
     assert.deepEqual(await run([failsFirst], { TERS_WORKERS: workers }), ["false\n", "", 0], `fails first, ${workers} workers`);

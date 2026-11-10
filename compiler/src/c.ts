@@ -63,7 +63,7 @@ import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts"
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
-import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -170,9 +170,11 @@ static inline void lab_dec(lab_cell *c) {
 static void lab_fields(lab_cell *c);
 // The count taken where it's dropped (C207b); the freeing out of line.
 // GCC, inlining it, warns of writing the count of a cell it can't size
-// (a constant empty list's) on a path the count of 0 rules out.
+// (a constant empty list's), and of freeing a small Int as a pointer, on
+// paths the count of 0 and the Int's tag rule out.
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
 #endif
 static void lab__dead(lab_cell *c) {
   size_t base = lab_dead_n;
@@ -2181,16 +2183,47 @@ static int lab__cmp_t${i}(const void *x, const void *y) {
 ${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) return r;`).join("\n")}
   return r;
 }`);
+    // Int keys, all small and within 2^32 of each other (a counter's), are
+    // sorted by a radix sort of (key − least, slot) words: no compare
+    // called per pair (swarm's `keys of` each tick spent a third of its
+    // run in qsort and the compare). 0 where it doesn't hold.
+    if (lists.length && int) out.push(`static int lab__isort_t${i}(${S} *t, uint32_t *ix, uint32_t n) {
+  if (n < 64) return 0;
+  int64_t lo = INT64_MAX, hi = INT64_MIN;
+  for (uint32_t j = 0; j < n; j++) {
+    lab_int k = t->ks[ix[j]];
+    if (!LAB_IS_SMALL(k)) return 0;
+    int64_t v = LAB_VAL(k);
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  uint64_t span = (uint64_t)hi - (uint64_t)lo;
+  if (span >= 0xffffffffu) return 0;
+  uint64_t *base = malloc(2 * (size_t)n * sizeof(uint64_t)), *a = base, *b = base + n;
+  if (!base) lab_oom();
+  for (uint32_t j = 0; j < n; j++) a[j] = (((uint64_t)LAB_VAL(t->ks[ix[j]]) - (uint64_t)lo) << 32) | ix[j];
+  for (int shift = 32; shift < 64 && (span >> (shift - 32)); shift += 8) {
+    uint32_t c[257] = {0};
+    for (uint32_t j = 0; j < n; j++) c[((a[j] >> shift) & 255) + 1]++;
+    for (int k = 1; k < 257; k++) c[k] += c[k - 1];
+    for (uint32_t j = 0; j < n; j++) b[c[(a[j] >> shift) & 255]++] = a[j];
+    uint64_t *x = a; a = b; b = x;
+  }
+  for (uint32_t j = 0; j < n; j++) ix[j] = (uint32_t)a[j];
+  free(base);
+  return 1;
+}`);
     for (const { d, j } of lists) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
       const cons = cname(d, tag), nil = cname(d, 1 - tag), item = d.cases[tag].fields[head].t;
-      // A set's items are its keys; a map's entries, pairs.
+      // A set's items are its keys, and a map's `keys of`; a map's
+      // entries, pairs.
       const same = (x: LType) => x === kt || (isRecord(x) && isRecord(kt) && x.key === kt.key);
-      const made = t.set ? (same(item) ? dupK("t->ks[ix[j]]") : zero(item))
+      const made = keyList(t, d) ? (same(item) ? dupK("t->ks[ix[j]]") : zero(item))
         : `(${ty(item)}){ ${same((item as RType).fields[0].t) ? dupK("t->ks[ix[j]]") : zero((item as RType).fields[0].t)}, ${dupV("t->vs[ix[j]]")} }`;
       // A key nothing ever fixed (an empty map nothing is put in) is held
       // as an Int, its entries' as another type: none are ever made.
-      out.push(`// The entries as a list of ${t.set ? "items" : "pairs"}, in compare's order of their keys.
+      out.push(`// The entries as a list of ${keyList(t, d) ? "keys" : "pairs"}, in compare's order of their keys.
 static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   lab__reroot_t${i}((${T} *)c);
   ${S} *t = ((${T} *)c)->cur;
@@ -2198,7 +2231,7 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   if (!ix) lab_oom();
   for (uint32_t j = 0; j < t->cap; j++) if (t->st[j] == 1) ix[n++] = j;
   lab__sort_t${i} = t;
-  qsort(ix, n, sizeof(uint32_t), lab__cmp_t${i});
+  ${int ? `if (!lab__isort_t${i}(t, ix, n)) ` : ""}qsort(ix, n, sizeof(uint32_t), lab__cmp_t${i});
   lab_cell *acc = &${nil};
   for (uint32_t j = n; j-- > 0;) {
     ${cons} *e = lab_new(sizeof(${cons}), ${tnum.get(d.key)}, ${tag});

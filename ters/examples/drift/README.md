@@ -20,3 +20,5 @@ as columns 0.08 s. The compiled program stores the motes as an array, but
 `map` makes a new array and a new record for each mote every step; written
 in place (the map's array and the motes have one holder), 0.33 s by hand.
 Each mote is now changed in place in the map: compiled 0.47 to 0.63 s.
+Since C60's columns step the motes are an array per field, and a step
+reads vx and vy and writes x and y, nothing else (compiler/src/columns.ts).

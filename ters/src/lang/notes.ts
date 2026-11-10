@@ -225,6 +225,7 @@ export const NOTES: Comments = {
   "builtin.table.size": "How many keys the table has.",
   "builtin.table.at": "The key's value, or no answer when the table doesn't have the key.",
   "builtin.table.entries": "The table's entries as (key, value) tuples, in compare's order of their keys: the map it stands for.",
+  "builtin.table.keys": "The table's keys, in compare's order: the map's `keys of`, with no pair made for each entry.",
   "builtin.hashset.empty": "A hash set with no items: how a set is stored when the compiler sees that every set has one holder (C63d). Programs say Set; the compiler picks this.",
   "builtin.hashset.add": "The set with the item in it. It changes the set itself, so the compiler uses it only where nobody can see the set before the change.",
   "builtin.hashset.remove": "The set without the item, changed in place like add.",

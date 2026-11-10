@@ -44,6 +44,8 @@ function walked(f: SFunc, fi: number, p: number): boolean {
   const isDerived = (e: SExpr) => e.k === "local" && derived.has(e.i);
   const ok = (e: SExpr): boolean => {
     if (e.k === "local") return !derived.has(e.i);
+    // Another name for it (a match's scrutinee named, swarm's `moved`).
+    if (e.k === "let" && isDerived(e.value)) { derived.add(e.i); return ok(e.body); }
     if (e.k === "let" && e.value.k === "rt" && READ.exec(e.value.fn)?.[1] === "rest" && isDerived(e.value.args[0])) {
       derived.add(e.i);
       rests++;
@@ -75,6 +77,7 @@ function offsetBy(ir: CoreIR, fi: number, p: number): number {
   const off = (m: number): SExpr => (m ? { k: "op", op: "add", args: [k, { k: "num", v: m }] } : k);
   const of = (e: SExpr) => (e.k === "local" ? depth.get(e.i) : undefined);
   const put = (e: SExpr): SExpr => {
+    if (e.k === "let" && of(e.value) !== undefined) { depth.set(e.i, of(e.value)!); return put(e.body); }
     if (e.k === "let" && e.value.k === "rt" && READ.exec(e.value.fn)?.[1] === "rest" && of(e.value.args[0]) !== undefined) {
       depth.set(e.i, of(e.value.args[0])! + 1);
       return put(e.body);
