@@ -137,11 +137,12 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any" }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; until?: "all" | "any"; search?: unknown }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
+  if (m.search) { const c = dec(m.search); return (i) => answers(c, i + 1); }
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
   return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
@@ -383,3 +384,39 @@ export function firstPure(xs: unknown, f: Fn, site: number): unknown {
   return sameKind(xs, i < 0 ? [] : [itemsOf(xs)[i]]);
 }
 export const firstInOrder = (xs: unknown, f: Fn): unknown => { const items = itemsOf(xs), i = items.findIndex((x) => f(x)); return sameKind(xs, i < 0 ? [] : [items[i]]); };
+
+// A count of a search that only computes (C43): the search run once for
+// each alternative of the first choice it makes, the first here, which
+// says how many there are, and the others shared out. Each run keeps one
+// item of that choice (choose.split), so its answers are the ones the
+// whole search gives with that item, and their counts add up to its.
+let split = -1, seen = -1;
+export function chooseSplit(l: unknown): unknown {
+  if (split < 0) return l;
+  const items = itemsOf(l), j = split;
+  split = -1;
+  seen = items.length;
+  return sameKind(l, j < items.length ? [items[j]] : []);
+}
+// A search inside the one split: its choices whole, then the split as it was.
+export const splitHold = (): number => { const j = split; split = -1; return j; };
+export const splitGive = (j: unknown): void => { split = j as number; };
+// How a search's answers are counted, given by core-rt.ts, which has FAIL.
+let countAll: (search: unknown) => number = () => 0;
+export const countsBy = (f: (search: unknown) => number): void => { countAll = f; };
+// The search's answers with item j of its first choice (all of them for
+// j < 0).
+function answers(search: unknown, j: number): number {
+  split = j;
+  try { return countAll(search); } finally { split = -1; }
+}
+export function countPure(search: unknown, site: number): number {
+  if (!canShare()) return countAll(search);
+  seen = -1;
+  const first = answers(search, 0), k = seen;
+  if (k <= 1) return first;
+  const t0 = performance.now();
+  const rest = shared(k - 1, (i) => answers(search, i + 1), () => { const g = encode(search, names!); return g === NO ? NO : { search: g }; }, (search as Closure).code);
+  perItem[site] = (performance.now() - t0) / (k - 1);
+  return rest.reduce((a: number, b) => a + (b as number), first);
+}

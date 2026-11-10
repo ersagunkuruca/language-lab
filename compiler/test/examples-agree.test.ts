@@ -37,6 +37,7 @@ const setup: Record<string, () => string[]> = {
   collatz: () => ["3000", "100"],
   nicomachus: () => ["200"],
   divisors: () => ["1000", "100"],
+  "queens-count": () => ["6"],
   chapters: () => { writeFileSync(join(dir, "book.md"), chaptersBook(3, 5)); return ["book.md", "out"]; },
   ledger: () => { writeFileSync(join(dir, "book.csv"), ledgerBook(60, 6)); return ["book.csv"]; },
   notebook: () => [join(examples, "notebook/notes.txt")],

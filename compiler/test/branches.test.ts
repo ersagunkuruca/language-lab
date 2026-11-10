@@ -159,6 +159,36 @@ test("divisors finds its n by first where on workers, the same answer as in turn
   assert.equal(small[0], inEvaluator[0]);
 });
 
+test("queens-count counts its boards by the first row's columns on workers, the same count as in turn and in the evaluator (C43)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/queens-count"), "-o", "queens-count.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/queens-count"), "6"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  assert.match(readFileSync(join(dir, "queens-count.mjs"), "utf8"), /R\d*\.rt\("count\.pure"/);
+  const [side, alone, small] = await Promise.all([run(["queens-count.mjs", "10"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["queens-count.mjs", "10"], { TERS_WORKERS: "0" }, dir), run(["queens-count.mjs", "6"], {}, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[0], /boards of 10 queens: 724\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.equal(small[0], inEvaluator[0]);
+});
+
+// A search inside the one a count splits keeps every item of its own
+// choices, wherever it runs (C43).
+test("a count split by its first choice counts a search inside it whole (C43)", async () => {
+  const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
+      k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(8))), (x) =>
+        k.let("ys", k.call(S.all, k.thunk(() => k.call(S.oneOf, k.call(INT_OPS.range, x)))), (ys) =>
+          k.call(B.add, k.call(INT_OPS.toNumber, k.call(S.oneOf, ys)), k.call(B.mul, work(k, 300000, 1), k.lit(0)))))))))));
+    return main;
+  });
+  assert.match(readFileSync(file, "utf8"), /R\.rt\("count\.pure"[\s\S]*R\.rt\("split\.hold"/);
+  const [side, alone] = await Promise.all([run([file], { TERS_WORKERS: "3", TERS_BRANCHES: "say" }), run([file], { TERS_WORKERS: "0" })]);
+  assert.deepEqual([side[0], side[2]], ["28\n", 0]);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.deepEqual(alone, ["28\n", "", 0]);
+});
+
 // all pass stops at the first item that fails: an abort after it isn't
 // seen, one before it is, wherever each ran (C43).
 test("all pass's first deciding item or abort in order is its answer, wherever each ran (C43)", async () => {

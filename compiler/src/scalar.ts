@@ -78,7 +78,7 @@ import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
-import { parallelLists, parallelTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
+import { parallelCounts, parallelLists, parallelTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -764,7 +764,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
   const fibers = !!opts.handlers && !opts.host;
-  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined;
+  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, counts: Set<Id> | undefined;
+  const countsShared = () => (counts ??= parallelCounts(code, info));
   // A call's inputs already worked out, as locals (a map that may be shared, C42).
   const given = new Map<Id, SExpr[]>();
   let mapSites = 0;
@@ -3174,6 +3175,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const t = stype(zonk(id)), bt = stype(zonk(search));
     if (!t || !bt) throw new Refused(`searches for ${whyNot(zonk(t ? search : id))}`);
     const kind = target === S.first ? "first" : target === S.optional ? "optional" : target === S.all ? "all" : "count";
+    // A count of a search that only computes (C43): its first choice's
+    // alternatives counted on worker threads, the search a closure the
+    // runtime runs once for each (branches-rt.ts countPure).
+    if (opts.host && !fibers && kind === "count" && countsShared().has(n.id)) {
+      return { k: "rt", fn: "count.pure", args: [expr(n.args[0], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
+    }
     if (target === S.first) { const only = soleSolve(search); if (only) firstOnly.add(only); }
     // A first of a call of a definition that is one such solve (relations'
     // to polar, a family of answers): the definition's body written in
@@ -3369,7 +3376,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         body: { k: "let", i: rest, value: { k: "field", rec: scrut, t: lt, c, i: 1 }, body: { k: "attempt", body: moved, res, ok: local(res), otherwise: again, t: "i32" } },
       })),
     };
-    return { k: "call", fn: l.hi, args: [list, ...l.passed], tail };
+    // Where a count's alternatives are shared (C43), the runtime may keep
+    // only one item of a run's first choice.
+    const split = opts.host && !fibers && countsShared().size > 0;
+    return { k: "call", fn: l.hi, args: [split ? { k: "rt", fn: "choose.split", args: [list] } : list, ...l.passed], tail };
   }
   // A call of a function with several answers: the rest of the search as
   // a closure (or the caller's own k, when the call is all that's left).
@@ -3544,7 +3554,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const run = cps(e.body, { gen: keep }, false, g), r = g.locals.push("i32") - 1;
     const back: SExpr = { k: "call", fn: e.kind === "all" ? reverse(d) : -1, args: [got, made(NIL, [])], tail: false };
     const [ok, otherwise]: [SExpr, SExpr] = e.kind === "first" ? [got, dflt()] : e.kind === "optional" ? [made(SOME, [got]), made(NONE, [])] : e.kind === "all" ? [back, back] : [got, got];
-    return { k: "let", i: b, value: { k: "make", t: box, args: [start] }, body: { k: "attempt", body: run, res: r, ok, otherwise, t: e.t } };
+    const searched: SExpr = { k: "attempt", body: run, res: r, ok, otherwise, t: e.t };
+    // Where a count's alternatives are shared (C43), a search inside the
+    // one split keeps every item of its own choices.
+    let inner: SExpr = searched;
+    if (opts.host && !fibers && !waits(e.body) && countsShared().size > 0) {
+      const held = g.locals.push("host") - 1, v = g.locals.push(e.t) - 1;
+      inner = { k: "let", i: held, value: { k: "rt", fn: "split.hold", args: [] }, body: { k: "let", i: v, value: searched, body: { k: "let", i: g.locals.push("host") - 1, value: { k: "rt", fn: "split.give", args: [local(held)] }, body: local(v) } } };
+    }
+    return { k: "let", i: b, value: { k: "make", t: box, args: [start] }, body: inner };
   }
   // A search that waits (C181), its value going on to k: the collector,
   // with k after its ok and its otherwise.
