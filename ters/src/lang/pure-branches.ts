@@ -15,8 +15,8 @@ import { originalOf, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
 import { subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
-import { ABORT, SIGS, writtenItems } from "./std.ts";
-import { DIVERGE, Subst, type Type } from "./types.ts";
+import { ABORT, S, SIGS, writtenItems } from "./std.ts";
+import { CHOICE, DIVERGE, Subst, type Type } from "./types.ts";
 
 // What a branch may do and still run elsewhere: stop (Abort), or run long
 // (Diverge). Everything else is shared with the caller or the world.
@@ -27,7 +27,7 @@ const ALONE: ReadonlySet<Id> = new Set([ABORT, DIVERGE]);
 // effect). Its type can't say: unified with together's, every action's row
 // is the whole list's, Await and all. Null when it calls a function it was
 // given or one computed, whose effects only the caller knows.
-function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
+export function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
   const out = new Set<Id>();
   const binders = new Set<Id>();
   for (const id of subtree(code, body)) { const n = code.nodes[id]; if (n?.kind === "lambda") n.params.forEach((p) => binders.add(p)); }
@@ -36,6 +36,9 @@ function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
     const n = code.nodes[id];
     if (isCall(n)) {
       const f = code.nodes[n.fn];
+      // A let (a lambda written in place, called at once): what it does
+      // is its body's, in the subtree too.
+      if (f?.kind === "lambda") continue;
       if (f?.kind !== "ref") return null;
       const target = code.nodes[f.target];
       if (!target || target.kind === "binder" || target.kind === "lambda") return null;
@@ -108,6 +111,21 @@ export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
   return out;
 }
 export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...parallelLists(code, info)].filter(([, k]) => k === "map").map(([id]) => id));
+
+// The calls of `count` a target may share out by the alternatives of its
+// search's first choice (C43): the search written in place, doing nothing
+// but compute and choose, as a map's function may.
+export function parallelCounts(code: Code, info: Info): Set<Id> {
+  const out = new Set<Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (!isCall(n) || n.args.length !== 1) continue;
+    const f = code.nodes[n.fn], l = code.nodes[n.args[0]];
+    if (f?.kind !== "ref" || (f as NodeOf<"ref">).target !== S.count || l?.kind !== "lambda" || l.params.length) continue;
+    const own = ownEffects(code, info, l.body);
+    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && own.has(ABORT))) out.add(n.id);
+  }
+  return out;
+}
 
 // Each marked call, with each action's own effects.
 function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {

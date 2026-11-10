@@ -9,7 +9,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { parallelLists, parallelMaps, parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
+import { parallelCounts, parallelLists, parallelMaps, parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
 import { ABORT_OP, AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 
@@ -120,4 +120,21 @@ test("all pass, any pass and first where share out their items only for a test t
   assert.equal(marked.get(runsLong), undefined);
   assert.equal(marked.get(found), "first");
   assert.equal(marked.get(foundLong), undefined);
+});
+
+test("a count of a search that only computes and chooses is shared by its first choice, lets and all (C43)", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main"), forever = k.def("forever");
+  k.define(forever, k.fn(["n"], (n) => k.call(forever, n)));
+  let chooses = "", abortsAndRunsLong = "";
+  k.define(main, k.thunk(() => k.call(S.print, k.text(
+    k.call(SHOW_ANY, (chooses = k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), (x) => k.call(B.add, x, k.lit(1))))))),
+    k.call(SHOW_ANY, (abortsAndRunsLong = k.call(S.count, k.thunk(() => k.let("x", k.call(S.oneOf, k.list(k.lit(1), k.lit(2))), (x) =>
+      k.if(k.call(S.less, x, k.lit(2)), k.call(forever, x), k.call(ABORT_OP, k.lit("no"))))))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const marked = parallelCounts(code, info);
+  assert.ok(marked.has(chooses));
+  assert.ok(!marked.has(abortsAndRunsLong));
 });
