@@ -698,7 +698,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const acts = (n: NodeOf<"lambda">): boolean => {
     let a = statically.get(n.id);
     if (a === undefined) {
-      const t0 = info.typeOf.get(n.id), t = t0 && info.subst.resolve(t0);
+      const t0 = info.typeOf?.get(n.id), t = t0 && info.subst.resolve(t0);
       a = !t || t.t !== "fn" || info.subst.resolveRow(t.eff).effs.some((e) => e !== DIVERGE);
       statically.set(n.id, a);
     }
@@ -840,7 +840,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const chooses = (n: NodeOf<"lambda">): boolean => {
     let a = choosing.get(n.id);
     if (a === undefined) {
-      const t0 = info.typeOf.get(n.id), t = t0 && info.subst.resolve(t0);
+      const t0 = info.typeOf?.get(n.id), t = t0 && info.subst.resolve(t0);
       a = !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.every((e) => e === DIVERGE || e === CHOICE);
       choosing.set(n.id, a);
     }
