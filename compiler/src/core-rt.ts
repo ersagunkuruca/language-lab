@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -187,6 +187,11 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     const any = name === "any.pure";
     return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? testPure(xs, f as (x: unknown) => unknown, site as number, any) : testInOrder(xs, f as (x: unknown) => unknown, any));
   }
+  // Two calls of a function in its own body (C61 e): the first's answer,
+  // and then the second's.
+  if (name === "both.pure") return bothPure as (...xs: unknown[]) => unknown;
+  if (name === "both.second") return bothSecond;
+  if (name === "both.on") return bothOn;
   // first where, its answer's item as a list of one or none (C43).
   if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
   // A count whose search's first choice is shared out (C43), and that

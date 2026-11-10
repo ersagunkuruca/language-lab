@@ -184,3 +184,43 @@ function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {
   }
   return out;
 }
+
+// Divide and conquer (C61 e): a call in a definition's body given two
+// calls of that definition itself, g(f(a), f(b)), may run the two on
+// other cores when f only computes, as a together's actions may. Their
+// inputs, and the call's others, are worked out first: so those must do
+// nothing at all (not even stop), or the first stop in order could change.
+// The call, and the positions of the two calls of f among its inputs.
+export function parallelHalves(code: Code, info: Info): Map<Id, [number, number]> {
+  const out = new Map<Id, [number, number]>();
+  for (const d of Object.values(code.nodes)) {
+    if (d.kind !== "def" || !d.body) continue;
+    const lam = code.nodes[d.body];
+    if (lam?.kind !== "lambda") continue;
+    const own = ownEffects(code, info, lam.body);
+    if (!own || ![...own].every((e) => ALONE.has(e)) || (own.has(DIVERGE) && own.has(ABORT))) continue;
+    const self = (id: Id) => { const c = code.nodes[id]; return isCall(c) && code.nodes[c.fn]?.kind === "ref" && (code.nodes[c.fn] as NodeOf<"ref">).target === d.id; };
+    const refsSelf = (id: Id) => subtree(code, id).some((x) => { const r = code.nodes[x]; return r?.kind === "ref" && r.target === d.id; });
+    const none = (id: Id) => { const e = ownEffects(code, info, id); return !!e && e.size === 0; };
+    // Not inside a lambda of its own (that runs when it's called), but a
+    // let's (a lambda called at once) is the body's.
+    const lets = new Set<Id>();
+    const inner = new Set<Id>();
+    for (const id of subtree(code, lam.body)) {
+      const n = code.nodes[id];
+      if (isCall(n) && code.nodes[n.fn]?.kind === "lambda") lets.add(n.fn);
+      if (n?.kind === "lambda" && !lets.has(id)) for (const x of subtree(code, id)) if (x !== id) inner.add(x);
+    }
+    for (const id of subtree(code, lam.body)) {
+      const n = code.nodes[id];
+      if (!isCall(n) || inner.has(id) || code.nodes[n.fn]?.kind !== "ref") continue;
+      const at = n.args.flatMap((a, j) => (self(a) ? [j] : []));
+      if (at.length !== 2) continue;
+      const calls = at.map((j) => code.nodes[n.args[j]] as NodeOf<"call">);
+      if (calls.some((c) => (c.args ?? []).some((a) => refsSelf(a) || !none(a)))) continue;
+      if (n.args.some((a, j) => !at.includes(j) && (refsSelf(a) || !none(a))) || !none(n.fn)) continue;
+      out.set(id, [at[0], at[1]]);
+    }
+  }
+  return out;
+}

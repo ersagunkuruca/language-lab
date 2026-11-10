@@ -1,0 +1,4 @@
+{
+  "p1qji187rdn89h6g21s0pr8s9u": "The nth Fibonacci number, the slow way: each call makes two more, which only compute and need nothing from each other. So the compiled program runs the two on other cores when it is worth it (C61 e): the first few levels are unfolded, their calls shared out on worker threads, and the levels above worked out from their answers. The same number as running it in turn.",
+  "6iemqaoil9kl47d9325ejtd17k": "Prints fib of the first argument (30 when there is none)."
+}

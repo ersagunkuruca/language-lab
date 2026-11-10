@@ -139,11 +139,12 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; join?: unknown; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number }
+interface Job { job: number; units: number; base: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean; fold?: FoldHow; join?: unknown; until?: "all" | "any" | "first"; search?: unknown; how?: How; ways?: number; calls?: unknown[][] }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
+  if (m.calls) return (i) => { const [f, ...xs] = m.calls![i].map(dec); return (f as Fn)(...xs); };
   if (m.search) { const c = dec(m.search); return (i) => answers(c, piece(i + 1, m.ways ?? 1), m.how!); }
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
   return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : m.fold ? (i) => together(items.slice(i * m.size!, (i + 1) * m.size!), f, m.fold!, m.join === undefined ? undefined : dec(m.join) as Fn) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
@@ -320,6 +321,86 @@ export function togetherPure(actions: unknown): unknown {
   const values = shared(as.length, (i) => as[i](), () => { const b = as.map((a) => encode(a, names!)); return b.includes(NO) ? NO : { branches: b }; }, (as[0] as Closure | undefined)?.code);
   return sameKind(actions, values);
 }
+
+// Divide and conquer (C61 e): g(f(a), f(b)) in f's own body, f only
+// computing (pure-branches.ts parallelHalves). Met first on the main
+// thread, the call's tree is unfolded there a few levels: each call of f
+// below is run till it meets its own two calls of f (a probe, thrown out
+// at that point) and stands for those two, until there are enough calls
+// to share, or one ends or stops before meeting them (then it is one to
+// share). Those leaves are shared out as a together's branches, in the
+// order running the tree in turn meets them, and the levels above are
+// then run again, each given its two calls' answers (f only computes,
+// so it meets the same two again). Below the leaves, and on a worker,
+// both calls are run here, one after the other.
+// Prior art: Bend 2's splits by depth; the probe-and-replay is ours.
+type Node = { f: Fn; args: unknown[]; kids?: [Node, Node]; v?: unknown };
+const PROBE = { probe: true };
+let plan: null | { probe: Node } | { kids: [unknown, unknown] } = null, inBoth = false, second: unknown;
+let main: boolean | undefined;
+const isMain = () => (main ??= !!wt()?.isMainThread);
+// Given f, how many inputs it takes (k), the first call's and the
+// second's, and the budget.
+export function bothPure(f: Fn, k: number): unknown {
+  // Below the leaves, on a worker, or not worth it: one after the other,
+  // nothing made for it (this is most calls).
+  if (!plan && (inBoth || !canShare() || !isMain() || inJob || quick.has(f))) {
+    if (k === 1) { const x = f(arguments[2]); second = f(arguments[3]); return x; }
+    if (k === 2) { const x = f(arguments[2], arguments[3]); second = f(arguments[4], arguments[5]); return x; }
+  }
+  const rest = Array.prototype.slice.call(arguments, 2) as unknown[], fuel = rest.pop(), a = rest.slice(0, k), b = rest.slice(k);
+  if (plan) {
+    const p = plan;
+    // A probe's call met its two calls: they are what it stands for.
+    if ("probe" in p) { p.probe.kids = [{ f, args: a }, { f, args: b }]; throw PROBE; }
+    // A level run again: given its two calls' answers, once.
+    plan = null;
+    second = p.kids[1];
+    return p.kids[0];
+  }
+  if (inBoth || !canShare() || !isMain() || inJob || quick.has(f) || !(fuel === Infinity || fuel === undefined)) {
+    const x = f(...a);
+    second = f(...b);
+    return x;
+  }
+  inBoth = true;
+  try {
+    const root: Node = { f, args: [], kids: [{ f, args: a }, { f, args: b }] };
+    const target = 8 * (SIZE() + 1);
+    // Unfolded a level at a time, while there are fewer leaves than that.
+    const leaves = (n: Node): Node[] => (n.kids ? [...leaves(n.kids[0]), ...leaves(n.kids[1])] : n.v === undefined ? [n] : []);
+    for (let depth = 0, open = leaves(root); depth < 8 && open.length && open.length < target; depth++, open = leaves(root)) {
+      for (const n of open) {
+        plan = { probe: n };
+        try { n.v = { ended: n.f(...n.args) }; }
+        catch (e) { if (e !== PROBE) n.kids = undefined; }
+        finally { plan = null; }
+      }
+      if (open.every((n) => !n.kids)) break;
+    }
+    const todo = leaves(root);
+    const values = shared(todo.length, (i) => todo[i].f(...todo[i].args), () => {
+      const calls = todo.map((n) => [encode(n.f, names!), ...n.args.map((x) => encode(x, names!))]);
+      return calls.some((c) => c.includes(NO)) ? NO : { calls };
+    }, f);
+    todo.forEach((n, i) => (n.v = { ended: values[i] }));
+    // The levels above, each run again with its two calls' answers.
+    const answer = (n: Node): unknown => {
+      if (!n.kids) return (n.v as { ended: unknown }).ended;
+      const kids: [unknown, unknown] = [answer(n.kids[0]), answer(n.kids[1])];
+      if (n === root) return kids;
+      plan = { kids };
+      try { return n.f(...n.args); } finally { plan = null; }
+    };
+    const [x, y] = answer(root) as [unknown, unknown];
+    second = y;
+    return x;
+  } finally { inBoth = false; plan = null; }
+}
+export const bothSecond = (): unknown => second;
+// Whether two calls go to bothPure: where they may be shared out, or a
+// probe or a level run again is waiting for them.
+export const bothOn = (): boolean => plan !== null || (!inBoth && !inJob && canShare() && isMain());
 
 // A map of a function that only computes (C42): its items in runs, as
 // many as a together's branches would be worth sharing. A map is often
