@@ -39,7 +39,7 @@ import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type U
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, endsAsBefore, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -589,6 +589,7 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // sort's lowering 451 to about 200 ms, wc's about 500 to 120).
   // A solve a relation's direction answers is that direction (directions.ts,
   // POLAR.md), as the checker reads it: the same nodes, its types (C177).
+  const given = info;
   code = reachedImplementing(useDirections(code), roots, info);
   const h = hoistInvariants(code, info, names);
   if (h.hoisted) ({ code, info, names } = h);
@@ -599,7 +600,7 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // (library-reps.ts) may call the constructors they stand for.
   ({ code, info, names } = withInverses(code, info, names));
   const f = fusedProgram(code, info, names);
-  let ir = lowerScalar(f.code, f.info, f.names, roots, { data: true, host: true });
+  let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true });
   // A linear function of a linear function, one matrix (linear-calls.ts, L44).
   if (!envSet("NO_LINEAR")) linearCalls(ir);
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
@@ -821,7 +822,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   // A together run side by side (C41, branches-rt.ts): the module is
   // started again on worker threads, which find each branch's code by
   // name, and run no main.
-  const branches = /R\.rt\("(together|map|keep|all|any)\.pure"/.test(js);
+  const branches = /R\.rt\("(together|map|keep|all|any|first)\.pure"/.test(js);
   const body = branches ? withFunctionsNamed(js) : js;
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,

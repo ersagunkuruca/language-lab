@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, firstInOrder, firstPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -177,6 +177,8 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     const any = name === "any.pure";
     return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? testPure(xs, f as (x: unknown) => unknown, site as number, any) : testInOrder(xs, f as (x: unknown) => unknown, any));
   }
+  // first where, its answer's item as a list of one or none (C43).
+  if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
   if (name === "map.pure" || name === "keep.pure") {
     const keep = name === "keep.pure";
     return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep) : mapInOrder(xs, f as (x: unknown) => unknown, keep));

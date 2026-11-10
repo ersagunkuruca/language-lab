@@ -506,6 +506,15 @@ export const OPS = {
 // value a printer may work out once (core-js.ts, C137d17).
 // `binders`: the binder each local holds, where the lowering read one
 // (C143d, the map's): ids only, by the local's number.
+// A rewrite that changes no answer (arithmetic resolved, a derivative
+// written out, a list let inlined, a list made an array) checked again: a
+// definition that ended before ends now, though the checker may no longer
+// see why, as with a walk over an array by first and rest (C184).
+export function endsAsBefore(before: Info, after: Info): Info {
+  for (const d of [...after.divergent]) if (before.typeOf.has(d) && !before.divergent.has(d)) after.divergent.delete(d);
+  return after;
+}
+
 export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[] }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
@@ -603,6 +612,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (i === undefined) { i = sites.push({ ...here, ...(names[here.def] ? { name: names[here.def] } : {}) }) - 1; siteAt.set(here.node, i); }
     return i;
   };
+  const asGiven = info;
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // Case and graphemes with no host to ask run the cases module (L214e5).
@@ -673,6 +683,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     code = lets.code;
     info = infer(code, names);
   }
+  // Each step above changes no answer, so what ended as given still ends.
+  info = endsAsBefore(asGiven, info);
   // A generic definition (the vectors module's plus, for any record of
   // Float64s) is lowered once per set of types it's called at, the way a
   // C++ template or a Rust generic is: `at` is what its type variables
@@ -1368,7 +1380,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             given.set(n.id, [xs, by]);
             let plain: SExpr;
             try { plain = expr(id, env, f, tail); } finally { given.delete(n.id); }
-            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: { k: "rt", fn: `${parallelList.get(n.id)}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] }, else: plain, t } };
+            const shared: SExpr = { k: "rt", fn: `${parallelList.get(n.id)}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
+            // first where's runtime gives the item found, as a list of it
+            // or of none, which first where as compiled then answers from.
+            let then: SExpr = shared;
+            if (parallelList.get(n.id) === "first") {
+              const one = f.locals.push(tx) - 1;
+              given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
+              try { then = { k: "let", i: one, value: shared, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
+            }
+            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then, else: plain, t } };
           }
         }
         // The same in C (L101, c.ts `par:map`), an array's: on threads,

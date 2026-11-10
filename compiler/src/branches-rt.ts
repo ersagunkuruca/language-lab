@@ -143,7 +143,7 @@ const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
-  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any") : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
+  return m.until ? (i) => deciding(items.slice(i * m.size!, (i + 1) * m.size!), f, m.until === "any", () => stopped(m.claims, i - m.base)) : (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
 
 // The list of actions, and the list of their values in the same kind.
@@ -254,7 +254,7 @@ const stopped = (claims: Int32Array, i: number): boolean => { const d = Atomics.
 function decided(claims: Int32Array, i: number): void {
   for (let d = Atomics.load(claims, 0); d === 0 || d - 1 > i; d = Atomics.load(claims, 0)) if (Atomics.compareExchange(claims, 0, d, i + 1) === d) return;
 }
-function sharedUntil(n: number, here: (i: number) => number, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
+function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => number, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
   const values: unknown[] = new Array(n), ends = (v: unknown) => v instanceof Thrown || (v as number) >= 0;
   const main = !!wt()?.isMainThread && !inJob;
   let next = 0;
@@ -280,7 +280,7 @@ function sharedUntil(n: number, here: (i: number) => number, send: () => Payload
       if (Atomics.compareExchange(claims, 2 + i, 0, 1) !== 0) continue;
       mine.add(i);
       if (stopped(claims, i)) continue;
-      if (ends(values[base + i] = attempt(() => here(base + i)))) decided(claims, i);
+      if (ends(values[base + i] = attempt(() => here(base + i, () => stopped(claims, i))))) decided(claims, i);
     }
   } finally { inJob = false; }
   const theirs = left - mine.size;
@@ -351,17 +351,35 @@ export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameK
 
 // all pass and any pass of a test that only computes (C43): a run's first
 // item that decides (fails the test for all, passes it for any), or -1.
-const deciding = (items: unknown[], f: Fn, any: boolean): number => { for (let i = 0; i < items.length; i++) if (!f(items[i]) === !any) return i; return -1; };
-export function testPure(xs: unknown, f: Fn, site: number, any: boolean): boolean {
-  if (!canShare()) return testInOrder(xs, f, any);
+// A run past one that decided stops between items (stop), its value then
+// never read.
+const deciding = (items: unknown[], f: Fn, any: boolean, stop?: () => boolean): number => { for (let i = 0; i < items.length; i++) { if (!f(items[i]) === !any) return i; if (stop?.()) return -1; } return -1; };
+// The index of the first item that decides, or -1.
+function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean): number {
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
-  const runs = sharedUntil(n, (i) => deciding(items.slice(i * size, (i + 1) * size), f, any), () => {
+  const runs = sharedUntil(n, (i, stop) => deciding(items.slice(i * size, (i + 1) * size), f, any, stop), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, until: any ? "any" : "all" };
   }, (f as Closure).code);
+  const last = runs[runs.length - 1];
+  if (last instanceof Thrown) throw last.e;
   // A measure only of a test that ran through: one that stopped early says little of the next.
-  const found = (runs[runs.length - 1] as number) >= 0;
-  if (!found) perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
+  if (!((last as number) >= 0)) { perItem[site] = (performance.now() - t0) / Math.max(1, items.length); return -1; }
+  return (runs.length - 1) * size + (last as number);
+}
+export function testPure(xs: unknown, f: Fn, site: number, any: boolean): boolean {
+  if (!canShare()) return testInOrder(xs, f, any);
+  const found = firstDeciding(xs, f, site, any) >= 0;
   return any ? found : !found;
 }
 export const testInOrder = (xs: unknown, f: Fn, any: boolean): boolean => (any ? itemsOf(xs).some((x) => f(x)) : itemsOf(xs).every((x) => f(x)));
+
+// first where of a test that only computes and ends (C43): the first item
+// that passes, as a list of it or of none in the input's kind, which the
+// compiled first where then takes its answer from.
+export function firstPure(xs: unknown, f: Fn, site: number): unknown {
+  if (!canShare()) return firstInOrder(xs, f);
+  const i = firstDeciding(xs, f, site, true);
+  return sameKind(xs, i < 0 ? [] : [itemsOf(xs)[i]]);
+}
+export const firstInOrder = (xs: unknown, f: Fn): unknown => { const items = itemsOf(xs), i = items.findIndex((x) => f(x)); return sameKind(xs, i < 0 ? [] : [items[i]]); };

@@ -146,6 +146,19 @@ test("nicomachus checks its ks by all pass and any pass on workers, the same ans
   assert.equal(small[0], inEvaluator[0]);
 });
 
+test("divisors finds its n by first where on workers, the same answer as in turn and in the evaluator (C43)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/divisors"), "-o", "divisors.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/divisors"), "1000", "100"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  assert.match(readFileSync(join(dir, "divisors.mjs"), "utf8"), /R\d*\.rt\("first\.pure"/);
+  const [side, alone, none, small] = await Promise.all([run(["divisors.mjs", "4000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "4000", "300"], { TERS_WORKERS: "0" }, dir), run(["divisors.mjs", "1500", "2000"], { TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "1000", "100"], {}, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[0], /more than 300 divisors: some\(2079\)/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(none[0], /more than 2000 divisors: none/);
+  assert.equal(small[0], inEvaluator[0]);
+});
+
 // all pass stops at the first item that fails: an abort after it isn't
 // seen, one before it is, wherever each ran (C43).
 test("all pass's first deciding item or abort in order is its answer, wherever each ran (C43)", async () => {

@@ -44,6 +44,11 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   const options = p.options as Parameters<typeof infer>[3];
   const info = infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
+  // A rewrite changes no answer, so a definition that ended as written
+  // ends stored too: a walk over an array (first and rest of a list made
+  // an array) isn't one the checker sees getting smaller, and would spend
+  // a step a call (C184: the pedal's following, matching and bands).
+  for (const d of [...info.divergent]) if (p.info.typeOf.has(d) && !p.info.divergent.has(d)) info.divergent.delete(d);
   return { ...p, code, names, info, chosen };
 }
 
