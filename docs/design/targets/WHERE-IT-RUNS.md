@@ -15,9 +15,13 @@ the items) is marked shared first, and only such cells' counts change
 atomically, as Koka's and Lean's runtimes do. A together whose actions
 only compute runs them on the same threads (C201): examples/area native,
 side 2400, 2.5 s to 0.86 s. An array's keep likewise (C202a,
+<<<<<<< HEAD
 `par:keep`): examples/collatz native below 3000000, 3.3 s to 1.3 s; and
 `all pass` and `any pass` (C202b): examples/nicomachus native below 12000,
 4.9 to 5.2 s to 2.6 s.
+=======
+`par:keep`): examples/collatz native below 3000000, 3.3 s to 1.3 s.
+>>>>>>> origin/main
 The goal is in [STABLE-REFERENCES.md](../data/STABLE-REFERENCES.md) §6:
 every processing environment a target has (on the web: the main thread,
 Web Workers, WebAssembly, the GPU through WebGPU compute) used without the

@@ -297,7 +297,11 @@ const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
 // A map whose function only computes, its items on threads (L101), and a
 // together whose actions only compute, its actions so (C201).
+<<<<<<< HEAD
 const isPar = (fn: string) => fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:together";
+=======
+const isPar = (fn: string) => fn === "par:map" || fn === "par:keep" || fn === "par:together";
+>>>>>>> origin/main
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -595,12 +599,19 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   // Each map on threads, by its array types and function type (parC).
   // A keep (C202) is a map whose function's answers say which items stay.
+<<<<<<< HEAD
   // all pass and any pass (C202b), whose answer is the first deciding test's.
   type ParJob = "map" | "keep" | "all" | "any";
   const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType; job: ParJob }>();
   const parSite = (ta: AType, tf: FType, to: AType, job: ParJob = "map"): number => {
     const k = `${ta.key} ${tf.key} ${to.key} ${job}`;
     if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to, job });
+=======
+  const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType; keep: boolean }>();
+  const parSite = (ta: AType, tf: FType, to: AType, keep = false): number => {
+    const k = `${ta.key} ${tf.key} ${to.key}${keep ? " keep" : ""}`;
+    if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to, keep });
+>>>>>>> origin/main
     arrayFns.add(`array.length.a${ta.index}`).add(`array.empty.a${to.index}`);
     return pars.get(k)!.n;
   };
@@ -1447,8 +1458,12 @@ int main(int argc, char **argv) {
             return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
           if (isPar(e.fn)) {
+<<<<<<< HEAD
             const job = e.fn.slice(4) as "map" | "keep" | "all" | "any", ta = typeOf(e.args[0], f.locals) as AType;
             const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" ? ta : e.host!.t as AType, job);
+=======
+            const n = parSite(typeOf(e.args[0], f.locals) as AType, typeOf(e.args[1], f.locals) as FType, e.host!.t as AType, e.fn === "par:keep");
+>>>>>>> origin/main
             return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
           if (isPerform(e.fn)) {
@@ -2203,12 +2218,17 @@ failed:
   // library's keep tests its items from the first, so they are held last
   // first: run from the back of that, the keep fails at the first item
   // that fails, as in order.
+<<<<<<< HEAD
   // all pass and any pass (C202b) likewise from the first item, the
   // answer the first test that decides (fails for all, passes for any),
   // or one that fails before it the failure.
   function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: "map" | "keep" | "all" | "any" }, stops: boolean, fuelled: boolean): string {
     const { n, ta, tf, to, job } = p, keep = job !== "map", tests = job === "all" || job === "any", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
     const decides = (x: string) => (job === "all" ? `!${x}` : x);
+=======
+  function parC(p: { n: number; ta: AType; tf: FType; to: AType; keep: boolean }, stops: boolean, fuelled: boolean): string {
+    const { n, ta, tf, to, keep } = p, J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
+>>>>>>> origin/main
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
     const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
@@ -2280,7 +2300,11 @@ ${keep ? `  int64_t m = 0;
   for (k = 0; k < n; k++) r->it[r->lo + (uint32_t)k] = j.out[k];`}
   ${counted(ta.item) ? `for (k = 0; k < n; k++) ${drop(ta.item, "j.in[k]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
   lab_drop(f);
+<<<<<<< HEAD
   return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)${keep ? "m" : "n"});`}
+=======
+  return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)${keep ? "m" : "n"});
+>>>>>>> origin/main
 failed:
   ${counted(out) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(out, "j.out[m]")}\n  ` : ""}${counted(ta.item) ? `for (int64_t m = 0; m < n; m++) ${drop(ta.item, "j.in[m]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
   lab_drop(f);
