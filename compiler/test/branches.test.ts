@@ -1,11 +1,11 @@
 // Pure branches of together on worker threads (C41, branches-rt.ts): a
 // compiled module shares a together's branches with workers, and a map's
-// items (C42), and says what it says run in order: the same values, and
+// or keep's items (C42, C43), and says what it says run in order: the same values, and
 // the first abort in the actions' or items' order.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
@@ -120,4 +120,17 @@ test("a map's items cross with what its function captured, and its first abort i
     const [out, err, code] = await run([aborts], { TERS_WORKERS: workers });
     assert.deepEqual([out, err, code], ["", "5\n", 1], `with ${workers} workers`);
   }
+});
+
+test("collatz keeps its long walks on workers, the same numbers in the same order as in turn and in the evaluator (C43)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/collatz"), "-o", "collatz.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/collatz"), "2000", "100"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  // keep is copied by the arrays pass (library-reps.ts), and known by its copy's id.
+  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("keep\.pure"/);
+  const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[0], /^665 numbers below 300000 take more than 300 steps/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.equal(small[0], inEvaluator[0]);
 });

@@ -133,13 +133,13 @@ export function branchWorker(): boolean {
   return true;
 }
 // What a job sends, and what comes back for each unit.
-interface Job { job: number; units: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number }
+interface Job { job: number; units: number; claims: Int32Array; branches?: unknown[]; f?: unknown; items?: unknown[]; size?: number; keep?: boolean }
 interface Answer { job: number; i: number; v?: unknown; abort?: unknown; esc?: number; again?: true }
 const dec = (x: unknown) => decode(x, mod!.fns, mod!.closure);
 function unitsOf(m: Job): (i: number) => unknown {
   if (m.branches) return (i) => (dec(m.branches![i]) as Fn)();
   const f = dec(m.f) as Fn, items = m.items!.map(dec);
-  return (i) => items.slice(i * m.size!, (i + 1) * m.size!).map((x) => f(x));
+  return (i) => run(items.slice(i * m.size!, (i + 1) * m.size!), f, m.keep);
 }
 
 // The list of actions, and the list of their values in the same kind.
@@ -266,15 +266,17 @@ export function mapWorth(xs: unknown, site: number): boolean {
   for (let c = xs as { tag: unknown; fields: unknown[]; f1?: unknown }; c.tag === CONS && n < enough; c = (c.f1 ?? c.fields[1]) as typeof c) n++;
   return n >= enough;
 }
-export function mapPure(xs: unknown, f: Fn, site: number): unknown {
-  if (!canShare()) return mapInOrder(xs, f);
+// With `keep`, the items whose test passed (C43), each run's in order.
+const run = (items: unknown[], f: Fn, keep?: boolean): unknown[] => (keep ? items.filter((x) => f(x)) : items.map((x) => f(x)));
+export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean): unknown {
+  if (!canShare()) return mapInOrder(xs, f, keep);
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
-  const runs = shared(n, (i) => items.slice(i * size, (i + 1) * size).map((x) => f(x)), () => {
+  const runs = shared(n, (i) => run(items.slice(i * size, (i + 1) * size), f, keep), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
-    return es.includes(NO) ? NO : { f: g, items: es, size };
+    return es.includes(NO) ? NO : { f: g, items: es, size, keep };
   }, (f as Closure).code);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
   return sameKind(xs, (runs as unknown[][]).flat());
 }
 // A map in order, under a budget.
-export const mapInOrder = (xs: unknown, f: Fn): unknown => sameKind(xs, itemsOf(xs).map((x) => f(x)));
+export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameKind(xs, run(itemsOf(xs), f, keep));

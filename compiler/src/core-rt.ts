@@ -172,7 +172,10 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name === "together.pure") return (actions: unknown, fuel: unknown) => (fuel === Infinity || fuel === undefined ? togetherPure(actions) : inOrder(actions));
   // And a map of a function that only computes, by runs of its items (C42).
   if (name === "map.worth") return mapWorth as (...xs: unknown[]) => unknown;
-  if (name === "map.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? mapPure(xs, f as (x: unknown) => unknown, site as number) : mapInOrder(xs, f as (x: unknown) => unknown));
+  if (name === "map.pure" || name === "keep.pure") {
+    const keep = name === "keep.pure";
+    return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
+  }
   // A replace where every array of its type has one holder (C93 s4,
   // core-js.ts lowerCore): written in place.
   if (name.startsWith("array.replaceOwned.")) return replaceOwned as (...xs: unknown[]) => unknown;
