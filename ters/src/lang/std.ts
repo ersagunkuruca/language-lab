@@ -258,8 +258,8 @@ export const TRIG_OPS = Object.fromEntries(TRIG_NAMES.map((op) => [op, `${TRIG_V
 export const TRIG_POLAR = `${TRIG_V}.polar`;
 {
   const port = (i: number) => node({ id: `${TRIG_POLAR}.t${i}`, kind: "tref", target: `${TRIG}.a`, args: [] });
-  const type = node({ id: `${TRIG_POLAR}.type`, kind: "tfun", params: [0, 1].map(port), result: node({ id: `${TRIG_POLAR}.t4`, kind: "tref", target: tupleType(2), args: [2, 3].map(port) }), effects: [] });
-  named(node({ id: TRIG_POLAR, kind: "field", type, ports: ["length", "angle", "x", "y"] }), "polar");
+  const type = node({ id: `${TRIG_POLAR}.type`, kind: "tfun", params: [0, 1].map(port), result: node({ id: `${TRIG_POLAR}.t4`, kind: "tref", target: tupleType(2), args: [2, 3].map(port) }), effects: [], ports: ["length", "angle", "x", "y"] });
+  named(node({ id: TRIG_POLAR, kind: "field", type }), "polar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_POLAR);
 }
 // And its other direction, unpolar: the same four ports as the function
@@ -267,8 +267,8 @@ export const TRIG_POLAR = `${TRIG_V}.polar`;
 export const TRIG_UNPOLAR = `${TRIG_V}.unpolar`;
 {
   const port = (i: number) => node({ id: `${TRIG_UNPOLAR}.t${i}`, kind: "tref", target: `${TRIG}.a`, args: [] });
-  const type = node({ id: `${TRIG_UNPOLAR}.type`, kind: "tfun", params: [0, 1].map(port), result: node({ id: `${TRIG_UNPOLAR}.t4`, kind: "tref", target: tupleType(2), args: [2, 3].map(port) }), effects: [] });
-  named(node({ id: TRIG_UNPOLAR, kind: "field", type, ports: ["x", "y", "length", "angle"] }), "unpolar");
+  const type = node({ id: `${TRIG_UNPOLAR}.type`, kind: "tfun", params: [0, 1].map(port), result: node({ id: `${TRIG_UNPOLAR}.t4`, kind: "tref", target: tupleType(2), args: [2, 3].map(port) }), effects: [], ports: ["x", "y", "length", "angle"] });
+  named(node({ id: TRIG_UNPOLAR, kind: "field", type }), "unpolar");
   (nodes.find((n) => n.id === TRIG_V) as NodeOf<"variant">).fields.push(TRIG_UNPOLAR);
 }
 // asin and acos (POLAR.md, L97c3): angles read off unpolar, (a) -[Choice]-> a:

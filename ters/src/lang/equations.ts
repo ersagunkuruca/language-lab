@@ -25,7 +25,7 @@
 import { defineRelation } from "../../../invertible/src/index.js";
 import { call, num, v } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf, Call } from "../model.ts";
-import { isCall, isUse } from "../model.ts";
+import { isCall, isUse, portNames } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
 import { ARITH, S, TRUE } from "./std.ts";
@@ -218,7 +218,8 @@ export function portLabel(code: Code, names: Names, fn: Id | null, key: string):
   if (key === "out") return "=";
   // An interface's field with results names its ports (POLAR.md, L231).
   const field = fn ? code.nodes[fn] : undefined;
-  if (field?.kind === "field" && field.ports && /^\d+$/.test(key) && field.ports[+key] !== undefined) return field.ports[+key];
+  const ports = field?.kind === "field" ? portNames(code.nodes, field) : undefined;
+  if (ports && /^\d+$/.test(key) && ports[+key] !== undefined) return ports[+key];
   // A builtin's ports are numbered; a function's are its parameters' ids,
   // which can be all digits too, so a key that names a node isn't a number.
   if (/^\d+$/.test(key) && !code.nodes[key]) {

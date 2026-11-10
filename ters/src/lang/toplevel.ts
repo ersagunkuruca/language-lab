@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, fieldWayOf, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
+import { conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
 import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
@@ -557,7 +557,7 @@ export function addWay(code: Code, names: Names, iface: Id, field: Id, rawName: 
   const n = t?.kind === "tfun" ? t.params.length : 0;
   const { nodes, add } = builder(code);
   const nn: Names = { ...names };
-  const params = Array.from({ length: n }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = f.ports?.[i] ?? LETTERS[23 + i] ?? `input ${i + 1}`; return b; });
+  const params = Array.from({ length: n }, (_, i) => { const b = add({ kind: "binder" }); nn[b] = portNames(code.nodes, f)?.[i] ?? LETTERS[23 + i] ?? `input ${i + 1}`; return b; });
   const hole = add({ kind: "hole" });
   const def = add({ kind: "def", body: add({ kind: "lambda", params, body: hole }), way: field });
   nn[def] = name;

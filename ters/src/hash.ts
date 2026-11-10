@@ -252,7 +252,9 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       // A shared field (L168) says which case's field it is, by position;
       // only when present, so every hash from before stays.
       // How many ports it names says how many results it gives (L128d3).
-      case "field": return [...(n.same ? ["field", go(n.type), ["same", ...samePlace(n.same)]] : ["field", go(n.type)]), ...(n.ports ? [["ports", n.ports.length]] : [])];
+      // How many ports its type names stays with the field, as it was
+      // before the names moved to the type (L182c3): the same hashes.
+      case "field": { const ports = (code.nodes[n.type] as { ports?: string[] } | undefined)?.ports; return [...(n.same ? ["field", go(n.type), ["same", ...samePlace(n.same)]] : ["field", go(n.type)]), ...(ports ? [["ports", ports.length]] : [])]; }
       case "tref": {
         const head = binders.has(n.target) ? ["var", binders.get(n.target)] : defRef(n.target);
         return ["tref", head, ...n.args.map(go)];
