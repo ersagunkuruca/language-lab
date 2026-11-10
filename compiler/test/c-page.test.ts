@@ -251,3 +251,32 @@ test("bounce in C moves its bodies frame by frame as html.ts does (C199f)", { sk
   assert.equal(r.status, 0, r.stderr.toString());
   assert.deepEqual(r.stdout.toString().split("\x1e\n").slice(0, -1), evaluator);
 });
+
+// tumble on a phone (C199f): Ersagun's taps swapped two pieces, and then
+// nothing, since a lane shows its next step when the step's animation
+// ends (animationend) and the screen ran no animations. c-layout.ts runs
+// a box's @keyframes as the clock goes and tells their ends; a part that
+// draws something else into the same elements starts their animations
+// again, as a browser's new elements would. A swap the hint shows (found
+// with html.ts) now plays its chain through to rest in every lane.
+test("tumble's swap in C plays its animations and the chain after it to rest (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/tumble"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const page = showPage({ code: p0.code, info, names: p0.pres.names, main, program: "tumble", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {} });
+  (page.root as FakeEl).find("hint").fire("click");
+  const [a, b] = [...(page.root as FakeEl).html().matchAll(/class="tap hint"[^>]*id="([^"]*)"/g)].map((m) => m[1]);
+  page.stop();
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", `pointerdown:${a}`, `pointerdown:${b}`, "frames:9:16", "frames:11:16", "frames:400:16"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const pages = r.stdout.toString().split("\x1e\n"), said = (k: number) => [...pages[k].matchAll(/"(Showing: \w+|At rest)\./g)].map((m) => m[1]);
+  assert.deepEqual(said(2), ["Showing: swap", "Showing: swap", "Showing: swap"]);
+  // Halfway through the swap a piece is on its way: the pieces' boxes
+  // are neither where they were nor where they end.
+  const pieces = (k: number) => pages[k].split("\n").filter((s) => / 36 36 bg /.test(s)).join("\n");
+  assert.notEqual(pieces(3), pieces(2));
+  assert.deepEqual(said(4), ["Showing: clear", "Showing: clear", "Showing: clear"]);
+  assert.deepEqual(said(5), ["At rest", "At rest", "At rest"]);
+  assert.match(pages[5], /Steps worked out, still to show: 0\./);
+});

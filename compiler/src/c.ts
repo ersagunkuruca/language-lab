@@ -937,10 +937,17 @@ typedef struct ters_host {
   void (*clear)(void *ctx, void *el);
   void (*listen)(void *ctx, void *el, const char *event, size_t n, int handler);
   void (*gone)(void *ctx, void *node);
+  // A part ran again and drew something else, but into the same elements
+  // (ters_lay): to a browser, which mounts a part's elements again, they
+  // are new, and their animations start again (c-layout.ts). May be null.
+  void (*renew)(void *ctx, void *el);
 } ters_host;
 static ters_host *ters_h;
 // Run after the page changed (c-layout.ts lays it out again).
 static void (*ters_after)(void);
+// A screen's own animations (c-layout.ts tl_moving): 0, whether any runs;
+// 1, move them on to now, telling their ends. Whether any still runs.
+static int (*ters_moving)(int);
 // What was drawn: an element (its tag, attributes and children), a text,
 // or a part (what it drew). A property keeps what it showed (null: none);
 // an event keeps its handler's number.
@@ -967,12 +974,15 @@ static int ters_handler(lab_cell *f) {
   ters_handlers[ters_nh] = f;
   return ters_nh++;
 }
+// How many times the page was told something changed.
+static long ters_changes;
 static void ters_show(ters_m *m, ters_attr *a) {
   lab_cell *v = ters_view(a->f);
   int live = (LAB_TN(a->name) == 5 && !memcmp(LAB_TB(a->name), "value", 5)) || (LAB_TN(a->name) == 7 && !memcmp(LAB_TB(a->name), "checked", 7));
   // None: an attribute is taken off; a field's value or tick stays.
-  if (!v) { if (a->shown) { if (!live) ters_h->remove_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name)); lab_drop(a->shown); a->shown = 0; } return; }
+  if (!v) { if (a->shown) { ters_changes++; if (!live) ters_h->remove_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name)); lab_drop(a->shown); a->shown = 0; } return; }
   if (ters_same(v, a->shown)) { lab_drop(v); return; }
+  ters_changes++;
   ters_h->set_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name), (const char *)LAB_TB(v), LAB_TN(v));
   if (a->shown) lab_drop(a->shown);
   a->shown = v;
@@ -981,6 +991,7 @@ static void ters_text(ters_m *m) {
   lab_cell *v = ters_view(m->f);
   if (!v) v = lab__text_of("", 0);
   if (ters_same(v, m->shown)) { lab_drop(v); return; }
+  ters_changes++;
   ters_h->set_text(ters_h->ctx, m->view, (const char *)LAB_TB(v), LAB_TN(v));
   if (m->shown) lab_drop(m->shown);
   m->shown = v;
@@ -1080,11 +1091,17 @@ static void ters_lay(ters_m *m, lab_cell *h) {
     if (h->tag == ${tx}) ters_text(m); else ters_part(m);
   }
 }
+// Each element of a part that drew something else, told it is new.
+static void ters_renew(ters_m *m) {
+  if (!m) return;
+  if (m->kind == ${el}) { ters_h->renew(ters_h->ctx, m->view); for (int j = 0; j < m->nk; j++) ters_renew(m->kids[j]); }
+  else if (m->kind == ${pt}) ters_renew(m->part);
+}
 static void ters_part(ters_m *m) {
   lab_dup(m->f);
   lab_cell *h = ${call(PF, "m->f")};
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); return; }
-  if (m->part && ters_fits(m->part, h)) ters_lay(m->part, h);
+  if (m->part && ters_fits(m->part, h)) { long was = ters_changes; ters_lay(m->part, h); if (ters_changes != was && ters_h->renew) ters_renew(m->part); }
   else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
   lab_drop(h);
 }
@@ -1126,16 +1143,20 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
   return ok;
 }
 // Whether what the page shows read the clock, so it runs again each frame.
-int ters_page_clock(void) { return ters_clock; }
+int ters_page_clock(void) { return ters_clock || (ters_moving && ters_moving(0)); }
 // A frame: what the page shows runs again, if it read the clock. Whether
 // it still does.
 int ters_page_frame(void) {
-  if (!ters_clock) return 0;
-  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
-  ters_refresh(ters_root);
-  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
-  if (ters_after) ters_after();
-  return ters_clock;
+  int moving = ters_moving && ters_moving(0);
+  if (!ters_clock && !moving) return 0;
+  if (ters_clock) {
+    ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+    ters_refresh(ters_root);
+    ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+    if (ters_after) ters_after();
+  }
+  if (ters_moving) moving = ters_moving(1);
+  return ters_clock || moving;
 }
 ${mode === "headless" ? HEADLESS_C : mode === "ui" ? LAYOUT_C : mode === "ui-headless" ? LAYOUT_C + UI_HEADLESS_C : ""}`;
   }
