@@ -229,7 +229,7 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     [prelude("remove key")]: def("table remove key", ["table", "key"], (t, key) => k.call(T.remove, t, key)),
     [prelude("has key")]: def("table has key", ["table", "key"], (t, key) => k.call(T.has, t, key)),
     [prelude("merge maps")]: def("table merge", ["first", "second"], (a, b) => putAllT(k.call(prelude("reverse"), k.call(tableEntries, b)), a)),
-    [prelude("keys of")]: def("table keys", ["table"], (t) => k.call(prelude("map"), k.call(tableEntries, t), k.fn(["entry"], (e) => pair(e, (key) => key)))),
+    [prelude("keys of")]: def("table keys", ["table"], (t) => k.call(T.keys, t)),
     [prelude("values of")]: def("table values", ["table"], (t) => k.call(prelude("map"), k.call(tableEntries, t), k.fn(["entry"], (e) => pair(e, (_, v) => v)))),
     [prelude("entries of")]: tableEntries,
     [prelude("map size")]: def("table size of", ["table"], (t) => k.call(T.size, t)),

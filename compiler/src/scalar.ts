@@ -107,6 +107,8 @@ import { wideProducts } from "./wide-products.ts";
 const TABLE_RT: Record<Id, string> = {
   [TABLE_OPS.empty]: "empty", [TABLE_OPS.put]: "put", [TABLE_OPS.remove]: "remove", [TABLE_OPS.has]: "has",
   [TABLE_OPS.size]: "size", [TABLE_OPS.at]: "at", [TABLE_OPS.entries]: "entries",
+  // Its keys alone are a list of them, as a set's items are (`keys of`).
+  [TABLE_OPS.keys]: "entries",
   // A hash set (C63i) is the table of its items, each holding true.
   [HASH_SET_OPS.empty]: "empty", [HASH_SET_OPS.add]: "put", [HASH_SET_OPS.remove]: "remove", [HASH_SET_OPS.has]: "has",
   [HASH_SET_OPS.size]: "size", [HASH_SET_OPS.items]: "entries",
@@ -219,6 +221,13 @@ export interface TType { key: string; name: string; keyT: "int" | "text" | "f64"
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
+// Whether a list of a table's (its `entries`) holds its keys alone: a
+// set's items, or a map's `keys of`; otherwise (key, value) pairs.
+export function keyList(t: TType, d: DType): boolean {
+  const c = d.cases.find((x) => x.fields.length > 0);
+  const item = c?.fields.find((x) => x.t !== d)?.t;
+  return t.set || item === t.keyT || (!!item && isRecord(item) && typeof t.keyT === "object" && item.key === t.keyT.key);
+}
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
@@ -1339,7 +1348,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
           const h = ts.find(isTable);
           if (!h) throw new Refused(`uses ${nm(target)} on no table`);
-          const l = target === TABLE_OPS.entries || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
+          const l = target === TABLE_OPS.entries || target === TABLE_OPS.keys || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
           if (l && !h.entries.includes(l)) h.entries.push(l);
           return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: target === HASH_SET_OPS.add ? [...args(), { k: "bool", v: true }] : args() };
         }

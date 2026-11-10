@@ -60,7 +60,8 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
     show(at(m, probe)),
     show(k.call(L("has key"), m, probe)),
     ...(opts.old ? [k.let("more", k.call(L("put"), m, probe, k.int(1000)), (more) => k.seq(show(at(more, probe)), show(at(m, probe))))] : []),
-    ...(opts.list ? [show(k.call(L("entries of"), m))] : []),
+    // Its keys too (`keys of`, a list of the keys alone on every target).
+    ...(opts.list ? [show(k.call(L("entries of"), m)), show(k.call(L("keys of"), m))] : []),
     ...(opts.remove ? [k.let("less", k.call(L("remove key"), m, probe), (less) => k.seq(show(k.call(L("map size"), less)), show(k.call(L("has key"), less, probe))))] : []),
   ))));
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
@@ -131,7 +132,8 @@ test("a map keyed by a record of Ints and Texts is a hash table, evaluated and c
   const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
   assert.deepEqual(lines, want);
   assert.equal(want[0], "38");
-  assert.match(want[want.length - 3], /^\[\(spot\(0, "0"\), 8\), /);
+  assert.match(want[want.length - 4], /^\[\(spot\(0, "0"\), 8\), /);
+  assert.match(want[want.length - 3], /^\[spot\(0, "0"\), spot\(1, "0"\), /);
   const got: string[] = [];
   const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();

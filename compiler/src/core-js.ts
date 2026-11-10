@@ -40,7 +40,7 @@ import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type U
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, endsAsBefore, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -96,7 +96,12 @@ function builtinOf(name: string): BuiltinOf | undefined {
   const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
   return id ? [id, runtime(plain).result === "i32"] : undefined;
 }
-export const tableSpec = (t: TType): TableSpec => ({ set: t.set });
+// Which of a map's entries lists are its keys alone (`keys of`): a list
+// whose items are of the key's type.
+export const tableSpec = (t: TType): TableSpec => {
+  const keys = t.set ? [] : t.entries.map((d) => keyList(t, d));
+  return keys.some((x) => x) ? { set: t.set, keys } : { set: t.set };
+};
 
 const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
 // The runtime's builtins that are one operator on how values are held
