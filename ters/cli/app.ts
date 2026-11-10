@@ -83,7 +83,7 @@ Built by \`ters build-app\` from a program in the language (docs/design/targets/
 
 // A square icon: the program's colour, with a white disc inside the
 // middle 40% that every mask keeps.
-function icon(n: number, [r, g, b]: number[]): Uint8Array {
+export function icon(n: number, [r, g, b]: number[]): Uint8Array {
   const rows = Buffer.alloc(n * (1 + 3 * n));
   for (let y = 0; y < n; y++) {
     rows[y * (1 + 3 * n)] = 0;
@@ -106,7 +106,7 @@ function icon(n: number, [r, g, b]: number[]): Uint8Array {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-function rgb(h: number, s: number, l: number): number[] {
+export function rgb(h: number, s: number, l: number): number[] {
   const k = (m: number) => (m + h / 30) % 12, a = s * Math.min(l, 1 - l);
   return [0, 8, 4].map((m) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(m) - 3, 9 - k(m), 1)))));
 }

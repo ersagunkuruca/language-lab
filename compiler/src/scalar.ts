@@ -617,6 +617,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // uses from around it, since there are no closures here (lift-lets.ts,
   // C54).
   ({ code, info, names } = liftLets(code, info, names, true));
+  // Only what the roots reach goes through firstArms, which checks the
+  // program again (T14): the editor's shader picture checked the whole
+  // library there. After the arithmetic is resolved, which reads
+  // implementations and ways nothing names.
+  code = reachedWithShows(code, roots, info);
   // The first answer of a search that can't fail once each choice takes
   // its first way is that way, as plain code (first-arms.ts, L72e1d):
   // json printed as json spelled's first, with no choice kept to go back to.
