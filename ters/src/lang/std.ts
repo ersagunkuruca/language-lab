@@ -977,7 +977,7 @@ export const replaceOwned = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => 
   const b = t.cur;
   if (b.items instanceof Uint8Array && !isByte(x)) b.items = Array.from(b.items);
   b.items[v.start + k] = x;
-  return new ArrayView(t, v.start, v.n);
+  return v;
 };
 const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
 const arrayOf_ = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });

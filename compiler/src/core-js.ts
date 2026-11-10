@@ -618,7 +618,7 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   writtenArrays(ir);
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
-  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0]);
+  if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0], true);
   // A push onto an array a call just made, on its view (C196).
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).

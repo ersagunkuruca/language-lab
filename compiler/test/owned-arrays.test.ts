@@ -14,9 +14,11 @@ import assert from "node:assert/strict";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
-import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { LIBRARY, TREES } from "../../ters/src/lang/library.ts";
+import { merge } from "../../ters/src/model.ts";
 import { runProgram } from "../../ters/src/lang/run.ts";
-import { ARRAY_OPS, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, INT_OPS, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { preludeDef } from "../../ters/src/lang/arith.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { ownedArrays } from "../src/owned-arrays.ts";
@@ -66,4 +68,42 @@ test("a rest taken before the change shares the buffer, so the change keeps a ve
   assert.equal(r.owned, true);
   assert.deepEqual(r.compiled, r.evaluator);
   assert.deepEqual(r.wasm, r.evaluator);
+});
+
+// An `array map` keeping its items' type, of an array nobody else holds,
+// writes each answer into the slot it came from (C60, JavaScript only):
+// printed, what the evaluator prints, and whether it was written so.
+function mapped(body: (k: Lang, a: Id, map: (a: Id, by: (x: Id) => Id) => Id) => Id): { evaluator: string[]; compiled: string[]; inPlace: boolean } {
+  const k = new Lang(merge(LIBRARY.code, TREES.code));
+  const map = (a: Id, by: (x: Id) => Id) => k.call(preludeDef("array map")!, a, k.fn(["x"], (x) => by(x)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("a", k.call(ARRAY_OPS.of, k.listOf(k.int(1), k.int(2), k.int(3))), (a) => k.call(S.print, k.call(SHOW_ANY, body(k, a, map))))));
+  const code = merge(base(TREES.code), k.code), names = { ...baseNames(k.names), ...TREES.names }, info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const evaluator: string[] = [], compiled: string[] = [];
+  runProgram(code, info, main, [], { print: (s) => evaluator.push(s), names });
+  const ir = lowerCore(code, info, names, [main]);
+  runCoreMain(ir, "main", [], { print: (s) => compiled.push(s) });
+  return { evaluator, compiled, inPlace: printed(ir).js.includes("array.replaceOwned") };
+}
+const plus = (k: Lang, x: Id, n: number) => k.call(INT_OPS.add, x, k.int(n));
+
+test("a map of an array nobody else holds writes into it", () => {
+  const r = mapped((k, a, map) => map(map(a, (x) => plus(k, x, 1)), (x) => plus(k, x, 10)));
+  assert.equal(r.inPlace, true);
+  assert.deepEqual(r.compiled, r.evaluator);
+});
+
+test("a map of an array read after it makes a new one", () => {
+  const r = mapped((k, a, map) => k.call(PAIR_V, map(a, (x) => plus(k, x, 1)), a));
+  assert.equal(r.inPlace, false);
+  assert.deepEqual(r.compiled, r.evaluator);
+});
+
+test("a map whose function reads the array it maps makes a new one", () => {
+  // The last item, read for each: written first, were it in place.
+  const last = (k: Lang, a: Id) => k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, a, k.int(2))), k.thunk(() => k.int(0)));
+  const r = mapped((k, a, map) => map(a, (x) => k.call(INT_OPS.add, x, last(k, a))));
+  assert.equal(r.inPlace, false);
+  assert.deepEqual(r.compiled, r.evaluator);
 });
