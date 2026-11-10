@@ -22,3 +22,6 @@ in place (the map's array and the motes have one holder), 0.33 s by hand.
 Each mote is now changed in place in the map: compiled 0.47 to 0.63 s.
 Since C60's columns step the motes are an array per field, and a step
 reads vx and vy and writes x and y, nothing else (compiler/src/columns.ts).
+On C (`ters native`) the map writes into its array (c2a) and the loop
+reads and writes each mote's fields where they sit (c2b): 0.28 s CPU at
+300,000 motes, against 0.10 s for hand-written C changing records in place.

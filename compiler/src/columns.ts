@@ -12,8 +12,10 @@
 // another array, which writes each item's fields at its position. A map
 // that may share its items on workers (map.worth) runs in turn instead.
 // Anything else, an item leaving whole or the array given to the runtime,
-// keeps the array as rows. JavaScript only (core-js.ts prints the `cols.`
-// functions inline): a Float64 field is a Float64Array, any other an Array.
+// keeps the array as rows. On JavaScript (core-js.ts prints the `array.c…`
+// functions inline) a Float64 field is a Float64Array, any other an Array;
+// on C (c.ts) the items stay a buffer of structs, each field written in
+// its slot where nothing else counts the array.
 
 import { kids, mapKids, type AType, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -25,24 +27,27 @@ const isRecord = (t: LType | undefined): t is RType => typeof t === "object" && 
 const isArray = (t: LType | undefined, a: AType) => typeof t === "object" && t !== null && (t as { key?: string }).key === a.key;
 
 // The ops on an array type that columns keep, by name.
-const KEPT = /^array\.(get|length|empty|replaceOwned|pushFrontOwned)\.a(\d+)$/;
+const KEPT = /^array\.(get|length|empty|replaceOwned|pushFrontOwned|replaceAt|pushFront)\.a(\d+)$/;
+const PUSH = /^array\.pushFront(Owned)?\.a\d+$/, REPLACE = /^array\.replace(Owned|At)\.a\d+$/;
 
 // A map's fold as lowered (owned-arrays.ts): f(a, i, made, by) is `if i = 0
 // then made else let j = i - 1; let x = a[j]; f(a, j, put(made, …), by)`.
-interface Fold { fold: number; j: number; put: Extract<SExpr, { k: "rt" }> }
+// `from`: the local its items are read from, the array it puts into (2,
+// where arrays are counted: owned-arrays.ts mapsInPlaceCounted) or not.
+interface Fold { fold: number; j: number; put: Extract<SExpr, { k: "rt" }>; from: number }
 function foldOf(ir: CoreIR, g: number): Fold | null {
   const b = ir.funcs[g].body;
   if (b.k !== "if" || !isLocal(b.then, 2)) return null;
   const lj = b.else;
   if (lj.k !== "let" || lj.value.k !== "rt" || lj.value.fn !== "int.sub" || !isLocal(lj.value.args[0], 1)) return null;
   const lx = lj.body;
-  if (lx.k !== "let" || lx.value.k !== "rt" || !/^array\.get\.a\d+$/.test(lx.value.fn) || !isLocal(lx.value.args[0], 0) || !isLocal(lx.value.args[1], lj.i)) return null;
+  if (lx.k !== "let" || lx.value.k !== "rt" || !/^array\.get\.a\d+$/.test(lx.value.fn) || !(isLocal(lx.value.args[0], 0) || isLocal(lx.value.args[0], 2)) || !isLocal(lx.value.args[1], lj.i)) return null;
   const again = lx.body;
   if (again.k !== "call" || again.fn !== g || again.args.length !== 4 || !isLocal(again.args[0], 0) || !isLocal(again.args[1], lj.i) || !isLocal(again.args[3], 3)) return null;
   const put = again.args[2];
   if (put.k !== "rt" || !isLocal(put.args[0], 2)) return null;
-  if (/^array\.pushFrontOwned\.a\d+$/.test(put.fn) && put.args.length === 2) return { fold: g, j: lj.i, put };
-  if (/^array\.replaceOwned\.a\d+$/.test(put.fn) && put.args.length === 3 && isLocal(put.args[1], lj.i)) return { fold: g, j: lj.i, put };
+  if (PUSH.test(put.fn) && put.args.length === 2) return { fold: g, j: lj.i, put, from: (lx.value.args[0] as Local).i };
+  if (REPLACE.test(put.fn) && put.args.length === 3 && isLocal(put.args[1], lj.i)) return { fold: g, j: lj.i, put, from: (lx.value.args[0] as Local).i };
   return null;
 }
 
@@ -138,7 +143,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
     const items = new Set<number>();
     const w = (e: SExpr) => { if (e.k === "let" && e.value.k === "rt" && e.value.fn === `array.get${suffix}`) items.add(e.i); kids(e).forEach(w); };
     w(f.body);
-    const puts = found(f.body, (e) => e.k === "rt" && (e.fn === `array.pushFrontOwned${suffix}` || e.fn === `array.replaceOwned${suffix}`));
+    const puts = found(f.body, (e) => e.k === "rt" && ofA(e.fn) && (PUSH.test(e.fn) || REPLACE.test(e.fn)));
     const makes = (c: Extract<SExpr, { k: "call" }>) => { const t = funcs[c.fn].result; return isRecord(t) && t.key === r.key; };
     if (items.size || puts) inlined(work, f, i, (c) => (puts && makes(c)) || c.args.some((x) => isLocal(x) && items.has(x.i)));
   }
@@ -152,8 +157,12 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
     const fd = foldOf(work, b.fn);
     if (!fd || !ofA(fd.put.fn)) continue;
     const [x, len, made, by] = b.args;
-    if (!isLocal(x, 0) || !isLocal(by, 1) || len.k !== "rt" || !/^array\.length\.a\d+$/.test(len.fn) || !isLocal(len.args[0], 0)) continue;
-    const fresh = made.k === "rt" && made.fn === `array.empty${suffix}` && fd.put.fn.startsWith("array.pushFrontOwned"), same = isLocal(made, 0) && fd.put.fn.startsWith("array.replaceOwned");
+    if (!isLocal(by, 1) || len.k !== "rt" || !/^array\.length\.a\d+$/.test(len.fn) || !isLocal(len.args[0], 0)) continue;
+    const empty = (e: SExpr) => e.k === "rt" && e.fn === `array.empty${suffix}`;
+    // A new array of the map's answers (a, n, empty, by), or the map's own
+    // array: (a, n, a, by) read from a, or (empty, n, a, by) read from it.
+    const fresh = isLocal(x, 0) && empty(made) && PUSH.test(fd.put.fn) && fd.from === 0;
+    const same = REPLACE.test(fd.put.fn) && ((isLocal(x, 0) && isLocal(made, 0) && fd.from === 0 && fd.put.fn.startsWith("array.replaceOwned")) || (empty(x) && isLocal(made, 0) && fd.from === 2));
     if (!fresh && !same) continue;
     folds.set(b.fn, fd);
     entries.set(i, { call: b, fold: fd });
@@ -195,8 +204,8 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
             const m = KEPT.exec(e.fn);
             if (!m) return bad();
             if (m[1] === "get" && under?.k !== "let") return bad();
-            if ((m[1] === "pushFrontOwned" || m[1] === "replaceOwned") && !(fold && fold.put === e)) return bad();
-            if (m[1] === "empty" && ![...entries.values()].some((x) => x.call.args[2] === e)) return bad();
+            if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e)) return bad();
+            if (m[1] === "empty" && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
             for (const x of e.args) walk(x, e);
             return;
           }
@@ -219,7 +228,6 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
   }
 
   // Written as columns.
-  const fields = r.fields.map((x) => (x.t === "f64" ? "f" : "a")).join("");
   for (const i of now) {
     const f = funcs[i];
     const at = new Map<number, { x: Local; j: Local }>();
@@ -230,12 +238,12 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
         return go(e.body);
       }
       if (e.k === "let" && e.value.k === "local" && at.has(e.value.i)) { at.set(e.i, at.get(e.value.i)!); return go(e.body); }
-      if (e.k === "get" && e.rec.k === "local" && at.has(e.rec.i)) { const p = at.get(e.rec.i)!; return rt(`cols.get${suffix}.${e.i}`, p.x, p.j); }
-      if (e.k === "rt" && e.fn === `array.length${suffix}`) return rt(`cols.length${suffix}`, ...e.args.map(go));
-      if (e.k === "rt" && fold && e === fold.put) return written(e.args[0], loc(fold.j), e.args[e.args.length - 1], e.fn.startsWith("array.replaceOwned"));
+      if (e.k === "get" && e.rec.k === "local" && at.has(e.rec.i)) { const p = at.get(e.rec.i)!; return rt(`array.cget${e.i}${suffix}`, p.x, p.j); }
+      if (e.k === "rt" && e.fn === `array.length${suffix}`) return rt(`array.clength${suffix}`, ...e.args.map(go));
+      if (e.k === "rt" && fold && e === fold.put) return written(e.args[0], loc(fold.j), e.args[e.args.length - 1], REPLACE.test(e.fn));
       if (entry && e === entry.call) {
         const made = e.args[2];
-        const args = made.k === "rt" && made.fn === `array.empty${suffix}` ? [e.args[0], e.args[1], rt(`cols.new${suffix}.${fields}`, e.args[1]), e.args[3]] : e.args;
+        const args = made.k === "rt" && made.fn === `array.empty${suffix}` ? [e.args[0], e.args[1], rt(`array.cnew${suffix}`, e.args[1]), e.args[3]] : e.args;
         return { ...e, args: args.map(go) };
       }
       return mapKids(e, go);
@@ -255,7 +263,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
         // Made from the item at j of the array it is put into (the map's
         // own, owned-arrays.ts): the fields it keeps are there already.
         const from = x.into !== undefined ? at.get(x.into) : undefined;
-        const same = replaces && from && from.j.i === j.i && from.x.i === 0 ? new Set(x.same ?? []) : new Set<number>();
+        const same = replaces && from && from.j.i === j.i && fold && from.x.i === fold.from ? new Set(x.same ?? []) : new Set<number>();
         ks = r.fields.map((_, k) => k).filter((k) => !same.has(k));
         vals = ks.map((k) => x.k === "make" ? x.args[k] : x);
       } else {
@@ -265,7 +273,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
         vals = ks.map((k): SExpr => ({ k: "get", rec: loc(t), t: r, i: k }));
       }
       // The lets first (an item read in them still says what it said).
-      const body: SExpr = rt(`cols.set${suffix}.${ks.join("_")}`, c, j, ...vals);
+      const body: SExpr = rt(`array.cset${ks.join("_")}${suffix}`, c, j, ...vals);
       return go(lets.reduceRight<SExpr>((b, l) => ({ k: "let", i: l.i, value: l.value, body: b }), body));
     };
     f.body = unread(go(f.body));
@@ -279,6 +287,6 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
 function unread(e: SExpr): SExpr {
   const x = mapKids(e, unread);
   if (x.k !== "let") return x;
-  const cheap = x.value.k === "local" || (x.value.k === "rt" && x.value.fn.startsWith("cols.get"));
+  const cheap = x.value.k === "local" || (x.value.k === "rt" && x.value.fn.startsWith("array.cget"));
   return cheap && !found(x.body, (y) => y.k === "local" && y.i === x.i) ? x.body : x;
 }

@@ -96,6 +96,10 @@ const PRINTED = new Set<SExpr["k"]>([
 ]);
 // std's Array's runtime functions, one copy per item type (scalar.ts).
 const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
+// An array of records read and written field by field (columns.ts, C60):
+// on C its items stay structs in the buffer, each field read or written in
+// its slot.
+const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
@@ -662,6 +666,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const share = (t: LType, x: string) => (cell(t) ? `lab_share(${x});` : t === "int" ? `lab_int_share(${x});` : `${sname.get((t as RType).key)}_share(${x});`);
   // The type of a runtime function's answer.
   const rtType = (fn: string): LType => {
+    const col = COL_FN.exec(fn);
+    if (col) {
+      const t = lowered.arrays[Number(col[4])];
+      return col[1] === "length" ? rtType(`array.length.a${col[4]}`) : col[2] !== undefined ? (t.item as RType).fields[Number(col[2])].t : t;
+    }
     const r = runtime(fn), a = ARRAY_FN.exec(fn), tb = TABLE_FN.exec(fn);
     if (tb) {
       const t = lowered.tables[Number(tb[2])];
@@ -1633,7 +1642,7 @@ int main(int argc, char **argv) {
           }
           (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
-          return runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
+          return !COL_FN.test(e.fn) && runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
         }
         // The console and files: a Unit's call is a statement; one that
         // fails has set lab_st to 2, with the reason.
@@ -2891,6 +2900,45 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
 }`];
     const has = (op: string) => arrayFns.has(`array.${op}.a${i}`);
     const keep = (b: string) => (bytes ? `${b}->bytes` : "0");
+    // Field by field (columns.ts, C60): a field of the item at k read; the
+    // fields named written into the item at k, in place where nothing else
+    // counts the array, else in a copy; n items made to be written so.
+    if (isRecord(a.item)) {
+      const r = a.item;
+      for (const fn of fns) {
+        const m = COL_FN.exec(fn);
+        if (!m) continue;
+        if (m[1] === "new") out.push(`static lab_cell *lab_array_cnew_a${i}(lab_int n) {
+  uint32_t m = LAB_IS_SMALL(n) && LAB_VAL(n) > 0 ? (uint32_t)LAB_VAL(n) : 0;
+  lab_int_drop(n);
+  ${B} *b = lab__buf_a${i}(m, 0);
+  memset(&b->it[b->lo], 0, (size_t)m * sizeof(${T}));
+  return lab__view_a${i}((lab_cell *)b, b->lo, m);
+}`);
+        else if (m[1] === "length") out.push(`static inline lab_int lab_array_clength_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); lab_drop(a); return n; }`);
+        else if (m[2] !== undefined) {
+          const ft = r.fields[Number(m[2])].t;
+          out.push(`static inline ${ty(ft)} lab_array_cget${m[2]}_a${i}(lab_cell *a, lab_int k) {
+  ${ty(ft)} x = ((${B} *)((${V} *)a)->b)->it[((${V} *)a)->s + LAB_VAL(k)].f${m[2]};
+  ${counted(ft) ? `${dup(ft, "x")};` : ""}
+  lab_int_drop(k);
+  lab_drop(a);
+  return x;
+}`);
+        } else {
+          const ks = m[3]!.split("_").map(Number);
+          const write = (it: string) => ks.map((k, j) => `${counted(r.fields[k].t) ? `{ ${ty(r.fields[k].t)} old = ${it}.f${k}; ${it}.f${k} = x${j}; ${drop(r.fields[k].t, "old")} }` : `${it}.f${k} = x${j};`}`).join(" ");
+          out.push(`static inline lab_cell *lab_array_cset${m[3]}_a${i}(lab_cell *a, lab_int k, ${ks.map((k, j) => `${ty(r.fields[k].t)} x${j}`).join(", ")}) {
+  ${V} *v = (${V} *)a;
+  uint32_t at = (uint32_t)LAB_VAL(k);
+  lab_int_drop(k);
+  if (!(a->rc == 1 && v->b->rc == 1)) { lab_cell *c = lab__copy_a${i}((${B} *)v->b, v->s, v->n, 0); lab_drop(a); a = c; v = (${V} *)a; }
+  ${write(`((${B} *)v->b)->it[v->s + at]`)}
+  return a;
+}`);
+        }
+      }
+    }
     if (has("empty")) out.push(`static lab_cell *lab_array_empty_a${i}(void) { return lab__view_a${i}((lab_cell *)lab__buf_a${i}(0, 0), 4, 0); }`);
     if (has("of")) out.push(`static lab_cell *lab_array_of_a${i}(lab_cell *l) {
   uint32_t n = 0;
@@ -3219,7 +3267,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
         if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
         if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
         for (const k of kids(n)) order(k);
-        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || runtime(n.fn).partial))) pure = false;
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || (!COL_FN.test(n.fn) && runtime(n.fn).partial)))) pure = false;
       };
       order(t);
       const ls: { i: number; value: SExpr }[] = [];

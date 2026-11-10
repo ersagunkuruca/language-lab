@@ -24,6 +24,7 @@ import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { CFLAGS, emitC } from "../../compiler/src/c.ts";
 import { emitWasm } from "../../compiler/src/wasm.ts";
 import { mapsInPlaceCounted, ownedArrays } from "../../compiler/src/owned-arrays.ts";
+import { columns } from "../../compiler/src/columns.ts";
 import { intoAsSets, ownedRecords } from "../../compiler/src/owned-records.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
@@ -238,10 +239,16 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true });
+  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: !wasm });
   // A map writes into the array it was given (C60 c2): in place where
   // nothing else counts it.
-  if (!wasm) mapsInPlaceCounted(lowered);
+  if (!wasm) {
+    mapsInPlaceCounted(lowered);
+    // And an array of records whose loops read and write it field by
+    // field, so on C, each field in its slot (columns.ts).
+    ownedRecords(lowered, q.code, q.info, q.names, root);
+    columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
+  }
   if (wasm) {
     ownedArrays(lowered, q.code, q.info, q.names, root);
     ownedRecords(lowered, q.code, q.info, q.names, root);
