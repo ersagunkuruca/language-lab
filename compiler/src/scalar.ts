@@ -3300,10 +3300,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // first (C203c), the runs' first answer in order, the default where
     // none has one (as JavaScript's, not of one solve or call of one).
     const firstC = kind === "first" && !!dflt && (isData(t) || t === "int" || t === "f64") && !soleSolve(search) && !soleCall(search);
-    if (opts.threads && (kind === "count" ? t === "int" : kind === "all" ? isData(t) : firstC) && countsShared().get(n.id) === kind && !splitting.has(n.id) && splitsC()) {
+    // Only a search with several answers, as in JavaScript.
+    // (Its closure made, as there, to learn that; then left unused.)
+    const severalC = () => { const c = expr(n.args[0], env, f, false); return c.k === "closure" && !!c.t.several; };
+    if (opts.threads && (kind === "count" ? t === "int" : kind === "all" ? isData(t) : firstC) && countsShared().get(n.id) === kind && !splitting.has(n.id) && splitsC() && severalC()) {
       const free = [...new Set(refsIn(n.args[0]))].filter((b) => env.has(b) || inlined.has(b));
       if (!free.some((b) => inlined.has(b))) {
-        const ft = fnOf([], t), caps = free.map((b) => f.locals[env.get(b)!]);
+        // Its own type: one of nothing giving t may be the search's, with several answers.
+        const rk = `split:${keyOf(t)}`;
+        if (!fns.has(rk)) fns.set(rk, { key: rk, params: [], result: t, partial: true });
+        const ft = fns.get(rk)!, caps = free.map((b) => f.locals[env.get(b)!]);
         const shape = shapes.push({ t: ft, caps }) - 1;
         const g: SFunc = { def: n.id, name: `${f.name}.${kind}.split`, params: [ft], result: t, locals: [ft], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
         const gi = funcs.push(g) - 1;
@@ -3314,7 +3320,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         let counted: SExpr;
         try { counted = attempt(n, id, inner, g); } finally { splitting.delete(n.id); }
         // A first's run has an answer or none (fails), its default given here.
-        if (counted.k === "search") counted = { ...counted, splits: true, ...(kind === "first" ? { dflt: undefined } : {}) };
+        if (counted.k === "search") counted = { ...counted, splits: true };
         g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), counted);
         const c: SExpr = { k: "closure", t: ft, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) };
         const found: SExpr = { k: "rt", fn: `par:${kind}:search`, args: [c], host: { t, partial: true } };
@@ -3339,7 +3345,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         body = lets.reduceRight<SExpr>((e, l) => ({ k: "let", i: l.i, value: l.value, body: e }), expr(sole.body, inner, f, false));
       } else body = expr(search, env, f, false);
     } finally { searching.set(f, searching.get(f)! - 1); }
-    return { k: "search", kind, body, res: f.locals.push(bt) - 1, t, bt, ...(dflt ? { dflt: expr(dflt, env, f, false) } : {}) };
+    // A first's run on the threads (C203c) has no default: it's given outside.
+    return { k: "search", kind, body, res: f.locals.push(bt) - 1, t, bt, ...(dflt && !splitting.has(n.id) ? { dflt: expr(dflt, env, f, false) } : {}) };
   }
 
   // ---- searches with several answers (docs/design/targets/WASM.md, W4d)
