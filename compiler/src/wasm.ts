@@ -52,6 +52,8 @@ import type { HostOps } from "./core-rt.ts";
 import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
+// columns.ts's ops on an array kept as columns (C60 w2).
+const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag";
@@ -214,7 +216,44 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   };
   // An Array of Ints, which keeps a byte a slot when it can (L189f2b).
   const byteArray = (a?: AType) => !!a && a.item === "int" && !lowered.int32;
+  // Arrays of records kept as columns (C60 w2, columns.ts): the buffer
+  // holds, past its own fields, one array per field of the item (its
+  // items left null), and an item is only read and written field by
+  // field. Fields of a plain type only: Float64, Int, Text, Bool.
+  const colArrays = new Map<number, MType[]>();
+  const colScan = (e: SExpr): void => {
+    const m = e.k === "rt" ? COL_FN.exec(e.fn) : null;
+    if (m && !colArrays.has(Number(m[4]))) {
+      const a = lowered.arrays[Number(m[4])], r = a?.item;
+      if (!r || !isRecord(r) || r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) throw new Error(`array ${m[4]} can't be kept as columns in WebAssembly`);
+      colArrays.set(a.index, (r as RType).fields.map((x) => x.t));
+    }
+    if (e.k !== "rt" || !m) kids(e).forEach(colScan); else e.args.forEach(colScan);
+  };
+  funcs.forEach((f) => colScan(f.body));
+  const colTypes = (i: number) => Object.fromEntries(colArrays.get(i)!.map((_, f) => [`col${f}`, { key: `col.${i}.${f}` }]));
+  const colRt = (name: string, m: RegExpExecArray): RtFn => {
+    const i = Number(m[4]), ts = colArrays.get(i)!, at = (f: number) => `local.get $a\nstruct.get $arr 0\nstruct.get $buf ${4 + f}\nlocal.get $j`;
+    const index = "local.get $a\nstruct.get $arr 1\nlocal.get $k\nref.test i31\nif i32\nlocal.get $k\nref.cast i31\ni31.get_s\nelse\nlocal.get $k\ncall $int.clamped\ni32.wrap_i64\nend\ni32.add\nlocal.set $j";
+    const base = { name, array: i, native: true as const, types: colTypes(i) };
+    if (m[1] === "new") return { ...base, params: [["n", "int"]], result: "array", locals: [["m", "i64"], ["c", "i32"]], uses: ["int.clamped"], body: [
+      "local.get $n", "call $int.clamped", "local.tee $m", "i64.const 0", "local.get $m", "i64.const 0", "i64.gt_s", "select", "i32.wrap_i64", "local.set $c",
+      "ref.null $items", "i32.const 0", "local.get $c", "i32.const 0", ...ts.map((_, f) => `local.get $c\narray.new_default $col${f}`), "struct.new $buf", "i32.const 0", "local.get $c", "struct.new $arr"].join("\n") };
+    if (m[1] === "length") return { ...base, params: [["a", "array"]], result: "int", locals: [], uses: ["int.of"], body: "local.get $a\nstruct.get $arr 2\ni64.extend_i32_s\ncall $int.of" };
+    if (m[2] !== undefined) { const f = Number(m[2]); return { ...base, params: [["a", "array"], ["k", "int"]], result: ts[f] as VT, locals: [["j", "i32"]], uses: ["int.clamped"], body: `${index}\n${at(f)}\narray.get $col${f}` }; }
+    const ks = m[3]!.split("_").map(Number);
+    return { ...base, params: [["a", "array"], ["k", "int"], ...ks.map((f, x) => [`x${x}`, ts[f] as VT] as [string, VT])], result: "array", locals: [["j", "i32"]], uses: ["int.clamped"],
+      body: [index, ...ks.map((f, x) => `${at(f)}\nlocal.get $x${x}\narray.set $col${f}`), "local.get $a"].join("\n") };
+  };
   const rt = (name: string): RtFn => {
+    const cm = COL_FN.exec(name);
+    if (cm) return colRt(name, cm);
+    const g = rt0(name);
+    // The buffer's columns, none, wherever it's made as rows.
+    if (g.array === undefined || !colArrays.has(g.array)) return g;
+    return { ...g, types: { ...g.types, ...colTypes(g.array) }, body: g.body.replace(/struct\.new \$buf/g, `${colArrays.get(g.array)!.map((_, f) => `ref.null $col${f}`).join("\n")}\nstruct.new $buf`) };
+  };
+  const rt0 = (name: string): RtFn => {
     if (STACK.test(name)) return stackRt(name);
     if (TABLE_RT.test(name)) return tableRt(name, lowered.tables);
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
@@ -354,10 +393,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // value: the buffer, a start and a length.
   const arrIndex = new Map<string, number>();
   for (const a of lowered.arrays) {
+    // Its columns first, when it's kept so (colArrays): the buffer's fields past its own.
+    const cols = (colArrays.get(a.index) ?? []).map((t, f) => { recIndex.set(`col.${a.index}.${f}`, structs.length); structs.push({ name: `col${a.index}.${f}`, fields: [], final: true, items: t }); return { name: `c${f}`, t: "i32" as const, ref: structs.length - 1 }; });
     const k = structs.length;
     structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
     // An Int array's buffer has its bytes too (L189f2b, wasm-rt.ts byteSlots).
-    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, { name: "shared", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : [])], final: true, mutable: true });
+    structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, { name: "shared", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : []), ...cols], final: true, mutable: true });
     structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
     arrIndex.set(a.key, k + 2);
   }
@@ -610,8 +651,41 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // if it isn't 0. With nowhere to go (a function of no Choice, called
   // through a closure under a budget that ran out) it's a trap, a runtime
   // error rather than a wrong answer.
+  // An Int operation on locals and small literals (C207e): inline while
+  // both are i31s and the answer is one, else the runtime's. An i31 is
+  // the only Int of its value (int.of), so `ref.eq` says two are equal
+  // when either is one. Each instruction as text and as bytes.
+  type Ins = [string, number[]];
+  const INT_FAST: Record<string, number> = { "int.add": 0x6a, "int.sub": 0x6b, "int.equal": 0, "int.less": 0x48 };
+  const intFast = (e: SExpr, lget: (i: number) => Ins, call: Ins): Ins[] | null => {
+    if (int32 || e.k !== "rt" || INT_FAST[e.fn] === undefined || e.args.length !== 2) return null;
+    const os = e.args.map((a) => (a.k === "local" ? { get: [lget(a.i)] as Ins[] } : a.k === "int" && small(a.v) ? { v: a.v } : null));
+    if (os.some((o) => !o)) return null;
+    const [a, b] = os as ({ get: Ins[] } | { v: bigint })[];
+    const lit = (o: { v: bigint }): Ins => [`i32.const ${o.v}`, [0x41, ...sBig(o.v)]];
+    const get = (o: typeof a): Ins[] => ("v" in o ? [lit(o), ["ref.i31", [0xfb, 0x1c]]] : o.get);
+    const val = (o: typeof a): Ins[] => ("v" in o ? [lit(o)] : [...o.get, ["ref.cast i31", [0xfb, 0x16, 0x6c]], ["i31.get_s", [0xfb, 0x1d]]]);
+    const test = (o: typeof a): Ins[] => ("v" in o ? [] : [...o.get, ["ref.test i31", [0xfb, 0x14, 0x6c]]]);
+    const both: Ins[] = [...test(a), ...test(b), ...("v" in a || "v" in b ? [] : [["i32.and", [0x71]] as Ins])];
+    const IF = (t: "i32" | "eqref"): Ins => [`if (result ${t})`, [0x04, t === "i32" ? 0x7f : 0x6d]], ELSE: Ins = ["else", [0x05]], END: Ins = ["end", [0x0b]];
+    const slow: Ins[] = [...get(a), ...get(b), call];
+    const guarded = (t: "i32" | "eqref", fast: Ins[]): Ins[] => (both.length ? [...both, IF(t), ...fast, ELSE, ...slow, END] : fast);
+    if (e.fn === "int.equal") {
+      const eq: Ins[] = [...get(a), ...get(b), ["ref.eq", [0xd3]]];
+      return "v" in a || "v" in b ? eq : [...eq, IF("i32"), ["i32.const 1", [0x41, 1]], ELSE, ...test(a), ...test(b), ["i32.or", [0x72]], IF("i32"), ["i32.const 0", [0x41, 0]], ELSE, ...slow, END, END];
+    }
+    const op: Ins = [e.fn === "int.add" ? "i32.add" : e.fn === "int.sub" ? "i32.sub" : "i32.lt_s", [INT_FAST[e.fn]]];
+    if (e.fn === "int.less") return guarded("i32", [...val(a), ...val(b), op]);
+    // The sum of two i31s fits an i32; it's an i31 when shifting it out and back keeps it.
+    const r: Ins[] = [...val(a), ...val(b), op];
+    return guarded("eqref", [...r, ["i32.const 1", [0x41, 1]], ["i32.shl", [0x74]], ["i32.const 1", [0x41, 1]], ["i32.shr_s", [0x75]], ...r, ["i32.eq", [0x46]], IF("eqref"), ...r, ["ref.i31", [0xfb, 0x1c]], ELSE, ...slow, END]);
+  };
+  // A function that calls itself last (and spends no fuel, and always
+  // answers) runs as a loop: its body in a `loop`, the call its inputs set
+  // and a branch back (C60 w2: drift's map, a tail call an item).
+  const selfTail = (f: SFunc, i: number) => !f.partial && !f.spends && (function has(e: SExpr): boolean { return (e.k === "call" && e.tail && e.fn === i) || kids(e).some(has); })(f.body);
   function coder(f: SFunc) {
-    const st = statusOf(f);
+    const st = statusOf(f), self = funcs.indexOf(f), looped = selfTail(f, self);
     const to = (d: number, fl: number) => { if (fl < 0) throw new Error(`${f.name}: no answer, and nowhere to say so`); return u(d - 1 - fl); };
     const check = (d: number, fl: number) => (fl < 0 ? [0x04, 0x40, 0x00, 0x0b] : [0x22, ...u(st), 0x20, ...u(st), 0x0d, ...to(d, fl), 0x1a]);
     // After a handler's block, the status on the stack: the one it handles
@@ -627,7 +701,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "int": return int32 ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : inI64(e.v) ? [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)]
         : [0x41, e.v < 0n ? 1 : 0, ...limbs(e.v).flatMap((l) => [0x41, ...sBig(BigInt(l))]), 0xfb, 0x08, ...u(u32sIndex), ...u(limbs(e.v).length), 0xfb, 0x00, ...u(hugeIndex)];
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
-      case "rt": return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^handler:/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
+      case "rt": {
+        const fast = intFast(e, (i) => ["", [0x20, ...u(i)]], ["", [0x10, ...u(resolve.func(e.fn))]]);
+        if (fast) return fast.flatMap((x) => x[1]);
+      }
+      return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^handler:/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
       case "let": return [...code1(e.value), 0x21, ...u(e.i), ...code1(e.body)];
@@ -637,6 +715,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
         const k = kept.get(e.fn);
         if (k !== undefined) return [0x23, ...u(k), 0xd1, 0x04, 0x40, 0x10, ...u(fnIndex(e.fn)), 0x24, ...u(k), 0x0b, 0x23, ...u(k)];
+        if (looped && e.tail && e.fn === self) return [...e.args.flatMap(code1), ...e.args.flatMap((_, j) => [0x21, ...u(e.args.length - 1 - j)]), 0x0c, ...u(d - 1)];
         return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
       }
       case "make": return [...e.args.flatMap(code1), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
@@ -758,7 +837,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     // A partial function's body is in a block a status goes to:
     // block $none (result i32) body; 0; return end; status = it; zero; status
     const st = statusOf(f), code = coder(f);
-    const main = f.partial ? [0x02, 0x7f, ...code(f.body, 1, 0), 0x41, 0x00, 0x0f, 0x0b, 0x21, ...u(st), ...zero(f.result), 0x20, ...u(st)] : code(f.body, 0, -1);
+    const main = f.partial ? [0x02, 0x7f, ...code(f.body, 1, 0), 0x41, 0x00, 0x0f, 0x0b, 0x21, ...u(st), ...zero(f.result), 0x20, ...u(st)] : selfTail(f, funcs.indexOf(f)) ? [0x03, ...typeOf(f.result as MType), ...code(f.body, 1, -1), 0x0b] : code(f.body, 0, -1);
     const body = [...vec(groups), ...spend(f), ...main, 0x0b];
     return [...u(body.length), ...body];
   }), ...helperCode, ...rtCode.map((c) => [...u(c.code.length), ...c.code])]);
@@ -795,7 +874,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "int": return int32 ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : inI64(e.v) ? `${d}i64.const ${e.v}\n${d}struct.new $big`
         : [`${d}i32.const ${e.v < 0n ? 1 : 0}`, ...limbs(e.v).map((l) => `${d}i32.const ${l}`), `${d}array.new_fixed $u32s ${limbs(e.v).length}`, `${d}struct.new $huge`].join("\n");
       case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
-      case "rt": return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^handler:/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
+      case "rt": {
+        const fast = intFast(e, (i) => [`local.get ${local(f, i)}`, []], [`call $${e.fn}`, []]);
+        if (fast) return fast.map((x) => `${d}${x[0]}`).join("\n");
+      }
+      return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^handler:/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
       case "local": return `${d}local.get ${local(f, e.i)}`;
       case "let": return `${w(e.value)}\n${d}local.set ${local(f, e.i)}\n${w(e.body)}`;
