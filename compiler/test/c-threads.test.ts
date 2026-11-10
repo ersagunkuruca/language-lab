@@ -9,6 +9,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -248,5 +251,21 @@ test("a search whose first choice has one item runs its second choice's items on
     assert.equal(many.out, want);
     if (!want.startsWith("aborted")) assert.ok(many.threads > 0, "no item ran on another thread");
     assert.equal(p.run("0").out, want);
+  }
+});
+
+// collatz natively (C42d): `walks of`'s fold, a record of the steps added
+// and the most kept, runs its items on threads and gives what the
+// evaluator prints.
+test("collatz's fold of a record of Ints runs on threads natively and prints the evaluator's (C42d)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-walks-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/collatz");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "collatz")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  assert.match(readFileSync(join(dir, "collatz.c"), "utf8"), /lab_par_map_\d+\(lab_cell \*xs, lab_cell \*f, Walks z, lab_cell \*jf\)/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "3000", "100"]).stdout.toString();
+  for (const workers of ["3", "0"]) {
+    const r = spawnSync(join(dir, "collatz"), ["3000", "100"], { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
+    assert.equal(r.stdout.toString(), evaluator, `${workers} workers`);
+    if (workers === "3") assert.match(r.stderr.toString(), /items on threads: [1-9]/);
   }
 });

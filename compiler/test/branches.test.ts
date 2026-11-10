@@ -168,10 +168,10 @@ test("collatz keeps its long walks on workers, the same numbers in the same orde
   assert.equal(made[2], 0, made[1]);
   // keep is copied by the arrays pass (library-reps.ts), and known by its copy's id.
   assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("keep\.pure"/);
-  // And `steps of all`'s fold adds each number's steps, and `most steps`
-  // keeps the largest, shared out (C42).
+  // And `walks of`'s fold, a record adding each number's steps and keeping
+  // the largest, shared out and put together by its own join (C42d).
   assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("fold\.pure"/);
-  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /"add"[^]*"max"|"max"[^]*"add"/);
+  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, "with", fuel, /);
   const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /^665 numbers below 300000 take more than 300 steps/);
