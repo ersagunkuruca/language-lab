@@ -57,5 +57,7 @@ for i, t in enumerate(taps):
     print(f"after tap {t}: {len(d)} lines changed")
     print("\n".join(d[:40]))
     before = after
-print("---- logcat (errors and the app's)")
-print(adb("logcat", "-d", "-v", "brief", "AndroidRuntime:E", "DEBUG:*", "libc:*", "ters:*", "*:F", "*:E")[-6000:])
+print("---- the app's log")
+print(adb("logcat", "-d", "-v", "brief", "-s", "ters:*")[-8000:])
+print("---- crashes")
+print(adb("logcat", "-d", "-v", "brief", "-s", "AndroidRuntime:E", "DEBUG:*", "libc:F", "*:F")[-6000:])
