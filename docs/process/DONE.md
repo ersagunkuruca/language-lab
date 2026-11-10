@@ -18,6 +18,8 @@ superseded.
 
 | id | item | why |
 |---|---|---|
+| P2, P3 | Batch deploys for Actions cost; a per-repo budget or a public repo | Ersagun 2026-11-10 16:10: the repo is public, so standard runners (macOS too) cost nothing |
+| L107 | Drop strict positivity (a data type taking itself as a function's input in its fields) | Ersagun 2026-11-10 16:09: keep the rule for now. Reopen if a real program needs it |
 | I82 | Changing one field of a record means writing all of them (Bounce's `Body`) | Already there: `set(field, record, value)` changes one field of any record, and several fields are sets chained, `set(b, set(a, r, 1), 2)` (checked 2026-10-31 on an 8-field record). The demo builder didn't use it. Closed by the Language lane with the T7 note's PR (#764). |
 | C25 | Audio: a sound is a function on blocks of samples, played live by a page's `listen` (AUDIO.md) | all five stages done (A1 to A5 below); the pedal plays at apps/pedal.html, 39× real time compiled |
 | E77 | A fraction prints as `ratio(1, 2)` | done as L74 |
