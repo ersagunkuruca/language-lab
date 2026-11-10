@@ -741,34 +741,62 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     if (c) return single(run((m) => m.apply(f, args)));
     throw NEED;
   };
-  function direct(id: Id, env: Env): Value {
+  // Each node is made once into a JavaScript function of its scope (closure
+  // compilation): no looking the node up, no switch on its kind, per run.
+  type Direct = (env: Env) => Value;
+  const compiled = new Map<Id, Direct>();
+  const direct = (id: Id, env: Env): Value => (compiled.get(id) ?? compile(id))(env);
+  const needs: Direct = () => { throw NEED; };
+  const compile = (id: Id): Direct => {
+    const d = compileNode(id);
+    compiled.set(id, d);
+    return d;
+  };
+  const compiledOf = (id: Id): Direct => compiled.get(id) ?? compile(id);
+  function compileNode(id: Id): Direct {
     const n = code.nodes[id];
     switch (n.kind) {
-      case "lit": return n.of === INT ? intLit(n.value) : n.value;
-      case "ref": return refValue(n.target, env);
-      case "lambda": return closure(n, env);
+      case "lit": { const v = n.of === INT ? intLit(n.value) : n.value; return () => v; }
+      case "ref": { const target = n.target; return (env) => refValue(target, env); }
+      case "lambda": return (env) => closure(n, env);
       case "call": {
-        if (isUse(n)) throw NEED;
-        const head = code.nodes[n.fn];
-        if (head.kind === "ref" && info.divergent.has(head.target)) spendStep();
-        const args = new Array<Value>(n.args.length);
+        if (isUse(n)) return needs;
+        const head = code.nodes[n.fn], k = n.args.length;
+        const steps = head.kind === "ref" && info.divergent.has(head.target);
+        // Made when first run: a node's parts are made as they're reached.
+        let args: Direct[] | undefined;
+        const argsOf = () => (args ??= n.args.map(compiledOf));
         if (head.kind === "lambda") {
-          for (let i = 0; i < args.length; i++) args[i] = direct(n.args[i], env);
-          return direct(head.body, bind(env, head.params, args));
+          let body: Direct | undefined;
+          const params = head.params;
+          return (env) => {
+            const as = argsOf(), vs = new Array<Value>(k);
+            for (let i = 0; i < k; i++) vs[i] = as[i](env);
+            return (body ??= compiledOf(head.body))(bind(env, params, vs));
+          };
         }
-        const f = direct(n.fn, env);
-        for (let i = 0; i < args.length; i++) args[i] = direct(n.args[i], env);
-        return callDirect(f, args);
+        let fn: Direct | undefined;
+        return (env) => {
+          if (steps) spendStep();
+          const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
+          for (let i = 0; i < k; i++) vs[i] = as[i](env);
+          return callDirect(f, vs);
+        };
       }
       case "match": {
-        if (handlerOf(n)) throw NEED;
-        const d = direct(n.scrutinee, env) as Data, arm = matchArms(n).get(d.tag);
-        if (arm) return direct(arm.body, bind(env, arm.binds, d.fields));
-        return direct(n.otherwise!, env);
+        if (handlerOf(n)) return needs;
+        let scrutinee: Direct | undefined, otherwise: Direct | undefined;
+        const arms = new Map<Id, { binds: Id[]; body: Direct | undefined; id: Id }>();
+        for (const [tag, arm] of matchArms(n)) arms.set(tag, { binds: arm.binds, body: undefined, id: arm.body });
+        return (env) => {
+          const d = (scrutinee ??= compiledOf(n.scrutinee))(env) as Data, arm = arms.get(d.tag);
+          if (arm) return (arm.body ??= compiledOf(arm.id))(bind(env, arm.binds, d.fields));
+          return (otherwise ??= compiledOf(n.otherwise!))(env);
+        };
       }
       // The rest (a fold, a solve, ...) on a machine of its own, which
       // stops this run if it would act.
-      default: return single(run((m) => m.eval(id, env)));
+      default: return (env) => single(run((m) => m.eval(id, env)));
     }
   }
 
