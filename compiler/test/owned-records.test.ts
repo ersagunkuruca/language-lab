@@ -21,7 +21,8 @@ import { INT } from "../../ters/src/lang/types.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { intoAsSets, ownedRecords } from "../src/owned-records.ts";
-import { lowerScalar } from "../src/scalar.ts";
+import { kids, lowerScalar } from "../src/scalar.ts";
+import { load } from "../src/program.ts";
 import { emitWasm } from "../src/wasm.ts";
 
 // A record P(x, y) of Ints; `moved(p)` is P(p.x + 1, p.y) and `x of(p)`
@@ -86,4 +87,22 @@ test("a closure capturing the record reads it as it was", () => {
   const r = both((q, p) => q.k.let("later", q.k.thunk(() => q.x(p)), (later) => q.k.let("m", q.moved(p), (m) => q.k.call(PAIR_V, q.k.call(later), m))));
   assert.deepEqual(r.compiled, r.evaluator);
   assert.deepEqual(r.wasm, r.evaluator);
+});
+
+// drift's `moved`, put in the closure code a map calls (zero-parts.ts puts
+// small functions in place), keeps the binder its input had, so the mote
+// it makes is written into the one the map was given (C60): every step
+// changed x and y in place, the other seven fields untouched.
+test("a record rebuilt in a map's closure code is written in place", () => {
+  const p = load("drift");
+  const main = p.code.defs.find((d) => p.pres.names[d] === "main")!;
+  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  const value = ir.funcs.find((f) => f.name === "moved.value")!;
+  const into = (e: { k: string; into?: number }): boolean => (e.k === "make" && e.into !== undefined) || kids(e as never).some((k) => into(k));
+  assert.ok(into(value.body), "moved.value writes the mote it was given");
+  const out: string[] = [];
+  runCoreMain(ir, "main", ["50"], { print: (s) => out.push(s) });
+  const evaluator: string[] = [];
+  runProgram(p.code, p.info, main, ["50"], { print: (s) => evaluator.push(s), names: p.pres.names });
+  assert.deepEqual(out, evaluator);
 });
