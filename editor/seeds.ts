@@ -131,7 +131,9 @@ export function seeds(host: SeedHost) {
     const was = doc().code, open = ui.def;
     const go = () => {
       if (doc().code !== was || longRuns.has(was)) return;
-      longCalls(info, entry, () => { if (doc().code === was && longRuns.get(was)?.get(body.id) && ui.def === open) render(); });
+      // What was kept for it before (nothing) goes, or the drawing reads
+      // it again (I196: newton opened empty when main's short run ran out).
+      longCalls(info, entry, () => { if (doc().code === was && longRuns.get(was)?.get(body.id) && ui.def === open) { seeds.get(was)?.m.delete(def); render(); } });
     };
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
     return undefined;
