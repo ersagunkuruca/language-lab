@@ -277,10 +277,13 @@ public class MainActivity extends Activity {
   private void tick() {
     if (ticking || nativeClock() == 0) return;
     ticking = true;
+    final long from = System.nanoTime();
     Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+      int n;
       public void doFrame(long nanos) {
+        n++;
         if (nativeFrame() != 0) Choreographer.getInstance().postFrameCallback(this);
-        else ticking = false;
+        else { ticking = false; Log.d("ters", "frames: " + n + " in " + (System.nanoTime() - from) / 1000000 + " ms"); }
       }
     });
   }
