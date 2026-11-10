@@ -222,3 +222,32 @@ test("dragging a point of compass's picture in C moves it under the finger (C199
   assert.deepEqual(after[1], before[1]);
   assert.ok(after[2][0] > before[2][0] + 5, "the built point follows");
 });
+
+// bounce's frames (C199f): the bodies move as the clock goes, the same on
+// the headless host as in html.ts on the fake document, three seconds of
+// frames 25 ms apart (a browser's first frame is 0 s after none, so
+// html.ts gets one more).
+test("bounce in C moves its bodies frame by frame as html.ts does (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/bounce"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const g = globalThis as { requestAnimationFrame?: (f: (ms?: number) => void) => number };
+  const saved = g.requestAnimationFrame, doc = fakeDoc(), proto = Object.getPrototypeOf(doc.createElement("div"));
+  let queued: ((ms?: number) => void)[] = [];
+  g.requestAnimationFrame = (f) => queued.push(f);
+  Object.defineProperty(proto, "isConnected", { get: () => true, configurable: true });
+  const evaluator: string[] = [];
+  try {
+    const page = showPage({ code: p0.code, info, names: p0.pres.names, main, program: "bounce", doc, store: store(), console: { log() {}, error() {} }, frame: (f) => queued.push(f) });
+    const root = page.root as FakeEl;
+    evaluator.push(root.html());
+    for (let k = 0; k <= 120; k++) { const now = queued; queued = []; for (const f of now) f(k * 25); }
+    evaluator.push(root.html());
+    page.stop();
+  } finally { g.requestAnimationFrame = saved; delete (proto as { isConnected?: boolean }).isConnected; }
+  assert.notEqual(evaluator[1], evaluator[0]);
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const r = spawnSync(compile(emitC(l, { main, page: "headless" }).c), ["frames:120:25"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  assert.deepEqual(r.stdout.toString().split("\x1e\n").slice(0, -1), evaluator);
+});
