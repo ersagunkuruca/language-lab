@@ -1,0 +1,82 @@
+# A native app tried on an Android emulator (C199f): `ters
+# build-native-app`, the APK built as "Android app" builds it, installed
+# on an emulator, started, and tapped (.github/android/check.py), so the
+# run's log shows the views before and after each tap and any crash, and
+# its artifact the screens. Run by hand only, since a run costs build
+# minutes.
+name: Android check
+
+on:
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Example to try (a folder in ters/examples)"
+        default: tumble
+        required: true
+      taps:
+        description: "Taps, by a view's text or square:N (a view N dp square), separated by |"
+        default: "Hint|square:44"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+        working-directory: ters
+      - name: Debug key
+        run: mkdir -p ~/.android && cp .github/android/debug.keystore ~/.android/debug.keystore
+      - name: ters build-native-app
+        working-directory: ters
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: node cli/ters.ts build-native-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app/android"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Native debug APK
+        working-directory: ${{ runner.temp }}/app/android
+        run: gradle assembleDebug --no-daemon
+      - name: App id
+        id: app
+        working-directory: ${{ runner.temp }}/app/android
+        run: echo "id=$(grep -o 'applicationId "[^"]*"' app/build.gradle | cut -d'"' -f2)" >> "$GITHUB_OUTPUT"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: On the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          TAPS: ${{ inputs.taps }}
+          APP: ${{ steps.app.outputs.id }}
+          APK_DIR: ${{ runner.temp }}/app/android/app/build/outputs/apk/debug
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb install -r "$APK_DIR"/*.apk
+            python3 .github/android/check.py "$APP"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.program }}-android-check
+          path: "*.png"
+          retention-days: 7
