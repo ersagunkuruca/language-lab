@@ -18,3 +18,11 @@ is the same number as running it in turn.
 
 Measured 2026-11-10 on 4 cores, n = 38: 2.3 s before the change, 2.1 s in
 turn with it (TERS_WORKERS=0), and 0.9 s with three workers.
+
+Natively (`ters native examples/fibonacci -o fibonacci`, C61e3, compiler/src/c.ts
+`dcC`), the second of the two calls is pushed where any of the pool's
+threads may take it, and the first is made here. Then the second is waited
+for, or made here if no thread took it. This goes down the first eight
+levels; below that, the calls are made as written. Measured on 4 cores, n = 38:
+0.41 s before the change, 0.5 s in turn with it (TERS_WORKERS=0), and
+0.15 s with three threads.

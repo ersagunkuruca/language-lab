@@ -1225,6 +1225,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             return { k: "let", i: on, value: { k: "rt", fn: "both.on", args: [] }, body: { k: "let", i: x0, value: { k: "if", cond: local(on), then: both, else: first, t: rt }, body: { k: "let", i: x1, value: { k: "if", cond: local(on), then: { k: "rt", fn: "both.second", args: [] }, else: then, t: rt }, body } } };
           }
         }
+        // The same on C's threads (C61e3, c.ts `par:both`): the second
+        // call given to another thread while this one makes the first.
+        if (opts.threads && !halving.has(n.id) && (halves ??= parallelHalves(code, info)).has(n.id)) {
+          const [j0, j1] = halves.get(n.id)!, rt = stype(zonk(n.args[j0]));
+          const first = expr(n.args[j0], env, f, false), then = expr(n.args[j1], env, f, false);
+          if (rt && first.k === "call" && then.k === "call" && first.fn === then.fn) {
+            const x0 = f.locals.push(rt) - 1, x1 = f.locals.push(rt) - 1;
+            const was = pinned;
+            pinned = (x) => (x === n.args[j0] ? local(x0) : x === n.args[j1] ? local(x1) : was?.(x));
+            halving.add(n.id);
+            let body: SExpr;
+            try { body = expr(id, env, f, tail); } finally { pinned = was; halving.delete(n.id); }
+            return bothOnThreads(f, first.fn, first.args, then.args, rt, x0, x1, body);
+          }
+        }
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") {
           // A let: each argument goes into a new local.
@@ -2757,6 +2772,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return fns.get(key)!;
   }
   // A definition used as a value: a closure that calls it, made once.
+  // Two calls of a function on C's threads (C61e3): asked whether
+  // (`par:both.on`, at the top levels only), then the first made here and
+  // the second on another thread (`par:both:<function>`), its answer
+  // taken after (`par:both.second:<function>`); else the two as written.
+  function bothOnThreads(f: SFunc, gi: number, a: SExpr[], b: SExpr[], rt: LType, x0: number, x1: number, body: SExpr): SExpr {
+    const on = f.locals.push("i32") - 1;
+    const both: SExpr = { k: "rt", fn: `par:both:${gi}`, args: [...a, ...b], host: { t: rt, partial: true } };
+    const second: SExpr = { k: "rt", fn: `par:both.second:${gi}`, args: [], host: { t: rt, partial: false } };
+    return { k: "let", i: on, value: { k: "rt", fn: "par:both.on", args: [], host: { t: "i32", partial: false } }, body: { k: "let", i: x0, value: { k: "if", cond: local(on), then: both, else: { k: "call", fn: gi, args: a, tail: false }, t: rt }, body: { k: "let", i: x1, value: { k: "if", cond: local(on), then: second, else: { k: "call", fn: gi, args: b, tail: false }, t: rt }, body } } };
+  }
   function named(def: Id, id: Id, t: FType): SExpr {
     const key = `&${def}|${t.key}`;
     if (!index.has(key)) {
@@ -2921,6 +2946,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         bind(a.results[j0]!, result, { k: "if", cond: local(on), then: { k: "rt", fn: "both.pure", args: [fn, { k: "num", v: params.length }, ...half(j0), ...half(j1), { k: "rt", fn: "fuel.get", args: [] }] }, else: { k: "call", fn: gi, args: half(j0), tail: false }, t: result });
         bind(a.results[j1]!, result, { k: "if", cond: local(on), then: { k: "rt", fn: "both.second", args: [] }, else: { k: "call", fn: gi, args: half(j1), tail: false }, t: result });
         return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
+      }
+      // The same on C's threads (C61e3).
+      if (opts.threads && !underBudget && halves.length === 2 && a.results.filter((r) => r).length === 2 && (treeFolds ??= parallelTreeFolds(code, info)).get(n.id)?.has(a.id)) {
+        const half = (j: number): SExpr[] => [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured];
+        const [j0, j1] = halves, x0 = g.locals.push(result) - 1, x1 = g.locals.push(result) - 1;
+        inner = new Map(inner).set(a.results[j0]!, x0).set(a.results[j1]!, x1);
+        const body = bothOnThreads(g, gi, half(j0), half(j1), result, x0, x1, expr(a.body, inner, g, true));
+        return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), body);
       }
       a.results.forEach((r, j) => {
         if (!r) return;
