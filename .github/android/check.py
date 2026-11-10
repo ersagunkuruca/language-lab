@@ -2,8 +2,8 @@
 # then each tap given as a finger would (adb input tap) and the views
 # dumped again, so a run's log shows whether the page answered. Run by the
 # "Android check" workflow inside the emulator; args: the app's id, then
-# taps (or TAPS, split at |), each a text (the view showing it) or "square:N" (a view N dp
-# square, as tumble's tiles are; the first one).
+# taps (or TAPS, split at |), each a text (the view showing it), "square:N" (a view N dp
+# square, as tumble's tiles are; the first one) or "scroll:N" (N dp down).
 import os, re, subprocess, sys, time, difflib
 
 def adb(*a):
@@ -36,6 +36,11 @@ print(f"started: {len(nodes(before))} views")
 print("\n".join(lines(before)[:60]))
 for i, t in enumerate(taps):
     ns = nodes(before)
+    if t.startswith("scroll:"):
+        # The page scrolled N dp down, a finger moving up the screen.
+        w = adb("shell", "wm", "size"); W, H = [int(v) for v in re.findall(r"(\d+)x(\d+)", w)[-1]]
+        adb("shell", "input", "swipe", str(W // 2), str(H * 3 // 4), str(W // 2), str(int(H * 3 // 4 - float(t[7:]) * density)), "800")
+        time.sleep(2); before = dump(f"after{i}"); print(f"scrolled {t[7:]} dp"); print("\n".join(lines(before)[:60])); continue
     if t.startswith("square:"):
         side = float(t[7:]) * density
         hit = [b for _, _, b in ns if abs((b[2] - b[0]) - side) <= 2 and abs((b[3] - b[1]) - side) <= 2]
