@@ -85,13 +85,13 @@ export function parallelTogethers(code: Code, info: Info): Set<Id> {
 // C43): the function written in place, doing nothing but compute, as a
 // together's action may. Run in order, an item that aborts stops the ones
 // after it, so a function that may abort may not also run long.
-// all pass and any pass (C43) stop at the first item that decides, so a
+// all pass, any pass and first where (C43) stop at the first item that decides, so a
 // test that may run long may not be run on an item past it: their tests
 // may abort, never run long.
-export type ListJob = "map" | "keep" | "all" | "any";
+export type ListJob = "map" | "keep" | "all" | "any" | "first";
 export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
   // List's map, and the array's that a split puts in its place (C196).
-  const kinds = new Map<Id | undefined, ListJob>([[preludeDef("map"), "map"], [preludeDef("array map"), "map"], [preludeDef("keep"), "keep"], [preludeDef("all pass"), "all"], [preludeDef("any pass"), "any"]]), out = new Map<Id, ListJob>();
+  const kinds = new Map<Id | undefined, ListJob>([[preludeDef("map"), "map"], [preludeDef("array map"), "map"], [preludeDef("keep"), "keep"], [preludeDef("all pass"), "all"], [preludeDef("any pass"), "any"], [preludeDef("first where"), "first"]]), out = new Map<Id, ListJob>();
   for (const n of Object.values(code.nodes)) {
     if (!isCall(n) || n.args.length !== 2) continue;
     const f = code.nodes[n.fn], l = code.nodes[n.args[1]];
@@ -99,10 +99,10 @@ export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
     // one that gives no list.
     const target = f?.kind === "ref" ? (f as NodeOf<"ref">).target : undefined;
     const split = target && kinds.get(originalOf(SPLIT_COPIED_FROM.get(target) ?? target));
-    const kind = target ? kinds.get(originalOf(target)) ?? (split === "all" || split === "any" ? split : undefined) : undefined;
+    const kind = target ? kinds.get(originalOf(target)) ?? (split === "all" || split === "any" || split === "first" ? split : undefined) : undefined;
     if (!kind || l?.kind !== "lambda" || l.params.length !== 1) continue;
     const own = ownEffects(code, info, l.body);
-    const stops = kind === "all" || kind === "any";
+    const stops = kind === "all" || kind === "any" || kind === "first";
     if (own && [...own].every((e) => ALONE.has(e)) && !(own.has(DIVERGE) && (stops || own.has(ABORT)))) out.set(n.id, kind);
   }
   return out;

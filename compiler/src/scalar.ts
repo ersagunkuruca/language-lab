@@ -1380,7 +1380,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             given.set(n.id, [xs, by]);
             let plain: SExpr;
             try { plain = expr(id, env, f, tail); } finally { given.delete(n.id); }
-            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: { k: "rt", fn: `${parallelList.get(n.id)}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] }, else: plain, t } };
+            const shared: SExpr = { k: "rt", fn: `${parallelList.get(n.id)}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
+            // first where's runtime gives the item found, as a list of it
+            // or of none, which first where as compiled then answers from.
+            let then: SExpr = shared;
+            if (parallelList.get(n.id) === "first") {
+              const one = f.locals.push(tx) - 1;
+              given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
+              try { then = { k: "let", i: one, value: shared, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
+            }
+            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then, else: plain, t } };
           }
         }
         // The same in C (L101, c.ts `par:map`), an array's: on threads,
