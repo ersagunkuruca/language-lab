@@ -146,15 +146,17 @@ const itemsOf = (l: unknown): unknown[] => {
   for (let c = l as { tag: unknown; fields: unknown[]; f0?: unknown; f1?: unknown }; c.tag === CONS; c = (c.f1 ?? c.fields[1]) as typeof c) xs.push(c.f0 ?? c.fields[0]);
   return xs;
 };
-// A cons list is rebuilt from the cells it came in, of the module's own
-// classes, which compiled code reads by their fields (f0, f1, $c).
+// A cons list of the module's own classes is rebuilt of them, which
+// compiled code reads by their fields (f0, f1, $c).
 function sameKind(l: unknown, xs: unknown[]): unknown {
   if (l instanceof ArrayView) return arrayOf(xs);
   type Cell = { tag: unknown; fields: unknown[]; f1?: unknown; constructor: new (x: unknown, rest: unknown) => Cell };
   let end = l as Cell, cell: Cell | undefined;
   while (end.tag === CONS) { cell = end; end = (end.f1 ?? end.fields[1]) as Cell; }
-  if (!cell) return xs.length ? toList(xs as never[]) : { tag: NIL, fields: [] };
-  const make = (cell.constructor as unknown) === Object ? (x: unknown, rest: unknown) => ({ tag: CONS, fields: [x, rest] }) : (x: unknown, rest: unknown) => new cell!.constructor(x, rest);
+  // Not one of the module's classes (a list over an array of the
+  // runtime's, ItemsList): the evaluator's list.
+  if (!cell || !Object.hasOwn(cell, "f0")) return xs.length ? toList(xs as never[]) : { tag: NIL, fields: [] };
+  const make = (x: unknown, rest: unknown) => new cell!.constructor(x, rest);
   let out: unknown = end;
   for (let i = xs.length - 1; i >= 0; i--) out = make(xs[i], out);
   return out;
