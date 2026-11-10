@@ -2072,11 +2072,14 @@ static inline ${T} *lab__made_t${i}(${S} *s) {
   t->cur = s; t->next = 0; t->had = 0;
   return t;
 }
-// Room for one more, at most 3/4 used: the full slots moved into twice
-// the room (or the same, when removed ones took it).
+// Room for one more, at most half used, removed slots counted: the full
+// slots moved into twice the room, or the same where at most a quarter
+// of it is full. A map whose keys come and go (swarm's motes, born and
+// gone each tick) leaves removed slots that a lookup walks past; at 3/4
+// they cost swarm's native run 12%.
 static inline void lab__grow_t${i}(${S} *t) {
-  if ((uint64_t)(t->used + 1) * 4 <= (uint64_t)t->cap * 3) return;
-  uint32_t cap = (uint64_t)(t->n + 1) * 2 > t->cap ? t->cap * 2 : t->cap;
+  if ((uint64_t)(t->used + 1) * 2 <= (uint64_t)t->cap) return;
+  uint32_t cap = (uint64_t)(t->n + 1) * 4 > t->cap ? t->cap * 2 : t->cap;
   if (cap < t->cap) lab_oom();
   uint8_t *st = t->st; ${K} *ks = t->ks; ${V} *vs = t->vs; uint32_t old = t->cap;
   t->st = calloc(cap, 1); t->ks = malloc(cap * sizeof(${K})); t->vs = malloc(cap * sizeof(${V}));
