@@ -1656,6 +1656,28 @@ int main(int argc, char **argv) {
             hostTypes.set(h.op, e.host!.t);
             return checked(`lab_host_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
+          // A column read (C60 c2b) borrows its array and index, as a field
+          // read borrows its record: no count taken and given back per read,
+          // and a local not used after is dropped once the read is made.
+          const colRead = COL_FN.exec(e.fn);
+          if (colRead && (colRead[1] === "length" || colRead[2] !== undefined)) {
+            arrayFns.add(e.fn);
+            if (!e.args.every((a) => a.k === "local")) {
+              // Given, not lent: held in temps and dropped after the read.
+              const ts = e.args.map((a) => typeOf(a, f.locals));
+              const xs = args(e.args, pre, d, after).map((x, k) => (counted(ts[k]) ? stated(x, ts[k], pre, d) : x));
+              const v = stated(`${cName(e.fn)}(${xs.join(", ")})`, rtType(e.fn), pre, d);
+              xs.forEach((x, k) => counted(ts[k]) && pre.push(`${d}${drop(ts[k], x)}`));
+              return v;
+            }
+            const is = e.args.map((a) => (a as SExpr & { k: "local" }).i);
+            const gone = is.filter((j, k) => isCounted(j) && !after.has(j) && !is.slice(k + 1).includes(j));
+            const c = `${cName(e.fn)}(${is.map(local).join(", ")})`;
+            if (!gone.length) return c;
+            const v = stated(c, rtType(e.fn), pre, d);
+            pre.push(...[...new Set(gone)].map((j) => `${d}${drop(f.locals[j], local(j))}`));
+            return v;
+          }
           (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
           return !COL_FN.test(e.fn) && runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
@@ -2952,14 +2974,13 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   memset(&b->it[b->lo], 0, (size_t)m * sizeof(${T}));
   return lab__view_a${i}((lab_cell *)b, b->lo, m);
 }`);
-        else if (m[1] === "length") out.push(`static inline lab_int lab_array_clength_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); lab_drop(a); return n; }`);
+        // A read borrows its array and index (the caller drops them).
+        else if (m[1] === "length") out.push(`static inline lab_int lab_array_clength_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); return n; }`);
         else if (m[2] !== undefined) {
           const ft = r.fields[Number(m[2])].t;
           out.push(`static inline ${ty(ft)} lab_array_cget${m[2]}_a${i}(lab_cell *a, lab_int k) {
   ${ty(ft)} x = ((${B} *)((${V} *)a)->b)->it[((${V} *)a)->s + LAB_VAL(k)].f${m[2]};
   ${counted(ft) ? `${dup(ft, "x")};` : ""}
-  lab_int_drop(k);
-  lab_drop(a);
   return x;
 }`);
         } else {
