@@ -13,6 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
+import { COPIED_FROM, originalOf } from "./prelude-ids.ts";
 import { bindsOf, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
@@ -151,6 +152,9 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const fresh = new Map<Id, Id>();
     for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, freshId());
     const f = (id: Id) => fresh.get(id) ?? id;
+    // Known by their originals' ids too (pure-branches.ts): each takes and
+    // gives its lists as the original does.
+    for (const d of library) COPIED_FROM.set(f(d), originalOf(d));
     const nodes = { ...withBoundary.nodes };
     for (const d of library) for (const id of subtree(withBoundary, d)) { const n = mapIds(withBoundary.nodes[id], f); nodes[n.id] = n; }
     for (const d of defs) for (const id of subtree(withBoundary, d)) nodes[id] = mapIds(withBoundary.nodes[id], f);

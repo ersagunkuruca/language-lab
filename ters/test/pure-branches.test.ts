@@ -9,7 +9,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { parallelMaps, parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
+import { parallelLists, parallelMaps, parallelTogethers, pureTogethers } from "../src/lang/pure-branches.ts";
 import { ABORT_OP, AWAIT_OP, START_TIMER_OP, S, SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 
@@ -85,4 +85,15 @@ test("a map shares out its items when its function only computes, or aborts, or 
   const forever = (k: Lang) => Object.keys(k.names).find((d) => k.names[d] === "forever")!;
   assert.equal(mapMarked((k, x) => k.call(forever(k), x)), true);
   assert.equal(mapMarked((k, x) => k.if(k.call(S.less, x, k.lit(2)), k.call(forever(k), x), k.call(ABORT_OP, k.lit("no")))), false);
+});
+
+test("a keep shares out its items like a map, its test written in place and only computing (C43)", () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  let pure = "";
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, (pure = k.call(lib("keep"), k.list(k.lit(1), k.lit(2)), k.fn(["x"], (x) => k.call(S.less, x, k.lit(2)))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(parallelLists(code, info).get(pure), "keep");
 });

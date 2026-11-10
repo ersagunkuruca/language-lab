@@ -737,7 +737,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const callDirect = (f: Value, args: Value[]): Value => {
     const c = closureOf(f);
     if (c && directly(c.node)) return enter(c, args);
-    if (pureFns.has(f as Fn) || pureJets.has(f as Fn) || HANDLED.has(f as Fn)) {
+    const h = HANDLED.get(f as Fn);
+    if (h && SEARCHES.has(h)) { try { return handledDirect(h, args); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; } }
+    if (pureFns.has(f as Fn) || pureJets.has(f as Fn) || h) {
       let r: Iterable<Value>;
       try { r = (f as Fn)(...args); } catch (e) { if (e instanceof OutOfSteps || e instanceof Aborted) throw e; throw NEED; }
       return single(r);
@@ -819,6 +821,111 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
   }
 
+  // A search run directly (L118d): the body of a `first`, `optional`,
+  // `all` or `count` whose type says it only computes and chooses runs as
+  // JavaScript too, each node made once into a function of its scope and of
+  // what to do with each of its values (a success continuation), so a
+  // choice is a loop over its alternatives and a failure is a return.
+  // Each says whether to stop (`first` has its value). Anything it
+  // can't do stops it as the direct run stops (NEED), having done nothing
+  // anyone sees, and the handler runs on the machine.
+  type K = (v: Value) => boolean;
+  type Search = (env: Env, k: K) => boolean;
+  const searches = new Map<Id, Search>();
+  const search = (id: Id, env: Env, k: K): boolean => (searches.get(id) ?? searchOf(id))(env, k);
+  const searchOf = (id: Id): Search => { const d = searchNode(id); searches.set(id, d); return d; };
+  const searchingNeeds: Search = () => { throw NEED; };
+  // Whether a lambda's type says it only computes and chooses.
+  const choosing = new Map<Id, boolean>();
+  const chooses = (n: NodeOf<"lambda">): boolean => {
+    let a = choosing.get(n.id);
+    if (a === undefined) {
+      const t0 = info.typeOf.get(n.id), t = t0 && info.subst.resolve(t0);
+      a = !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.every((e) => e === DIVERGE || e === CHOICE);
+      choosing.set(n.id, a);
+    }
+    return a;
+  };
+  // The values of a call, each given to k in the order the machine finds them.
+  const callSearch = (f: Value, args: Value[], k: K): boolean => {
+    const c = closureOf(f);
+    if (c && !machineOnly.has(c.lambda)) {
+      if (!acts(c.node)) return k(enter(c, args));
+      if (chooses(c.node)) {
+        rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
+        return search(c.node.body, bind(c.scope, c.node.params, args), k);
+      }
+    }
+    if (pureFns.has(f as Fn) || pureJets.has(f as Fn)) {
+      let r: Iterable<Value>;
+      try { r = (f as Fn)(...args); } catch (e) { if (e instanceof OutOfSteps || e instanceof Aborted) throw e; throw NEED; }
+      if (Array.isArray(r)) { for (let i = 0; i < r.length; i++) if (k(r[i])) return true; return false; }
+      for (const v of r) if (k(v)) return true;
+      return false;
+    }
+    const h = HANDLED.get(f as Fn);
+    if (h) return k(handledDirect(h, args));
+    throw NEED;
+  };
+  function searchNode(id: Id): Search {
+    const n = code.nodes[id];
+    switch (n.kind) {
+      case "lit": case "ref": case "lambda": { const d = compiledOf(id); return (env, k) => k(d(env)); }
+      case "call": {
+        if (isUse(n)) return searchingNeeds;
+        const head = code.nodes[n.fn], count = n.args.length, argIds = n.args;
+        const steps = head.kind === "ref" && info.divergent.has(head.target);
+        // The arguments' values, left to right, each one's alternatives in turn.
+        const each = (env: Env, i: number, vs: Value[], done: (vs: Value[]) => boolean): boolean => {
+          if (i === count) return done(vs.slice());
+          return search(argIds[i], env, (v) => { vs[i] = v; return each(env, i + 1, vs, done); });
+        };
+        if (head.kind === "lambda") {
+          const params = head.params, body = head.body;
+          return (env, k) => each(env, 0, new Array<Value>(count), (vs) => search(body, bind(env, params, vs), k));
+        }
+        const fn = n.fn;
+        return (env, k) => {
+          if (steps) spendStep();
+          return search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => callSearch(f, vs, k)));
+        };
+      }
+      case "match": {
+        if (handlerOf(n)) return searchingNeeds;
+        const arms = matchArms(n), scrutinee = n.scrutinee, otherwise = n.otherwise;
+        return (env, k) => search(scrutinee, env, (d) => {
+          const arm = arms.get((d as Data).tag);
+          if (arm) return search(arm.body, bind(env, arm.binds, (d as Data).fields), k);
+          return search(otherwise!, env, k);
+        });
+      }
+      // The rest on a machine of its own, every value it gives.
+      default: return (env, k) => { for (const v of run((m) => m.eval(id, env))) if (k(v)) return true; return false; };
+    }
+  }
+  // `first`, `optional`, `all` or `count` of a body that only computes and
+  // chooses, run directly; NEED when it can't be.
+  const SEARCHES = new Set<Id>([S.first, S.optional, S.all, S.count]);
+  const handledDirect = (h: Id, args: Value[]): Value => {
+    const body = closureOf(args[0]);
+    if (!SEARCHES.has(h) || !body || machineOnly.has(body.lambda) || !chooses(body.node)) throw NEED;
+    const t = tries.get(body.lambda);
+    if (t) t.n++; else tries.set(body.lambda, { n: 1, stops: 0 });
+    directDepth++;
+    try {
+      if (h === S.first || h === S.optional) {
+        let found: Value | undefined;
+        if (callSearch(args[0], [], (v) => { found = v; return true; })) return h === S.optional ? { tag: SOME, fields: [found!] } : found!;
+        return h === S.optional ? { tag: NONE, fields: [] } : callDirect(args[1], []);
+      }
+      if (h === S.all) { const all: Value[] = []; callSearch(args[0], [], (v) => { all.push(v); return false; }); return toList(all); }
+      let count = 0;
+      callSearch(args[0], [], () => { count++; return false; });
+      return count;
+    } catch (e) { if (e === NEED || e instanceof RangeError) stopped(body.lambda); throw e; }
+    finally { directDepth--; }
+  };
+
   const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
     const f = (...args: Value[]) => run((m) => m.apply(f, args));
     (f as unknown as Record<symbol, unknown>)[META] = new LambdaMeta(n, env);
@@ -888,7 +995,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         return this.eval(c.node.body, bind(c.scope, c.node.params, args));
       }
       const h = HANDLED.get(f as Fn);
-      if (h) return this.handle(h, args);
+      if (h) {
+        // A search run directly first (L118d).
+        if (!this.fuel && SEARCHES.has(h)) { try { return this.ret(handledDirect(h, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; } }
+        return this.handle(h, args);
+      }
       if (directDepth && builtinFns.has(f as Fn) && !pureFns.has(f as Fn)) throw NEED;
       const op = operations.get(f as Fn);
       if (op) return this.perform(op, args);
