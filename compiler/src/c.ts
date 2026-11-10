@@ -300,8 +300,9 @@ const isFiber = (fn: string) => FIBER.test(fn);
 // A search split by its first choice (C203): the item a thread's run
 // keeps of it, and a search inside that keeps all of its own (scalar.ts).
 const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
+type SearchHow = "count" | "all" | "first";
 const folds = (job: string) => job === "add" || job === "max" || job === "min";
-const isPar = (fn: string) => fn.startsWith("par:fold:") || fn === "par:count" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
+const isPar = (fn: string) => fn.startsWith("par:fold:") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -614,10 +615,10 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   };
   // A count of a search split by its first choice (C203), by its closure's
   // type, and each list type a choice splits.
-  const countPars = new Map<string, { n: number; tf: FType }>();
-  const countSite = (tf: FType): number => {
-    if (!countPars.has(tf.key)) countPars.set(tf.key, { n: countPars.size, tf });
-    rts.add("int.add");
+  const countPars = new Map<string, { n: number; tf: FType; how: SearchHow }>();
+  const countSite = (tf: FType, how: SearchHow): number => {
+    if (!countPars.has(tf.key)) countPars.set(tf.key, { n: countPars.size, tf, how });
+    if (how === "count") rts.add("int.add");
     return countPars.get(tf.key)!.n;
   };
   const splitLists = new Map<string, { n: number; t: DType }>();
@@ -1473,7 +1474,8 @@ int main(int argc, char **argv) {
             if (!splitLists.has(t.key)) splitLists.set(t.key, { n: splitLists.size, t });
             return stated(`lab_split_${splitLists.get(t.key)!.n}(${xs[0]})`, t, pre, d);
           }
-          if (e.fn === "par:count") return checked(`lab_par_count_${countSite(typeOf(e.args[0], f.locals) as FType)}(${args(e.args, pre, d, after).join(", ")})`, "int", pre, d, after);
+          const sh = /^par:(count|all|first):search$/.exec(e.fn);
+          if (sh) return checked(`lab_par_search_${countSite(typeOf(e.args[0], f.locals) as FType, sh[1] as SearchHow)}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           if (isPar(e.fn)) {
             const job = (e.fn.startsWith("par:fold:") ? e.fn.slice(9) : e.fn.slice(4)) as "map" | "keep" | "all" | "any" | "first" | "add" | "max" | "min", ta = typeOf(e.args[0], f.locals) as AType;
             const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" || folds(job) ? ta : e.host!.t as AType, job);
@@ -2260,9 +2262,32 @@ static double lab_split_give(double j) { lab_split = (int64_t)j; return 0; }`, .
   // item here, which says how many there are, then, when that took a
   // millisecond, the others on the threads, each count added. An abort is
   // the first in order's, as each run that failed runs again here in turn.
-  function countC(p: { n: number; tf: FType }, stops: boolean, fuelled: boolean): string {
-    const { n, tf } = p, J = `lab_par_cjob_${n}`, call = (f: string) => `((${fname.get(tf.key)})((lab_closure *)${f})->code)(${f})`;
-    return `typedef struct { lab_cell *f; lab_int *out; char *bad; int64_t next; } ${J};
+  function countC(p: { n: number; tf: FType; how: SearchHow }, stops: boolean, fuelled: boolean): string {
+    if (p.how === "first") return firstSearchC(p, stops, fuelled);
+    const { n, tf, how } = p, J = `lab_par_cjob_${n}`, call = (f: string) => `((${fname.get(tf.key)})((lab_closure *)${f})->code)(${f})`;
+    const t = tf.result, T = ty(t), drop1 = (x: string) => drop(t, x);
+    // An all's lists joined in order: each list's cells copied onto the
+    // ones after it, from the last.
+    let join = "", joined = "";
+    if (how === "all") {
+      const d = t as DType, c = d.cases.findIndex((x) => x.fields.length > 0), C = cname(d, c);
+      const ri = d.cases[c].fields.findIndex((x) => x.t === d), hi = 1 - ri, h = d.cases[c].fields[hi].t;
+      join = `static lab_cell *lab_par_join_${n}(lab_cell *a, lab_cell *b) {
+  lab_cell *r = b, *last = 0, *p;
+  for (p = a; p->tag == ${c}; p = ((${C} *)p)->f${ri}) {
+    lab_cell *x = lab_new(sizeof(${C}), ${tnum.get(d.key)}, ${c});
+    ((${C} *)x)->f${hi} = ${dup(h, `((${C} *)p)->f${hi}`)}; ((${C} *)x)->f${ri} = b;
+    if (last) ((${C} *)last)->f${ri} = x; else r = x;
+    last = x;
+  }
+  lab_drop(a);
+  return r;
+}
+`;
+      joined = `  for (k = n - 1; k-- > 0;) j.out[n - 1] = lab_par_join_${n}(j.out[k], j.out[n - 1]);
+  r = lab_par_join_${n}(r, j.out[n - 1]);`;
+    } else joined = "  for (k = 0; k < n; k++) r = lab_int_add(r, j.out[k]);";
+    return `${join}typedef struct { lab_cell *f; ${T} *out; char *bad; int64_t next; } ${J};
 static void lab_par_cone_${n}(${J} *j, int64_t k) {
   lab_cell *f = lab_dup(j->f);
   lab_split = k + 1; lab_seen = -1;
@@ -2283,18 +2308,18 @@ static void lab_par_cwork_${n}(void *p) {
   lab_split = -1;${stops ? `
   lab_stop_at = was;` : ""}
 }
-static lab_int lab_par_count_${n}(lab_cell *f) {
+static ${T} lab_par_search_${n}(lab_cell *f) {
   int64_t was = lab_split, outer = lab_seen, n, k;
   struct timespec t0;
   lab_cell *g = lab_dup(f);
-  lab_int r;
+  ${T} r;
   clock_gettime(CLOCK_MONOTONIC, &t0);
   lab_split = 0; lab_seen = -1;
   r = ${call("g")};
   n = lab_seen - 1; lab_split = was; lab_seen = outer;
   if (lab_st) { lab_drop(f); return 0; }
   if (n <= 0) { lab_drop(f); return r; }
-  ${J} j = { f, malloc((size_t)n * sizeof(lab_int)), malloc((size_t)n), 0 };
+  ${J} j = { f, malloc((size_t)n * sizeof(${T})), malloc((size_t)n), 0 };
   if (!j.out || !j.bad) lab_oom();
   memset(j.bad, 1, (size_t)n);
   if (lab_par_worth(&t0)${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
@@ -2309,15 +2334,96 @@ static lab_int lab_par_count_${n}(lab_cell *f) {
     if (lab_st) goto failed;
     j.bad[k] = 0;
   }
-  for (k = 0; k < n; k++) r = lab_int_add(r, j.out[k]);
+${joined}
   free(j.out); free(j.bad);
   lab_drop(f);
   return r;
 failed:
-  lab_int_drop(r);
-  for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) lab_int_drop(j.out[m]);
+  ${drop1("r")}
+  for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop1("j.out[m]")}
   free(j.out); free(j.bad);
   lab_drop(f);
+  return 0;
+}`;
+  }
+  // A first of a search split by its first choice (C203c), as compiled
+  // JavaScript's (branches-rt.ts searchPure with first): the run keeping
+  // the first item here, then the others from the front on the threads, a
+  // thread taking none past the first with an answer (stop). Here, in
+  // order, the first run with an answer is the answer, one that aborted or
+  // wasn't run running again here first; none with an answer fails (1),
+  // for the default. bad: 1 not run or aborted, 2 no answer, 0 answered.
+  function firstSearchC(p: { n: number; tf: FType }, stops: boolean, fuelled: boolean): string {
+    const { n, tf } = p, J = `lab_par_fjob_${n}`, call = (f: string) => `((${fname.get(tf.key)})((lab_closure *)${f})->code)(${f})`;
+    const t = tf.result, T = ty(t);
+    const free = `${counted(t) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(t, "j.out[m]")}
+  ` : ""}free(j.out); free(j.bad);
+  lab_drop(f);`;
+    return `typedef struct { lab_cell *f; ${T} *out; char *bad; int64_t next, stop, n; } ${J};
+static void lab_par_fone_${n}(${J} *j, int64_t k) {
+  lab_cell *f = lab_dup(j->f);
+  lab_split = k + 1; lab_seen = -1;
+  j->out[k] = ${call("f")};
+  lab_split = -1;
+}
+static void lab_par_fwork_${n}(void *p) {
+  ${J} *j = p;
+  volatile int64_t k;${stops ? `
+  jmp_buf here, *was = lab_stop_at;
+  if (setjmp(here)) lab_st = 0;
+  lab_stop_at = &here;` : ""}
+  while ((k = __atomic_fetch_add(&j->next, 1, __ATOMIC_RELAXED)) < j->n) {
+    if (k > __atomic_load_n(&j->stop, __ATOMIC_RELAXED)) break;
+    lab_par_fone_${n}(j, k);
+    if (lab_st >= 2${fuelled ? " || lab_fuel != INFINITY" : ""}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
+    else if (lab_st) { lab_st = 0; j->bad[k] = 2; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED); }
+    else {
+      int64_t s = __atomic_load_n(&j->stop, __ATOMIC_RELAXED);
+      j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED);
+      while (s > k && !__atomic_compare_exchange_n(&j->stop, &s, k, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
+    }
+  }
+  lab_split = -1;${stops ? `
+  lab_stop_at = was;` : ""}
+}
+static ${T} lab_par_search_${n}(lab_cell *f) {
+  int64_t was = lab_split, outer = lab_seen, n, k;
+  struct timespec t0;
+  lab_cell *g = lab_dup(f);
+  ${T} r;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  lab_split = 0; lab_seen = -1;
+  r = ${call("g")};
+  n = lab_seen - 1; lab_split = was; lab_seen = outer;
+  if (lab_st != 1 || n <= 0) { lab_drop(f); return r; }
+  lab_st = 0;
+  ${J} j = { f, malloc((size_t)n * sizeof(${T})), malloc((size_t)n), 0, n, n };
+  if (!j.out || !j.bad) lab_oom();
+  memset(j.bad, 1, (size_t)n);
+  if (lab_par_worth(&t0)${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
+    lab_share_no = 0;
+    lab_share(f);
+    lab_shared();
+    if (!lab_share_no) lab_pool_run(lab_par_fwork_${n}, &j);
+  }
+  for (k = 0; k < n; k++) {
+    if (j.bad[k] == 2) continue;
+    if (j.bad[k] == 1) {
+      lab_par_fone_${n}(&j, k);
+      if (lab_st == 1) { lab_st = 0; j.bad[k] = 2; continue; }
+      if (lab_st) goto failed;
+      j.bad[k] = 0;
+    }
+    r = j.out[k];
+    ${free}
+    return r;
+  }
+  k = -1;
+  ${free}
+  lab_st = 1;
+  return 0;
+failed:
+  ${free}
   return 0;
 }`;
   }
