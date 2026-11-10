@@ -19,7 +19,9 @@ side 2400, 2.5 s to 0.86 s. An array's keep likewise (C202a,
 `all pass` and `any pass` (C202b): examples/nicomachus native below 12000,
 4.8 to 5.2 s to 1.3 s; and `first where` (C202c), a thread past the first
 deciding item taking no more: examples/divisors native, 500 below 20000,
-5.1 s to 1.35 s.
+5.1 s to 1.35 s; and an array's fold adding its items' Ints or keeping the
+largest or smallest (C202d): examples/collatz native below 3000000, its keep
+and two folds, 9.8 to 11 s to 3.9 to 4.1 s.
 The goal is in [STABLE-REFERENCES.md](../data/STABLE-REFERENCES.md) §6:
 every processing environment a target has (on the web: the main thread,
 Web Workers, WebAssembly, the GPU through WebGPU compute) used without the

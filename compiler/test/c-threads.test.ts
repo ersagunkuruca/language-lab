@@ -14,7 +14,7 @@ import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
-import { ABORT_OP, INT_OPS, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -140,6 +140,40 @@ test("all pass, any pass and first where run their tests on threads, answering b
     const many = p.run("3");
     assert.equal(many.out, want);
     assert.ok(many.threads > 0, "no item ran on another thread");
+    assert.equal(p.run("0").out, want);
+  }
+});
+
+// main prints a fold over 0 to n - 1, kept as an array: from z, each
+// item's Int (`each`, given the work) put to the rest's by `by`.
+function folded(n: number, z: number, by: "add" | "max", each: (k: Lang, x: Id, work: Id) => Id) {
+  return built(/lab_par_map_0\(/, true, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
+    k.let("xs", k.call(INT_OPS.range, k.int(n)), (xs) =>
+      k.seq(k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), xs, k.int(1), k.int(-1)))),
+        k.call(S.print, k.call(SHOW_ANY, k.fold(xs, [
+          { variant: NIL, names: [], body: () => k.int(z) },
+          { variant: CONS, names: ["x", "rest"], results: [null, "the rest's"], body: ([x], [, r]) => by === "add" ? k.call(INT_OPS.add, each(k, x, work(k, x, big)), r!) : k.let("v", each(k, x, work(k, x, big)), (v) => k.if(k.call(INT_OPS.less, r!, v), v, r!)) },
+        ])))))));
+}
+
+// A fold adding Ints, or keeping the largest, on threads (C202d): the
+// evaluator's Int, big ones too, and the abort the fold in turn meets
+// first, the last item's.
+test("a fold of an array adding its items' Ints or keeping the largest runs on threads, as in order (C202)", { skip }, () => {
+  const plain = (k: Lang, x: Id, work: Id) => k.call(INT_OPS.add, k.call(INT_OPS.mul, k.call(INT_OPS.sub, work, work), k.int(0)), x);
+  const cases: [string, ReturnType<typeof folded>][] = [
+    ["1\n76\n", folded(12, 10, "add", plain)],
+    ["1\n11\n", folded(12, -5, "max", plain)],
+    ["1\n40\n", folded(12, 40, "max", plain)],
+    ["1\n13298184015760920921767936\n", folded(12, 0, "max", (k, x, work) => k.call(INT_OPS.add, k.call(INT_OPS.mul, work, k.int(0)), k.call(INT_OPS.mul, k.int(1n << 40n), k.call(INT_OPS.mul, k.int(1n << 40n), x))))],
+    ["aborted 11", folded(12, 0, "add", (k, x, work) => k.if(k.call(INT_OPS.less, k.int(8), x), k.call(ABORT_OP, k.call(SHOW_ANY, x)), plain(k, x, work)))],
+  ];
+  for (const [want, p] of cases) {
+    assert.equal(p.evaluator, want);
+    const many = p.run("3");
+    assert.equal(many.out, want);
+    // The last item aborts first, here, before any is shared.
+    if (!want.startsWith("aborted")) assert.ok(many.threads > 0, "no item ran on another thread");
     assert.equal(p.run("0").out, want);
   }
 });

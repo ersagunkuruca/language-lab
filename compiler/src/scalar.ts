@@ -2757,13 +2757,17 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // (map.worth), from the last as the fold meets them, their Ints
       // added or compared (exact, so in any order) after the empty list's.
       // Otherwise as below.
-      const each = result === "int" && !underBudget && opts.host && !fibers && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f) : null;
+      const each = result === "int" && !underBudget && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f) : null;
       if (each) {
         const arr = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn);
+        // In C (C202d), an array's, on the threads, which time it themselves.
+        if (opts.threads) { if (arr) return { k: "rt", fn: `par:fold:${each.how}`, args: [s.args[0], each.fn, each.nil], host: { t: "int", partial: true } }; }
+        else {
         const whole = arr ? s.args[0] : s, lt = arr ? [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])] : st;
         const l = f.locals.push(lt) - 1, xs: SExpr = { k: "local", i: l }, site: SExpr = { k: "num", v: mapSites++ };
         const shared: SExpr = { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site] };
         return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: "int" } };
+        }
       }
       return inTurn(s);
     }
