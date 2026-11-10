@@ -105,3 +105,42 @@ test("dice laid out in C on a 360-wide screen puts the chart's bars where Chromi
   assert.match(dark, /^page 360 [\d.]+ bg FF161615\n/);
   assert.match(dark, /button [\d. ]+ bg FF7AA2FF radius 10/);
 });
+
+// The other page examples (C199f): what C shows after the same taps, and
+// where it lays them out on a 360-wide screen against Chromium (measured
+// by hand with Playwright, the evaluator's page in a body). Texts measure
+// differently on the headless host, so only boxes above or beside them
+// are compared.
+test("tumble in C shows what html.ts shows after taps and hints (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/tumble"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const p = both(p0.code, info, p0.pres.names, main, ["click:hint", "click:tap 0 0", "click:tap 0 1", "click:two"]);
+  assert.deepEqual(p.c, p.evaluator);
+});
+
+test("a part inside a picture is an SVG group in C, as html.ts makes it: compass (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/compass"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const p = both(p0.code, info, p0.pres.names, main, []);
+  assert.match(p.c[0], /<svg[^>]*>.*<g><g><circle/);
+  assert.deepEqual(p.c, p.evaluator);
+});
+
+test("tumble laid out in C: main's margins, an h1's margin collapsed through main, .lane h2's rule (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/tumble"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const lines = r.stdout.toString().split("\n").map((s) => s.trim());
+  // Chromium: main 32 24 296, h1 32 24 296, a lane's h2 8 below the lane's top, 272 wide.
+  assert.match(lines[1], /^main 32 24 296 /);
+  assert.match(lines[2], /^h1 32 24 296 /);
+  const lane = lines.findIndex((s) => s.startsWith("div 32") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
+  assert.equal(lines[lane + 1].split(" ")[0], "h2");
+  assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);
+  assert.equal(h2[3], 272);
+});

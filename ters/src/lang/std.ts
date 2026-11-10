@@ -1111,6 +1111,24 @@ export const tableRead = (t: Table, key: unknown, none: unknown): unknown => { c
 const keyOf = (k: unknown, v: unknown) => (v instanceof Keyed ? v.key : k);
 const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableOf_(k, v), k], v], [CHOICE]));
 STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.m.has(h) ? [valueOf(t.m.get(h))] : []; };
+// A table whose keys are all plain numbers (Ints), listed without a
+// comparison through keyOrder or a copy per entry: kept in the order they
+// were put, which a counter's keys already are, so sorted only when they
+// aren't (C58b', examples/swarm: listing its 2,000 keys each tick was a
+// third of its run). Null for any other keys.
+function numberEntries(m: Map<unknown, unknown>): object | null {
+  const ks: number[] = [], vs: unknown[] = [];
+  let sorted = true;
+  for (const [k, v] of m) {
+    if (typeof k !== "number") return null;
+    if (sorted && ks.length && k < ks[ks.length - 1]) sorted = false;
+    ks.push(k); vs.push(v);
+  }
+  const at = sorted ? null : ks.map((_, i) => i).sort((a, b) => ks[a] - ks[b]);
+  let out: object = { tag: NIL, fields: [] };
+  for (let i = ks.length - 1; i >= 0; i--) { const j = at ? at[i] : i; out = { tag: CONS, fields: [{ tag: PAIR_V, fields: [ks[j], vs[j]] }, out] }; }
+  return out;
+}
 export const TABLE_OPS = {
   empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)]), () => new Table(new Map(), true)),
   put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => {
@@ -1123,7 +1141,7 @@ export const TABLE_OPS = {
   at: tableAt,
   // The entries in compare's order: the Map it stands for.
   entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
-    (t: Table) => (t.listed ??= listOf([...t.m].map(([k, v]) => [keyOf(k, v), valueOf(v)]).sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
+    (t: Table) => (t.listed ??= numberEntries(t.m) ?? listOf([...t.m].map(([k, v]) => [keyOf(k, v), valueOf(v)]).sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
 };
 
 // Set as a hash table changed in place (C63d): the same Table, its keys

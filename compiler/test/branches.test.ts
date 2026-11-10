@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
-import { ABORT_OP, INT_OPS, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -122,12 +122,56 @@ test("a map's items cross with what its function captured, and its first abort i
   }
 });
 
+test("a fold adding an Int for each item adds them on workers, and its first abort is the one the fold in turn meets first, the last item's (C42)", async () => {
+  // Item i's Int is 1, worked out by a sum, or an abort for i of 5 or more.
+  const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.fold(k.call(INT_OPS.range, k.int(8)), [
+      { variant: NIL, names: [], body: () => k.int(10) },
+      { variant: CONS, names: ["i", "rest"], results: [null, "the rest's"], body: ([i], [, r]) => k.call(INT_OPS.add,
+        k.if(k.call(S.less, k.call(B.add, work(k, 400000, 1), k.call(INT_OPS.toNumber, i)), k.lit(79999800005)), k.int(1), k.call(ABORT_OP, k.call(SHOW_ANY, i))), r!) },
+    ])))));
+    return main;
+  }, false);
+  assert.match(readFileSync(file, "utf8"), /R\.rt\("fold\.pure"/);
+  for (const workers of ["2", "0"]) {
+    const [out, err, code] = await run([file], { TERS_WORKERS: workers });
+    assert.deepEqual([out, err, code], ["", "7\n", 1], `with ${workers} workers`);
+  }
+});
+
+test("a fold keeping its items' smallest Int keeps it on workers, or the empty list's when smaller (C42)", async () => {
+  // Item i's Int is 3000100 less i · 7, worked out by 3000000 steps (so the
+  // last is the smallest), or the empty list's when it is smaller still.
+  const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
+    const main = k.def("main"), down = k.def("down");
+    // n again, by n steps.
+    k.define(down, k.fn(["n", "got"], (n, got) => k.if(k.call(INT_OPS.less, k.int(0), n), k.call(down, k.call(INT_OPS.sub, n, k.int(1)), k.call(INT_OPS.add, got, k.int(1))), got)));
+    const least = (z: number) => k.fold(k.call(INT_OPS.range, k.int(12)), [
+      { variant: NIL, names: [], body: () => k.int(z) },
+      { variant: CONS, names: ["i", "rest"], results: [null, "the rest's"], body: ([i], [, r]) => k.let("v", k.call(INT_OPS.sub, k.call(INT_OPS.add, k.int(100), k.call(down, k.int(3000000), k.int(0))), k.call(INT_OPS.mul, i, k.int(7))),
+        (v) => k.if(k.call(INT_OPS.less, v, r!), v, r!)) },
+    ]);
+    k.define(main, k.thunk(() => k.call(S.print, k.text(k.call(SHOW_ANY, least(10000000)), k.lit(" "), k.call(SHOW_ANY, least(5))))));
+    return main;
+  }, false);
+  assert.match(readFileSync(file, "utf8"), /"min"/);
+  for (const workers of ["2", "0"]) {
+    const [out, err, code] = await run([file], { TERS_WORKERS: workers });
+    assert.deepEqual([out, err, code], ["3000023 5\n", "", 0], `with ${workers} workers`);
+  }
+});
+
 test("collatz keeps its long walks on workers, the same numbers in the same order as in turn and in the evaluator (C43)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/collatz"), "-o", "collatz.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/collatz"), "2000", "100"], {})]);
   assert.equal(made[2], 0, made[1]);
   // keep is copied by the arrays pass (library-reps.ts), and known by its copy's id.
   assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("keep\.pure"/);
+  // And `steps of all`'s fold adds each number's steps, and `most steps`
+  // keeps the largest, shared out (C42).
+  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("fold\.pure"/);
+  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /"add"[^]*"max"|"max"[^]*"add"/);
   const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /^665 numbers below 300000 take more than 300 steps/);

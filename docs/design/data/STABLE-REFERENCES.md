@@ -234,10 +234,13 @@ before it, each as a representation:
   is stored as a grow-only array with a free list; a key resolves to a slot
   plus a counter, so a reused slot never answers for an old key (generational
   indices, as in ECS engines; Goose's reusable pools lack the counter and say
-  a stale reference reads another item).
+  a stale reference reads another item). Read against Ters in
+  [KEYED-COLLECTIONS.md](KEYED-COLLECTIONS.md): keys here are the
+  program's own, so what carries over is an array part for small Int keys.
 - **Flat, inline layout** (C59) for data built once and then read: nested
   records inside each other with no pointers, which is also a file format
-  (FlatBuffers, by the same author).
+  (FlatBuffers, by the same author). Read against Ters in
+  [FLAT-LAYOUT.md](FLAT-LAYOUT.md): no example gains yet.
 
 What we don't take from Goose: array kinds in the type, one growable value
 per struct, no growable data across recursion, no closures. Those put the

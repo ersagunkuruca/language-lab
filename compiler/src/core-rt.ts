@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -200,6 +200,9 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     if (!xs.length) throw FAIL;
     return xs[0];
   };
+  // A fold of a list adding an Int for each item, or keeping the largest
+  // or the smallest, after the empty list's z (C42).
+  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add"));
   if (name === "choose.split") return chooseSplit as (...xs: unknown[]) => unknown;
   if (name === "split.hold") return splitHold;
   if (name === "split.give") return splitGive as (...xs: unknown[]) => unknown;
