@@ -168,13 +168,19 @@ static inline void lab_dec(lab_cell *c) {
   }
 }
 static void lab_fields(lab_cell *c);
-static void lab_drop(lab_cell *c) {
-  if (!c || !LAB_RC(c) || !lab__last(c)) return;
+// The count taken where it's dropped (C207b); the freeing out of line.
+// GCC, inlining it, warns of writing the count of a cell it can't size
+// (a constant empty list's) on a path the count of 0 rules out.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
+static void lab__dead(lab_cell *c) {
   size_t base = lab_dead_n;
   lab_fields(c);
   lab_free(c);
   while (lab_dead_n > base) { lab_cell *d = lab_dead[--lab_dead_n]; lab_fields(d); lab_free(d); }
-}`;
+}
+static inline void lab_drop(lab_cell *c) { if (c && LAB_RC(c) && lab__last(c)) lab__dead(c); }`;
 };
 
 // Marking what a map's items and function reach as shared (L101), before
@@ -469,7 +475,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`)])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`)])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -1511,6 +1517,14 @@ int main(int argc, char **argv) {
             return stated(c, e.host!.t, pre, d);
           }
           if (isFiber(e.fn)) { rts.add("fibers"); return fiber(e as SExpr & { k: "rt" }, pre, d, after); }
+          // `array of` a range (C207b): the array filled with 0 to n − 1
+          // straight away, no list made to be copied in and freed.
+          const ofRange = ARRAY_FN.exec(e.fn), r0 = e.args[0];
+          if (ofRange?.[1] === "of" && r0?.k === "rt" && (r0.fn === "int.range" && lowered.arrays[Number(ofRange[2])].item === "int" || r0.fn === "number.range" && lowered.arrays[Number(ofRange[2])].item === "f64")) {
+            const fn = `array.${r0.fn === "int.range" ? "range" : "rangeF"}.a${ofRange[2]}`;
+            arrayFns.add(fn);
+            return stated(`${cName(fn)}(${args(r0.args, pre, d, after).join(", ")})`, lowered.arrays[Number(ofRange[2])], pre, d);
+          }
           if (e.fn === "par:together") {
             const n = togetherSite(typeOf(e.args[0], f.locals) as DType, e.host!.t as DType);
             return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
@@ -2677,6 +2691,24 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   lab_cell *a = lab__view_a${i}((lab_cell *)b, b->lo, n);
   lab_drop(l);
   return a;
+}`);
+    // 0 to n − 1 (C207b), as `array of` makes it from range(n)'s list.
+    if (has("range")) out.push(`static lab_cell *lab_array_range_a${i}(lab_int x) {
+  int64_t n = lab__clamp(x);
+  lab_int_drop(x);
+  if (n < 0) n = 0;
+  if (n > UINT32_MAX) lab_oom();
+  ${B} *b = lab__buf_a${i}((uint32_t)n, ${bytes ? "n >= 16 && n <= 256" : "0"});
+  for (uint32_t k = 0; k < (uint32_t)n; k++) ${wr("b", "b->lo + k", "LAB_SMALL((int64_t)k)")}
+  return lab__view_a${i}((lab_cell *)b, b->lo, (uint32_t)n);
+}`);
+    if (has("rangeF")) out.push(`static lab_cell *lab_array_rangeF_a${i}(double x) {
+  double m = x != x || x <= 0 ? 0 : floor(x);
+  if (m > UINT32_MAX) lab_oom();
+  uint32_t n = (uint32_t)m;
+  ${B} *b = lab__buf_a${i}(n, 0);
+  for (uint32_t k = 0; k < n; k++) ${wr("b", "b->lo + k", "(double)k")}
+  return lab__view_a${i}((lab_cell *)b, b->lo, n);
 }`);
     if (has("items")) out.push(`static lab_cell *lab_array_items_a${i}(lab_cell *a) {
   ${V} *v = (${V} *)a;
