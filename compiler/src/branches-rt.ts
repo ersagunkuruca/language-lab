@@ -492,17 +492,17 @@ export function pageBranches(script: string | undefined, fns: Record<string, Fn>
 }
 const inPageWorker = () => typeof (globalThis as { document?: unknown }).document === "undefined" && typeof (globalThis as { importScripts?: unknown }).importScripts === "function";
 // In a page's worker: answer each run sent, and say so (true: the script
-// draws no page). A run is a map's items from i * size.
+// draws no page). A run is a map's items from i * size, or a search's piece.
 export function pageWorker(): boolean {
   if (!inPageWorker() || !mod) return false;
   const self = globalThis as unknown as { onmessage: ((e: { data: WebJob }) => void) | null; postMessage(m: unknown): void };
   self.onmessage = ({ data: m }) => {
-    const f = dec(m.f) as Fn;
+    const f = dec(m.f);
     for (const [i, xs] of m.runs) {
       let out: WebAnswer;
       const used = { n: 0 };
       try {
-        const u = m.steps === null ? unitOf(xs.map(dec), f, m.how) : counted(m.steps, () => unitOf(xs.map(dec), f, m.how), used);
+        const u = m.steps === null ? webUnit(m, f, xs) : counted(m.steps, () => webUnit(m, f, xs), used);
         const v = encode(u, names!);
         out = v === NO ? { job: m.job, i, again: true } : { job: m.job, i, v };
       } catch (e) {
@@ -514,7 +514,7 @@ export function pageWorker(): boolean {
   };
   return true;
 }
-interface WebJob { job: number; f: unknown; runs: [number, unknown[]][]; how: AwayHow; steps: number | null }
+interface WebJob { job: number; f: unknown; runs: [number, unknown][]; how: AwayHow | How; ways?: number; steps: number | null }
 // A run's answer, with the steps it spent under a page's budget; `out`: it ran out.
 type WebAnswer = Answer & { used?: number; out?: true };
 const webSize = () => Math.max(0, Math.min(7, ((globalThis as { navigator?: { hardwareConcurrency?: number } }).navigator?.hardwareConcurrency ?? 1) - 1));
@@ -527,14 +527,16 @@ function startWeb(w: Web): Worker[] {
 let pageMaps = 0;
 // For a test: how many runs of a map went to a page's workers.
 export const pageMapsOnWorkers = () => pageMaps;
-// The map of xs by f, given to k: on the page's workers where there are
-// any and the map is worth them, else here and at once.
 // What a job on the page's workers is: a map, a keep, or a fold of the
 // items' Ints (added, or the largest or smallest kept) from z.
 type AwayHow = "map" | "keep" | FoldHow;
 const isFold = (how: AwayHow): how is FoldHow => how !== "map" && how !== "keep";
 // A run of the job's items here: a map's or keep's items, or a fold's Int.
 const unitOf = (items: unknown[], f: Fn, how: AwayHow): unknown => (isFold(how) ? together(items, f, how) : run(items, f, how === "keep"));
+// A run of a job sent to a worker: a map's items, or a search's piece.
+const webUnit = (m: WebJob, f: unknown, x: unknown): unknown => (m.how === "count" || m.how === "all" || m.how === "first" ? answers(f, piece(x as number, m.ways!), m.how) : unitOf((x as unknown[]).map(dec), f as Fn, m.how));
+// The map of xs by f, given to k: on the page's workers where there are
+// any and the map is worth them, else here and at once.
 export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, k: (v: unknown) => unknown): unknown {
   const unbudgeted = fuel === Infinity || fuel === undefined;
   const inTurn = () => (isFold(how) ? foldInOrder(xs, f, z as Int, how) : mapInOrder(xs, f, how === "keep"));
@@ -550,27 +552,81 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
     if (performance.now() - t0 > WORTH) w.workers = startWeb(w);
     return k(v);
   }
-  const helpers = w.workers;
-  if (!helpers.length || !items.length) return k(inTurn());
+  if (!w.workers.length || !items.length) return k(inTurn());
   const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
   if (es.includes(NO)) return k(inTurn());
-  const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), id = ++job;
+  const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size);
+  return awayRuns(w.workers, n, { f: g, how }, (i) => es.slice(i * size, (i + 1) * size), (i) => unitOf(items.slice(i * size, (i + 1) * size), f, how), (values) => {
+    perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
+    return k(isFold(how) ? (values as Int[]).reduce(both(how), z as Int) : sameKind(xs, (values as unknown[][]).flat()));
+  }, () => { setStepsLeft(-1); throw new OutOfSteps(); });
+}
+
+// A count or an all of a search on the page's workers (C61 c′4), as
+// searchPure shares one on Node's: the first piece here, which says how
+// many items its first two choices have, and the other pieces shared out,
+// their counts added or their answers joined in order.
+export function searchAway(search: unknown, fuel: unknown, site: number, how: How, k: (v: unknown) => unknown): unknown {
+  const unbudgeted = fuel === Infinity || fuel === undefined;
+  const out = (v: unknown) => k(how === "count" ? v : itemsOf(v));
+  const inTurn = () => out(answers(search, null, how));
+  if (canShare()) return k(unbudgeted ? searchPure(search, site, how) : how === "count" ? answers(search, null, how) : itemsOf(answers(search, null, how)));
+  const w = web;
+  if (!w || !unbudgeted) return inTurn();
+  const t0 = performance.now();
+  if (!w.workers) {
+    const v = inTurn();
+    if (performance.now() - t0 > WORTH) w.workers = startWeb(w);
+    return v;
+  }
+  const g = w.workers.length ? encode(search, names!) : NO;
+  if (g === NO) return inTurn();
+  // The pieces spend more steps together than the search in turn (each
+  // goes through the choices before its own again), so where they run out
+  // the search runs in turn, from the steps it was given, to say.
+  const left = stepsLeft(), again = () => { if (left !== null) setStepsLeft(left); return inTurn(); };
+  const outer = [seen, seen2];
+  let first: unknown, kk: number, m: number;
+  const u0 = { n: 0 };
+  seen = -1; seen2 = -1;
+  try { first = left === null ? answers(search, piece(0, 2), how) : counted(left, () => answers(search, piece(0, 2), how), u0); kk = seen; m = seen2; }
+  catch (e) { if (e instanceof OutOfSteps) return again(); throw e; }
+  finally { [seen, seen2] = outer; }
+  m = Math.max(1, m);
+  // With one item or none at each, that piece was the whole search.
+  if (left !== null) setStepsLeft(left - u0.n);
+  if (kk <= 1 && m <= 1 || (how === "first" && decides(first))) return out(first);
+  const n = Math.max(1, kk) * m - 1;
+  // A first's answer: the first piece's in order that has one (C61 c′5).
+  return awayRuns(w.workers, n, { f: g, how, ways: m }, (i) => i + 1, (i) => answers(search, piece(i + 1, m), how), (rest) => {
+    perItem[site] = (performance.now() - t0) / n;
+    if (how === "first") { const found = rest[rest.length - 1]; return out(found !== undefined && decides(found) ? found : arrayOf([])); }
+    return out(how === "all" ? arrayOf([first, ...rest].flatMap((a) => itemsOf(a))) : rest.reduce((a: number, b) => a + (b as number), first as number));
+  }, again, how === "first" ? decides : undefined);
+}
+
+// A job's n runs on the page's workers (and here): run i sent as what
+// `data` gives for it, or run here by `here`; `done` given their values in
+// order, or `over` where, in order, they ran out of the steps they had.
+// With `decided`, the job ends at the first run, in order, that decides
+// it: the runs after it, as in turn, spend nothing and can't abort.
+function awayRuns(helpers: Worker[], n: number, kind: Pick<WebJob, "f" | "how" | "ways">, data: (i: number) => unknown, unit: (i: number) => unknown, done: (values: unknown[]) => unknown, over: () => unknown, decided?: (v: unknown) => boolean): unknown {
+  const id = ++job;
   // Run i to the helper i mod (workers + 1), the last of them this thread:
   // the costly runs of a picture (its middle rows) spread over all.
-  const parts = helpers.length + 1, theirs: [number, unknown[]][][] = helpers.map(() => []);
-  for (let i = 0; i < n; i++) if (i % parts < helpers.length) theirs[i % parts].push([i, es.slice(i * size, (i + 1) * size)]);
+  const parts = helpers.length + 1, theirs: [number, unknown][][] = helpers.map(() => []);
+  for (let i = 0; i < n; i++) if (i % parts < helpers.length) theirs[i % parts].push([i, data(i)]);
   // Under a page's budget (a handler's steps), every run gets what is left
   // and says what it spent; the job spends their sum, in order (finish).
   const left = stepsLeft(), used: number[] = new Array(n).fill(0), out: boolean[] = new Array(n).fill(false);
-  const unit = (i: number) => unitOf(items.slice(i * size, (i + 1) * size), f, how);
   const here = (i: number): unknown => {
     if (left === null) return unit(i);
     const u = { n: 0 };
     try { return counted(left, () => unit(i), u); } catch (e) { if (e instanceof OutOfSteps) { out[i] = true; return undefined; } throw e; } finally { used[i] = u.n; }
   };
   const values: unknown[] = new Array(n);
-  let waiting = 0, done!: () => void;
-  const ready = new Promise<void>((r) => (done = r));
+  let waiting = 0, ready!: () => void;
+  const answered = new Promise<void>((r) => (ready = r));
   helpers.forEach((h, j) => {
     if (!theirs[j].length) return;
     waiting += theirs[j].length;
@@ -580,11 +636,12 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
       if (r.out) out[r.i] = true;
       values[r.i] = r.again ? AGAIN : "abort" in r ? new Thrown(new mod!.Aborted(dec(r.abort), r.esc!)) : dec(r.v);
       if (!r.again) pageMaps++;
-      if (--waiting === 0) done();
+      if (--waiting === 0) ready();
     };
-    h.postMessage({ job: id, f: g, runs: theirs[j], how, steps: left } satisfies WebJob);
+    h.postMessage({ ...kind, job: id, runs: theirs[j], steps: left } satisfies WebJob);
   });
-  for (let i = 0; i < n; i++) if (i % parts === helpers.length) values[i] = attempt(() => here(i));
+  // Here, none after one that decides: those after it aren't read.
+  for (let i = 0, end = false; i < n && !end; i++) if (i % parts === helpers.length) { values[i] = attempt(() => here(i)); end = !!decided && !out[i] && !(values[i] instanceof Thrown) && decided(values[i]); }
   // In order, as running them in order would have: the first to abort is
   // the job's; one that failed on a worker otherwise runs here.
   const finish = (): unknown => {
@@ -592,15 +649,15 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
     for (let i = 0; i < n; i++) {
       if (values[i] === AGAIN) values[i] = attempt(() => here(i));
       // Out of steps at the run where, in order, the sum passes the budget.
-      if (left !== null) { spent += used[i]; if (out[i] || spent > left) { setStepsLeft(-1); throw new OutOfSteps(); } }
+      if (left !== null) { spent += used[i]; if (out[i] || spent > left) return over(); }
       if (values[i] instanceof Thrown) { if (left !== null) setStepsLeft(left - spent); throw (values[i] as Thrown).e; }
+      if (decided?.(values[i])) { if (left !== null) setStepsLeft(left - spent); return done(values.slice(0, i + 1)); }
     }
     if (left !== null) setStepsLeft(left - spent);
-    perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
-    return k(isFold(how) ? (values as Int[]).reduce(both(how), z as Int) : sameKind(xs, (values as unknown[][]).flat()));
+    return done(values);
   };
   if (!waiting) return finish();
-  const p = new Pending(ready, "the workers' runs", false);
+  const p = new Pending(answered, "the workers' runs", false);
   p.resume = () => [finish()];
   p.hold = true;
   throw p;

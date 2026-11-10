@@ -3343,6 +3343,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const c = searchClosure();
       if (c) {
         const res = f.locals.push(t) - 1;
+        // In a function that may wait, on a page's workers (C61 c′5): its
+        // answer, or none (FAIL) for the default, given to the rest.
+        if (waitsIn(f)) {
+          const got = f.locals.push(t) - 1;
+          const away: SExpr = { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: false }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: "first" }], t, suspends: true };
+          return { k: "let", i: got, value: away, body: { k: "attempt", body: { k: "rt", fn: "first.one", args: [local(got)] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t } };
+        }
         return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
       }
     }
@@ -3350,6 +3357,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // all's answers as the list kind its type is: an array, or a list
       // the compiled code reads as it reads any of the runtime's.
       const how: SExpr[] = kind === "all" ? [{ k: "bool", v: isArray(t) }] : [], c = searchClosure();
+      // In a function that may wait (a page's handler), on the page's
+      // workers, the rest of it given (C61 c′4, branches-rt.ts searchAway).
+      if (c && waitsIn(f)) return { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: kind === "all" && isArray(t) }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: kind }], t, suspends: true };
       if (c) return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
     }
     // The same count in C (C203): the search a closure of nothing giving
@@ -3504,7 +3514,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   };
   // A definition's copy lowered where it may wait (C61 c′3, func's `away`).
   const awayFuncs = new Set<SFunc>();
-  // Whether a definition has a map, keep or fold that may be shared, in
+  // Whether a definition has a map, keep, fold or search that may be shared, in
   // itself or in a definition it calls (more is fine: a copy that waits
   // for nothing only costs its continuations).
   const reaching = new Map<Id, boolean>();
@@ -3514,7 +3524,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     reaching.set(def, false);
     const lists = (parallelList ??= parallelLists(code, info)), folds = (foldsShared ??= parallelFolds(code, info));
     const r = subtree(code, def).some((id) => {
-      if (lists.has(id) || folds.has(id)) return true;
+      if (lists.has(id) || folds.has(id) || countsShared().has(id)) return true;
       const n = code.nodes[id];
       return n?.kind === "ref" && n.target !== def && code.nodes[n.target]?.kind === "def" && !LIBRARY.code.nodes[n.target] && reachesShared(n.target);
     });

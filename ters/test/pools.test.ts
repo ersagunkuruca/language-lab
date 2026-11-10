@@ -67,3 +67,25 @@ test("a pool gives out keys, reuses a removed item's slot, and an old key finds 
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
+
+// swarm on a Pool (C58d): the pool's lists are the program's own
+// (own-holders.ts), so the chooser stores every list as an array, pool and
+// all; compiled it prints what the evaluator does.
+test("swarm on a Pool stores its lists as arrays and runs as evaluated", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { represented } = await import("../cli/represented.ts");
+  const { join } = await import("node:path");
+  const { spawnSync } = await import("node:child_process");
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const dir = join(import.meta.dirname, "../examples/swarm-pool");
+  const pr = loadProgram(dir);
+  const p = { code: pr.code, info: infer(pr.code, pr.pres.names, undefined, pr.options), names: pr.pres.names };
+  const stored = represented({ title: "swarm-pool", ...p, own: pr.own.defs, reps: [], options: pr.options }, pr.named("main"), true);
+  assert.deepEqual((stored as { chosen?: string[] }).chosen, ["List as array of List"]);
+  const lab = join(import.meta.dirname, "../cli/ters.ts"), out = join(mkdtempSync(join(tmpdir(), "pool-")), "swarm.mjs");
+  const ran = spawnSync(process.execPath, [lab, "run", dir, "40", "20"], { encoding: "utf8" });
+  assert.equal(ran.stdout, "708 motes after 40 ticks, 800 made\n");
+  assert.equal(spawnSync(process.execPath, [lab, "compile", dir, "-o", out], { encoding: "utf8" }).status, 0);
+  assert.equal(spawnSync(process.execPath, [out, "40", "20"], { encoding: "utf8" }).stdout, ran.stdout);
+});

@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -200,6 +200,8 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     if (!xs.length) throw FAIL;
     return xs[0];
   };
+  // A first's answer on a page's workers, or FAIL for the default (C61 c′5).
+  if (name === "first.one") return (v: unknown) => { if (v === FAIL) throw FAIL; return v; };
   // A fold of a list adding an Int for each item, or keeping the largest
   // or the smallest, after the empty list's z (C42).
   if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, join?: unknown) => (fuel === Infinity || fuel === undefined ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join as (x: unknown) => unknown) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join as (x: unknown) => unknown));
@@ -632,6 +634,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     case "startTimer": return (ms) => timers.start(clock(), ms as number);
     // A map on a page's workers (C61 c′, branches-rt.ts), given the rest.
     case "mapAway": return (xs, f, fuel, site, how, z, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, (v) => RUNTIME.ap(k as never, v));
+    // A count or an all of a search there likewise (C61 c′4).
+    case "searchAway": return (search, array, fuel, site, how, k) => searchAway(search, fuel, site as number, how as "count", (v) => RUNTIME.ap(k as never, how === "count" ? v : how === "first" ? ((v as Value[]).length ? (v as Value[])[0] : FAIL) : array ? arrayOf(v as Value[]) : toList(v as Value[])));
     case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };
     case "await": return (t, k) => awaited(t as Data, k);
     case "randomSeed": return () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))();
