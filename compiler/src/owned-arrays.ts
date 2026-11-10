@@ -60,9 +60,53 @@ export function ownedArrays(ir: CoreIR, code: Code, info: Info, names: Record<Id
 // the fold its own array to make, and each push front becomes the
 // replace of slot j.
 function mapsInPlace(ir: CoreIR, code: Code, info: Info, names: Record<Id, string>, main: Id): number {
+  const found = mapFolds(ir);
+  if (!found.length) return 0;
+  const def = preludeDef("array map")!;
+  const ops = ARRAY_OPS as Record<string, Id>;
+  const jobs = new Set([...Object.values(ops), def]), changes = new Map([[ops.replaceAt, 0], [def, 0]]);
+  const owned = new Map<number, boolean>();
+  const ownedOf = (a: number): boolean => {
+    if (!owned.has(a)) {
+      const t = ir.arrays[a]?.item;
+      const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : typeof t === "object" && t !== null && "def" in t ? (t as { def: Id }).def : undefined;
+      owned.set(a, !!item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item).ok);
+    }
+    return owned.get(a)!;
+  };
+  let n = 0;
+  for (const m of found) {
+    if (!ownedOf(m.a)) continue;
+    m.entry.args[2] = { k: "local", i: 0 };
+    Object.assign(m.push, { fn: `array.replaceOwned.a${m.a}`, args: [m.push.args[0], { k: "local", i: m.j }, m.push.args[1]] });
+    n++;
+  }
+  return n;
+}
+
+// Where arrays are counted (C, C60 c2): the same maps, each writing into
+// the array it was given, which a replace does in place when nothing else
+// counts it (c.ts replaceAt, Perceus's reuse) and in a copy otherwise, so
+// no proof of one holder is needed. The fold reads each item from the
+// array it writes, and is given an empty array where it read before, so
+// the array it writes is counted once.
+export function mapsInPlaceCounted(ir: CoreIR): number {
+  let n = 0;
+  for (const m of mapFolds(ir)) {
+    const empty = m.entry.args[2];
+    m.entry.args[2] = m.entry.args[0];
+    m.entry.args[0] = empty;
+    m.get.args[0] = { k: "local", i: 2 };
+    Object.assign(m.push, { fn: `array.replaceAt.a${m.a}`, args: [m.push.args[0], { k: "local", i: m.j }, m.push.args[1]] });
+    n++;
+  }
+  return n;
+}
+
+function mapFolds(ir: CoreIR) {
   const def = preludeDef("array map");
-  if (!def) return 0;
-  const found: { entry: Extract<SExpr, { k: "call" }>; push: Extract<SExpr, { k: "rt" }>; j: number; a: number }[] = [];
+  if (!def) return [];
+  const found: { entry: Extract<SExpr, { k: "call" }>; push: Extract<SExpr, { k: "rt" }>; get: Extract<SExpr, { k: "rt" }>; j: number; a: number }[] = [];
   for (const f of ir.funcs) {
     const b = f.body;
     if (f.def !== def || b.k !== "call" || b.args.length !== 4) continue;
@@ -86,26 +130,7 @@ function mapsInPlace(ir: CoreIR, code: Code, info: Info, names: Record<Id, strin
     if (push.k !== "rt" || at(push, "pushFront") === null || push.args[0]?.k !== "local" || (push.args[0] as { i: number }).i !== 2) continue;
     const t = at(get, "get");
     if (t !== at(push, "pushFront") || t !== at(empty, "empty")) continue;
-    found.push({ entry: b, push, j: lj.i, a: t! });
+    found.push({ entry: b, push, get, j: lj.i, a: t! });
   }
-  if (!found.length) return 0;
-  const ops = ARRAY_OPS as Record<string, Id>;
-  const jobs = new Set([...Object.values(ops), def]), changes = new Map([[ops.replaceAt, 0], [def, 0]]);
-  const owned = new Map<number, boolean>();
-  const ownedOf = (a: number): boolean => {
-    if (!owned.has(a)) {
-      const t = ir.arrays[a]?.item;
-      const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : typeof t === "object" && t !== null && "def" in t ? (t as { def: Id }).def : undefined;
-      owned.set(a, !!item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item).ok);
-    }
-    return owned.get(a)!;
-  };
-  let n = 0;
-  for (const m of found) {
-    if (!ownedOf(m.a)) continue;
-    m.entry.args[2] = { k: "local", i: 0 };
-    Object.assign(m.push, { fn: `array.replaceOwned.a${m.a}`, args: [m.push.args[0], { k: "local", i: m.j }, m.push.args[1]] });
-    n++;
-  }
-  return n;
+  return found;
 }
