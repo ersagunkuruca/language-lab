@@ -297,7 +297,7 @@ const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
 // A map whose function only computes, its items on threads (L101), and a
 // together whose actions only compute, its actions so (C201).
-const isPar = (fn: string) => fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:together";
+const isPar = (fn: string) => fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -595,8 +595,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   // Each map on threads, by its array types and function type (parC).
   // A keep (C202) is a map whose function's answers say which items stay.
-  // all pass and any pass (C202b), whose answer is the first deciding test's.
-  type ParJob = "map" | "keep" | "all" | "any";
+  // all pass and any pass (C202b), whose answer is the first deciding test's;
+  // first where (C202c), an array of the item that first passes, or empty.
+  type ParJob = "map" | "keep" | "all" | "any" | "first";
   const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType; job: ParJob }>();
   const parSite = (ta: AType, tf: FType, to: AType, job: ParJob = "map"): number => {
     const k = `${ta.key} ${tf.key} ${to.key} ${job}`;
@@ -1447,7 +1448,7 @@ int main(int argc, char **argv) {
             return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
           if (isPar(e.fn)) {
-            const job = e.fn.slice(4) as "map" | "keep" | "all" | "any", ta = typeOf(e.args[0], f.locals) as AType;
+            const job = e.fn.slice(4) as "map" | "keep" | "all" | "any" | "first", ta = typeOf(e.args[0], f.locals) as AType;
             const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" ? ta : e.host!.t as AType, job);
             return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
@@ -2206,13 +2207,15 @@ failed:
   // all pass and any pass (C202b) likewise from the first item, the
   // answer the first test that decides (fails for all, passes for any),
   // or one that fails before it the failure.
-  function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: "map" | "keep" | "all" | "any" }, stops: boolean, fuelled: boolean): string {
-    const { n, ta, tf, to, job } = p, keep = job !== "map", tests = job === "all" || job === "any", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
+  function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: "map" | "keep" | "all" | "any" | "first" }, stops: boolean, fuelled: boolean): string {
+    const { n, ta, tf, to, job } = p, keep = job !== "map", tests = job === "all" || job === "any" || job === "first", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
     const decides = (x: string) => (job === "all" ? `!${x}` : x);
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
     const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
-    return `typedef struct { lab_cell *f; ${Ti} *in; ${To} *out; char *bad; int64_t next; } ${J};
+    // A test that decides (C202c) says so in stop, the highest such slot,
+    // the first in order: a thread past it takes no more items.
+    return `typedef struct { lab_cell *f; ${Ti} *in; ${To} *out; char *bad; int64_t next${tests ? ", stop" : ""}; } ${J};
 static void lab_par_one_${n}(${J} *j, int64_t k) {
   lab_cell *f = lab_dup(j->f);
   j->out[k] = ((${fname.get(tf.key)})((lab_closure *)f)->code)(f, ${dup(ta.item, "j->in[k]")});
@@ -2223,18 +2226,22 @@ static void lab_par_work_${n}(void *p) {
   jmp_buf here, *was = lab_stop_at;
   if (setjmp(here)) lab_st = 0;
   lab_stop_at = &here;` : ""}
-  while ((k = __atomic_sub_fetch(&j->next, 1, __ATOMIC_RELAXED)) >= 0) {
+  while ((k = __atomic_sub_fetch(&j->next, 1, __ATOMIC_RELAXED)) >= 0) {${tests ? `
+    if (k < __atomic_load_n(&j->stop, __ATOMIC_RELAXED)) break;` : ""}
     lab_par_one_${n}(j, k);
     if (${failed}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
-    else { j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED); }
+    else {
+      j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED);${tests ? `
+      if (${decides("j->out[k]")}) { int64_t s = __atomic_load_n(&j->stop, __ATOMIC_RELAXED); while (s < k && !__atomic_compare_exchange_n(&j->stop, &s, k, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)); }` : ""}
+    }
   }${stops ? `
   lab_stop_at = was;` : ""}
 }
-static ${tests ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_${n}(lab_cell *xs, lab_cell *f) {
+static ${tests && job !== "first" ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_${n}(lab_cell *xs, lab_cell *f) {
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;
-  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0 };
+  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0${tests ? ", -1" : ""} };
   struct timespec t0;
   if (!j.in || !j.out || !j.bad) lab_oom();
   for (k = 0; k < n; k++) j.in[${keep ? "n - 1 - k" : "k"}] = ${dup(ta.item, rd)};
@@ -2263,10 +2270,12 @@ ${tests ? `  for (k = left - 1; k >= 0; k--) {
     }
     if (${decides("j.out[k]")}) goto found;
   }
-found:
+found:${job === "first" ? `
+  ${vo.buf} *r = lab__buf_a${to.index}(k >= 0 ? 1 : 0, 0);
+  if (k >= 0) r->it[r->lo] = ${dup(ta.item, "j.in[k]")};` : ""}
   ${counted(ta.item) ? `for (int64_t m = 0; m < n; m++) ${drop(ta.item, "j.in[m]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
   lab_drop(f);
-  return ${job === "all" ? "k < 0" : "k >= 0"};` : `  for (k = left - 1; k >= 0; k--) {
+  return ${job === "first" ? `lab__view_a${to.index}((lab_cell *)r, r->lo, k >= 0 ? 1 : 0)` : job === "all" ? "k < 0" : "k >= 0"};` : `  for (k = left - 1; k >= 0; k--) {
     if (!j.bad[k]) continue;
     lab_par_one_${n}(&j, k);
     if (lab_st) goto failed;

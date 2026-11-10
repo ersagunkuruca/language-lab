@@ -114,7 +114,7 @@ test("a keep's tests run on threads, and it gives the evaluator's array of the i
 
 // main prints all pass's or any pass's answer over 0 to n - 1, a list kept
 // as an array (read by position too), with `test` given each and work.
-function tested(n: number, by: "all pass" | "any pass", test: (k: Lang, x: Id, work: Id) => Id) {
+function tested(n: number, by: "all pass" | "any pass" | "first where", test: (k: Lang, x: Id, work: Id) => Id) {
   return built(/lab_par_map_0\(/, true, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
     k.let("xs", k.call(INT_OPS.range, k.int(n)), (xs) =>
       k.seq(k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), xs, k.int(1), k.int(-1)))),
@@ -123,13 +123,17 @@ function tested(n: number, by: "all pass" | "any pass", test: (k: Lang, x: Id, w
 
 // The first test that decides is the answer, and an abort before it the
 // abort; one past it never counts, as in order, where it isn't run.
-test("all pass and any pass run their tests on threads, answering by the first that decides, as in order (C202)", { skip }, () => {
+test("all pass, any pass and first where run their tests on threads, answering by the first that decides, as in order (C202)", { skip }, () => {
   const below = (k: Lang, x: Id, work: Id, m: number) => k.call(INT_OPS.less, k.call(INT_OPS.add, k.call(INT_OPS.mul, work, k.int(0)), x), k.int(m));
   const cases: [string, ReturnType<typeof tested>][] = [
     ["1\nfalse\n", tested(12, "all pass", (k, x, work) => k.if(k.call(INT_OPS.less, k.int(8), x), k.call(ABORT_OP, k.call(SHOW_ANY, x)), below(k, x, work, 7)))],
     ["1\ntrue\n", tested(12, "all pass", (k, x, work) => below(k, x, work, 100))],
     ["1\ntrue\n", tested(12, "any pass", (k, x, work) => k.if(k.call(INT_OPS.less, k.int(8), x), k.call(ABORT_OP, k.call(SHOW_ANY, x)), k.call(S.not, below(k, x, work, 5))))],
     ["aborted 3", tested(12, "any pass", (k, x, work) => k.if(k.call(S.equal, x, k.int(3)), k.call(ABORT_OP, k.call(SHOW_ANY, x)), k.call(S.not, below(k, x, work, 7))))],
+    // first where (C202c): the first item that passes.
+    ["1\nsome(7)\n", tested(12, "first where", (k, x, work) => k.if(k.call(INT_OPS.less, k.int(8), x), k.call(ABORT_OP, k.call(SHOW_ANY, x)), k.call(S.not, below(k, x, work, 7))))],
+    ["1\nnone\n", tested(12, "first where", (k, x, work) => k.call(S.not, below(k, x, work, 100)))],
+    ["aborted 3", tested(12, "first where", (k, x, work) => k.if(k.call(S.equal, x, k.int(3)), k.call(ABORT_OP, k.call(SHOW_ANY, x)), k.call(S.not, below(k, x, work, 7))))],
   ];
   for (const [want, p] of cases) {
     assert.equal(p.evaluator, want);

@@ -1408,9 +1408,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // And a keep (C202), its items that pass in order; all pass and
         // any pass, the first test that decides.
         const job = opts.threads ? (parallelList ??= parallelLists(code, info)).get(n.id) : undefined;
-        if (job === "map" || job === "keep" || job === "all" || job === "any") {
+        if (job === "map" || job === "keep" || job === "all" || job === "any" || job === "first") {
           const t = stype(zonk(id)), tx = stype(zonk(n.args[0]));
           if (t && (job === "all" || job === "any" ? tx && isArray(tx) : isArray(t))) return { k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } };
+          // first where (C202c): the item that first passes, as an array
+          // of it or of none, which first where as compiled then answers
+          // from, as in JavaScript.
+          if (job === "first" && tx && isArray(tx) && !given.has(n.id)) {
+            const one = f.locals.push(tx) - 1;
+            const found: SExpr = { k: "rt", fn: "par:first", args: args(), host: { t: tx, partial: true } };
+            given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
+            try { return { k: "let", i: one, value: found, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
+          }
         }
         if (fibers && (target === TOGETHER || target === RACE)) {
           const t = stype(zonk(id));
