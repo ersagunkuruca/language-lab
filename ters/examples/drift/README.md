@@ -25,3 +25,5 @@ reads vx and vy and writes x and y, nothing else (compiler/src/columns.ts).
 On C (`ters native`) the map writes into its array (c2a) and the loop
 reads and writes each mote's fields where they sit (c2b): 0.28 s CPU at
 300,000 motes, against 0.10 s for hand-written C changing records in place.
+Since then a column read lends its array (c2c, 0.15 s) and the buffer
+holds the motes as columns (c2d, 0.12 s).

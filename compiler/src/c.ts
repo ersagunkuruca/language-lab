@@ -816,6 +816,21 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   for (const [i, ps] of [...lent]) if (!ps.size) lent.delete(i);
   const bnames = new Map([...lent.keys()].map((i) => [i, ident(`${names.get(i)}_b`)]));
   const text = kept.map((i) => func(funcs[i], i));
+  // Arrays of records kept as columns (C60 c2d): a buffer's slots hold
+  // field 0 of every slot, then field 1 of every slot, and so on, where
+  // the program reads its items field by field (columns.ts) and nothing
+  // walks the buffer as whole items in place (threads, keys). Fields of
+  // eight bytes only, so each column stays aligned whatever the room.
+  const colsOf = new Set<string>();
+  for (const a of arrays.values()) {
+    const r = a.item;
+    if (!isRecord(r) || r.mutable || !r.fields.length || !r.fields.every((x) => ["double", "lab_int", "lab_cell *"].includes(ty(x.t)))) continue;
+    if (![...arrayFns].some((fn) => { const m = COL_FN.exec(fn); return !!m && Number(m[4]) === a.index && m[1].startsWith("get"); })) continue;
+    if ([...pars.values()].some((p) => p.ta.key === a.key || p.to.key === a.key) || keyArrays.some(([, , ai]) => ai === a.index)) continue;
+    colsOf.add(a.key);
+  }
+  // Field f of slot k of buffer b, of an array kept as columns.
+  const colAt = (a: AType, b: string, k: string, f: number) => `((${ty((a.item as RType).fields[f].t)} *)((char *)${b}->it + (size_t)${b}->cap * ${8 * f}))[${k}]`;
   const ints = opts.main !== undefined || rts.size > 0 || hostsUsed.size > 0 || arrayFns.size > 0 || statics.size > 0 || kept.some((i) => [...funcs[i].params, ...funcs[i].locals, funcs[i].result].some((t) => mentions(t)));
   const cells = ints || tnum.size > 0 || kept.some((i) => funcs[i].partial);
   const tests = opts.harness ? harness() : "";
@@ -888,7 +903,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     for (const a of arrays.values()) {
       const n = aname.get(a.key)!;
       out.push(`case ${tnum.get(`array ${a.key}`)}: ${each(a, `((${n.view} *)c)->b`)} break;`);
-      if (counted(a.item)) out.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; ${a.item === "int" ? "if (!b->bytes) " : ""}for (uint32_t k = b->lo; k < b->hi; k++) ${each(a.item, "b->it[k]")} } break;`);
+      const ks = colsOf.has(a.key) ? (a.item as RType).fields.map((x, f) => (counted(x.t) ? each(x.t, colAt(a, "b", "k", f)) : "")).join(" ") : "";
+      if (counted(a.item)) out.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; ${a.item === "int" ? "if (!b->bytes) " : ""}for (uint32_t k = b->lo; k < b->hi; k++) ${colsOf.has(a.key) ? `{ ${ks} }` : each(a.item, "b->it[k]")} } break;`);
     }
     for (const s of shaped) {
       const ks = shapes[s].caps.map((x, j) => (counted(x) ? each(x, `((${shapeName.get(s)} *)c)->c${j}`) : "")).filter(Boolean);
@@ -2933,8 +2949,11 @@ failed:${fold ? `
     // byte goes in. Read (rd) and written (wr) through these; other arrays
     // as plain slots.
     const bytes = a.item === "int";
-    const rd = (b: string, k: string) => (bytes ? `lab__rd_a${i}(${b}, ${k})` : `${b}->it[${k}]`);
-    const wr = (b: string, k: string, x: string) => (bytes ? `lab__wr_a${i}(${b}, ${k}, ${x});` : `${b}->it[${k}] = ${x};`);
+    // Kept as columns (colsOf): an item read field by field, made whole.
+    const cols = colsOf.has(a.key), nf = cols ? (a.item as RType).fields.length : 0;
+    const at = (b: string, k: string, f: number) => (cols ? colAt(a, b, k, f) : `${b}->it[${k}].f${f}`);
+    const rd = (b: string, k: string) => (bytes ? `lab__rd_a${i}(${b}, ${k})` : cols ? `((${T}){ ${[...Array(nf).keys()].map((f) => at(b, k, f)).join(", ")} })` : `${b}->it[${k}]`);
+    const wr = (b: string, k: string, x: string) => (bytes ? `lab__wr_a${i}(${b}, ${k}, ${x});` : cols ? `{ ${T} lab_w = ${x}; ${[...Array(nf).keys()].map((f) => `${at(b, k, f)} = lab_w.f${f};`).join(" ")} }` : `${b}->it[${k}] = ${x};`);
     // In place only where x fits the buffer.
     const fits = (b: string, x: string) => (bytes ? ` && (!${b}->bytes || LAB_IS_BYTE(${x}))` : "");
     const out = [`// Array ${i}: of ${T}.
@@ -2971,7 +2990,7 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   uint32_t m = LAB_IS_SMALL(n) && LAB_VAL(n) > 0 ? (uint32_t)LAB_VAL(n) : 0;
   lab_int_drop(n);
   ${B} *b = lab__buf_a${i}(m, 0);
-  memset(&b->it[b->lo], 0, (size_t)m * sizeof(${T}));
+  ${cols ? [...Array(nf).keys()].map((f) => `memset(&${at("b", "b->lo", f)}, 0, (size_t)m * 8);`).join(" ") : `memset(&b->it[b->lo], 0, (size_t)m * sizeof(${T}));`}
   return lab__view_a${i}((lab_cell *)b, b->lo, m);
 }`);
         // A read borrows its array and index (the caller drops them).
@@ -2979,19 +2998,19 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
         else if (m[2] !== undefined) {
           const ft = r.fields[Number(m[2])].t;
           out.push(`static inline ${ty(ft)} lab_array_cget${m[2]}_a${i}(lab_cell *a, lab_int k) {
-  ${ty(ft)} x = ((${B} *)((${V} *)a)->b)->it[((${V} *)a)->s + LAB_VAL(k)].f${m[2]};
+  ${ty(ft)} x = ${at(`((${B} *)((${V} *)a)->b)`, `((${V} *)a)->s + LAB_VAL(k)`, Number(m[2]))};
   ${counted(ft) ? `${dup(ft, "x")};` : ""}
   return x;
 }`);
         } else {
           const ks = m[3]!.split("_").map(Number);
-          const write = (it: string) => ks.map((k, j) => `${counted(r.fields[k].t) ? `{ ${ty(r.fields[k].t)} old = ${it}.f${k}; ${it}.f${k} = x${j}; ${drop(r.fields[k].t, "old")} }` : `${it}.f${k} = x${j};`}`).join(" ");
+          const write = (b: string, k0: string) => ks.map((k, j) => { const it = at(b, k0, k); return counted(r.fields[k].t) ? `{ ${ty(r.fields[k].t)} old = ${it}; ${it} = x${j}; ${drop(r.fields[k].t, "old")} }` : `${it} = x${j};`; }).join(" ");
           out.push(`static inline lab_cell *lab_array_cset${m[3]}_a${i}(lab_cell *a, lab_int k, ${ks.map((k, j) => `${ty(r.fields[k].t)} x${j}`).join(", ")}) {
   ${V} *v = (${V} *)a;
   uint32_t at = (uint32_t)LAB_VAL(k);
   lab_int_drop(k);
   if (!(a->rc == 1 && v->b->rc == 1)) { lab_cell *c = lab__copy_a${i}((${B} *)v->b, v->s, v->n, 0); lab_drop(a); a = c; v = (${V} *)a; }
-  ${write(`((${B} *)v->b)->it[v->s + at]`)}
+  ${write(`((${B} *)v->b)`, "v->s + at")}
   return a;
 }`);
         }
