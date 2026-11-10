@@ -704,7 +704,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     let a = statically.get(n.id);
     if (a === undefined) {
       const t0 = info.typeOf?.get(n.id), t = t0 && info.subst.resolve(t0);
-      a = !t || t.t !== "fn" || info.subst.resolveRow(t.eff).effs.some((e) => e !== DIVERGE);
+      // An Abort too (L118d2): one met stops the direct run, and the
+      // machine runs the call again, so the program's handlers see it.
+      a = !t || t.t !== "fn" || info.subst.resolveRow(t.eff).effs.some((e) => e !== DIVERGE && e !== ABORT);
       statically.set(n.id, a);
     }
     return a;
@@ -736,8 +738,19 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
     directDepth++;
     try { return direct(c.node.body, bind(c.scope, c.node.params, args)); }
-    catch (e) { if (e === NEED || e instanceof RangeError) stopped(c.lambda); throw e; }
+    catch (e) {
+      if (e instanceof Aborted && aborts(c.node)) e = NEED;
+      if (e === NEED || e instanceof RangeError) stopped(c.lambda);
+      throw e;
+    }
     finally { directDepth--; }
+  };
+  // Whether a lambda's row has Abort (an abort in its direct run goes to the machine).
+  const aborting = new Map<Id, boolean>();
+  const aborts = (n: NodeOf<"lambda">): boolean => {
+    let a = aborting.get(n.id);
+    if (a === undefined) { const t0 = info.typeOf?.get(n.id), t = t0 && info.subst.resolve(t0); a = !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(ABORT); aborting.set(n.id, a); }
+    return a;
   };
   const callDirect = (f: Value, args: Value[]): Value => {
     const c = closureOf(f);
@@ -846,7 +859,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     let a = choosing.get(n.id);
     if (a === undefined) {
       const t0 = info.typeOf?.get(n.id), t = t0 && info.subst.resolve(t0);
-      a = !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.every((e) => e === DIVERGE || e === CHOICE);
+      a = !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.every((e) => e === DIVERGE || e === CHOICE || e === ABORT);
       choosing.set(n.id, a);
     }
     return a;
@@ -872,6 +885,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     if (h) return k(handledDirect(h, args));
     throw NEED;
   };
+  // A node whose one value is worked out directly, as searchNode's first case.
+  const simple = (id: Id): boolean => { const k = code.nodes[id]?.kind; return k === "lit" || k === "ref" || k === "lambda"; };
   function searchNode(id: Id): Search {
     const n = code.nodes[id];
     switch (n.kind) {
@@ -880,8 +895,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (isUse(n)) return searchingNeeds;
         const head = code.nodes[n.fn], count = n.args.length, argIds = n.args;
         const steps = head.kind === "ref" && info.divergent.has(head.target);
+        // An argument with one value (a literal, a name, a function) is
+        // worked out directly, not through a continuation: fewer frames a
+        // level, so a search that recurses deeply fits JavaScript's stack.
+        const one = argIds.map((a) => (simple(a) ? compiledOf(a) : null));
         // The arguments' values, left to right, each one's alternatives in turn.
         const each = (env: Env, i: number, vs: Value[], done: (vs: Value[]) => boolean): boolean => {
+          for (; i < count && one[i]; i++) vs[i] = one[i]!(env);
           if (i === count) return done(vs.slice());
           return search(argIds[i], env, (v) => { vs[i] = v; return each(env, i + 1, vs, done); });
         };
@@ -890,6 +910,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           return (env, k) => each(env, 0, new Array<Value>(count), (vs) => search(body, bind(env, params, vs), k));
         }
         const fn = n.fn;
+        if (simple(fn)) {
+          const f0 = compiledOf(fn);
+          if (one.every((d) => d)) return (env, k) => {
+            if (steps) spendStep();
+            const f = f0(env), vs = new Array<Value>(count);
+            for (let i = 0; i < count; i++) vs[i] = one[i]!(env);
+            return callSearch(f, vs, k);
+          };
+          return (env, k) => { if (steps) spendStep(); const f = f0(env); return each(env, 0, new Array<Value>(count), (vs) => callSearch(f, vs, k)); };
+        }
         return (env, k) => {
           if (steps) spendStep();
           return search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => callSearch(f, vs, k)));
@@ -898,6 +928,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       case "match": {
         if (handlerOf(n)) return searchingNeeds;
         const arms = matchArms(n), scrutinee = n.scrutinee, otherwise = n.otherwise;
+        if (simple(scrutinee)) {
+          const sd = compiledOf(scrutinee);
+          return (env, k) => {
+            const d = sd(env) as Data, arm = arms.get(d.tag);
+            if (arm) return search(arm.body, bind(env, arm.binds, d.fields), k);
+            return search(otherwise!, env, k);
+          };
+        }
         return (env, k) => search(scrutinee, env, (d) => {
           const arm = arms.get((d as Data).tag);
           if (arm) return search(arm.body, bind(env, arm.binds, (d as Data).fields), k);
@@ -927,7 +965,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       let count = 0;
       callSearch(args[0], [], () => { count++; return false; });
       return count;
-    } catch (e) { if (e === NEED || e instanceof RangeError) stopped(body.lambda); throw e; }
+    } catch (e) {
+      // An abort goes to the machine, which runs the search again (L118d2).
+      if (e instanceof Aborted && aborts(body.node)) e = NEED;
+      if (e === NEED || e instanceof RangeError) stopped(body.lambda);
+      throw e;
+    }
     finally { directDepth--; }
   };
 
