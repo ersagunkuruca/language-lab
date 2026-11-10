@@ -70,6 +70,11 @@ function decode(x: unknown, fns: Record<string, Fn>, closure: (code: Fn, caps: u
 interface Module { url: string; fns: Record<string, Fn>; closure: (code: Fn, caps: unknown[]) => Fn; Aborted: new (reason: unknown, esc: number) => { reason: unknown; esc: number } }
 let mod: Module | undefined, names: Map<Fn, string> | undefined;
 const wt = (): WT | undefined => (globalThis as { process?: { getBuiltinModule?: (m: string) => unknown } }).process?.getBuiltinModule?.("node:worker_threads") as WT | undefined;
+// Where there are no worker threads (a browser's page, an audio worklet),
+// a pure together or map runs as it is written, unmeasured: such a scope
+// may have no `performance` either.
+let workers: boolean | undefined;
+const canShare = () => (workers ??= !!wt());
 
 // Each worker's port. A job is sent to every worker, ready or not: one
 // still starting takes what is left when it is.
@@ -237,6 +242,7 @@ function shared(n: number, here: (i: number) => unknown, send: () => Omit<Job, "
 }
 
 export function togetherPure(actions: unknown): unknown {
+  if (!canShare()) return inOrder(actions);
   const as = itemsOf(actions) as Fn[];
   const values = shared(as.length, (i) => as[i](), () => { const b = as.map((a) => encode(a, names!)); return b.includes(NO) ? NO : { branches: b }; }, (as[0] as Closure | undefined)?.code);
   return sameKind(actions, values);
@@ -251,6 +257,7 @@ const RUNS = 32, perItem: number[] = [];
 // Whether a map is worth sharing: never met, or as many items as would
 // take a millisecond by the last measure, counted no further than that.
 export function mapWorth(xs: unknown, site: number): boolean {
+  if (!canShare()) return false;
   const est = perItem[site];
   if (est === undefined) return true;
   const enough = 1 / est;
@@ -260,6 +267,7 @@ export function mapWorth(xs: unknown, site: number): boolean {
   return n >= enough;
 }
 export function mapPure(xs: unknown, f: Fn, site: number): unknown {
+  if (!canShare()) return mapInOrder(xs, f);
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = shared(n, (i) => items.slice(i * size, (i + 1) * size).map((x) => f(x)), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
