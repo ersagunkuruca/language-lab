@@ -786,7 +786,11 @@ static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : 
   // The world's clock in milliseconds since 1970, and a wait that blocks
   // (C44a), logged as Node's world logs now and wait (worldlog.ts).
   "world.now": { uses: ["world.log"], c: `#include <time.h>
+// Whether the clock was read (C199c: a native page's views that read it
+// run again each frame, as a browser page's do).
+static int lab_now_read;
 static double lab_world_now(void) {
+  lab_now_read = 1;
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   double ms = (double)ts.tv_sec * 1000.0 + (double)(ts.tv_nsec / 1000000);

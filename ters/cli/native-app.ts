@@ -122,6 +122,8 @@ static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
   (*env)->ReleaseStringChars(env, s, u);
   *out = b; *n = k;
 }
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeClock(JNIEnv *env, jobject self) { (void)env; (void)self; return ters_page_clock(); }
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeFrame(JNIEnv *env, jobject self) { (void)self; ters_j = env; return ters_page_frame(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, jobject self, jint h, jstring value, jstring key, jdouble x, jdouble y, jdouble seconds) {
   (void)self;
   ters_j = env;
@@ -141,6 +143,7 @@ const ACTIVITY = `package ${PACKAGE};
 
 import android.app.Activity;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -148,6 +151,7 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -163,6 +167,10 @@ public class MainActivity extends Activity {
   static { System.loadLibrary("page"); }
   native int nativeStart();
   native int nativeEvent(int handler, String value, String key, double x, double y, double seconds);
+  // Whether what the page shows read the clock, and a frame that shows it
+  // again (whether it still reads it).
+  native int nativeClock();
+  native int nativeFrame();
 
   private final HashMap<Integer, View> views = new HashMap<>();
   private final HashMap<Integer, String> tags = new HashMap<>();
@@ -179,7 +187,31 @@ public class MainActivity extends Activity {
     View page = views.get(root);
     if (page != null) scroll.addView(page);
     else { TextView t = new TextView(this); t.setText("This page has no answer to draw."); scroll.addView(t); }
+    // Below the status bar and above the navigation bar, which Android 15
+    // draws the page under (edge to edge).
+    scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+      if (Build.VERSION.SDK_INT >= 30) {
+        android.graphics.Insets b = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+        v.setPadding(b.left, b.top, b.right, b.bottom);
+      } else v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+      return insets;
+    });
     setContentView(scroll);
+    tick();
+  }
+
+  // While what the page shows reads the clock, it runs again each frame,
+  // as a browser page does.
+  private boolean ticking;
+  private void tick() {
+    if (ticking || nativeClock() == 0) return;
+    ticking = true;
+    Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+      public void doFrame(long nanos) {
+        if (nativeFrame() != 0) Choreographer.getInstance().postFrameCallback(this);
+        else ticking = false;
+      }
+    });
   }
 
   private int put(View v, String tag) { int id = next++; views.put(id, v); tags.put(id, tag); return id; }
@@ -265,7 +297,7 @@ public class MainActivity extends Activity {
 
   private String valueOf(View v) { return v instanceof EditText ? ((EditText) v).getText().toString() : ""; }
 
-  private void fire(int handler, String value, String key) { nativeEvent(handler, value, key, 0, 0, 0); }
+  private void fire(int handler, String value, String key) { nativeEvent(handler, value, key, 0, 0, 0); tick(); }
 
   // Once each frame while the view is shown, with the seconds since the
   // frame before (0 the first time), as a browser's frame event.
@@ -279,6 +311,7 @@ public class MainActivity extends Activity {
           double seconds = last < 0 ? 0 : (nanos - last) / 1e9;
           last = nanos;
           nativeEvent(handler, "", "", 0, 0, seconds);
+          tick();
         } else if (seen) return;
         Choreographer.getInstance().postFrameCallback(this);
       }

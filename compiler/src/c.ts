@@ -325,7 +325,8 @@ static void lab__host_abort(const char *name, const char *what, const char *deta
 // as HTML the way the tests' fake document prints it (ters/test/
 // fakedom.ts), and a main that does what its arguments say, printing the
 // page after each: click:ID, keydown:ID:KEY, input:ID:TEXT (typed into the
-// field, then "input"). ID is the first element whose id attribute it is.
+// field, then "input"), frames:N:MS (N frames MS apart). ID is the first
+// element whose id attribute it is.
 // Each page printed ends with a record separator (\x1e) and a newline.
 const HEADLESS_C = String.raw`
 typedef struct tn { char *tag, *text, *value, **an, **av, **ev; int checked, na, nk, ne, *eh; struct tn **kids; } tn;
@@ -374,6 +375,14 @@ static tn *t_find(tn *e, const char *id) {
   for (int j = 0; j < e->nk; j++) { tn *r = t_find(e->kids[j], id); if (r) return r; }
   return 0;
 }
+// Every element that listens for frames gets one, s seconds after the
+// last (a browser's frame event, html.ts everyFrame).
+static void t_frame(tn *e, double s) {
+  if (!e->tag) return;
+  for (int j = 0; j < e->ne; j++) if (!strcmp(e->ev[j], "frame")) ters_page_event(e->eh[j], "", 0, "", 0, 0, 0, s);
+  for (int j = 0; j < e->nk; j++) t_frame(e->kids[j], s);
+}
+static void t_frames(tn *root, double s) { t_frame(root, s); ters_page_frame(); }
 static void t_fire(tn *e, const char *type, const char *key) {
   // A handler may draw this element again: what it listens to is copied
   // first.
@@ -393,6 +402,15 @@ int main(int argc, char **argv) {
     if (!id) return 2;
     *id++ = 0;
     if ((more = strchr(id, ':'))) *more++ = 0;
+    if (!strcmp(s, "frames")) {
+      // frames:N:MS, N frames MS milliseconds apart, as the clock goes.
+      int n = atoi(id);
+      double ms = more ? atof(more) : 16;
+      for (int k = 0; k < n; k++) { struct timespec ts = { 0, (long)(ms * 1e6) }; nanosleep(&ts, 0); t_frames(root, ms / 1000); }
+      t_print(root); fputs("\x1e\n", stdout);
+      free(s);
+      continue;
+    }
     tn *e = t_find(root, id);
     if (!e) { fprintf(stderr, "no element with id %s\n", id); return 2; }
     if (!strcmp(s, "input")) { free(e->value); e->value = t_dup(more ? more : "", more ? strlen(more) : 0); t_fire(e, "input", ""); }
@@ -1032,6 +1050,7 @@ static void ters_part(ters_m *m) {
   lab_drop(h);
 }
 // Everything shown, run again.
+static int ters_no_clock, ters_clock;
 static void ters_refresh(ters_m *m) {
   if (m->kind == ${tx}) { ters_text(m); return; }
   if (m->kind == ${pt}) { ters_part(m); return; }
@@ -1041,10 +1060,12 @@ static void ters_refresh(ters_m *m) {
 // main's page on host h: its root's view, or null when main has no answer.
 void *ters_page_start(ters_host *h) {
   ters_h = h;
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   lab_cell *html = ${names.get(i)}();
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
   ters_root = ters_mount(html);
   lab_drop(html);
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
   return ters_root->view;
 }
 // An event given to handler n: what was typed or chosen, the key, where
@@ -1059,8 +1080,21 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
   (void)r;
   int ok = 1;
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ok = 0; }
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   ters_refresh(ters_root);
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
   return ok;
+}
+// Whether what the page shows read the clock, so it runs again each frame.
+int ters_page_clock(void) { return ters_clock; }
+// A frame: what the page shows runs again, if it read the clock. Whether
+// it still does.
+int ters_page_frame(void) {
+  if (!ters_clock) return 0;
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+  ters_refresh(ters_root);
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  return ters_clock;
 }
 ${headless ? HEADLESS_C : ""}`;
   }
