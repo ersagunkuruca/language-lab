@@ -227,3 +227,26 @@ test("a count, an all or a first of a search runs its first choice's items on th
     assert.equal(p.run("0").out, want);
   }
 });
+
+// A search whose first choice has one item (C43 deeper splits): the
+// second choice's items run on threads, the answers in order, and an abort
+// the first in order's.
+function twoDeep(abortAt: number, by: Id = S.count) {
+  return built(/lab_par_search_0\(/, false, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
+    k.call(S.print, k.call(SHOW_ANY, searchBy(k, by, k.thunk(() =>
+      k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(1))), (x) =>
+        k.let("y", k.call(S.oneOf, k.call(INT_OPS.range, k.int(8))), (y) =>
+          k.let("w", k.call(INT_OPS.mul, k.call(INT_OPS.add, work(k, y, big), work(k, y, big)), k.int(0)), (w) =>
+            k.if(k.call(S.equal, y, k.int(abortAt)), k.call(ABORT_OP, k.call(SHOW_ANY, y)),
+              k.call(INT_OPS.add, k.call(INT_OPS.add, x, y), w)))))))))));
+}
+
+test("a search whose first choice has one item runs its second choice's items on threads, as in order (C43 deeper splits)", { skip }, () => {
+  for (const [want, p] of [["8\n", twoDeep(-1)], ["aborted 4", twoDeep(4)], ["[0, 1, 2, 3, 4, 5, 6, 7]\n", twoDeep(-1, S.all)], ["aborted 6", twoDeep(6, S.all)]] as const) {
+    assert.equal(p.evaluator, want);
+    const many = p.run("3");
+    assert.equal(many.out, want);
+    if (!want.startsWith("aborted")) assert.ok(many.threads > 0, "no item ran on another thread");
+    assert.equal(p.run("0").out, want);
+  }
+});
