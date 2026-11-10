@@ -425,7 +425,18 @@ export function dependencies(code: Code, root: Id): Id[] {
 
 // Variants and fields are referred to directly (constructors, projections);
 // this finds the def whose typedef they belong to.
+// A program derived from another by nodes that are none of a type's
+// (each of a palette's fillings) has its base's, worked out once (E103:
+// the modes of each filling's solves asked for it, 30 ms a hole).
+const ownersKept = new WeakMap<Code, Map<Id, Id>>();
+const typePart = (n: Node | undefined) => n?.kind === "def" || n?.kind === "typedef" || n?.kind === "variant";
 export function ownerOfTypeParts(code: Code): Map<Id, Id> {
+  const from = derived.get(code);
+  if (from && from.base !== code && code.defs.length === from.base.defs.length && ![...from.changed].some((id) => typePart(code.nodes[id]) || typePart(from.base.nodes[id]))) {
+    let kept = ownersKept.get(from.base);
+    if (!kept) ownersKept.set(from.base, (kept = ownerOfTypeParts(from.base)));
+    return kept;
+  }
   const out = new Map<Id, Id>();
   // Every def is a top-level one, so the defs list is enough: a scan of
   // every node made it the slow part of checking a palette's offers.
@@ -672,7 +683,7 @@ export function scanningOnLayer<T>(code: Code, step: () => T): T {
 
 // Each node's parent, as a lookup. For a derived program, its base's
 // parents, found once, beside those of the nodes changed.
-const parentsKept = new WeakMap<Code, Map<Id, Id>>();
+const parentsKept = new WeakMap<Code, (id: Id) => Id | undefined>();
 const parentsIn = (code: Code): Map<Id, Id> => {
   const m = new Map<Id, Id>();
   for (const n of Object.values(code.nodes)) for (const c of children(n)) m.set(c, n.id);
@@ -681,12 +692,14 @@ const parentsIn = (code: Code): Map<Id, Id> => {
 export function parentLookup(code: Code): (id: Id) => Id | undefined {
   const from = derived.get(code);
   if (!from) { const m = parentsIn(code); return (id) => m.get(id); }
+  // A base itself derived (a program on the library's layer, the base of
+  // a palette's fillings) is looked up through its own base in turn.
   let under = parentsKept.get(from.base);
-  if (!under) parentsKept.set(from.base, (under = parentsIn(from.base)));
+  if (!under) parentsKept.set(from.base, (under = parentLookup(from.base)));
   const mine = new Map<Id, Id>();
   for (const id of from.changed) { const n = code.nodes[id]; if (n) for (const c of children(n)) mine.set(c, id); }
   const below = under;
-  return (id) => { if (mine.has(id)) return mine.get(id); const p = below.get(id); return p !== undefined && !from.changed.has(p) ? p : undefined; };
+  return (id) => { if (mine.has(id)) return mine.get(id); const p = below(id); return p !== undefined && !from.changed.has(p) ? p : undefined; };
 }
 // The ids of the nodes `keep` picks, `kind` naming the pick. For a derived
 // program: its base's (scanned once), those still there and still picked,
