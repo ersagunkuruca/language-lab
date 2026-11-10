@@ -256,6 +256,17 @@ export function withSteps<T>(n: number, f: () => T): T {
 }
 // One step outside any `with fuel`: free, except under a page's budget.
 export const spendStep = () => { if (page && --page.left < 0) throw new OutOfSteps(); };
+// A page's budget as it is now (null: none), and set (C61 c′: what a
+// map's runs on workers spent comes off it).
+export const stepsLeft = (): number | null => (page ? page.left : null);
+export const setStepsLeft = (n: number): void => { if (page) page.left = n; };
+// f under a budget of n steps of its own, `used` told how many it spent,
+// whether it ends, aborts or runs out (C61 c′: a run on a page's worker).
+export function counted<T>(n: number, f: () => T, used: { n: number }): T {
+  const saved = page, d = depth.d, fuel = { left: n };
+  page = fuel;
+  try { return f(); } finally { used.n = n - fuel.left; page = saved; depth.d = d; }
+}
 // The variables in scope, as a linked list: binding one more shares the
 // rest, so a call costs one cell per parameter, not a copy of the scope.
 type Env = { b: Id; v: Value; up: Env } | null;

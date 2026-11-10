@@ -239,8 +239,13 @@ What this leaves, in order:
     events wait their turn (html.ts `held`), frames joined with their
     seconds added. So the choice can't be seen.
   - **Result.** 3 to 3.5 times quicker on 4 cores.
+  - **Keep and folds (c′2).** A keep and the Int folds (add, max, min)
+    written in the handler go the same way.
+  - **Steps.** Under a page's step budget, each run gets what is left and
+    says what it spent. The job spends their sum in order, so a handler
+    that runs out of steps runs out on workers too.
   - **Not covered.** A map in a function called from the handler (its row
-    doesn't say Wait) stays in turn, and so do keep, folds and searches.
+    doesn't say Wait) stays in turn, and so do searches.
 - **(d′) The GPU for an Int map,** with the trial of finding 4. The
   example: collatz's `keep` (its walk is in Int, a lot of work an item; a
   number whose walk passes 32 bits gives up there and is tested again on
