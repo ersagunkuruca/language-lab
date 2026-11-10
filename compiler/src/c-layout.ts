@@ -53,6 +53,9 @@ typedef struct {
   // An animation: its keyframes' name, duration and delay in ms.
   char anim[32]; double adur, adelay;
   int clip;
+  // min-height, as a border box (a set height wins over it, as here no
+  // page sets both).
+  int set_minh; double minh;
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -466,6 +469,7 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("position")) c->pos = TL_V("absolute") || TL_V("fixed") ? 2 : TL_V("relative") ? 1 : 0;
   else if (TL_IS("width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->w = x, c->set_w = 1, c->wpct = 0; else if (ok == 2) c->wpct = x, c->set_w = 0; }
   else if (TL_IS("height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->h = x, c->set_h = 1; }
+  else if (TL_IS("min-height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->minh = x, c->set_minh = 1; }
   else if (TL_IS("max-width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->maxw = x, c->set_maxw = 1; }
   else if (TL_IS("left")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->left = x, c->set_left = 1; }
   else if (TL_IS("top")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->top = x, c->set_top = 1; }
@@ -754,6 +758,7 @@ static void tl_lay(tl_n *e, double avail) {
   double h = (pic ? (tl_viewbox(e, vb) ? (w - edge) * vb[3] / vb[2] : 150) : tl_flow(e, w - edge)) + c->pad[0] + c->pad[2] + 2 * c->bw;
   if (!c->set_h && c->aspect > 0) h = c->border_box ? w / c->aspect : (w - edge) / c->aspect + c->pad[0] + c->pad[2] + 2 * c->bw;
   if (c->set_h) h = tl_border_h(c);
+  else if (c->set_minh) { double mh = c->border_box ? c->minh : c->minh + c->pad[0] + c->pad[2] + 2 * c->bw; if (h < mh) h = mh; }
   e->w = w; e->h = h;
   // Absolutely placed children: at left and top of e's padding box.
   for (int j = 0; j < e->nk; j++) {
