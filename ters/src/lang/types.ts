@@ -677,10 +677,18 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
 // A type as the checker `s` has it: its number-type variables said, and
 // rows one inside the other (Subst.subs) printed as one.
 export function showIn(t: Type, names: Names, s: Subst): string {
+  return shownIn(s)(t, names);
+}
+// The same for many types of one checker that is done (an editor's
+// tooltips, one for each node of a definition): what it reads of s besides
+// the type, its rows inside others and its interfaces' uses, worked out
+// once (Spacetime's `rapidity picture` spent 170 ms on them, I192).
+export function shownIn(s: Subst): (t: Type, names: Names) => string {
   const links: [number, number][] = [];
   for (const c of s.subs) { const f = s.resolveRow(c.from).tail, to = s.resolveRow(c.to).tail; if (f !== null && to !== null) links.push([f, to]); }
   const uses = s.effectsAt.flatMap((e): SchemeEffectsAt[] => { const v = s.resolve(e.t); return v.t === "var" ? [[v.v, e.iface, e.field, s.resolveRow(e.row).tail]] : []; });
-  return showType(s.zonk(t), names, s.arith, links, new Map([...s.needs].map(([v, m]) => [v, m.keys()])), uses);
+  const needs = new Map([...s.needs].map(([v, m]) => [v, [...m.keys()]]));
+  return (t, names) => showType(s.zonk(t), names, s.arith, links, needs, uses);
 }
 
 // A scheme's interfaces, for showType.

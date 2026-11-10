@@ -22,7 +22,7 @@ import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
 import { ARITH, ARITHMETIC, ASSOCIATIVE, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
-import { INT, NUMBER, STRING, schemeArith, showIn, showType, type Type } from "../ters/src/lang/types.ts";
+import { INT, NUMBER, STRING, schemeArith, shownIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
@@ -65,14 +65,18 @@ export function sigType(info: Info, target: Id): Type | undefined {
 // redraw put every node's type in its hover title again, a fifth of a
 // click's time in Constructions.
 const shownTypes = new WeakMap<Info, WeakMap<Names, Map<Id, string | null>>>();
+// And what each type shown reads of the checker, once per version (I192).
+const showers = new WeakMap<Info, (t: Type, names: Names) => string>();
 export const typeOf = (info: Info | null, id: Id, names: Names): string | null => {
   if (!info) return null;
+  let show = showers.get(info);
+  if (!show) showers.set(info, (show = shownIn(info.subst)));
   let byNames = shownTypes.get(info);
   if (!byNames) shownTypes.set(info, (byNames = new WeakMap()));
   let m = byNames.get(names);
   if (!m) byNames.set(names, (m = new Map()));
   if (m.has(id)) return m.get(id)!;
-  const t = info.typeOf.get(id), shown = t ? showIn(t, names, info.subst) : null;
+  const t = info.typeOf.get(id), shown = t ? show(t, names) : null;
   m.set(id, shown);
   return shown;
 };
