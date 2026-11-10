@@ -848,6 +848,16 @@ static void tl_picture(tl_n *e) {
   if (tl_ui->draw) tl_ui->draw(tl_ui->ctx, e->view, e->drawn, e->ndrawn);
 }
 static void tl_hide(tl_n *e) { tl_place(e, 0, 0, 0, 0, 0); for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); }
+// How far right and down the absolutely placed boxes in k reach (k too),
+// against the box k is placed in (ox, oy there).
+static void tl_reach(tl_n *k, double ox, double oy, double *rx, double *ry) {
+  if (!k->tag || k->c.display == TL_NONE) return;
+  if (k->c.display == TL_CONTENTS) { for (int j = 0; j < k->nk; j++) tl_reach(k->kids[j], ox, oy, rx, ry); return; }
+  double x = ox + k->x, y = oy + k->y;
+  if (k->c.pos == 2 && x + k->w > *rx) *rx = x + k->w;
+  if (k->c.pos == 2 && y + k->h > *ry) *ry = y + k->h;
+  if (strcmp(k->tag, "svg")) for (int j = 0; j < k->nk; j++) tl_reach(k->kids[j], x, y, rx, ry);
+}
 // Each box to the screen: its place against its parent's view.
 static void tl_show(tl_n *e, double dx, double dy, int shown) {
   if (!e->tag) {
@@ -868,7 +878,13 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
     for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
     return;
   }
-  tl_place(e, e->x + dx, e->y + dy, e->w, e->h, me);
+  // A box that paints nothing is told it is as big as the absolutely
+  // placed boxes inside it reach: a phone only gives a touch to a view inside its parent's
+  // bounds, and a browser finds an absolutely placed box under a finger
+  // wherever its parents are (tumble's tiles, in a div 0 high).
+  double rw = e->w, rh = e->h;
+  if (!e->c.bg && !e->c.bw && strcmp(e->tag, "svg")) for (int j = 0; j < e->nk; j++) tl_reach(e->kids[j], 0, 0, &rw, &rh);
+  tl_place(e, e->x + dx, e->y + dy, rw, rh, me);
   tl_paint(e, e->c.bg, e->c.radius, e->c.bw, e->c.bc);
   tl_font(e, &e->c);
   if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }

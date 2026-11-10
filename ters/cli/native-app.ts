@@ -190,6 +190,7 @@ import android.text.Layout;
 import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Choreographer;
 import android.view.Gravity;
@@ -455,6 +456,9 @@ public class MainActivity extends Activity {
 
   void listen(int id, String event, int handler) {
     final View v = views.get(id);
+    // In logcat (tag ters), so the "Android check" workflow shows what the
+    // page listens for and what it was told.
+    if (!event.equals("frame")) Log.d("ters", "listen " + event + " on " + id + (v == null ? " (no view)" : ""));
     if (v == null) return;
     switch (event) {
       case "click":
@@ -500,6 +504,7 @@ public class MainActivity extends Activity {
       int a = e.getActionMasked();
       String[] names = a == MotionEvent.ACTION_DOWN ? new String[] { "pointerdown" } : a == MotionEvent.ACTION_MOVE ? new String[] { "pointermove" } : a == MotionEvent.ACTION_UP ? new String[] { "pointerup", "pointerleave" } : a == MotionEvent.ACTION_CANCEL ? new String[] { "pointercancel", "pointerleave" } : new String[0];
       boolean heard = false;
+      Log.d("ters", "touch " + a + " heard by " + hs.keySet());
       for (String n : names) { Integer h = hs.get(n); if (h != null) { nativeEvent(h, "", "", e.getX() / density, e.getY() / density, 0); heard = true; } }
       if (heard) tick();
       return a == MotionEvent.ACTION_DOWN ? !hs.isEmpty() : heard;
@@ -509,7 +514,7 @@ public class MainActivity extends Activity {
 
   private String valueOf(View v) { return v instanceof EditText ? ((EditText) v).getText().toString() : ""; }
 
-  private void fire(int handler, String value, String key) { nativeEvent(handler, value, key, 0, 0, 0); tick(); }
+  private void fire(int handler, String value, String key) { Log.d("ters", "event " + handler); nativeEvent(handler, value, key, 0, 0, 0); tick(); }
 
   // Once each frame while the view is shown, with the seconds since the
   // frame before (0 the first time), as a browser's frame event.
