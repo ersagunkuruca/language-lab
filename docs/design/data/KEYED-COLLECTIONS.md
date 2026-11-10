@@ -102,6 +102,18 @@ those keys to the hash part. That is the one case where reusing slots
 (the pool) would beat the array part. The example will show whether it
 matters.
 
+## Built since: a pool (C58c, 2026-11-10)
+
+Ersagun asked for free lists, which need the collection to choose its keys,
+since a key the program chose can't be handed to another item. So std now
+has `Pool a` and `Pool key` (proposal 3): `added to pool`, `pool item`,
+`replaced in pool`, `removed from pool`, `pool keys`, `pool size`, and
+`next key`, the key the next add gives (an item can hold its own key). It
+is written in the language over two lists, the items by slot and each
+slot's generation, plus the free slots; compiled, the lists are arrays, so
+a lookup is an index and a generation compared. swarm on a pool is the
+next step, timed against its Map version.
+
 ## Prior art
 
 - Generational indices in ECS engines, and Rust's slotmap and
