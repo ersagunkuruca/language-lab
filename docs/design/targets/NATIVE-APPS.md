@@ -5,8 +5,9 @@ Stretch goal is native compilation on each platform instead of webview
 stuff."). Written 2026-11-10 by Language lane B. The last section is the
 plan, as rows C199a to C199e.
 
-**Status.** Route A chosen (Ersagun, 2026-11-10). C199a is done: cells,
-formulas, reads and writes in C and WebAssembly. Today a phone runs a Ters page in a webview:
+**Status.** Route A chosen (Ersagun, 2026-11-10). C199a and C199b are done:
+cells in C and WebAssembly, and a page's Html mounted from C on a view
+host, checked against html.ts on a headless host. Today a phone runs a Ters page in a webview:
 `ters build-app` makes an installable web app that is also a Capacitor
 project (WEB.md "Mobile", C198), and the hand-run "Android app" workflow
 (#2146) builds its debug APK.
@@ -126,11 +127,20 @@ What a page's parts become under route A:
   those, comes with the mount (C199b), as do each, paths and edits.
   Example: a counter written three times and a formula over it read as
   the evaluator reads them (compiler/test/c-cells.test.ts).
-- **C199b. The Html mount in C over a view-host interface.** `mountHtml`'s
-  steps printed as C calls on a host struct of function pointers, plus a
-  headless host that records calls. Example: dice built as C against the
-  headless host gives the same tree of elements, attributes and texts as
-  html.ts against a fake DOM, before and after a tap.
+- **C199b. The Html mount in C over a view host.** Done: c.ts `pageC`
+  mounts main's Html through `ters_host`, a struct of function pointers
+  (element, text, set text, set and remove attribute, append, clear,
+  listen, gone), and keeps a tree of what it drew. The shell calls
+  `ters_page_start(host)` once and `ters_page_event(handler, value, key,
+  x, y, seconds)` for each event. Rather than cells.ts's watchers, each
+  event runs every text, attribute and part again and tells the host only
+  what changed; a part's new Html is laid over what it drew where the tags
+  and attributes match, so a field keeps its place. With C199a's cells
+  read at each call this gives what the watchers give, at the cost of
+  running every view per event, which a page of dice's size doesn't feel.
+  Example: dice, and a counter with a todo list, print what html.ts's mount
+  prints on the tests' fake document, before and after clicks and typing
+  (compiler/test/c-page.test.ts, the headless host `page: "headless"`).
 - **C199c. The Android shell.** A Kotlin `Activity` with a JNI view host
   and the program's C built by the NDK, plus an `ters build-native-app`
   command writing the Gradle project; the "Android app" workflow builds the
