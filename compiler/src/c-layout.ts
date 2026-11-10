@@ -39,6 +39,10 @@ typedef struct ters_ui {
   // rounded (overflow: hidden; tumble's board, where pieces drop in from
   // above). May be null.
   void (*clip)(void *ctx, void *v, int on);
+  // A box that scrolls what's inside it (overflow: auto or scroll; clip
+  // was told 2), and how high what's inside is, padding and border in.
+  // May be null.
+  void (*scroll)(void *ctx, void *v, double inside);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -55,7 +59,7 @@ typedef struct {
   int clip;
   // min-height, as a border box (a set height wins over it, as here no
   // page sets both).
-  int set_minh; double minh;
+  int set_minh, set_maxh; double minh, maxh;
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -73,6 +77,9 @@ typedef struct tl_n {
   // text's last measure.
   double sent_place[5], sent_paint[4], sent_font[5], m_size, m_width, m_w;
   int sent, m_bold, m_lines, measured, sent_clip;
+  // How high what's inside it is (its height as nothing held it), and what
+  // the screen was told of it, for a box that scrolls.
+  double inside, sent_inside;
   // The animation running on it (C199f): its name, when it started (ms),
   // whether it ended, and what it does to the box now (moved by ax, ay,
   // scaled by as round its middle, opacity ao).
@@ -465,11 +472,12 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
       q = z;
     }
   }
-  else if (TL_IS("overflow")) c->clip = TL_V("hidden") || TL_V("clip") || TL_V("auto") || TL_V("scroll");
+  else if (TL_IS("overflow")) c->clip = TL_V("hidden") || TL_V("clip") ? 1 : TL_V("auto") || TL_V("scroll") ? 2 : 0;
   else if (TL_IS("position")) c->pos = TL_V("absolute") || TL_V("fixed") ? 2 : TL_V("relative") ? 1 : 0;
   else if (TL_IS("width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->w = x, c->set_w = 1, c->wpct = 0; else if (ok == 2) c->wpct = x, c->set_w = 0; }
   else if (TL_IS("height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->h = x, c->set_h = 1; }
   else if (TL_IS("min-height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->minh = x, c->set_minh = 1; }
+  else if (TL_IS("max-height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->maxh = x, c->set_maxh = 1; }
   else if (TL_IS("max-width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->maxw = x, c->set_maxw = 1; }
   else if (TL_IS("left")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->left = x, c->set_left = 1; }
   else if (TL_IS("top")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->top = x, c->set_top = 1; }
@@ -757,8 +765,14 @@ static void tl_lay(tl_n *e, double avail) {
   // its viewBox is for its width (150 without one).
   double h = (pic ? (tl_viewbox(e, vb) ? (w - edge) * vb[3] / vb[2] : 150) : tl_flow(e, w - edge)) + c->pad[0] + c->pad[2] + 2 * c->bw;
   if (!c->set_h && c->aspect > 0) h = c->border_box ? w / c->aspect : (w - edge) / c->aspect + c->pad[0] + c->pad[2] + 2 * c->bw;
+  e->inside = h;
   if (c->set_h) h = tl_border_h(c);
-  else if (c->set_minh) { double mh = c->border_box ? c->minh : c->minh + c->pad[0] + c->pad[2] + 2 * c->bw; if (h < mh) h = mh; }
+  else {
+    // max-height, then min-height, which wins over it (as CSS's).
+    double edge_h = c->pad[0] + c->pad[2] + 2 * c->bw;
+    if (c->set_maxh) { double mh = c->border_box ? c->maxh : c->maxh + edge_h; if (h > mh) h = mh; }
+    if (c->set_minh) { double mh = c->border_box ? c->minh : c->minh + edge_h; if (h < mh) h = mh; }
+  }
   e->w = w; e->h = h;
   // Absolutely placed children: at left and top of e's padding box.
   for (int j = 0; j < e->nk; j++) {
@@ -982,6 +996,7 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   tl_paint(e, bg, e->c.radius * as, e->c.bw * as, bc);
   tl_font(e, &e->c);
   if (tl_ui->clip && (!(e->sent & 8) || e->sent_clip != e->c.clip)) { e->sent |= 8; e->sent_clip = e->c.clip; tl_ui->clip(tl_ui->ctx, e->view, e->c.clip); }
+  if (tl_ui->scroll && e->c.clip == 2 && (!(e->sent & 16) || e->sent_inside != e->inside)) { e->sent |= 16; e->sent_inside = e->inside; tl_ui->scroll(tl_ui->ctx, e->view, e->inside); }
   if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
 }
@@ -1213,7 +1228,7 @@ void ters_ui_resize(double width, int dark) {
 // size wide, so places that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
 export const UI_HEADLESS_C = String.raw`
-typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
+typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip; double inside; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
 static void *u_box(void *c, const char *t, size_t n) { (void)c; return u_new(t, n, 0, 0); }
 static void *u_text(void *c, const char *s, size_t n) { (void)c; return u_new(0, 0, s, n); }
@@ -1229,6 +1244,7 @@ static void u_listen(void *c, void *x, const char *ev, size_t n, int h) {
 static void u_gone(void *c, void *x) { (void)c; uv *v = x; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
 static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv *v = x; free(v->ops); v->ops = malloc(sizeof *ops * (n + 1)); memcpy(v->ops, ops, sizeof *ops * n); v->nops = n; }
 static void u_clip(void *c, void *x, int on) { (void)c; ((uv *)x)->clip = on; }
+static void u_scroll(void *c, void *x, double inside) { (void)c; ((uv *)x)->inside = inside; }
 static void u_place(void *c, void *x, double px, double py, double w, double h, int shown) { (void)c; uv *v = x; v->x = px; v->y = py; v->w = w; v->h = h; v->shown = shown; }
 static void u_paint(void *c, void *x, uint32_t bg, double radius, double border, uint32_t bc) { (void)c; (void)bc; uv *v = x; v->bg = bg; v->radius = radius; v->border = border; }
 static void u_font(void *c, void *x, double size, int bold, uint32_t color, int align, double line) { (void)c; (void)align; (void)line; uv *v = x; v->size = size; v->bold = bold; v->color = color; }
@@ -1259,6 +1275,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && v->radius) printf(" radius %g", v->radius);
   if (v->tag && v->border) printf(" border %g", v->border);
   if (v->tag && v->clip) printf(" clip");
+  if (v->tag && v->clip == 2) printf(" scroll %g", v->inside);
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
   putchar('\n');
   // A picture's shapes, one a line: the box round its points on the page
@@ -1299,7 +1316,7 @@ static void u_frame(uv *v, double s) {
 }
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 int main(int argc, char **argv) {
-  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip };
+  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll };
   double width = 360; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);

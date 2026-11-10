@@ -333,4 +333,13 @@ test("pig in C plays a game, replays the very same one and a thousand quietly (C
   assert.match(lines(1).at(-1)!, /^[AB] wins, \d+ to \d+$/);
   assert.deepEqual(lines(2), lines(1));
   assert.match(pages[3], /id="tally">Of 1000 games, A \(holds at 20\) won (\d+) and B \(holds at 25\) won (\d+)\./);
+  // Its log is at most 340 high and scrolls (max-height, overflow: auto):
+  // a game's lines are inside it, not a page that grows and grows.
+  const ui = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", "click:play"], { maxBuffer: 1 << 30 });
+  assert.equal(ui.status, 0, ui.stderr.toString());
+  const [before, after] = ui.stdout.toString().split("\x1e\n"), log = (t: string) => t.match(/ div [\d.]+ [\d.]+ 328 ([\d.]+) bg FFFFFFFF radius 14 border 1 clip scroll ([\d.]+)/)!.slice(1).map(Number);
+  assert.deepEqual(log(before), [14, 14]);
+  const [high, inside] = log(after);
+  assert.equal(high, 340);
+  assert.ok(inside > 1000, String(inside));
 });
