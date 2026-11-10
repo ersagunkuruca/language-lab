@@ -17,6 +17,8 @@ import type { Code, Id } from "../model.ts";
 import { root } from "../io.ts";
 import { keepLibraryChecks, type Info, type LibraryStore, type Options } from "./infer.ts";
 import { Subst } from "./types.ts";
+import { LIBRARY } from "./library.ts";
+import { filledLibrary } from "./ports.ts";
 import { keepAcrossRuns, type Keeper } from "./kept.ts";
 
 const DIR = join(root, ".lab");
@@ -31,7 +33,19 @@ const sourcesHash = () => {
   return (sources = h.digest("hex"));
 };
 const codes = new WeakMap<Code, string>();
+// The library, and the library filled, are made from its files and the
+// checker's source alone: found by the files' names, sizes and times, not a
+// hash of their 43k nodes written out (70 ms each start).
+let files: string | undefined;
+const libraryFiles = () => {
+  if (files) return files;
+  const dir = join(root, "library"), h = createHash("sha1");
+  for (const f of readdirSync(dir).sort()) { const s = statSync(join(dir, f)); h.update(`${f} ${s.size} ${s.mtimeMs}\n`); }
+  return (files = h.digest("hex"));
+};
 const codeHash = (code: Code) => {
+  if (code === LIBRARY.code) return `library ${libraryFiles()}`;
+  if (code === filledLibrary()) return `filled library ${libraryFiles()}`;
   let k = codes.get(code);
   if (!k) { const h = createHash("sha1"); h.update(JSON.stringify(code.defs)); h.update(JSON.stringify(code.nodes)); codes.set(code, (k = h.digest("hex"))); }
   return k;
