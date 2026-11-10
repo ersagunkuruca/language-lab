@@ -50,13 +50,17 @@ test("an array whose items leave whole stays rows", () => {
 });
 
 // On C (`ters native`, C60 c2a), a map of an array of one type writes
-// into the array it was given, in place where nothing else counts it.
+// into the array it was given, in place where nothing else counts it;
+// since c2d the buffer keeps the motes as columns.
 test("drift's map on C writes into the array it was given, and prints what ters run prints", () => {
   const ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), ex = join(import.meta.dirname, "../../ters/examples/drift");
   const out = join(mkdtempSync(join(tmpdir(), "drift-c-")), "drift");
   const made = spawnSync(process.execPath, [ters, "native", ex, "-o", out], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
-  assert.match(readFileSync(`${out}.c`, "utf8"), /lab_array_replaceAt_a\d+\(/);
+  const c0 = readFileSync(`${out}.c`, "utf8");
+  assert.match(c0, /lab_array_replaceAt_a\d+\(/);
+  // c2d: its buffer holds the motes as columns, field 1 after every field 0.
+  assert.match(c0, /->it \+ \(size_t\)\S+->cap \* 8\)\)/);
   const c = spawnSync(out, ["300"], { encoding: "utf8" }), run = spawnSync(process.execPath, [ters, "run", ex, "300"], { encoding: "utf8" });
   assert.equal(c.stdout, run.stdout);
 });
