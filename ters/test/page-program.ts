@@ -12,7 +12,9 @@ import { B } from "../src/prelude.ts";
 const C = CELL_OPS;
 const VALUE = "std.event.event.value", KEY = "std.event.event.key";
 
-export function pageProgram() {
+// `fields`: false leaves the two fields out (C199b: C has no backwards
+// reading of `as celsius` yet).
+export function pageProgram({ fields = true } = {}) {
   const k = new Lang(LIBRARY.code);
   const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
   const read = (c: Id) => k.call(C.read, c);
@@ -44,8 +46,7 @@ export function pageProgram() {
     k.let("todos", k.call(C.cell, k.list(k.lit("milk"))), (todos) =>
     k.let("draft", k.call(C.cell, k.lit("")), (draft) =>
       el("div", [prop("class", () => k.lit("app"))], [
-        field("c", celsius, temp),
-        field("f", fahrenheit, temp),
+        ...(fields ? [field("c", celsius, temp), field("f", fahrenheit, temp)] : []),
         el("button", [prop("id", () => k.lit("plus")), on("click", () => k.call(C.write, count, k.call(B.add, read(count), k.lit(1))))], [text(() => k.lit("+"))]),
         el("span", [prop("id", () => k.lit("count"))], [text(() => k.call(S.show, read(count)))]),
         el("input", [prop("id", () => k.lit("new")), prop("value", () => read(draft)),
