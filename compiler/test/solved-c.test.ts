@@ -75,9 +75,12 @@ async function throughLab(k: Lang): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "solved-"));
   writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
   writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
-  const want = spawnSync(process.execPath, [lab, "run", dir], { encoding: "utf8" });
+  return throughDir(dir, dir);
+}
+async function throughDir(program: string, dir = mkdtempSync(join(tmpdir(), "solved-"))): Promise<string> {
+  const want = spawnSync(process.execPath, [lab, "run", program], { encoding: "utf8" });
   assert.equal(want.status, 0, want.stderr);
-  const made = spawnSync(process.execPath, [lab, "wasi", dir, "-o", join(dir, "p.wasm")], { encoding: "utf8" });
+  const made = spawnSync(process.execPath, [lab, "wasi", program, "-o", join(dir, "p.wasm")], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
   const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
@@ -85,7 +88,7 @@ async function throughLab(k: Lang): Promise<string> {
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (!skip) {
-    const built = spawnSync(process.execPath, [lab, "native", dir, "-o", join(dir, "p")], { encoding: "utf8" });
+    const built = spawnSync(process.execPath, [lab, "native", program, "-o", join(dir, "p")], { encoding: "utf8" });
     assert.equal(built.status, 0, built.stderr);
     assert.equal(spawnSync(join(dir, "p"), [], { encoding: "utf8" }).stdout, want.stdout, "ters native");
   }
@@ -161,4 +164,26 @@ test("a relation solved by searching for a number gives the solver's roots on We
   const main = k.def("main");
   k.define(main, k.call(SHOW_ANY, k.listOf(...[[29.62, 5], [0, 0], [-100, 0], [1, -3], [1e4, 1]].map(([h, v]) => k.call(times, k.lit(h), k.lit(v))))));
   assert.equal(await throughLab(k), "[[2, -3.019367992], [0], [], [-0.239527661, 0.851148456], [45.050542366, -45.254415965]]\n");
+});
+
+// A family of answers (C195): angle = ±acos(x / 2) + 2πk, where only a
+// first takes it: the solver's first answer (level 0, every k 0), and
+// none where acos has none; and for some over a predicate, whether it
+// has an answer.
+test("a solve with a periodic family gives the solver's first answer on WebAssembly and C", async () => {
+  const k = new Lang(LIBRARY.code);
+  const c = k.def("twice cos");
+  k.define(c, k.fn(["a"], (a) => k.call(B.mul, k.lit(2), k.call(B.cos, a))));
+  const a = firstParam(k, c);
+  const angle = k.def("angle");
+  k.define(angle, k.fn(["v"], (v) => k.call(S.first, k.thunk(() => k.solve(c, { out: v }, { [a]: "a" }, ({ [a]: y }) => k.call(B.mul, y, k.lit(10)))), k.thunk(() => k.lit(-1)))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.listOf(...[1, 2, -2, 0, 3, -0.5].map((v) => k.call(angle, k.lit(v))))));
+  assert.equal(await throughLab(k), "[10.471975512, 0, 31.415926536, 15.707963268, -1, 18.234765819]\n");
+});
+
+// physics, all of it: fall's tear, rotate's periodic ways under first, and
+// for some y, angle: polar(…).
+test("physics prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/physics")), /for some y, angle: polar\(3, y, 2, angle\) = false\n$/);
 });

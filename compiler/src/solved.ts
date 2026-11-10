@@ -39,6 +39,16 @@ export function writtenExpr(e: Expr, at: (name: string) => number): SExpr {
   const a = e.args!.map((x) => writtenExpr(x, at));
   if (INFIX[e.f!] && a.length === 2) return op(INFIX[e.f!], a[0], a[1]);
   if (UNARY.has(e.f!) && a.length === 1) return op(e.f!, a[0]);
+  // The inverses the solver writes, by atan2: atan(x) is atan2(x, 1)
+  // (fdlibm's atan2 is atan(x / 1) there), and acos and asin take the
+  // other side as √((1 − x)(1 + x)), NaN past ±1 as theirs is; within an
+  // ulp or so of the solver's Math.acos and Math.asin, which its answer's
+  // rounding to 12 digits doesn't see.
+  if (a.length === 1 && (e.f === "atan" || e.f === "acos" || e.f === "asin")) {
+    if (e.f === "atan") return op("atan2", a[0], num(1));
+    const side = op("sqrt", op("mul", op("sub", num(1), a[0]), op("add", num(1), a[0])));
+    return e.f === "acos" ? op("atan2", side, a[0]) : op("atan2", a[0], side);
+  }
   throw new NotWritten(`the solver's ${e.f}`);
 }
 
@@ -52,10 +62,19 @@ export function readIn(e: Expr, out: string[] = []): string[] {
 // `torn` (C195, torn.ts): a tear's root taken, given its residual's known
 // variables (names, and their values); without it, a tear isn't written.
 // The root is checked as the solver checks its answers (1e-9 relative).
-export function writtenSteps(steps: Step[], local0: (name: string) => number, done: (path: number[]) => SExpr, fail: () => SExpr, t: LType, ways: (step: number, each: SExpr[]) => SExpr = () => { throw new NotWritten("a plan with more than one way"); }, fixed?: number[], torn?: (s: Extract<Step, { type: "tear" }>, ks: string[], values: SExpr[]) => SExpr): SExpr {
+// `periodic`: the values a way's whole-number parameters (2πk) take, the
+// solver's window at one level (0; or 0, 1 and −1).
+// `free`: what a way gives where the equations leave its variable free
+// (0·x = 0), which the solver answers as free; without it, such a case
+// isn't written. `eqs`: checked once every step has its values, as the
+// solver checks each answer (a step right in general can be wrong at a
+// singular point).
+export interface Written { torn?: (s: Extract<Step, { type: "tear" }>, ks: string[], values: SExpr[]) => SExpr; periodic?: number[]; free?: () => SExpr; eqs?: { lhs: Expr; rhs: Expr }[] }
+export function writtenSteps(steps: Step[], local0: (name: string) => number, done: (path: number[]) => SExpr, fail: () => SExpr, t: LType, ways: (step: number, each: SExpr[]) => SExpr = () => { throw new NotWritten("a plan with more than one way"); }, fixed?: number[], w: Written = {}): SExpr {
+  const { torn } = w;
   const ex = (e: Expr): SExpr => writtenExpr(e, local0);
   const gen = (i: number, path: number[]): SExpr => {
-    if (i === steps.length) return done(path);
+    if (i === steps.length) return (w.eqs ?? []).reduceRight<SExpr>((rest, eq) => iff(close(ex(eq.lhs), ex(eq.rhs)), rest, fail(), t), done(path));
     const s = steps[i];
     if (s.type === "check") return iff(close(ex(s.eq.lhs), ex(s.eq.rhs)), gen(i + 1, path), fail(), t);
     if (s.type === "linear") {
@@ -70,19 +89,39 @@ export function writtenSteps(steps: Step[], local0: (name: string) => number, do
       const j = local0(s.tear);
       return let_(j, torn(s, ks, ks.map((k) => local(local0(k)))), iff(close(ex(s.residual.lhs), ex(s.residual.rhs)), gen(i + 1, path), fail(), t));
     }
-    if (s.type !== "solve" || s.branches.some((b) => b.params.length)) throw new NotWritten("a plan with numbers searched for");
-    const j = local0(s.x), many = s.branches.length > 1;
+    if (s.type !== "solve" || (!w.periodic && s.branches.some((b) => b.params.length))) throw new NotWritten("a plan with numbers searched for");
+    // Each way with each assignment of its parameters, in the solver's
+    // order (relation.js run: the branches, then k over the window).
+    const j = local0(s.x);
+    const combos = s.branches.flatMap((b, bi) => assignments(b.params, w.periodic ?? [0]).map((a) => ({ bi, a })));
+    const many = combos.length > 1;
     const way = (k: number) => {
-      const b = s.branches[k], on = many ? [...path, k] : path;
+      const { bi, a } = combos[k], b = s.branches[bi], on = many ? [...path, k] : path;
       const ok = b.guards.reduce<SExpr>((acc, g) => and(acc, atMost(num(-1e-9), ex(g))), finite(local(j)));
-      return let_(j, ex(b.expr), iff(ok, gen(i + 1, on), fail(), t));
+      const solved = b.params.reduceRight<SExpr>((body, p) => let_(local0(p), num(a[p]), body), let_(j, ex(b.expr), iff(ok, gen(i + 1, on), fail(), t)));
+      const frees = b.free.filter(live);
+      if (!frees.length) return solved;
+      if (!w.free) throw new NotWritten("a case the equations leave free");
+      const isFree = frees.map((g) => g.map((e) => atMost(op("abs", ex(e)), num(1e-9))).reduce(and)).reduce((x, c) => op("or", x, c));
+      return iff(isFree, w.free(), solved, t);
     };
     if (!many) return way(0);
     if (fixed) return way(fixed[path.length]);
-    return ways(i, s.branches.map((_, k) => way(k)));
+    return ways(i, combos.map((_, k) => way(k)));
   };
   return gen(0, []);
 }
+
+// Each parameter given each of ks, the first varying slowest (relation.js
+// assignments).
+function assignments(params: string[], ks: number[]): Record<string, number>[] {
+  if (!params.length) return [{}];
+  const rest = assignments(params.slice(1), ks);
+  return ks.flatMap((k) => rest.map((a) => ({ [params[0]]: k, ...a })));
+}
+
+// A group of a way's coefficients that can all be 0 (none a nonzero number).
+export const live = (g: Expr[]) => !g.some((e) => e.k === "num" && Math.abs(e.v!) > 1e-9);
 
 // The solver's key for an answer, Math.round(x · 1e8) of each port's
 // rounded value: two answers with the same key are one (relation.js).
