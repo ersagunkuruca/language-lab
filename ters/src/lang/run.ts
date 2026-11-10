@@ -271,7 +271,11 @@ class LambdaMeta {
   readonly lambda: Id;
   readonly node: NodeOf<"lambda">;
   readonly scope: Env;
-  constructor(node: NodeOf<"lambda">, scope: Env) { this.lambda = node.id; this.node = node; this.scope = scope; }
+  // The runner that made it: another runner's closure (main's run's
+  // derivative, passed to a helper's Run) is called as a function, since
+  // its nodes may not be this runner's (I196).
+  readonly by: object;
+  constructor(node: NodeOf<"lambda">, scope: Env, by: object) { this.lambda = node.id; this.node = node; this.scope = scope; this.by = by; }
   get env() { return toMap(this.scope); }
 }
 const toMap = (env: Env) => {
@@ -508,7 +512,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const one = (x: Value): Iterable<Value> => [x];
   // Closures made by this runner, so the machine can enter them directly
   // instead of calling them as JS functions.
-  const closureOf = (f: Value): LambdaMeta | undefined => { const m = typeof f === "function" ? (f as unknown as Record<symbol, unknown>)[META] : undefined; return m instanceof LambdaMeta ? m : undefined; };
+  const mine = {};
+  const closureOf = (f: Value): LambdaMeta | undefined => { const m = typeof f === "function" ? (f as unknown as Record<symbol, unknown>)[META] : undefined; return m instanceof LambdaMeta && m.by === mine ? m : undefined; };
   // The innermost `with fuel` frame, for code the machine calls out to (a
   // builtin that calls back in): each machine starts from it.
   let ambient: Fuel | null = null;
@@ -928,7 +933,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
   const closure = (n: NodeOf<"lambda">, env: Env): Fn => {
     const f = (...args: Value[]) => run((m) => m.apply(f, args));
-    (f as unknown as Record<symbol, unknown>)[META] = new LambdaMeta(n, env);
+    (f as unknown as Record<symbol, unknown>)[META] = new LambdaMeta(n, env, mine);
     return f;
   };
 
