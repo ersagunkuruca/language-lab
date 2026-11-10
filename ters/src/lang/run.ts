@@ -484,20 +484,26 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   ({ code, info } = resolvedFor(code, info, rt.names));
   // A copy at another number type is entered as the lambda it copies.
   const copyOf = info.copyOf;
-  // Our own copy of the node table: `derivative` writes new code into it.
-  // A solve written in the program is read on the code as resolved, which
-  // every run shares, so what is worked out about it once (its mode,
-  // modes.ts solveMode; its plans) is kept between runs (I179: opening
-  // board's `stage from key` worked its modes out again, 0.1 s).
+  // `derivative` writes new code into our own copy of the node table, made
+  // when it first does (copying every node for each runner was 20 ms, and
+  // the editor makes several when a definition opens). A solve written in
+  // the program is read on the code as resolved, which every run shares,
+  // so what is worked out about it once (its mode, modes.ts solveMode; its
+  // plans) is kept between runs (I179: opening board's `stage from key`
+  // worked its modes out again, 0.1 s).
   const shared = code;
-  code = { nodes: { ...code.nodes }, defs: code.defs };
-  // It is resolved: a solve inside the run (relate.ts interpreter) reads
-  // this copy, and resolving it again walked every node twice a solve
-  // (I176: about 1.2 s opening board's `stage from key`).
-  resolvedAlready(code, info);
   // Whether a derivative has written new nodes into the copy, which the
   // check doesn't have.
   let wrote = false;
+  const writable = () => {
+    if (wrote) return;
+    wrote = true;
+    code = { nodes: { ...code.nodes }, defs: code.defs };
+    // It is resolved: a solve inside the run (relate.ts interpreter) reads
+    // this copy, and resolving it again walked every node twice a solve
+    // (I176: about 1.2 s opening board's `stage from key`).
+    resolvedAlready(code, info);
+  };
   const defs = new Map<Id, Value>();
   const one = (x: Value): Iterable<Value> => [x];
   // Closures made by this runner, so the machine can enter them directly
@@ -616,7 +622,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // Every function value carries its node, so this can always look inside.
     [S.derivative]: (f) => {
       const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
-      wrote = true;
+      writable();
       return run((machine) => machine.eval(derivativeLambda(code, m), fromMap("env" in m ? m.env : new Map())));
     },
     // The record a gradient is over is known once there's a point to take
@@ -624,7 +630,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.gradient]: (f) => {
       const m = (f as unknown as Record<symbol, { lambda: Id; env: Map<Id, Value> } | { prim: Id }>)[META];
       const env = fromMap("env" in m ? m.env : new Map());
-      wrote = true;
+      writable();
       return one(function* (p: Value) {
         const lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : gradientLambda(code, m, (p as Data).tag);
         for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
