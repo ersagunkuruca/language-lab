@@ -2221,7 +2221,27 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 const matchers = new WeakMap<object, Set<Id>>();
 // What is kept by a nodes object, forgotten when it changes (fillings).
 function forgetNodes(nodes: object) { matchers.delete(nodes); pieceMakers.delete(nodes); forgetDerived(nodes); }
+// A program derived from another (a palette's filling) has its base's,
+// unless a changed node is one of a `match by` call's, there or in the
+// base: the call, its function or the input it names (E103: the scan of
+// every node for each filling's ending check, 40 ms a hole).
+const matchersKept = new WeakMap<Code, { m: Set<Id>; calls: Set<Id>; inputs: Set<Id> }>();
 function matchersOf(code: Code): Set<Id> {
+  const from = derived.get(code);
+  if (from && from.base !== code) {
+    let kept = matchersKept.get(from.base);
+    if (!kept) {
+      const base = from.base, m = matchersOf(base), calls = new Set<Id>(), inputs = new Set<Id>();
+      for (const id of nodesWhere(base, "match by calls", (n) => isCall(n) && base.nodes[n.fn]?.kind === "ref" && (base.nodes[n.fn] as NodeOf<"ref">).target === JOBS.matchBy)) { calls.add(id); inputs.add((base.nodes[id] as Call).args[0]); }
+      matchersKept.set(base, (kept = { m, calls, inputs }));
+    }
+    const k = kept;
+    const touches = [...from.changed].some((id) => {
+      if (k.calls.has(id) || k.inputs.has(id)) return true;
+      return [code, from.base].some((c) => { const n = c.nodes[id]; return (n?.kind === "ref" && n.target === JOBS.matchBy) || (isCall(n) && c.nodes[n.fn]?.kind === "ref" && (c.nodes[n.fn] as NodeOf<"ref">).target === JOBS.matchBy); });
+    });
+    if (!touches) return k.m;
+  }
   let m = matchers.get(code.nodes);
   if (!m) {
     m = new Set();
