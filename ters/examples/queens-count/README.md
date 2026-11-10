@@ -20,3 +20,11 @@ Measured 2026-11-10 on 4 cores, which other work shared, so the times
 varied by a second: n = 12 (14200 boards) took 6.2 to 7.5 s in turn and
 3.4 to 3.7 s with three workers. n = 11 (2680) took 1.3 to 1.4 s either
 way, since the first column runs alone before the workers start.
+
+Native (C203a) it's split the same way on C's threads (c.ts `par:count`),
+each thread keeping its own split and seen:
+
+    ters native examples/queens-count -o queens-count && ./queens-count 12
+
+Measured 2026-11-10 on 4 cores: n = 12 took 2.2 s on one thread
+(TERS_WORKERS=0) and 0.86 to 0.98 s on four.
