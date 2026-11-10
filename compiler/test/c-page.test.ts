@@ -259,7 +259,7 @@ test("bounce in C moves its bodies frame by frame as html.ts does (C199f)", { sk
 // draws something else into the same elements starts their animations
 // again, as a browser's new elements would. A swap the hint shows (found
 // with html.ts) now plays its chain through to rest in every lane.
-test("tumble's swap in C plays its animations and the chain after it to rest (C199f)", { skip }, () => {
+test("tumble's swap in C, by taps or a drag, plays its animations and the chain after it to rest (C199f)", { skip }, () => {
   const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/tumble"));
   const info = infer(p0.code, p0.pres.names, undefined, p0.options);
   const main = pageMain(p0.own.defs, info, p0.pres.names)!;
@@ -268,7 +268,8 @@ test("tumble's swap in C plays its animations and the chain after it to rest (C1
   const [a, b] = [...(page.root as FakeEl).html().matchAll(/class="tap hint"[^>]*id="([^"]*)"/g)].map((m) => m[1]);
   page.stop();
   const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
-  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", `pointerdown:${a}`, `pointerdown:${b}`, "frames:9:16", "frames:11:16", "frames:400:16"]);
+  const exe = compile(emitC(l, { main, page: "ui-headless" }).c);
+  const r = spawnSync(exe, ["width:360", `pointerdown:${a}`, `pointerdown:${b}`, "frames:9:16", "frames:11:16", "frames:400:16"]);
   assert.equal(r.status, 0, r.stderr.toString());
   const pages = r.stdout.toString().split("\x1e\n"), said = (k: number) => [...pages[k].matchAll(/"(Showing: \w+|At rest)\./g)].map((m) => m[1]);
   assert.deepEqual(said(2), ["Showing: swap", "Showing: swap", "Showing: swap"]);
@@ -279,4 +280,20 @@ test("tumble's swap in C plays its animations and the chain after it to rest (C1
   assert.deepEqual(said(4), ["Showing: clear", "Showing: clear", "Showing: clear"]);
   assert.deepEqual(said(5), ["At rest", "At rest", "At rest"]);
   assert.match(pages[5], /Steps worked out, still to show: 0\./);
+  // A drag from one into the other swaps them too (tumble's dragged): a
+  // finger moving inside the place it went down on doesn't.
+  const at = (t: string) => t.split(" ").slice(1).map(Number), [ac, ar] = at(a), [bc, br] = at(b);
+  const to = bc > ac ? "60,22" : bc < ac ? "-16,22" : br > ar ? "22,-16" : "22,60";
+  const d = spawnSync(exe, ["width:360", `pointerdown:${a}:22,22`, `pointermove:${a}:30,25`, `pointermove:${a}:${to}`, "frames:600:16"]);
+  assert.equal(d.status, 0, d.stderr.toString());
+  const dp = d.stdout.toString().split("\x1e\n"), dsaid = (k: number) => [...dp[k].matchAll(/"(Showing: \w+|At rest)\./g)].map((m) => m[1]);
+  assert.deepEqual(dsaid(2), ["At rest", "At rest", "At rest"]);
+  assert.deepEqual(dsaid(3), ["Showing: swap", "Showing: swap", "Showing: swap"]);
+  assert.deepEqual(dsaid(4), ["At rest", "At rest", "At rest"]);
+  // Two pieces of one kind swapped don't line up: the lane swaps them back,
+  // drawing the same pieces again, and the timer still starts over (the
+  // part read a cell that was written, so its elements are new).
+  const same = spawnSync(exe, ["width:360", "pointerdown:tap 0 0", "pointerdown:tap 1 0", "frames:600:16"]).stdout.toString().split("\x1e\n");
+  assert.match(same[2], /Showing: swap/);
+  assert.doesNotMatch(same[3], /Showing/);
 });

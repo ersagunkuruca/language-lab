@@ -1188,7 +1188,9 @@ void ters_ui_resize(double width, int dark) {
 // A screen for tests (C199d): it keeps each box's place and paint, and
 // prints them, one box a line, after the page starts and after each thing
 // done to it (as HEADLESS_C's actions: click:ID, keydown:ID:KEY,
-// input:ID:TEXT, frames:N:MS (N frames MS apart on a clock of its own, which animations run on), and pointer:down|move|up:X,Y at a point on the page,
+// input:ID:TEXT, pointerdown:ID:X,Y and pointermove:ID:X,Y (X, Y from its
+// top left), frames:N:MS (N frames MS apart on a clock of its own, which
+// animations run on), and pointer:down|move|up:X,Y at a point on the page,
 // in a picture). Texts measure as if each character were half a font
 // size wide, so places that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
@@ -1317,8 +1319,11 @@ int main(int argc, char **argv) {
     uv *v = e->view;
     int ne = v->ne, *hs = malloc(sizeof *hs * (size_t)(ne + 1)), m = 0;
     for (int j = 0; j < ne; j++) if (!strcmp(v->ev[j], s)) hs[m++] = v->eh[j];
-    const char *value = !strcmp(s, "input") && more ? more : "", *key = strcmp(s, "input") && more ? more : "";
-    for (int j = 0; j < m; j++) ters_page_event(hs[j], value, strlen(value), key, strlen(key), 0, 0, 0);
+    // pointerdown:ID:X,Y (pointermove …): at X, Y from the box's top left.
+    int at = !strncmp(s, "pointer", 7) && more;
+    double px = at ? atof(more) : 0, py = at && strchr(more, ',') ? atof(strchr(more, ',') + 1) : 0;
+    const char *value = !strcmp(s, "input") && more ? more : "", *key = strcmp(s, "input") && more && !at ? more : "";
+    for (int j = 0; j < m; j++) ters_page_event(hs[j], value, strlen(value), key, strlen(key), px, py, 0);
     free(hs); free(s);
     u_show(root);
   }

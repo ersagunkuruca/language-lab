@@ -3,7 +3,8 @@
 # dumped again, so a run's log shows whether the page answered. Run by the
 # "Android check" workflow inside the emulator; args: the app's id, then
 # taps (or TAPS, split at |), each a text (the view showing it), "square:N" (a view N dp
-# square, as tumble's tiles are; the first one, or the k-th with #k) or "scroll:N" (N dp down).
+# square, as tumble's tiles are; the first one, or the k-th with #k), "scroll:N" (N dp down)
+# or "drag:N#k:DX,DY" (a finger down on that square, moved DX, DY dp, and up).
 import os, re, subprocess, sys, time, difflib
 
 def adb(*a):
@@ -46,6 +47,11 @@ for i, t in enumerate(taps):
         w = adb("shell", "wm", "size"); W, H = [int(v) for v in re.findall(r"(\d+)x(\d+)", w)[-1]]
         adb("shell", "input", "swipe", str(W // 2), str(H * 3 // 4), str(W // 2), str(int(H * 3 // 4 - float(t[7:]) * density)), "800")
         time.sleep(2); before = dump(f"after{i}"); print(f"scrolled {t[7:]} dp"); print("\n".join(lines(before)[:60])); continue
+    drag = None
+    if t.startswith("drag:"):
+        spec, _, by = t[5:].partition(":")
+        drag = [float(v) * density for v in by.split(",")]
+        t = "square:" + spec
     if t.startswith("square:"):
         size, _, nth = t[7:].partition("#")
         side = float(size) * density
@@ -56,8 +62,13 @@ for i, t in enumerate(taps):
     if len(hit) <= k: print(f"tap {t}: no such view"); continue
     b = hit[k]
     x, y = (b[0] + b[2]) // 2, (b[1] + b[3]) // 2
-    print(f"tap {t} at {x},{y}")
-    adb("shell", "input", "tap", str(x), str(y))
+    if drag:
+        print(f"drag {t} from {x},{y} by {drag}")
+        adb("shell", "input", "swipe", str(x), str(y), str(int(x + drag[0])), str(int(y + drag[1])), "400")
+        t = f"drag {t}"
+    else:
+        print(f"tap {t} at {x},{y}")
+        adb("shell", "input", "tap", str(x), str(y))
     time.sleep(3)
     after = dump(f"after{i}")
     d = list(difflib.unified_diff(lines(before), lines(after), lineterm="", n=0))

@@ -327,6 +327,24 @@ static void lab__host_abort(const char *name, const char *what, const char *deta
 
 // `hosts`: the program's own operations (core-js.ts hostOpsOf) and its
 // hosts/c.c, which answers those nothing in the program handles (L69b1).
+// Which cells a page's parts read, and which were written since the page
+// was last run again (C199f): a part runs again on each change, but html.ts
+// mounts it again only when a cell it read was written, and then its
+// elements are new (their animations start again, c-layout.ts).
+const READS_C = String.raw`
+static void **lab_rd, **lab_wr;
+static int lab_nrd, lab_crd, lab_rding, lab_nwr, lab_cwr;
+static void *lab_touch(void *c) {
+  if (lab_rding) { if (lab_nrd == lab_crd) { lab_crd = lab_crd ? 2 * lab_crd : 16; lab_rd = realloc(lab_rd, sizeof *lab_rd * (size_t)lab_crd); } lab_rd[lab_nrd++] = c; }
+  return c;
+}
+static void lab_wrote(void *c) {
+  for (int j = 0; j < lab_nwr; j++) if (lab_wr[j] == c) return;
+  if (lab_nwr == lab_cwr) { lab_cwr = lab_cwr ? 2 * lab_cwr : 16; lab_wr = realloc(lab_wr, sizeof *lab_wr * (size_t)lab_cwr); }
+  lab_wr[lab_nwr++] = c;
+}
+`;
+
 // A host with no screen (C199b): the page kept as a tree of nodes, printed
 // as HTML the way the tests' fake document prints it (ters/test/
 // fakedom.ts), and a main that does what its arguments say, printing the
@@ -827,6 +845,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     "",
     ...types,
     ...counts,
+    ...(opts.page ? [READS_C] : []),
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
     ...(threads ? [`static void lab_shares(lab_cell *c) { switch (c->type) { ${sharesOf.filter(Boolean).join(" ")} default: break; } }`] : []),
     ...(text.some((t) => t.includes("lab_none")) ? [`static ${TL}int lab_none = 0; // no answer inside a search (C166)`] : []),
@@ -937,9 +956,10 @@ typedef struct ters_host {
   void (*clear)(void *ctx, void *el);
   void (*listen)(void *ctx, void *el, const char *event, size_t n, int handler);
   void (*gone)(void *ctx, void *node);
-  // A part ran again and drew something else, but into the same elements
-  // (ters_lay): to a browser, which mounts a part's elements again, they
-  // are new, and their animations start again (c-layout.ts). May be null.
+  // A part ran again after a cell it read was written, and drew into the
+  // same elements (ters_lay): to a browser, which mounts such a part's
+  // elements again, they are new, and their animations start again
+  // (c-layout.ts). May be null.
   void (*renew)(void *ctx, void *el);
 } ters_host;
 static ters_host *ters_h;
@@ -952,7 +972,7 @@ static int (*ters_moving)(int);
 // or a part (what it drew). A property keeps what it showed (null: none);
 // an event keeps its handler's number.
 typedef struct ters_attr { int kind; lab_cell *name, *f, *shown; int handler; } ters_attr;
-typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part; } ters_m;
+typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk, nreads; ters_attr *attrs; struct ters_m **kids, *part; void **reads; } ters_m;
 // Whether what is mounted now is inside an svg element: a part there is an
 // SVG group, as html.ts makes it, not a lab-part.
 static int ters_svg;
@@ -974,15 +994,12 @@ static int ters_handler(lab_cell *f) {
   ters_handlers[ters_nh] = f;
   return ters_nh++;
 }
-// How many times the page was told something changed.
-static long ters_changes;
 static void ters_show(ters_m *m, ters_attr *a) {
   lab_cell *v = ters_view(a->f);
   int live = (LAB_TN(a->name) == 5 && !memcmp(LAB_TB(a->name), "value", 5)) || (LAB_TN(a->name) == 7 && !memcmp(LAB_TB(a->name), "checked", 7));
   // None: an attribute is taken off; a field's value or tick stays.
-  if (!v) { if (a->shown) { ters_changes++; if (!live) ters_h->remove_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name)); lab_drop(a->shown); a->shown = 0; } return; }
+  if (!v) { if (a->shown) { if (!live) ters_h->remove_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name)); lab_drop(a->shown); a->shown = 0; } return; }
   if (ters_same(v, a->shown)) { lab_drop(v); return; }
-  ters_changes++;
   ters_h->set_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name), (const char *)LAB_TB(v), LAB_TN(v));
   if (a->shown) lab_drop(a->shown);
   a->shown = v;
@@ -991,7 +1008,6 @@ static void ters_text(ters_m *m) {
   lab_cell *v = ters_view(m->f);
   if (!v) v = lab__text_of("", 0);
   if (ters_same(v, m->shown)) { lab_drop(v); return; }
-  ters_changes++;
   ters_h->set_text(ters_h->ctx, m->view, (const char *)LAB_TB(v), LAB_TN(v));
   if (m->shown) lab_drop(m->shown);
   m->shown = v;
@@ -1050,6 +1066,7 @@ static void ters_forget(ters_m *m) {
   for (int j = 0; j < m->na; j++) { if (m->attrs[j].name) lab_drop(m->attrs[j].name); if (m->attrs[j].f) lab_drop(m->attrs[j].f); if (m->attrs[j].shown) lab_drop(m->attrs[j].shown); if (m->attrs[j].kind == ${on}) { lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = 0; } }
   for (int j = 0; j < m->nk; j++) ters_forget(m->kids[j]);
   ters_forget(m->part);
+  free(m->reads);
   if (m->tag) lab_drop(m->tag);
   if (m->f) lab_drop(m->f);
   if (m->shown) lab_drop(m->shown);
@@ -1099,9 +1116,17 @@ static void ters_renew(ters_m *m) {
 }
 static void ters_part(ters_m *m) {
   lab_dup(m->f);
+  // Whether a cell it read last time was written since, and what it reads
+  // now (its own reads: a part inside notes its own).
+  int stale = 0;
+  for (int j = 0; j < m->nreads && !stale; j++) for (int k = 0; k < lab_nwr; k++) if (m->reads[j] == lab_wr[k]) { stale = 1; break; }
+  void **rd = lab_rd; int nrd = lab_nrd, crd = lab_crd, rding = lab_rding;
+  lab_rd = 0; lab_nrd = lab_crd = 0; lab_rding = 1;
   lab_cell *h = ${call(PF, "m->f")};
+  free(m->reads); m->reads = lab_rd; m->nreads = lab_nrd;
+  lab_rd = rd; lab_nrd = nrd; lab_crd = crd; lab_rding = rding;
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); return; }
-  if (m->part && ters_fits(m->part, h)) { long was = ters_changes; ters_lay(m->part, h); if (ters_changes != was && ters_h->renew) ters_renew(m->part); }
+  if (m->part && ters_fits(m->part, h)) { ters_lay(m->part, h); if (stale && ters_h->renew) ters_renew(m->part); }
   else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
   lab_drop(h);
 }
@@ -1138,6 +1163,7 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ok = 0; }
   ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   ters_refresh(ters_root);
+  lab_nwr = 0;
   ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
   if (ters_after) ters_after();
   return ok;
@@ -1152,6 +1178,7 @@ int ters_page_frame(void) {
   if (ters_clock) {
     ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
     ters_refresh(ters_root);
+    lab_nwr = 0;
     ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
     if (ters_after) ters_after();
   }
@@ -1550,7 +1577,11 @@ int main(int argc, char **argv) {
           pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, 0);`, ...xs.map((x, k) => `${d}((${n} *)${v})->f${k} = ${x};`));
           return v;
         }
-        case "get": return borrow(e.rec, e.t.fields[e.i].t, (r) => (e.t.mutable ? `((${sname.get(e.t.key)} *)${r})->f${e.i}` : `${r}.f${e.i}`), pre, d, after);
+        case "get": {
+          // A page's cell read is noted, for the part reading it (READS_C).
+          const touch = opts.page && e.t.mutable && e.t.key.startsWith("cell:");
+          return borrow(e.rec, e.t.fields[e.i].t, (r) => (e.t.mutable ? `((${sname.get(e.t.key)} *)${touch ? `lab_touch(${r})` : r})->f${e.i}` : `${r}.f${e.i}`), pre, d, after);
+        }
         case "new": {
           const c = e.t.cases[e.c];
           if (!c.fields.length) return `(&${cname(e.t, e.c)})`;
@@ -1636,6 +1667,7 @@ int main(int argc, char **argv) {
           pending.pop();
           if (counted(ft)) { const old = temp(ft); pre.push(`${d}${old} = ((${n} *)${b})->f${e.i};`, `${d}((${n} *)${b})->f${e.i} = ${v};`, `${d}${drop(ft, old)}`); }
           else pre.push(`${d}((${n} *)${b})->f${e.i} = ${v};`);
+          if (opts.page && e.t.key.startsWith("cell:")) pre.push(`${d}lab_wrote(${b});`);
           pre.push(`${d}${drop(e.t, b)}`);
           return ex(e.then, pre, d, after);
         }
