@@ -32,9 +32,9 @@ test("drift's motes are moved as columns, and it prints what the evaluator print
   // aren't touched in its loop.
   const step = ir.funcs.find((f) => f.name.startsWith("array map.fold.items·moved"))!;
   const cols = new Set<string>();
-  const w = (e: SExpr) => { if (e.k === "rt" && e.fn.startsWith("cols.")) cols.add(e.fn.replace(/\.a\d+/, "")); kids(e).forEach(w); };
+  const w = (e: SExpr) => { if (e.k === "rt" && /^array\.c(get|set|new|length)/.test(e.fn)) cols.add(e.fn.replace(/\.a\d+/, "")); kids(e).forEach(w); };
   w(step.body);
-  assert.deepEqual([...cols].sort(), ["cols.get.0", "cols.get.1", "cols.get.2", "cols.get.3", "cols.set.0_1"]);
+  assert.deepEqual([...cols].sort(), ["array.cget0", "array.cget1", "array.cget2", "array.cget3", "array.cset0_1"]);
   const out: string[] = [], evaluator: string[] = [];
   runCoreMain(ir, "main", ["300"], { print: (s) => out.push(s) });
   runProgram(r.code, r.info, main, ["300"], { print: (s) => evaluator.push(s), names: r.names });

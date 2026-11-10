@@ -41,7 +41,7 @@ import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type U
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -415,16 +415,16 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // An array of records as columns (columns.ts, C60): an array per
           // field, a Float64Array for a Float64.
           {
-            const m = /^cols\.(new|length|get|set)\.a\d+(?:\.([\w]+))?$/.exec(e.fn);
+            const m = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
               if (m[1] === "length") return `${xs[0]}.n`;
-              if (m[1] === "get") return `${xs[0]}.c${m[2]}[${xs[1]}]`;
+              if (m[2] !== undefined) return `${xs[0]}.c${m[2]}[${xs[1]}]`;
               if (m[1] === "new") {
-                const t = temp();
+                const t = temp(), r = ir.arrays[Number(m[4])].item as RType;
                 pre.push(`${d}const ${t} = ${xs[0]};`);
-                return `{ n: ${t}, ${[...m[2]!].map((k, i) => `c${i}: ${k === "f" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
+                return `{ n: ${t}, ${r.fields.map((x, i) => `c${i}: ${x.t === "f64" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
               }
-              const c = temp(), j = temp(), ks = m[2]!.split("_");
+              const c = temp(), j = temp(), ks = m[3]!.split("_");
               pre.push(`${d}const ${c} = ${xs[0]}, ${j} = ${xs[1]};`);
               const vs = ks.map((k, i) => { const v = temp(); pre.push(`${d}const ${v} = ${xs[i + 2]};`); return [k, v]; });
               for (const [k, v] of vs) pre.push(`${d}${c}.c${k}[${j}] = ${v};`);
