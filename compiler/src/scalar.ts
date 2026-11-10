@@ -1405,11 +1405,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (t && isData(t)) return { k: "rt", fn: "par:together", args: args(), host: { t, partial: true } };
         }
-        // And a keep (C202), its items that pass in order.
+        // And a keep (C202), its items that pass in order; all pass and
+        // any pass, the first test that decides.
         const job = opts.threads ? (parallelList ??= parallelLists(code, info)).get(n.id) : undefined;
-        if (job === "map" || job === "keep") {
-          const t = stype(zonk(id));
-          if (t && isArray(t)) return { k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } };
+        if (job === "map" || job === "keep" || job === "all" || job === "any") {
+          const t = stype(zonk(id)), tx = stype(zonk(n.args[0]));
+          if (t && (job === "all" || job === "any" ? tx && isArray(tx) : isArray(t))) return { k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } };
         }
         if (fibers && (target === TOGETHER || target === RACE)) {
           const t = stype(zonk(id));
