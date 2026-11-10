@@ -71,7 +71,8 @@ export const answerKeys = (code: Code, n: Use): string[] => (n.body !== undefine
 // same nodes. A use whose ports aren't known (a hole, an unknown target)
 // is left alone.
 // `own`: the nodes to look at (a program's own, not the library under it).
-export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes)): void {
+// `wrote`: where to list the nodes it writes.
+export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes), wrote?: Id[]): void {
   for (const id of own) {
     const n = code.nodes[id];
     if (n?.kind !== "call" || !n.given || (n as { body?: Id }).body !== undefined) continue;
@@ -87,8 +88,10 @@ export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes)
       code.nodes[fn] = { id: fn, kind: "ref", target: tupleVariant(refs.length) };
       body = `${id}.tuple`;
       code.nodes[body] = { id: body, kind: "call", fn, args: refs };
+      wrote?.push(fn, body);
     }
     code.nodes[id] = { ...n, binds, body } as Node;
+    wrote?.push(id, ...Object.values(binds), ...refs);
   }
 }
 
@@ -139,23 +142,30 @@ function filledFrom(code: Code): Code {
   const fb = filled(from.base);
   const bare = bareIn(code, from.changed);
   if (fb === from.base && !bare.length) return code;
-  if (bare.length) {
+  // A stable program is filled once and kept (filled above): its own copy.
+  if (bare.length && from.stable) {
     const out: Code = { ...code, nodes: { ...fb.nodes } };
-    for (const id of from.changed) { if (id in code.nodes) out.nodes[id] = code.nodes[id]; else delete out.nodes[id]; }
-    fillUses(out, bare);
-    derivedFrom(out, fb, [...from.changed, ...Object.keys(out.nodes).filter((id) => out.nodes[id] !== fb.nodes[id])]);
+    const put = [...from.changed];
+    for (const id of put) { if (id in code.nodes) out.nodes[id] = code.nodes[id]; else delete out.nodes[id]; }
+    fillUses(out, bare, put);
+    derivedFrom(out, fb, put);
     return out;
   }
   let m = mirrors.get(code.nodes);
-  if (!m || m.fb !== fb) mirrors.set(code.nodes, (m = { fb, nodes: { ...fb.nodes }, put: [] }));
+  if (!m || m.fb.nodes !== fb.nodes) mirrors.set(code.nodes, (m = { fb, nodes: { ...fb.nodes }, put: [] }));
   else {
     for (const id of m.put) { if (id in fb.nodes) m.nodes[id] = fb.nodes[id]; else delete m.nodes[id]; }
     forgetSpine(m.nodes);
   }
+  m.fb = fb;
   m.put = [...from.changed];
   for (const id of m.put) { if (id in code.nodes) m.nodes[id] = code.nodes[id]; else delete m.nodes[id]; }
   const out: Code = { ...code, nodes: m.nodes };
-  derivedFrom(out, fb, from.changed);
+  // A bare use is filled in the same nodes, and what that wrote is put
+  // back the next time too (E103: a copy of every node per offer was 2.5
+  // of fall's 12 s).
+  if (bare.length) fillUses(out, bare, m.put);
+  derivedFrom(out, fb, m.put);
   return out;
 }
 
