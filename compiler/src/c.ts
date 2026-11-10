@@ -2295,20 +2295,20 @@ failed:
   // split: the list of that one item, or none past the last.
   function splitC(TL: string): string {
     // A count or an all splits by its first two choices (C43 deeper
-    // splits): lab_split2 the item kept at the second, taken up once the
-    // first is split, and lab_seen2 how many that one had.
-    return [`static ${TL}int64_t lab_split = -1, lab_seen = -1, lab_split2 = -1, lab_seen2 = -1;
-static double lab_split_hold(void) { double j = (double)lab_split; lab_split = -1; return j; }
-static double lab_split_give(double j) { lab_split = (int64_t)j; return 0; }`, ...[...splitLists.values()].map(({ n, t }) => {
+    // splits): lab__split2 the item kept at the second, taken up once the
+    // first is split, and lab__seen2 how many that one had.
+    return [`static ${TL}int64_t lab__split = -1, lab__seen = -1, lab__split2 = -1, lab__seen2 = -1;
+static double lab_split_hold(void) { double j = (double)lab__split; lab__split = -1; return j; }
+static double lab_split_give(double j) { lab__split = (int64_t)j; return 0; }`, ...[...splitLists.values()].map(({ n, t }) => {
       const c = t.cases.findIndex((x) => x.fields.length > 0), nil = `(&${cname(t, 1 - c)})`, C = cname(t, c);
       const ri = t.cases[c].fields.findIndex((x) => x.t === t), hi = 1 - ri, h = t.cases[c].fields[hi].t;
       return `static lab_cell *lab_split_${n}(lab_cell *l) {
-  if (lab_split < 0) return l;
-  int64_t j = lab_split, m = 0;
+  if (lab__split < 0) return l;
+  int64_t j = lab__split, m = 0;
   lab_cell *got = ${nil}, *p;
-  lab_split = lab_split2; lab_split2 = -1;
+  lab__split = lab__split2; lab__split2 = -1;
   for (p = l; p->tag == ${c}; p = ((${C} *)p)->f${ri}) if (m++ == j) { got = lab_new(sizeof(${C}), ${tnum.get(t.key)}, ${c}); ((${C} *)got)->f${hi} = ${dup(h, `((${C} *)p)->f${hi}`)}; ((${C} *)got)->f${ri} = ${nil}; }
-  if (lab_seen < 0) lab_seen = m; else lab_seen2 = m;
+  if (lab__seen < 0) lab__seen = m; else lab__seen2 = m;
   lab_drop(l);
   return got;
 }`;
@@ -2347,10 +2347,10 @@ static double lab_split_give(double j) { lab_split = (int64_t)j; return 0; }`, .
     return `${join}typedef struct { lab_cell *f; ${T} *out; char *bad; int64_t *ji, *jj, *seen; int64_t next, lo; } ${J};
 static void lab_par_cone_${n}(${J} *j, int64_t k) {
   lab_cell *f = lab_dup(j->f);
-  lab_split = j->ji[k]; lab_split2 = j->jj[k]; lab_seen = -1; lab_seen2 = -1;
+  lab__split = j->ji[k]; lab__split2 = j->jj[k]; lab__seen = -1; lab__seen2 = -1;
   j->out[k] = ${call("f")};
-  j->seen[k] = lab_seen2;
-  lab_split = -1; lab_split2 = -1;
+  j->seen[k] = lab__seen2;
+  lab__split = -1; lab__split2 = -1;
 }
 static void lab_par_cwork_${n}(void *p) {
   ${J} *j = p;
@@ -2363,7 +2363,7 @@ static void lab_par_cwork_${n}(void *p) {
     if (lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
     else { j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED); }
   }
-  lab_split = -1; lab_split2 = -1;${stops ? `
+  lab__split = -1; lab__split2 = -1;${stops ? `
   lab_stop_at = was;` : ""}
 }
 static ${J} lab_par_cjobs_${n}(lab_cell *f, int64_t m) {
@@ -2409,17 +2409,17 @@ static int lab_par_crun_${n}(${J} *j, int64_t m, int *par, const struct timespec
 // The answers are put together in order. Where one failed, the whole search
 // runs again here in turn, so an abort is the first in order's.
 static ${T} lab_par_search_${n}(lab_cell *f) {
-  int64_t was = lab_split, was2 = lab_split2, outer = lab_seen, outer2 = lab_seen2, n1, m0, k, i, m, b;
+  int64_t was = lab__split, was2 = lab__split2, outer = lab__seen, outer2 = lab__seen2, n1, m0, k, i, m, b;
   int par = 0;
   struct timespec t0;
   lab_cell *g = lab_dup(f);
   ${T} r;
   ${T} *seq;
   clock_gettime(CLOCK_MONOTONIC, &t0);
-  lab_split = 0; lab_split2 = 0; lab_seen = -1; lab_seen2 = -1;
+  lab__split = 0; lab__split2 = 0; lab__seen = -1; lab__seen2 = -1;
   r = ${call("g")};
-  n1 = lab_seen; m0 = lab_seen2;
-  lab_split = was; lab_split2 = was2; lab_seen = outer; lab_seen2 = outer2;
+  n1 = lab__seen; m0 = lab__seen2;
+  lab__split = was; lab__split2 = was2; lab__seen = outer; lab__seen2 = outer2;
   if (lab_st) { lab_drop(f); return 0; }
   if (n1 < 1) n1 = 1;
   if (m0 < 1) m0 = 1;
@@ -2445,9 +2445,9 @@ ${joined}
   return r;
 again:
   ${drop1("r")}
-  lab_split = -1; lab_split2 = -1;
+  lab__split = -1; lab__split2 = -1;
   r = ${call("f")};
-  lab_split = was; lab_split2 = was2; lab_seen = outer; lab_seen2 = outer2;
+  lab__split = was; lab__split2 = was2; lab__seen = outer; lab__seen2 = outer2;
   return r;
 }`;
   }
@@ -2467,9 +2467,9 @@ again:
     return `typedef struct { lab_cell *f; ${T} *out; char *bad; int64_t next, stop, n; } ${J};
 static void lab_par_fone_${n}(${J} *j, int64_t k) {
   lab_cell *f = lab_dup(j->f);
-  lab_split = k + 1; lab_seen = -1;
+  lab__split = k + 1; lab__seen = -1;
   j->out[k] = ${call("f")};
-  lab_split = -1;
+  lab__split = -1;
 }
 static void lab_par_fwork_${n}(void *p) {
   ${J} *j = p;
@@ -2488,18 +2488,18 @@ static void lab_par_fwork_${n}(void *p) {
       while (s > k && !__atomic_compare_exchange_n(&j->stop, &s, k, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
     }
   }
-  lab_split = -1;${stops ? `
+  lab__split = -1;${stops ? `
   lab_stop_at = was;` : ""}
 }
 static ${T} lab_par_search_${n}(lab_cell *f) {
-  int64_t was = lab_split, outer = lab_seen, n, k;
+  int64_t was = lab__split, outer = lab__seen, n, k;
   struct timespec t0;
   lab_cell *g = lab_dup(f);
   ${T} r;
   clock_gettime(CLOCK_MONOTONIC, &t0);
-  lab_split = 0; lab_seen = -1;
+  lab__split = 0; lab__seen = -1;
   r = ${call("g")};
-  n = lab_seen - 1; lab_split = was; lab_seen = outer;
+  n = lab__seen - 1; lab__split = was; lab__seen = outer;
   if (lab_st != 1 || n <= 0) { lab_drop(f); return r; }
   lab_st = 0;
   ${J} j = { f, malloc((size_t)n * sizeof(${T})), malloc((size_t)n), 0, n, n };
