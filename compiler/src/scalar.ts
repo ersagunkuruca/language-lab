@@ -1035,21 +1035,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
 
   // The function index for `def` at these types, lowering it (and what it
   // calls) first.
-  function func(def: Id, types: At = new Map()): number {
+  function func(def: Id, types: At = new Map(), away = false): number {
     // A definition that names another (`twice = double`, I150) is that one,
     // at the types it has here.
     const named = code.nodes[def]?.kind === "def" && (code.nodes[def] as NodeOf<"def">).body ? code.nodes[(code.nodes[def] as NodeOf<"def">).body!] : undefined;
     if (named?.kind === "ref" && named.target !== def && code.nodes[named.target]?.kind === "def") {
       const here = defType(def), there = defType(named.target), at: At = new Map();
       if (here && there) bindVars(there, put(here, types), at);
-      return func(named.target, at);
+      return func(named.target, at, away);
     }
     const raw = defType(def);
     const t = raw && put(raw, types);
     if (!opts.data && !underBudget && diverges(t)) throw new Refused(`calls ${nm(def)}, which ${MAY_NOT_FINISH}`);
     const used = raw ? [...new Set(vars(raw))].filter((v) => types.has(v)).sort((a, b) => a - b) : [];
     const bound = (x: Type | Row) => ("t" in x ? show(x) : `{${x.effs.join(",")}}`);
-    const key = (used.length ? `${def}|${used.map((v) => `${v}=${bound(types.get(v)!)}`).join(",")}` : def) + (trying ? "|trying" : "");
+    const key = (used.length ? `${def}|${used.map((v) => `${v}=${bound(types.get(v)!)}`).join(",")}` : def) + (trying ? "|trying" : "") + (away ? "|away" : "");
     if (index.has(key)) return index.get(key)!;
     if (refused.has(key)) throw new Refused(`calls ${nm(def)}, which ${refused.get(key)}`);
     const d = code.nodes[def] as NodeOf<"def">;
@@ -1095,6 +1095,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     inProgress.add(def);
     const f: SFunc = { def, name: nm(def), params: params as LType[], result: result!, locals: [...params as LType[]], body: { k: "num", v: 0 }, spends: info.divergent.has(def), budgeted, ...(partial ? { partial } : {}), ...(constant ? { value: true as const } : {}) };
     funcs.push(f);
+    if (away) awayFuncs.add(f);
     const outer = underBudget, outerAt = at, shaped = shapes.length;
     try {
       const l = lam as NodeOf<"lambda">;
@@ -1575,7 +1576,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const types: At = new Map();
           const ct = defType(target);
           if (ct?.t === "fn") { ct.params.forEach((p, j) => n.args[j] && bindVars(p, zonk(n.args[j]), types)); bindVars(ct.ret, zonk(id), types); }
-          const fn = func(target, types);
+          // Called where it may wait, one that shares a map or a fold
+          // has a copy of its own that may too (C61 c′3), so its map
+          // goes to a page's workers; elsewhere it is the one in turn.
+          const fn = func(target, types, waitsIn(f) && reachesShared(target));
           n.args.forEach((a, j) => {
             if (stype(zonk(a)) !== funcs[fn].params[j]) throw new Refused(`passes ${nm(target)} something other than ${nm(target)} takes there`);
           });
@@ -3454,11 +3458,31 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // saying Wait.
   const waitsIn = (f: SFunc): boolean => {
     if (!opts.host || !f.def) return false;
+    if (awayFuncs.has(f)) return true;
     const d = code.nodes[f.def], at = d?.kind === "def" ? d.body : d?.kind === "lambda" ? f.def : undefined;
     const t0 = at && info.typeOf.get(at), t = t0 && info.subst.resolve(t0);
     // Wait, not Await: a together's actions say Await, and are no rest.
     return !!t && t.t === "fn" && info.subst.resolveRow(t.eff).effs.includes(WAIT);
   };
+  // A definition's copy lowered where it may wait (C61 c′3, func's `away`).
+  const awayFuncs = new Set<SFunc>();
+  // Whether a definition has a map, keep or fold that may be shared, in
+  // itself or in a definition it calls (more is fine: a copy that waits
+  // for nothing only costs its continuations).
+  const reaching = new Map<Id, boolean>();
+  function reachesShared(def: Id): boolean {
+    const known = reaching.get(def);
+    if (known !== undefined) return known;
+    reaching.set(def, false);
+    const lists = (parallelList ??= parallelLists(code, info)), folds = (foldsShared ??= parallelFolds(code, info));
+    const r = subtree(code, def).some((id) => {
+      if (lists.has(id) || folds.has(id)) return true;
+      const n = code.nodes[id];
+      return n?.kind === "ref" && n.target !== def && code.nodes[n.target]?.kind === "def" && !LIBRARY.code.nodes[n.target] && reachesShared(n.target);
+    });
+    reaching.set(def, r);
+    return r;
+  }
   // Whether e may wait (C40 step 4): a search or a budget around a wait
   // isn't lowered, since the rest it's given would run after it's gone.
   const waiting = new Set<number>();
