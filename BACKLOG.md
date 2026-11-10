@@ -23,10 +23,10 @@ Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | after its native-pages step, C57 (a region per scope); mobile rows wait. Then Language or Compiler rows agreed with those lanes |
+| E Editor | "Editor lane" | C58 (free lists; a Pool type asked of Ersagun), then C59; mobile rows wait. Then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C60 (drift: the map written into its own array, then columns), then C42's other associative folds; C187 is blocked on V8; C184 with the Editor lane |
 | L Language and library | "Language lane" | C61 (a page's keep and Int folds on web workers, then a map in a function the handler calls), then C43's deeper splits (L182 is with the Editor lane) |
-| L Language and library | "Language lane B" | C58 (free lists), then C59; round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | C57 (a region per scope); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
