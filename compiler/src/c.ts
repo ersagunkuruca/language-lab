@@ -170,9 +170,11 @@ static inline void lab_dec(lab_cell *c) {
 static void lab_fields(lab_cell *c);
 // The count taken where it's dropped (C207b); the freeing out of line.
 // GCC, inlining it, warns of writing the count of a cell it can't size
-// (a constant empty list's) on a path the count of 0 rules out.
+// (a constant empty list's), and of freeing a small Int as a pointer, on
+// paths the count of 0 and the Int's tag rule out.
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
 #endif
 static void lab__dead(lab_cell *c) {
   size_t base = lab_dead_n;
