@@ -102,7 +102,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
-    const tree = choose(code, main, [spec, ...rows], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined).rep;
+    const tree = choose(code, main, [spec, ...rows], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, asked.flatMap((r) => Object.keys(r.impl))).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
     // Lists as trees for the whole, where parts of it would have arrays
     // (machine's step loop): those parts as arrays, the rest as written,

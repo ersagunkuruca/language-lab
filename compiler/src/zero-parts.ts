@@ -172,12 +172,29 @@ function inlineLeaves(funcs: SFunc[]): SFunc[] {
   });
 }
 
+// A map, keep, first where or count shared on worker threads where its
+// items are worth it (C42, C43, scalar.ts `map.worth`) hands its function
+// to the runtime, whose closures may be given anything: every function of
+// that type, and what it calls, would lose its masks (Bounce's outlines,
+// 128 multiplications for 28, through the points of a box's corners as
+// well as its multivectors). In a program with an algebra the map as
+// compiled is kept, so the parts stay known.
+function unshared(algebras: Map<Id, Algebra>): (f: SFunc) => SFunc {
+  const put = (e: SExpr): SExpr => {
+    const r = mapKids(e, put);
+    return r.k === "if" && r.cond.k === "rt" && r.cond.fn === "map.worth" ? r.else : r;
+  };
+  return (f) => (algebras.size ? { ...f, body: put(f.body) } : f);
+}
+
 // A switch from the environment, where there is one: the editor runs
 // this in a browser, which has no `process`.
 export const envSet = (k: string): boolean => typeof process !== "undefined" && !!process.env?.[k];
 
 export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: number; dropped: number } {
-  const ir: CoreIR = { ...ir0, funcs: inlineLeaves(ir0.funcs) };
+  const algebras = new Map<Id, Algebra>();
+  try { for (const a of algebrasOf(ir0.code, ir0.info).values()) algebras.set(a.variant, a); } catch { /* no algebras */ }
+  const ir: CoreIR = { ...ir0, funcs: inlineLeaves(ir0.funcs.map(unshared(algebras))) };
   const funcs = ir.funcs;
   // A closure's code, by its function type: what every apply of that type
   // may call.
@@ -291,8 +308,6 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     if (!same(now, caps[shape][i])) { caps[shape][i] = now; changed = true; for (const r of capReaders[shape][i]) r.dirty = true; }
   };
 
-  const algebras = new Map<Id, Algebra>();
-  try { for (const a of algebrasOf(ir.code, ir.info).values()) algebras.set(a.variant, a); } catch { /* no algebras */ }
   // A body read with its inputs: what each expression may be. `at`, when
   // given, is told each call's copy and each expression's value (the last
   // round, for the rewrite).

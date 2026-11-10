@@ -17,7 +17,18 @@ test("Bounce's compiled step multiplies only the parts its vectors, bivectors an
     if (every) process.env.NO_ZP = "1"; else delete process.env.NO_ZP;
     try { return lowerCore(p.code, p.info, p.pres.names, [main]); } finally { delete process.env.NO_ZP; }
   };
-  const muls = (ir: ReturnType<typeof lowerCore>) => { let n = 0; const w = (e: SExpr) => { if (e.k === "op" && e.op === "mul") n++; kids(e).forEach(w); }; ir.funcs.forEach((f) => w(f.body)); return n; };
+  // In the functions a program's own reach, not copies nothing calls (a
+  // map shared on workers, C42, kept as compiled here, leaves its other
+  // lowering behind).
+  const muls = (ir: ReturnType<typeof lowerCore>) => {
+    const seen = new Set<number>();
+    const reach = (i: number) => { if (seen.has(i)) return; seen.add(i); const w = (e: SExpr) => { if (e.k === "call" || e.k === "closure") reach(e.fn); kids(e).forEach(w); }; w(ir.funcs[i].body); };
+    ir.funcs.forEach((f, i) => { if (!f.inner) reach(i); });
+    let n = 0;
+    const w = (e: SExpr) => { if (e.k === "op" && e.op === "mul") n++; kids(e).forEach(w); };
+    seen.forEach((i) => w(ir.funcs[i].body));
+    return n;
+  };
   const all = lowered(true), masked = lowered(false);
   assert.ok(muls(masked) < muls(all) * 0.45, `${muls(masked)} multiplications against ${muls(all)}`);
   const steps = (ir: ReturnType<typeof lowerCore>, world: string) => {

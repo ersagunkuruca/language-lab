@@ -187,10 +187,10 @@ function fieldsOf(code: Code, t: Id, variants: Set<Id>): Map<Id, [Id, number]> {
 
 // `absorbed`: leave out a job every use of which is on a list just made
 // (freshUses), as `choose` does.
-export function uses(code: Code, entry: Id, reps: Representation[], absorbed = false): string[] {
+export function uses(code: Code, entry: Id, reps: Representation[], absorbed = false, opaque: Iterable<Id> = []): string[] {
   const t = reps[0].of;
   const variants = new Set(variantsOf(code, t));
-  const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
+  const implemented = new Set([...reps.flatMap((r) => Object.keys(r.impl)), ...opaque]);
   const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
   const out = new Set<string>();
   let fresh = new Set<Id>();
@@ -233,10 +233,10 @@ export function uses(code: Code, entry: Id, reps: Representation[], absorbed = f
 // may run once per item, so `choose` weighs it by n: a lookup done for
 // every town costs n log n on a tree and n on a table, and outweighs a
 // listing of the keys done once.
-export function looped(code: Code, entry: Id, reps: Representation[]): Set<string> {
+export function looped(code: Code, entry: Id, reps: Representation[], opaque: Iterable<Id> = []): Set<string> {
   const t = reps[0].of;
   const variants = new Set(variantsOf(code, t));
-  const implemented = new Set(reps.flatMap((r) => Object.keys(r.impl)));
+  const implemented = new Set([...reps.flatMap((r) => Object.keys(r.impl)), ...opaque]);
   const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
   const out = new Set<string>();
   // The definitions reachable from entry, not looking inside a job's own.
@@ -393,8 +393,10 @@ export interface Choice {
 // in T's own terms; one with no cost at all is NEVER.
 // prefer: between representations whose costs tie, the one to take
 // before the definition as written (a sound's lists as arrays, C196).
-export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean): Choice {
-  const jobs = uses(code, entry, reps, true);
+// `opaque`: definitions another type's chosen representation does (Bytes'
+// byte at, as a byte array): their bodies, the lists as written, don't run.
+export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean, opaque: Iterable<Id> = []): Choice {
+  const jobs = uses(code, entry, reps, true, opaque);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   // Building a v onto a field taken out of another value costs v's
   // constructor where the field is a value kept (the definition as
@@ -413,7 +415,7 @@ export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, own(r, j) ?? onto(r, j) ?? own(spec, j) ?? "?"]));
   const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
   // A job in a loop runs about n times (C63c): one order up, n² at most.
-  const inLoop = looped(code, entry, reps);
+  const inLoop = looped(code, entry, reps, opaque);
   const times = (c: string) => (c === "1" ? "n" : c === "log n" ? "n log n" : LADDER.includes(c) ? "n²" : c);
   const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(inLoop.has(j) ? times(c[j]) : c[j]))), space: step(c.space) }; };
   const best = reps.filter((r) => !r.approximate).sort((a, b) => {
