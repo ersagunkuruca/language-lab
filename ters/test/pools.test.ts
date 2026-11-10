@@ -82,7 +82,7 @@ test("swarm on a Pool stores its lists as arrays and runs as evaluated", async (
   const pr = loadProgram(dir);
   const p = { code: pr.code, info: infer(pr.code, pr.pres.names, undefined, pr.options), names: pr.pres.names };
   const stored = represented({ title: "swarm-pool", ...p, own: pr.own.defs, reps: [], options: pr.options }, pr.named("main"), true);
-  assert.deepEqual(stored.chosen, ["List as array of List"]);
+  assert.deepEqual((stored as { chosen?: string[] }).chosen, ["List as array of List"]);
   const lab = join(import.meta.dirname, "../cli/ters.ts"), out = join(mkdtempSync(join(tmpdir(), "pool-")), "swarm.mjs");
   const ran = spawnSync(process.execPath, [lab, "run", dir, "40", "20"], { encoding: "utf8" });
   assert.equal(ran.stdout, "708 motes after 40 ticks, 800 made\n");
