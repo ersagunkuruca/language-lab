@@ -244,8 +244,12 @@ What this leaves, in order:
   - **Steps.** Under a page's step budget, each run gets what is left and
     says what it spent. The job spends their sum in order, so a handler
     that runs out of steps runs out on workers too.
-  - **Not covered.** A map in a function called from the handler (its row
-    doesn't say Wait) stays in turn, and so do searches.
+  - **Called functions (c′3).** A function the handler calls that has
+    such a map, keep or fold, in itself or in what it calls, gets a copy
+    of its own lowered as if it may wait (scalar.ts `func`'s `away`,
+    `reachesShared`), so its map goes to the workers too. Called
+    anywhere else, it is the one in turn.
+  - **Not covered.** Searches stay in turn.
 - **(d′) The GPU for an Int map,** with the trial of finding 4. The
   example: collatz's `keep` (its walk is in Int, a lot of work an item; a
   number whose walk passes 32 bits gives up there and is tested again on
