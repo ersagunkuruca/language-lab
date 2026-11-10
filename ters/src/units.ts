@@ -400,7 +400,14 @@ export class UnitsBefore {
 const key = (c: Constraint) => JSON.stringify([c.terms, c.rhs]);
 const counts = (cs: Constraint[]) => { const m = new Map<string, number>(); for (const c of cs) m.set(key(c), (m.get(key(c)) ?? 0) + 1); return m; };
 
-function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conflicts"] {
+// With `quick`, a conflict the earlier system finds is said without its
+// message (the whole set solved again to word it): the palette asks only
+// whether a filling brings one.
+// A definition the earlier system solved had no conflict, so any it has
+// now is new.
+const UNWORDED = "\u0000a conflict, not worded";
+const unworded: Inference["conflicts"] = [{ why: UNWORDED }];
+function conflictsWith(code: Code, d: Id, before?: UnitsBefore, quick = false): Inference["conflicts"] {
   const was = before?.of(d);
   if (!was) return infer(code, d).conflicts;
   const cs = constraints(code, d), left = new Map(was.keys), added: Constraint[] = [];
@@ -408,7 +415,7 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conf
   if ([...left.values()].some((n) => n > 0)) return infer(code, d).conflicts;
   if (!added.length) return [];
   const sys = was.sys.copy();
-  return added.some((c) => !sys.add(c)) ? infer(code, d).conflicts : [];
+  return added.some((c) => !sys.add(c)) ? (quick ? unworded : infer(code, d).conflicts) : [];
 }
 
 // Unit conflicts in every function of a program, as messages, or in the
@@ -425,14 +432,14 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore): Inference["conf
 // the library's once and looks only at its own nodes (E253b).
 const declaresUnit = (code: Code) => nodesWhere(code, "declares a unit", (n) => !!unitOf(n) && !isPublished(n.id)).length > 0;
 
-export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore): { id: Id; message: string }[] {
+export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore, quick = false): { id: Id; message: string }[] {
   if (!(before ? before.anyUnit : declaresUnit(code))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
     if ((only && !only.has(d)) || isPublished(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda") continue;
-    for (const c of conflictsWith(code, d, before)) out.push({ id: c.node ?? d, message: unitMessage(code, c, names) });
+    for (const c of conflictsWith(code, d, before, quick)) out.push({ id: c.node ?? d, message: c.why === UNWORDED ? UNWORDED : unitMessage(code, c, names) });
   }
   return out;
 }
