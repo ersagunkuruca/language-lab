@@ -91,6 +91,8 @@ import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAI
 // core IR (C137c8); an operation of one that isn't lowered is refused
 // where it is called.
 const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK, VIEW_ROW, HANDLER_ROW, SOUND_ROW]);
+// The cells operations C has (C199a): the rest are refused there.
+const CELL_C = new Set<Id>([CELL_OPS.cell, CELL_OPS.formula, CELL_OPS.read, CELL_OPS.write]);
 const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
 import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
@@ -573,7 +575,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `hosted`: the program's own effects its host answers where nothing
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -586,11 +588,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -781,7 +783,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e);
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.cells && (e === CELLS || e === UPDATE)) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -856,6 +858,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (opts.data && t.id === STRING) return "text";
     // A cell or a place in one (C137c8): the evaluator's value, opaque here.
     if (opts.host && (t.id === CELL || t.id === PATH_T)) return "host";
+    // A cell in C (C199a, NATIVE-APPS.md): a box holding what gives its
+    // value, a closure of nothing: one that gives what was written, or the
+    // formula.
+    if (opts.cells && t.id === CELL) { const a = t.args[0] && stype(t.args[0], inside); return a ? cellBox(a) : null; }
     if ((opts.data || opts.shader) && t.id === ARRAY) {
       const key = `${t.id}<${t.args.map(show).join(",")}>`;
       if (arrays.has(key)) return arrays.get(key)!;
@@ -1053,7 +1059,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.cells && (e === CELLS || e === UPDATE)) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
     const budgeted = !constant && !opts.data && diverges(ft);
 
@@ -1530,6 +1536,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (!r || !isRecord(r)) throw new Refused(`takes ${nm(target)} of something that isn't a record of Float64s and Bools`);
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
+        if (opts.cells && !opts.host && CELL_C.has(target)) return cellOp(n, target, id, env, f);
         if (opts.host && (STD_IMPL[target] || STD_MANY[target] || (HOST_CELLS.has(target)))) return host(n, target, id, env, f);
         // for some(x => …), for JavaScript from the core IR (C137c16): the
         // evaluator's relational interpreter (relate.ts satisfiable) on the
@@ -3091,6 +3098,46 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (!fns.has(key)) fns.set(key, { key, params: [t], result: "i32", partial: true });
     return fns.get(key)!;
   };
+  // A cell's box (C199a): its one field gives the cell's value.
+  function cellBox(a: LType): RType {
+    const ft = fnOf([], a), key = `cell:${ft.key}`;
+    if (!records.has(key)) records.set(key, { key, name: "Cell", def: key, variant: key, fields: [{ name: "value", t: ft }], mutable: true });
+    return records.get(key)!;
+  }
+  // A closure of nothing that gives v (C199a): what a cell holds once
+  // written.
+  const cellGivers = new Map<string, { fn: number; shape: number }>();
+  function giving(ft: FType, v: SExpr): SExpr {
+    if (!cellGivers.has(ft.key)) {
+      const a = ft.result, shape = shapes.push({ t: ft, caps: [a] }) - 1;
+      const g: SFunc = { def: `cell:${ft.key}`, name: "cell.value", params: [ft], result: a, locals: [ft], body: { k: "cap", t: ft, shape, i: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+      const fn = funcs.push(g) - 1;
+      closureCode.add(fn);
+      cellGivers.set(ft.key, { fn, shape });
+    }
+    const { fn, shape } = cellGivers.get(ft.key)!;
+    return { k: "closure", t: ft, fn, shape, caps: [v] };
+  }
+  // cell, formula, read and write in C (C199a): a cell is a box (cellBox);
+  // a formula's is its function, run at each read, which gives what
+  // cells.ts's formula gives, as it can only read cells.
+  function cellOp(n: Call, target: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
+    const ct = stype(zonk(target === CELL_OPS.cell || target === CELL_OPS.formula ? id : n.args[0]));
+    if (!ct || !isRecord(ct) || !ct.key.startsWith("cell:")) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(target === CELL_OPS.cell || target === CELL_OPS.formula ? id : n.args[0]))}`);
+    const ft = ct.fields[0].t as FType;
+    const arg = (i: number) => expr(n.args[i], env, f, false);
+    if (target === CELL_OPS.cell) return { k: "make", t: ct, args: [giving(ft, arg(0))] };
+    if (target === CELL_OPS.formula) {
+      const th = stype(zonk(n.args[0]));
+      if (!th || typeof th !== "object" || !("params" in th) || th.key !== ft.key) throw new Refused(`uses formula on a function of type ${th && typeof th === "object" ? th.key : th}, not ${ft.key}`);
+      return { k: "make", t: ct, args: [arg(0)] };
+    }
+    if (target === CELL_OPS.read) return { k: "apply", fn: { k: "get", rec: arg(0), t: ct, i: 0 }, t: ft, args: [], tail: false, tmp: f.locals.push(ft) - 1 };
+    const unit = stype(zonk(id));
+    if (!unit) throw new Refused(`uses write on ${whyNot(zonk(id))}`);
+    const b = f.locals.push(ct) - 1;
+    return { k: "let", i: b, value: arg(0), body: { k: "set", rec: { k: "local", i: b }, t: ct, i: 0, value: giving(ft, arg(1)), then: { k: "zero", t: unit } } };
+  }
   const boxOf = (t: LType): RType => {
     const key = `box:${keyOf(t)}`;
     if (!records.has(key)) records.set(key, { key, name: "Box", def: key, variant: key, fields: [{ name: "value", t }], mutable: true });
