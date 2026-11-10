@@ -112,6 +112,22 @@ export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
 }
 export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...parallelLists(code, info)].filter(([, k]) => k === "map").map(([id]) => id));
 
+// The folds of a list a target may share out by items when they add an
+// Int for each (C42): every arm doing nothing but compute, as a map's
+// function may. A fold works out the rest's result before an item's arm,
+// so in turn the last item's arm runs first: the runtime shares the items
+// from the last, and an abort is the one the fold in turn would meet first.
+export function parallelFolds(code: Code, info: Info): Set<Id> {
+  const out = new Set<Id>();
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "fold") continue;
+    const effs = n.arms.map((a) => ownEffects(code, info, (code.nodes[a] as NodeOf<"arm">).body));
+    const all = new Set(effs.flatMap((e) => (e ? [...e] : [CHOICE])));
+    if (effs.every((e) => e) && [...all].every((e) => ALONE.has(e)) && !(all.has(DIVERGE) && all.has(ABORT))) out.add(n.id);
+  }
+  return out;
+}
+
 // The calls of `count` and `all` a target may share out by the
 // alternatives of their search's first choice (C43): the search written in
 // place, doing nothing but compute and choose, as a map's function may.
@@ -126,9 +142,26 @@ export function parallelCounts(code: Code, info: Info): Map<Id, "count" | "all" 
     const kind = target === S.count ? "count" : target === S.all ? "all" : target === S.first ? "first" : undefined;
     if (!kind || n.args.length !== (kind === "first" ? 2 : 1) || l?.kind !== "lambda" || l.params.length) continue;
     const own = ownEffects(code, info, l.body);
-    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && (kind === "first" || own.has(ABORT)))) out.set(n.id, kind);
+    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && (kind === "first" || own.has(ABORT))) && !budgets(code, l.body)) out.set(n.id, kind);
   }
   return out;
+}
+
+// Whether a search sets a budget (`with fuel`), itself or in what it
+// calls: one around its choices is spent by every alternative in turn, so
+// a run of one alternative alone would start it afresh (C43).
+function budgets(code: Code, body: Id): boolean {
+  const seen = new Set<Id>(), todo = [body];
+  while (todo.length) {
+    for (const id of subtree(code, todo.pop()!)) {
+      const n = code.nodes[id];
+      if (n?.kind !== "ref") continue;
+      if (n.target === S.fuel) return true;
+      const d = code.nodes[n.target];
+      if (d?.kind === "def" && d.body && !seen.has(d.id)) { seen.add(d.id); todo.push(d.body); }
+    }
+  }
+  return false;
 }
 
 // Each marked call, with each action's own effects.

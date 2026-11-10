@@ -88,6 +88,9 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(CONS), k.x(cons), cost(k, "constant")),
     k.call(JOBS.matchBy, k.x(match), cost(k, "constant")),
     k.call(JOBS.foldBy, k.x(fold), cost(k, "linear")),
+    // A fold whose arms don't read the rest (a sum, a count): the items'
+    // own fold, read in place, with no rest built (C42).
+    k.call(JOBS.foldOfItems, cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("length")), k.x(length), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
