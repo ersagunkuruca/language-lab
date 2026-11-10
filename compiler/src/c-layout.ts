@@ -46,6 +46,8 @@ typedef struct {
   // A picture's paint, which its shapes inherit.
   uint32_t fill, stroke; double sw, fop, sop, dash[2]; int join, pe; // pe: pointer-events, 0 visiblePainted, 1 stroke, 2 fill, 3 all, 4 none
   tl_track cols[8];
+  // An animation: its keyframes' name, duration and delay in ms.
+  char anim[32]; double adur, adelay;
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -63,6 +65,10 @@ typedef struct tl_n {
   // text's last measure.
   double sent_place[5], sent_paint[4], sent_font[5], m_size, m_width, m_w;
   int sent, m_bold, m_lines, measured;
+  // The animation running on it (C199f): its name, when it started (ms),
+  // whether it ended, and what it does to the box now (moved by ax, ay,
+  // scaled by as round its middle, opacity ao).
+  char an[32]; double a0, ax, ay, as, ao; int aend;
 } tl_n;
 
 static ters_ui *tl_ui;
@@ -71,6 +77,14 @@ static double tl_width = 360;
 static int tl_dark;
 static char *tl_sheet;
 static size_t tl_sheet_n;
+// The sheet's @keyframes: each name's from and to declarations.
+typedef struct { char name[32]; const char *from, *from_e, *to, *to_e; } tl_kf;
+static tl_kf *tl_kfs;
+static int tl_nkf;
+static tl_kf *tl_kf_of(const char *name) { for (int i = tl_nkf; i-- > 0;) if (!strcmp(tl_kfs[i].name, name)) return &tl_kfs[i]; return 0; }
+// The clock animations run on, in ms (a test's own when tl_fake >= 0).
+static double tl_fake = -1;
+static double tl_ms(void) { if (tl_fake >= 0) return tl_fake; struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
 
 static char *tl_dup(const char *s, size_t n) { char *r = malloc(n + 1); memcpy(r, s, n); r[n] = 0; return r; }
 static void *tl_element(void *c, const char *tag, size_t n) {
@@ -119,13 +133,15 @@ static void tl_listen(void *c, void *x, const char *ev, size_t n, int h) {
   (void)c; tl_n *e = x;
   // Pointer events in a picture are found here, by what's drawn where
   // (ters_ui_pointer), since its shapes have no views of their own.
-  if (n > 7 && !memcmp(ev, "pointer", 7)) {
+  int mine = n == 12 && !memcmp(ev, "animationend", 12);
+  if ((n > 7 && !memcmp(ev, "pointer", 7)) || mine) {
     int j = 0; while (j < e->np && (strlen(e->pev[j]) != n || memcmp(e->pev[j], ev, n))) j++;
     if (j == e->np) { e->pev = realloc(e->pev, sizeof *e->pev * (size_t)(e->np + 1)); e->ph = realloc(e->ph, sizeof *e->ph * (size_t)(e->np + 1)); e->pev[j] = tl_dup(ev, n); e->np++; }
     e->ph[j] = h;
   }
   // The screen too: a box outside a picture hears its own (tumble's taps).
-  tl_ui->listen(tl_ui->ctx, e->view, ev, n, h);
+  // Animations run here, so their ends are told here (tl_moving).
+  if (!mine) tl_ui->listen(tl_ui->ctx, e->view, ev, n, h);
 }
 static void tl_gone(void *c, void *x) {
   (void)c; tl_n *e = x;
@@ -242,6 +258,27 @@ static void tl_add(const char *sel, const char *se, const char *d, const char *d
 }
 static void tl_parse(const char *p, const char *e, int *order) {
   while ((p = tl_ws(p, e)) < e) {
+    if (*p == '@' && e - p > 10 && !memcmp(p, "@keyframes", 10)) {
+      // @keyframes name { from { … } to { … } } (0% and 100% too).
+      const char *o = memchr(p, '{', (size_t)(e - p));
+      if (!o) return;
+      const char *a = tl_ws(p + 10, o), *b = o; while (b > a && b[-1] == ' ') b--;
+      tl_kf k; memset(&k, 0, sizeof k);
+      if (b - a < 32) memcpy(k.name, a, (size_t)(b - a));
+      const char *c = o + 1;
+      for (;;) {
+        c = tl_ws(c, e);
+        if (c >= e || *c == '}') break;
+        const char *ko = memchr(c, '{', (size_t)(e - c)); if (!ko) return;
+        const char *kc = memchr(ko, '}', (size_t)(e - ko)); if (!kc) return;
+        if (!memcmp(c, "from", 4) || !memcmp(c, "0%", 2)) k.from = ko + 1, k.from_e = kc;
+        else if (!memcmp(c, "to", 2) || !memcmp(c, "100%", 4)) k.to = ko + 1, k.to_e = kc;
+        c = kc + 1;
+      }
+      tl_kfs = realloc(tl_kfs, sizeof *tl_kfs * (size_t)(tl_nkf + 1)); tl_kfs[tl_nkf++] = k;
+      p = c < e ? c + 1 : e;
+      continue;
+    }
     if (*p == '@') {
       // @media (prefers-color-scheme: dark) { … }: its rules when dark.
       const char *o = memchr(p, '{', (size_t)(e - p));
@@ -310,13 +347,30 @@ static char *tl_var(const char *name, size_t n) {
   }
   return found;
 }
+// A custom property set in the style attribute of el or a box round it
+// (tumble's --dx), else :root's.
+static char *tl_evar(tl_n *el, const char *name, size_t n) {
+  for (tl_n *a = el; a; a = a->parent) {
+    if (!a->style) continue;
+    char *found = 0; const char *end = a->style + strlen(a->style);
+    for (const char *p = a->style; p < end;) {
+      const char *s = memchr(p, ';', (size_t)(end - p)); if (!s) s = end;
+      const char *b = tl_ws(p, s), *colon = memchr(b, ':', (size_t)(s - b));
+      if (colon && (size_t)(colon - b) == n && !memcmp(b, name, n)) { free(found); const char *v = tl_ws(colon + 1, s), *z = s; while (z > v && z[-1] == ' ') z--; found = tl_dup(v, (size_t)(z - v)); }
+      p = s + 1;
+    }
+    if (found) return found;
+  }
+  return tl_var(name, n);
+}
+static tl_n *tl_vars_of;
 // v with each var(--x) replaced by its value.
 static char *tl_resolve(const char *v, const char *e) {
   size_t cap = (size_t)(e - v) + 64, k = 0; char *out = malloc(cap);
   for (const char *p = v; p < e;) {
     if (e - p > 6 && !memcmp(p, "var(--", 6)) {
       const char *a = p + 4, *b = a; while (b < e && *b != ')' && *b != ',') b++;
-      char *x = tl_var(a, (size_t)(b - a));
+      char *x = tl_vars_of ? tl_evar(tl_vars_of, a, (size_t)(b - a)) : tl_var(a, (size_t)(b - a));
       const char *z = b; int depth = 1; while (z < e && depth) { if (*z == '(') depth++; else if (*z == ')') depth--; z++; }
       if (!x && *b == ',') x = tl_dup(b + 1, (size_t)(z - 1 - (b + 1)));
       if (x) { size_t m = strlen(x); while (k + m + 1 > cap) cap *= 2, out = realloc(out, cap); memcpy(out + k, x, m); k += m; free(x); }
@@ -381,6 +435,28 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("line-height")) { char *z; double l = strtod(v, &z); c->line = z < e && *z == 'p' ? l / c->size : l; }
   else if (TL_IS("box-sizing")) c->border_box = TL_V("border-box");
   else if (TL_IS("text-align")) c->align = TL_V("center") ? 1 : TL_V("right") || TL_V("end") ? 2 : 0;
+  else if (TL_IS("animation") || TL_IS("animation-name") || TL_IS("animation-duration") || TL_IS("animation-delay")) {
+    // animation: name duration [timing] [delay] …: the first time is its
+    // duration, the second its delay, and a word that isn't a keyword its
+    // name.
+    static const char *kw[] = { "ease", "ease-in", "ease-out", "ease-in-out", "linear", "forwards", "backwards", "both", "infinite", "normal", "reverse", "alternate", "alternate-reverse", "running", "paused", "step-start", "step-end" };
+    int times = TL_IS("animation-delay") ? 1 : 0, whole = TL_IS("animation");
+    if (whole || TL_IS("animation-name")) c->anim[0] = 0;
+    if (whole) c->adur = c->adelay = 0;
+    for (const char *q = v; (q = tl_ws(q, e)) < e;) {
+      const char *z = q; while (z < e && *z != ' ' && *z != ',') z++;
+      size_t n = (size_t)(z - q);
+      char *u; double t = strtod(q, &u);
+      if (u > q && (u == z - 2 && !memcmp(u, "ms", 2))) { if (times++ == 0) c->adur = t; else c->adelay = t; }
+      else if (u > q && u == z - 1 && *u == 's') { if (times++ == 0) c->adur = t * 1000; else c->adelay = t * 1000; }
+      else if (!TL_IS("animation-duration") && !TL_IS("animation-delay")) {
+        int k = 0; for (size_t i = 0; i < sizeof kw / sizeof *kw; i++) if (strlen(kw[i]) == n && !memcmp(kw[i], q, n)) k = 1;
+        if (!k && n < 32 && !(n == 4 && !memcmp(q, "none", 4))) { memcpy(c->anim, q, n); c->anim[n] = 0; }
+      }
+      if (*z == ',') break;
+      q = z;
+    }
+  }
   else if (TL_IS("position")) c->pos = TL_V("absolute") || TL_V("fixed") ? 2 : TL_V("relative") ? 1 : 0;
   else if (TL_IS("width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->w = x, c->set_w = 1, c->wpct = 0; else if (ok == 2) c->wpct = x, c->set_w = 0; }
   else if (TL_IS("height")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->h = x, c->set_h = 1; }
@@ -469,7 +545,9 @@ static void tl_style(tl_n *e, const tl_css *up, int root) {
   for (int i = 0; i < tl_nrules && n < 512; i++) if (tl_matches(&tl_rules[i], e, root)) idx[n++] = i;
   for (int i = 1; i < n; i++) for (int j = i; j > 0 && (tl_rules[idx[j]].spec < tl_rules[idx[j - 1]].spec || (tl_rules[idx[j]].spec == tl_rules[idx[j - 1]].spec && tl_rules[idx[j]].order < tl_rules[idx[j - 1]].order)); j--) { int t = idx[j]; idx[j] = idx[j - 1]; idx[j - 1] = t; }
   for (int i = 0; i < n; i++) tl_decls(&e->c, tl_rules[idx[i]].decl, tl_rules[idx[i]].end);
-  if (e->style) tl_decls(&e->c, e->style, e->style + strlen(e->style));
+  if (e->style) { tl_vars_of = e; tl_decls(&e->c, e->style, e->style + strlen(e->style)); tl_vars_of = 0; }
+  // An animation starts when its name is new on the box, as in a browser.
+  if (strcmp(e->c.anim, e->an)) { strcpy(e->an, e->c.anim); e->a0 = tl_ms(); e->aend = 0; e->ax = e->ay = 0; e->as = e->ao = 1; }
   for (int j = 0; j < e->nk; j++) tl_style(e->kids[j], &e->c, 0);
 }
 
@@ -884,8 +962,13 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   // wherever its parents are (tumble's tiles, in a div 0 high).
   double rw = e->w, rh = e->h;
   if (!e->c.bg && !e->c.bw && strcmp(e->tag, "svg")) for (int j = 0; j < e->nk; j++) tl_reach(e->kids[j], 0, 0, &rw, &rh);
-  tl_place(e, e->x + dx, e->y + dy, rw, rh, me);
-  tl_paint(e, e->c.bg, e->c.radius, e->c.bw, e->c.bc);
+  double ax = 0, ay = 0, as = 1, ao = 1;
+  if (e->an[0] && !e->aend && e->as > 0) ax = e->ax, ay = e->ay, as = e->as, ao = e->ao;
+  if (as != 1) { ax += (1 - as) * e->w / 2; ay += (1 - as) * e->h / 2; rw *= as; rh *= as; }
+  tl_place(e, e->x + dx + ax, e->y + dy + ay, rw, rh, me);
+  uint32_t bg = e->c.bg, bc = e->c.bc;
+  if (ao < 1) { bg = (uint32_t)((bg >> 24) * ao) << 24 | (bg & 0xFFFFFFu); bc = (uint32_t)((bc >> 24) * ao) << 24 | (bc & 0xFFFFFFu); }
+  tl_paint(e, bg, e->c.radius * as, e->c.bw * as, bc);
   tl_font(e, &e->c);
   if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
@@ -904,6 +987,7 @@ static void tl_layout(void) {
   if (!tl_sheet || n != tl_sheet_n || memcmp(sheet, tl_sheet, n)) {
     free(tl_sheet); tl_sheet = sheet; tl_sheet_n = n;
     free(tl_rules); tl_rules = 0; tl_nrules = 0;
+    free(tl_kfs); tl_kfs = 0; tl_nkf = 0;
     int order = 0;
     if (sheet) tl_parse(sheet, sheet + n, &order);
   } else free(sheet);
@@ -993,6 +1077,69 @@ static tl_n *tl_find_view(tl_n *e, void *view) {
   for (int j = 0; j < e->nk; j++) { tl_n *r = tl_find_view(e->kids[j], view); if (r) return r; }
   return 0;
 }
+// ---- Animations (C199f): a box's @keyframes from and to, eased (CSS's
+// ease), moving it (transform: translate, scale) and fading it (opacity)
+// as the clock goes; at the end, animationend for it and the boxes round
+// it, as a browser bubbles it.
+static double tl_bez(double a, double b, double t) { return 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t; }
+static double tl_ease(double x) {
+  double lo = 0, hi = 1;
+  for (int i = 0; i < 30; i++) { double m = (lo + hi) / 2; if (tl_bez(.25, .25, m) < x) lo = m; else hi = m; }
+  return tl_bez(.1, 1, (lo + hi) / 2);
+}
+// What a keyframe's declarations do: moved by x, y, scaled by s, opacity o.
+static void tl_frame_of(tl_n *el, const char *d, const char *de, double *x, double *y, double *sc, double *o) {
+  *x = *y = 0; *sc = *o = 1;
+  if (!d) return;
+  tl_vars_of = el;
+  char *r = tl_resolve(d, de);
+  tl_vars_of = 0;
+  const char *t = strstr(r, "translate("), *s = strstr(r, "scale("), *op = strstr(r, "opacity");
+  if (t) { int ok = 1; const char *a; *x = tl_len(t + 10, r + strlen(r), el->c.size, &ok, &a); a = tl_ws(a, r + strlen(r)); if (*a == ',') a++; ok = 1; double yy = tl_len(a, r + strlen(r), el->c.size, &ok, 0); if (ok == 1) *y = yy; }
+  if (s) *sc = strtod(s + 6, 0);
+  if (op) { const char *c = strchr(op, ':'); if (c) *o = strtod(c + 1, 0); }
+  free(r);
+}
+// Each running animation moved on to now; the boxes whose ended into out.
+static int tl_step(tl_n *e, double now, tl_n **out, int *nout, int most) {
+  if (!e->tag || e->c.display == TL_NONE) return 0;
+  int any = 0;
+  tl_kf *k = e->an[0] && !e->aend ? tl_kf_of(e->an) : 0;
+  if (k) {
+    double p = e->c.adur > 0 ? (now - e->a0 - e->c.adelay) / e->c.adur : 1;
+    if (p >= 1) { e->aend = 1; if (*nout < most) out[(*nout)++] = e; }
+    else if (p < 0) { e->ax = e->ay = 0; e->as = e->ao = 1; any = 1; }
+    else {
+      double x0, y0, s0, o0, x1, y1, s1, o1, q = tl_ease(p);
+      tl_frame_of(e, k->from, k->from_e, &x0, &y0, &s0, &o0);
+      tl_frame_of(e, k->to, k->to_e, &x1, &y1, &s1, &o1);
+      e->ax = x0 + (x1 - x0) * q; e->ay = y0 + (y1 - y0) * q; e->as = s0 + (s1 - s0) * q; e->ao = o0 + (o1 - o0) * q;
+      any = 1;
+    }
+  }
+  for (int j = 0; j < e->nk; j++) any |= tl_step(e->kids[j], now, out, nout, most);
+  return any;
+}
+// step 0: whether an animation is running. Otherwise each moves on to
+// now and is shown, and the ends are told. Whether any still runs.
+static int tl_running(tl_n *e) {
+  if (!e->tag || e->c.display == TL_NONE) return 0;
+  if (e->an[0] && !e->aend && tl_kf_of(e->an)) return 1;
+  for (int j = 0; j < e->nk; j++) if (tl_running(e->kids[j])) return 1;
+  return 0;
+}
+static int tl_moving(int step) {
+  if (!tl_root) return 0;
+  if (!step) return tl_running(tl_root);
+  tl_n *ended[256]; int n = 0;
+  tl_step(tl_root, tl_ms(), ended, &n, 256);
+  tl_show(tl_root, 0, 0, 1);
+  // Their handlers, found before any runs (a handler may draw them again).
+  int hs[256], m = 0;
+  for (int i = 0; i < n; i++) for (tl_n *a = ended[i]; a; a = a->parent) for (int j = 0; j < a->np && m < 256; j++) if (!strcmp(a->pev[j], "animationend")) hs[m++] = a->ph[j];
+  for (int j = 0; j < m; j++) ters_page_event(hs[j], "", 0, "", 0, 0, 0, 0);
+  return tl_running(tl_root);
+}
 // A pointer at (x, y) in picture view's box: kind 0 down, 1 move, 2 up
 // (and then leave, as a finger leaves when it lifts), 3 cancelled. The
 // handlers of the shape under it and of the groups and picture round it,
@@ -1015,12 +1162,16 @@ int ters_ui_pointer(void *view, int kind, double x, double y) {
   for (int j = 0; j < m; j++) ters_page_event(hs[j], "", 0, "", 0, ux, uy, 0);
   return m > 0;
 }
-static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone };
+// An element a part drew again: its animation starts again (as a
+// browser's new element's would) when it next has one.
+static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
+static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew };
 // main's page on screen ui, width wide (in the units its texts measure
 // in), dark or not: the root's view.
 void *ters_ui_start(ters_ui *ui, double width, int dark) {
   tl_ui = ui; tl_width = width; tl_dark = dark;
   ters_after = tl_layout;
+  ters_moving = tl_moving;
   tl_root = ters_page_start(&tl_host);
   if (!tl_root) return 0;
   tl_layout();
@@ -1029,7 +1180,7 @@ void *ters_ui_start(ters_ui *ui, double width, int dark) {
 // The screen's width or colour scheme changed.
 void ters_ui_resize(double width, int dark) {
   tl_width = width;
-  if (dark != tl_dark) { tl_dark = dark; free(tl_sheet); tl_sheet = 0; free(tl_rules); tl_rules = 0; tl_nrules = 0; }
+  if (dark != tl_dark) { tl_dark = dark; free(tl_sheet); tl_sheet = 0; free(tl_rules); tl_rules = 0; tl_nrules = 0; free(tl_kfs); tl_kfs = 0; tl_nkf = 0; }
   tl_layout();
 }
 `;
@@ -1037,7 +1188,9 @@ void ters_ui_resize(double width, int dark) {
 // A screen for tests (C199d): it keeps each box's place and paint, and
 // prints them, one box a line, after the page starts and after each thing
 // done to it (as HEADLESS_C's actions: click:ID, keydown:ID:KEY,
-// input:ID:TEXT, and pointer:down|move|up:X,Y at a point on the page,
+// input:ID:TEXT, pointerdown:ID:X,Y and pointermove:ID:X,Y (X, Y from its
+// top left), frames:N:MS (N frames MS apart on a clock of its own, which
+// animations run on), and pointer:down|move|up:X,Y at a point on the page,
 // in a picture). Texts measure as if each character were half a font
 // size wide, so places that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
@@ -1118,6 +1271,12 @@ static tl_n *u_picture(tl_n *e, double dx, double dy, double x, double y, double
   for (int j = 0; j < e->nk; j++) { tl_n *r = u_picture(e->kids[j], ex, ey, x, y, bx, by); if (r) return r; }
   return 0;
 }
+// Every view that listens for frames gets one, s seconds after the last.
+static void u_frame(uv *v, double s) {
+  int ne = v->ne, nk = v->nk;
+  for (int j = 0; j < ne; j++) if (!strcmp(v->ev[j], "frame")) ters_page_event(v->eh[j], "", 0, "", 0, 0, 0, s);
+  for (int j = 0; j < nk && j < v->nk; j++) u_frame(v->kids[j], s);
+}
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 int main(int argc, char **argv) {
   static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw };
@@ -1127,6 +1286,8 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[a], "dark")) dark = 1;
     else break;
   }
+  // The clock animations run on is the test's: frames:N:MS moves it.
+  tl_fake = 0;
   uv *root = ters_ui_start(&ui, width, dark);
   if (!root) return 1;
   u_show(root);
@@ -1135,6 +1296,14 @@ int main(int argc, char **argv) {
     if (!id) return 2;
     *id++ = 0;
     if ((more = strchr(id, ':'))) *more++ = 0;
+    if (!strcmp(s, "frames")) {
+      // frames:N:MS, N frames MS apart on the test's clock.
+      int n = atoi(id); double ms = more ? atof(more) : 16;
+      for (int k = 0; k < n; k++) { tl_fake += ms; u_frame(root, ms / 1000); ters_page_frame(); }
+      free(s);
+      u_show(root);
+      continue;
+    }
     if (!strcmp(s, "pointer") && more) {
       double px = atof(more), py = strchr(more, ',') ? atof(strchr(more, ',') + 1) : 0;
       int kind = !strcmp(id, "down") ? 0 : !strcmp(id, "move") ? 1 : !strcmp(id, "up") ? 2 : 3;
@@ -1150,8 +1319,11 @@ int main(int argc, char **argv) {
     uv *v = e->view;
     int ne = v->ne, *hs = malloc(sizeof *hs * (size_t)(ne + 1)), m = 0;
     for (int j = 0; j < ne; j++) if (!strcmp(v->ev[j], s)) hs[m++] = v->eh[j];
-    const char *value = !strcmp(s, "input") && more ? more : "", *key = strcmp(s, "input") && more ? more : "";
-    for (int j = 0; j < m; j++) ters_page_event(hs[j], value, strlen(value), key, strlen(key), 0, 0, 0);
+    // pointerdown:ID:X,Y (pointermove …): at X, Y from the box's top left.
+    int at = !strncmp(s, "pointer", 7) && more;
+    double px = at ? atof(more) : 0, py = at && strchr(more, ',') ? atof(strchr(more, ',') + 1) : 0;
+    const char *value = !strcmp(s, "input") && more ? more : "", *key = strcmp(s, "input") && more && !at ? more : "";
+    for (int j = 0; j < m; j++) ters_page_event(hs[j], value, strlen(value), key, strlen(key), px, py, 0);
     free(hs); free(s);
     u_show(root);
   }

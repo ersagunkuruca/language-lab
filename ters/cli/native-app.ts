@@ -277,10 +277,13 @@ public class MainActivity extends Activity {
   private void tick() {
     if (ticking || nativeClock() == 0) return;
     ticking = true;
+    final long from = System.nanoTime();
     Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+      int n;
       public void doFrame(long nanos) {
+        n++;
         if (nativeFrame() != 0) Choreographer.getInstance().postFrameCallback(this);
-        else ticking = false;
+        else { ticking = false; Log.d("ters", "frames: " + n + " in " + (System.nanoTime() - from) / 1000000 + " ms"); }
       }
     });
   }
@@ -504,7 +507,10 @@ public class MainActivity extends Activity {
       int a = e.getActionMasked();
       String[] names = a == MotionEvent.ACTION_DOWN ? new String[] { "pointerdown" } : a == MotionEvent.ACTION_MOVE ? new String[] { "pointermove" } : a == MotionEvent.ACTION_UP ? new String[] { "pointerup", "pointerleave" } : a == MotionEvent.ACTION_CANCEL ? new String[] { "pointercancel", "pointerleave" } : new String[0];
       boolean heard = false;
-      Log.d("ters", "touch " + a + " heard by " + hs.keySet());
+      if (a != MotionEvent.ACTION_MOVE) Log.d("ters", "touch " + a + " heard by " + hs.keySet());
+      // A box that hears a finger move keeps it (CSS touch-action: none):
+      // the page doesn't scroll instead (tumble's drags).
+      if (a == MotionEvent.ACTION_DOWN && hs.containsKey("pointermove") && x.getParent() != null) x.getParent().requestDisallowInterceptTouchEvent(true);
       for (String n : names) { Integer h = hs.get(n); if (h != null) { nativeEvent(h, "", "", e.getX() / density, e.getY() / density, 0); heard = true; } }
       if (heard) tick();
       return a == MotionEvent.ACTION_DOWN ? !hs.isEmpty() : heard;

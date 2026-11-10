@@ -54,5 +54,7 @@
   "esgsv3o4rc322sle9jjv1qifuf": "The page's style sheet: four kinds of piece, each its own shape and colour, and the animations the scenes name.",
   "do4oaqd57hq42a6cappnckl764": "Who this page borrows from, shown on the page (docs/language/CREDITS.md).",
   "1pqr27q1sdpsl6oqhos7ilqm4v": "The first move the search finds, if there is one.",
-  "urm6r2u3pncj6hlfdpdb4jajcd": "The page: one board to start from, three lanes, and the taps shared between them."
+  "urm6r2u3pncj6hlfdpdb4jajcd": "The page: one board to start from, three lanes, and the taps shared between them.",
+  "kb2k5kbv7napc5gq2ivobch31f": "Where a finger that went down on a place (44 wide) is now, at x, y from its top left: the neighbour it went into, or the place itself while it is still over it.",
+  "v4rjasht20aro18kliojshnp15": "A finger dragged from a place into its neighbour swaps them, as a tap on each would. A phone (and a browser, for a touch) keeps telling the place the finger went down on where it is, from its top left; touch-action: none on the board keeps a browser from scrolling instead."
 }
