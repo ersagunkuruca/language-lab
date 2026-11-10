@@ -17,3 +17,8 @@ in turn. Measured 2026-11-09 on 4 cores: width 1200 with 5000 steps,
 2628 ms in turn and 906 ms on three workers and the main thread. A small
 picture stays on the main thread (TERS_WORKERS=0 keeps every run there;
 TERS_BRANCHES=say says how many runs of rows went to workers).
+
+Built native (`ters native examples/mandelbrot-rows -o mandelbrot`) the
+rows go to threads too (L101): 2.8 s in turn and 0.75 s on four cores, for
+width 1200 with 5000 steps, measured 2026-11-10 in the same container.
+TERS_WORKERS=0 keeps it on one thread here as well.

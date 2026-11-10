@@ -227,13 +227,14 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // handler stack (L213c4), as effects' Ask is. In WebAssembly a replace in
 // an array nobody else holds, and a record rebuilt from one nobody else
 // holds, are written in place (C56), as in compiled JavaScript; C knows
-// arrays from its counts.
+// arrays from its counts. In C a map whose function only computes shares
+// its items out on threads (L101, c.ts `par:map`).
 function nativeLowered(main: Id, wasm = false) {
   const q0 = withInverses(p.code, p.info, p.names);
   const { q, root } = valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted });
+  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm });
   if (wasm) {
     ownedArrays(lowered, q.code, q.info, q.names, root);
     ownedRecords(lowered, q.code, q.info, q.names, root);

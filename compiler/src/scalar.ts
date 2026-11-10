@@ -54,7 +54,7 @@ import { tableText } from "./table-text.ts";
 import { unnameHandlers } from "./handler-names.ts";
 import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
-import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
+import { preludeDef, resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
@@ -112,7 +112,7 @@ const TABLE_RT: Record<Id, string> = {
 const LOG_EFFECT = "std.log";
 // together and race (C44): in C, each action on a fiber.
 const libDef = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
-const TOGETHER = libDef("together"), RACE = libDef("race");
+const TOGETHER = libDef("together"), RACE = libDef("race"), ARRAY_MAP = preludeDef("array map");
 
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -572,7 +572,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `hosted`: the program's own effects its host answers where nothing
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -585,11 +585,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -1355,6 +1355,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             try { plain = expr(id, env, f, tail); } finally { given.delete(n.id); }
             return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: { k: "rt", fn: "map.pure", args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] }, else: plain, t } };
           }
+        }
+        // The same in C (L101, c.ts `par:map`), an array's: on threads,
+        // the counts of what they share made atomic, where the runtime
+        // finds the items worth it. Its items do nothing a fiber is for.
+        if (opts.threads && target === ARRAY_MAP && (parallelMap ??= parallelMaps(code, info)).has(n.id)) {
+          const t = stype(zonk(id));
+          if (t && isArray(t)) return { k: "rt", fn: "par:map", args: args(), host: { t, partial: true } };
         }
         if (fibers && (target === TOGETHER || target === RACE)) {
           const t = stype(zonk(id));

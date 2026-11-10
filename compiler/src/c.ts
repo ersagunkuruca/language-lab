@@ -101,13 +101,18 @@ const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.st
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
-const CELLS = `typedef struct lab_cell { uint32_t rc; uint16_t type; uint8_t tag, size; } lab_cell;
+// With threads (L101, `par:map`), each thread has its own status, cells
+// and free lists (TL), and a cell another thread may hold too has the top
+// bit of its count set (lab_share) and its count changed atomically.
+const cellsC = (threads: boolean) => {
+  const TL = threads ? "_Thread_local " : "";
+  return `typedef struct lab_cell { uint32_t rc; uint16_t type; uint8_t tag, size; } lab_cell;
 typedef struct { lab_cell h; void (*code)(void); } lab_closure;
-static int lab_st = 0; // 1: no answer, 2: aborted, with lab_reason
-static lab_cell *lab_reason = 0;
-static int64_t lab_live = 0;
-static lab_cell **lab_dead = 0;
-static size_t lab_dead_n = 0, lab_dead_cap = 0;
+static ${TL}int lab_st = 0; // 1: no answer, 2: aborted, with lab_reason
+static ${TL}lab_cell *lab_reason = 0;
+static ${TL}int64_t lab_live = 0;
+static ${TL}lab_cell **lab_dead = 0;
+static ${TL}size_t lab_dead_n = 0, lab_dead_cap = 0;
 static void lab_oom(void) { fputs("out of memory\\n", stderr); exit(3); }
 // Cells up to 256 bytes come in sizes 8 bytes apart, each with a list of
 // the free ones, cut from blocks that are never given back (as Lean's and
@@ -124,8 +129,8 @@ static void lab_oom(void) { fputs("out of memory\\n", stderr); exit(3); }
 #ifndef LAB_SIZES
 #define LAB_SIZES 32
 #endif
-static void *lab_unused[LAB_SIZES + 1];
-static char *lab_block = 0, *lab_block_end = 0;
+static ${TL}void *lab_unused[LAB_SIZES + 1];
+static ${TL}char *lab_block = 0, *lab_block_end = 0;
 static void *lab_new(size_t size, uint16_t type, uint8_t tag) {
   size_t k = (size + 7) >> 3;
   lab_cell *c;
@@ -148,21 +153,115 @@ static inline void lab_free(lab_cell *c) {
 #endif
   free(c);
 }
+${threads ? `#define LAB_SHARED 0x80000000u
+#define LAB_RC(c) __atomic_load_n(&(c)->rc, __ATOMIC_RELAXED)
+static inline lab_cell *lab_dup(lab_cell *c) { uint32_t r; if (c && (r = LAB_RC(c))) { if (r & LAB_SHARED) __atomic_fetch_add(&c->rc, 1, __ATOMIC_RELAXED); else c->rc = r + 1; } return c; }
+static inline int lab__last(lab_cell *c) { uint32_t r = LAB_RC(c); if (r & LAB_SHARED) return __atomic_sub_fetch(&c->rc, 1, __ATOMIC_ACQ_REL) == LAB_SHARED; c->rc = r - 1; return r == 1; }` : `#define LAB_RC(c) ((c)->rc)
 static inline lab_cell *lab_dup(lab_cell *c) { if (c && c->rc) c->rc++; return c; }
+#define lab__last(c) (--(c)->rc == 0)`}
 // One count fewer; a cell that has none left waits on lab_dead.
 static inline void lab_dec(lab_cell *c) {
-  if (c && c->rc && --c->rc == 0) {
+  if (c && LAB_RC(c) && lab__last(c)) {
     if (lab_dead_n == lab_dead_cap) { lab_dead_cap = lab_dead_cap ? 2 * lab_dead_cap : 64; lab_dead = realloc(lab_dead, lab_dead_cap * sizeof *lab_dead); if (!lab_dead) lab_oom(); }
     lab_dead[lab_dead_n++] = c;
   }
 }
 static void lab_fields(lab_cell *c);
 static void lab_drop(lab_cell *c) {
-  if (!c || !c->rc || --c->rc) return;
+  if (!c || !LAB_RC(c) || !lab__last(c)) return;
   size_t base = lab_dead_n;
   lab_fields(c);
   lab_free(c);
   while (lab_dead_n > base) { lab_cell *d = lab_dead[--lab_dead_n]; lab_fields(d); lab_free(d); }
+}`;
+};
+
+// Marking what a map's items and function reach as shared (L101), before
+// any other thread sees it: each cell's top bit, its fields' through
+// lab_shares (made with lab_fields). A table or a box can't be shared (its
+// store is changed in place), and lab_share_no says one was met: the map
+// then runs on one thread.
+const SHARE_C = `static int lab_share_no = 0;
+static lab_cell **lab_share_st = 0;
+static size_t lab_share_n = 0, lab_share_cap = 0;
+static void lab_share(lab_cell *c) {
+  if (!c || !c->rc || (c->rc & LAB_SHARED)) return;
+  c->rc |= LAB_SHARED;
+  if (lab_share_n == lab_share_cap) { lab_share_cap = lab_share_cap ? 2 * lab_share_cap : 64; lab_share_st = realloc(lab_share_st, lab_share_cap * sizeof *lab_share_st); if (!lab_share_st) lab_oom(); }
+  lab_share_st[lab_share_n++] = c;
+}
+static inline void lab_int_share(lab_int x) { if (!LAB_IS_SMALL(x)) lab_share((lab_cell *)LAB_BIG(x)); }
+static void lab_shares(lab_cell *c);
+static void lab_shared(void) { while (lab_share_n) lab_shares(lab_share_st[--lab_share_n]); }`;
+
+// The threads a map's items are shared out on (L101): started at the
+// first map worth it and kept, as many as the cores less one (or
+// TERS_WORKERS), each running every job given to lab_pool_run beside the
+// thread that gave it. A map met on one of them, or inside a job, stays
+// on its thread. With TERS_BRANCHES=say, how many items they ran is said
+// at the exit, as compiled JavaScript says it (branches-rt.ts).
+const POOL_C = `static _Thread_local int lab_in_par = 0, lab_on_pool = 0;
+static int64_t lab_par_items = 0;
+static void lab_par_say(void) { fprintf(stderr, "items on threads: %lld\\n", (long long)__atomic_load_n(&lab_par_items, __ATOMIC_RELAXED)); }
+static pthread_mutex_t lab_pool_m = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t lab_pool_go = PTHREAD_COND_INITIALIZER, lab_pool_done = PTHREAD_COND_INITIALIZER;
+static void (*lab_pool_fn)(void *);
+static void *lab_pool_arg;
+static unsigned long lab_pool_gen = 0;
+static int lab_pool_busy = 0, lab_pool_n = -1;
+static int64_t lab_pool_live = 0;
+static void *lab_pool_loop(void *unused) {
+  unsigned long seen = 0;
+  (void)unused;
+  lab_in_par = lab_on_pool = 1;
+  for (;;) {
+    pthread_mutex_lock(&lab_pool_m);
+    while (lab_pool_gen == seen) pthread_cond_wait(&lab_pool_go, &lab_pool_m);
+    seen = lab_pool_gen;
+    void (*fn)(void *) = lab_pool_fn;
+    void *arg = lab_pool_arg;
+    pthread_mutex_unlock(&lab_pool_m);
+    int64_t live = lab_live;
+    fn(arg);
+    pthread_mutex_lock(&lab_pool_m);
+    lab_pool_live += lab_live - live;
+    if (--lab_pool_busy == 0) pthread_cond_signal(&lab_pool_done);
+    pthread_mutex_unlock(&lab_pool_m);
+  }
+  return 0;
+}
+static int lab_pool_ready(void) {
+  if (lab_in_par) return 0;
+  if (lab_pool_n < 0) {
+    const char *w = getenv("TERS_WORKERS");
+    long n = w ? atol(w) : sysconf(_SC_NPROCESSORS_ONLN) - 1;
+    pthread_attr_t a;
+    lab_pool_n = 0;
+    if (getenv("TERS_BRANCHES") && !strcmp(getenv("TERS_BRANCHES"), "say")) atexit(lab_par_say);
+    pthread_attr_init(&a);
+    pthread_attr_setstacksize(&a, sizeof(void *) == 8 ? (size_t)1 << 28 : (size_t)1 << 24);
+    for (long k = 0; k < (n > 15 ? 15 : n); k++) { pthread_t t; if (pthread_create(&t, &a, lab_pool_loop, 0)) break; pthread_detach(t); lab_pool_n++; }
+  }
+  return lab_pool_n > 0;
+}
+static void lab_pool_run(void (*fn)(void *), void *arg) {
+  pthread_mutex_lock(&lab_pool_m);
+  lab_pool_fn = fn; lab_pool_arg = arg; lab_pool_busy = lab_pool_n; lab_pool_gen++;
+  pthread_cond_broadcast(&lab_pool_go);
+  pthread_mutex_unlock(&lab_pool_m);
+  lab_in_par = 1;
+  fn(arg);
+  lab_in_par = 0;
+  pthread_mutex_lock(&lab_pool_m);
+  while (lab_pool_busy) pthread_cond_wait(&lab_pool_done, &lab_pool_m);
+  lab_live += lab_pool_live; lab_pool_live = 0;
+  pthread_mutex_unlock(&lab_pool_m);
+}
+// Items that took a millisecond on this thread are worth sharing.
+static int lab_par_worth(const struct timespec *t0) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (double)(t.tv_sec - t0->tv_sec) * 1e3 + (double)(t.tv_nsec - t0->tv_nsec) / 1e6 >= 1;
 }`;
 
 export interface CProgram { c: string; names: Map<number, string>; refused: Map<number, string> }
@@ -195,6 +294,8 @@ const isStack = (fn: string) => STACK.test(fn);
 // of one of its operations: the code handled on a fiber (c-rt "fibers").
 const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
+// A map whose function only computes, its items on threads (L101).
+const isPar = (fn: string) => fn === "par:map";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -275,7 +376,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
   const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
@@ -288,6 +389,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     });
   }
   const kept = funcs.map((_, i) => i).filter((i) => !refused.has(i));
+  // Maps on threads (L101): a definition's value is then worked out at
+  // each use, as no thread may keep it for the others.
+  const threads = kept.some((i) => walk(funcs[i].body).some((e) => e.k === "rt" && isPar(e.fn)));
   // A definition's value worked out once (C173b), as WebAssembly and the
   // core IR's JavaScript keep it: what a function of no inputs gives (a
   // record, data or a text) is held in a static of its own from its first
@@ -295,7 +399,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // lets go of them after each call, so its count of cells left is still 0.
   // An array too (C30): the static's count makes replace at copy it, as
   // it does any array another holds.
-  const once = new Set(kept.filter((i) => { const f = funcs[i]; return f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || isArray(f.result)); }));
+  const once = new Set(kept.filter((i) => { const f = funcs[i]; return !threads && f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || isArray(f.result)); }));
 
   // Types: every record, data type and function type the kept functions
   // mention, and the shapes of their closures.
@@ -319,7 +423,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       if (tb) collect(lowered.tables[Number(tb[2])]);
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
-      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn)) {
+      if (e.k === "rt" && isPar(e.fn)) collect(e.host!.t);
+      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn)) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -347,6 +452,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const dup = (t: LType, x: string) => (cell(t) ? `lab_dup(${x})` : t === "int" ? `lab_int_dup(${x})` : isRecord(t) && counted(t) ? `${sname.get(t.key)}_dup(${x})` : x);
   const drop = (t: LType, x: string) => (cell(t) ? `lab_drop(${x});` : t === "int" ? `lab_int_drop(${x});` : `${sname.get((t as RType).key)}_drop(${x});`);
   const dec = (t: LType, x: string) => (cell(t) ? `lab_dec(${x});` : t === "int" ? `lab_int_dec(${x});` : `${sname.get((t as RType).key)}_dec(${x});`);
+  // The same, marking what it reaches shared (L101, SHARE_C).
+  const share = (t: LType, x: string) => (cell(t) ? `lab_share(${x});` : t === "int" ? `lab_int_share(${x});` : `${sname.get((t as RType).key)}_share(${x});`);
   // The type of a runtime function's answer.
   const rtType = (fn: string): LType => {
     const r = runtime(fn), a = ARRAY_FN.exec(fn), tb = TABLE_FN.exec(fn);
@@ -377,6 +484,14 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // Text and big Int constants, as static cells that are never counted;
   // and the runtime functions called.
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
+  // Each map on threads, by its array types and function type (parC).
+  const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType }>();
+  const parSite = (ta: AType, tf: FType, to: AType): number => {
+    const k = `${ta.key} ${tf.key} ${to.key}`;
+    if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to });
+    arrayFns.add(`array.length.a${ta.index}`).add(`array.empty.a${to.index}`);
+    return pars.get(k)!.n;
+  };
   // The host's operations called (L69b1), each a wrapper lab_host_<n>.
   const hostsUsed = new Map<string, number>(), hostTypes = new Map<string, LType>();
   // The effects a program handles itself on the handler stack, numbered.
@@ -515,34 +630,45 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       `static inline ${n} ${n}_dup(${n} r) { ${parts.map((x) => `${dup(x.t, x.at)};`).join(" ")} return r; }`,
       `static inline void ${n}_drop(${n} r) { ${parts.map((x) => drop(x.t, x.at)).join(" ")} }`,
       `static inline void ${n}_dec(${n} r) { ${parts.map((x) => dec(x.t, x.at)).join(" ")} }`,
+      ...(threads ? [`static inline void ${n}_share(${n} r) { ${parts.map((x) => share(x.t, x.at)).join(" ")} }`] : []),
     );
   }
-  const fieldsOf: string[] = [];
-  for (const d of data.values()) {
-    const arms = d.cases.map((c, j) => {
-      const ks = c.fields.map((x, k) => ({ t: x.t, at: `((${cname(d, j)} *)c)->f${k}` })).filter((x) => counted(x.t));
-      return ks.length ? `case ${j}: ${ks.map((x) => dec(x.t, x.at)).join(" ")} break;` : "";
-    }).filter(Boolean);
-    fieldsOf.push(arms.length ? `case ${tnum.get(d.key)}: switch (c->tag) { ${arms.join(" ")} } break;` : "");
+  const fieldsOf: string[] = [], sharesOf: string[] = [];
+  const kidsOf = (out: string[], each: (t: LType, x: string) => string) => {
+    for (const d of data.values()) {
+      const arms = d.cases.map((c, j) => {
+        const ks = c.fields.map((x, k) => ({ t: x.t, at: `((${cname(d, j)} *)c)->f${k}` })).filter((x) => counted(x.t));
+        return ks.length ? `case ${j}: ${ks.map((x) => each(x.t, x.at)).join(" ")} break;` : "";
+      }).filter(Boolean);
+      out.push(arms.length ? `case ${tnum.get(d.key)}: switch (c->tag) { ${arms.join(" ")} } break;` : "");
+    }
+    for (const a of arrays.values()) {
+      const n = aname.get(a.key)!;
+      out.push(`case ${tnum.get(`array ${a.key}`)}: ${each(a, `((${n.view} *)c)->b`)} break;`);
+      if (counted(a.item)) out.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; ${a.item === "int" ? "if (!b->bytes) " : ""}for (uint32_t k = b->lo; k < b->hi; k++) ${each(a.item, "b->it[k]")} } break;`);
+    }
+    for (const s of shaped) {
+      const ks = shapes[s].caps.map((x, j) => (counted(x) ? each(x, `((${shapeName.get(s)} *)c)->c${j}`) : "")).filter(Boolean);
+      out.push(ks.length ? `case ${tnum.get(`shape ${s}`)}: ${ks.join(" ")} break;` : "");
+    }
+  };
+  kidsOf(fieldsOf, dec);
+  if (threads) {
+    kidsOf(sharesOf, share);
+    for (const k of [...boxes.map((b) => b.key), ...[...tables.keys()].map((k) => `table ${k}`)]) sharesOf.push(`case ${tnum.get(k)}: lab_share_no = 1; break;`);
   }
   for (const b of boxes) fieldsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${dec(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
-  for (const a of arrays.values()) {
-    const n = aname.get(a.key)!;
-    fieldsOf.push(`case ${tnum.get(`array ${a.key}`)}: lab_dec(((${n.view} *)c)->b); break;`);
-    if (counted(a.item)) fieldsOf.push(`case ${tnum.get(`buf ${a.key}`)}: { ${n.buf} *b = (${n.buf} *)c; ${a.item === "int" ? "if (!b->bytes) " : ""}for (uint32_t k = b->lo; k < b->hi; k++) ${dec(a.item, "b->it[k]")} } break;`);
-  }
   for (const t of tables.values()) {
     const T = `lab_Table_t${t.index}`, k = counted(t.keyT) ? dec(t.keyT, "b->ks[j]") : "";
     const v = (x: string) => (counted(t.value) ? dec(t.value, x) : "");
     fieldsOf.push(`case ${tnum.get(`table ${t.key}`)}: { ${T} *v = (${T} *)c; lab_Store_t${t.index} *b = v->cur; if (b) { for (uint32_t j = 0; j < b->cap; j++) if (b->st[j] == 1) { ${k} ${v("b->vs[j]")} } free(b->st); free(b->ks); free(b->vs); free(b); } else { ${k.replace("b->ks[j]", "v->key")} if (v->had) { ${v("v->old")} } lab_dec(v->next); } } break;`);
   }
-  for (const s of shaped) {
-    const ks = shapes[s].caps.map((x, j) => (counted(x) ? dec(x, `((${shapeName.get(s)} *)c)->c${j}`) : "")).filter(Boolean);
-    fieldsOf.push(ks.length ? `case ${tnum.get(`shape ${s}`)}: ${ks.join(" ")} break;` : "");
-  }
 
   const world = [...rts].some((x) => x.startsWith("world."));
   const entry = opts.main === undefined ? "" : program(opts.main);
+  const TL = threads ? "_Thread_local " : "";
+  const stops = text.some((t) => t.includes("lab_stop(")) || rts.has("world.stopWith") || !!opts.harness;
+  const fuelled = int32Used.size > 0 || text.some((t) => t.includes("lab_fuel"));
   const c = [
     ...(world ? [POSIX] : []),
     "// Generated by compiler/src/c.ts from a typed program. Do not edit.",
@@ -555,16 +681,19 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     "#include <stdlib.h>",
     "#include <math.h>",
     ...(world ? [WORLD_H] : []),
-    ...(entry ? ["#include <pthread.h>"] : []),
+    ...(entry || threads ? ["#include <pthread.h>"] : []),
+    ...(threads ? ["#include <string.h>", "#include <time.h>", "#include <unistd.h>"] : []),
     ...(math ? [FDLIBM_C] : []),
-    ...(cells ? [CELLS] : []),
+    ...(cells ? [cellsC(threads)] : []),
     ...(ints ? [BASE] : []),
+    ...(threads ? [SHARE_C] : []),
     "",
     ...types,
     ...counts,
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
-    ...(text.some((t) => t.includes("lab_none")) ? ["static int lab_none = 0; // no answer inside a search (C166)"] : []),
-    ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? ["static double lab_fuel = INFINITY; // outside any budget, as much as it takes"] : []),
+    ...(threads ? [`static void lab_shares(lab_cell *c) { switch (c->type) { ${sharesOf.filter(Boolean).join(" ")} default: break; } }`] : []),
+    ...(text.some((t) => t.includes("lab_none")) ? [`static ${TL}int lab_none = 0; // no answer inside a search (C166)`] : []),
+    ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? [`static ${TL}double lab_fuel = INFINITY; // outside any budget, as much as it takes`] : []),
     ...[...int32Used].map((op) => INT32_C[op]!),
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
     // A Float64 with no answer or too big (L125c2, stops.ts): the reason
@@ -572,8 +701,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // A stop with a reason (L51c) is number -1, its words in lab_stop_why.
     ...(text.some((t) => t.includes("lab_stop(")) || rts.has("world.stopWith") || opts.harness ? [`static const char *lab_stops[] = { ${STOPS.map((x) => JSON.stringify(x)).join(", ")} };`, "#include <setjmp.h>",
       // The test harness goes on to its next call instead (lab_stop_at).
-      "static jmp_buf *lab_stop_at = 0; static int lab_stopped = 0;",
-      "static const char *lab_stop_why = 0; static size_t lab_stop_n = 0;",
+      `static ${TL}jmp_buf *lab_stop_at = 0; static ${TL}int lab_stopped = 0;`,
+      `static ${TL}const char *lab_stop_why = 0; static ${TL}size_t lab_stop_n = 0;`,
       // Each stop site's definition (C143b), printed after the reason.
       `static const char *lab_sites[] = { ${[...(lowered.stops ?? []).map((x) => JSON.stringify(x.name ?? "")), "0"].join(", ")} };`,
       "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); int s = (int)i / " + SITES + " - 1; if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else if (s >= 0 && s < " + (lowered.stops?.length ?? 0) + " && lab_sites[s][0]) fprintf(stderr, \"%s (in %s)\\n\", lab_stops[(int)i % " + SITES + "], lab_sites[s]); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
@@ -582,6 +711,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(hostsUsed.size ? ["", HOST_RT, "// hosts/c.c", opts.hosts!.c!, "", ...[...hostsUsed].map(([op, n]) => hostWrapper(opts.hosts!.ops[Object.keys(opts.hosts!.ops).find((k) => opts.hosts!.ops[k].op === op)!], n, hostTypes.get(op)!))] : []),
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     ...[...tables.values()].flatMap((t) => tableC(t)),
+    ...(threads ? [POOL_C, ...[...pars.values()].map((x) => parC(x, stops, fuelled))] : []),
     "",
     ...[...fiberGlobals].map(([n, t]) => `static ${t} ${n};`),
     ...fiberC,
@@ -955,6 +1085,10 @@ int main(int argc, char **argv) {
             return stated(c, e.host!.t, pre, d);
           }
           if (isFiber(e.fn)) { rts.add("fibers"); return fiber(e as SExpr & { k: "rt" }, pre, d, after); }
+          if (isPar(e.fn)) {
+            const n = parSite(typeOf(e.args[0], f.locals) as AType, typeOf(e.args[1], f.locals) as FType, e.host!.t as AType);
+            return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+          }
           if (isPerform(e.fn)) {
             const h = hostOf(e.fn)!;
             let n = hostsUsed.get(h.op);
@@ -1181,7 +1315,7 @@ int main(int argc, char **argv) {
         give ? `${d}  ${r.v} = ${local(s)};` : `${d}  lab_free(${local(s)});`,
         `${d}} else {`,
         ...kept.map((r) => `${d}  ${local(r.i)} = ${dup(f.locals[r.i], at(r.f))};`),
-        `${d}  if (${local(s)}->rc) ${local(s)}->rc--;`,
+        threads ? `${d}  lab_drop(${local(s)});` : `${d}  if (${local(s)}->rc) ${local(s)}->rc--;`,
         ...(give ? [`${d}  ${r.v} = 0;`] : []),
         `${d}}`,
         ...lines,
@@ -1373,7 +1507,7 @@ int main(int argc, char **argv) {
       case "if": case "budget": case "attempt": case "handle": case "released": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
-      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) ? e.host!.t : rtType(e.fn);
+      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) || isPar(e.fn) ? e.host!.t : rtType(e.fn);
       case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
@@ -1618,6 +1752,80 @@ static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
     }
     return out;
   }
+  // A map on threads (L101, scalar.ts `par:map`): its items and its
+  // function, which only computes, given; the array of what it gives, or
+  // nothing with lab_st set. The items are run from the last, as the
+  // library's map runs them, on this thread till they have taken a
+  // millisecond; the rest are then shared out (lab_pool_run), the function
+  // and the items marked shared first. One that failed on another thread
+  // (an abort, a stop, Int32 arithmetic that overflowed) is run again here
+  // in its turn, as are the rest when nothing may be shared, so the map
+  // fails as it would have in order: at the last item that fails.
+  function parC(p: { n: number; ta: AType; tf: FType; to: AType }, stops: boolean, fuelled: boolean): string {
+    const { n, ta, tf, to } = p, J = `lab_par_job_${n}`, Ti = ty(ta.item), To = ty(to.item);
+    const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
+    const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
+    const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
+    return `typedef struct { lab_cell *f; ${Ti} *in; ${To} *out; char *bad; int64_t next; } ${J};
+static void lab_par_one_${n}(${J} *j, int64_t k) {
+  lab_cell *f = lab_dup(j->f);
+  j->out[k] = ((${fname.get(tf.key)})((lab_closure *)f)->code)(f, ${dup(ta.item, "j->in[k]")});
+}
+static void lab_par_work_${n}(void *p) {
+  ${J} *j = p;
+  volatile int64_t k;${stops ? `
+  jmp_buf here, *was = lab_stop_at;
+  if (setjmp(here)) lab_st = 0;
+  lab_stop_at = &here;` : ""}
+  while ((k = __atomic_sub_fetch(&j->next, 1, __ATOMIC_RELAXED)) >= 0) {
+    lab_par_one_${n}(j, k);
+    if (${failed}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
+    else { j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED); }
+  }${stops ? `
+  lab_stop_at = was;` : ""}
+}
+static lab_cell *lab_par_map_${n}(lab_cell *xs, lab_cell *f) {
+  ${vi.view} *v = (${vi.view} *)xs;
+  ${vi.buf} *b = (${vi.buf} *)v->b;
+  int64_t n = v->n, left = n, k;
+  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0 };
+  struct timespec t0;
+  if (!j.in || !j.out || !j.bad) lab_oom();
+  for (k = 0; k < n; k++) j.in[k] = ${dup(ta.item, rd)};
+  lab_drop(xs);
+  memset(j.bad, 1, (size_t)n);
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  while (left > 0) {
+    lab_par_one_${n}(&j, left - 1);
+    if (lab_st) { k = left - 1; goto failed; }
+    j.bad[--left] = 0;
+    if (left > 0 && lab_par_worth(&t0)) break;
+  }
+  if (left > 0${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
+    lab_share_no = 0;
+    lab_share(f);
+    for (k = 0; k < left; k++) ${share(ta.item, "j.in[k]")}
+    lab_shared();
+    if (!lab_share_no) { j.next = left; lab_pool_run(lab_par_work_${n}, &j); }
+  }
+  for (k = left - 1; k >= 0; k--) {
+    if (!j.bad[k]) continue;
+    lab_par_one_${n}(&j, k);
+    if (lab_st) goto failed;
+    j.bad[k] = 0;
+  }
+  ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)n, 0);
+  for (k = 0; k < n; k++) r->it[r->lo + (uint32_t)k] = j.out[k];
+  ${counted(ta.item) ? `for (k = 0; k < n; k++) ${drop(ta.item, "j.in[k]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
+  lab_drop(f);
+  return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)n);
+failed:
+  ${counted(to.item) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(to.item, "j.out[m]")}\n  ` : ""}${counted(ta.item) ? `for (int64_t m = 0; m < n; m++) ${drop(ta.item, "j.in[m]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
+  lab_drop(f);
+  return 0;
+}`;
+  }
+
   function arrayC(a: AType): string[] {
     const fns = [...arrayFns].filter((f) => ARRAY_FN.test(f) && Number(ARRAY_FN.exec(f)![2]) === a.index);
     if (!fns.length) return [];

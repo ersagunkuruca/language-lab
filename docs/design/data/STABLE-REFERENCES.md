@@ -254,6 +254,13 @@ representation in the language, which Ersagun decided against.
   rayon does. Effect rows already say what each step reads and writes, which
   is what an ECS scheduler uses to decide what may run side by side. This
   joins LANGUAGE-NEEDS-2026-10-24.md's `together` and data-parallel map.
+  Built in C (L101, 2026-11-10): a map whose function only computes runs its
+  items on threads. Counts are what makes threads unsafe in C, so what the
+  threads share is marked shared first and only those cells' counts change
+  atomically; a cell with one holder keeps its plain count and its in-place
+  writes, and a shared one is copied instead of written (its count is never
+  1). JavaScript's workers copy what crosses (C41, C42), so there one holder
+  buys nothing yet.
 
 ### 6. Where code runs, chosen like everything else (C61)
 
