@@ -11,6 +11,7 @@
 // The runtime decides by cost whether to (a branch worth less than a
 // thread hop runs in place, C41); this only marks the calls it may.
 
+import { originalOf } from "./prelude-ids.ts";
 import { subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
@@ -80,22 +81,26 @@ export function parallelTogethers(code: Code, info: Info): Set<Id> {
   return out;
 }
 
-// The calls of `map` a target may share out by items (C42): the function
-// written in place, doing nothing but compute, as a together's action may.
-// Run in order, an item that aborts stops the ones after it, so a function
-// that may abort may not also run long.
-export function parallelMaps(code: Code, info: Info): Set<Id> {
+// The calls of `map` and `keep` a target may share out by items (C42,
+// C43): the function written in place, doing nothing but compute, as a
+// together's action may. Run in order, an item that aborts stops the ones
+// after it, so a function that may abort may not also run long.
+export type ListJob = "map" | "keep";
+export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
   // List's map, and the array's that a split puts in its place (C196).
-  const maps = new Set([preludeDef("map"), preludeDef("array map")]), out = new Set<Id>();
+  const kinds = new Map<Id | undefined, ListJob>([[preludeDef("map"), "map"], [preludeDef("array map"), "map"], [preludeDef("keep"), "keep"]]), out = new Map<Id, ListJob>();
   for (const n of Object.values(code.nodes)) {
     if (!isCall(n) || n.args.length !== 2) continue;
     const f = code.nodes[n.fn], l = code.nodes[n.args[1]];
-    if (f?.kind !== "ref" || !maps.has((f as NodeOf<"ref">).target) || l?.kind !== "lambda" || l.params.length !== 1) continue;
+    // Or the copy a split made of one (C196).
+    const kind = f?.kind === "ref" ? kinds.get(originalOf((f as NodeOf<"ref">).target)) : undefined;
+    if (!kind || l?.kind !== "lambda" || l.params.length !== 1) continue;
     const own = ownEffects(code, info, l.body);
-    if (own && [...own].every((e) => ALONE.has(e)) && !(own.has(ABORT) && own.has(DIVERGE))) out.add(n.id);
+    if (own && [...own].every((e) => ALONE.has(e)) && !(own.has(ABORT) && own.has(DIVERGE))) out.set(n.id, kind);
   }
   return out;
 }
+export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...parallelLists(code, info)].filter(([, k]) => k === "map").map(([id]) => id));
 
 // Each marked call, with each action's own effects.
 function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {
