@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, tablePutOwned, tableRemoveOwned, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -84,24 +84,28 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a
 // Map with Baker's versions), a record key given as the evaluator's
 // record and taken back from its entries.
-const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e\d+)?$/;
+const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 // What the runtime needs of the program's tables, as plain data a module
 // can carry: whether each is a Hash set.
-export interface TableSpec { set: boolean }
-function tableFn(op: string, t: TableSpec): (...xs: unknown[]) => unknown {
+// `keys`: which of a map's entries lists are its keys alone.
+export interface TableSpec { set: boolean; keys?: boolean[] }
+function tableFn(op: string, t: TableSpec, e?: number): (...xs: unknown[]) => unknown {
   const bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
   const impl = (id: Id) => STD_IMPL[id] as (...xs: unknown[]) => unknown;
   switch (op) {
     case "empty": return () => impl(TABLE_OPS.empty)();
     case "put": return (m, k, v) => impl(TABLE_OPS.put)(m, k, v);
     case "remove": return (m, k) => impl(TABLE_OPS.remove)(m, k);
+    // Where every table has one holder (owned-tables.ts): changed in place.
+    case "putOwned": return (m, k, v) => tablePutOwned(m as Table, k, v);
+    case "removeOwned": return (m, k) => tableRemoveOwned(m as Table, k);
     case "has": return (m, k) => bool(impl(TABLE_OPS.has)(m, k));
     case "size": return (m) => impl(TABLE_OPS.size)(m);
     case "at": return (m, k) => { const v = tableRead(m as Table, k, FAIL); if (v === FAIL) throw FAIL; return v; };
     // The same, no answer given back as FAIL, not thrown: printed where
     // the caller checks it (core-js.ts, C59).
     case "atv": return (m, k) => tableRead(m as Table, k, FAIL);
-    case "entries": return t.set ? (m) => impl(HASH_SET_OPS.items)(m) : (m) => impl(TABLE_OPS.entries)(m);
+    case "entries": return t.set ? (m) => impl(HASH_SET_OPS.items)(m) : t.keys?.[e ?? -1] ? (m) => impl(TABLE_OPS.keys)(m) : (m) => impl(TABLE_OPS.entries)(m);
   }
   return () => { throw new Unsupported(`table.${op}`); };
 }
@@ -184,6 +188,11 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
     const any = name === "any.pure";
     return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? testPure(xs, f as (x: unknown) => unknown, site as number, any) : testInOrder(xs, f as (x: unknown) => unknown, any));
   }
+  // Two calls of a function in its own body (C61 e): the first's answer,
+  // and then the second's.
+  if (name === "both.pure") return bothPure as (...xs: unknown[]) => unknown;
+  if (name === "both.second") return bothSecond;
+  if (name === "both.on") return bothOn;
   // first where, its answer's item as a list of one or none (C43).
   if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
   // A count whose search's first choice is shared out (C43), and that
@@ -282,7 +291,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   }
   if (name.startsWith("pick:")) { const [, j, bool] = name.split(":"); return (xs) => { const v = (xs as Value[])[Number(j)]; return bool ? (v as unknown) === true || (v as { tag?: Id }).tag === TRUE : v; }; }
   const tm = TABLE.exec(name);
-  if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])]);
+  if (tm && tables) return tableFn(tm[1], tables[Number(tm[2])], tm[3] === undefined ? undefined : Number(tm[3]));
   if (rand?.[name]) return rand[name] as (...xs: unknown[]) => unknown;
   const base = name.replace(/\.a\d+$/, "");
   if (OWN[base]) return OWN[base] as (...xs: unknown[]) => unknown;

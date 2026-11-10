@@ -897,7 +897,8 @@ const isByte = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x
 const byteArray = (b: Uint8Array): ArrayView => new ArrayView(versionOf({ items: b as unknown as unknown[], lo: 0, hi: b.length }), 0, b.length);
 export const arrayOfItems = (l: { tag: Id; fields: unknown[] }): ArrayView => {
   if (l instanceof ItemsList && l.b instanceof Uint8Array) return byteArray(l.b.slice(l.i));
-  const xs = itemsOf(l);
+  // A list over a whole JS array (a table's keys) is read in place.
+  const xs = l instanceof ItemsList && l.i === 0 && Array.isArray(l.b) ? l.b : itemsOf(l);
   return xs.length >= 16 && xs.every(isByte) ? byteArray(Uint8Array.from(xs as number[])) : arrayOf(xs);
 };
 // Either kind of array value: a view, or { tag, fields } made elsewhere
@@ -1053,6 +1054,8 @@ export class Table {
   // version's entries never change, so a map read many times (an index's
   // postings) is sorted once (C72).
   listed: unknown = undefined;
+  // Its keys in compare's order, once listed, the same way.
+  keyed: unknown = undefined;
   constructor(m: Map<unknown, unknown>, shared = false) { this.cur = m; this.shared = shared; }
   get m(): Map<unknown, unknown> { reroot(this); return this.cur!; }
 }
@@ -1082,6 +1085,19 @@ function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
   t.cur = null; t.next = n; t.key = key; t.had = had; t.old = old;
   return n;
 }
+// The same where every table of the program has one holder
+// (owned-tables.ts, compiler): nobody reads the version given again, so
+// the change is written into it and it is given back, with no version
+// made for the old one. The empty table every map starts from is shared,
+// and an older version can't be one here but is still kept right.
+export function changeOwned(t: Table, key: unknown, set: boolean, v?: unknown): Table {
+  if (t.shared || !t.cur) return change(t, key, set, v);
+  if (set) t.cur.set(key, v); else if (!t.cur.delete(key)) return t;
+  t.listed = t.keyed = undefined;
+  return t;
+}
+export const tablePutOwned = (t: Table, key: unknown, v: unknown): Table => { const h = held(key); return changeOwned(t, h, true, h === key ? v : new Keyed(key, v)); };
+export const tableRemoveOwned = (t: Table, key: unknown): Table => changeOwned(t, held(key), false);
 const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
 const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
 // compare's order on Ints, Texts and tuples of them (run.ts
@@ -1116,6 +1132,20 @@ STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.
 // were put, which a counter's keys already are, so sorted only when they
 // aren't (C58b', examples/swarm: listing its 2,000 keys each tick was a
 // third of its run). Null for any other keys.
+// The same for the keys alone: Int keys, put in order, as they are, as a
+// list over one array (bytes.ts ItemsList), which `array of` reads in place.
+function numberKeys(m: Map<unknown, unknown>): object | null {
+  const ks: number[] = [];
+  let sorted = true;
+  for (const k of m.keys()) {
+    if (typeof k !== "number") return null;
+    if (sorted && ks.length && k < ks[ks.length - 1]) sorted = false;
+    ks.push(k);
+  }
+  if (!sorted) ks.sort((a, b) => a - b);
+  // A list over the array, its cells made only where it is walked.
+  return new ItemsList(ks, 0);
+}
 function numberEntries(m: Map<unknown, unknown>): object | null {
   const ks: number[] = [], vs: unknown[] = [];
   let sorted = true;
@@ -1142,6 +1172,10 @@ export const TABLE_OPS = {
   // The entries in compare's order: the Map it stands for.
   entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
     (t: Table) => (t.listed ??= numberEntries(t.m) ?? listOf([...t.m].map(([k, v]) => [keyOf(k, v), valueOf(v)]).sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
+  // Its keys alone in compare's order (`keys of`): no pair made for each
+  // entry to be taken apart again.
+  keys: builtin("table.keys", "table keys list", ofEntry((k, v) => [[tableOf_(k, v)], list(k)]),
+    (t: Table) => (t.keyed ??= numberKeys(t.m) ?? listOf([...t.m].map(([k, v]) => keyOf(k, v)).sort(keyOrder)))),
 };
 
 // Set as a hash table changed in place (C63d): the same Table, its keys

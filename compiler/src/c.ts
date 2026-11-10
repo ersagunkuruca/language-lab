@@ -63,7 +63,7 @@ import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts"
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
-import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -2184,13 +2184,14 @@ ${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) r
     for (const { d, j } of lists) {
       const tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
       const cons = cname(d, tag), nil = cname(d, 1 - tag), item = d.cases[tag].fields[head].t;
-      // A set's items are its keys; a map's entries, pairs.
+      // A set's items are its keys, and a map's `keys of`; a map's
+      // entries, pairs.
       const same = (x: LType) => x === kt || (isRecord(x) && isRecord(kt) && x.key === kt.key);
-      const made = t.set ? (same(item) ? dupK("t->ks[ix[j]]") : zero(item))
+      const made = keyList(t, d) ? (same(item) ? dupK("t->ks[ix[j]]") : zero(item))
         : `(${ty(item)}){ ${same((item as RType).fields[0].t) ? dupK("t->ks[ix[j]]") : zero((item as RType).fields[0].t)}, ${dupV("t->vs[ix[j]]")} }`;
       // A key nothing ever fixed (an empty map nothing is put in) is held
       // as an Int, its entries' as another type: none are ever made.
-      out.push(`// The entries as a list of ${t.set ? "items" : "pairs"}, in compare's order of their keys.
+      out.push(`// The entries as a list of ${keyList(t, d) ? "keys" : "pairs"}, in compare's order of their keys.
 static lab_cell *lab_table_entries_t${i}_e${j}(lab_cell *c) {
   lab__reroot_t${i}((${T} *)c);
   ${S} *t = ((${T} *)c)->cur;

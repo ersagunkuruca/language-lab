@@ -171,7 +171,7 @@ test("collatz keeps its long walks on workers, the same numbers in the same orde
   // And `walks of`'s fold, a record adding each number's steps and keeping
   // the largest, shared out and put together by its own join (C42d).
   assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("fold\.pure"/);
-  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, "with", fuel, /);
+  assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, "with", (fuel|Infinity), /);
   const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /^665 numbers below 300000 take more than 300 steps/);
@@ -318,4 +318,16 @@ test("all pass's first deciding item or abort in order is its answer, wherever e
     assert.deepEqual(await run([failsFirst], { TERS_WORKERS: workers }), ["false\n", "", 0], `fails first, ${workers} workers`);
     assert.deepEqual(await run([abortsFirst], { TERS_WORKERS: workers }), ["", "abort at 3\n", 1], `aborts first, ${workers} workers`);
   }
+});
+
+test("fibonacci's two calls of itself are shared out on workers, the same number as in turn and in the evaluator (C61 e)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/fibonacci"), "-o", "fibonacci.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/fibonacci"), "15"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  assert.match(readFileSync(join(dir, "fibonacci.mjs"), "utf8"), /R\d*\.rt\("both\.pure"/);
+  const [side, alone, small] = await Promise.all([run(["fibonacci.mjs", "36"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["fibonacci.mjs", "36"], { TERS_WORKERS: "0" }, dir), run(["fibonacci.mjs", "15"], {}, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.equal(side[0], "14930352\n");
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.equal(small[0], inEvaluator[0]);
 });

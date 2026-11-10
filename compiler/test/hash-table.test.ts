@@ -17,9 +17,9 @@ import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts"
 import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
-import { compiledDefs } from "../src/core-js.ts";
+import { compiledDefs, lowerCore } from "../src/core-js.ts";
 import { execFileSync } from "node:child_process";
-import { lowerScalar } from "../src/scalar.ts";
+import { kids, lowerScalar, type SExpr } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile as cc, skip } from "./c-harness.ts";
@@ -29,7 +29,7 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean; made?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   // With `record`, the same as a record of the program's own, spot(row, name)
   // (C63g); with "floats", its row is a Float64.
@@ -43,21 +43,25 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, third(i)) : third(i), k.call(SHOW_ANY, opts.remainders ? rem(i, 11) : k.call(INT_OPS.shiftDown, i, k.int(5))));
   const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
-  k.define(counts, k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, k.int(n)), [
+  // With `made`, counts is a function of how many, called once: not one
+  // value wherever it is named.
+  const counted = (size: Id) => k.fold(opts.floats ? k.call(S.range, k.lit(n)) : k.call(INT_OPS.range, size), [
     { variant: NIL, names: [], body: () => k.x(L("empty map")) },
     { variant: CONS, names: ["i", "rest"], results: [null, "counted"], body: ([i], [, m]) => k.let("key", key(i), (w) =>
       k.call(L("put"), m!, w, k.call(INT_OPS.add, k.call(S.first, k.thunk(() => k.call(L("value at"), m!, w)), k.thunk(() => k.int(0))), k.int(1)))) },
-  ]));
+  ]);
+  k.define(counts, opts.made ? k.fn(["size"], (size) => counted(size)) : counted(k.int(n)));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const at = (m: Id, x: Id) => k.call(S.first, k.thunk(() => k.call(L("value at"), m, x)), k.thunk(() => k.int(-1)));
   const probe = opts.pairs || opts.record ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : k.int(5);
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.let("m", k.x(counts), (m) => k.seq(
+  k.define(main, k.thunk(() => k.let("m", opts.made ? k.call(counts, k.int(n)) : k.x(counts), (m) => k.seq(
     show(k.call(L("map size"), m)),
     show(at(m, probe)),
     show(k.call(L("has key"), m, probe)),
     ...(opts.old ? [k.let("more", k.call(L("put"), m, probe, k.int(1000)), (more) => k.seq(show(at(more, probe)), show(at(m, probe))))] : []),
-    ...(opts.list ? [show(k.call(L("entries of"), m))] : []),
+    // Its keys too (`keys of`, a list of the keys alone on every target).
+    ...(opts.list ? [show(k.call(L("entries of"), m)), show(k.call(L("keys of"), m))] : []),
     ...(opts.remove ? [k.let("less", k.call(L("remove key"), m, probe), (less) => k.seq(show(k.call(L("map size"), less)), show(k.call(L("has key"), less, probe))))] : []),
   ))));
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
@@ -128,7 +132,8 @@ test("a map keyed by a record of Ints and Texts is a hash table, evaluated and c
   const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
   assert.deepEqual(lines, want);
   assert.equal(want[0], "38");
-  assert.match(want[want.length - 3], /^\[\(spot\(0, "0"\), 8\), /);
+  assert.match(want[want.length - 4], /^\[\(spot\(0, "0"\), 8\), /);
+  assert.match(want[want.length - 3], /^\[spot\(0, "0"\), spot\(1, "0"\), /);
   const got: string[] = [];
   const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();
@@ -155,6 +160,25 @@ test("compiled JavaScript on the hash table prints what the evaluator prints", a
   const defs = compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>;
   defs.main();
   assert.deepEqual(got, lines);
+});
+
+// A map nobody else holds is changed in place in compiled JavaScript
+// (owned-tables.ts): its puts and removes are the owned ones. One whose old
+// version is read again keeps the versions, and both print as evaluated.
+test("compiled JavaScript changes a map nobody else holds in place, and keeps the versions of one read again", () => {
+  for (const old of [false, true]) {
+    const p = program(300, { remove: true, old, made: true });
+    const c = chosen(p);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    const ir = lowerCore(c.code, info, c.names, [p.main]);
+    const fns = new Set<string>();
+    const scan = (e: SExpr) => { if (e.k === "rt") fns.add(e.fn); kids(e).forEach(scan); };
+    ir.funcs.forEach((f) => scan(f.body));
+    assert.equal([...fns].some((f) => /^table\.putOwned\./.test(f)), !old, `old ${old}: ${[...fns].filter((f) => f.startsWith("table."))}`);
+    const got: string[] = [];
+    (compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>).main();
+    assert.deepEqual(got, lines);
+  }
 });
 
 // Set as a hash table (C63d): the same, for a set of Ints built by adding

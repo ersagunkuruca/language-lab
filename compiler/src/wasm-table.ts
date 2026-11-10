@@ -21,7 +21,7 @@
 // entry, `pkey` an entry's key where it isn't the table's (an empty map
 // nothing is put in), in RtFn.types.
 
-import { isRecord, type DType, type LType, type RType, type TType } from "./scalar.ts";
+import { isRecord, keyList, type DType, type LType, type RType, type TType } from "./scalar.ts";
 import type { RtFn, VT } from "./wasm-rt.ts";
 
 export const TABLE_RT = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
@@ -527,14 +527,14 @@ local.get $nv`,
     case "entries": {
       // The full slots sorted by their keys (a merge sort, bottom up, on
       // their places), then the list built from the end: a set's items
-      // are its keys, a map's entries pairs.
+      // are its keys, and a map's `keys of`; a map's entries pairs.
       const d: DType = t.entries[Number(ei)], tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
       if (tag !== 1 || head !== 0) throw new Error(`table entries: ${d.name} isn't a list`);
       const item = d.cases[tag].fields[head].t;
       const same = (x: LType) => x === t.keyT || (isRecord(x) && isRecord(t.keyT) && x.key === t.keyT.key);
       const key = (x: LType) => (same(x) ? "local.get $ks\nlocal.get $p\narray.get $tkeys" : zero(x, types, "pkey"));
       let made: string;
-      if (t.set) made = key(item);
+      if (keyList(t, d)) made = key(item);
       else { types.pair = item; made = `${key((item as RType).fields[0].t)}\nlocal.get $m\nstruct.get $tstore 2\nlocal.get $p\narray.get $tvals\nstruct.new $pair`; }
       return {
         ...base, list: d.key, params: [["t", "table"]], result: "list", uses: [fn("reroot"), fn("cmp")],

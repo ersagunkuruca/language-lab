@@ -22,10 +22,12 @@
 import { shareCalls } from "./share-calls.ts";
 import { inlineSmall } from "./inline-small.ts";
 import { ownedArrays } from "./owned-arrays.ts";
+import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
 import { arrayOffsets } from "./array-offsets.ts";
 import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
+import { ownedTables } from "./owned-tables.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
 import { ARRAY_OPS, FALSE, STD_IMPL, STD_MANY, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
@@ -39,7 +41,7 @@ import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type U
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
-import { ARRAY_RT, endsAsBefore, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -95,7 +97,12 @@ function builtinOf(name: string): BuiltinOf | undefined {
   const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
   return id ? [id, runtime(plain).result === "i32"] : undefined;
 }
-export const tableSpec = (t: TType): TableSpec => ({ set: t.set });
+// Which of a map's entries lists are its keys alone (`keys of`): a list
+// whose items are of the key's type.
+export const tableSpec = (t: TType): TableSpec => {
+  const keys = t.set ? [] : t.entries.map((d) => keyList(t, d));
+  return keys.some((x) => x) ? { set: t.set, keys } : { set: t.set };
+};
 
 const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
 // The runtime's builtins that are one operator on how values are held
@@ -405,6 +412,25 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // One of an answer's values (core-rt.ts pick), read where it is used.
           { const m = /^pick:(\d+)$/.exec(e.fn); if (m && xs.length === 1) return `(${xs[0]})[${m[1]}]`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
+          // An array of records as columns (columns.ts, C60): an array per
+          // field, a Float64Array for a Float64.
+          {
+            const m = /^cols\.(new|length|get|set)\.a\d+(?:\.([\w]+))?$/.exec(e.fn);
+            if (m) {
+              if (m[1] === "length") return `${xs[0]}.n`;
+              if (m[1] === "get") return `${xs[0]}.c${m[2]}[${xs[1]}]`;
+              if (m[1] === "new") {
+                const t = temp();
+                pre.push(`${d}const ${t} = ${xs[0]};`);
+                return `{ n: ${t}, ${[...m[2]!].map((k, i) => `c${i}: ${k === "f" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
+              }
+              const c = temp(), j = temp(), ks = m[2]!.split("_");
+              pre.push(`${d}const ${c} = ${xs[0]}, ${j} = ${xs[1]};`);
+              const vs = ks.map((k, i) => { const v = temp(); pre.push(`${d}const ${v} = ${xs[i + 2]};`); return [k, v]; });
+              for (const [k, v] of vs) pre.push(`${d}${c}.c${k}[${j}] = ${v};`);
+              return c;
+            }
+          }
           // A builtin that is one JavaScript operator, printed as it (C170b).
           { const op = RT_INFIX[e.fn]; if (op && xs.length === 2) return `(${xs[0]} ${op} ${xs[1]})`; }
           // A map's `value at` where no answer leaves by onFail: checked as
@@ -619,10 +645,15 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // A replace in an array of a type whose every value has one holder,
   // written in place (owned-arrays.ts, C93 s4).
   if (!envSet("NO_OWN") && roots.length === 1) ownedArrays(ir, code, info, names, roots[0], true);
+  // And puts and removes on tables nobody else holds (owned-tables.ts).
+  if (!envSet("NO_OWN") && !envSet("NO_OWN_TABLES") && roots.length === 1) ownedTables(ir, code, info, names, roots[0]);
   // A push onto an array a call just made, on its view (C196).
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).
   if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
+  // Arrays of records whose loops read and write them field by field, as
+  // an array per field (columns.ts, C60).
+  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
@@ -822,7 +853,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   // A together run side by side (C41, branches-rt.ts): the module is
   // started again on worker threads, which find each branch's code by
   // name, and run no main.
-  const branches = /R\.rt\("((together|map|keep|all|any|first|fold)\.pure|(count|all|first)\.search)"/.test(js);
+  const branches = /R\.rt\("((together|map|keep|all|any|first|fold|both)\.pure|(count|all|first)\.search)"/.test(js);
   const body = branches ? withFunctionsNamed(js) : js;
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,

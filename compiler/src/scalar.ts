@@ -78,7 +78,7 @@ import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
-import { parallelCounts, parallelFolds, parallelLists, parallelTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
+import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -107,6 +107,8 @@ import { wideProducts } from "./wide-products.ts";
 const TABLE_RT: Record<Id, string> = {
   [TABLE_OPS.empty]: "empty", [TABLE_OPS.put]: "put", [TABLE_OPS.remove]: "remove", [TABLE_OPS.has]: "has",
   [TABLE_OPS.size]: "size", [TABLE_OPS.at]: "at", [TABLE_OPS.entries]: "entries",
+  // Its keys alone are a list of them, as a set's items are (`keys of`).
+  [TABLE_OPS.keys]: "entries",
   // A hash set (C63i) is the table of its items, each holding true.
   [HASH_SET_OPS.empty]: "empty", [HASH_SET_OPS.add]: "put", [HASH_SET_OPS.remove]: "remove", [HASH_SET_OPS.has]: "has",
   [HASH_SET_OPS.size]: "size", [HASH_SET_OPS.items]: "entries",
@@ -219,6 +221,13 @@ export interface TType { key: string; name: string; keyT: "int" | "text" | "f64"
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
+// Whether a list of a table's (its `entries`) holds its keys alone: a
+// set's items, or a map's `keys of`; otherwise (key, value) pairs.
+export function keyList(t: TType, d: DType): boolean {
+  const c = d.cases.find((x) => x.fields.length > 0);
+  const item = c?.fields.find((x) => x.t !== d)?.t;
+  return t.set || item === t.keyT || (!!item && isRecord(item) && typeof t.keyT === "object" && item.key === t.keyT.key);
+}
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
@@ -996,6 +1005,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // are read from their locals (expr at the top), so a call whose inputs
   // are known runs forward as any call does.
   let pinned: ((id: Id) => SExpr | undefined) | null = null;
+  // The calls of f given two calls of f (C61 e), and the one being lowered.
+  let halves: Map<Id, [number, number]> | undefined;
+  const halving = new Set<Id>();
   // A mode function giving all its answers (modeFn's `all`): the local
   // holding the answers found after the arm being written, in order.
   const collecting = new Map<SFunc, number>();
@@ -1107,7 +1119,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       at = new Map(types);
       const bt = info.typeOf.get(d.body!) && info.subst.zonk(info.typeOf.get(d.body!)!);
       if (bt && t) bindVars(bt, t, at);
-      f.body = expr(constant ? d.body! : l.body, env, f, true);
+      // What a caller pinned is its own (a halves' calls, C61 e).
+      const pinnedOuter = pinned;
+      pinned = null;
+      try { f.body = expr(constant ? d.body! : l.body, env, f, true); } finally { pinned = pinnedOuter; }
     } catch (e) {
       underBudget = outer;
       at = outerAt;
@@ -1180,6 +1195,27 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (isUse(n)) {
           if (!opts.host) return writtenSolve(n, env, f, tail);
           return solveUse(n, env, f, tail);
+        }
+        // g(f(a), f(b)) in f's own body (C61 e): the two calls of f given to
+        // the runtime, which may run them on other cores (branches-rt.ts
+        // `both`), the first's answer back and the second's after it.
+        if (opts.host && !fibers && !halving.has(n.id) && (halves ??= parallelHalves(code, info)).has(n.id)) {
+          const [j0, j1] = halves.get(n.id)!, c0 = code.nodes[n.args[j0]] as Call, c1 = code.nodes[n.args[j1]] as Call;
+          const rt = stype(zonk(n.args[j0])), ps = c0.args.map((a) => stype(zonk(a)));
+          if (rt && ps.every((p) => p)) {
+            const fn = named((code.nodes[c0.fn] as NodeOf<"ref">).target, c0.fn, fnOf(ps as LType[], rt));
+            const x0 = f.locals.push(rt) - 1, x1 = f.locals.push(rt) - 1, on = f.locals.push("i32") - 1;
+            const both: SExpr = { k: "rt", fn: "both.pure", args: [fn, { k: "num", v: c0.args.length }, ...[...c0.args, ...c1.args].map((a) => expr(a, env, f, false)), { k: "rt", fn: "fuel.get", args: [] }] };
+            // Most calls (below the leaves, on a worker) are the two calls
+            // as written, the runtime only asked whether: both.on.
+            const first = expr(n.args[j0], env, f, false), then = expr(n.args[j1], env, f, false);
+            const was = pinned;
+            pinned = (x) => (x === n.args[j0] ? local(x0) : x === n.args[j1] ? local(x1) : was?.(x));
+            halving.add(n.id);
+            let body: SExpr;
+            try { body = expr(id, env, f, tail); } finally { pinned = was; halving.delete(n.id); }
+            return { k: "let", i: on, value: { k: "rt", fn: "both.on", args: [] }, body: { k: "let", i: x0, value: { k: "if", cond: local(on), then: both, else: first, t: rt }, body: { k: "let", i: x1, value: { k: "if", cond: local(on), then: { k: "rt", fn: "both.second", args: [] }, else: then, t: rt }, body } } };
+          }
         }
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") {
@@ -1312,7 +1348,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
           const h = ts.find(isTable);
           if (!h) throw new Refused(`uses ${nm(target)} on no table`);
-          const l = target === TABLE_OPS.entries || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
+          const l = target === TABLE_OPS.entries || target === TABLE_OPS.keys || target === HASH_SET_OPS.items ? ts.find(isData) : undefined;
           if (l && !h.entries.includes(l)) h.entries.push(l);
           return { k: "rt", fn: `table.${TABLE_RT[target]}.t${h.index}${l ? `.e${h.entries.indexOf(l)}` : ""}`, args: target === HASH_SET_OPS.add ? [...args(), { k: "bool", v: true }] : args() };
         }
@@ -4195,7 +4231,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // (`with fuel`, or the fuel a search outside one swaps in) nothing
   // spends it (C171): no count per call of a function that may not end.
   // A shader keeps its own (its loops must end).
-  const setsFuel = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.")) || kids(e).some(setsFuel);
+  const setsFuel = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.") && e.fn !== "fuel.get") || kids(e).some(setsFuel);
   if (opts.data && !funcs.some((f) => setsFuel(f.body))) for (const f of funcs) f.spends = false;
   return ir;
 }
