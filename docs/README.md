@@ -127,6 +127,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [GAPS.md](reports/GAPS.md) | Bigger-program rounds: compiled output against ideal hand-written code, gap by gap | current (rounds 1 to 5) |
 | [WASM.md](design/targets/WASM.md) | WebAssembly, with WASI | built (W1 to W4) |
 | [NATIVE.md](design/targets/NATIVE.md) | Native code through C | built (N1 to N5) |
+| [NATIVE-APPS.md](design/targets/NATIVE-APPS.md) | Native phone apps: C program, native shell, view host | design (C199) |
 | [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `ters build-web` | built |
 | [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | proposal (L69a to L69d), one question for Ersagun |
 | [WHERE-IT-RUNS.md](design/targets/WHERE-IT-RUNS.md) | Where code runs chosen by cost (workers, the GPU): Bend 2 read, a worker's round trip measured, one-holder arrays transferred, only a caller that can wait | design (C61), steps a to e |
