@@ -273,6 +273,9 @@ test("tumble's swap in C, by taps or a drag, plays its animations and the chain 
   assert.equal(r.status, 0, r.stderr.toString());
   const pages = r.stdout.toString().split("\x1e\n"), said = (k: number) => [...pages[k].matchAll(/"(Showing: \w+|At rest)\./g)].map((m) => m[1]);
   assert.deepEqual(said(2), ["Showing: swap", "Showing: swap", "Showing: swap"]);
+  // The board cuts its pieces to it (overflow: hidden), so the ones
+  // dropping in from above aren't seen over the lane's heading.
+  assert.equal(pages[0].split("\n").filter((s) => s.includes(" bg FFF1ECE2 radius 10 clip")).length, 3);
   // Halfway through the swap a piece is on its way: the pieces' boxes
   // are neither where they were nor where they end.
   const pieces = (k: number) => pages[k].split("\n").filter((s) => / 36 36 bg /.test(s)).join("\n");
