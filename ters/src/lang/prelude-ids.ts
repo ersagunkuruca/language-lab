@@ -1,8 +1,8 @@
 import { children, type Code, type Id, type Node } from "../model.ts";
 
 // The prelude definitions the passes and the solver find by name
-// (arith.ts preludeDef): fractions' and grammars' pieces, `inverse` and
-// `together`, and the checks a printer's arms make (descent.ts). A table,
+// (arith.ts preludeDef): fractions' and grammars' pieces, `inverse`,
+// `together` and `map` (the trees module's for arrays too, C42), and the checks a printer's arms make (descent.ts). A table,
 // so that a compiled program that solves doesn't carry the library (library/prelude.json, 4 MB) to look them up
 // (C137d2); test/prelude-ids.test.ts checks it against the prelude.
 export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
@@ -15,6 +15,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "optional parens": "@9hjf7ci8fb8h0lvmnpjq3go6a2",
  "inverse": "@c8c8umeg8tfsrur401k166n204",
  "together": "@1o5g8v7mf0toapgikplsnlelu1",
+ "map": "@9902gjnadddgv3jrh6ir29nf4q",
+ "array map": "@dom7ap03ujn65jk9krb3tv2v60",
  "all pass": "@ku5ojesmoico158dp65r5o0q8f",
  "is letter": "@3ghl6cjivv5vaeuti6ht2gip8a",
  "is digit": "@kns2kgot84jr2lfre0vbl00j9q",
