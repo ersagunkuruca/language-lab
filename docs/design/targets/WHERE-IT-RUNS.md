@@ -23,7 +23,9 @@ deciding item taking no more: examples/divisors native, 500 below 20000,
 largest or smallest (C202d): examples/collatz native below 3000000, its keep
 and two folds, 9.8 to 11 s to 3.9 to 4.1 s. A count of a search by its
 first choice's items (C203a, `par:count`, each thread with its own split):
-examples/queens-count native at 12, 2.2 s to 0.9 s.
+examples/queens-count native at 12, 2.2 s to 0.9 s; and an all of one whose
+answers are a list (C203b, `par:all:search`, the runs' lists joined in
+order): all boards of 12 queens, 2.6 s to 0.9 s.
 The goal is in [STABLE-REFERENCES.md](../data/STABLE-REFERENCES.md) §6:
 every processing environment a target has (on the web: the main thread,
 Web Workers, WebAssembly, the GPU through WebGPU compute) used without the
