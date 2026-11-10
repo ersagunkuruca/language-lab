@@ -263,9 +263,10 @@ test("collatz's fold of a record of Ints runs on threads natively and prints the
   assert.equal(built.status, 0, built.stderr.toString());
   assert.match(readFileSync(join(dir, "collatz.c"), "utf8"), /lab_par_map_\d+\(lab_cell \*xs, lab_cell \*f, Walks z, lab_cell \*jf\)/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "3000", "100"]).stdout.toString();
-  for (const workers of ["3", "0"]) {
-    const r = spawnSync(join(dir, "collatz"), ["3000", "100"], { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
-    assert.equal(r.stdout.toString(), evaluator, `${workers} workers`);
-    if (workers === "3") assert.match(r.stderr.toString(), /items on threads: [1-9]/);
-  }
+  const runs = (args: string[], workers: string) => spawnSync(join(dir, "collatz"), args, { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
+  for (const workers of ["3", "0"]) assert.equal(runs(["3000", "100"], workers).stdout.toString(), evaluator, `${workers} workers`);
+  // Big enough to be worth the threads: the same as on one.
+  const many = runs(["300000", "300"], "3");
+  assert.match(many.stderr.toString(), /items on threads: [1-9]/);
+  assert.equal(many.stdout.toString(), runs(["300000", "300"], "0").stdout.toString());
 });
