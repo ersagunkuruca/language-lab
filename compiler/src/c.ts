@@ -297,7 +297,7 @@ const FIBER = /^f(handle|perform|ready|park|branches)(:|$)/;
 const isFiber = (fn: string) => FIBER.test(fn);
 // A map whose function only computes, its items on threads (L101), and a
 // together whose actions only compute, its actions so (C201).
-const isPar = (fn: string) => fn === "par:map" || fn === "par:together";
+const isPar = (fn: string) => fn === "par:map" || fn === "par:keep" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -594,10 +594,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // and the runtime functions called.
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   // Each map on threads, by its array types and function type (parC).
-  const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType }>();
-  const parSite = (ta: AType, tf: FType, to: AType): number => {
-    const k = `${ta.key} ${tf.key} ${to.key}`;
-    if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to });
+  // A keep (C202) is a map whose function's answers say which items stay.
+  const pars = new Map<string, { n: number; ta: AType; tf: FType; to: AType; keep: boolean }>();
+  const parSite = (ta: AType, tf: FType, to: AType, keep = false): number => {
+    const k = `${ta.key} ${tf.key} ${to.key}${keep ? " keep" : ""}`;
+    if (!pars.has(k)) pars.set(k, { n: pars.size, ta, tf, to, keep });
     arrayFns.add(`array.length.a${ta.index}`).add(`array.empty.a${to.index}`);
     return pars.get(k)!.n;
   };
@@ -1433,7 +1434,7 @@ int main(int argc, char **argv) {
             return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
           if (isPar(e.fn)) {
-            const n = parSite(typeOf(e.args[0], f.locals) as AType, typeOf(e.args[1], f.locals) as FType, e.host!.t as AType);
+            const n = parSite(typeOf(e.args[0], f.locals) as AType, typeOf(e.args[1], f.locals) as FType, e.host!.t as AType, e.fn === "par:keep");
             return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
           }
           if (isPerform(e.fn)) {
@@ -2183,8 +2184,13 @@ failed:
 }`;
   }
 
-  function parC(p: { n: number; ta: AType; tf: FType; to: AType }, stops: boolean, fuelled: boolean): string {
-    const { n, ta, tf, to } = p, J = `lab_par_job_${n}`, Ti = ty(ta.item), To = ty(to.item);
+  // A keep on threads (C202, scalar.ts `par:keep`) likewise, its tests'
+  // answers kept, then the items that passed, in order, in an array. The
+  // library's keep tests its items from the first, so they are held last
+  // first: run from the back of that, the keep fails at the first item
+  // that fails, as in order.
+  function parC(p: { n: number; ta: AType; tf: FType; to: AType; keep: boolean }, stops: boolean, fuelled: boolean): string {
+    const { n, ta, tf, to, keep } = p, J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
     const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
@@ -2213,7 +2219,7 @@ static lab_cell *lab_par_map_${n}(lab_cell *xs, lab_cell *f) {
   ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0 };
   struct timespec t0;
   if (!j.in || !j.out || !j.bad) lab_oom();
-  for (k = 0; k < n; k++) j.in[k] = ${dup(ta.item, rd)};
+  for (k = 0; k < n; k++) j.in[${keep ? "n - 1 - k" : "k"}] = ${dup(ta.item, rd)};
   lab_drop(xs);
   memset(j.bad, 1, (size_t)n);
   clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -2236,13 +2242,17 @@ static lab_cell *lab_par_map_${n}(lab_cell *xs, lab_cell *f) {
     if (lab_st) goto failed;
     j.bad[k] = 0;
   }
-  ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)n, 0);
-  for (k = 0; k < n; k++) r->it[r->lo + (uint32_t)k] = j.out[k];
+${keep ? `  int64_t m = 0;
+  for (k = 0; k < n; k++) if (j.out[k]) m++;
+  ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)m, 0);
+  m = 0;
+  for (k = n; k-- > 0;) if (j.out[k]) { r->it[r->lo + (uint32_t)m] = ${dup(ta.item, "j.in[k]")}; m++; }` : `  ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)n, 0);
+  for (k = 0; k < n; k++) r->it[r->lo + (uint32_t)k] = j.out[k];`}
   ${counted(ta.item) ? `for (k = 0; k < n; k++) ${drop(ta.item, "j.in[k]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
   lab_drop(f);
-  return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)n);
+  return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)${keep ? "m" : "n"});
 failed:
-  ${counted(to.item) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(to.item, "j.out[m]")}\n  ` : ""}${counted(ta.item) ? `for (int64_t m = 0; m < n; m++) ${drop(ta.item, "j.in[m]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
+  ${counted(out) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(out, "j.out[m]")}\n  ` : ""}${counted(ta.item) ? `for (int64_t m = 0; m < n; m++) ${drop(ta.item, "j.in[m]")}\n  ` : ""}free(j.in); free(j.out); free(j.bad);
   lab_drop(f);
   return 0;
 }`;
