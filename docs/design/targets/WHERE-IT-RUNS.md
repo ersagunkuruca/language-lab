@@ -12,7 +12,9 @@ only computes runs its items on a pool of threads once they have taken a
 millisecond: mandelbrot-rows native, 1200 columns and 5000 steps, 2.8 s on
 one thread and 0.75 s on four. What the threads share (the function and
 the items) is marked shared first, and only such cells' counts change
-atomically, as Koka's and Lean's runtimes do.
+atomically, as Koka's and Lean's runtimes do. A together whose actions
+only compute runs them on the same threads (C201): examples/area native,
+side 2400, 2.5 s to 0.86 s.
 The goal is in [STABLE-REFERENCES.md](../data/STABLE-REFERENCES.md) §6:
 every processing environment a target has (on the web: the main thread,
 Web Workers, WebAssembly, the GPU through WebGPU compute) used without the

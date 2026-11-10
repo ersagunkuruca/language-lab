@@ -25,7 +25,7 @@ a lane takes them when bugs and goal rows are in hand.
 | E Editor | "Editor lane" | E103, then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C187 (fibers in WASM); C184 with the Editor lane |
 | L Language and library | "Language lane" | C43 (all/any/first after keep), C42 (associative folds), then L182 when unblocked (core, run.ts, infer.ts, hosts.ts) |
-| L Language and library | "Language lane B" | C201 (told the Compiler lane); C60 waits for a program whose loop reads few fields; round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
+| L Language and library | "Language lane B" | C58 or C59 (stable references), agreed with the Compiler lane first; C60 waits for a program whose loop reads few fields; round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
 ## Inbox
@@ -94,7 +94,6 @@ New targets and speed rank below every language item (Ersagun,
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C200 | tumble's lists stored as the costs choose (arrays: its board read by position), where they are kept as written today: a Cell of the program's lists (a lane's `queue`, `swaps`, its Board) is made on one side and read by the page on the other, and rep-split.ts refuses a Cell holding lists (a cell can't be converted where it is read). A cell made on the stored side could convert at each `read` and `write` on the other, as a field of a stored type converts. Measure first: tumble's boards are 8 by 8, so the gain may be small. Example: `ters compile examples/tumble` choosing `array of List` beside main's lists, the same page | C196 (its last refusal, 2026-11-09) | P3 | M | |
-| C201 | A `together` whose actions only compute, on threads in C, as a map's items are since L101 (c.ts `par:map`, its pool and shared counts): C runs together's actions on fibers (C44), and the pure ones (pure-branches.ts `parallelTogethers`) could go to the pool instead, each action a unit, the first abort in order the together's. Example: `ters native examples/area 900` faster on four cores than on one, the same answer | L101 (2026-11-10) | P3 | M | |
 
 ### Speed of compiled code
 

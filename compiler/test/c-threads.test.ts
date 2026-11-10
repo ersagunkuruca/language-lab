@@ -1,4 +1,5 @@
-// A map whose function only computes, on threads in C (L101, c.ts
+// A map whose function only computes, and a together whose actions only
+// compute (C201), on threads in C (L101, c.ts
 // `par:map`): the items share out once they have taken a millisecond, the
 // function and the items marked shared so their counts change atomically,
 // and the map gives what the evaluator gives: the same array, and the
@@ -22,31 +23,46 @@ import { compile, skip } from "./c-harness.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
+// Work for an item or an action: a sum over 10000 big Ints.
+const work = (k: Lang, x: Id, big: Id) => k.call(lib("sum"), k.call(lib("map"), k.call(INT_OPS.range, k.int(10000)), k.fn(["j"], (j) => k.call(INT_OPS.add, k.call(INT_OPS.mul, j, x), big))));
+const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
+
 // main prints the map of `item` over 0 to n - 1, a list kept as an array
-// (`array map`); `item` is given the
-// item, a big Int and a list that every item reads (both shared between
-// the threads), and some work.
+// (`array map`); `item` is given the item, a big Int and a list that
+// every item reads (both shared between the threads), and some work.
 function program(n: number, item: (k: Lang, x: Id, big: Id, list: Id, work: Id) => Id) {
-  const k = new Lang(LIBRARY.code), main = k.def("main");
-  const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
-  k.define(main, k.thunk(() => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
+  return built(/lab_par_map_0\(/, true, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
     k.let("list", k.call(INT_OPS.range, k.int(50)), (list) =>
-      k.let("ys", k.call(lib("map"), k.call(INT_OPS.range, k.int(n)), k.fn(["x"], (x) => item(k, x, big, list,
-        k.call(lib("sum"), k.call(lib("map"), k.call(INT_OPS.range, k.int(10000)), k.fn(["j"], (j) => k.call(INT_OPS.add, k.call(INT_OPS.mul, j, x), big))))))), (ys) =>
+      k.let("ys", k.call(lib("map"), k.call(INT_OPS.range, k.int(n)), k.fn(["x"], (x) => item(k, x, big, list, work(k, x, big)))), (ys) =>
         // Read by position too, so the list is kept as an array (C30).
-        k.seq(k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), ys, k.int(1), k.int(-1)))), k.call(S.print, k.call(SHOW_ANY, ys))))))));
+        k.seq(k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), ys, k.int(1), k.int(-1)))), k.call(S.print, k.call(SHOW_ANY, ys)))))));
+}
+
+// main prints a together of n actions, each `action` of its number, the
+// big Int and some work.
+function togetherProgram(n: number, action: (k: Lang, i: number, big: Id, work: Id) => Id) {
+  return built(/lab_par_together_0\(/, false, (k) => k.let("big", k.call(INT_OPS.mul, k.int(1n << 40n), k.int(1n << 40n)), (big) =>
+    k.call(S.print, k.call(SHOW_ANY, k.call(lib("together"), k.list(...Array.from({ length: n }, (_, i) => k.thunk(() => action(k, i, big, work(k, k.int(i + 1), big))))))))));
+}
+
+// The program checked, run by the evaluator and built as C with threads;
+// `run` gives what it printed, or its abort, and how many items or
+// actions ran on other threads.
+function built(marker: RegExp, arrays: boolean, body: (k: Lang) => Id) {
+  const k = new Lang(LIBRARY.code), main = k.def("main");
+  k.define(main, k.thunk(() => body(k)));
   const code0 = base(k.code), names0 = baseNames(k.names), info0 = infer(code0, names0, undefined, checkOptions);
   assert.deepEqual(info0.errors.map((e) => e.message), []);
   // The list as an array (C30): the map is the array's.
-  const r = withLibraryRepresentations(code0, info0, names0, main, [main]);
-  assert.deepEqual(r.chosen, ["List as array of List"]);
-  const { code, names } = r, info = infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...r.insiders] });
+  const r = arrays ? withLibraryRepresentations(code0, info0, names0, main, [main]) : null;
+  if (r) assert.deepEqual(r.chosen, ["List as array of List"]);
+  const code = r?.code ?? code0, names = r?.names ?? names0, info = r ? infer(code, names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...r.insiders] }) : info0;
   let evaluator = "";
   try { runMain(code, info, main, { print: (l) => { evaluator += `${l}\n`; }, names }); } catch (e) { evaluator = `aborted ${(e as { reason?: unknown }).reason}`; }
   const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true });
   assert.deepEqual([...l.refused.values()], []);
   const c = emitC(l, { main }).c;
-  assert.match(c, /lab_par_map_0\(/);
+  assert.match(c, marker);
   const exe = compile(c);
   const run = (workers: string) => {
     const r = spawnSync(exe, [], { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
@@ -74,5 +90,25 @@ test("a map whose items abort on other threads aborts as in order: at the last i
   const many = p.run("3");
   assert.equal(many.out, p.evaluator);
   assert.ok(many.threads > 0, "no item ran on another thread");
+  assert.equal(p.run("0").out, p.evaluator);
+});
+
+test("a together's actions run on threads, sharing a big Int, and give the evaluator's list (C201)", { skip }, () => {
+  const p = togetherProgram(6, (k, i, big, w) => k.call(INT_OPS.add, w, k.call(INT_OPS.mul, big, k.int(i))));
+  assert.match(p.evaluator, /^\[\d+, /);
+  const many = p.run("3"), one = p.run("0");
+  assert.equal(many.out, p.evaluator);
+  assert.equal(one.out, p.evaluator);
+  assert.ok(many.threads > 0, "no action ran on another thread");
+});
+
+// Actions 2 and 4 abort: the together's abort is action 2's, the first in
+// order, whichever thread finishes first.
+test("a together whose actions abort on threads aborts at the first that does, as in order (C201)", { skip }, () => {
+  const p = togetherProgram(6, (k, i, _big, w) => (i === 2 || i === 4 ? k.if(k.call(INT_OPS.less, k.int(0), w), k.call(ABORT_OP, k.lit(`action ${i}`)), w) : w));
+  assert.equal(p.evaluator, "aborted action 2");
+  const many = p.run("3");
+  assert.equal(many.out, p.evaluator);
+  assert.ok(many.threads > 0, "no action ran on another thread");
   assert.equal(p.run("0").out, p.evaluator);
 });
