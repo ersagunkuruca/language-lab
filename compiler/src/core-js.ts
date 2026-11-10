@@ -22,6 +22,7 @@
 import { shareCalls } from "./share-calls.ts";
 import { inlineSmall } from "./inline-small.ts";
 import { ownedArrays } from "./owned-arrays.ts";
+import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
 import { arrayOffsets } from "./array-offsets.ts";
 import { ownedPushes } from "./owned-pushes.ts";
@@ -411,6 +412,25 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           // One of an answer's values (core-rt.ts pick), read where it is used.
           { const m = /^pick:(\d+)$/.exec(e.fn); if (m && xs.length === 1) return `(${xs[0]})[${m[1]}]`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
+          // An array of records as columns (columns.ts, C60): an array per
+          // field, a Float64Array for a Float64.
+          {
+            const m = /^cols\.(new|length|get|set)\.a\d+(?:\.([\w]+))?$/.exec(e.fn);
+            if (m) {
+              if (m[1] === "length") return `${xs[0]}.n`;
+              if (m[1] === "get") return `${xs[0]}.c${m[2]}[${xs[1]}]`;
+              if (m[1] === "new") {
+                const t = temp();
+                pre.push(`${d}const ${t} = ${xs[0]};`);
+                return `{ n: ${t}, ${[...m[2]!].map((k, i) => `c${i}: ${k === "f" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
+              }
+              const c = temp(), j = temp(), ks = m[2]!.split("_");
+              pre.push(`${d}const ${c} = ${xs[0]}, ${j} = ${xs[1]};`);
+              const vs = ks.map((k, i) => { const v = temp(); pre.push(`${d}const ${v} = ${xs[i + 2]};`); return [k, v]; });
+              for (const [k, v] of vs) pre.push(`${d}${c}.c${k}[${j}] = ${v};`);
+              return c;
+            }
+          }
           // A builtin that is one JavaScript operator, printed as it (C170b).
           { const op = RT_INFIX[e.fn]; if (op && xs.length === 2) return `(${xs[0]} ${op} ${xs[1]})`; }
           // A map's `value at` where no answer leaves by onFail: checked as
@@ -631,6 +651,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).
   if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
+  // Arrays of records whose loops read and write them field by field, as
+  // an array per field (columns.ts, C60).
+  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
