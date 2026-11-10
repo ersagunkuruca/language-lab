@@ -60,3 +60,22 @@ test("dice in C on a view host shows what html.ts shows, before and after a hund
   assert.match(p.evaluator[1], /Rolls: 100;/);
   assert.deepEqual(p.c, p.evaluator);
 });
+
+// On a phone (C199c): Roll rolled 1 and 1 every time, since a page's
+// handlers draw though main doesn't, and nothing seeded Random; Throw 100
+// never landed, since its throws land as the clock goes, and nothing ran
+// the views that read the clock again.
+test("dice in C rolls from the world's randomness and lands its hundred throws as frames go (C199c)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/dice"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const exe = compile(emitC(l, { main, page: "headless" }).c);
+  const r = spawnSync(exe, Array.from({ length: 8 }, () => "click:roll"));
+  const rolled = [...r.stdout.toString().matchAll(/You rolled (\d) and (\d)/g)].map((m) => `${m[1]}${m[2]}`);
+  assert.equal(rolled.length, 8);
+  assert.ok(new Set(rolled).size > 1, `rolled ${rolled.join(" ")}`);
+  const t = spawnSync(exe, ["click:throw", "frames:150:25"]).stdout.toString().split("\x1e\n");
+  assert.match(t[1], /Rolls: 0</);
+  assert.match(t[2], /Rolls: 100;/);
+});
