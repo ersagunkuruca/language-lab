@@ -224,3 +224,37 @@ export function parallelHalves(code: Code, info: Info): Map<Id, [number, number]
   }
   return out;
 }
+
+// A fold over a tree (C61 e): an arm given two folded results whose body
+// does nothing but compute, and needs both (each read outside any branch
+// of an if or a match, so working out both first does no more than the
+// fold in turn). Nothing in its arms may stop either, since the two are
+// worked out before the arm, in an order the arm's body may not keep.
+// Each such fold, with those arms.
+export function parallelTreeFolds(code: Code, info: Info): Map<Id, Set<Id>> {
+  const out = new Map<Id, Set<Id>>();
+  for (const n of Object.values(code.nodes)) {
+    if (n.kind !== "fold") continue;
+    const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
+    const effs = arms.map((a) => ownEffects(code, info, a.body));
+    if (!effs.every((e) => e && e.size === 0)) continue;
+    const two = new Set(arms.filter((a) => a.results.filter((r) => r).length === 2 && a.results.every((r) => !r || surely(code, a.body, r))).map((a) => a.id));
+    if (two.size) out.set(n.id, two);
+  }
+  return out;
+}
+// Whether x is read in e outside any branch: not in a match's or a fold's
+// arms, nor in a lambda (a let's, called at once, is e's own).
+function surely(code: Code, e: Id, x: Id): boolean {
+  const n = code.nodes[e];
+  if (!n) return false;
+  if (n.kind === "ref") return n.target === x;
+  if (n.kind === "match" || n.kind === "fold") return surely(code, n.scrutinee, x);
+  if (n.kind === "lambda") return false;
+  if (isCall(n)) {
+    const f = code.nodes[n.fn];
+    if (f?.kind === "lambda") return (n.args ?? []).some((a) => surely(code, a, x)) || surely(code, f.body, x);
+    return surely(code, n.fn, x) || (n.args ?? []).some((a) => surely(code, a, x));
+  }
+  return false;
+}
