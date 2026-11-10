@@ -216,8 +216,10 @@ test("a field with results over ports of several types, given by a definition an
     ["gap", (a) => k.tfun([k.tref(a), k.tref(NUMBER)], k.tref(NUMBER))],
     ["touch", (a) => k.tfun([k.tref(a), k.tref(NUMBER)], k.tref(NUMBER), [CHOICE])],
   ]);
-  (k.code.nodes[I.op.gap] as { ports?: string[] }).ports = ["body", "at", "gap"];
-  (k.code.nodes[I.op.touch] as { ports?: string[] }).ports = ["body", "gap", "at"];
+  // The port names are the field's function type's (L182c3).
+  const typeOf = (f: Id) => k.code.nodes[(k.code.nodes[f] as { type: Id }).type] as { ports?: string[] };
+  typeOf(I.op.gap).ports = ["body", "at", "gap"];
+  typeOf(I.op.touch).ports = ["body", "gap", "at"];
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const r = (b: Id) => k.call(Ball.f["ball.r"], b);
   const gap = def("ball gap", () => k.fn(["b", "s"], (b, s) => k.call(B.sub, r(b), s)));

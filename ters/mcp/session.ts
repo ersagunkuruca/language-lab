@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, freshId, portsOf, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
+import { collect, freshId, portNames, portsOf, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -193,7 +193,8 @@ export class Session {
     // What the lines don't show: an operation's ports, a way's mark.
     const marks = subtree(this.code, found ? id : def).flatMap((x) => {
       const n = this.code.nodes[x];
-      if (n?.kind === "field" && n.ports?.length) return [`${this.id(x)} ports: ${n.ports.slice(0, -1).join(", ")} -> ${n.ports.at(-1)}`];
+      const ports = n?.kind === "field" ? portNames(this.code.nodes, n) : undefined;
+      if (ports?.length) return [`${this.id(x)} ports: ${ports.slice(0, -1).join(", ")} -> ${ports.at(-1)}`];
       if (n?.kind === "def" && n.way) return [`${this.id(x)} a way of ‹${this.name(n.way)}›${n.cost != null ? `, cost ${n.cost}` : ""}`];
       return [];
     });
@@ -362,13 +363,13 @@ export class Session {
     const head = norm(m[1]);
     // A field with ports of the program's (an interface's operation), else a
     // definition with results.
-    const fields = Object.values(code.nodes).filter((n) => n.kind === "field" && n.ports?.length && all[n.id] === head);
+    const fields = Object.values(code.nodes).filter((n) => n.kind === "field" && !!portNames(code.nodes, n)?.length && all[n.id] === head);
     const defs = code.defs.filter((d) => all[d] === head && portsOf(code.nodes, d));
     const target = fields.length === 1 ? fields[0].id : defs.length === 1 ? defs[0] : null;
     if (!target) return null;
     const f = code.nodes[target];
     const keys: [string, string][] = f.kind === "field"
-      ? f.ports!.map((p, i) => [p, String(i)])
+      ? portNames(code.nodes, f)!.map((p, i) => [p, String(i)])
       : (code.nodes[(code.nodes[target] as NodeOf<"def">).body!] as NodeOf<"lambda">).params.map((p) => [all[p] ?? p, p]);
     // Split the inputs on commas outside brackets.
     const parts: string[] = [];
@@ -605,9 +606,11 @@ export class Session {
     const t = code.nodes[f.type];
     const n = t?.kind === "tfun" ? t.params.length + 1 : 0;
     const ps = ports.map((p) => p.trim());
-    if (!ps.length) { const { ports: _, ...plain } = f; return { ok: true, code: { nodes: { ...code.nodes, [field]: plain }, defs: code.defs }, names }; }
+    // The names go on the field's function type (L182c3).
+    if (t?.kind !== "tfun") return ps.length ? { ok: false, reason: `${names[field] ?? "it"} has no inputs` } : { ok: true, code, names };
+    if (!ps.length) { const { ports: _, ...plain } = t; return { ok: true, code: { nodes: { ...code.nodes, [f.type]: plain }, defs: code.defs }, names }; }
     if (ps.length !== n) return { ok: false, reason: `${names[field] ?? "it"} has ${n ? `${n - 1} inputs and a result` : "no inputs"}: give ${n} ports, the inputs' then the result's` };
-    return { ok: true, code: { nodes: { ...code.nodes, [field]: { ...f, ports: ps } }, defs: code.defs }, names };
+    return { ok: true, code: { nodes: { ...code.nodes, [f.type]: { ...t, ports: ps } }, defs: code.defs }, names };
   }
 
   // A way of an operation (WAYS.md): a new definition with a hole for its

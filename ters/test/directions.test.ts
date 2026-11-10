@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Code, NodeOf } from "../src/model.ts";
-import { SHAPE, toTodaysShape } from "../src/model.ts";
+import { SHAPE_STEPS, toTodaysShape } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Lang } from "../src/lang/dsl.ts";
@@ -114,6 +114,13 @@ test("a direction keeps the law: each answer it gives holds for the relation (SP
 // old `direction` attribute loads with it as a way.
 test("a saved direction loads as a way of its relation (L182c2)", () => {
   const nodes: Record<string, unknown> = { d: { id: "d", kind: "def", body: "b", direction: "r" } };
-  toTodaysShape(nodes, SHAPE - 1);
+  toTodaysShape(nodes, SHAPE_STEPS.findIndex((s) => s.what.includes("L182c2")));
   assert.deepEqual(nodes.d, { id: "d", kind: "def", body: "b", way: "r" });
+});
+
+test("a saved field's port names load onto its function type (L182c3)", () => {
+  const nodes: Record<string, unknown> = { f: { id: "f", kind: "field", type: "t", ports: ["x", "y", "length", "angle"] }, t: { id: "t", kind: "tfun", params: ["p", "q"], result: "r" } };
+  toTodaysShape(nodes, SHAPE_STEPS.findIndex((s) => s.what.includes("L182c3")));
+  assert.deepEqual(nodes.f, { id: "f", kind: "field", type: "t" });
+  assert.deepEqual(nodes.t, { id: "t", kind: "tfun", params: ["p", "q"], result: "r", ports: ["x", "y", "length", "angle"] });
 });
