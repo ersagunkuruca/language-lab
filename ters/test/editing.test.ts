@@ -707,6 +707,24 @@ async function shaderOpens() {
   await p.close();
 }
 
+// Calculus's newton opens with what main passes it and runs to its root
+// (I196, #744): main's short run runs out before newton, the long one
+// finds it, and the derivative it made is called as that run's own.
+async function newtonOpens() {
+  where = "calculus's newton opens with main's values";
+  const p = await browser.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /^Calculus$/ }).first().click();
+  await p.locator(".p-nav .nav-row[data-def]", { hasText: /^newton$/ }).first().click();
+  for (let i = 0; i < 40 && !(await p.locator(".port-row input[type=text]").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value)))[0]; i++) await p.waitForTimeout(100);
+  const vals = await p.locator(".port-row input[type=text]").evaluateAll((es) => es.map((e) => (e as HTMLInputElement).value));
+  if (vals[0] !== "cubic" || vals[2] !== "1") errors.push(`${where}: newton opens with ${JSON.stringify(vals)}`);
+  const text = (await p.locator("body").allInnerTexts()).join("\n");
+  if (!text.includes("1.324718")) errors.push(`${where}: its Run doesn't reach cubic's root${text.includes("no result") ? " (the search found no result)" : ""}`);
+  await p.close();
+}
+
 // Let and get nodes for the whole definition at once, from the canvas's
 // menu (BACKLOG E112); and a call picked in the graph opens or changes the
 // function it calls (E113).
@@ -792,7 +810,7 @@ async function whereTold() {
   await p.close();
 }
 
-const scenarios = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, letNodes, simplifyAppend, whereTold };
+const scenarios = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, newtonOpens, letNodes, simplifyAppend, whereTold };
 for (const [name, run] of Object.entries(scenarios)) {
   test(name, async () => {
     errors.length = 0;
