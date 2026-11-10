@@ -42,8 +42,10 @@ jobs:
         working-directory: ters
       # One debug key for every run (a debug key, not a secret), so a new
       # build installs over the one on the phone instead of being refused.
+      # Given to Gradle as Android Studio gives its signing key (a key in
+      # ~/.android wasn't used: I198), and checked on the APK after.
       - name: Debug key
-        run: mkdir -p ~/.android && cp .github/android/debug.keystore ~/.android/debug.keystore
+        run: echo "SIGN=-Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/.github/android/debug.keystore -Pandroid.injected.signing.store.password=android -Pandroid.injected.signing.key.alias=androiddebugkey -Pandroid.injected.signing.key.password=android" >> "$GITHUB_ENV"
       - name: ters build-app
         if: inputs.kind == 'webview'
         working-directory: ters
@@ -63,7 +65,7 @@ jobs:
           RUN: ${{ github.run_number }}
         run: |
           sed -i "s/versionCode 1\b/versionCode $RUN/" app/build.gradle
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon $SIGN
       - name: ters build-native-app
         if: inputs.kind == 'native'
         working-directory: ters
@@ -79,7 +81,14 @@ jobs:
         working-directory: ${{ runner.temp }}/app/android
         env:
           TERS_VERSION_CODE: ${{ github.run_number }}
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon $SIGN
+      - name: Signed with the one key
+        run: |
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for apk in "$RUNNER_TEMP"/app/android/app/build/outputs/apk/debug/*.apk; do
+            "$tools/aapt2" dump badging "$apk" | head -1
+            "$tools/apksigner" verify --print-certs "$apk" 2>/dev/null | grep "SHA-256" | tee /dev/stderr | grep -q 61df053836f4ca3208fc38ab4903810a7925d55ee8c30c467e25b1176be45c74
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.program }}-android-${{ inputs.kind }}
