@@ -326,6 +326,10 @@ const onlyWhatIsUsed: Plugin = {
     const marked = Symbol("resolved");
     build.onResolve({ filter: /^(\.\.?)?\// }, async (a) => {
       if (a.pluginData === marked || a.kind === "entry-point") return undefined;
+      // A path to a file that is there is that file: asking esbuild again
+      // for each of a bundle's thousands of imports took 7 of 9 s (I193n).
+      const there = resolve(a.resolveDir, a.path);
+      if (existsSync(there) && statSync(there).isFile()) return { path: there, sideEffects: false };
       const r = await build.resolve(a.path, { importer: a.importer, resolveDir: a.resolveDir, kind: a.kind, pluginData: marked });
       return r.errors.length || r.external ? undefined : { path: r.path, sideEffects: false };
     });
