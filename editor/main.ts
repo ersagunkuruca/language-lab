@@ -2193,8 +2193,16 @@ document.addEventListener("pointerdown", (e) => {
   const pane = k === "text-h" ? grid.querySelector<HTMLElement>(".p-text")! : grid.querySelector<HTMLElement>(k === "nav-w" ? ".p-nav" : ".side")!;
   const r = pane.getBoundingClientRect();
   const start = k === "text-h" ? r.height : r.width;
-  const limit = k === "text-h" ? [80, grid.clientHeight - 200] : k === "nav-w" ? [140, 420] : [240, k === "page-w" ? 960 : 640];
+  // Bounds only keep every pane on screen and its gutter in reach: any pane
+  // may shrink to a sliver or grow until the middle is a sliver.
+  const MIN = 48, gutters = 12;
+  const other = k === "text-h" ? 0 : grid.querySelector<HTMLElement>(k === "nav-w" ? ".side" : ".p-nav")!.getBoundingClientRect().width;
+  const limit = k === "text-h" ? [MIN, grid.clientHeight - 6 - MIN] : [MIN, grid.clientWidth - other - gutters - MIN];
   g.classList.add("dragging");
+  // The pointer stays the gutter's while dragging, even over a page shown in
+  // an iframe, which would otherwise take the moves for itself.
+  try { g.setPointerCapture(e.pointerId); } catch {}
+  document.body.classList.add("resizing");
   const mv = (ev: PointerEvent) => {
     const d = k === "text-h" ? e.clientY - ev.clientY : k === "nav-w" ? ev.clientX - e.clientX : e.clientX - ev.clientX;
     dock[k] = Math.round(Math.min(limit[1], Math.max(limit[0], start + d)));
@@ -2202,6 +2210,7 @@ document.addEventListener("pointerdown", (e) => {
   };
   follow(e, mv, () => {
     g.classList.remove("dragging");
+    document.body.classList.remove("resizing");
     try { localStorage.setItem(DOCK, JSON.stringify(dock)); } catch {}
   });
 });
