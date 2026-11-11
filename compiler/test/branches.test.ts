@@ -163,6 +163,20 @@ test("a fold keeping its items' smallest Int keeps it on workers, or the empty l
   }
 });
 
+// A fold whose join is no sum (C42e): each number's walks worked out on
+// workers as a map's items, the hashes then put together in turn.
+test("fingerprint works out its numbers' walks on workers and hashes them in turn, the same as in turn and in the evaluator (C42e)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/fingerprint"), "-o", "fingerprint.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/fingerprint"), "12", "--evaluator"], {})]);
+  assert.equal(made[2], 0, made[1]);
+  assert.match(readFileSync(join(dir, "fingerprint.mjs"), "utf8"), /R\d*\.rt\("map\.pure"/);
+  const [side, alone, small] = await Promise.all([run(["fingerprint.mjs", "400"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["fingerprint.mjs", "400"], { TERS_WORKERS: "0" }, dir), run(["fingerprint.mjs", "12"], {}, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[0], /below 400: \d+\n$/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.equal(small[0], inEvaluator[0]);
+});
+
 test("collatz keeps its long walks on workers, the same numbers in the same order as in turn and in the evaluator (C43)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/collatz"), "-o", "collatz.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/collatz"), "2000", "100"], {})]);
