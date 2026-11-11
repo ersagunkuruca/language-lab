@@ -27,7 +27,9 @@ const small = (e: SExpr) => e.k === "int" && e.v > -SMALL && e.v < SMALL;
 const STEP = new Set(["int.add", "int.sub"]);
 const COMPARE: Record<string, string> = { "int.equal": "i64.eq", "int.less": "i64.less" };
 
-export function untaggedLoops(ir: CoreIR): number {
+// `valuesOnly` (WebAssembly, C207k): only loops that compute on Ints
+// alone, whose rounds start again as written; counts stay tagged there.
+export function untaggedLoops(ir: CoreIR, valuesOnly = false): number {
   const n0 = ir.funcs.length, copies: number[] = [];
   let made = 0;
   for (let i = 0; i < n0; i++) {
@@ -39,7 +41,8 @@ export function untaggedLoops(ir: CoreIR): number {
       kids(e).forEach(walk);
     })(f.body);
     if (!calls.length || other) continue;
-    if (valueLoop(ir, i)) { made++; continue; }
+    if (valueLoop(ir, i, valuesOnly)) { made++; continue; }
+    if (valuesOnly) continue;
     // The counts: parameters, then the lets stepping one of them.
     let params = new Set(f.params.flatMap((t, j) => (t === "int" ? [j] : [])));
     let counts = new Set<number>();
@@ -95,7 +98,11 @@ export function untaggedLoops(ir: CoreIR): number {
 // a count past 2^62 is no different here.
 const VALUE_FN: Record<string, string> = { "int.add": "i64.addv", "int.sub": "i64.subv", "int.mul": "i64.mulv", "int.bitAnd": "i64.and" };
 class Not extends Error {}
-function valueLoop(ir: CoreIR, i: number): boolean {
+// `total` (WebAssembly): the copy is no partial function, even where the
+// loop is (it may not finish, so it may be stopped): nothing in a round
+// fails, so it runs as a loop there (wasm.ts selfTail), and a round that
+// starts again as written traps if that one has no answer.
+function valueLoop(ir: CoreIR, i: number, total = false): boolean {
   const f = ir.funcs[i];
   if (!f.params.length || !f.params.every((t) => t === "int")) return false;
   const g = ir.funcs.length, locals = f.locals.map((t, j) => (j < f.params.length ? "i64" : t)), ints = new Set(f.params.map((_, j) => j));
@@ -114,7 +121,14 @@ function valueLoop(ir: CoreIR, i: number): boolean {
   const val = (e: SExpr, lets: Lets): SExpr => {
     if (e.k === "local" && ints.has(e.i)) return e;
     if (small(e)) return lit(e);
-    if (e.k === "rt" && VALUE_FN[e.fn] && e.args.length === 2) return { k: "rt", fn: VALUE_FN[e.fn], args: e.args.map((a) => atom(a, lets)) };
+    // Each step named, so a printer checks it before going on.
+    if (e.k === "rt" && VALUE_FN[e.fn] && e.args.length === 2) {
+      const x: SExpr = { k: "rt", fn: VALUE_FN[e.fn], args: e.args.map((a) => atom(a, lets)) };
+      if (x.fn === "i64.and") return x;
+      locals.push("i64");
+      lets.push([locals.length - 1, x]);
+      return { k: "local", i: locals.length - 1 };
+    }
     if (e.k === "rt" && e.fn === "int.shiftDown" && e.args.length === 2 && e.args[1].k === "int" && e.args[1].v >= 0n && e.args[1].v < 62n) return { k: "rt", fn: "i64.shr", args: [atom(e.args[0], lets), lit(e.args[1])] };
     if (e.k === "if" && e.t === "int") return { k: "if", cond: test(e.cond, lets), then: own(e.then, val), else: own(e.else, val), t: "i64" };
     if (e.k === "let" && f.locals[e.i] === "int") { ints.add(e.i); locals[e.i] = "i64"; lets.push([e.i, own(e.value, val)]); return val(e.body, lets); }
@@ -138,7 +152,7 @@ function valueLoop(ir: CoreIR, i: number): boolean {
   // The copy, then the loop as written that a round leaving the small
   // range starts again in, then the loop: to the copy when its inputs are
   // small.
-  ir.funcs.push({ ...f, name: `${f.name} counted`, inner: true, params: f.params.map(() => "i64"), locals, body, bail: g + 1 });
+  ir.funcs.push({ ...f, name: `${f.name} counted`, inner: true, params: f.params.map(() => "i64"), locals, body, bail: g + 1, ...(total ? { partial: false } : {}) });
   ir.funcs.push({ ...f, name: `${f.name} as written`, inner: true });
   const cond = f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.small", args: [{ k: "local", i: j }] })).reduce((a, b) => ({ k: "op", op: "and", args: [a, b] }));
   const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.unbox", args: [{ k: "local", i: j }] })) };

@@ -7443,10 +7443,33 @@ export const runtime = (name: string): RtFn => {
     if (!TABLES[tb[1]]) throw new Error(`no runtime function ${name}`);
     return { ...TABLES[tb[1]], name, locals: [], uses: [], body: "unreachable" };
   }
-  // A loop's counts untagged (C207e, untagged-ints.ts): only their shapes
-  // here; c.ts prints them, and nothing else lowers them.
+  // A loop's Ints untagged (C207e, C207i; untagged-ints.ts). On C c.ts
+  // prints them; on WebAssembly a loop's values (C207k) call these, which
+  // V8 inlines. A $big holds any i64, so an Int is "small" here unless it's
+  // a $huge; a value stepped past an i64 gives i64's least, which wasm.ts
+  // takes as the round to start again as written. (Counts, i64.add and
+  // i64.sub, aren't untagged on WebAssembly.)
   const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit)$/.exec(name);
-  if (i64) return { name, params: [], result: ({ eq: "i32", less: "i32", small: "i32", toNumber: "f64", box: "int" } as Record<string, VT>)[i64[1]] ?? "i64", locals: [], uses: [], body: "unreachable", native: true };
+  if (i64) {
+    const op = i64[1], two: [string, VT][] = [["a", "i64"], ["b", "i64"]];
+    const plain: Record<string, [string, VT]> = { eq: ["i64.eq", "i32"], less: ["i64.lt_s", "i32"], and: ["i64.and", "i64"], shr: ["i64.shr_s", "i64"] };
+    if (plain[op]) return { name, params: two, result: plain[op][1], locals: [], uses: [], native: true, body: `local.get $a\nlocal.get $b\n${plain[op][0]}` };
+    if (op === "toNumber") return { name, params: [["a", "i64"]], result: "f64", locals: [], uses: [], native: true, body: "local.get $a\nf64.convert_i64_s" };
+    if (op === "box") return { name, params: [["a", "i64"]], result: "int", locals: [], uses: ["int.of"], native: true, body: "local.get $a\ncall $int.of" };
+    if (op === "unbox") return { name, params: [["x", "int"]], result: "i64", locals: [], uses: ["int.small"], native: true, body: "local.get $x\ncall $int.small" };
+    if (op === "small") return { name, params: [["x", "int"]], result: "i32", locals: [], uses: [], native: true, body: "local.get $x\nref.test $huge\ni32.eqz" };
+    // a ± b past an i64: the answer's sign is neither's (as int.add).
+    if (op === "addv" || op === "subv") return {
+      name, params: two, result: "i64", locals: [["r", "i64"]], uses: [], native: true,
+      body: `local.get $a\nlocal.get $b\ni64.${op === "addv" ? "add" : "sub"}\nlocal.set $r\nlocal.get $a\nlocal.get $r\ni64.xor\n${op === "addv" ? "local.get $b\nlocal.get $r\ni64.xor" : "local.get $a\nlocal.get $b\ni64.xor"}\ni64.and\ni64.const 0\ni64.lt_s\nif i64\ni64.const -9223372036854775808\nelse\nlocal.get $r\nend`,
+    };
+    // a · b: exact when both fit 32 bits; otherwise the round as written.
+    if (op === "mulv") return {
+      name, params: two, result: "i64", locals: [], uses: [], native: true,
+      body: "local.get $a\ni64.const 2147483648\ni64.add\ni64.const 4294967296\ni64.lt_u\nlocal.get $b\ni64.const 2147483648\ni64.add\ni64.const 4294967296\ni64.lt_u\ni32.and\nif i64\nlocal.get $a\nlocal.get $b\ni64.mul\nelse\ni64.const -9223372036854775808\nend",
+    };
+    return { name, params: [], result: ({ toNumber: "f64", box: "int" } as Record<string, VT>)[op] ?? "i64", locals: [], uses: [], body: "unreachable", native: true };
+  }
   // An array function's copy for one item type (C66): the template, told which.
   const at = /^(array\.\w+)\.a(\d+)(\.i64)?$/.exec(name);
   // columns.ts's ops (C60 w2): only their shapes here; wasm.ts writes
