@@ -101,7 +101,7 @@ const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // its slot.
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 // untagged-ints.ts's ops on a loop's counts (C207e).
-const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit)$/;
+const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv)$/;
 // A count stepped past the small Ints: some 2^62 steps, never in practice.
 const I64_C = `static void lab__i64_past(void) { fflush(stdout); fputs("a count went past 2^62\\n", stderr); exit(1); }
 static inline int64_t lab__i64_add(int64_t a, int64_t b) { int64_t r = a + b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
@@ -1758,6 +1758,13 @@ int main(int argc, char **argv) {
             if (i64[1] === "add" || i64[1] === "sub") i64Used = true;
             // A value leaving the small range: the round again as written
             // (C207i, untagged-ints.ts valueLoop).
+            if (i64[1] === "muladdv") {
+              // k·x + c (C207q): x tested against the bounds k and c give,
+              // which the C compiler works out once.
+              const v = temp("i64");
+              pre.push(`${d}if (${xs[0]} > (lab__max - ${xs[2]}) / ${xs[1]} || ${xs[0]} < (lab__min - ${xs[2]}) / ${xs[1]}) goto lab_bail;`, `${d}${v} = ${xs[0]} * ${xs[1]} + ${xs[2]};`);
+              return v;
+            }
             if (i64[1].endsWith("v")) {
               i64vUsed = true;
               const v = temp("i64");
