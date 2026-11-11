@@ -25,7 +25,7 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { nodesWhere, freshId } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
+import { inferRewritten, type Info } from "./infer.ts";
 import { FALSE, S, TRUE } from "./std.ts";
 
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
@@ -57,5 +57,7 @@ export function literalMatch(code: Code, info: Info, names: Names): { code: Code
     nodes[m.id] = { id: m.id, kind: "call", fn: add({ kind: "lambda", params: [x], body: chain }), args: [m.scrutinee] } as Node;
   }
   const next: Code = { ...code, nodes };
-  return { code: next, info: infer(next, out, undefined, info.options), names: out };
+  // Each match is the same type as the chain it becomes: only the
+  // definitions holding one are checked again.
+  return { code: next, info: inferRewritten(code, next, out, info, matches.map((m) => m.id), []), names: out };
 }

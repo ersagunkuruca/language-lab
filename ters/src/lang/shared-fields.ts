@@ -21,7 +21,7 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
+import { inferRewritten, type Info } from "./infer.ts";
 import { S, SET } from "./std.ts";
 import { fieldPath } from "./records.ts";
 
@@ -66,6 +66,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
   const ref = (target: Id) => add({ kind: "ref", target });
   const made = new Map<Id, Id>();
   let changed = false;
+  const touched: Id[] = [];
   const shared = (field: Id) => {
     const td = typeOf(code, field);
     const sh = td && td.variants.length > 1 ? sharing(code, td, field) : null;
@@ -115,6 +116,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
     };
     const whole = step(n.args[1], path);
     nodes[n.id] = { ...(nodes[whole] as Call), id: n.id };
+    touched.push(n.id);
     changed = true;
   }
   for (const n of Object.values(nodes)) {
@@ -138,9 +140,11 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
       out[def] = `${names[root] ?? root} of every case`;
     }
     nodes[n.id] = { id: n.id, kind: "ref", target: def };
+    touched.push(n.id);
     changed = true;
   }
   if (!changed) return { code, info, names };
   const next: Code = { ...code, nodes, defs };
-  return { code: next, info: infer(next, out, undefined, info.options), names: out };
+  // Each definition keeps its type: only those it changed or made are checked again.
+  return { code: next, info: inferRewritten(code, next, out, info, touched, defs.slice(code.defs.length)), names: out };
 }

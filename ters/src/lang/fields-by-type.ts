@@ -23,7 +23,7 @@
 import type { Code, Id, Node } from "../model.ts";
 import { nodesWhere, freshId, isCall } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
+import { inferRewritten, type Info } from "./infer.ts";
 import { CONS, FIELDS, NIL } from "./std.ts";
 import type { Type } from "./types.ts";
 
@@ -63,6 +63,7 @@ export function fieldsByType(code: Code, info: Info, names: Names): { code: Code
   const ref = (target: Id) => add({ kind: "ref", target });
   const made = new Map<string, Id>();
   let changed = false;
+  const touched: Id[] = [];
   for (const n of Object.values(code.nodes)) {
     if (!isCall(n)) continue;
     const fnNode = code.nodes[n.fn];
@@ -99,9 +100,11 @@ export function fieldsByType(code: Code, info: Info, names: Names): { code: Code
       out[def] = `fields ${mapping ? "mapped" : "listed"} at ${names[data.id] ?? data.id} ${names[part] ?? part}`;
     }
     nodes[n.fn] = { id: n.fn, kind: "ref", target: def };
+    touched.push(n.fn);
     changed = true;
   }
   if (!changed) return { code, info, names };
   const next: Code = { ...code, nodes, defs };
-  return { code: next, info: infer(next, out, undefined, info.options), names: out };
+  // Each definition keeps its type: only those it changed or made are checked again.
+  return { code: next, info: inferRewritten(code, next, out, info, touched, defs.slice(code.defs.length)), names: out };
 }

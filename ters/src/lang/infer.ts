@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf } from "../model.ts";
-import { conditionResults, dependencies, derived, layerOf, nodesWhere, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
+import { conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { constraints as unitConstraints, unitProblems, UnitsBefore } from "../units.ts";
@@ -3243,4 +3243,44 @@ function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
     return { t: "fn", params: fs, ret: r ? te(r) : s.fresh(), eff: s.freshRow([def]) };
   }
   return fs.length ? { t: "fn", params: fs, ret: self, eff: s.freshRow() } : self;
+}
+
+// A program rewritten without changing any definition's type (a step of
+// arith.ts's resolving: literalMatch, fieldsByType, sharedFields), checked
+// again only where it changed: the definitions holding `changed` nodes of
+// `before` and the ones it `made`, over the check before as a layer is
+// read under a program. A changed definition whose type comes out other
+// than it was, or an error the program didn't have, has the whole program
+// checked (I192: each step checked all of calc again, 0.3 s each).
+export function inferRewritten(before: Code, next: Code, names: Names, info: Info, changed: Iterable<Id>, made: Id[]): Info {
+  const whole = () => infer(next, names, undefined, info.options);
+  const parent = parentLookup(before), defs = new Set(before.defs);
+  const only = new Set<Id>(made);
+  for (const id of changed) {
+    // A node the rewrite made is inside one it changed, or a definition it made.
+    if (!(id in before.nodes)) continue;
+    let at: Id | undefined = id;
+    while (at !== undefined && !defs.has(at)) at = parent(at);
+    if (at === undefined) return whole();
+    only.add(at);
+  }
+  // Its scans read the program before's picks but for what the rewrite
+  // changed or made: every other node is the one before (model.ts derived).
+  if (!derived.has(next)) {
+    const touched = new Set<Id>(changed);
+    for (const id in next.nodes) if (!(id in before.nodes)) touched.add(id);
+    derivedFrom(next, before, touched, true);
+  }
+  const quick = infer(next, names, { from: info, only, layer: true }, info.options);
+  // Its errors are those the program had (a library definition's that
+  // takes any value, say): only the rechecked ones are found again.
+  const had = new Set(info.errors.map((e) => e.message));
+  if (quick.errors.some((e) => !had.has(e.message))) return whole();
+  quick.errors = info.errors;
+  for (const d of only) {
+    if (made.includes(d)) continue;
+    const was = info.schemes.get(d), now = quick.schemes.get(d);
+    if (!was !== !now || (was && now && groupKey(info.subst, [was.type]) !== groupKey(quick.subst, [now.type]))) return whole();
+  }
+  return quick;
 }
