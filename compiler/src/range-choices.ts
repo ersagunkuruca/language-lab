@@ -1,4 +1,4 @@
-// A choice over a range's items made with no list (BACKLOG C207, on C).
+// A choice over a range's items made with no list (BACKLOG C207, on C and JavaScript).
 // queens' `choose column from range n` lowers to a loop over a list
 // (scalar.ts's "choose"): each placement fills an array with 0 … n − 1
 // (`range`), makes a list of its items (`items of`), and the loop takes
@@ -12,12 +12,17 @@
 // the low half as a Float64, its rest the int64 plus one. The copy is
 // made only where the loop takes the list apart and nothing else: its
 // rest only goes round again.
+// On JavaScript (`js`, C207s) the range is one Float64 instead: its next
+// item plus its end times 2^26, the two halves read back by a floor, which
+// is exact below 2^52. A range's list of 2^26 items or more, some 67
+// million cons cells, would take gigabytes there, so it stops as out of
+// memory too.
 import { kids, mapKids, type CoreIR, type DType, type SExpr } from "./scalar.ts";
 
 const LOW = (1n << 31n) - 1n;
 const ITEMS = /^array\.items\.a(\d+)$/, RANGE = /^array\.rangeF\.a(\d+)$/, OF = /^array\.of\.a(\d+)$/;
 
-export function rangeChoices(ir: CoreIR): number {
+export function rangeChoices(ir: CoreIR, js = false): number {
   let made = 0;
   const n0 = ir.funcs.length;
   for (let i = 0; i < n0; i++) {
@@ -65,32 +70,39 @@ export function rangeChoices(ir: CoreIR): number {
     if (!ok || !rests.size) continue;
     // The copy.
     const g = ir.funcs.length;
+    const w = js ? "f64" : "i64";
     const locals = [...f.locals];
-    locals[0] = "i64";
-    for (const r of rests) locals[r] = "i64";
-    const fresh = (): number => locals.push("i64") - 1;
+    locals[0] = w;
+    for (const r of rests) locals[r] = w;
+    const fresh = (): number => locals.push(w) - 1;
     const lit = (v: bigint): SExpr => ({ k: "rt", fn: "i64.lit", args: [{ k: "int", v }] });
+    const num = (v: number): SExpr => ({ k: "num", v });
+    const op = (o: "add" | "sub" | "mul" | "floor" | "equal", ...args: SExpr[]): SExpr => ({ k: "op", op: o, args });
     const p: SExpr = { k: "local", i: 0 };
+    // The end, and the next item, of local p; on JavaScript the end is
+    // read first, the next item from it.
+    const high = (x: SExpr): SExpr => (js ? op("floor", op("mul", x, num(2 ** -26))) : { k: "rt", fn: "i64.shr", args: [x, lit(31n)] });
+    const lowOf = (x: SExpr, h: SExpr): SExpr => (js ? op("sub", x, op("mul", h, num(2 ** 26))) : { k: "rt", fn: "i64.and", args: [x, lit(LOW)] });
+    const low = fresh(), hi2 = fresh();
     const rw = (e: SExpr): SExpr => {
       if (e.k === "field" && e.rec.k === "local" && e.rec.i === 0) {
-        if (e.i === ri) return { k: "rt", fn: "i64.add", args: [p, lit(1n)] };
-        const low = fresh();
-        return { k: "let", i: low, value: { k: "rt", fn: "i64.and", args: [p, lit(LOW)] }, body: { k: "rt", fn: "i64.toNumber", args: [{ k: "local", i: low }] } };
+        if (e.i === ri) return js ? op("add", p, num(1)) : { k: "rt", fn: "i64.add", args: [p, lit(1n)] };
+        // The next item, read once at the loop's top.
+        return js ? { k: "local", i: low } : { k: "rt", fn: "i64.toNumber", args: [{ k: "local", i: low }] };
       }
       if (e.k === "call" && e.fn === i && e.tail) return { ...e, fn: g, args: e.args.map(rw) };
       return mapKids(e, rw);
     };
-    const low = fresh(), high = fresh();
     const body: SExpr = {
-      k: "let", i: low, value: { k: "rt", fn: "i64.and", args: [p, lit(LOW)] },
-      body: { k: "let", i: high, value: { k: "rt", fn: "i64.shr", args: [p, lit(31n)] },
-        body: { k: "if", cond: { k: "rt", fn: "i64.eq", args: [{ k: "local", i: low }, { k: "local", i: high }] }, then: rw(b.arms[1 - c]!), else: rw(b.arms[c]!), t: f.result } },
+      k: "let", i: hi2, value: high(p),
+      body: { k: "let", i: low, value: lowOf(p, { k: "local", i: hi2 }),
+        body: { k: "if", cond: js ? op("equal", { k: "local", i: low }, { k: "local", i: hi2 }) : { k: "rt", fn: "i64.eq", args: [{ k: "local", i: low }, { k: "local", i: hi2 }] }, then: rw(b.arms[1 - c]!), else: rw(b.arms[c]!), t: f.result } },
     };
-    ir.funcs.push({ ...f, name: `${f.name} range`, inner: true, params: ["i64", ...f.params.slice(1)], locals, body });
+    ir.funcs.push({ ...f, name: `${f.name} range`, inner: true, params: [w, ...f.params.slice(1)], locals, body });
     for (const { e } of sites) {
       const split = e.args[0].k === "rt" && e.args[0].fn === "choose.split";
       e.fn = g;
-      e.args[0] = { k: "rt", fn: split ? "i64.rangeSplit" : "i64.range", args: [given(e.args[0])!] };
+      e.args[0] = { k: "rt", fn: js ? (split ? "range.split" : "range.of") : split ? "i64.rangeSplit" : "i64.range", args: [given(e.args[0])!] };
     }
     made++;
   }

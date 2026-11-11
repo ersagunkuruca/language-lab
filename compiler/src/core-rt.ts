@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker, mapAway, searchAway, chooseSplit, rangeSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -50,6 +50,13 @@ let decoder: TextDecoder | undefined, lastText: string | undefined, lastBytes: U
 const known = (t: string) => { if (t !== lastText) { lastText = t; lastAscii = !/[^\x00-\x7f]/.test(t); lastBytes = undefined; } };
 const ascii = (t: string) => (known(t), lastAscii);
 const utf8Of = (t: string) => (known(t), (lastBytes ??= UTF8.encode(t)));
+// The items of number.range x, which as a list of 2^26 or more would be
+// gigabytes of cons cells.
+const rangeCount = (x: number): number => {
+  const n = x > 0 ? Math.floor(x) : 0;
+  if (n >= 2 ** 26) throw new RangeError("out of memory");
+  return n;
+};
 const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.equal": (a: I.Int, b: I.Int) => a === b,
   "int.less": (a: I.Int, b: I.Int) => a < b,
@@ -60,6 +67,8 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
   // run.ts's, which the evaluator has outside std.ts.
   "number.range": (n: number) => toList(Array.from({ length: Math.max(0, n) }, (_, i) => i)),
+  // A choice over number.range's items as one Float64 (range-choices.ts).
+  "range.of": (x: number) => rangeCount(x) * 2 ** 26,
   "text.size": (t: string) => (ascii(t) ? t.length : utf8Of(t).length),
   "text.bytes": (t: string, a: number, b: number) => (ascii(t) ? t.slice(a, b) : (decoder ??= new TextDecoder()).decode(utf8Of(t).subarray(a, b))),
   // Where the character that ends at byte i (> 0) starts.
@@ -215,6 +224,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // or the smallest, after the empty list's z (C42).
   if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, join?: unknown) => (fuel === Infinity || fuel === undefined ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join as (x: unknown) => unknown) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join as (x: unknown) => unknown));
   if (name === "choose.split") return chooseSplit as (...xs: unknown[]) => unknown;
+  if (name === "range.split") return ((x: number) => rangeSplit(rangeCount(x))) as (...xs: unknown[]) => unknown;
   if (name === "split.hold") return splitHold;
   if (name === "split.give") return splitGive as (...xs: unknown[]) => unknown;
   if (name === "map.pure" || name === "keep.pure") {

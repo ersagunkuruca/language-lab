@@ -584,6 +584,15 @@ export function chooseSplit(l: unknown): unknown {
   if (seen < 0) seen = items.length; else seen2 = items.length;
   return sameKind(l, items.slice(lo, hi));
 }
+// A choice over a range's n items (range-choices.ts, C207s): its next
+// item plus its end times 2^26, as range.of makes it, and split as above.
+export function rangeSplit(n: number): number {
+  if (split < 0) return n * 2 ** 26;
+  const lo = Math.min(split, n), hi = Math.min(splitHi, n);
+  split = split2; splitHi = split2Hi; split2 = -1; split2Hi = -1;
+  if (seen < 0) seen = n; else seen2 = n;
+  return hi * 2 ** 26 + lo;
+}
 // A search inside the one split: its choices whole, then the split as it was.
 export const splitHold = (): unknown => { const j = [split, splitHi]; split = -1; return j; };
 export const splitGive = (j: unknown): void => { [split, splitHi] = j as number[]; };
