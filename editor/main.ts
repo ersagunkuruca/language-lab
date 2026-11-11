@@ -63,6 +63,7 @@ import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
+import { loadChecks } from "./checkStore.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -2611,11 +2612,17 @@ if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p)
   render();
 }, () => { ui.note = UNREADABLE; ui.refused = true; render(); });
 
-render();
-// What every first click asks, found before it (selection.ts).
-setTimeout(() => warmParents(LIBRARY.code), 1500);
-// Run's worker, started with this program's check while nothing else
-// runs, so Run main doesn't wait for the library's check (I177).
-if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 1000);
-// What main first calls each function with, for opening one (I179).
-if (!EMBED) setTimeout(() => { const info = typesOf(); if (info) warmCalls(info); }, 2000);
+function started() {
+  render();
+  // What every first click asks, found before it (selection.ts).
+  setTimeout(() => warmParents(LIBRARY.code), 1500);
+  // Run's worker, started with this program's check while nothing else
+  // runs, so Run main doesn't wait for the library's check (I177).
+  if (!EMBED) setTimeout(() => { const m = defNamed("main"); if (m && typesOf()) warmRun(m); }, 1000);
+  // What main first calls each function with, for opening one (I179).
+  if (!EMBED) setTimeout(() => { const info = typesOf(); if (info) warmCalls(info); }, 2000);
+}
+// The checks kept in this browser read first (checkStore.ts), so the first
+// check takes the library's from them.
+const checksRead = loadChecks();
+if (checksRead) void checksRead.then(started); else started();

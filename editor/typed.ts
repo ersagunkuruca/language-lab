@@ -11,6 +11,7 @@ import type { Names, Notation, Presentation } from "../ters/src/presentation.ts"
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
 import { CheckCache } from "../ters/src/lang/check-cache.ts";
+import { groupStore } from "./checkStore.ts";
 import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } from "../ters/src/model.ts";
 import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "../ters/src/lang/library.ts";
@@ -202,7 +203,7 @@ const INSIDERS = [...PRELUDE.code.defs, ...TREES.code.defs, ...NUMBERS.code.defs
 // Each definition group's check is kept between checks (L215b,
 // check-cache.ts): an edit checks the groups it changed, and their callers
 // only where a type changed.
-const CACHE = new CheckCache();
+const CACHE = new CheckCache(4000, groupStore);
 // The options are the same object while the pins are the same, so the
 // library's kept check (L216, infer.ts `under`) is found again: made anew
 // for each check, they missed it, and every edit checked the library too.
