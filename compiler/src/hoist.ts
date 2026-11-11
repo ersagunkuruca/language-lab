@@ -21,11 +21,12 @@
 
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { fieldWayOf, isUse, isCall, type Call } from "../../ters/src/model.ts";
-import { freshId, subtree } from "../../ters/src/model.ts";
+import { freshId, parentLookup, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
-import { Subst, type Type } from "../../ters/src/lang/types.ts";
+import { OverMap, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
+import { envSet } from "./zero-parts.ts";
 
 export function hoistInvariants(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names; hoisted: number } {
   const nodes = { ...code.nodes };
@@ -58,6 +59,22 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
     return !isCall(n) || plainCall(n, false);
   });
   let hoisted = 0;
+  // Each new node's type, from the nodes it was made of (I203: no check
+  // again). A call's facts keyed by its id go with its contents.
+  const typeOf = new OverMap(info.typeOf), answered = new Set(info.answered ?? []), spread = new Set(info.spread ?? []);
+  const parent = parentLookup(code);
+  const rowAt = (id: Id): Row => {
+    for (let at = parent(id); at !== undefined; at = parent(at)) {
+      if (code.nodes[at]?.kind !== "lambda") continue;
+      const t = info.typeOf.get(at);
+      return t?.t === "fn" ? t.eff : { effs: [], tail: null };
+    }
+    return { effs: [], tail: null };
+  };
+  const follow = (from: Id, to: Id) => { if (answered.has(from)) answered.add(to); if (spread.has(from)) spread.add(to); };
+  // An embedded or reshaped expression keeps its fact on its node, which a
+  // copy would split: such a program is checked again, as before.
+  let carried = true;
   // The lambdas given to calls, outermost first.
   const ids = code.defs.flatMap((d) => subtree(code, d));
   for (const id of ids) {
@@ -89,6 +106,8 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
       // contents move to a fresh node, and it becomes the let.
       const moved = freshId();
       nodes[moved] = { ...call, id: moved };
+      follow(id, moved);
+      typeOf.set(moved, info.typeOf.get(id)!);
       const binders = found.map((x) => {
         const b = freshId();
         nodes[b] = { id: b, kind: "binder" };
@@ -97,17 +116,24 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
         const value = freshId();
         nodes[value] = { ...nodes[x], id: value };
         nodes[x] = { id: x, kind: "ref", target: b };
+        if (info.embedded?.has(x) || info.reshape?.has(x)) carried = false;
+        follow(x, value);
+        typeOf.set(b, info.typeOf.get(x)!);
+        typeOf.set(value, info.typeOf.get(x)!);
         return { b, value };
       });
       const let_ = freshId();
       nodes[let_] = { id: let_, kind: "lambda", params: binders.map((x) => x.b), body: moved };
       nodes[id] = { id, kind: "call", fn: let_, args: binders.map((x) => x.value) };
+      // The let is called where the call was, so it does what that place does.
+      typeOf.set(let_, { t: "fn", params: found.map((x) => info.typeOf.get(x)!), ret: info.typeOf.get(id)!, eff: rowAt(id) });
       hoisted += found.length;
       break;
     }
   }
   if (!hoisted) return { code, info, names, hoisted };
   const out = { nodes, defs: code.defs };
+  if (carried && !envSet("HOIST_CHECK")) return { code: out, info: { ...info, typeOf, answered, spread }, names, hoisted };
   const checked = infer(out, names, undefined, info.options);
   // Checked again the same way as the program as it came is, since a check
   // again can find what the first (with its pins) didn't (stage.ts, I121).
