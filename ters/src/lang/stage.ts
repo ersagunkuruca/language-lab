@@ -178,6 +178,7 @@ function putBack(back: [Id, Node, Id, Id | null][], code: Code, info: Info, asCh
       if (t) { params.push(t); continue; }
       const ids = subtree(code, a), called = new Set(ids.flatMap((x) => { const c = code.nodes[x]; return isCall(c) ? [c.fn] : []; }));
       for (const x of ids) {
+        if (out.has(x)) continue;
         const c = code.nodes[x], z = zonk(asChecked, x);
         const ctor = z?.t === "fn" && c?.kind === "ref" && called.has(x) && z.eff.effs.every((e) => row.effs.includes(e));
         if (!z || hasVar(ctor ? ({ ...z, eff: PURE } as Type) : z)) return null;
@@ -188,6 +189,24 @@ function putBack(back: [Id, Node, Id, Id | null][], code: Code, info: Info, asCh
     out.set(n.fn, { t: "fn", params, ret, eff: row });
   }
   return out;
+}
+
+// Whether every expression the program reaches has a type, from the check
+// before or carried (the library's own, "@", are typed where it's kept,
+// I193). One missing (a call put back inside another's input
+// was once, I205) leaves the lowering unable to say what a call passes,
+// so then the program is checked again instead.
+function typedAll(code: Code, info: Info, carried: Map<Id, Type>): boolean {
+  const seen = new Set<Id>(), stack = [...code.defs];
+  for (let id = stack.pop(); id !== undefined; id = stack.pop()) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const n = code.nodes[id];
+    if (!n || n.kind === "typedef") continue;
+    if (!id.startsWith("@") && (n.kind === "ref" || n.kind === "call" || n.kind === "lambda" || n.kind === "lit") && !info.typeOf.has(id) && !carried.has(id)) return false;
+    stack.push(...children(n));
+  }
+  return true;
 }
 
 // The types of the nodes a staged call was made of (I203), with no check
@@ -307,7 +326,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   let carried: Map<Id, Type> | null = new Map();
   const check = (): boolean => {
     prune();
-    if (carried && !(typeof process !== "undefined" && process.env?.STAGE_CHECK)) {
+    if (carried && !(typeof process !== "undefined" && process.env?.STAGE_CHECK) && typedAll(code, info, carried)) {
       const typeOf = new OverMap(info.typeOf);
       for (const [id, t] of carried) if (id in code.nodes) typeOf.set(id, t);
       info = { ...info, typeOf };
@@ -362,9 +381,11 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
       if (back.length) {
         const unpaid = new Set(copies.copies.filter((c) => !paid.has(c)).flatMap((c) => [c, ...(copies.holders.get(c) ?? [])]));
         code = { nodes: { ...code.nodes }, defs: code.defs.filter((d) => !unpaid.has(d)) };
-        // A call put back carries its types too (putBack).
-        if (carried) carried = putBack(back, code, info, asChecked, carried);
         for (const [id, n] of back) code.nodes[id] = n;
+        // A call put back carries its types too (putBack), read in the
+        // program with them all put back: one may be inside another's
+        // input (impact's `pga` of `plane basis`, I205).
+        if (carried) carried = putBack(back, code, info, asChecked, carried);
       }
       keep = [];
     }
