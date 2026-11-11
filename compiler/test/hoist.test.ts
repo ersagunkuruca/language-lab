@@ -14,6 +14,7 @@ import type { Id } from "../../ters/src/model.ts";
 import { compiledDefs } from "../src/core-js.ts";
 import { toList } from "../../ters/src/lang/run.ts";
 import { hoistInvariants } from "../src/hoist.ts";
+import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -69,4 +70,14 @@ test("a first's fallback keeps its work: nothing is moved out of a lambda of no 
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   assert.equal(hoistInvariants(code, info, names).hoisted, 0);
+});
+
+test("the hoisted program's types are carried, not checked again, and the verifier vouches for them (I203)", () => {
+  const p = program();
+  const h = hoistInvariants(p.code, p.info, p.names);
+  assert.ok(h.hoisted > 0);
+  const v = verify(h.code, elaborate(h.code, h.info), [p.shares, p.own]);
+  assert.deepEqual(v.problems, []);
+  // The let it made is checked like any function.
+  assert.ok(v.checked > 20, `${v.checked} nodes`);
 });
