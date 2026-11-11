@@ -344,6 +344,36 @@ test("a program that reads a list by position gets arrays, and prints what the d
   assert.equal(showValue(runMain(c.code, info2, main, { print: () => {}, names: c.names }), c.code, c.names), "[9, 8]");
 });
 
+// Round 13 (pond) P1: `show decimals` calls the library's `padded
+// digits`, which folds over a range: the program gets a copy of both, not
+// of the one alone. And a value recurring over a list by a match (`seeded
+// over`) still surely ends once the match is on the array's front.
+test("lists as arrays copy a library function that calls one with lists, and a value's match recursion still ends (round 13 P1)", () => {
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(200)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  const summed = k.def("summed");
+  k.define(summed, k.fn(["ns", "acc"], (ns, acc) => k.match(ns, [
+    { variant: NIL, names: [], body: () => acc },
+    { variant: CONS, names: ["n", "rest"], body: ([n, rest]) => k.call(summed, rest, k.call(B.add, acc, n)) },
+  ])));
+  const total = k.def("total");
+  k.define(total, k.call(summed, k.x(xs), k.lit(0)));
+  const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    show(k.x(total)),
+    show(k.call(L("item at"), k.x(xs), k.int(7), k.lit(-1))),
+    k.call(S.print, k.call(L("show decimals"), k.call(B.div, k.x(total), k.lit(7)), k.int(3))),
+  )));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const before = printed(code, names, main);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, summed, total, main]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
+});
+
 // C30d3c: WebAssembly and C take the same choice. `array of List`'s match
 // is `first of array if any`, lowered as `optional` of the array's first.
 test("a program that reads a list by position and takes it apart gets arrays in WebAssembly and C too, with the evaluator's answers", async () => {
