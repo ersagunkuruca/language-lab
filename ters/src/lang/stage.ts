@@ -386,6 +386,11 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
         // program with them all put back: one may be inside another's
         // input (impact's `pga` of `plane basis`, I205).
         if (carried) carried = putBack(back, code, info, asChecked, carried);
+        // And the program with them put back is the one kept: checked (or
+        // its types carried) at the end. I203d left this out, so the copies
+        // stayed and a library map called through one wasn't shared on
+        // workers (REVIEW-2026-11-11, branches.test.ts).
+        pending = pending ?? [];
       }
       keep = [];
     }
