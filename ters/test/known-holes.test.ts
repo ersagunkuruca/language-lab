@@ -9,13 +9,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get, type Code, type Id, type NodeData } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { infer } from "../src/lang/infer.ts";
+import { bodiesTyped, forgetLibraryChecks, infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY, RATIO_V as RATIO, RATIONAL_TYPE } from "../src/lang/library.ts";
 import { relate } from "../src/lang/relate.ts";
 import { runMain } from "../src/lang/run.ts";
 import { CELL_OPS, COMPARE, CONS, NIL, S, SET_V, SHOW_ANY } from "../src/lang/std.ts";
-import { DIVERGE } from "../src/lang/types.ts";
+import { DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
 function program(build: (k: Lang) => Id) {
@@ -266,13 +266,19 @@ test("R3 §2.2 a fraction made with ratio keeps the fraction's rule (lowest term
 // fresh process. Every `ters run`, `ters check` and test file pays it. The
 // library's definitions are pinned (their types are known by hash), so a
 // program should only need the types of what it reaches.
-test("R10 §2 checking a main that prints one text doesn't type the whole library", { todo: "infer types every library node before the program's own" }, () => {
+test("R10 §2 checking a main that prints one text doesn't type the whole library", () => {
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.lit("hi"))));
   const code = base(k.code), names = baseNames(k.names);
+  // (A library check of its own: the tests before may have typed the
+  // bodies of the one kept.)
+  forgetLibraryChecks();
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors, []);
-  // Today: about 40,000 of 43,500.
-  assert.ok(info.typeOf.size < 2000, `typed ${info.typeOf.size} nodes of ${Object.keys(code.nodes).length}`);
+  assert.match(showType(info.subst.zonk(info.typeOf.get(main)!), names), /Console/);
+  // The library's definitions' types come from their pins (I193): no body
+  // of it is typed, as no node inside one was asked for. (It was about
+  // 40,000 nodes of 43,500.)
+  assert.ok(info.layer && !bodiesTyped(info.layer));
 });
