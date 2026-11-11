@@ -18,7 +18,8 @@
 //                  each one file built like `ters build-web` (WEB.md)
 
 import { build } from "../ters/node_modules/esbuild/lib/main.js";
-import { copyFileSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { markdown } from "./markdown.ts";
 import { mkdirSync } from "node:fs";
 import { corePageRuntime, coreWorkletRuntime, recordings, webCorePage } from "../ters/cli/web.ts";
@@ -38,7 +39,12 @@ const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true,
 // The runtimes and the examples are text elements of the page, read when
 // they're needed, not parts of the script parsed before the first drawing
 // (BACKLOG E204): main.ts reads them by id.
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""' } });
+// What names the checks a browser keeps (checkStore.ts): the checker's and
+// the library's sources, so a change to either checks again.
+const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? sources(`${dir}/${e.name}`) : /\.(ts|js|json|ters)$/.test(e.name) ? [`${dir}/${e.name}`] : []);
+const checksKey = createHash("sha1");
+for (const f of [...sources(site + "ters/src"), ...sources(site + "ters/library"), ...sources(site + "invertible/src")].sort()) checksKey.update(f.slice(site.length)).update(readFileSync(f));
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CHECKS_KEY: JSON.stringify(checksKey.digest("hex").slice(0, 16)) } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
 // The core IR's page and audio runtimes (E244): Save page prints from the
