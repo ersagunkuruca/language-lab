@@ -585,7 +585,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -846,7 +846,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // holder and are changed in place.
     const made = new Set(walk(f.body).flatMap((e) => (e.k === "make" || e.k === "new" || e.k === "list" ? [e.t.key] : [])));
     const shared = (t: LType) => ((isRecord(t) && !t.mutable && counted(t)) || isData(t)) && !made.has((t as RType).key);
-    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (isArray(t) && same(j)) ? [j] : [])));
+    // A table only read, as an array is (round 13 P5).
+    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (isArray(t) && same(j)) || (isTable(t) && (!rounds.length || same(j))) ? [j] : [])));
     if (c.size) lent.set(i, c);
   }
   // Whether e uses local j other than as a field's record or a lent input.
@@ -854,7 +855,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     if (e.k === "local") return e.i === j;
     if ((e.k === "get" || e.k === "field" || e.k === "tag") && e.rec.k === "local" && e.rec.i === j) return false;
     // An array's item or length read from it (C207g, C207r).
-    if (e.k === "rt" && /^array\.(get|length|at)\.a\d+$/.test(e.fn) && e.args[0].k === "local" && e.args[0].i === j) return e.args.slice(1).some((x) => owns(x, j));
+    if (e.k === "rt" && /^(array\.(get|length|at)\.a|table\.at\.t)\d+$/.test(e.fn) && e.args[0].k === "local" && e.args[0].i === j) return e.args.slice(1).some((x) => owns(x, j));
     if (e.k === "call") return e.args.some((a, k) => (a.k === "local" && a.i === j ? !lent.get(e.fn)?.has(k) : owns(a, j)));
     return kids(e).some((x) => owns(x, j));
   };
@@ -1830,6 +1831,16 @@ int main(int argc, char **argv) {
             pre.push(`${d}${drop(f.locals[j], local(j))}`);
             return v;
           }
+          // A value read from a table in a local, the same way (round 13
+          // P5: pond's food read at every cell around every fish, on 4
+          // threads, changed the floor's shared count atomically each time).
+          const tat = TABLE_FN.exec(e.fn);
+          if (tat?.[1] === "at" && e.args[0].k === "local" && (!isCounted(e.args[0].i) || after.has(e.args[0].i))) {
+            const fb = `table.atb.t${tat[2]}`;
+            arrayFns.add(fb);
+            const kx = args([e.args[1]], pre, d, after);
+            return checked(`${cName(fb)}(${[local(e.args[0].i), ...kx].join(", ")})`, rtType(e.fn), pre, d, after);
+          }
           (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
           const c = `${cName(e.fn)}(${args(e.args, pre, d, after).join(", ")})`;
           return !COL_FN.test(e.fn) && runtime(e.fn).partial ? checked(c, rtType(e.fn), pre, d, after) : stated(c, rtType(e.fn), pre, d);
@@ -2466,6 +2477,15 @@ static lab_cell *lab__change_t${i}(lab_cell *c, ${K} k, int set, ${V} v) {
 }`);
     if (has("size")) out.push(`static lab_int lab_table_size_t${i}(lab_cell *c) { lab__reroot_t${i}((${T} *)c); lab_int n = LAB_SMALL(((${T} *)c)->cur->n); lab_drop(c); return n; }`);
     // No answer for a key it doesn't have.
+    // The same, the table lent (round 13 P5).
+    if (has("atb")) out.push(`static ${V} lab_table_atb_t${i}(lab_cell *c, ${K} k) {
+  lab__reroot_t${i}((${T} *)c);
+  ${S} *m = ((${T} *)c)->cur;
+  int f; uint32_t j = lab__find_t${i}(m, k, &f);
+  ${dropK("k")}
+  if (!f) { lab_st = 1; return ${zero(t.value)}; }
+  return ${dupV("m->vs[j]")};
+}`);
     if (has("at")) out.push(`static ${V} lab_table_at_t${i}(lab_cell *c, ${K} k) {
   lab__reroot_t${i}((${T} *)c);
   ${S} *m = ((${T} *)c)->cur;
