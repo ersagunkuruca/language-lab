@@ -39,3 +39,15 @@ test("collatz's loop keeps its values as int64_ts on C, and prints what ters run
   const native = spawnSync(out, args, { encoding: "utf8", env: { ...process.env, TERS_WORKERS: "0" } }), run = spawnSync(process.execPath, [ters, "run", ex, ...args], { encoding: "utf8" });
   assert.equal(native.stdout, run.stdout);
 });
+
+// C207j: in divisors' counted copy, the Float64 made from the count
+// (`(double)l + 1.0`) isn't checked finite; only the product is.
+test("divisors' counted loop checks only the product finite", () => {
+  const ex = join(import.meta.dirname, "../../ters/examples/divisors"), out = join(mkdtempSync(join(tmpdir(), "untagged-")), "divisors");
+  const made = spawnSync(process.execPath, [ters, "native", ex, "-o", out], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr);
+  const c = readFileSync(`${out}.c`, "utf8"), at = c.indexOf("_counted(int64_t p0, int64_t p1, double p2, double p3) {");
+  assert.ok(at > 0);
+  const body = c.slice(at, c.indexOf("\n}\n", at));
+  assert.equal(body.match(/lab_stop\(/g)?.length, 1);
+});
