@@ -18,6 +18,7 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { freshId, subtree, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, recursiveLet, type Info } from "./infer.ts";
+import { OverMap, type Scheme, type Type } from "./types.ts";
 
 // `every`: every let whose value is a function, recursive or not, outer
 // ones first, so an inner one that calls an outer one calls its
@@ -117,5 +118,27 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
     }
   }
   const lifted = { nodes, defs };
-  return { code: lifted, info: infer(lifted, out, undefined, info.options), names: out };
+  const checked = infer(lifted, out, undefined, info.options);
+  // A library definition arith.ts resolved (pedal's `smaller`, at Float64)
+  // keeps its id, and this check reads that id's type from the library's
+  // check, generic, under the body it gave a type: as arith.ts left them.
+  const typeOf = new OverMap(checked.typeOf), schemes = new Map(checked.schemes);
+  typedAsBodies(lifted, typeOf, schemes, new Set(), (t) => checked.subst.zonk(t));
+  return { code: lifted, info: { ...checked, typeOf, schemes }, names: out };
+}
+
+// Each definition whose body has a type with no variable in it has that
+// type, as its scheme (arith.ts, after resolving; liftLets, after its
+// check again). `skip`: those left generic on purpose; `zonk`: a
+// check's types read through its substitution.
+export function typedAsBodies(code: Code, typeOf: Map<Id, Type>, schemes: Map<Id, Scheme>, skip: Set<Id> = new Set(), zonk = (t: Type) => t): void {
+  const valueVar = (t: Type): boolean => t.t === "var" || (t.t === "con" ? t.args.some(valueVar) : t.params.some(valueVar) || valueVar(t.ret));
+  for (const d of code.defs) {
+    const n = code.nodes[d], sc = schemes.get(d);
+    if (n?.kind !== "def" || !n.body || !sc || skip.has(d)) continue;
+    const got = typeOf.get(n.body), bt = got && zonk(got);
+    if (!bt || valueVar(bt) || JSON.stringify(bt) === JSON.stringify(sc.type)) continue;
+    schemes.set(d, { ...sc, vars: [], type: bt });
+    typeOf.set(d, bt);
+  }
 }
