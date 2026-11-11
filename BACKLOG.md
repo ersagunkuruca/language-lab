@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | C58 (free lists; a Pool type asked of Ersagun), then C59; mobile rows wait. Then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C60 (drift: the map written into its own array, then columns), then C42's other associative folds; C187 is blocked on V8; C184 with the Editor lane |
-| L Language and library | "Language lane" | C61 (what's left: (e) on pages, a GPU map whose function closes over values) (L182 is with the Editor lane) |
+| L Language and library | "Language lane" | C61 (what's left: (e) on pages, which waits on the step-budget question to Ersagun), then C42 and C43 examples (L182 is with the Editor lane) |
 | L Language and library | "Language lane B" | the next goal row agreed with its lane (C43's first on C waits for an example); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 

@@ -14,26 +14,29 @@
 
 import type { Code, Id } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
+import type { Type } from "../../ters/src/lang/types.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { lowerScalar, type CoreIR } from "./scalar.ts";
 import { emitWgsl } from "./wgsl.ts";
 
-export interface GpuMap { how: "map" | "keep"; result: "int" | "bool"; wgsl: string }
+// caps: what the function captured, in the closure's order, each an Int
+// or a Bool, which the kernel is given after the item.
+export interface GpuMap { how: "map" | "keep"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
 
 // The kernel's own part: the items in, the answers and the steps out, and
 // the budget and the count of items.
-const kernel = (entry: string, bool: boolean, fuel: boolean, none: boolean) => `${fuel ? "" : "var<private> lab_fuel: f32;\n"}${none ? "" : "var<private> lab_none: bool;\n"}
+const kernel = (entry: string, bool: boolean, fuel: boolean, none: boolean, caps: ("int" | "bool")[]) => `${fuel ? "" : "var<private> lab_fuel: f32;\n"}${none ? "" : "var<private> lab_none: bool;\n"}
 struct LabJob { budget: f32, n: u32 }
 @group(0) @binding(0) var<storage, read> lab_xs: array<i32>;
 @group(0) @binding(1) var<storage, read_write> lab_out: array<i32>;
 @group(0) @binding(2) var<storage, read_write> lab_spent: array<f32>;
-@group(0) @binding(3) var<uniform> lab_job: LabJob;
+@group(0) @binding(3) var<uniform> lab_job: LabJob;${caps.length ? "\n@group(0) @binding(4) var<storage, read> lab_caps: array<i32>;" : ""}
 @compute @workgroup_size(64) fn lab_main(@builtin(global_invocation_id) g: vec3u) {
   let i = g.x + g.y * 65535u * 64u;
   if (i >= lab_job.n) { return; }
   lab_fuel = lab_job.budget;
   lab_none = false;
-  let r = ${entry}(lab_xs[i]);
+  let r = ${entry}(${["lab_xs[i]", ...caps.map((c, j) => (c === "bool" ? `lab_caps[${j}] != 0i` : `lab_caps[${j}]`))].join(", ")});
   if (lab_fuel < 0.0 || lab_none) { lab_spent[i] = -1.0; return; }
   lab_out[i] = ${bool ? "select(0i, 1i, r)" : "r"};
   lab_spent[i] = lab_job.budget - lab_fuel;
@@ -41,28 +44,34 @@ struct LabJob { budget: f32, n: u32 }
 `;
 
 // The kernels by site, for the sites whose function the shader lowering
-// takes. A function that closes over the handler's values isn't one yet.
+// takes, with what it captured (Ints and Bools) given after the item.
 export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
   const out: Record<number, GpuMap> = {};
   for (const m of ir.awayMaps ?? []) {
     const lam = ir.code.nodes[m.fn];
-    const t = ir.info.typeOf.get(m.fn);
-    if (lam?.kind !== "lambda" || lam.params.length !== 1 || !t) continue;
+    const t0 = ir.info.typeOf.get(m.fn), t = t0 && ir.info.subst.zonk(t0);
+    if (lam?.kind !== "lambda" || lam.params.length !== 1 || t?.t !== "fn") continue;
     try {
-      const id = `gpu.${m.site}` as Id;
-      const code: Code = { ...ir.code, defs: [...ir.code.defs, id], nodes: { ...ir.code.nodes, [id]: { id, kind: "def", body: m.fn } } };
-      const info: Info = { ...ir.info, typeOf: new Map(ir.info.typeOf).set(id, t) };
+      // The function lifted to a definition taking what it captured after
+      // the item, as parameters of the same binders.
+      const id = `gpu.${m.site}` as Id, lifted = `gpu.${m.site}.λ` as Id;
+      const capTypes = m.caps.map((b) => { const ct = ir.info.typeOf.get(b); return ct && ir.info.subst.zonk(ct); });
+      if (capTypes.some((ct) => !ct)) continue;
+      const code: Code = { ...ir.code, defs: [...ir.code.defs, id], nodes: { ...ir.code.nodes, [lifted]: { ...lam, id: lifted, params: [...lam.params, ...m.caps] }, [id]: { id, kind: "def", body: lifted } } };
+      const ft: Type = { ...t, params: [...t.params, ...(capTypes as Type[])] };
+      const info: Info = { ...ir.info, typeOf: new Map(ir.info.typeOf).set(id, ft).set(lifted, ft) };
       const names = { ...(ir as { names?: Names }).names, [id]: `map ${m.site}` } as Names;
       const l = lowerScalar(code, info, names, [id], { records: true, shader: true, stepped: true });
       if (l.refused.has(id)) continue;
       const fi = l.funcs.findIndex((g) => g.def === id && !g.inner);
       const f = l.funcs[fi];
-      if (!f || f.params.length !== 1 || f.params[0] !== "int32" || (f.result !== "int32" && f.result !== "i32")) continue;
+      if (!f || f.params.length !== 1 + m.caps.length || f.params.some((p) => p !== "int32" && p !== "i32") || f.params[0] !== "int32" || (f.result !== "int32" && f.result !== "i32")) continue;
+      const caps = f.params.slice(1).map((p) => (p === "i32" ? "bool" : "int") as "int" | "bool");
       if (m.how === "keep" && f.result !== "i32") continue;
       const sh = emitWgsl(l);
       const entry = sh.entries.get(fi);
       if (!entry) continue;
-      out[m.site] = { how: m.how as "map" | "keep", result: f.result === "i32" ? "bool" : "int", wgsl: sh.wgsl + kernel(entry, f.result === "i32", sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none")) };
+      out[m.site] = { how: m.how as "map" | "keep", result: f.result === "i32" ? "bool" : "int", caps, wgsl: sh.wgsl + kernel(entry, f.result === "i32", sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), caps) };
     } catch { /* not one the GPU takes */ }
   }
   return out;
