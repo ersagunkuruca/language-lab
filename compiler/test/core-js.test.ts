@@ -29,7 +29,7 @@ import { lowerScalar } from "../src/scalar.ts";
 import { represented } from "../../ters/cli/represented.ts";
 import { representationsIn } from "../../ters/src/lang/represent.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { FAIL, loadCoreJs, loadPrinted, lowerCore, printed, runCoreMain } from "../src/core-js.ts";
+import { compiledDefs, emitCoreJs, FAIL, loadCoreJs, loadPrinted, lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
 import { book as chaptersBook } from "../gaps/chapters.ts";
 import { book as ledgerBook } from "../gaps/ledger.ts";
@@ -277,5 +277,18 @@ test("for some in JavaScript from the core IR: the evaluator's relational interp
     assert.deepEqual([fs[fi](...xs)], want, `${names[def]}(${xs.join(", ")})`);
     // And given only the nodes it reaches, as a module is (C167d).
     assert.deepEqual([small[fi](...xs)], want, `${names[def]}(${xs.join(", ")}), its nodes only`);
+  }
+});
+
+test("a remainder by a positive literal is worked out with no try, as it always has an answer (round 13 P4)", () => {
+  const p = load("../../compiler/gaps/pond");
+  const wrapped = p.named("wrapped cell");
+  const { js } = emitCoreJs(lowerCore(p.code, p.info, p.pres.names, [wrapped]));
+  assert.match(js, /R\.remk\(/);
+  assert.doesNotMatch(js, /try \{/);
+  const f = compiledDefs(p.code, p.info, p.pres.names, ["wrapped cell"])["wrapped cell"];
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  for (const x of [0, 5, -1, -48, -49, 47, 1000, 2 ** 52, -(2 ** 52), 10n ** 30n, -(10n ** 30n)]) {
+    assert.deepEqual(f(x), [...r.call(r.value(wrapped), x as Value)][0], String(x));
   }
 });

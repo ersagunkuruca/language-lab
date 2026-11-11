@@ -44,7 +44,7 @@ import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
 import { rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
@@ -122,7 +122,7 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // What in printed code may throw no answer (R.FAIL) rather than give it:
 // anything of the runtime's but its stop, step and mod, the program's
 // runtime and world functions, a try, a throw, a yield.
-const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
+const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\(|remk\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
 
 export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
@@ -281,6 +281,15 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     // here and leaves by onFail, without a throw.
     // An attempt's body, run: the name of the Bool saying it answered.
     function tried(e: Extract<SExpr, { k: "attempt" }>, pre: string[], d: string): string {
+      // A remainder by a positive literal always has an answer (round 13
+      // P4: pond's `first(remainder(c + side cells, side cells), else 0)`,
+      // a quarter of its time in the try and the generic remainder): no
+      // try, and a small Int's worked out in place.
+      const b = e.body;
+      if (b.k === "rt" && b.fn === "int.remainder" && b.args.length === 2 && b.args[1].k === "int" && b.args[1].v > 0n && b.args[1].v < 1n << 31n && !e.spent && !e.resumes && !fails(b.args[0], ir.funcs)) {
+        pre.push(`${d}${local(e.res)} = R.remk(${ex(b.args[0], pre, d)}, ${b.args[1].v});`);
+        return "true";
+      }
       const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
       // A body whose every no answer leaves by its label, with nothing in

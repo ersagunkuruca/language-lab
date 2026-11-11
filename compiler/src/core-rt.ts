@@ -522,6 +522,8 @@ export const RUNTIME = {
   // A module's stop has its definition's name and no ids (core-js.ts moduleTags).
   stop: (i: number, node?: Id | 0, def?: Id | 0, name?: string): never => { throw new Stopped(reasonOf(i), node && def ? { node, def, name } : undefined, name); },
   mod: (a: number, b: number) => ((a % b) + b) % b,
+  // A remainder by a positive literal k (core-js.ts tried): never none.
+  remk: (a: I.Int, k: number): I.Int => (typeof a === "number" ? ((a % k) + k) % k : I.remainder(a, k)[0]),
   unsupported: (what: string): never => { throw new Unsupported(what); },
   int: (s: string) => I.norm(BigInt(s)),
   // A data value's case number, for `tag`.
