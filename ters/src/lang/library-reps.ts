@@ -149,6 +149,14 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // inverses.ts, which writes the pedal's solves out, C196).
     const listed = (t: Type | undefined): boolean => { if (!t) return false; t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || t.args.some(listed) : t.t === "fn" ? [...t.params, t.ret].some(listed) : false; };
     const library = boundary.reached.filter((d) => !defs.includes(d) && subtree(code, d).some((x) => listed(info.typeOf.get(x))));
+    // And each that calls one of those (show decimals, whose padded
+    // digits folds over a range): left as it is, it would call the
+    // library's own, which the rewrite then reaches through it and
+    // changes (round 13 P1).
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const d of boundary.reached) if (!defs.includes(d) && !library.includes(d) && subtree(code, d).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && library.includes(n.target); })) { library.push(d); grew = true; }
+    }
     const fresh = new Map<Id, Id>();
     for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, freshId());
     const f = (id: Id) => fresh.get(id) ?? id;

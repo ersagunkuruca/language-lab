@@ -2554,6 +2554,11 @@ function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null, isI
         const of = sizeOf(n.args[0]);
         return of && new Map([...of.keys()].map((i) => [i, true]));
       }
+      // An array's front (lists as arrays match on it, C30d3b): its
+      // first item and the rest, as large as the array; a match on it
+      // gives pieces (round 13: a value recurring over a list as arrays
+      // was held to Diverge).
+      if (isCall(n) && g?.kind === "ref" && g.target === "builtin.array.front") return sizeOf(n.args[0]);
       return undefined;
     };
     let ok = true;
