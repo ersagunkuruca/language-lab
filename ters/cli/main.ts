@@ -283,6 +283,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     intoAsSets(lowered);
     // A loop computing on Ints alone, with them as i64s (C207k).
     untaggedLoops(lowered, true);
+    // And a function only computing on Ints, called (round 13 P4).
+    if (!process.env.NO_UNTAGGED_FNS) untaggedFunctions(lowered);
     // A choice over a range's items as one i64, no list (C207u).
     if (!process.env.NO_RANGE_CHOICES) rangeChoices(lowered);
     // And `array of range x` of Ints filled with no list (C207v).

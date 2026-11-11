@@ -286,6 +286,26 @@ test("a loop's Int adds and subtracts past an i64 on WebAssembly give the evalua
   }
 });
 
+// Round 13 P4: a function only computing on Ints, called, on i64s
+// (untagged-ints.ts untaggedFunctions): its answer the evaluator's on
+// small Ints, on Ints past an i64, and where a step leaves one.
+test("pond's neighbour, wrapped cell and weight of on i64s in WebAssembly give the evaluator's answers", async () => {
+  const { untaggedFunctions } = await import("../src/untagged-ints.ts");
+  const p = load("../../compiler/gaps/pond");
+  const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  assert.ok(untaggedFunctions(lowered) >= 3);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const edge = 2n ** 63n;
+  for (const name of ["neighbour", "wrapped cell", "weight of", "cell key"]) {
+    const f = lowered.funcs.find((g) => g.name === name && !g.inner)!;
+    for (const x of [0n, 5n, -49n, 2303n, edge - 3n, -edge + 2n, edge * 4n]) {
+      const xs = Array.from({ length: f.params.length }, (_, j) => norm(j % 2 ? -x : x));
+      assert.equal(flat(answer(w, f, w[f.name](...xs.map((v) => toWasm(w, v, "int"))))), flat(outcome(r, f.def, xs)), `${name} ${x}`);
+    }
+  }
+});
+
 // BACKLOG C49: a fold over characters named by a let first is fused too.
 test("a fold over characters named by a let first walks the text in WebAssembly, with no list", async () => {
   const { Lang } = await import("../../ters/src/lang/dsl.ts");

@@ -3049,6 +3049,7 @@ small range go to it as written. Native one thread 2.0 to 1.35 s; then
 6.7 to 5.4 s. JS's Int adds through the generic runtime, and WebAssembly,
 are left: plain adds in `neighbour` measured under 10% by hand. The food
 map is read as an array on JS since C215: 5.2 to 4.3 s.
+On WebAssembly (G13-P4d) the same int64 copies: WASI 5.6 to 3.3 s.
 
 **P5. Threads make it slower (perf, the multithreading goal).** Native on
 4 threads takes 8.3 s against 4.2 on one (25 s of CPU); JS's workers 7.1
