@@ -483,11 +483,15 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     // adjacent violators). An action's steps stay as they were stacked:
     // they read down their column in the order they run.
     const steps = new Set(chainsIn.flat());
+    // What feeds each unit, found once: asked of every unit for every unit,
+    // it was most of the layout of a definition of 400 nodes (I192).
+    const insOf = new Map<string, string[]>(units.map((u) => [u, []]));
+    for (const v of units) for (const t of new Set(outs.get(v)!.map((e) => e.to))) insOf.get(t)!.push(v);
     for (let r = cols.length - 2; r >= 0; r--) {
       const col = cols[r];
       if (!col || col.some((u) => steps.has(u))) continue;
       const wants = col.map((u) => {
-        const ins = units.filter((v) => outs.get(v)!.some((e) => e.to === u));
+        const ins = insOf.get(u)!;
         if (!ins.length) return y.get(u)!;
         const top = Math.min(...ins.map((v) => y.get(v)!)), bottom = Math.max(...ins.map((v) => y.get(v)! + size.get(v)!.h));
         return (top + bottom) / 2 - size.get(u)!.h / 2;
