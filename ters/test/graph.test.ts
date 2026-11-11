@@ -8,8 +8,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import type { Id } from "../src/model.ts";
-import { isCall } from "../src/model.ts";
+import type { Code, Id, NodeOf } from "../src/model.ts";
+import { isCall, isUse } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 
@@ -236,6 +236,40 @@ test("a use with no body has an output per produced port, wired to what reads ea
       assert.ok(Math.abs(outs[i].x - start.x) < 0.5 && Math.abs(outs[i].y - start.y) < 0.5, `the wire to ${r} starts on port ${i} of ${m.use}`);
     }
   }
+});
+
+// A one-port use's value read by two inputs keeps its dot, as any shared
+// value does. It used to be drawn without one, the use's port wired to both
+// inputs, so there was no dot to see, select or drag, and dragging the port
+// onto either input was refused as "already that" (I201, Ersagun
+// 2026-11-11). Read by one input, the let's dot isn't drawn (L211).
+test("a one-port use read by two inputs is drawn with its dot", async () => {
+  const { answerKeys } = await import("../src/lang/ports.ts");
+  const { addDot } = await import("../../editor/typed.ts");
+  const l = loadProgram(join(root, "examples", "backwards"));
+  const info = infer(l.code, l.pres.names);
+  const hooks = { selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {}, canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set<Id>(), folded: new Set<Id>() };
+  const drawn = (code: typeof l.code, names: Record<Id, string>, d: Id, dot: Id) => (typedGraph(code, { ...l.pres, names }, info, d, hooks).root as unknown as El).all().some((e) => e.getAttribute("data-src") === dot);
+  let tried = 0;
+  for (const d of l.own.defs) {
+    for (const u of under(l.code.nodes, d)) {
+      const n = l.code.nodes[u];
+      if (!isUse(n) || n.body !== undefined || answerKeys(l.code, n as never).length !== 1) continue;
+      // A dot on the use's wire (what dragging its output onto another
+      // input does first): read once, drawn without it.
+      const r = addDot(l.code, l.pres.names, info, d, u);
+      if (!r.ok) continue;
+      const dot = r.select!;
+      assert.equal(drawn(r.code, r.names, d, dot), false, `${u}: read once, no dot`);
+      // Read by a second input too, both reads inputs of one call (any
+      // call: the drawing doesn't ask its type): the dot is drawn.
+      const lam = Object.values(r.code.nodes).find((x) => x.kind === "lambda" && x.params.includes(dot)) as NodeOf<"lambda">;
+      const both = { ...r.code.nodes, f2: { id: "f2", kind: "ref", target: d }, r2: { id: "r2", kind: "ref", target: dot }, c2: { id: "c2", kind: "call", fn: "f2", args: [lam.body, "r2"] }, [lam.id]: { ...lam, body: "c2" } } as Code["nodes"];
+      assert.ok(drawn({ ...r.code, nodes: both }, r.names, d, dot), `${u}: read twice, its dot is drawn`);
+      tried++;
+    }
+  }
+  assert.ok(tried > 0, "no one-port use to share");
 });
 
 // Every node under a definition, the definition included.
