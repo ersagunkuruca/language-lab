@@ -218,14 +218,18 @@ test("divisors finds its n by first where on workers, the same answer as in turn
   assert.equal(small[0], inEvaluator[0]);
 });
 
-test("queens-count counts its boards by the first row's columns on workers, the same count as in turn and in the evaluator (C43)", async () => {
+test("queens-count counts its boards by the first row's columns on workers, the same count as in turn and in the evaluator (C43, C207s)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/queens-count"), "-o", "queens-count.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/queens-count"), "6"], {})]);
   assert.equal(made[2], 0, made[1]);
-  assert.match(readFileSync(join(dir, "queens-count.mjs"), "utf8"), /R\d*\.rt\("count\.search"/);
-  const [side, alone, small] = await Promise.all([run(["queens-count.mjs", "10"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["queens-count.mjs", "10"], { TERS_WORKERS: "0" }, dir), run(["queens-count.mjs", "6"], {}, dir)]);
+  const js = readFileSync(join(dir, "queens-count.mjs"), "utf8");
+  assert.match(js, /R\d*\.rt\("count\.search"/);
+  // C207s: its choice of a column counts through the range, split on the
+  // workers too (and fast enough now that 10 queens stay in turn).
+  assert.match(js, /R\d*\.rt\("range\.split"\)/);
+  const [side, alone, small] = await Promise.all([run(["queens-count.mjs", "11"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["queens-count.mjs", "11"], { TERS_WORKERS: "0" }, dir), run(["queens-count.mjs", "6"], {}, dir)]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[0], /boards of 10 queens: 724\n/);
+  assert.match(side[0], /boards of 11 queens: 2680\n/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/);
   assert.equal(small[0], inEvaluator[0]);
 });

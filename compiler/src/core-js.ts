@@ -42,6 +42,7 @@ import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
+import { rangeChoices } from "./range-choices.ts";
 import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
@@ -637,6 +638,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // them (C194); then a pure call made twice with the same inputs, made
   // once (C189).
   if (!envSet("NO_INLINE")) inlineSmall(ir);
+  // A choice over a range's items as one Float64, no list (C207s).
+  if (!envSet("NO_RANGE_CHOICES")) rangeChoices(ir, true);
   // An array a function walks by its rests, read by position (C196).
   if (!envSet("NO_OFFSETS")) arrayOffsets(ir);
   if (!envSet("NO_SHARE")) shareCalls(ir);
