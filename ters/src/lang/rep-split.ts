@@ -25,7 +25,7 @@ import { SPLIT_COPIED_FROM, originalOf } from "./prelude-ids.ts";
 import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { BY_VALUE, listBoundary, treesFor } from "./library-reps.ts";
+import { BY_VALUE, listBoundary, withTrees } from "./library-reps.ts";
 import { represent, type Representation } from "./represent.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY } from "./library.ts";
@@ -42,7 +42,7 @@ export interface Split { code: Code; names: Names; seeds: Id[]; copies: Id[]; ty
 // `List x` does, as C93's splits by position have it.
 export function splitLists(code: Code, info: Info, names: Names, own: Id[], main: Id, seeds: Id[], rep: Representation, deep = false): Split | null {
   if (!rep.meaning || !rep.store) return null;
-  code = merge(treesFor(code, [rep]), code);
+  code = withTrees(code, [rep]);
   const nodes: Record<Id, Node> = { ...code.nodes };
   const isDef = (d: Id) => code.nodes[d]?.kind === "def";
   const isType = (d: Id) => isDef(d) && code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]?.kind === "typedef";
@@ -247,9 +247,20 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   };
   let refused = false;
   const ref = (target: Id) => { const id = freshId(); nodes[id] = { id, kind: "ref", target }; return id; };
+  // Each call by the node it calls, made at the first ask: a seed used other
+  // than called looked for its call among every node (I203: a tenth of
+  // clinic's check for running). A call wrapped below moves to its inner id.
+  let callOf: Map<Id, Id> | null = null;
+  const callOfFn = (fn: Id) => {
+    if (!callOf) { callOf = new Map(); for (const p of Object.values(nodes)) if (isCall(p)) callOf.set(p.fn, p.id); }
+    const p = callOf.get(fn);
+    return p !== undefined && isCall(nodes[p]) && (nodes[p] as { fn: Id }).fn === fn ? p : undefined;
+  };
   // Node `id` becomes conv(what it was).
   const wrap = (id: Id, conv: Id) => {
     const inner = freshId();
+    const was0 = nodes[id];
+    if (callOf && isCall(was0)) callOf.set(was0.fn, inner);
     nodes[inner] = { ...nodes[id], id: inner } as Node;
     wrapped.set(inner, wrapped.get(id) ?? id);
     const was = innerOf.get(id);
@@ -290,7 +301,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
         const t = typeOf(id);
         if (!crosses(t)) {
           // Converted as a function from this side (a call converts at the call).
-          const parent = Object.values(nodes).find((p) => isCall(p) && p.fn === id);
+          const parent = callOfFn(id);
           if (!parent) { const c = deep && converter(t!, false); if (c) wrap(id, c); else refused = true; }
         }
         continue;
@@ -314,7 +325,9 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   convert(bDefs, false);
   if (refused) return null;
   const seedsNow = seeds.map(f);
-  let out: Code = { nodes: { ...nodes, ...k.code.nodes }, defs: [...code.defs, ...shared.map(f), ...k.code.defs] };
+  // The copy of the program's nodes made above takes the rest in place: a
+  // copy of 50,000 nodes each time was a tenth of clinic's check (I203).
+  let out: Code = { nodes: Object.assign(nodes, k.code.nodes), defs: [...code.defs, ...shared.map(f), ...k.code.defs] };
   // Builtins on lists the seeds' side calls: given its lists as written
   // and theirs stored, as with one representation (library-reps.ts).
   const types = [...aTypes];
