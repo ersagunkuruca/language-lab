@@ -6,13 +6,13 @@
 // inside a definition is asked for (infer.ts libraryLater).
 //
 // A kept check is found by what it was of: the library's code, the
-// options it was checked with, and the checker's own source (every .ts
-// under src/), so a change to any of them makes a new one. Only a few are
+// options it was checked with, and the checker's own source (the files
+// it imports), so a change to any of them makes a new one. Only a few are
 // kept; the oldest go. LAB_NO_LIBRARY_STORE=1 turns it off.
 
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { deserialize, serialize } from "node:v8";
 import type { Code, Id } from "../model.ts";
 import { root } from "../io.ts";
@@ -26,13 +26,30 @@ const DIR = join(root, ".lab");
 // (Tests check with several options, so a few of each are kept.)
 const KEEP = 12;
 
-let sources: string | undefined;
-const sourcesHash = () => {
-  if (sources) return sources;
-  const src = join(root, "src"), h = createHash("sha1");
-  for (const f of (readdirSync(src, { recursive: true }) as string[]).filter((f) => f.endsWith(".ts")).sort()) { h.update(f); h.update(readFileSync(join(src, f))); }
-  return (sources = h.digest("hex"));
+// A library check, and what kept.ts keeps (modules.ts's hashes), depend
+// only on this file and what it imports, every one in turn (66 of src/'s
+// 128 files, and invertible/'s): a change to the rest (a page's printer,
+// the evaluator's tracer) keeps them (I193h). Found by reading the
+// imports, a few ms.
+let checker: string | undefined;
+const checkerHash = () => {
+  if (checker) return checker;
+  const seen = new Set<string>(), h = createHash("sha1");
+  const go = (f: string) => {
+    if (seen.has(f)) return;
+    seen.add(f);
+    const text = readFileSync(f, "utf8");
+    h.update(f.slice(root.length));
+    h.update(text);
+    for (const m of text.matchAll(/(?:from|import)\s*\(?\s*["'](\.[^"']+)["']/g)) {
+      const t = resolve(dirname(f), m[1]);
+      try { if (statSync(t).isFile()) go(t); } catch { /* not a file of ours */ }
+    }
+  };
+  go(join(root, "src", "lang", "library-store.ts"));
+  return (checker = h.digest("hex"));
 };
+
 const codes = new WeakMap<Code, string>();
 // The library, and the library filled, are made from its files and the
 // checker's source alone: found by the files' names, sizes and times, not a
@@ -54,7 +71,7 @@ const codeHash = (code: Code) => {
 const ids = (xs: Iterable<Id> | undefined) => (xs ? [...xs].sort() : null);
 const fileOf = (lib: Code, opts: Options, pins: [Id, unknown][], kind: LibraryCheck) => {
   const h = createHash("sha1");
-  h.update(sourcesHash());
+  h.update(checkerHash());
   h.update(codeHash(lib));
   h.update(JSON.stringify([ids(opts.hidden), ids(opts.insiders), ids(opts.library), pins]));
   return join(DIR, `library-${kind}-${h.digest("hex").slice(0, 20)}.v8`);
@@ -98,7 +115,7 @@ const keepOld = (prefix: string) => {
 };
 export const keeper: Keeper = (name, of, make) => {
   const h = createHash("sha1");
-  h.update(sourcesHash());
+  h.update(checkerHash());
   h.update(codeHash(of));
   const file = join(DIR, `${name}-${h.digest("hex").slice(0, 20)}.v8`);
   try { return deserialize(readFileSync(file)); } catch { /* not kept yet */ }
