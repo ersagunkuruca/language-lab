@@ -7450,9 +7450,12 @@ export const runtime = (name: string): RtFn => {
   // a $huge; a value stepped past an i64 gives i64's least, which wasm.ts
   // takes as the round to start again as written. (Counts, i64.add and
   // i64.sub, aren't untagged on WebAssembly.)
-  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit)$/.exec(name);
+  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit)$/.exec(name);
   if (i64) {
-    const op = i64[1], two: [string, VT][] = [["a", "i64"], ["b", "i64"]];
+    const op = i64[1];
+    // A range's items as one int64 (C207p): on C only.
+    if (op === "range" || op === "rangeSplit") return { name, params: [["x", "f64"]], result: "i64", locals: [], uses: [], native: true, body: "unreachable" };
+    const two: [string, VT][] = [["a", "i64"], ["b", "i64"]];
     const plain: Record<string, [string, VT]> = { eq: ["i64.eq", "i32"], less: ["i64.lt_s", "i32"], and: ["i64.and", "i64"], shr: ["i64.shr_s", "i64"] };
     if (plain[op]) return { name, params: two, result: plain[op][1], locals: [], uses: [], native: true, body: `local.get $a\nlocal.get $b\n${plain[op][0]}` };
     // A count stepped (C207e; C211b on WebAssembly): past 2^62 it stops,

@@ -101,7 +101,7 @@ const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // its slot.
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 // untagged-ints.ts's ops on a loop's counts (C207e).
-const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit)$/;
+const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit)$/;
 // A count stepped past the small Ints: some 2^62 steps, never in practice.
 const I64_C = `static void lab__i64_past(void) { fflush(stdout); fputs("a count went past 2^62\\n", stderr); exit(1); }
 static inline int64_t lab__i64_add(int64_t a, int64_t b) { int64_t r = a + b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
@@ -110,6 +110,22 @@ static inline int64_t lab__i64_sub(int64_t a, int64_t b) { int64_t r = a - b; if
 const I64V_C = `static inline int lab__i64_addv(int64_t a, int64_t b, int64_t *r) { *r = a + b; return *r < lab__min || *r > lab__max; }
 static inline int lab__i64_subv(int64_t a, int64_t b, int64_t *r) { *r = a - b; return *r < lab__min || *r > lab__max; }
 static inline int lab__i64_mulv(int64_t a, int64_t b, int64_t *r) { return __builtin_mul_overflow(a, b, r) || *r < lab__min || *r > lab__max; }`;
+// A range's items as one int64 (C207p, range-choices.ts): the next in the
+// low 31 bits, the end in the 31 above, the range's length as `range`
+// takes it (2^31 items or more, tens of gigabytes as a list, out of memory). Split (C43): only the item a thread's run keeps, counting how
+// many there were, as lab_split_N does for a list.
+const i64RangeC = (split: boolean) => `static inline int64_t lab__i64_range(double x) {
+  double m = x != x || x <= 0 ? 0 : floor(x);
+  if (m > INT32_MAX) lab_oom();
+  return (int64_t)m << 31;
+}${split ? `
+static int64_t lab__i64_range_split(double x) {
+  int64_t n = lab__i64_range(x) >> 31, j = lab__split;
+  if (j < 0) return n << 31;
+  lab__split = lab__split2; lab__split2 = -1;
+  if (lab__seen < 0) lab__seen = n; else lab__seen2 = n;
+  return j < n ? ((j + 1) << 31) | j : 0;
+}` : ""}`;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
@@ -568,7 +584,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
-  let i64Used = false; let i64vUsed = false;
+  let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
   const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -1010,6 +1026,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...[...arrays.values()].flatMap((a) => arrayC(a)),
     ...[...tables.values()].flatMap((t) => tableC(t)),
     ...(splits ? [splitC(TL)] : []),
+    ...(i64RangeUsed ? [i64RangeC(splits)] : []),
     ...(threads ? [POOL_C, ...[...countPars.values()].map((x) => countC(x, stops, fuelled)), ...[...pars.values()].map((x) => parC(x, stops, fuelled)), ...[...togethers.values()].map((x) => togetherC(x, stops, fuelled))] : []),
     "",
     ...[...fiberGlobals].map(([n, t]) => `static ${t} ${n};`),
@@ -1722,6 +1739,13 @@ int main(int argc, char **argv) {
           // A loop's counts untagged (C207e, untagged-ints.ts): int64_ts
           // compared and stepped as they are; an Int given is lent.
           const i64 = I64_FN.exec(e.fn);
+          // A range's items as one int64 (C207p, range-choices.ts): the next
+          // in the low half, the end in the high; a thread's split keeps one.
+          if (i64 && (i64[1] === "range" || i64[1] === "rangeSplit")) {
+            i64RangeUsed = true;
+            if (i64[1] === "rangeSplit") splits = true;
+            return stated(`lab__i64_range${i64[1] === "rangeSplit" ? "_split" : ""}(${args(e.args, pre, d, after)[0]})`, "i64", pre, d);
+          }
           if (i64) {
             const gone: number[] = [];
             const xs = e.args.map((a, k) => {
