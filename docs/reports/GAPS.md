@@ -2941,3 +2941,125 @@ ticks, 4 cores:
 - **H5. One core, JavaScript and WebAssembly are 1.5x native** (2.0 and
   2.07 s against 1.36): the sines are most of it; *measured in C208*: mostly V8's sine (the plain loop 0.89 s in JavaScript against 0.73 in C).
 
+
+## Round 13: pond, stable references, free lists and threads together (2026-11-11)
+
+`compiler/gaps/pond` lives a pond a tick at a time: fish in a `Pool`
+(keys that are a slot and a generation, a free list of slots), each
+following a leader by its key; food patches in a `Map Int Patch`; six
+herons in a `Map Int Heron`, each hunting a fish by its key. Each tick
+every fish's plan is made from the pond as it was by a `map` over the
+pool's keys that only computes (the threads' part), then carried out in
+turn: eat, die, have young or move; then the herons strike and the food
+grows. **105 definitions** (6 types, 99 functions and values), against
+round 12's 86. 300 ticks from 400 fish, about 750 alive at a time.
+
+It was written whole through the MCP's tools, types included, by a
+driver in the project's files (`gaps-round13/drive.ts`): no DSL seed this
+time (round 12's M1 is fixed).
+
+Files:
+- `compiler/gaps/pond/`: the program and its README (credits).
+- `compiler/gaps/pond.ideal.js`: by hand as a data-oriented JavaScript
+  developer would: the fish as columns of typed arrays by slot, a
+  generation a slot and a free list, the food one Float64Array.
+- `compiler/gaps/pond.ideal.c`: the same in C, with `-DTHREADS` making
+  the plans on 4 pthreads.
+
+The evaluator, `ters compile`, `ters wasi`, `ters native` and both ideals
+print the same lines, to the bit.
+
+### Results
+
+```
+way                      300 ticks, 400 fish   against its ideal
+ideal C, 4 threads            0.099 s
+ideal C                       0.175 s
+ideal JS                      0.47 s
+ters native                  18.2 s                104x
+ters wasi                    17.9 s
+ters compile                 20.9 s                 45x
+with P1 fixed (next PR):
+ters native, one thread       4.2 s                 24x
+ters native, 4 threads        8.3 s
+ters wasi                     5.9 s
+ters compile                  6.2 s                 13x
+ters compile, workers         7.1 s
+```
+
+One run each, `TERS_WORKERS=0` for one thread; native at -O2.
+
+### The gaps, ranked
+
+**P1. Lists stayed cons lists, so the Pool was walked (perf, 3.4x JS,
+4.4x native).** The Pool's items and generations are lists; `pool item`
+walked them (native: `lab_item_at` 31%, `lab_int_sub` 18%). The chooser
+wanted `array of List` but the program refused to check once rewritten,
+for two reasons:
+- `show decimals` (the library's) calls `padded digits`, which folds over
+  `range`. The rewrite copies the library definitions with lists in their
+  types (padded digits) for the program, but not one that only calls
+  them (show decimals), so it went on calling the library's own, which
+  the rewrite then reached through it and changed: "items of array needs
+  Array a here, got List Float64".
+- A list as an array is matched by `front of array`, which the
+  termination check didn't count as taking its input apart, so `seeded
+  over` (a match recursion over a list) was held to Diverge, which `start
+  patches`, a value, can't.
+*Fixed locally*, both one-line rules (library-reps.ts: copy what calls a
+copy too; infer.ts: an array's front is as large as the array): the
+numbers above; the same lines. Its own PR next.
+
+**P2. The pool is copied for every fish carried out (perf, about 25% of
+native after P1, O(n²)).** `applied(p, plan)` makes a new Pond with the
+fish replaced in the school; the old Pond still holds the school, so the
+replace copies the pool's arrays (`lab__copy_a1` 9%, `Pool_drop` 15%,
+`lab_dec` 15%). The ideal changes one slot in place. This is the stable
+references goal: a Pool held by one Pond that the next one replaces is
+one holder (C56/C58p's in-place rule, for records' fields).
+
+**P3. `sum(map(offsets, …))` builds lists, and `offsets` is made afresh
+each call (perf, scent is 71% of native).** The smell of food sums a
+5 by 5 block: two nested `sum(map(offsets, …))`. `offsets`, a value
+(`[-2, -1, 0, 1, 2]`), is rebuilt at every call (`lab_offsets` 18%),
+and each map makes a list that the sum then folds. The ideal is two
+counted loops over a 25-entry weight table.
+
+**P4. Int arithmetic through the generic runtime (perf, about 15%).**
+`first(remainder(c, side cells), else 0)`: `remainder` is a Choice (none
+for 0), and on JS goes through the runtime's generic `remainder` with
+type checks (11.5% of JS's samples); on C `lab__floordiv` isn't inlined
+(8%) and Int adds are checked calls (`lab_int_add` 6%).
+
+**P5. Threads make it slower (perf, the multithreading goal).** Native on
+4 threads takes 8.3 s against 4.2 on one (25 s of CPU); JS's workers 7.1
+against 6.2. The ideal gains 1.8x from 4 threads. The plans map does run
+on them (`lab_par_one`); to measure: the reference counts' atomics once
+the pond is shared (`lab_dec` is 15% on one thread), and what each tick
+sends the workers on JS.
+
+**P6. The evaluator (not the compiler's).** Agrees, slowly; L118c again.
+
+### What the MCP couldn't do
+
+- **M1. A match still can't be read from text** (round 12's I184 fixed
+  `split`, not the text). Each of 7 recursions over a list was a
+  `define`, a `split` on the list, then a `replace` per case.
+- **M2. A field name a library type has too needs `as`.** `p.x` in 7
+  definitions was refused until `as: "Vec"` was given; the driver reads
+  the type out of the refusal and retries. The editor would offer the
+  choice; text has no way to say whose field.
+- **M3. A loop over an index can't be a value.** `if n = 0 then … else
+  seeded(n - 1)` is "performs Diverge" in a value, as round 12's M5 was
+  for eval; each became a match recursion over `range from(0, n)`. The
+  termination check counts an Int towards a bound (L46) only in a
+  function.
+
+### Proposed order
+
+1. P1, lists as arrays (its PR is ready to open).
+2. P2, the pool replaced in place: the stable references goal, O(n²) to
+   O(n).
+3. P5, why the threads cost more than they buy: the multithreading goal.
+4. P3 and P4, measured again after those.
+5. M1, a match read from text.
