@@ -68,5 +68,10 @@ function carried(code: Code, out: Code, info: Info): Info | null {
       typeOf.set(ref, parts[i]);
     });
   }
-  return { ...info, typeOf };
+  // Only the implementations the program holds, as a check of it finds
+  // them: a check given of more code (the library's, before the program was
+  // cut to what its roots reach) names some it doesn't, which arith.ts would
+  // resolve a literal to (order.test's fractions).
+  const implementations = info.implementations && new Map([...info.implementations].filter(([, d]) => d in out.nodes));
+  return { ...info, typeOf, ...(implementations ? { implementations } : {}) };
 }
