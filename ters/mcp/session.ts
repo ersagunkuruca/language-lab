@@ -319,6 +319,7 @@ export class Session {
   // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
   // the ports given by name and the one left out the value.
   private fill(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def);
     const solve = this.solveIn(code, names, hole, text);
     if (!solve) return this.fillOne(code, names, hole, text, def, as);
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
@@ -354,6 +355,70 @@ export class Session {
       ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
     if (!near) return r;
     return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
+  }
+
+  // A match written as view prints it (I212), one case a line:
+  //   match ids
+  //     nil → m
+  //     cons(head, tail) → herons over(put(m, head, start heron(head)), tail)
+  // or on one line, its cases after `;`s. It is the editor's Split on the
+  // variable (T.splitOn: one case per variant of its type, none missing),
+  // each case's fields named as written and its body read as text in
+  // turn, so a case's body may be a match too (on deeper lines). `->` reads
+  // as →; a case left out, or written □, stays a hole.
+  private matchIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const lines = text.replace(/^\s*\n/, "").split("\n");
+    let head = lines[0].trim().replace(/^match\s+/, "");
+    let cases: string[];
+    if (lines.length === 1 || !lines.slice(1).some((l) => l.trim())) {
+      // One line: the scrutinee, then the cases after `;`s outside brackets.
+      const parts = topLevel(head, ";");
+      head = parts[0];
+      cases = parts.slice(1);
+    } else {
+      // Cases begin on the least indented of the lines after the first;
+      // deeper lines go on the case above.
+      const rest = lines.slice(1).filter((l) => l.trim());
+      const indent = (l: string) => l.length - l.trimStart().length;
+      const least = Math.min(...rest.map(indent));
+      cases = [];
+      for (const l of rest) if (indent(l) === least || !cases.length) cases.push(l.trim()); else cases[cases.length - 1] += "\n" + l;
+    }
+    const all = baseNames(names);
+    const on = norm(head);
+    const binder = T.scopeAt(code, def, hole).filter((b) => all[b] === on).at(-1);
+    if (!binder) return { ok: false, reason: `match reads a variable here, and nothing in scope is named ${on}: give the value a name with a step first` };
+    const read = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
+    const bad = read.findIndex((k) => !k);
+    if (bad >= 0) return { ok: false, reason: `a case reads Case(fields) → value, not ${cases[bad].trim()}` };
+    // A variable nothing has typed yet (a new function's input) is split
+    // on the data type the cases name, as split's `as` says it.
+    const written = read.map((k) => norm(k![1]));
+    const types = code.defs.filter((d) => {
+      const b = (code.nodes[d] as NodeOf<"def"> | undefined)?.body, td = b ? code.nodes[b] : undefined;
+      return td?.kind === "typedef" && written.every((w) => td.variants.some((v) => norm(all[v] ?? "") === w));
+    });
+    const as = types.length === 1 ? types[0] : types.find((d) => !LIBRARY.code.nodes[d]);
+    const split = T.splitOn(code, names, editorInfo(code, names), hole, binder, as);
+    if (!split.ok) return !types.length ? { ok: false, reason: `no data type has the cases ${written.join(", ")}` } : split;
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: split.code, names: { ...split.names } };
+    const m = split.code.nodes[hole] as NodeOf<"match">;
+    const arms = m.arms.map((a) => split.code.nodes[a] as NodeOf<"arm">);
+    const caseName = (a: NodeOf<"arm">) => norm(all[a.variant] ?? this.name(a.variant));
+    const seen = new Set<Id>();
+    for (const k of read as RegExpExecArray[]) {
+      const arm = arms.find((a) => caseName(a) === norm(k[1]));
+      if (!arm) return { ok: false, reason: `${on}'s cases are ${arms.map(caseName).join(", ")}, not ${norm(k[1])}` };
+      if (seen.has(arm.id)) return { ok: false, reason: `the case ${norm(k[1])} is written twice` };
+      seen.add(arm.id);
+      const fields = k[2]?.trim() ? k[2].split(",").map(norm) : [];
+      if (fields.length && fields.length !== arm.binds.length) return { ok: false, reason: `${norm(k[1])} has ${arm.binds.length} field${arm.binds.length === 1 ? "" : "s"}, not ${fields.length}` };
+      if (!cur.ok) return cur;
+      fields.forEach((f, i) => { (cur as { names: Names }).names[arm.binds[i]] = f; });
+      const body = k[3].trim();
+      if (body && body !== "□" && body !== "?") cur = this.fill(cur.code, cur.names, arm.body, body.replace(/[‹›]/g, ""), def);
+    }
+    return cur;
   }
 
   private solveIn(code: Code, names: Names, hole: Id, text: string): { code: Code; fills: [Id, string][] } | null {
@@ -774,6 +839,21 @@ export function clip(lines: string[], max = 200, chars = 6000): string[] {
 }
 
 // Text as an LLM copies it from view: ids dropped, operators as typed.
+// Parts of a text split at `sep` outside brackets and quotes.
+function topLevel(text: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0, from = 0, quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') quoted = !quoted;
+    else if (quoted) continue;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (c === sep && !depth) { out.push(text.slice(from, i).trim()); from = i + 1; }
+  }
+  out.push(text.slice(from).trim());
+  return out;
+}
 const norm = (s: string) => s.replace(/#[0-9a-v]{3,}\b/g, "").replace(/[‹›]/g, "").replace(/·/g, "*").replace(/−/g, "-").replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/\s+/g, " ").trim();
 
 // The editor's own check, which its gestures compare against.
