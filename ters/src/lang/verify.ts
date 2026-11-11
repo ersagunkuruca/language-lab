@@ -16,7 +16,7 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import { children, subtree } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { SIGS } from "./std.ts";
+import { LIST, S, SIGS } from "./std.ts";
 import { CHOICE, DIVERGE } from "./types.ts";
 import { Subst, type Type } from "./types.ts";
 
@@ -171,6 +171,11 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
         if (target?.kind === "binder") { const bt = ty(n.target); if (!bt) skip("a binder with no type"); else if (!same(bt, t)) bad(id, "a name is its binder's type"); break; }
         if (target?.kind === "def") { const sc = schemeOf(n.target); if (!sc) { skip("a definition with no scheme"); break; } if (!instance(sc.type, t, general(new Set(sc.vars)))) bad(id, "a use is an instance of its definition's scheme"); break; }
         if (target?.kind === "builtin") {
+          // A written list (infer.ts listOfType): n items of one type.
+          if (n.target === S.listOf) {
+            if (t.t !== "fn" || t.ret.t !== "con" || t.ret.id !== LIST || !t.params.every((p) => same(p, (t.ret as Extract<Type, { t: "con" }>).args[0]))) bad(id, "a written list takes items of its items' type");
+            break;
+          }
           const sig = SIGS[n.target];
           if (!sig) { skip("a built-in with no signature"); break; }
           const s = new Subst();
@@ -182,7 +187,20 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
         if (target?.kind === "variant" || target?.kind === "field") {
           const dp = dataParts(n.target);
           if (!dp) { skip("a case of a type not in the code"); break; }
-          if (dp.td.effect || dp.td.interface || (target.kind === "field" && dp.td.variants.length !== 1)) { skip("an effect's operation, an interface's or a shared field"); break; }
+          // An effect's operation (infer.ts constructorType): its inputs,
+          // what it returns (any type when it says none), and it performs
+          // the effect.
+          if (dp.td.effect && target.kind === "variant") {
+            // Its own type parameters (await's `a`) as the type's are.
+            const own = new Map<Id, Type>([...dp.td.params.map((q, i) => [q, { t: "var", v: PARAM - i } as Type] as const), ...(target.params ?? []).map((q, i) => [q, { t: "var", v: PARAM - 800 - i } as Type] as const)]);
+            const fs = target.fields.map((f) => typeOfExpr((code.nodes[f] as NodeOf<"field">).type, own)), r = target.returns ? typeOfExpr(target.returns, own) : { t: "var", v: PARAM - 900 } as Type;
+            if (!fs.every(Boolean) || !r) { skip("a field's type not written as types"); break; }
+            const want: Type = { t: "fn", params: fs as Type[], ret: r, eff: { effs: [], tail: null } };
+            if (!instance(want, t, (v) => general(new Set())(v) || (v <= PARAM - 800 && v >= PARAM - 900))) bad(id, "an effect's operation is used at an instance of its type");
+            else if (t.t !== "fn" || !t.eff.effs.includes((dp.self as Extract<Type, { t: "con" }>).id)) bad(id, "an effect's operation performs its effect");
+            break;
+          }
+          if (dp.td.effect || dp.td.interface || (target.kind === "field" && dp.td.variants.length !== 1)) { skip(dp.td.effect ? "an effect's operation" : dp.td.interface ? "an interface's operation" : "a field several cases share"); break; }
           let want: Type | null;
           if (target.kind === "variant") { const fs = dp.fields(n.target); want = fs.every(Boolean) ? (fs.length ? { t: "fn", params: fs as Type[], ret: dp.self, eff: { effs: [], tail: null } } : dp.self) : null; }
           else { const i = (code.nodes[dp.td.variants[0]] as NodeOf<"variant">).fields.indexOf(n.target), f = dp.fields(dp.td.variants[0])[i]; want = f ? { t: "fn", params: [dp.self], ret: f, eff: { effs: [], tail: null } } : null; }
