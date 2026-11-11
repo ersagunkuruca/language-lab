@@ -36,12 +36,16 @@ test("ters wasi builds examples that print what ters run prints: a value main, o
 // C207k: collatz's loop computes on Ints alone, so on WebAssembly it runs
 // on i64s (a copy `steps to one counted`), and a round whose value goes
 // past an i64 starts again as written; it prints what ters run prints.
+// Its numbers are `array of range below`, filled with no list (C207v),
+// none of them too.
 test("ters wasi runs collatz's loop on i64s, printing what ters run prints", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "lab-wasi-")), args = ["3000", "100"];
+  const dir = mkdtempSync(join(tmpdir(), "lab-wasi-"));
   const made = spawnSync(process.execPath, [lab, "wasi", join(examples, "collatz"), "-o", join(dir, "p.wasm")], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
-  const want = spawnSync(process.execPath, [lab, "run", join(examples, "collatz"), ...args], { encoding: "utf8" });
-  assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status]);
+  for (const args of [["3000", "100"], ["0", "5"]]) {
+    const want = spawnSync(process.execPath, [lab, "run", join(examples, "collatz"), ...args], { encoding: "utf8" });
+    assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status], args.join(" "));
+  }
 });
 
 // C211b: divisors' counted loop steps its counts as i64s on WebAssembly,
