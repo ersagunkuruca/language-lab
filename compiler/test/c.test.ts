@@ -21,7 +21,9 @@ import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
 import { withInverses } from "../src/inverses.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
-import type { Info } from "../../ters/src/lang/infer.ts";
+import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
+import { checkOptions } from "../../ters/src/lang/load.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { area, choices, numberTexts, fuzzFinds, fuzzFindInputs, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
@@ -402,6 +404,24 @@ test("a record given whole to a function reading only some of its fields is give
   assert.doesNotMatch(body, /Pond_dup\(p0\)/);
   assert.match(body, /Pond_drop\(p0\);[^]*lab_replaced_in_pool/);
   assert.match(body, /\(\(Pond\)\{ \(\(Pool\)\{ \(\(lab_cell \*\)0\)/);
+});
+
+// Round 13 P5: a table only read is lent, as an array is: pond's `food
+// at`, called at every cell around every fish (on the threads, where the
+// floor is shared and each dup and drop of it was atomic), takes the
+// floor without counting it.
+test("a table a function only reads is lent, and read without its count changed (round 13 P5)", () => {
+  const p = load("../../compiler/gaps/pond"), main = p.named("main");
+  // The floor as ters native has it: a hash table.
+  const t = withLibraryRepresentations(p.code, p.info, p.pres.names, main, p.own.defs, [], { tables: true });
+  assert.deepEqual(t.chosen, ["Map as hash table"]);
+  const info = infer(t.code, t.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...t.insiders] });
+  const { c } = emitC(lowerScalar(t.code, info, t.names, [main], { data: true }), { main });
+  const at = c.indexOf("\ndouble lab_food_at_b(lab_cell * p0, lab_int p1) {"), body = c.slice(at, c.indexOf("\n}\n", at));
+  assert.ok(at >= 0, "food at is lent");
+  assert.doesNotMatch(body, /lab_drop\(p0\)/);
+  assert.match(c, /lab_table_atb_t\d+\(p0, /);
+  assert.doesNotMatch(c, /lab_food_at(_b)?\(lab_dup\(/);
 });
 
 test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {

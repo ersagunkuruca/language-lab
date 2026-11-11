@@ -3041,6 +3041,12 @@ against 6.2. The ideal gains 1.8x from 4 threads. The plans map does run
 on them (`lab_par_one`); to measure: the reference counts' atomics once
 the pond is shared (`lab_dec` is 15% on one thread), and what each tick
 sends the workers on JS.
+*Fixed on C (G13-P5):* the floor's count. `food at`, read at 25 cells for
+8 directions of every fish, took the floor's table owned, so each read
+dup'd and dropped it, atomically once it was shared with the threads, all
+of them on one count. A table only read is lent now, as an array is:
+native on 4 threads 6.5 to 1.1 s (one thread 2.9 s), the ideal's 4-thread
+gain about matched (2.6x against its 1.8x). JS's workers are still left.
 
 **P6. The evaluator (not the compiler's).** Agrees, slowly; L118c again.
 
