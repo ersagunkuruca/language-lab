@@ -121,7 +121,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // program's definitions that never sees a library type holding lists
     // (a page's Html) takes them, and the rest keep lists as written,
     // converted where they cross (C196: the pedal's sound beside its page).
-    if (tree.of === LIST && !chosen.length && !listBoundary(merge(treesFor(code, [tree]), code), info, defs, tree, asked)) {
+    if (tree.of === LIST && !chosen.length && !listBoundary(withTrees(code, [tree]), info, defs, tree, asked)) {
       const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
       if (s) return s;
       continue;
@@ -134,7 +134,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // The trees' module, which the library leaves out (library.ts): only
   // the definitions the chosen rows use, since the program is checked
   // again with them (the whole module is about 2,500 nodes).
-  code = merge(treesFor(code, chosen), code);
+  code = withTrees(code, chosen);
   names = { ...TREES.names, ...names };
   // Lists as arrays reach the library's own definitions on lists (map,
   // sum, …): the program gets its own copies of them, which the rewrite
@@ -830,6 +830,20 @@ function holdsType(code: Code, of: Id): (id: Id) => boolean {
     return r;
   };
   return holds;
+}
+
+// The program with the part of the trees' module the rows use, made once
+// for a program and rows: a split tried seed by seed made it again for
+// every try, a merge of the whole program twice (I203: a fifth of
+// clinic's check for running).
+const withTreesMade = new WeakMap<Code, Map<string, Code>>();
+export function withTrees(code: Code, rows: Representation[]): Code {
+  let made = withTreesMade.get(code);
+  if (!made) withTreesMade.set(code, (made = new Map()));
+  const key = rows.map((r) => `${r.of}|${r.name}`).join("\n");
+  let c = made.get(key);
+  if (!c) made.set(key, (c = merge(treesFor(code, rows), code)));
+  return c;
 }
 
 // The part of the trees' module the rows use: their definitions (the

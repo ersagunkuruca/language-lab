@@ -16,6 +16,8 @@ import { tuplePart } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { loadCoreJs, lowerCore } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
+import { withBodies } from "../src/uses.ts";
+import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 
 // three(n): add with 2 and out = n given (n − 2); both(r): polar with
 // length r and angle 0 given, x + 10 y of its (x, y); rest(n): a relation
@@ -70,4 +72,16 @@ test("in WebAssembly and C a use with no body is refused as a filled one is: for
   const p = program();
   const lowered = lowerScalar(p.code, p.info, p.names, p.defs, { data: true });
   assert.deepEqual([...new Set(lowered.refused.values())], ["solves rest of ten by the relational interpreter (a solve goal; not in this profile yet)"]);
+});
+
+// Filled, the uses carry their types (I203): the verifier vouches for the
+// binders, parts and tuples made, with no check again.
+test("the filled uses' types are carried, and verify", () => {
+  const p = program();
+  const w = withBodies(p.code, p.info, p.names);
+  assert.notEqual(w.code, p.code);
+  assert.equal(w.info.subst, p.info.subst, "not checked again");
+  const v = verify(w.code, elaborate(w.code, w.info, p.defs), p.defs);
+  assert.deepEqual(v.problems, []);
+  assert.ok(v.checked > 20, `${v.checked} nodes`);
 });
