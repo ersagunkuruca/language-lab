@@ -276,6 +276,10 @@ function unify(a: Term, b: Term, s: State): State | null {
   a = walk(a, s);
   b = walk(b, s);
   if (a === b) return s;
+  // Two unknowns: the newer one to the older (I200b), so a fresh unknown
+  // points at the one it meets and no chain of them grows a level at a
+  // time (mandelbrot's `line` backwards walked chains 182 long).
+  if (a instanceof LVar && b instanceof LVar && a.n < b.n) return bindVar(s, b, a);
   if (a instanceof LVar) return bindVar(s, a, b);
   if (b instanceof LVar) return bindVar(s, b, a);
   // Near (run.ts close): the solver checks an answer it computed in floats,
