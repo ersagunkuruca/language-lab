@@ -385,11 +385,18 @@ test("queens-count natively checks a column by a loop over the queens placed, an
 // queens-first natively (C207h): `safe`'s loop checks the column and the
 // distance on its first step only, its later steps running a copy that
 // knows them finite, and the board is the evaluator's.
-test("queens-first natively checks a loop's unchanged numbers once, and finds the evaluator's board (C207h)", { skip }, () => {
+test("queens-first natively checks a loop's unchanged numbers once, its columns never, and finds the evaluator's board (C207h, C207l)", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "c-finite-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/queens-first");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "queens")]);
   assert.equal(built.status, 0, built.stderr.toString());
-  assert.match(readFileSync(join(dir, "queens.c"), "utf8"), /lab_safe_fold_forward_finite\w*\(/);
+  const c = readFileSync(join(dir, "queens.c"), "utf8");
+  assert.match(c, /lab_safe_fold_forward_finite\w*\(/);
+  // C207l: the columns are finite and not below zero (made by `range`,
+  // pushed back as they are), so the loop's steps check neither an item
+  // nor its distance from the column.
+  const loop = /\nint32_t lab_safe_fold_forward_finite_counted\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  assert.ok(loop, "the counted loop");
+  assert.doesNotMatch(loop[0], /lab_stop/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "8"]).stdout.toString();
   assert.match(evaluator, /\[3, 1, 6, 2, 5, 7, 4, 0\]/);
   for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "queens"), ["8"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);
