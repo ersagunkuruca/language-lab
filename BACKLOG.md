@@ -95,6 +95,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| I199 | A counter written with literals that the text reader (MCP `replace`, `eval`) leaves as generic numbers isn't seen as counted (counting.ts takes only a literal whose `of` is Int), so the definition keeps Diverge even after its counter's type settles to Int. Example: `reachby(edges, known, left) = if 0 < left then reachby(edges, set union(known, …), left − 1) else known`, written through the MCP, checks as `(Map a (List a), Set a, Int) -> Set a` with no Diverge, as it does when the two literals are Int | Ersagun's fixed-point discussion (thread "Explore solving by fixed-point iteration", 2026-11-11) | P2 | S | |
 | C200 | tumble's lists stored as the costs choose (arrays: its board read by position), where they are kept as written today: a Cell of the program's lists (a lane's `queue`, `swaps`, its Board) is made on one side and read by the page on the other, and rep-split.ts refuses a Cell holding lists (a cell can't be converted where it is read). A cell made on the stored side could convert at each `read` and `write` on the other, as a field of a stored type converts. Measured 2026-11-10 (Language lane B): settling a scattered board, the most a tap makes, takes 80 µs in compiled JavaScript (2000 boards in 161 ms), against 16 ms a frame, so arrays could save at most a fraction of that: not worth building for tumble. It waits for a program whose cells hold big lists. Example: `ters compile examples/tumble` choosing `array of List` beside main's lists, the same page | C196 (its last refusal, 2026-11-09) | P3 | M | |
 
 ### Speed of compiled code
@@ -159,6 +160,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 
+### Someday
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C210 | A quantum target for the reversible part: a function that is `det` both ways over fixed-width Ints printed as Toffoli/CNOT gates in OpenQASM 3, with Bennett's uncompute added by the compiler. Superposition and measurement would be a language layer (Choice with amplitudes), not part of this row. Waits until the current goals are done and Ersagun asks. Example: a 4-bit adder's circuit agrees with the evaluator on all 256 inputs in a small permutation simulator | [REVERSIBLE-AND-QUANTUM-2026-11-11](docs/design/targets/REVERSIBLE-AND-QUANTUM-2026-11-11.md) §6 | P3 | L | |
+
 ## L: Language and library
 
 Numbers first (Ersagun, 2026-10-24 07:01), then the rest of
@@ -199,6 +206,8 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L237 | `grow(universe, start, more)` in the library: the least set holding start and closed under `more`, each new item kept inside the finite `universe` (a set). Every round but the last adds an item, so it ends within `set size(universe)` rounds and is total by the counted-input rule (counting.ts), with no checker work. The finite-and-growing case of fixed-point iteration (Datalog, dataflow, reachability). Credit as prior art: Kleene's fixed-point theorem (1952), Knaster–Tarski (1955), Datalog. Example: reachability over a graph's edges, typed with no Diverge, gives the nodes reached from one | Ersagun's fixed-point discussion (thread "Explore solving by fixed-point iteration", 2026-11-11) | P3 | M | |
+| L238 | Design note FIXPOINT.md: a `fixpoint` where the program states only the equation and the compiler picks the way (semi-naive rounds over only the new facts, Newton, plain rounds), and how each ends: a finite universe (L237), a contraction checked at run time so not converging is Choice instead of Diverge (Banach, 1922), else Diverge; whether monotone functions belong in types as in Datafun. Prior art: semi-naive Datalog (Bancilhon, 1986), Flix (Madsen, Yee and Lhoták, PLDI 2016), Datafun (Arntzenius and Krishnaswami, ICFP 2016); relate.ts's tabling and `inverse` already solve some fixed points. Example: the note, with PageRank or a Markov chain's stationary distribution as its worked program | Ersagun's fixed-point discussion (thread "Explore solving by fixed-point iteration", 2026-11-11) | P3 | L | |
 
 ### Grammars, modules and sharing
 
