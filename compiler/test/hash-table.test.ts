@@ -239,6 +239,26 @@ test("in C, a map of Int keys is C's hash table, and prints what the definition 
   assert.deepEqual(out.split("\n").slice(0, -1), lines);
 });
 
+// C58m: a table of Int keys in C starts direct, each key at its own
+// value's slot, and is hashed at its first key that would take another's
+// slot (`big`'s keys are multiples of 2^40, so all meet): both print what
+// the definition prints, old versions, removes and listings too.
+test("in C, a map of Int keys keeps each key at its own slot until two would meet, and prints what the definition prints (C58m)", { skip }, () => {
+  for (const o of [{}, { big: true }]) {
+    const p = program(300, { ...o, old: true, remove: true, list: true, array: true });
+    const c = chosen(p, false, true);
+    assert.deepEqual(c.chosen, ["Map as hash table"]);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    assert.deepEqual(lines, printed(p.code, p.names, p.main).lines);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+    assert.deepEqual([...lowered.refused.values()], []);
+    const src = emitC(lowered, { main: p.main }).c;
+    assert.match(src, /if \(t->direct\) \{/);
+    const out = execFileSync(cc(src), { encoding: "utf8" });
+    assert.deepEqual(out.split("\n").slice(0, -1), lines, JSON.stringify(o));
+  }
+});
+
 // C63i: a set of Ints in C is C's table of its items too, its old
 // version read again after an add and a remove.
 test("in C, a set of Ints is C's hash set, and prints what the definition prints, its old version too (C63i)", { skip }, () => {

@@ -585,7 +585,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -931,7 +931,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   }
   for (const t of tables.values()) {
     const K = ty(t.keyT);
-    types.push(`typedef struct { uint32_t n, used, cap; uint8_t *st; ${K} *ks; ${ty(t.value)} *vs; } lab_Store_t${t.index}; // a table's slots: cap, n full, used full or removed`,
+    types.push(`typedef struct { uint32_t n, used, cap; uint8_t direct; uint8_t *st; ${K} *ks; ${ty(t.value)} *vs; } lab_Store_t${t.index}; // a table's slots: cap, n full, used full or removed; direct: Int keys each at its own value's slot`,
       `typedef struct { lab_cell h; lab_Store_t${t.index} *cur; lab_cell *next; ${K} key; ${ty(t.value)} old; uint8_t had; } lab_Table_t${t.index}; // a version: the newest holds the slots (cur), an older one the change from the next (key had old or was absent)`);
   }
   for (const [k, t] of fns) types.push(`typedef ${ty(t.result)} (*${fname.get(k)})(${["lab_cell *", ...t.params.map(ty)].join(", ")});`);
@@ -2332,8 +2332,14 @@ static inline int lab__eq_t${i}(${K} a, ${K} b) {
   return ${parts("").map(([x, at]) => `lab__e${x[0]}_t${i}(a${at}, b${at})`).join(" && ")};
 }
 // The slot holding k, or the free one where it would go (a removed one
-// first), with *found saying which.
-static inline uint32_t lab__find_t${i}(${S} *t, ${K} k, int *found) {
+// first), with *found saying which. A table of Int keys starts direct
+// (C58m): each key at its own value's slot (k mod cap), so a lookup reads
+// one slot, a removed key's slot is free again, and nothing is hashed or
+// walked past; a counter's keys (swarm's motes) never meet. The first key
+// that would take a slot another holds, or a key past the small Ints,
+// makes it hashed (lab__room), for good.
+static inline uint32_t lab__find_t${i}(${S} *t, ${K} k, int *found) {${int ? `
+  if (t->direct) { uint32_t j = LAB_IS_SMALL(k) ? (uint32_t)LAB_VAL(k) & (t->cap - 1) : 0; *found = LAB_IS_SMALL(k) && t->st[j] == 1 && t->ks[j] == k; return j; }` : ""}
   uint32_t m = t->cap - 1, j = (uint32_t)lab__hash_t${i}(k) & m, free_at = UINT32_MAX;
   for (;; j = (j + 1) & m) {
     if (t->st[j] == 0) { *found = 0; return free_at != UINT32_MAX ? free_at : j; }
@@ -2344,7 +2350,7 @@ static inline uint32_t lab__find_t${i}(${S} *t, ${K} k, int *found) {
 static inline ${S} *lab__store_t${i}(uint32_t cap) {
   ${S} *t = malloc(sizeof(${S}));
   if (!t) lab_oom();
-  t->n = 0; t->used = 0; t->cap = cap;
+  t->n = 0; t->used = 0; t->cap = cap; t->direct = ${int ? 1 : 0};
   t->st = calloc(cap, 1); t->ks = malloc(cap * sizeof(${K})); t->vs = malloc(cap * sizeof(${V}));
   if (!t->st || !t->ks || !t->vs) lab_oom();
   return t;
@@ -2369,7 +2375,25 @@ static inline void lab__grow_t${i}(${S} *t) {
   t->cap = cap; t->used = t->n;
   for (uint32_t j = 0; j < old; j++) if (st[j] == 1) { int f; uint32_t at = lab__find_t${i}(t, ks[j], &f); t->st[at] = 1; t->ks[at] = ks[j]; t->vs[at] = vs[j]; }
   free(st); free(ks); free(vs);
-}${threads ? `
+}
+// Where k goes in, or is: a direct table that can't hold it at its own
+// slot hashed first, its keys moved as grow moves them (C58m).
+static inline uint32_t lab__room_t${i}(${S} *t, ${K} k, int *found) {
+  uint32_t j = lab__find_t${i}(t, k, found);${int ? `
+  if (t->direct && !*found && (!LAB_IS_SMALL(k) || t->st[j] == 1)) {
+    uint8_t *st = t->st; ${K} *ks = t->ks; ${V} *vs = t->vs;
+    t->st = calloc(t->cap, 1); t->ks = malloc(t->cap * sizeof(${K})); t->vs = malloc(t->cap * sizeof(${V}));
+    if (!t->st || !t->ks || !t->vs) lab_oom();
+    t->direct = 0; t->used = t->n;
+    for (uint32_t x = 0; x < t->cap; x++) if (st[x] == 1) { int f; uint32_t at = lab__find_t${i}(t, ks[x], &f); t->st[at] = 1; t->ks[at] = ks[x]; t->vs[at] = vs[x]; }
+    free(st); free(ks); free(vs);
+    j = lab__find_t${i}(t, k, found);
+  }` : ""}
+  return j;
+}
+// A key gone from slot j: removed, for a lookup to walk past, or free in
+// a direct table, where no lookup walks.
+static inline void lab__gone_t${i}(${S} *t, uint32_t j) { if (t->direct) { t->st[j] = 0; t->used--; } else t->st[j] = 2; t->n--; }${threads ? `
 // Shared with the threads (lab_shares): the newest version's keys and
 // values; an older version is changed when read, so it stays here.
 static void lab__share_t${i}(lab_cell *c) {
@@ -2393,11 +2417,11 @@ static void lab__reroot_t${i}(${T} *t) {
     ${T} *y = path[n];
     ${S} *m = x->cur;
     lab__grow_t${i}(m);
-    int f; uint32_t j = lab__find_t${i}(m, y->key, &f);
+    int f; uint32_t j = y->had ? lab__room_t${i}(m, y->key, &f) : lab__find_t${i}(m, y->key, &f);
     ${V} old = f ? m->vs[j] : ${zero(t.value)};
     if (y->had && f) m->vs[j] = y->old;
     else if (y->had) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = ${dupK("y->key")}; m->vs[j] = y->old; m->n++; }
-    else if (f) { ${dropK("m->ks[j]")} m->st[j] = 2; m->n--; }
+    else if (f) { ${dropK("m->ks[j]")} lab__gone_t${i}(m, j); }
     x->cur = 0; x->key = y->key; x->had = f; x->old = old;
     x->next = lab_dup((lab_cell *)y);
     y->cur = m; y->next = 0;
@@ -2413,19 +2437,19 @@ static lab_cell *lab__change_t${i}(lab_cell *c, ${K} k, int set, ${V} v) {
   lab__reroot_t${i}(t);
   ${S} *m = t->cur;
   if (set) lab__grow_t${i}(m);
-  int f; uint32_t j = lab__find_t${i}(m, k, &f);
+  int f; uint32_t j = set ? lab__room_t${i}(m, k, &f) : lab__find_t${i}(m, k, &f);
   if (!set && !f) { ${dropK("k")} return c; }
   if (${threads ? "(t->h.rc & ~LAB_SHARED)" : "t->h.rc"} == 1) {
     if (set && f) { ${V} old = m->vs[j]; m->vs[j] = v; ${dropV("old")} (void)old; ${dropK("k")} }
     else if (set) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = k; m->vs[j] = v; m->n++; }
-    else { ${dropK("m->ks[j]")} ${dropV("m->vs[j]")} m->st[j] = 2; m->n--; ${dropK("k")} }
+    else { ${dropK("m->ks[j]")} ${dropV("m->vs[j]")} lab__gone_t${i}(m, j); ${dropK("k")} }
     return c;
   }
   ${T} *nv = lab__made_t${i}(m);
   t->cur = 0; t->had = f; t->old = f ? m->vs[j] : ${zero(t.value)}; t->key = k;
   if (set && f) m->vs[j] = v;
   else if (set) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = ${dupK("k")}; m->vs[j] = v; m->n++; }
-  else { ${dropK("m->ks[j]")} m->st[j] = 2; m->n--; }
+  else { ${dropK("m->ks[j]")} lab__gone_t${i}(m, j); }
   t->next = (lab_cell *)nv;
   lab_dup((lab_cell *)nv);
   lab_drop(c);
