@@ -43,6 +43,10 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
   routes: () => [["roads.txt"], { "roads.txt": readFileSync(join(examples, "routes/roads.txt"), "utf8") }],
   wc: () => [["a.txt"], { "a.txt": "two words\nand three more\n" }],
   swarm: () => [["20", "10"], {}],
+  // Their defaults are sized for compiled code (I202).
+  "swarm-pool": () => [["20", "10"], {}],
+  herd: () => [["20", "10"], {}],
+  "queens-first": () => [["8"], {}],
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
