@@ -367,13 +367,19 @@ test("a fold over a tree whose leaves abort on threads aborts at the first in or
 // queens-count natively (C207f): `safe`'s fold to a function of the
 // distance, applied at once, is a loop from the first queen placed, no
 // closure per queen, and the count is the evaluator's.
-test("queens-count natively checks a column by a loop over the queens placed, and counts the evaluator's boards (C207f)", { skip }, () => {
+test("queens-count natively checks a column by a loop over the queens placed, and counts the evaluator's boards (C207f, C207n)", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "c-forward-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/queens-count");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "queens")]);
   assert.equal(built.status, 0, built.stderr.toString());
   const c = readFileSync(join(dir, "queens.c"), "utf8");
   assert.match(c, /lab_safe_fold_forward\(/);
   assert.doesNotMatch(c, /lab_safe_fold_items\(/);
+  // C207n: its search runs on the threads (`par:count:search`), and still
+  // its columns are known finite and the loop gives false once it is.
+  const loop = /\nint32_t lab_safe_fold_forward_finite_counted\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  assert.ok(loop, "the counted loop");
+  assert.doesNotMatch(loop[0], /lab_stop/);
+  assert.match(loop[0], /\} else \{[^{}]*return 0;/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "6"]).stdout.toString();
   assert.match(evaluator, /boards of 6 queens: 4/);
   for (const workers of ["3", "0"]) for (const n of ["6", "8"]) {
