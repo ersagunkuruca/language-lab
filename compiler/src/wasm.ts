@@ -422,7 +422,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     structs.push({ name: `${n}.st`, fields: [], final: true, items: "i32" });
     structs.push({ name: `${n}.keys`, fields: [], final: true, items: t.keyT });
     structs.push({ name: `${n}.vals`, fields: [], final: true, items: t.value });
-    structs.push({ name: `${n}.store`, fields: [{ name: "st", t: "i32", ref: k }, { name: "ks", t: "i32", ref: k + 1 }, { name: "vs", t: "i32", ref: k + 2 }, { name: "n", t: "i32" }, { name: "used", t: "i32" }], final: true, mutable: true });
+    structs.push({ name: `${n}.store`, fields: [{ name: "st", t: "i32", ref: k }, { name: "ks", t: "i32", ref: k + 1 }, { name: "vs", t: "i32", ref: k + 2 }, { name: "n", t: "i32" }, { name: "used", t: "i32" }, { name: "direct", t: "i32" }], final: true, mutable: true });
     structs.push({ name: n, fields: [{ name: "cur", t: "i32", ref: k + 3 }, { name: "next", t: "i32", ref: k + 4 }, { name: "key", t: t.keyT }, { name: "had", t: "i32" }, { name: "old", t: t.value }], final: true, mutable: true });
     structs.push({ name: `${n}.path`, fields: [], final: true, items: t });
     tblIndex.set(t.index, k + 4);
