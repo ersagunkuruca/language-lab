@@ -72,6 +72,7 @@ import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fuseSteps } from "./fuse-steps.ts";
+import { shareFoldItems } from "./fold-items.ts";
 import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
 import { B } from "../../ters/src/prelude.ts";
@@ -706,6 +707,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
   if (fusedSteps?.fused) {
     code = fusedSteps.code;
+    info = infer(code, names);
+  }
+  // A fold's costly work on each item shared out as a map, where a target
+  // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares
+  // an array's only.
+  const sharedItems = opts.host && !opts.shader && !envSet("NO_FOLD_ITEMS") ? shareFoldItems(code, info) : null;
+  if (sharedItems?.shared) {
+    code = sharedItems.code;
     info = infer(code, names);
   }
   // Each step above changes no answer, so what ended as given still ends.
