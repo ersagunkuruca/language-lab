@@ -3594,6 +3594,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
     for (let x = 0; x < f.params.length; x++) {
       const rt = f.locals[x];
       if (!isRecord(rt) || rt.mutable || !occurs(t, x)) continue;
+      t = narrowed(t, x, rt);
       // Calls given x whole that come first, in the order things happen.
       const first: SExpr[] = [];
       let pure = true;
@@ -3628,6 +3629,73 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
     }
     return t;
   };
+  // A call here given x whole, to a function that makes a new value of
+  // its type from it and reads only some of its fields (pond's `with
+  // school(p, replaced in pool(p.school, …), …)`, which reads every field
+  // but the school and the patches): given a value of those fields and
+  // zeros for the counted rest, so x is only read field by field and the
+  // fields the call leaves are taken with one holder (round 13 P2). A
+  // zero is nothing to drop.
+  // Only where x is then read field by field alone.
+  const narrowed = (t: SExpr, x: number, rt: RType): SExpr => {
+    let changed = false;
+    const put = (n: SExpr): SExpr => {
+      const m = mapKids(n, put);
+      if (m.k !== "call") return m;
+      const g = funcs[m.fn], reads = fieldsRead(funcs);
+      if (!walk(g.body).some((y) => y.k === "make" && y.t.key === rt.key)) return m;
+      const args = m.args.map((a, k) => {
+        const r = reads.get(m.fn)?.[k];
+        if (a.k !== "local" || a.i !== x || !r) return a;
+        changed = true;
+        return { k: "make", t: rt, args: rt.fields.map((fl, i) => (r.has(i) ? { k: "get", rec: a, t: rt, i } : { k: "zero", t: fl.t })) } as SExpr;
+      });
+      return { ...m, args };
+    };
+    const out = put(t);
+    return changed && occurs(out, x) === fieldReads(out, x) ? out : t;
+  };
   return tail(go(f.body));
+}
+
+// The fields of each function's record inputs that it reads (null: all
+// of them, or it isn't a record), following an input given whole to
+// another function to what that one reads.
+const readsMemo = new WeakMap<SFunc[], Map<number, (Set<number> | null)[]>>();
+function fieldsRead(funcs: SFunc[]): Map<number, (Set<number> | null)[]> {
+  let out = readsMemo.get(funcs);
+  if (out) return out;
+  out = new Map(funcs.map((f, i) => [i, f.params.map((t) => (isRecord(t) && !t.mutable ? new Set<number>() : null))]));
+  const all = out;
+  for (let more = true; more;) {
+    more = false;
+    funcs.forEach((f, i) => {
+      const mine = all.get(i)!;
+      mine.forEach((r, x) => {
+        if (!r) return;
+        let whole = false;
+        const add = (j: number) => { if (!r.has(j)) { r.add(j); more = true; } };
+        const look = (e: SExpr): void => {
+          if (whole) return;
+          if (e.k === "get" && e.rec.k === "local" && e.rec.i === x) { add(e.i); return; }
+          if (e.k === "call") {
+            e.args.forEach((a, k) => {
+              if (a.k !== "local" || a.i !== x) { look(a); return; }
+              const g = all.get(e.fn)?.[k];
+              if (!g) whole = true;
+              else g.forEach(add);
+            });
+            return;
+          }
+          if (e.k === "local" && e.i === x) { whole = true; return; }
+          kids(e).forEach(look);
+        };
+        look(f.body);
+        if (whole) { mine[x] = null; more = true; }
+      });
+    });
+  }
+  readsMemo.set(funcs, out);
+  return out;
 }
 
