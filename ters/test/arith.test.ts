@@ -14,6 +14,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { ARITH, INT_OPS, S } from "../src/lang/std.ts";
 import { resolveArithmetic, usesGenericArithmetic } from "../src/lang/arith.ts";
+import { elaborate, verify } from "../src/lang/verify.ts";
 import { usesLiteralMatch } from "../src/lang/literal-match.ts";
 import { NUMBER, STRING, schemeArith, showType } from "../src/lang/types.ts";
 import { subtree, type Id, type NodeOf } from "../src/model.ts";
@@ -210,4 +211,19 @@ test("a use at Float64 of a definition whose default is Int gets a Float64 copy"
 // resolve the whole library again, about 2 s in node.
 test("the library has no match on values, so its resolving is made once for every program", () => {
   assert.equal(usesLiteralMatch(LIBRARY.code), false);
+});
+
+// The library's `sum` at Ints: its body resolves at Int (its literal 0),
+// and its scheme and type said so too only after I207. Before, the scheme
+// closed to Float64 and the type stayed open, and the verifier refused
+// sheet's compile (REVIEW-2026-11-11 §2).
+test("a library definition resolved at a type has that type and scheme: the verifier finds them agree (I207)", () => {
+  const k = new Lang(LIBRARY.code);
+  const sum = LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === "sum")!;
+  const d = k.def("total");
+  k.define(d, k.fn([], () => k.call(sum, k.list(k.lit(1), k.lit(2)))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = resolveArithmetic(code, info, names);
+  assert.deepEqual(verify(r.code, elaborate(r.code, r.info), [d, sum]).problems, []);
 });

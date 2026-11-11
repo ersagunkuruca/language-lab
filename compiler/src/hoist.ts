@@ -118,6 +118,15 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
         nodes[x] = { id: x, kind: "ref", target: b };
         if (info.embedded?.has(x) || info.reshape?.has(x)) carried = false;
         follow(x, value);
+        // Its calls now run where the let is: each callee's row was the
+        // lambda's it sat in, and becomes that place's (pure by `quiet`, so
+        // the row is only what joined it there; I207, bounce).
+        for (const y of subtree({ nodes, defs: [] }, value)) {
+          const c = nodes[y];
+          if (!isCall(c) || nodes[c.fn]?.kind !== "ref") continue;
+          const ft = ty(c.fn);
+          if (ft.t === "fn") typeOf.set(c.fn, { ...ft, eff: rowAt(id) });
+        }
         typeOf.set(b, info.typeOf.get(x)!);
         typeOf.set(value, info.typeOf.get(x)!);
         return { b, value };
