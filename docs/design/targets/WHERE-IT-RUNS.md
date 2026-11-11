@@ -322,7 +322,12 @@ What this leaves, in order:
     eight levels the calls are made as written. A call that fails anywhere
     marks the run failed, and the top makes its two calls again in turn.
     fib 38 natively: 0.41 s before, 0.5 s in turn, 0.15 s on three threads.
-  - **Not yet.** Pages (no blocking wait there).
+  - **Not on pages (closed 2026-11-11).** A page has no blocking wait,
+    and under a handler's million steps (kept by Ersagun 2026-11-11) a
+    divide and conquer is small: each call of itself is a step, so the
+    most a handler gets is about fib 27, 10 to 30 ms on the CPU (Node,
+    compiled, measured). Warm workers would save a few ms of that, the
+    first press would pay their start, so it isn't built.
 - A Float32 type, if Ersagun wants float maps on the GPU: a language
   question, so a row of its own, not part of C61.
 
