@@ -24,6 +24,7 @@ import type { Code, Id } from "../../ters/src/model.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { checkOptions } from "../../ters/src/lang/load.ts";
+import { represented } from "../../ters/cli/represented.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { area, choices, numberTexts, fuzzFinds, fuzzFindInputs, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
@@ -422,6 +423,21 @@ test("a table a function only reads is lent, and read without its count changed 
   assert.doesNotMatch(body, /lab_drop\(p0\)/);
   assert.match(c, /lab_table_atb_t\d+\(p0, /);
   assert.doesNotMatch(c, /lab_food_at(_b)?\(lab_dup\(/);
+});
+
+// Round 13 P3: with threads, a value made of cells is still worked out
+// once, and kept for good with no count, so the threads share it: pond's
+// `offsets`, read at every fish's every smell, made afresh each time.
+test("with threads, a definition's value is made once and kept uncounted for every thread (round 13 P3)", () => {
+  const p = load("../../compiler/gaps/pond"), main = p.named("main");
+  // As ters native has it: lists as arrays, the floor a hash table.
+  const t = represented({ title: "pond", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: [], options: p.options }, main, false, true);
+  const lowered = lowerScalar(t.code, t.info, t.names, [main], { data: true, threads: true });
+  const offsets = lowered.funcs.findIndex((g) => g.name === "offsets" && !g.inner);
+  const { c } = emitC(lowered, { main });
+  assert.match(c, /lab_par/, "the plans are mapped on the threads");
+  assert.match(c, new RegExp(`static lab_cell \\*lab_m${offsets}_make\\(void\\) \\{ lab_cell \\*x = lab_offsets\\(\\), \\*z = 0; lab_forever\\(x\\);`));
+  assert.doesNotMatch(c.slice(c.indexOf("\ndouble lab_scent_at_b(")), /= lab_offsets\(\);/);
 });
 
 test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {
