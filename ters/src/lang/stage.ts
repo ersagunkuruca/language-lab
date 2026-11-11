@@ -38,7 +38,7 @@ import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
 import { equal, type Value } from "./run.ts";
 import { ARITH, CONS, FALSE, NIL, S, STD_IMPL, TRUE } from "./std.ts";
-import { NUMBER, type Type } from "./types.ts";
+import { NUMBER, OverMap, type Row, type Type } from "./types.ts";
 import { infer, type Info } from "./infer.ts";
 import { recordVariant } from "./derive.ts";
 import { valueMasks, type Algebra } from "./grades.ts";
@@ -68,9 +68,10 @@ const LIMIT = 400_000, NODES = 40_000, LETS = 800;
 // caller; staged is empty when nothing changed.
 // `rounded`: the staged calls that worked out a number Float32 can't hold,
 // so a Float32 run of the same program rounds it differently.
-export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], copied: Set<Id> = new Set(), masks?: Map<Id, { algebra: Algebra; mask: number }>): { code: Code; names: Names; staged: Id[]; rounded: Id[] } {
+export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], copied: Set<Id> = new Set(), masks?: Map<Id, { algebra: Algebra; mask: number }>): { code: Code; names: Names; staged: Id[]; rounded: Id[]; types: Map<Id, Type> | null } {
   const nodes = code.nodes;
   const staged: Id[] = [], rounded: Id[] = [];
+  let types: Map<Id, Type> | null = new Map();
   const out: Code = { nodes: { ...nodes }, defs: [...code.defs] };
   const outNames: Names = { ...names };
   const ty = (id: Id) => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
@@ -119,7 +120,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
         if (known[i]) { binders.push(null); return known[i]!; }
         const mark = st.lets.length;
         try { const v = st.ev(a, Scope.empty); binders.push(null); return v; } catch (e) { if (!stopped(e)) throw e; st.lets.length = mark; }
-        const b = st.binder(`staged ${i}`);
+        const b = st.binder(`staged ${i}`, ty(a));
         binders.push(b);
         return st.later(b, shape(a)!, masks?.get(a));
       });
@@ -132,6 +133,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
         ? { kind: "call", fn: st.add({ kind: "lambda", params: kept.map((x) => x.b), body }), args: kept.map((x) => x.a) }
         : (() => { const r = out.nodes[body]; return { ...r } as NodeData; })();
       out.nodes[id] = { ...root, id } as Node;
+      if (types) { const t = typesMade(out, info, st, id, kept.length > 0); if (t) for (const [x, y] of t) types.set(x, y); else types = null; }
       staged.push(id);
       if (st.rounded) rounded.push(id);
     } catch (e) {
@@ -139,7 +141,127 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
       // Leave the call; its stray new nodes are unreachable.
     }
   }
-  return staged.length ? { code: out, names: outNames, staged, rounded } : { code, names, staged, rounded };
+  return staged.length ? { code: out, names: outNames, staged, rounded, types } : { code, names, staged, rounded, types };
+}
+
+// The types of the calls stageProgram puts back (below), or null. A call
+// put back is as it came, in the place of a call of a copy (or a name of
+// it, given all its data) the check before typed: its result is that
+// one's, the inputs the copy still takes are as typed there, and a
+// function's row at a call is the row around it (the lambda it is in, or
+// none: pure). The data the copy had written in is typed as the first
+// check typed it, when that holds no variable of that check's but the row
+// of a function it calls (a constructor's, list.of's), the row around.
+function putBack(back: [Id, Node, Id, Id | null][], code: Code, info: Info, asChecked: Info, carried: Map<Id, Type>): Map<Id, Type> | null {
+  const zonk = (i: Info, id: Id) => { const t = i.typeOf.get(id); return t ? i.subst.zonk(t) : null; };
+  const out = new Map(carried);
+  // (A call in a copy taken out is in nothing checked.)
+  const reached = new Set<Id>(), parent = new Map<Id, Id>();
+  const walk = (id: Id) => { if (reached.has(id) || !code.nodes[id]) return; reached.add(id); for (const c of children(code.nodes[id])) { if (!parent.has(c)) parent.set(c, id); walk(c); } };
+  code.defs.forEach(walk);
+  const rowAt = (id: Id): Row | null => {
+    for (let at = parent.get(id); at !== undefined; at = parent.get(at)) {
+      if (code.nodes[at]?.kind !== "lambda") continue;
+      const t = zonk(info, at);
+      return t?.t === "fn" ? info.subst.resolveRow(t.eff) : null;
+    }
+    // A definition's own value is pure (infer.ts).
+    return PURE;
+  };
+  for (const [id, n] of back) {
+    if (!reached.has(id)) continue;
+    const ret = zonk(info, id), row = rowAt(id);
+    if (!isCall(n) || !ret || !row || code.nodes[n.fn]?.kind !== "ref") return null;
+    const params: Type[] = [];
+    for (const a of n.args) {
+      const t = reached.has(a) ? zonk(info, a) : null;
+      if (t) { params.push(t); continue; }
+      const ids = subtree(code, a), called = new Set(ids.flatMap((x) => { const c = code.nodes[x]; return isCall(c) ? [c.fn] : []; }));
+      for (const x of ids) {
+        const c = code.nodes[x], z = zonk(asChecked, x);
+        const ctor = z?.t === "fn" && c?.kind === "ref" && called.has(x) && z.eff.effs.every((e) => row.effs.includes(e));
+        if (!z || hasVar(ctor ? ({ ...z, eff: PURE } as Type) : z)) return null;
+        out.set(x, ctor ? { ...(z as Type & { t: "fn" }), eff: row } : z);
+      }
+      params.push(out.get(a)!);
+    }
+    out.set(n.fn, { t: "fn", params, ret, eff: row });
+  }
+  return out;
+}
+
+// The types of the nodes a staged call was made of (I203), with no check
+// again: what is left of a call is arithmetic on Float64s, records of them
+// read part by part and made, and lets, so each node's type follows from
+// its parts'. Null when one doesn't (a generic data type, a literal of
+// a type not known): the program is checked again.
+const NUM: Type = { t: "con", id: NUMBER, args: [] };
+const hasVar = (t: Type): boolean => t.t === "var" || (t.t === "con" ? t.args.some(hasVar) : t.params.some(hasVar) || hasVar(t.ret) || t.eff.tail !== null || Object.values(t.eff.args ?? {}).some((xs) => xs.some(hasVar)));
+const PURE: Row = { effs: [], tail: null };
+function typesMade(code: Code, info: Info, st: Stager, root: Id, wrapped: boolean): Map<Id, Type> | null {
+  const nodes = code.nodes, made = new Set(st.ids), out = new Map<Id, Type>();
+  const zonk = (id: Id) => { const t = info.typeOf.get(id); return t ? info.subst.zonk(t) : null; };
+  const dataOf = (variant: Id): Type | null => {
+    const d = info.owner.get(variant), td = d ? nodes[(nodes[d] as NodeOf<"def">)?.body ?? ""] : undefined;
+    return td?.kind === "typedef" && !td.params.length && td.variants.includes(variant) ? { t: "con", id: d!, args: [] } : null;
+  };
+  const fieldType = (f: Id): Type | null => {
+    const tr = nodes[(nodes[f] as NodeOf<"field">).type];
+    if (tr?.kind !== "tref" || tr.args.length) return null;
+    if (tr.target === NUMBER) return NUM;
+    const td = nodes[(nodes[tr.target] as NodeOf<"def">)?.body ?? ""];
+    return td?.kind === "typedef" && !td.params.length ? { t: "con", id: tr.target, args: [] } : null;
+  };
+  const fail = (): never => { throw new Stop(); };
+  const type = (id: Id): Type => {
+    const was = out.get(id);
+    if (was) return was;
+    if (!made.has(id)) return zonk(id) ?? fail();
+    const n = nodes[id];
+    let t: Type;
+    switch (n?.kind) {
+      case "binder": t = st.binderTypes.get(id) ?? fail(); break;
+      case "lit": { const from = st.litFrom.get(id); t = from ? zonk(from) ?? fail() : n.of === NUMBER ? NUM : fail(); break; }
+      case "ref": {
+        const target = nodes[n.target];
+        if (target?.kind === "variant") t = target.fields.length ? fail() : dataOf(n.target) ?? fail();
+        else t = st.binderTypes.has(n.target) ? type(n.target) : zonk(n.target) ?? fail();
+        break;
+      }
+      case "lambda": t = { t: "fn", params: n.params.map(type), ret: type(n.body), eff: PURE }; break;
+      case "call": {
+        if (!isCall(n)) return fail();
+        const f = nodes[n.fn], args = n.args.map(type);
+        let ret: Type;
+        if (f?.kind === "lambda") ret = (type(n.fn) as Type & { t: "fn" }).ret;
+        else if (f?.kind !== "ref" || !made.has(n.fn)) return fail();
+        else {
+          const target = nodes[f.target];
+          if (f.target.startsWith("builtin.") || f.target === S.float32) ret = NUM;
+          else if (target?.kind === "field" && args.length === 1) ret = fieldType(f.target) ?? fail();
+          else if (target?.kind === "variant" && target.fields.length === args.length) ret = dataOf(f.target) ?? fail();
+          else return fail();
+          if (f.target.startsWith("builtin.") && !args.every((a) => a.t === "con" && a.id === NUMBER)) fail();
+          out.set(n.fn, { t: "fn", params: args, ret, eff: PURE });
+        }
+        t = ret;
+        break;
+      }
+      default: return fail();
+    }
+    out.set(id, t);
+    return t;
+  };
+  try {
+    // The call's own node keeps its type; what it is now is typed from its
+    // parts, and must be that type.
+    const n = nodes[root], was = zonk(root);
+    if (!was) return null;
+    if (wrapped && isCall(n)) { type(n.fn); for (const a of n.args) type(a); }
+    else { made.add(root); const t = type(root); out.delete(root); if (JSON.stringify(t) !== JSON.stringify(was)) return null; }
+    for (const id of subtree(code, root)) if (id !== root && made.has(id)) type(id);
+    return out;
+  } catch (e) { if (e instanceof Stop) return null; throw e; }
 }
 
 // Both passes, checked again after each, kept only while the program
@@ -154,7 +276,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   // program as it came, checked the same way: a pinned generic definition
   // such as the prelude's `sum` can check worse plainly than it did under
   // its pin, and that is not the staging's doing (I121).
-  const asCame = code, initial = info.errors.length;
+  const asCame = code, asChecked = info, initial = info.errors.length;
   let base: number | null = null;
   const before = () => {
     if (base === null) { try { base = Math.max(initial, infer(asCame, names).errors.length); } catch { base = initial; } }
@@ -179,8 +301,21 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
     for (const [id, n] of Object.entries(code.nodes)) if (seen.has(id)) nodes[id] = n;
     code = { nodes, defs: code.defs };
   };
+  // The types of the nodes staged since the last check, when each staged
+  // call's are known (typesMade): the program then isn't checked again
+  // (I203; STAGE_CHECK=1 checks it, to compare).
+  let carried: Map<Id, Type> | null = new Map();
   const check = (): boolean => {
     prune();
+    if (carried && !(typeof process !== "undefined" && process.env?.STAGE_CHECK)) {
+      const typeOf = new OverMap(info.typeOf);
+      for (const [id, t] of carried) if (id in code.nodes) typeOf.set(id, t);
+      info = { ...info, typeOf };
+      good = { code, names, info, rounded: [...good.rounded, ...(pending ?? [])] };
+      pending = null;
+      carried = new Map();
+      return true;
+    }
     // (Too deep to check, as a very long chain of lets can be: kept out.)
     let again: Info | null = null;
     try { again = infer(code, names); } catch (e) { if (!(e instanceof RangeError)) throw e; }
@@ -188,6 +323,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
     info = again;
     good = { code, names, info, rounded: [...good.rounded, ...(pending ?? [])] };
     pending = null;
+    carried = new Map();
     return true;
   };
   const copied = new Set<Id>();
@@ -198,6 +334,8 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
     st.staged.forEach((id) => staged.add(id));
     if (!st.staged.length) return;
     ({ code, names } = st);
+    if (carried && st.types) for (const [id, t] of st.types) carried.set(id, t);
+    else carried = null;
     pending = [...(pending ?? []), ...st.rounded];
   };
   stage();
@@ -208,6 +346,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   const copies = specialiseCalls(code, info, names, calls);
   if (copies.copies.length) {
     ({ code, names } = copies);
+    carried = null;
     copies.copies.forEach((c) => copied.add(c));
     keep = copies.sites.flatMap(([, n]) => children(n));
     if (check()) {
@@ -223,8 +362,9 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
       if (back.length) {
         const unpaid = new Set(copies.copies.filter((c) => !paid.has(c)).flatMap((c) => [c, ...(copies.holders.get(c) ?? [])]));
         code = { nodes: { ...code.nodes }, defs: code.defs.filter((d) => !unpaid.has(d)) };
+        // A call put back carries its types too (putBack).
+        if (carried) carried = putBack(back, code, info, asChecked, carried);
         for (const [id, n] of back) code.nodes[id] = n;
-        pending = pending ?? [];
       }
       keep = [];
     }
@@ -499,15 +639,22 @@ class Stager {
   }
 
   made = 0;
+  // What it made, for their types (typesMade): each node, a literal's
+  // original and each binder's type when known.
+  ids: Id[] = [];
+  litFrom = new Map<Id, Id>();
+  binderTypes = new Map<Id, Type | null>();
   add(n: NodeData): Id {
     const id = freshId();
     this.made++;
+    this.ids.push(id);
     this.code.nodes[id] = { id, ...n } as Node;
     return id;
   }
-  binder(name: string): Id {
+  binder(name: string, type: Type | null = null): Id {
     const id = this.add({ kind: "binder" });
     this.names[id] = name;
+    this.binderTypes.set(id, type);
     return id;
   }
   ref(target: Id) { return this.add({ kind: "ref", target }); }
@@ -535,7 +682,7 @@ class Stager {
     if (typeof v === "number") return this.add({ kind: "lit", value: v, of: NUMBER });
     switch (v.k) {
       case "dyn": return v.make();
-      case "lit": { const { id: _, ...rest } = v.node; return this.add(rest); }
+      case "lit": { const { id: from, ...rest } = v.node; const id = this.add(rest); this.litFrom.set(id, from); return id; }
       case "data": {
         const variant = this.code.nodes[v.tag] as NodeOf<"variant">;
         return variant.fields.length ? this.add({ kind: "call", fn: this.ref(v.tag), args: v.fields.map((f) => this.residual(f)) }) : this.ref(v.tag);
@@ -582,7 +729,7 @@ class Stager {
     if (typeof v !== "object") return v;
     if (v.k === "data") return v.fields.some((f) => typeof f === "object" && f.k === "dyn" && !f.cheap) ? { ...v, fields: v.fields.map((f) => this.bind(f)) } : v;
     if (v.k !== "dyn" || v.cheap) return v;
-    const b = this.binder("part");
+    const b = this.binder("part", NUM);
     this.lets.push({ b, value: v.make() });
     return { k: "dyn", make: () => this.ref(b), cheap: true, ...(v.f32 ? { f32: true as const } : {}) };
   }

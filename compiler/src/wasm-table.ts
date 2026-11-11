@@ -78,140 +78,55 @@ export function tableRt(name: string, tables: TType[]): RtFn {
   // Find k (a local) in $m: $j the slot, $f whether it was there.
   const find = (k: string) => `local.get $m\nlocal.get $${k}\ncall $${fn("find")}\nlocal.tee $r\ni32.const 31\ni32.shr_u\nlocal.set $f\nlocal.get $r\ni32.const 2147483647\ni32.and\nlocal.set $j`;
   const slots: [string, VT][] = [["m", "tstore"], ["r", "i32"], ["f", "i32"], ["j", "i32"]];
-  switch (op) {
-    case "hash": {
-      // FNV-1a over the parts: an Int's bits (a huge one, a constant), a
-      // Text's bytes; then mixed, since the slot is its low bits.
-      const body = ["i32.const -2128831035", "local.set $h"];
-      for (const [kind, steps] of ks) {
-        body.push("local.get $k", ...steps);
-        if (kind === "int") body.push("local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "ref.test i31", "if i64", "local.get $li", "ref.cast i31", "i31.get_s", "i64.extend_i32_s", "else", "local.get $li", "call $int.small", "end", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
-        else if (kind === "f64") body.push("i64.reinterpret_f64", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
-        else body.push("local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end");
-      }
-      body.push("local.get $h", "local.get $h", "i32.const 16", "i32.shr_u", "i32.xor", "i32.const -2048144789", "i32.mul", "local.tee $h", "local.get $h", "i32.const 13", "i32.shr_u", "i32.xor");
-      return { ...base, params: [["k", "key"]], result: "i32", locals: [["h", "i32"], ...(kinds.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(kinds.has("int") || kinds.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(kinds.has("text") ? [["lt", "text"], ["i", "i32"]] as [string, VT][] : [])], uses: kinds.has("int") ? ["int.small"] : [], body: body.join("\n") };
-    }
-    case "eq": {
-      // An Int part: the same i31 (or the same Int) without a call; two
-      // i31s that differ aren't equal.
-      const intEq = ["local.set $eb", "local.tee $ea", "local.get $eb", "ref.eq", "if i32", "i32.const 1", "else", "local.get $ea", "ref.test i31", "local.get $eb", "ref.test i31", "i32.and", "if i32", "i32.const 0", "else", "local.get $ea", "local.get $eb", "call $int.equal", "end", "end"];
-      const body = ks.flatMap(([kind, steps], n) => ["local.get $a", ...steps, "local.get $b", ...steps, ...(kind === "f64" ? ["f64.eq"] : kind === "int" ? intEq : [`call $${kind}.equal`]), ...(n ? ["i32.and"] : [])]);
-      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: kinds.has("int") ? [["ea", "int"], ["eb", "int"]] : [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.equal`), body: body.join("\n") };
-    }
-    case "cmp": {
-      // compare's order, part by part: −1, 0 or 1.
-      const less = (kind: string) => (kind === "f64" ? "f64.lt" : `call $${kind}.less`);
-      const body = ks.flatMap(([kind, steps]) => ["local.get $a", ...steps, "local.get $b", ...steps, less(kind), "if void", "i32.const -1", "return", "end", "local.get $b", ...steps, "local.get $a", ...steps, less(kind), "if void", "i32.const 1", "return", "end"]);
-      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.less`), body: [...body, "i32.const 0"].join("\n") };
-    }
-    case "store":
-      return { ...base, params: [["cap", "i32"]], result: "tstore", locals: [], uses: [], body: "local.get $cap\narray.new_default $tst\nlocal.get $cap\narray.new_default $tkeys\nlocal.get $cap\narray.new_default $tvals\ni32.const 0\ni32.const 0\nstruct.new $tstore" };
-    case "find":
-      // The slot holding k, its top bit set, or the free one where it
-      // would go (a removed one first).
-      return {
-        ...base, params: [["m", "tstore"], ["k", "key"]], result: "i32", locals: [["mask", "i32"], ["j", "i32"], ["free", "i32"], ["x", "i32"]], uses: [fn("hash"), fn("eq")],
-        body: `${S(0)}
-array.len
-i32.const 1
-i32.sub
-local.set $mask
-local.get $k
-call $${fn("hash")}
-local.get $mask
+  // A table of Int keys starts direct (C58m, as c.ts's): each key at its
+  // own value's slot, an i31's bits mod the room, so a lookup reads one
+  // slot and a removed key's slot is free again. The first key that would
+  // take a slot another holds, or one that isn't an i31, makes it hashed
+  // (table.undirect), for good. The store's field 5 says which.
+  const direct = ks.length === 1 && ks[0][0] === "int" && ks[0][1].length === 0;
+  // Where k goes in, or is: find, then, if `when` and the table is direct
+  // and can't hold k at its own slot, the store hashed and k found again.
+  const room = (k: string, when: string) => !direct ? find(k) : `${find(k)}
+${when}
+${S(5)}
 i32.and
-local.set $j
-i32.const -1
-local.set $free
-block void
-loop void
-  ${S(0)}
-  local.get $j
-  array.get $tst
-  local.tee $x
-  i32.eqz
-  if void
-    local.get $free
-    i32.const -1
-    i32.ne
-    if void
-      local.get $free
-      return
-    end
-    local.get $j
-    return
-  end
-  local.get $x
-  i32.const 2
-  i32.eq
-  if void
-    local.get $free
-    i32.const -1
-    i32.eq
-    if void
-      local.get $j
-      local.set $free
-    end
-  else
-    ${S(1)}
-    local.get $j
-    array.get $tkeys
-    local.get $k
-    call $${fn("eq")}
-    if void
-      local.get $j
-      i32.const -2147483648
-      i32.or
-      return
-    end
-  end
-  local.get $j
-  i32.const 1
-  i32.add
-  local.get $mask
-  i32.and
-  local.set $j
-  br 0
-end
-end
-unreachable`,
-      };
-    case "grow":
-      // Room for one more, at most half used, removed slots counted: the
-      // full slots moved into twice the room, or the same where at most a
-      // quarter of it is full, as on C (C207x: swarm's motes come and go,
-      // and at 3/4 a lookup walked past their removed slots).
-      return {
-        ...base, params: [["m", "tstore"]], result: "void", locals: [["cap", "i32"], ["old", "i32"], ["ost", "tst"], ["oks", "tkeys"], ["ovs", "tvals"], ["j", "i32"], ["at", "i32"]], uses: [fn("find")],
-        body: `${S(4)}
-i32.const 1
-i32.add
-i32.const 2
-i32.mul
-${S(0)}
-array.len
-local.tee $old
-i32.le_u
+local.get $f
+i32.eqz
+i32.and
 if void
-  return
-end
-${S(3)}
-i32.const 1
-i32.add
-i32.const 4
-i32.mul
-local.get $old
-i32.gt_u
-if i32
-  local.get $old
-  i32.const 2
-  i32.mul
-else
-  local.get $old
-end
-local.set $cap
-${S(0)}
+  local.get $${k}
+  ref.test i31
+  i32.eqz
+  if i32
+    i32.const 1
+  else
+    ${S(0)}
+    local.get $j
+    array.get $tst
+    i32.const 1
+    i32.eq
+  end
+  if void
+    local.get $m
+    call $${fn("undirect")}
+    ${find(k)}
+  end
+end`;
+  // A key gone from slot j: removed, for a lookup to walk past, or free in
+  // a direct table, where no lookup walks.
+  const gone = !direct ? `${S(0)}\nlocal.get $j\ni32.const 2\narray.set $tst` : `${S(0)}
+local.get $j
+i32.const 0
+i32.const 2
+${S(5)}
+select
+array.set $tst
+${S(5)}
+if void
+  ${bump(4, -1)}
+end`;
+  // The full slots of $m moved into new arrays of $cap slots ($old before).
+  const moved = `${S(0)}
 local.set $ost
 ${S(1)}
 local.set $oks
@@ -275,13 +190,197 @@ loop void
   local.set $j
   br 0
 end
-end`,
+end`;
+  switch (op) {
+    case "hash": {
+      // FNV-1a over the parts: an Int's bits (a huge one, a constant), a
+      // Text's bytes; then mixed, since the slot is its low bits.
+      const body = ["i32.const -2128831035", "local.set $h"];
+      for (const [kind, steps] of ks) {
+        body.push("local.get $k", ...steps);
+        if (kind === "int") body.push("local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "ref.test i31", "if i64", "local.get $li", "ref.cast i31", "i31.get_s", "i64.extend_i32_s", "else", "local.get $li", "call $int.small", "end", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
+        else if (kind === "f64") body.push("i64.reinterpret_f64", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
+        else body.push("local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end");
+      }
+      body.push("local.get $h", "local.get $h", "i32.const 16", "i32.shr_u", "i32.xor", "i32.const -2048144789", "i32.mul", "local.tee $h", "local.get $h", "i32.const 13", "i32.shr_u", "i32.xor");
+      return { ...base, params: [["k", "key"]], result: "i32", locals: [["h", "i32"], ...(kinds.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(kinds.has("int") || kinds.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(kinds.has("text") ? [["lt", "text"], ["i", "i32"]] as [string, VT][] : [])], uses: kinds.has("int") ? ["int.small"] : [], body: body.join("\n") };
+    }
+    case "eq": {
+      // An Int part: the same i31 (or the same Int) without a call; two
+      // i31s that differ aren't equal.
+      const intEq = ["local.set $eb", "local.tee $ea", "local.get $eb", "ref.eq", "if i32", "i32.const 1", "else", "local.get $ea", "ref.test i31", "local.get $eb", "ref.test i31", "i32.and", "if i32", "i32.const 0", "else", "local.get $ea", "local.get $eb", "call $int.equal", "end", "end"];
+      const body = ks.flatMap(([kind, steps], n) => ["local.get $a", ...steps, "local.get $b", ...steps, ...(kind === "f64" ? ["f64.eq"] : kind === "int" ? intEq : [`call $${kind}.equal`]), ...(n ? ["i32.and"] : [])]);
+      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: kinds.has("int") ? [["ea", "int"], ["eb", "int"]] : [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.equal`), body: body.join("\n") };
+    }
+    case "cmp": {
+      // compare's order, part by part: −1, 0 or 1.
+      const less = (kind: string) => (kind === "f64" ? "f64.lt" : `call $${kind}.less`);
+      const body = ks.flatMap(([kind, steps]) => ["local.get $a", ...steps, "local.get $b", ...steps, less(kind), "if void", "i32.const -1", "return", "end", "local.get $b", ...steps, "local.get $a", ...steps, less(kind), "if void", "i32.const 1", "return", "end"]);
+      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.less`), body: [...body, "i32.const 0"].join("\n") };
+    }
+    case "store":
+      return { ...base, params: [["cap", "i32"]], result: "tstore", locals: [], uses: [], body: `local.get $cap\narray.new_default $tst\nlocal.get $cap\narray.new_default $tkeys\nlocal.get $cap\narray.new_default $tvals\ni32.const 0\ni32.const 0\ni32.const ${direct ? 1 : 0}\nstruct.new $tstore` };
+    case "find":
+      // The slot holding k, its top bit set, or the free one where it
+      // would go (a removed one first).
+      return {
+        ...base, params: [["m", "tstore"], ["k", "key"]], result: "i32", locals: [["mask", "i32"], ["j", "i32"], ["free", "i32"], ["x", "i32"]], uses: [fn("hash"), fn("eq")],
+        body: `${S(0)}
+array.len
+i32.const 1
+i32.sub
+local.set $mask
+${!direct ? "" : `${S(5)}
+if void
+  local.get $k
+  ref.test i31
+  i32.eqz
+  if void
+    i32.const 0
+    return
+  end
+  local.get $k
+  ref.cast i31
+  i31.get_s
+  local.get $mask
+  i32.and
+  local.set $j
+  ${S(0)}
+  local.get $j
+  array.get $tst
+  i32.const 1
+  i32.eq
+  if void
+    ${S(1)}
+    local.get $j
+    array.get $tkeys
+    local.get $k
+    ref.eq
+    if void
+      local.get $j
+      i32.const -2147483648
+      i32.or
+      return
+    end
+  end
+  local.get $j
+  return
+end`}
+local.get $k
+call $${fn("hash")}
+local.get $mask
+i32.and
+local.set $j
+i32.const -1
+local.set $free
+block void
+loop void
+  ${S(0)}
+  local.get $j
+  array.get $tst
+  local.tee $x
+  i32.eqz
+  if void
+    local.get $free
+    i32.const -1
+    i32.ne
+    if void
+      local.get $free
+      return
+    end
+    local.get $j
+    return
+  end
+  local.get $x
+  i32.const 2
+  i32.eq
+  if void
+    local.get $free
+    i32.const -1
+    i32.eq
+    if void
+      local.get $j
+      local.set $free
+    end
+  else
+    ${S(1)}
+    local.get $j
+    array.get $tkeys
+    local.get $k
+    call $${fn("eq")}
+    if void
+      local.get $j
+      i32.const -2147483648
+      i32.or
+      return
+    end
+  end
+  local.get $j
+  i32.const 1
+  i32.add
+  local.get $mask
+  i32.and
+  local.set $j
+  br 0
+end
+end
+unreachable`,
+      };
+    case "undirect":
+      // A direct table hashed (C58m): its full slots moved, by their
+      // hashes, into new ones of the same room.
+      return {
+        ...base, params: [["m", "tstore"]], result: "void", locals: [["cap", "i32"], ["old", "i32"], ["ost", "tst"], ["oks", "tkeys"], ["ovs", "tvals"], ["j", "i32"], ["at", "i32"]], uses: [fn("find")],
+        body: `local.get $m
+i32.const 0
+struct.set $tstore 5
+${S(0)}
+array.len
+local.tee $old
+local.set $cap
+${moved}`,
+      };
+    case "grow":
+      // Room for one more, at most half used, removed slots counted: the
+      // full slots moved into twice the room, or the same where at most a
+      // quarter of it is full, as on C (C207x: swarm's motes come and go,
+      // and at 3/4 a lookup walked past their removed slots).
+      return {
+        ...base, params: [["m", "tstore"]], result: "void", locals: [["cap", "i32"], ["old", "i32"], ["ost", "tst"], ["oks", "tkeys"], ["ovs", "tvals"], ["j", "i32"], ["at", "i32"]], uses: [fn("find")],
+        body: `${S(4)}
+i32.const 1
+i32.add
+i32.const 2
+i32.mul
+${S(0)}
+array.len
+local.tee $old
+i32.le_u
+if void
+  return
+end
+${S(3)}
+i32.const 1
+i32.add
+i32.const 4
+i32.mul
+local.get $old
+i32.gt_u
+if i32
+  local.get $old
+  i32.const 2
+  i32.mul
+else
+  local.get $old
+end
+local.set $cap
+${moved}`,
       };
     case "reroot":
       // Make t the newest version: undo, from the newest back, each change
       // between it and t, each undone one becoming the change that redoes it.
       return {
-        ...base, params: [["t", "table"]], result: "void", locals: [["n", "i32"], ["path", "tpath"], ["np", "tpath"], ["x", "table"], ["y", "table"], ...slots, ["old", "value"], ["z", "value"], ["zk", "key"]], uses: [fn("grow"), fn("find")],
+        ...base, params: [["t", "table"]], result: "void", locals: [["n", "i32"], ["path", "tpath"], ["np", "tpath"], ["x", "table"], ["y", "table"], ...slots, ["old", "value"], ["z", "value"], ["zk", "key"]], uses: [fn("grow"), fn("find"), ...(direct ? [fn("undirect")] : [])],
         body: `local.get $t
 struct.get $tbl 0
 ref.is_null
@@ -354,7 +453,7 @@ loop void
   local.get $y
   struct.get $tbl 2
   local.set $zk
-  ${find("zk")}
+  ${room("zk", "local.get $y\nstruct.get $tbl 3")}
   local.get $z
   local.set $old
   local.get $f
@@ -395,10 +494,7 @@ loop void
   else
     local.get $f
     if void
-      ${S(0)}
-      local.get $j
-      i32.const 2
-      array.set $tst
+      ${gone}
       ${S(2)}
       local.get $j
       local.get $z
@@ -436,7 +532,7 @@ end`,
     case "change":
       // A put (set) or remove: a new newest version, c the change back to it.
       return {
-        ...base, params: [["c", "table"], ["k", "key"], ["set", "i32"], ["v", "value"]], result: "table", locals: [...slots, ["nv", "table"], ["old", "value"], ["z", "value"], ["zk", "key"]], uses: [fn("reroot"), fn("grow"), fn("find")],
+        ...base, params: [["c", "table"], ["k", "key"], ["set", "i32"], ["v", "value"]], result: "table", locals: [...slots, ["nv", "table"], ["old", "value"], ["z", "value"], ["zk", "key"]], uses: [fn("reroot"), fn("grow"), fn("find"), ...(direct ? [fn("undirect")] : [])],
         body: `local.get $c
 call $${fn("reroot")}
 local.get $c
@@ -447,7 +543,7 @@ if void
   local.get $m
   call $${fn("grow")}
 end
-${find("k")}
+${room("k", "local.get $set")}
 local.get $set
 i32.eqz
 local.get $f
@@ -491,10 +587,7 @@ if void
   local.get $v
   array.set $tvals
 else
-  ${S(0)}
-  local.get $j
-  i32.const 2
-  array.set $tst
+  ${gone}
   ${S(2)}
   local.get $j
   local.get $z
@@ -565,6 +658,76 @@ local.get $nv`,
       const intKey = ks.length === 1 && ks[0][0] === "int" && ks[0][1].length === 0;
       const loop = (body: string) => `i32.const 0\nlocal.set $j\nblock void\nloop void\nlocal.get $j\nlocal.get $n\ni32.ge_u\nbr_if 1\n${body}\nlocal.get $j\ni32.const 1\ni32.add\nlocal.set $j\nbr 0\nend\nend`;
       const digit = "local.get $ka\nlocal.get $j\narray.get $tst\nlocal.get $sh\ni32.shr_u\ni32.const 255\ni32.and";
+      const rotation = (arr: string, tmp: string, key: (at: string) => string, sorted: string) => `i32.const 0
+local.set $q
+i32.const 1
+local.set $j
+block void
+loop void
+  local.get $j
+  local.get $n
+  i32.ge_u
+  br_if 1
+  ${key("local.get $j\ni32.const 1\ni32.sub")}
+  ${key("local.get $j")}
+  i32.gt_s
+  if void
+    local.get $q
+    i32.const 1
+    i32.add
+    local.tee $q
+    i32.const 1
+    i32.gt_u
+    br_if 2
+    local.get $j
+    local.set $p
+  end
+  local.get $j
+  i32.const 1
+  i32.add
+  local.set $j
+  br 0
+end
+end
+local.get $q
+i32.eqz
+if void
+  ${sorted}
+end
+local.get $q
+i32.const 1
+i32.eq
+if void
+  ${key("local.get $n\ni32.const 1\ni32.sub")}
+  ${key("i32.const 0")}
+  i32.lt_s
+  if void
+    local.get $${tmp}
+    i32.const 0
+    local.get $${arr}
+    local.get $p
+    local.get $n
+    local.get $p
+    i32.sub
+    array.copy $tst $tst
+    local.get $${tmp}
+    local.get $n
+    local.get $p
+    i32.sub
+    local.get $${arr}
+    i32.const 0
+    local.get $p
+    array.copy $tst $tst
+    local.get $${arr}
+    local.set $c
+    local.get $${tmp}
+    local.set $${arr}
+    local.get $c
+    local.set $${tmp}
+    ${sorted}
+  end
+end`;
+      const rotated = rotation("ka", "kb", (at) => `local.get $ka\n${at}\narray.get $tst`, "local.get $rlo\nlocal.set $rhi");
       const radix = !intKey ? "" : `local.get $n
 i32.const 64
 i32.ge_u
@@ -601,6 +764,10 @@ if void
 local.get $x
 local.set $rhi
 end`)}
+local.get $ok
+if void
+${rotation("a", "b", (at) => `local.get $ks\nlocal.get $a\n${at}\narray.get $tst\narray.get $tkeys\nref.cast i31\ni31.get_s`, "i32.const 0\nlocal.set $ok\nlocal.get $n\nlocal.set $w")}
+end
 local.get $ok
 if void
 local.get $n
@@ -752,6 +919,11 @@ struct.new $arr`;
       // A map's Int keys, all i31s (swarm's motes): the bare Ints sorted
       // by the radix sort, with no slots carried, and boxed again into the
       // Array; a key that isn't an i31 leaves it to the sorts below.
+      // A direct table's slots hold a counter's keys in order already, but
+      // for one turn round the end (C58n, as c.ts's lab__isort): at most
+      // one step down, and the last key below the first, is a rotation, put
+      // right by two copies; either way the radix sort has nothing to do
+      // ($rhi made $rlo).
       const fastKeys = !(keys && intKey) ? "" : `local.get $t
 call $${fn("reroot")}
 local.get $t
@@ -835,6 +1007,7 @@ local.get $ka
 ref.is_null
 i32.eqz
 if void
+${rotated}
 block void
 loop void
   local.get $rhi
