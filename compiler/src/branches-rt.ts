@@ -39,6 +39,8 @@ const NO = Symbol("can't cross");
 function encode(x: unknown, names: Map<Fn, string>): unknown {
   if (x === null || x === undefined || typeof x !== "object" && typeof x !== "function") return x;
   if (x instanceof ArrayView) {
+    const k = byShape(x.buf.items, x.start, x.n);
+    if (k) return { ...k, view: true };
     const items: unknown[] = [];
     for (let i = 0; i < x.n; i++) { const e = encode(x.buf.items[x.start + i], names); if (e === NO) return NO; items.push(e); }
     return { $a: items };
@@ -51,7 +53,7 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
   }
   if (x instanceof Uint8Array || x instanceof Float64Array || x instanceof Int32Array) return x;
   if (x instanceof Table) return encodeTable(x, names);
-  if (Array.isArray(x)) { const r = recordsAsColumns(x); if (r) return r; }
+  if (Array.isArray(x)) { const r = recordsAsColumns(x) ?? byShape(x, 0, x.length); if (r) return r; }
   if (Array.isArray(x)) { const xs = x.map((v) => encode(v, names)); return xs.includes(NO) ? NO : xs; }
   const t = x as { tag?: unknown; fields?: unknown[] };
   if (t.tag !== undefined && Array.isArray(t.fields)) {
@@ -101,6 +103,67 @@ function recordsAsColumns(xs: unknown[]): unknown {
   }
   return { $r: out, w, tag };
 }
+// A list of records made only of numbers and records, of a few shapes
+// (examples' pools of optional records, compiler/gaps/pond's fish):
+// each item's shape by number, and its numbers in order in one
+// Float64Array (Ints too big for a double in a list of their own), so
+// that what crosses is a few arrays of bytes rather than an object for
+// each record, which every worker would be sent a copy of.
+type Shape = "n" | "b" | { c: unknown } | { t: unknown; f: Shape[] };
+const SHAPES = 16;
+function shapeOf(x: unknown): Shape | undefined {
+  if (typeof x === "number") return "n";
+  if (typeof x === "bigint") return "b";
+  if (x === null || x === undefined || typeof x === "boolean" || typeof x === "string") return { c: x };
+  const r = x as { tag?: unknown; fields?: unknown[] };
+  if (typeof r !== "object" || r.tag === undefined || x instanceof ArrayView || !Array.isArray(r.fields)) return undefined;
+  const f: Shape[] = [];
+  for (const v of r.fields) { const s = shapeOf(v); if (!s) return undefined; f.push(s); }
+  return { t: r.tag, f };
+}
+function fits(x: unknown, s: Shape, nums: number[], bigs: bigint[]): boolean {
+  if (s === "n") { if (typeof x !== "number") return false; nums.push(x); return true; }
+  if (s === "b") { if (typeof x !== "bigint") return false; bigs.push(x); return true; }
+  if ("c" in s) return x === s.c;
+  const r = x as { tag?: unknown; fields?: unknown[] };
+  if (typeof r !== "object" || r === null || r.tag !== s.t) return false;
+  const fs = r.fields;
+  if (!Array.isArray(fs) || fs.length !== s.f.length) return false;
+  for (let i = 0; i < fs.length; i++) if (!fits(fs[i], s.f[i], nums, bigs)) return false;
+  return true;
+}
+function byShape(xs: unknown[], start: number, n: number): unknown {
+  if (n < 4) return undefined;
+  const first = xs[start] as { tag?: unknown } | null;
+  if (typeof first !== "object" || first === null || first.tag === undefined) return undefined;
+  const shapes: Shape[] = [], ids = new Uint8Array(n), nums: number[] = [], bigs: bigint[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = xs[start + i], a = nums.length, b = bigs.length;
+    let id = 0;
+    for (; id < shapes.length; id++) { if (fits(x, shapes[id], nums, bigs)) break; nums.length = a; bigs.length = b; }
+    if (id === shapes.length) {
+      const s = shapeOf(x);
+      if (!s || shapes.length === SHAPES) return undefined;
+      shapes.push(s);
+      fits(x, s, nums, bigs);
+    }
+    ids[i] = id;
+  }
+  return { $k: shapes, ids, nums: new Float64Array(nums), bigs };
+}
+function fromShape(s: Shape, at: { n: number; b: number }, nums: Float64Array, bigs: bigint[]): unknown {
+  if (s === "n") return nums[at.n++];
+  if (s === "b") return bigs[at.b++];
+  if ("c" in s) return s.c;
+  const fields = new Array<unknown>(s.f.length);
+  for (let i = 0; i < fields.length; i++) fields[i] = fromShape(s.f[i], at, nums, bigs);
+  return { tag: s.t, fields };
+}
+const unshaped = (o: { $k: Shape[]; ids: Uint8Array; nums: Float64Array; bigs: bigint[] }): unknown[] => {
+  const at = { n: 0, b: 0 }, xs = new Array<unknown>(o.ids.length);
+  for (let i = 0; i < xs.length; i++) xs[i] = fromShape(o.$k[o.ids[i]], at, o.nums, o.bigs);
+  return xs;
+};
 // A worker's view of such a table: its keys found by row, its records made
 // when read. A job only computes, so nothing changes it.
 class SharedEntries {
@@ -125,7 +188,8 @@ class SharedEntries {
 function decode(x: unknown, fns: Record<string, Fn>, closure: (code: Fn, caps: unknown[]) => Fn): unknown {
   if (x === null || typeof x !== "object" || ArrayBuffer.isView(x)) return x;
   if (Array.isArray(x)) return x.map((v) => decode(v, fns, closure));
-  const o = x as { $a?: unknown[]; $r?: Float64Array; $s?: SharedArrayBuffer; $m?: unknown[]; n?: number; w?: number; tag?: unknown; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
+  const o = x as { $k?: Shape[]; $a?: unknown[]; $r?: Float64Array; $s?: SharedArrayBuffer; $m?: unknown[]; n?: number; w?: number; tag?: unknown; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
+  if (o.$k) { const xs = unshaped(o as never); return (o as { view?: true }).view ? arrayOf(xs) : xs; }
   if (o.$a) return arrayOf(o.$a.map((v) => decode(v, fns, closure)));
   if (o.$r) { const xs: unknown[] = [], c = o.$r, w = o.w!; for (let i = 0; i < c.length; i += w) { const fields = new Array<number>(w); for (let f = 0; f < w; f++) fields[f] = c[i + f]; xs.push({ tag: o.tag, fields }); } return xs; }
   if (o.$s) return new Table(new SharedEntries(o.$s, o.n!, o.w!, o.tag) as unknown as Map<unknown, unknown>, true);
