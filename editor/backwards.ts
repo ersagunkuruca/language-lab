@@ -7,6 +7,7 @@ import { FIXED_V } from "../ters/src/lang/library.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import { relationFor } from "../ters/src/lang/equations.ts";
+import { bodiesTyped } from "../ters/src/lang/infer.ts";
 import { analyze } from "../invertible/src/index.js";
 import { Namer } from "../ters/src/render/namer.ts";
 import { TRUE } from "../ters/src/lang/std.ts";
@@ -165,6 +166,11 @@ export function backwards(host: BackHost) {
     // A short look on the page, so the first answer shows at once; what
     // that cuts short, the worker searches to the end (BACKLOG E127).
     const until = Date.now() + BACK_MS;
+    // Before the library's bodies are typed (I193g), the search's first
+    // run would type them, about 2 s, before its short look's time
+    // starts: on the page's first draw it was most of a 3.5 s task. The
+    // worker searches then, and the page draws now.
+    if (look && info.layer && !bodiesTyped(info.layer)) look = false;
     if (look) Object.assign(out, searchBackwards(doc().code, ui.def, values, pres().names, () => Date.now() > until, info));
     else out.cut = true;
     if (out.cut) searchOn(key, values, out.plan);
