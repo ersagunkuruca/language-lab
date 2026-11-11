@@ -7463,6 +7463,8 @@ const TABLES: Record<string, Omit<RtFn, "name" | "body" | "locals" | "uses">> = 
   empty: { params: [], result: "table" },
   put: { params: [["t", "table"], ["k", "key"], ["v", "value"]], result: "table" },
   remove: { params: [["t", "table"], ["k", "key"]], result: "table" },
+  putOwned: { params: [["t", "table"], ["k", "key"], ["v", "value"]], result: "table" },
+  removeOwned: { params: [["t", "table"], ["k", "key"]], result: "table" },
   has: { params: [["t", "table"], ["k", "key"]], result: "i32" },
   size: { params: [["t", "table"]], result: "int" },
   at: { params: [["t", "table"], ["k", "key"]], result: "value", partial: true },

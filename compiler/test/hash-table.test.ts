@@ -22,6 +22,7 @@ import { execFileSync } from "node:child_process";
 import { kids, lowerScalar, type SExpr } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
+import { ownedTables } from "../src/owned-tables.ts";
 import { compile as cc, skip } from "./c-harness.ts";
 
 // Each test after a turn of the event loop (I204): a check's trials are
@@ -186,6 +187,23 @@ test("compiled JavaScript changes a map nobody else holds in place, and keeps th
     assert.equal([...fns].some((f) => /^table\.putOwned\./.test(f)), !old, `old ${old}: ${[...fns].filter((f) => f.startsWith("table."))}`);
     const got: string[] = [];
     (compiledDefs(c.code, info, c.names, ["main"], { print: (s: string) => got.push(s) }) as Record<string, () => void>).main();
+    assert.deepEqual(got, lines);
+  }
+});
+
+// C58p: on WebAssembly too, a map nobody else holds is changed in place
+// (owned-tables.ts, wasm-table.ts `changeOwned`), and one whose old version
+// is read again keeps its versions; both print as evaluated.
+test("WebAssembly changes a map nobody else holds in place, and keeps the versions of one read again (C58p)", async () => {
+  for (const old of [false, true]) {
+    const p = program(300, { remove: true, old, made: true, list: true, array: true });
+    const c = chosen(p, false, true);
+    const { lines, info } = printed(c.code, c.names, p.main, c.insiders);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
+    assert.equal(ownedTables(lowered, c.code, info, c.names, p.main) > 0, !old);
+    const got: string[] = [], m = emitWasm(lowered);
+    assert.equal(/call \$table\.changeOwned\.t0/.test(m.wat), !old);
+    await runWasm(lowered, m, lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
     assert.deepEqual(got, lines);
   }
 });
