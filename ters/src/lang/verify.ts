@@ -14,9 +14,10 @@
 // so a check can say how much of a program it vouches for.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { subtree } from "../model.ts";
+import { children, subtree } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { SIGS } from "./std.ts";
+import { CHOICE, DIVERGE } from "./types.ts";
 import { Subst, type Type } from "./types.ts";
 
 export interface Elaboration {
@@ -28,6 +29,8 @@ export interface Elaboration {
   // Each expression lifted through a canonical embedding (EMBEDDINGS.md):
   // what it is, and what it is taken as where it is used.
   embedded: Map<Id, { from: Type; to: Type }>;
+  // Calls whose Choice their inputs answer (signs.ts, L125b): x / 2.
+  answered: Set<Id>;
 }
 
 // Variables renumbered from 0 in the order they are met.
@@ -53,7 +56,9 @@ export function elaborate(code: Code, info: Info, defs: Id[] = code.defs): Elabo
     const sc = info.schemes.get(d);
     if (sc) schemes.set(d, { vars: sc.vars.map((v) => n.v(v)), type: n.type(info.subst.zonk(sc.type)) });
   }
-  return { types, schemes, embedded };
+  const answered = new Set<Id>();
+  for (const d of defs) for (const id of subtree(code, d)) if (info.answered?.has(id)) answered.add(id);
+  return { types, schemes, embedded, answered };
 }
 
 // Value types the same (rows aside, a later step's).
@@ -130,6 +135,26 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
         n.params.forEach((p, i) => { const pt = ty(p); if (!pt || !same(pt, t.params[i])) bad(id, "a function's input is its parameter's type"); });
         const bt = ty(n.body);
         if (!bt || !same(bt, t.ret)) bad(id, "a function's result is its body's type");
+        // What it does: every effect of a call in its body (not inside a
+        // function of its own, which does it when called) is in its row.
+        const todo = [n.body];
+        while (todo.length) {
+          const c = code.nodes[todo.pop()!];
+          if (!c || c.kind === "lambda") continue;
+          if (c.kind === "match" && c.arms.length && ownerOf.get((code.nodes[c.arms[0]] as NodeOf<"arm">).variant)?.effect) { skip("effects inside a handler"); continue; }
+          if (c.kind === "call" && c.args) {
+            const ft = ty(c.fn);
+            if (ft?.t === "fn") for (const ef of ft.eff.effs) {
+              if (t.eff.effs.includes(ef)) continue;
+              // A Choice its inputs answer (signs.ts): whether they do is a
+              // later step's to check, as are the ones not recorded.
+              if (ef === CHOICE) { skip("a Choice its inputs answer"); continue; }
+              if (ef === DIVERGE) { skip("termination"); continue; }
+              bad(c.id, "what a call does is in the row of the function it is in");
+            }
+          }
+          todo.push(...children(c));
+        }
         break;
       }
       case "call": {
