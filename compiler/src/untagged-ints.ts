@@ -18,7 +18,7 @@
 // i64.eq, i64.less, i64.add, i64.sub and i64.toNumber on counts and small
 // literals; i64.box (a count as an Int), i64.small (an Int is small),
 // i64.unbox (a small Int's count) and i64.lit (a literal as a count).
-import { kids, mapKids, type CoreIR, type SExpr, type SFunc, type SType } from "./scalar.ts";
+import { kids, mapKids, type CoreIR, type SExpr, type SFunc } from "./scalar.ts";
 import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
 
@@ -214,12 +214,13 @@ export function untaggedFunctions(ir: CoreIR): number {
   ir.funcs.forEach((f, i) => { if (!f.params.length && f.result === "int" && small(f.body)) consts.set(i, f.body); });
   const n0 = ir.funcs.length, bodies = ir.funcs.map((f) => f.body);
   const selfCalls = (i: number) => { let yes = false; (function walk(e: SExpr) { if (e.k === "call" && e.fn === i) yes = true; kids(e).forEach(walk); })(bodies[i]); return yes; };
-  const intFn = (i: number) => { const f = ir.funcs[i]; return i < n0 && !f.inner && f.params.length > 0 && f.params.every((t) => t === "int") && f.result === "int" && !selfCalls(i); };
+  const intFn = (i: number) => { const f = ir.funcs[i]; return i < n0 && !f.inner && f.params.length > 0 && f.params.every((t) => t === "int") && (f.result === "int" || f.result === "f64") && !selfCalls(i); };
   let made = 0;
+  const copies: number[] = [];
   for (let i = 0; i < n0; i++) {
     if (!intFn(i)) continue;
     const f = ir.funcs[i], g = ir.funcs.length;
-    const locals: SType[] = f.params.map(() => "i64");
+    const locals = f.locals.map((t, j) => (j < f.params.length ? "i64" : t)) as SFunc["locals"];
     const fresh = () => locals.push("i64") - 1;
     type Lets = [number, SExpr][];
     type Env = Map<number, number>;
@@ -238,7 +239,7 @@ export function untaggedFunctions(ir: CoreIR): number {
       if (small(e)) return lit(e);
       if (e.k === "call" && consts.has(e.fn) && !e.args.length) return lit(consts.get(e.fn)!);
       // Another such function, written in.
-      if (e.k === "call" && !e.cps && e.fn !== i && intFn(e.fn) && !stack.includes(e.fn) && stack.length < 4) {
+      if (e.k === "call" && !e.cps && e.fn !== i && intFn(e.fn) && ir.funcs[e.fn].result === "int" && !stack.includes(e.fn) && stack.length < 4) {
         const inner: Env = new Map();
         // Each argument a local (a literal let to one), as the callee reads.
         e.args.forEach((a, j) => { const x = atom(a, env, lets, stack), y = x.k === "local" ? x : named(x, lets); inner.set(j, (y as SExpr & { k: "local" }).i); });
@@ -278,19 +279,31 @@ export function untaggedFunctions(ir: CoreIR): number {
       if (e.k === "rt" && (e.fn === "int.less" || e.fn === "int.equal") && e.args.length === 2) return { k: "rt", fn: e.fn === "int.less" ? "i64.less" : "i64.eq", args: e.args.map((a) => atom(a, env, lets, stack)) };
       throw new Not();
     };
+    // A Float64 made from them (pond's `weight of`, 1 / (1 + x² + y²)):
+    // its Ints untagged where made a Float64, the rest as it is.
+    const top: Env = new Map(f.params.map((_, j) => [j, j]));
+    const fl = (e: SExpr): SExpr => {
+      if (e.k === "rt" && e.fn === "int.toNumber" && e.args.length === 1) { steps++; const lets: Lets = []; return wrap(lets, { k: "rt", fn: "i64.toNumber", args: [atom(e.args[0], top, lets, [i])] }); }
+      if (e.k === "local" && e.i < f.params.length) throw new Not();
+      if (e.k === "num" || e.k === "bool" || e.k === "local") return e;
+      if (e.k === "op" || e.k === "if" || (e.k === "let" && f.locals[e.i] === "f64")) return mapKids(e, fl);
+      throw new Not();
+    };
     let body: SExpr;
     try {
       const lets: Lets = [];
-      const env: Env = new Map(f.params.map((_, j) => [j, j]));
-      body = wrap(lets, { k: "rt", fn: "i64.box", args: [atom(f.body, env, lets, [i])] });
+      body = f.result === "f64" ? fl(f.body) : wrap(lets, { k: "rt", fn: "i64.box", args: [atom(f.body, top, lets, [i])] });
     } catch (e) { if (e instanceof Not) continue; throw e; }
     if (steps < 2) continue;
     ir.funcs.push({ ...f, name: `${f.name} untagged`, inner: true, params: f.params.map(() => "i64"), locals, body, bail: g + 1 });
+    copies.push(g);
     ir.funcs.push({ ...f, name: `${f.name} as written`, inner: true });
     const cond = f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.small", args: [{ k: "local", i: j }] })).reduce((a, b) => ({ k: "op", op: "and", args: [a, b] }));
     const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.unbox", args: [{ k: "local", i: j }] })) };
     ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: f.body, t: f.result } };
     made++;
   }
+  // A Float64 made from an int64 needs no check that it is finite.
+  if (copies.length && !envSet("NO_FINITE")) finiteChecks(ir, copies);
   return made;
 }

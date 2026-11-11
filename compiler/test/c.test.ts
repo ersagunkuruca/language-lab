@@ -460,7 +460,8 @@ test("a function only computing on Ints runs on int64s, and as written past them
   for (const x of big) for (const y of [0n, -5n, 1n << 61n, 1n << 70n]) {
     work.push([at("neighbour"), [x, y, -3n, x].map(norm)], [at("cell key"), [x, y].map(norm)]);
   }
-  for (const x of big) work.push([at("wrapped cell"), [norm(x)]]);
+  for (const x of big) work.push([at("wrapped cell"), [norm(x)]], [at("weight of"), [x, -2n].map(norm)], [at("chance"), [norm(x)]]);
+  assert.ok(lowered.funcs.some((g) => g.name === "weight of untagged"), "a Float64 made from Ints too");
   sameAndFreed(build(lowered), work, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });
 
