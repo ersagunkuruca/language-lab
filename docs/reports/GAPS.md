@@ -3047,8 +3047,8 @@ small range go to it as written. Native one thread 2.0 to 1.35 s; then
 `weight of`, a Float64 made from Ints, the same way (G13-P4b): 1.28 to
 1.12 s. On JS (G13-P4c) the remainder by 48 is worked out with no try:
 6.7 to 5.4 s. JS's Int adds through the generic runtime, and WebAssembly,
-are left: plain adds in `neighbour` measured under 10% by hand; the food
-map read as an array on JS is row C215.
+are left: plain adds in `neighbour` measured under 10% by hand. The food
+map is read as an array on JS since C215: 5.2 to 4.3 s.
 
 **P5. Threads make it slower (perf, the multithreading goal).** Native on
 4 threads takes 8.3 s against 4.2 on one (25 s of CPU); JS's workers 7.1
@@ -3092,5 +3092,5 @@ gain about matched (2.6x against its 1.8x). JS's workers are still left.
 *Where it stands (2026-11-11):* P1, P2, P5, P3 (in part) and P4 fixed
 (#2410 to #2423): native one thread 18.2 to 1.12 s (ideal 0.175), 4
 threads 0.63 s (ideal 0.099); JS 20.9 to 5.4 s (ideal 0.47).
-Left as rows: C215 (JS food map as an array), I212 (M1, a match from
-text).
+Left as a row: I212 (M1, a match from text). C215 (JS food map as an
+array) since done: JS 4.3 s.

@@ -102,9 +102,18 @@ function builtinOf(name: string): BuiltinOf | undefined {
 }
 // Which of a map's entries lists are its keys alone (`keys of`): a list
 // whose items are of the key's type.
-export const tableSpec = (t: TType): TableSpec => {
+// `removed`: the tables some code removes from; one of Int keys none of
+// whose kind is removed from is a DirectMap (std.ts, C215: pond's food).
+export const tableSpec = (t: TType, removed = new Set<number>()): TableSpec => {
   const keys = t.set ? [] : t.entries.map((d) => keyList(t, d));
-  return keys.some((x) => x) ? { set: t.set, keys } : { set: t.set };
+  const direct = t.keyT === "int" && !removed.has(t.index) ? { direct: true as const } : {};
+  return keys.some((x) => x) ? { set: t.set, keys, ...direct } : { set: t.set, ...direct };
+};
+const tableSpecs = (ir: CoreIR): TableSpec[] => {
+  const removed = new Set<number>();
+  const walk = (e: SExpr) => { if (e.k === "rt") { const m = /^table\.remove(?:Owned)?\.t(\d+)$/.exec(e.fn); if (m) removed.add(Number(m[1])); } kids(e).forEach(walk); };
+  ir.funcs.forEach((f) => walk(f.body));
+  return ir.tables.map((t) => tableSpec(t, removed));
 };
 
 const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
@@ -774,7 +783,7 @@ export function loadCoreJs(ir: CoreIR, rt: Runtime = { print: () => {} }, hostOp
 export interface Printed { js: string; names: string[]; worlds: string[]; tables: TableSpec[]; f64: boolean[]; code?: Code; checked?: true }
 export function printed(ir: CoreIR): Printed {
   const { js, names, worlds } = emitCoreJs(ir);
-  return { js, names, worlds, tables: ir.tables.map(tableSpec), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: solverCode(ir, js) } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
+  return { js, names, worlds, tables: tableSpecs(ir), f64: ir.funcs.map((f) => f.result === "f64" && !ir.shader), ...(solving(js) ? { code: solverCode(ir, js) } : {}), ...(/R\.rt\("derive:/.test(js) ? { checked: true as const } : {}) };
 }
 export function loadPrinted(p: Printed, rt: Runtime = { print: () => {} }, code: Code | undefined = p.code, info?: Info, hostOps?: HostOps): ((...xs: unknown[]) => unknown)[] {
   const all = new Function("R", p.js)(coreRuntime(p.tables, p.worlds, rt, code, info, hostOps)) as Record<string, (...xs: unknown[]) => unknown>;
@@ -883,7 +892,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     "const $logTo = process.env.TERS_LOG, $logged = $logTo ? logged(nodeWorld()) : null;",
     "if ($logged) process.on(\"exit\", () => $writeLog($logTo, logText($logged.log)));",
     `const rt = { print: (s) => console.log(s), world: $logged ? $logged.world : nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
-    `const R = coreRuntime(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, rt, ${code}${hosts ? `, undefined, ${JSON.stringify(hosts.ops)}` : ""});`,
+    `const R = coreRuntime(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, rt, ${code}${hosts ? `, undefined, ${JSON.stringify(hosts.ops)}` : ""});`,
     "const defs = (function (R) {",
     body,
     "})(R);",
@@ -1135,7 +1144,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
     using("startCorePage", page),
     ...solverFor(code, page, js),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
-    `startCorePage(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
+    `startCorePage(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
     `}, ${JSON.stringify(names[fi])}, ${JSON.stringify(title)}, ${code}, ${worklet === undefined ? "undefined" : JSON.stringify(worklet)}${hosts ? `, { answers: $hostAnswers, ops: ${JSON.stringify(hosts.ops)} }` : ""});`,
   ]);
@@ -1155,7 +1164,7 @@ export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?:
     using("startCoreSound", sound),
     ...solverFor(code, sound, js),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
-    `startCoreSound(${JSON.stringify(ir.tables.map(tableSpec))}, ${JSON.stringify(worlds)}, (R) => {`,
+    `startCoreSound(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
     `}, ${JSON.stringify(names[fi])}, ${code}${hosts ? `, { answers: $hostAnswers, ops: ${JSON.stringify(hosts.ops)} }` : ""});`,
   ]);
