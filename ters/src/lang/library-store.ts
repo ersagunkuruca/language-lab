@@ -38,22 +38,28 @@ const checkerHash = () => graphHash(join(root, "src", "lang", "library-store.ts"
 function graphHash(entry: string): string {
   const had = graphs.get(entry);
   if (had) return had;
-  const seen = new Set<string>(), h = createHash("sha1");
+  const h = createHash("sha1");
+  for (const f of graphFiles(entry)) { h.update(f.slice(root.length)); h.update(readFileSync(f, "utf8")); }
+  const out = h.digest("hex");
+  graphs.set(entry, out);
+  return out;
+}
+// The files a kept check depends on: the entry and what it imports, in turn
+// (test/library-store.test.ts holds them to esbuild's own import graph).
+export const checkerFiles = () => graphFiles(join(root, "src", "lang", "library-store.ts"));
+function graphFiles(entry: string): string[] {
+  const seen = new Set<string>();
   const go = (f: string) => {
     if (seen.has(f)) return;
     seen.add(f);
     const text = readFileSync(f, "utf8");
-    h.update(f.slice(root.length));
-    h.update(text);
     for (const m of text.matchAll(/(?:from|import)\s*\(?\s*["'](\.[^"']+)["']/g)) {
       const t = resolve(dirname(f), m[1]);
       try { if (statSync(t).isFile()) go(t); } catch { /* not a file of ours */ }
     }
   };
   go(entry);
-  const out = h.digest("hex");
-  graphs.set(entry, out);
-  return out;
+  return [...seen];
 }
 
 const codes = new WeakMap<Code, string>();
