@@ -69,3 +69,16 @@ test("a function whose row leaves out what a call in it does is refused", () => 
   }
   assert.ok(refused > 0, "no dropped effect was refused");
 });
+
+test("a written list and an effect's operation are checked: changed, they are refused", () => {
+  const p = loadProgram(join(root, "examples", "wc"));
+  const info = infer(p.code, p.pres.names, undefined, checkOptions).layer!;
+  const e = elaborate(LIBRARY.code, info);
+  const code = LIBRARY.code;
+  const refTo = (pick: (target: string) => boolean) => Object.values(code.nodes).find((n) => n.kind === "ref" && e.types.has(n.id) && pick(n.target))!.id;
+  const list = refTo((x) => x === "builtin.list.of"), op = refTo((x) => code.nodes[x]?.kind === "variant" && x === "std.await.await");
+  for (const [id, change] of [[list, (t: Type) => t.t === "fn" ? { ...t, ret: text } : t], [op, (t: Type) => t.t === "fn" ? { ...t, eff: { effs: [], tail: null } } : t]] as const) {
+    const changed: Elaboration = { ...e, types: new Map(e.types).set(id, change(e.types.get(id)!)) };
+    assert.ok(verify(code, changed).problems.some((x) => x.id === id), `${id} let through`);
+  }
+});
