@@ -874,6 +874,29 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       }
       // The rest (a fold, a solve, ...) on a machine of its own, which
       // stops this run if it would act.
+      // A fold, children before their parent as the machine folds them
+      // (foldValue), on the JavaScript stack. Each fold had a machine of its
+      // own: Spacetime's `clifford product` folds a 16-part list, 13,000
+      // times for `path`'s 400 steps (I189).
+      case "fold": {
+        let scrutinee: Direct | undefined;
+        const bodies = new Map<Id, Direct>();
+        return (env) => {
+          const arms = foldArms(n);
+          const go = (d: Data): Value => {
+            const arm = arms.get(d.tag)!, kids = kidsOf(arm, d), m = kids.kids.length;
+            const rs = new Array<Value>(m);
+            for (let i = 0; i < m; i++) rs[i] = go(kids.kids[i]);
+            const folded = kids.folded(rs);
+            let inner = bind(env, arm.arm.binds, d.fields);
+            for (let k = 0; k < arm.rec.length; k++) inner = { b: arm.arm.results[arm.rec[k]]!, v: folded[k], up: inner };
+            let body = bodies.get(arm.arm.id);
+            if (!body) bodies.set(arm.arm.id, (body = compiledOf(arm.arm.body)));
+            return body(inner);
+          };
+          return go((scrutinee ??= compiledOf(n.scrutinee))(env) as Data);
+        };
+      }
       default: return (env) => single(run((m) => m.eval(id, env)));
     }
   }
