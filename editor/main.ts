@@ -1893,7 +1893,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox(), h("p", { class: "hint" }, `What ${namer.name(ui.def)} reads as standard input, as ters run reads what is piped to it.`));
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
-    if (given) box.append(h("p", { class: "hint" }, `As ters run gives it: ${given.args.join(", ")}. ${Object.keys(given.files).join(", ")} ${Object.keys(given.files).length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.`));
+    // The files only where it brings some (pond's words are numbers).
+    const brought = Object.keys(given?.files ?? {});
+    if (given) box.append(h("p", { class: "hint" }, `As ters run gives it: ${given.args.join(", ")}.${brought.length ? ` ${brought.join(", ")} ${brought.length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.` : ""}`));
     if (ui.output?.def === ui.def) {
       // What it prints is read out as it comes (a log), and a failure at once.
       box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
