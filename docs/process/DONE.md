@@ -675,6 +675,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I200b | relate's unify binds the newer unknown to the older when both are unknown, so a fresh one points at the one it meets: mandelbrot's `line` backwards from "" walked chains of unknowns up to 182 long (about 30 lookups a walk, half the search's time), now at most 2; before I200 (#2328) it took 180 steps in 8 s, after this 2,900. agreement.test's two `line`s with SWEEP=all 5.2 to 4.6 s; the relate tests keep their step counts | this PR |
 | C211d | On WebAssembly an array function given untagged Ints (`i64.box` of an untagged-ints.ts copy's i64) calls its `.i64` body with them as they are, not the wrapper boxing and clamping them back (wasm.ts `viaI64`). queens-count under Node's WASI CPU 0.161 to 0.136 s (its fold's `at` at a counted position), the same output | #2326 |
 | C211c | On WebAssembly `array of` a map's keys fills the Array from the table's slots, no list between (wasm-table.ts `table.keys`, as c.ts's C58j), its Int keys, all i31s, sorted bare by the radix sort; an Int key's hash and compare take an i31 without a call (`ref.eq`, added to the assembler). swarm under Node's WASI about 15% less (CPU 0.71 to 0.62 s; wall 0.59 s, natively 0.29), the same output | #2324 |
 | C211b | On WebAssembly a loop's counting Ints run as i64s in a copy, as C207e does on C (untagged-ints.ts's counts path no longer skipped there; wasm-rt.ts's i64.add and i64.sub, inlined by V8, stop past 2^62 as on C). divisors under Node's WASI 0.20 to 0.12 s (natively 0.12), the same output | #2322 |
