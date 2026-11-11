@@ -36,7 +36,7 @@ import { INT, NUMBER, OverMap, type Row, type Scheme, type Type } from "./types.
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
 import { recordVariant } from "./derive.ts";
-import { hasRecursiveLet, liftLets } from "./lift-lets.ts";
+import { hasRecursiveLet, liftLets, typedAsBodies } from "./lift-lets.ts";
 import { spreadTuples } from "./spread.ts";
 import { fieldsByType, usesFieldsByType } from "./fields-by-type.ts";
 import { jsonByType, usesJsonByType } from "./json-by-type.ts";
@@ -688,15 +688,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // its scheme's variables to their default (Float64, when the program's
   // substitution doesn't know a library body's variable) left the three
   // disagreeing, which verify.ts refused (REVIEW-2026-11-11 §2, I207).
-  const valueVar = (t: Type): boolean => t.t === "var" || (t.t === "con" ? t.args.some(valueVar) : t.params.some(valueVar) || valueVar(t.ret));
-  for (const d of defs) {
-    const n = nodes[d], sc = schemes.get(d);
-    if (n?.kind !== "def" || !n.body || !sc || unresolved.has(d)) continue;
-    const bt = typeOf.get(n.body);
-    if (!bt || valueVar(bt) || JSON.stringify(bt) === JSON.stringify(sc.type)) continue;
-    schemes.set(d, { ...sc, vars: [], type: bt });
-    typeOf.set(d, bt);
-  }
+  typedAsBodies({ nodes, defs }, typeOf, schemes, unresolved);
   return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames };
 }
 

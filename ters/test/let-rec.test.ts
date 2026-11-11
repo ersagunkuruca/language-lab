@@ -8,7 +8,10 @@ import assert from "node:assert/strict";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { base, baseNames } from "../src/lang/load.ts";
+import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { LIBRARY } from "../src/lang/library.ts";
+import { resolveArithmetic } from "../src/lang/arith.ts";
+import { elaborate, verify } from "../src/lang/verify.ts";
 import { runMain } from "../src/lang/run.ts";
 import { hasRecursiveLet, liftLets } from "../src/lang/lift-lets.ts";
 import { CONS, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
@@ -107,4 +110,21 @@ test("a recursive let runs backwards: fast(n) = 8 finds n = 5", async () => {
   assert.deepEqual(p.info.errors, []);
   const [first] = relate(p.code, fast, { out: 8 });
   assert.equal(showTerm(first.values[n]), "5");
+});
+
+// pedal: the prelude's `smaller`, resolved at Float64 by arith.ts, keeps
+// its id, and liftLets' check again read that id's generic type from the
+// library's check under the body arith.ts typed: the verifier refused it
+// (I207).
+test("a library definition arith.ts resolved keeps its type through liftLets' check (I207)", () => {
+  const smaller = Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === "smaller" && LIBRARY.code.nodes[d]?.kind === "def")!;
+  const k = new Lang(LIBRARY.code);
+  const d = k.def("least");
+  k.define(d, k.fn(["x"], (x) => k.let("h", k.fn(["y"], (y) => k.call(smaller, y, k.lit(2.5))), (h) => k.call(h, x))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = resolveArithmetic(code, info, names);
+  const l = liftLets(r.code, r.info, r.names, true);
+  assert.equal(l.code.defs.length, r.code.defs.length + 1);
+  assert.deepEqual(verify(l.code, elaborate(l.code, l.info), [d, smaller]).problems, []);
 });
