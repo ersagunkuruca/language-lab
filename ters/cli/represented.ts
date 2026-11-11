@@ -53,7 +53,11 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   code = { ...code, defs: code.defs.filter((d) => !reps.has(d)) };
   // The library's representations may call the constructors they stand for.
   const options = p.options as Parameters<typeof infer>[3];
-  const info = infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
+  // Where only the library's rows were chosen, withLibraryRepresentations
+  // checked this same program with these same insiders: its check is it
+  // (I203: bounce's Run main checked it twice, 1.3 s the second time).
+  const same = lib.info && !reps.size && chosen.length === lib.chosen.length;
+  const info = same ? lib.info! : infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders] });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
   // A rewrite changes no answer, so a definition that ended as written
   // ends stored too: a walk over an array (first and rest of a list made
