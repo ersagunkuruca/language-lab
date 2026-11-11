@@ -312,6 +312,9 @@ test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records
     // Ints (C211c: an i31 without a call).
     program(300, { old: true, remove: true, list: true, array: true }),
     program(300, { old: true, remove: true, list: true, array: true, big: true }),
+    // Int keys that turn round the slots' end: a direct table's keys
+    // listed by a rotation (C58m, C58n on WebAssembly).
+    program(300, { old: true, remove: true, list: true, array: true, past: true }),
   ];
   for (const p of programs) {
     const c = chosen(p, false, true);
@@ -323,6 +326,9 @@ test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records
     assert.deepEqual([...lowered.refused.values()], []);
     assert.equal(lowered.tables.length, 1);
     const got: string[] = [], m = emitWasm(lowered);
+    // A map of Int keys starts direct, and is hashed at its first two keys
+    // that would meet (C58m).
+    if (lowered.tables[0].keyT === "int") assert.match(m.wat, /call \$table\.undirect\.t0/);
     await runWasm(lowered, m, lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
     assert.deepEqual(got, lines);
   }
