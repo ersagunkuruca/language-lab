@@ -233,6 +233,7 @@ export function forgetLibraryChecks() { underChecks.length = 0; }
 function libraryLater(lib: Code, skeleton: Info, check: () => Info): Info {
   const defs = new Set(lib.defs);
   let whole: Info | undefined;
+  skeleton.subst.joinable = true;
   const inside = (k: Id) => (whole || !defs.has(k)) && k in lib.nodes;
   const made = (): Info => {
     if (whole) return whole;
