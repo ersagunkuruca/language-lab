@@ -3039,6 +3039,12 @@ threads 1.1 to 0.86 s. The lists `sum(map(…))` makes are left.
 for 0), and on JS goes through the runtime's generic `remainder` with
 type checks (11.5% of JS's samples); on C `lab__floordiv` isn't inlined
 (8%) and Int adds are checked calls (`lab_int_add` 6%).
+*Fixed on C (G13-P4):* a function that only computes on Ints, called
+rather than looping, now gets a copy on int64s as C207i's loops do, with
+`side cells` its literal, the remainder by 48 worked out in place and
+`wrapped cell` and `cell key` written into `neighbour`; inputs out of the
+small range go to it as written. Native one thread 2.0 to 1.35 s. JS and
+WebAssembly are left.
 
 **P5. Threads make it slower (perf, the multithreading goal).** Native on
 4 threads takes 8.3 s against 4.2 on one (25 s of CPU); JS's workers 7.1

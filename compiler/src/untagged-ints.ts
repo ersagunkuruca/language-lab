@@ -18,7 +18,7 @@
 // i64.eq, i64.less, i64.add, i64.sub and i64.toNumber on counts and small
 // literals; i64.box (a count as an Int), i64.small (an Int is small),
 // i64.unbox (a small Int's count) and i64.lit (a literal as a count).
-import { kids, mapKids, type CoreIR, type SExpr, type SFunc } from "./scalar.ts";
+import { kids, mapKids, type CoreIR, type SExpr, type SFunc, type SType } from "./scalar.ts";
 import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
 
@@ -196,4 +196,101 @@ function valueLoop(ir: CoreIR, i: number, total = false): boolean {
   const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.unbox", args: [{ k: "local", i: j }] })) };
   ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: f.body, t: f.result } };
   return true;
+}
+
+// A function that only computes on Ints, called rather than looping
+// (round 13 P4: pond's `neighbour`, which wraps two cells round the pond
+// and gives their key). Each of its Ints is a tagged lab_int, so each add,
+// multiply and remainder tests tags and calls the runtime; a remainder,
+// which has no answer for 0, is an attempt too. Here such a function gets
+// a copy as valueLoop's: every Int an int64_t, a definition that is a
+// small Int (`side cells`) its literal, a remainder by a positive literal
+// computed in place (it always has an answer), and a call of another such
+// function written into it. A step leaving the small range starts again
+// with the function as written (`bail`). As written it goes to the copy
+// when its inputs are small.
+export function untaggedFunctions(ir: CoreIR): number {
+  const consts = new Map<number, SExpr>();
+  ir.funcs.forEach((f, i) => { if (!f.params.length && f.result === "int" && small(f.body)) consts.set(i, f.body); });
+  const n0 = ir.funcs.length, bodies = ir.funcs.map((f) => f.body);
+  const selfCalls = (i: number) => { let yes = false; (function walk(e: SExpr) { if (e.k === "call" && e.fn === i) yes = true; kids(e).forEach(walk); })(bodies[i]); return yes; };
+  const intFn = (i: number) => { const f = ir.funcs[i]; return i < n0 && !f.inner && f.params.length > 0 && f.params.every((t) => t === "int") && f.result === "int" && !selfCalls(i); };
+  let made = 0;
+  for (let i = 0; i < n0; i++) {
+    if (!intFn(i)) continue;
+    const f = ir.funcs[i], g = ir.funcs.length;
+    const locals: SType[] = f.params.map(() => "i64");
+    const fresh = () => locals.push("i64") - 1;
+    type Lets = [number, SExpr][];
+    type Env = Map<number, number>;
+    let steps = 0;
+    const wrap = (lets: Lets, e: SExpr): SExpr => lets.reduceRight<SExpr>((body, [j, value]) => ({ k: "let", i: j, value, body }), e);
+    const lit = (e: SExpr): SExpr => ({ k: "rt", fn: "i64.lit", args: [e] });
+    const named = (x: SExpr, lets: Lets): SExpr => { const j = fresh(); lets.push([j, x]); return { k: "local", i: j }; };
+    const atom = (e: SExpr, env: Env, lets: Lets, stack: number[]): SExpr => {
+      const x = val(e, env, lets, stack);
+      return x.k === "local" || (x.k === "rt" && x.fn === "i64.lit") ? x : named(x, lets);
+    };
+    const own = (e: SExpr, env: Env, stack: number[], how: typeof val): SExpr => { const lets: Lets = []; return wrap(lets, how(e, env, lets, stack)); };
+    const posLit = (x: SExpr) => x.k === "rt" && x.fn === "i64.lit" && x.args[0].k === "int" && x.args[0].v > 0n;
+    const val = (e: SExpr, env: Env, lets: Lets, stack: number[]): SExpr => {
+      if (e.k === "local" && env.has(e.i)) return { k: "local", i: env.get(e.i)! };
+      if (small(e)) return lit(e);
+      if (e.k === "call" && consts.has(e.fn) && !e.args.length) return lit(consts.get(e.fn)!);
+      // Another such function, written in.
+      if (e.k === "call" && !e.cps && e.fn !== i && intFn(e.fn) && !stack.includes(e.fn) && stack.length < 4) {
+        const inner: Env = new Map();
+        // Each argument a local (a literal let to one), as the callee reads.
+        e.args.forEach((a, j) => { const x = atom(a, env, lets, stack), y = x.k === "local" ? x : named(x, lets); inner.set(j, (y as SExpr & { k: "local" }).i); });
+        return val(bodies[e.fn], inner, lets, [...stack, e.fn]);
+      }
+      const ma = e.k === "rt" && e.fn === "int.add" && e.args.length === 2 ? mulAdd(e.args) : null;
+      if (ma) { steps++; return named({ k: "rt", fn: "i64.muladdv", args: [atom(ma.x, env, lets, stack), lit(ma.k), lit(ma.c)] }, lets); }
+      if (e.k === "rt" && VALUE_FN[e.fn] && e.args.length === 2) {
+        steps++;
+        const x: SExpr = { k: "rt", fn: VALUE_FN[e.fn], args: e.args.map((a) => atom(a, env, lets, stack)) };
+        return x.fn === "i64.and" ? x : named(x, lets);
+      }
+      // A remainder by a positive literal: always an answer, in range.
+      if (e.k === "rt" && e.fn === "int.remainder" && e.args.length === 2) {
+        const by = atom(e.args[1], env, lets, stack);
+        if (!posLit(by)) throw new Not();
+        steps++;
+        return { k: "rt", fn: "i64.mod", args: [atom(e.args[0], env, lets, stack), by] };
+      }
+      if (e.k === "rt" && e.fn === "int.shiftDown" && e.args.length === 2 && e.args[1].k === "int" && e.args[1].v >= 0n && e.args[1].v < 62n) { steps++; return { k: "rt", fn: "i64.shr", args: [atom(e.args[0], env, lets, stack), lit(e.args[1])] }; }
+      if (e.k === "if" && e.t === "int") return { k: "if", cond: test(e.cond, env, lets, stack), then: own(e.then, env, stack, val), else: own(e.else, env, stack, val), t: "i64" };
+      if (e.k === "let" && e.value.k !== "lambda") {
+        const j = fresh();
+        lets.push([j, own(e.value, env, stack, val)]);
+        return val(e.body, new Map(env).set(e.i, j), lets, stack);
+      }
+      // An attempt whose body always has an answer is its body, let.
+      if (e.k === "attempt" && e.t === "int") {
+        const j = fresh();
+        lets.push([j, own(e.body, env, stack, val)]);
+        return val(e.ok, new Map(env).set(e.res, j), lets, stack);
+      }
+      throw new Not();
+    };
+    const test = (e: SExpr, env: Env, lets: Lets, stack: number[]): SExpr => {
+      if (e.k === "bool") return e;
+      if (e.k === "rt" && (e.fn === "int.less" || e.fn === "int.equal") && e.args.length === 2) return { k: "rt", fn: e.fn === "int.less" ? "i64.less" : "i64.eq", args: e.args.map((a) => atom(a, env, lets, stack)) };
+      throw new Not();
+    };
+    let body: SExpr;
+    try {
+      const lets: Lets = [];
+      const env: Env = new Map(f.params.map((_, j) => [j, j]));
+      body = wrap(lets, { k: "rt", fn: "i64.box", args: [atom(f.body, env, lets, [i])] });
+    } catch (e) { if (e instanceof Not) continue; throw e; }
+    if (steps < 2) continue;
+    ir.funcs.push({ ...f, name: `${f.name} untagged`, inner: true, params: f.params.map(() => "i64"), locals, body, bail: g + 1 });
+    ir.funcs.push({ ...f, name: `${f.name} as written`, inner: true });
+    const cond = f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.small", args: [{ k: "local", i: j }] })).reduce((a, b) => ({ k: "op", op: "and", args: [a, b] }));
+    const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => ({ k: "rt", fn: "i64.unbox", args: [{ k: "local", i: j }] })) };
+    ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: f.body, t: f.result } };
+    made++;
+  }
+  return made;
 }
