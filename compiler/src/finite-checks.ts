@@ -70,7 +70,9 @@ function steady(f: SFunc): Set<number> {
 // is too: queens' `safe` checked both on every item.
 const ITEM_READS = /^array\.(get|getb|at|first)\.a(\d+)$/;
 const ARRAY_OPS = new Set(["empty", "length", "items", "rest", "get", "getb", "at", "first", "of", "pushFront", "push", "replaceAt", "range", "rangeF"]);
-const KNOWN_RT = /^(i64|int|text|split)\.|^(number\.show|number\.range|choose\.split)$/;
+// A search run on the threads (c.ts `par:`) only runs its closure, whose
+// body is looked at like any other, and passes its answer on.
+const KNOWN_RT = /^(i64|int|text|split)\.|^(number\.show|number\.range|choose\.split|par:(count|all|first):search)$/;
 export interface Carriers { arrays: Set<number>; datas: Set<string>; params: Set<number>[] }
 export function carriers(ir: CoreIR): Carriers | null {
   const arrays = new Set(ir.arrays.filter((a) => a.item === "f64").map((a) => a.index));
