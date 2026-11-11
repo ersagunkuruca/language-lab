@@ -7,11 +7,15 @@
 // search: a variable stands only for itself, except a scheme's or a
 // built-in's, matched at each use.
 //
-// This first step checks values' types: a function's inputs and result,
-// a call's, a use's instance of what it names, each case of a match or a
-// fold. Effect rows, interfaces, number kinds and why a recursion ends are
-// the next steps; `unchecked` counts the nodes a rule doesn't cover yet,
-// so a check can say how much of a program it vouches for.
+// It checks values' types (a function's inputs and result, a call's, a
+// use's instance of what it names, each case of a match or a fold) and a
+// function's row against the calls in it. Not yet: why a recursion ends
+// (Diverge left out is the checker's word: counting.ts, infer.ts), a Choice
+// its inputs answer, effects inside a handler, interfaces and number kinds;
+// `unchecked` counts the nodes a rule doesn't cover, so a check can say
+// how much of a program it vouches for. No compile runs it yet: the
+// passes' carried types (I203) are verified in their tests only
+// (REVIEW-2026-11-11 §2, I207).
 
 import type { Code, Id, NodeOf } from "../model.ts";
 import { children, subtree } from "../model.ts";

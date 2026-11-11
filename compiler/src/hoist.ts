@@ -133,7 +133,7 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
   }
   if (!hoisted) return { code, info, names, hoisted };
   const out = { nodes, defs: code.defs };
-  if (carried && !envSet("HOIST_CHECK")) return { code: out, info: { ...info, typeOf, answered, spread }, names, hoisted };
+  if (carried && !envSet("TERS_RECHECK")) return { code: out, info: { ...info, typeOf, answered, spread }, names, hoisted };
   const checked = infer(out, names, undefined, info.options);
   // Checked again the same way as the program as it came is, since a check
   // again can find what the first (with its pins) didn't (stage.ts, I121).

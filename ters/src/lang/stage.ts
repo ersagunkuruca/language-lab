@@ -322,11 +322,11 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   };
   // The types of the nodes staged since the last check, when each staged
   // call's are known (typesMade): the program then isn't checked again
-  // (I203; STAGE_CHECK=1 checks it, to compare).
+  // (I203; TERS_RECHECK=1 checks it, to compare, as hoist.ts and uses.ts do then).
   let carried: Map<Id, Type> | null = new Map();
   const check = (): boolean => {
     prune();
-    if (carried && !(typeof process !== "undefined" && process.env?.STAGE_CHECK) && typedAll(code, info, carried)) {
+    if (carried && !(typeof process !== "undefined" && process.env?.TERS_RECHECK) && typedAll(code, info, carried)) {
       const typeOf = new OverMap(info.typeOf);
       for (const [id, t] of carried) if (id in code.nodes) typeOf.set(id, t);
       info = { ...info, typeOf };

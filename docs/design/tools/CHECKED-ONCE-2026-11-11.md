@@ -8,6 +8,8 @@ Design note, 2026-11-11 (I193, the Language lane). It covers Ersagun's three ask
 
 ## Where it stands (I193a to I193h)
 
+**Since (REVIEW-2026-11-11 §2, §6).** §3 A's verifier (verify.ts) checks values' types and a function's row against its calls. It does not check why a recursion ends, a Choice its inputs answer, effects inside a handler, interfaces or number kinds, so those are still the checker's word. No compile runs it. I203 took another route than reading the elaboration: each pass that makes nodes carries their types (hoist, withBodies, staging), checked against a recheck with `TERS_RECHECK=1` and verified in those passes' tests only (row I207).
+
 The library's check is kept on disk (`.lab/`). A program is checked over the library's **skeleton**: each definition's type is taken from its pin, and no library body is typed. That takes 0.4 s to make the first time, against 1.7 s for the whole check. The whole check is made only when a compiler asks about a node inside a library body, and is then kept too.
 
 Both are keyed by:
