@@ -252,10 +252,15 @@ export class Subst {
   // not change while the trial is in use, and keeps only what it adds.
   trial(): Subst {
     const s = new Subst();
-    // (Kept so a join reaches it, below; the gone ones dropped now and then.)
-    const trials = (this.trials ??= []);
-    if (trials.length >= 64 && trials.length % 64 === 0) this.trials = trials.filter((r) => r.deref());
-    this.trials.push(new WeakRef(s));
+    // Kept so a join reaches it (below), only while one may come: a WeakRef
+    // keeps what it refers to until the running job ends (a test's loop of
+    // a thousand checks), so one for every trial ran out of memory.
+    if (this.joinable) {
+      s.joinable = true;
+      const trials = (this.trials ??= []);
+      if (trials.length >= 64 && trials.length % 64 === 0) this.trials = trials.filter((r) => r.deref());
+      this.trials.push(new WeakRef(s));
+    }
     s.types = new OverMap(this.types);
     s.rows = new OverMap(this.rows);
     s.next = this.next;
@@ -277,6 +282,9 @@ export class Subst {
   }
 
   trials?: WeakRef<Subst>[];
+  // A join may still come (the library skeleton's, until its bodies are
+  // typed: infer.ts libraryLater), so trials made of it are kept.
+  joinable?: boolean;
   // What another substitution knows joins this one, its variables none of
   // this one's (a library's bodies typed later, infer.ts libraryLater):
   // its bindings read through by every trial, and its lists, which a trial
@@ -291,6 +299,13 @@ export class Subst {
     for (const v of from.whole) this.whole.add(v);
     for (const [v, n] of from.needs) this.needs.set(v, n);
     this.joinLists(from);
+    this.settle();
+  }
+  // No join comes after: what was kept for one goes.
+  private settle(): void {
+    this.joinable = false;
+    for (const r of this.trials ?? []) r.deref()?.settle();
+    this.trials = undefined;
   }
   private joinLists(from: Subst): void {
     this.subs.push(...from.subs);
