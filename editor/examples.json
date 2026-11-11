@@ -9,6 +9,7 @@
     { "program": "backwards", "label": "Run backwards", "folders": ["backwards"], "start": "who was greeted" },
     { "program": "conjugate", "label": "Conjugation", "folders": ["conjugate"] },
     { "program": "relations", "label": "Relations in programs", "folders": ["relations"], "start": "to polar" },
+    { "program": "markov", "label": "Where Markov chains settle", "folders": ["markov"], "start": "main" },
     { "program": "effects", "label": "Effects", "folders": ["effects"], "start": "main" },
     { "program": "lockstep", "label": "Lockstep: a cart on a spring", "folders": ["lockstep"] },
     { "program": "shaders", "label": "Shader: ripples", "folders": ["shaders"] },
