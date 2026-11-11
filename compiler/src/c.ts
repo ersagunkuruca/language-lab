@@ -554,7 +554,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false;
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -1719,6 +1719,20 @@ int main(int argc, char **argv) {
             if (!gone.length) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(...[...new Set(gone)].map((j) => `${d}${drop(f.locals[j], local(j))}`));
+            return v;
+          }
+          // An item read from an array in a local (C207g): the array lent,
+          // as a column read is, not dup'd for the read and dropped in it;
+          // dropped once here when the local isn't used after.
+          const get = ARRAY_FN.exec(e.fn);
+          if (get?.[1] === "get" && e.args[0].k === "local") {
+            const fb = `array.getb.a${get[2]}`, j = e.args[0].i;
+            arrayFns.add(fb);
+            const [kx] = args([e.args[1]], pre, d, after);
+            const c = `${cName(fb)}(${local(j)}, ${kx})`;
+            if (!isCounted(j) || after.has(j)) return c;
+            const v = stated(c, rtType(e.fn), pre, d);
+            pre.push(`${d}${drop(f.locals[j], local(j))}`);
             return v;
           }
           (ARRAY_FN.test(e.fn) || TABLE_FN.test(e.fn) ? arrayFns : rts).add(e.fn);
@@ -3111,6 +3125,7 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   return x;
 }`);
     // Item k where k is known to be in the array (equal and compare's loop).
+    if (has("getb")) out.push(`static inline ${T} lab_array_getb_a${i}(lab_cell *a, lab_int k) { return ${cp(rd(`((${B} *)((${V} *)a)->b)`, `((${V} *)a)->s + LAB_VAL(k)`))}; }`);
     if (has("get")) out.push(`static ${T} lab_array_get_a${i}(lab_cell *a, lab_int k) {
   ${T} x = ${cp(rd(`((${B} *)((${V} *)a)->b)`, `((${V} *)a)->s + LAB_VAL(k)`))};
   lab_drop(a);
