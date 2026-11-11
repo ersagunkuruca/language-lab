@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { root } from "../src/io.ts";
 import { loadProgram, checkOptions } from "../src/lang/load.ts";
 import { infer, keepLibraryChecks, type Info } from "../src/lang/infer.ts";
-import { libraryStore } from "../src/lang/library-store.ts";
+import { checkerFiles, libraryStore } from "../src/lang/library-store.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { subtree } from "../src/model.ts";
 import { showType } from "../src/lang/types.ts";
@@ -73,4 +73,19 @@ test("a program's groups kept on disk are taken by a fresh cache, the same check
     assert.ok(again.hits > 0 && again.misses === 0, `${ex}: ${again.hits} hits, ${again.misses} misses`);
     assert.deepEqual(b, a);
   }
+});
+
+// A kept check is found by the checker's own files (library-store.ts
+// checkerFiles: the imports read with a regex, a few ms), so a change to
+// any file the checker runs must change its name. Held to esbuild's import
+// graph, which is the bundler's own reading (REVIEW-2026-11-11 §3, I209).
+test("the files a kept check is named by are every file the checker imports", async () => {
+  const { build } = await import("esbuild");
+  const entry = join(root, "src", "lang", "library-store.ts");
+  const r = await build({ entryPoints: [entry], bundle: true, write: false, metafile: true, platform: "node", format: "esm", logLevel: "silent", packages: "external" });
+  const repo = join(root, "..");
+  const imported = Object.keys(r.metafile!.inputs).map((f) => join(process.cwd(), f)).filter((f) => f.startsWith(repo) && /\.ts$/.test(f));
+  const named = new Set(checkerFiles());
+  assert.ok(imported.length > 20, `${imported.length} files`);
+  assert.deepEqual(imported.filter((f) => !named.has(f)), []);
 });
