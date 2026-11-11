@@ -735,7 +735,18 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "local": return [0x20, ...u(e.i)];
       case "let":
         // A loop's value stepped past an i64 (C207k): the round again as written.
-        if (stepped(e.value)) return [...code1(e.value), 0x22, ...u(e.i), 0x42, ...sBig(I64_LEAST), 0x51, 0x04, 0x40, ...f.params.flatMap((_, j) => [0x20, ...u(j), 0x10, ...u(resolve.func("i64.box"))]), 0x10, ...u(fnIndex(f.bail!)), ...(funcs[f.bail!].partial && !f.partial ? [0x04, 0x40, 0x00, 0x0b] : []), 0x0f, 0x0b, ...code1(e.body)];
+        if (stepped(e.value)) {
+          const again = [0x04, 0x40, ...f.params.flatMap((_, j) => [0x20, ...u(j), 0x10, ...u(resolve.func("i64.box"))]), 0x10, ...u(fnIndex(f.bail!)), ...(funcs[f.bail!].partial && !f.partial ? [0x04, 0x40, 0x00, 0x0b] : []), 0x0f, 0x0b];
+          // a ± b of locals and literals inline (C207w): past an i64 when
+          // the answer's sign is neither's (a + b) or not a's where a and
+          // b differ in sign (a − b), as wasm-rt.ts's $i64.addv tests it.
+          const v = e.value as SExpr & { k: "rt" }, simple = (x: SExpr) => x.k === "local" || (x.k === "rt" && x.fn === "i64.lit" && x.args[0].k === "int");
+          if ((v.fn === "i64.addv" || v.fn === "i64.subv") && v.args.every(simple)) {
+            const [a, b] = v.args.map(code1), r = [0x20, ...u(e.i)];
+            return [...a, ...b, v.fn === "i64.addv" ? 0x7c : 0x7d, 0x21, ...u(e.i), ...a, ...r, 0x85, ...(v.fn === "i64.addv" ? [...b, ...r] : [...a, ...b]), 0x85, 0x83, 0x42, 0x00, 0x53, ...again, ...code1(e.body)];
+          }
+          return [...code1(e.value), 0x22, ...u(e.i), 0x42, ...sBig(I64_LEAST), 0x51, ...again, ...code1(e.body)];
+        }
         return [...code1(e.value), 0x21, ...u(e.i), ...code1(e.body)];
       case "if": return [...code1(e.cond), 0x04, ...typeOf(e.t), ...code(e.then, d + 1, fl), 0x05, ...code(e.else, d + 1, fl), 0x0b];
       case "call": {
