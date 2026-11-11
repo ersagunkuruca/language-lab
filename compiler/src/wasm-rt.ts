@@ -78,7 +78,7 @@ const OPS: Record<string, [number[], Imm[]]> = {
   "i32.store": [[0x36, 0x02, 0x00], []], "i32.store8": [[0x3a, 0x00, 0x00], []], "memory.size": [[0x3f, 0x00], []], "memory.grow": [[0x40, 0x00], []],
   "f64.load": [[0x2b, 0x03, 0x00], []], "f64.store": [[0x39, 0x03, 0x00], []], "i64.store": [[0x37, 0x03, 0x00], []],
   "i32.trunc_sat_f64_s": [[0xfc, 0x02], []], "i32.trunc_sat_f64_u": [[0xfc, 0x03], []], "i64.trunc_sat_f64_s": [[0xfc, 0x06], []], "i32.rotl": [[0x77], []], "f64.convert_i32_u": [[0xb8], []], "global.get": [[0x23], ["global"]], "global.set": [[0x24], ["global"]],
-  "ref.is_null": [[0xd1], []], "ref.null": [[0xd0], ["type"]],
+  "ref.is_null": [[0xd1], []], "ref.eq": [[0xd3], []], "ref.null": [[0xd0], ["type"]],
   "ref.test": [[0xfb, 0x14], ["type"]], "ref.i31": [[0xfb, 0x1c], []], "i31.get_s": [[0xfb, 0x1d], []],
   "struct.new": [[0xfb, 0x00], ["type"]], "struct.get": [[0xfb, 0x02], ["type", "u"]], "struct.set": [[0xfb, 0x05], ["type", "u"]], "ref.cast": [[0xfb, 0x16], ["type"]],
   "array.new_default": [[0xfb, 0x07], ["type"]], "array.new_fixed": [[0xfb, 0x08], ["type", "u"]], "array.get_u": [[0xfb, 0x0d], ["type"]], "array.get": [[0xfb, 0x0b], ["type"]], "array.new": [[0xfb, 0x06], ["type"]],
@@ -7401,6 +7401,7 @@ const TABLES: Record<string, Omit<RtFn, "name" | "body" | "locals" | "uses">> = 
   size: { params: [["t", "table"]], result: "int" },
   at: { params: [["t", "table"], ["k", "key"]], result: "value", partial: true },
   entries: { params: [["t", "table"]], result: "list" },
+  keys: { params: [["t", "table"]], result: "array" },
 };
 // A stop's reason to standard error and exit 1 (L125c2), followed by the
 // definition it is in when its site has a name (C143b): `sites` are the
@@ -7438,10 +7439,10 @@ export const runtime = (name: string): RtFn => {
   // A program's own handlers (L213c8): only their shapes here; wasm.ts
   // writes each (`stackRt`), knowing its cases and its effect's number.
   if (/^(hpush|hpop|handler):/.test(name)) return { name, params: [], result: "i32", locals: [], uses: [], body: "unreachable", native: true };
-  const tb = /^table\.(\w+)\.t\d+(?:\.e\d+)?$/.exec(name);
+  const tb = /^table\.(\w+)\.t\d+(?:\.e\d+)?(?:\.a(\d+))?$/.exec(name);
   if (tb) {
     if (!TABLES[tb[1]]) throw new Error(`no runtime function ${name}`);
-    return { ...TABLES[tb[1]], name, locals: [], uses: [], body: "unreachable" };
+    return { ...TABLES[tb[1]], name, locals: [], uses: [], body: "unreachable", ...(tb[2] !== undefined ? { array: Number(tb[2]) } : {}) };
   }
   // A loop's Ints untagged (C207e, C207i; untagged-ints.ts). On C c.ts
   // prints them; on WebAssembly a loop's values (C207k) call these, which

@@ -41,7 +41,7 @@ import { assemble, byteSlots, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, 
 // Where the math functions' page starts in WASI's memory: after its fixed
 // area (iovecs, sizes), before its buffer.
 const MATH_AT = 128;
-import { TABLE_RT, tableRt } from "./wasm-table.ts";
+import { keysArrays, TABLE_RT, tableRt } from "./wasm-table.ts";
 import { reasonOf, siteOf } from "./stops.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -151,7 +151,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (bad) throw new Error(`${h.name} takes or gives ${bad.k === "list" ? "a list" : bad.k === "record" ? "a record" : "a value"}, which doesn't cross to the host in WebAssembly yet`);
     return { k: "world", op: `host:${eff}:${i}`, aborts: true, args: x.args, t: x.host!.t, ins: h.ins.map((y) => HOST_TYPES[y.k]!) };
   };
-  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f));
+  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f)).map((f) => (lowered.tables.length ? { ...f, body: keysArrays(lowered, f.body) } : f));
   // A text constant longer than array.new_fixed takes (10,000 bytes; the
   // cases module's collation tables, L214e5b4) is made of pieces joined.
   const longIn = (e: SExpr): boolean => (e.k === "text" && e.v.length > TEXT_PIECE / 4) || kids(e).some(longIn);
@@ -255,7 +255,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   };
   const rt0 = (name: string): RtFn => {
     if (STACK.test(name)) return stackRt(name);
-    if (TABLE_RT.test(name)) return tableRt(name, lowered.tables);
+    if (TABLE_RT.test(name)) { const f = tableRt(name, lowered.tables); return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f; }
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
     const f = runtime(name);
     return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f;

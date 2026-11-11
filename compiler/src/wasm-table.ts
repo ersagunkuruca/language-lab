@@ -21,10 +21,24 @@
 // entry, `pkey` an entry's key where it isn't the table's (an empty map
 // nothing is put in), in RtFn.types.
 
-import { isRecord, keyList, type DType, type LType, type RType, type TType } from "./scalar.ts";
+import { isRecord, keyList, mapKids, type CoreIR, type DType, type LType, type RType, type SExpr, type TType } from "./scalar.ts";
 import type { RtFn, VT } from "./wasm-rt.ts";
 
-export const TABLE_RT = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
+export const TABLE_RT = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?(?:\.a(\d+))?$/;
+
+// `array of` a map's keys (`keys of`, C211c, as c.ts's C58j): the Array
+// filled from the table's slots, no list made to be copied in
+// (`table.keys.tT.eE.aA`); swarm's every tick.
+export function keysArrays(ir: CoreIR, e: SExpr): SExpr {
+  const x = mapKids(e, (y) => keysArrays(ir, y));
+  const of = x.k === "rt" ? /^array\.of\.a(\d+)$/.exec(x.fn) : null, r0 = x.k === "rt" ? x.args[0] : undefined;
+  const en = r0?.k === "rt" ? TABLE_RT.exec(r0.fn) : null;
+  if (!of || !en || en[1] !== "entries" || en[3] === undefined || x.k !== "rt" || r0?.k !== "rt" || x.args.length !== 1) return x;
+  const t = ir.tables[Number(en[2])], a = ir.arrays[Number(of[1])];
+  const sameKey = a.item === t.keyT || (isRecord(a.item) && isRecord(t.keyT) && a.item.key === t.keyT.key);
+  if (t.set || !keyList(t, t.entries[Number(en[3])]) || !sameKey) return x;
+  return { ...x, fn: `table.keys.t${en[2]}.e${en[3]}.a${of[1]}`, args: r0.args };
+}
 
 // The parts of a key in order, each an Int or a Text, and the steps from
 // the key to it (`struct.get $k0 1`).
@@ -52,7 +66,7 @@ function zero(t: LType, types: Record<string, LType>, name: string): string {
 export function tableRt(name: string, tables: TType[]): RtFn {
   const m = TABLE_RT.exec(name);
   if (!m) throw new Error(`no table function ${name}`);
-  const [, op, ti, ei] = m, i = Number(ti), t = tables[i];
+  const [, op, ti, ei, ai] = m, i = Number(ti), t = tables[i];
   const fn = (x: string) => `table.${x}.t${i}`;
   const types: Record<string, LType> = {};
   const ks = leaves(t.keyT, types), kinds = new Set(ks.map(([k]) => k));
@@ -71,7 +85,7 @@ export function tableRt(name: string, tables: TType[]): RtFn {
       const body = ["i32.const -2128831035", "local.set $h"];
       for (const [kind, steps] of ks) {
         body.push("local.get $k", ...steps);
-        if (kind === "int") body.push("local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "call $int.small", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
+        if (kind === "int") body.push("local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "ref.test i31", "if i64", "local.get $li", "ref.cast i31", "i31.get_s", "i64.extend_i32_s", "else", "local.get $li", "call $int.small", "end", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
         else if (kind === "f64") body.push("i64.reinterpret_f64", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
         else body.push("local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end");
       }
@@ -79,8 +93,11 @@ export function tableRt(name: string, tables: TType[]): RtFn {
       return { ...base, params: [["k", "key"]], result: "i32", locals: [["h", "i32"], ...(kinds.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(kinds.has("int") || kinds.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(kinds.has("text") ? [["lt", "text"], ["i", "i32"]] as [string, VT][] : [])], uses: kinds.has("int") ? ["int.small"] : [], body: body.join("\n") };
     }
     case "eq": {
-      const body = ks.flatMap(([kind, steps], n) => ["local.get $a", ...steps, "local.get $b", ...steps, kind === "f64" ? "f64.eq" : `call $${kind}.equal`, ...(n ? ["i32.and"] : [])]);
-      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.equal`), body: body.join("\n") };
+      // An Int part: the same i31 (or the same Int) without a call; two
+      // i31s that differ aren't equal.
+      const intEq = ["local.set $eb", "local.tee $ea", "local.get $eb", "ref.eq", "if i32", "i32.const 1", "else", "local.get $ea", "ref.test i31", "local.get $eb", "ref.test i31", "i32.and", "if i32", "i32.const 0", "else", "local.get $ea", "local.get $eb", "call $int.equal", "end", "end"];
+      const body = ks.flatMap(([kind, steps], n) => ["local.get $a", ...steps, "local.get $b", ...steps, ...(kind === "f64" ? ["f64.eq"] : kind === "int" ? intEq : [`call $${kind}.equal`]), ...(n ? ["i32.and"] : [])]);
+      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: kinds.has("int") ? [["ea", "int"], ["eb", "int"]] : [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.equal`), body: body.join("\n") };
     }
     case "cmp": {
       // compare's order, part by part: −1, 0 or 1.
@@ -524,12 +541,15 @@ local.get $nv`,
         ...base, params: [["t", "table"], ["k", "key"]], result: "value", locals: [...slots, ["z", "value"]], uses: [fn("reroot"), fn("find")], partial: true,
         body: `local.get $t\ncall $${fn("reroot")}\nlocal.get $t\nstruct.get $tbl 0\nlocal.set $m\n${find("k")}\nlocal.get $f\ni32.eqz\nif void\n  local.get $z\n  i32.const 1\n  return\nend\n${S(2)}\nlocal.get $j\narray.get $tvals\ni32.const 0`,
       };
+    case "keys":
     case "entries": {
       // The full slots sorted by their keys (a merge sort, bottom up, on
       // their places), then the list built from the end: a set's items
       // are its keys, and a map's `keys of`; a map's entries pairs.
       const d: DType = t.entries[Number(ei)], tag = d.cases.findIndex((c) => c.fields.length > 0), head = d.cases[tag].fields.findIndex((x) => x.t !== d);
       if (tag !== 1 || head !== 0) throw new Error(`table entries: ${d.name} isn't a list`);
+      const keys = op === "keys";
+      if (keys && (ai === undefined || !keyList(t, d))) throw new Error(`${name}: not a map's keys`);
       const item = d.cases[tag].fields[head].t;
       const same = (x: LType) => x === t.keyT || (isRecord(x) && isRecord(t.keyT) && x.key === t.keyT.key);
       const key = (x: LType) => (same(x) ? "local.get $ks\nlocal.get $p\narray.get $tkeys" : zero(x, types, "pkey"));
@@ -698,10 +718,241 @@ local.get $n
 local.set $w
 end
 end`;
+      const itemsOf = (at: (x: string) => string) => `local.get $n
+i32.const 4
+local.get $n
+i32.const 4
+i32.gt_u
+select
+local.set $room
+local.get $n
+local.get $room
+i32.const 1
+i32.shl
+i32.add
+array.new_default $items
+local.set $it
+${loop(`local.get $it
+local.get $room
+local.get $j
+i32.add
+${at("j")}
+array.set $items`)}
+local.get $it
+local.get $room
+local.get $room
+local.get $n
+i32.add
+i32.const 0
+struct.new $buf
+local.get $room
+local.get $n
+struct.new $arr`;
+      const bareDigit = "local.get $ka\nlocal.get $j\narray.get $tst\nlocal.get $rlo\ni32.sub\nlocal.get $sh\ni32.shr_u\ni32.const 255\ni32.and";
+      // A map's Int keys, all i31s (swarm's motes): the bare Ints sorted
+      // by the radix sort, with no slots carried, and boxed again into the
+      // Array; a key that isn't an i31 leaves it to the sorts below.
+      const fastKeys = !(keys && intKey) ? "" : `local.get $t
+call $${fn("reroot")}
+local.get $t
+struct.get $tbl 0
+local.tee $m
+struct.get $tstore 1
+local.set $ks
+${S(3)}
+local.tee $n
+array.new_default $tst
+local.set $ka
+local.get $n
+array.new_default $tst
+local.set $kb
+i32.const 2147483647
+local.set $rlo
+i32.const -2147483648
+local.set $rhi
+block void
+block void
+loop void
+  local.get $j
+  ${S(0)}
+  array.len
+  i32.ge_u
+  br_if 2
+  ${S(0)}
+  local.get $j
+  array.get $tst
+  i32.const 1
+  i32.eq
+  if void
+    local.get $ks
+    local.get $j
+    array.get $tkeys
+    local.tee $kq
+    ref.test i31
+    i32.eqz
+    br_if 2
+    local.get $ka
+    local.get $o
+    local.get $kq
+    ref.cast i31
+    i31.get_s
+    local.tee $x
+    array.set $tst
+    local.get $x
+    local.get $rlo
+    i32.lt_s
+    if void
+      local.get $x
+      local.set $rlo
+    end
+    local.get $x
+    local.get $rhi
+    i32.gt_s
+    if void
+      local.get $x
+      local.set $rhi
+    end
+    local.get $o
+    i32.const 1
+    i32.add
+    local.set $o
+  end
+  local.get $j
+  i32.const 1
+  i32.add
+  local.set $j
+  br 0
+end
+end
+i32.const 0
+local.set $j
+i32.const 0
+local.set $o
+ref.null $tst
+local.set $ka
+end
+local.get $ka
+ref.is_null
+i32.eqz
+if void
+block void
+loop void
+  local.get $rhi
+  local.get $rlo
+  i32.sub
+  local.get $sh
+  i32.shr_u
+  i32.eqz
+  br_if 1
+  i32.const 257
+  array.new_default $tst
+  local.set $cnt
+  ${loop(`local.get $cnt
+${bareDigit}
+i32.const 1
+i32.add
+local.tee $x
+local.get $cnt
+local.get $x
+array.get $tst
+i32.const 1
+i32.add
+array.set $tst`)}
+  i32.const 1
+  local.set $x
+  block void
+  loop void
+    local.get $x
+    i32.const 257
+    i32.ge_u
+    br_if 1
+    local.get $cnt
+    local.get $x
+    local.get $cnt
+    local.get $x
+    array.get $tst
+    local.get $cnt
+    local.get $x
+    i32.const 1
+    i32.sub
+    array.get $tst
+    i32.add
+    array.set $tst
+    local.get $x
+    i32.const 1
+    i32.add
+    local.set $x
+    br 0
+  end
+  end
+  ${loop(`${bareDigit}
+local.set $x
+local.get $cnt
+local.get $x
+array.get $tst
+local.set $p
+local.get $cnt
+local.get $x
+local.get $p
+i32.const 1
+i32.add
+array.set $tst
+local.get $kb
+local.get $p
+local.get $ka
+local.get $j
+array.get $tst
+array.set $tst`)}
+  local.get $ka
+  local.set $c
+  local.get $kb
+  local.set $ka
+  local.get $c
+  local.set $kb
+  local.get $sh
+  i32.const 8
+  i32.add
+  local.tee $sh
+  i32.const 32
+  i32.lt_u
+  br_if 0
+end
+end
+${itemsOf((x) => `local.get $ka\nlocal.get $${x}\narray.get $tst\nref.i31`)}
+return
+end
+`;
+      // The sorted slots' keys: into a list, from the end, or (keys) an
+      // Array's items, with room on both sides as array.of leaves.
+      const tail = keys ? itemsOf((x) => `local.get $ks\nlocal.get $a\nlocal.get $${x}\narray.get $tst\narray.get $tkeys`) : `i32.const 0
+struct.new $list.nil
+local.set $acc
+block void
+loop void
+  local.get $n
+  i32.eqz
+  br_if 1
+  local.get $n
+  i32.const 1
+  i32.sub
+  local.set $n
+  local.get $a
+  local.get $n
+  array.get $tst
+  local.set $p
+  i32.const 1
+  ${made}
+  local.get $acc
+  struct.new $list.cons
+  local.set $acc
+  br 0
+end
+end
+local.get $acc`;
       return {
-        ...base, list: d.key, params: [["t", "table"]], result: "list", uses: [fn("reroot"), fn("cmp")],
-        locals: [["m", "tstore"], ["a", "tst"], ["b", "tst"], ["c", "tst"], ["ks", "tkeys"], ["n", "i32"], ["j", "i32"], ["w", "i32"], ["lo", "i32"], ["mid", "i32"], ["hi", "i32"], ["p", "i32"], ["q", "i32"], ["o", "i32"], ["acc", "list"], ...(intKey ? [["kq", "key"], ["ok", "i32"], ["rlo", "i32"], ["rhi", "i32"], ["x", "i32"], ["sh", "i32"], ["ka", "tst"], ["kb", "tst"], ["cnt", "tst"]] as [string, VT][] : [])],
-        body: `local.get $t
+        ...base, ...(keys ? { array: Number(ai), result: "array" as VT } : { list: d.key, result: "list" as VT }), params: [["t", "table"]], uses: [fn("reroot"), fn("cmp")],
+        locals: [["m", "tstore"], ["a", "tst"], ["b", "tst"], ["c", "tst"], ["ks", "tkeys"], ["n", "i32"], ["j", "i32"], ["w", "i32"], ["lo", "i32"], ["mid", "i32"], ["hi", "i32"], ["p", "i32"], ["q", "i32"], ["o", "i32"], ...(keys ? [["room", "i32"], ["it", "items"]] as [string, VT][] : [["acc", "list"]] as [string, VT][]), ...(intKey ? [["kq", "key"], ["ok", "i32"], ["rlo", "i32"], ["rhi", "i32"], ["x", "i32"], ["sh", "i32"], ["ka", "tst"], ["kb", "tst"], ["cnt", "tst"]] as [string, VT][] : [])],
+        body: `${fastKeys}local.get $t
 call $${fn("reroot")}
 local.get $t
 struct.get $tbl 0
@@ -852,31 +1103,7 @@ loop void
   br 0
 end
 end
-i32.const 0
-struct.new $list.nil
-local.set $acc
-block void
-loop void
-  local.get $n
-  i32.eqz
-  br_if 1
-  local.get $n
-  i32.const 1
-  i32.sub
-  local.set $n
-  local.get $a
-  local.get $n
-  array.get $tst
-  local.set $p
-  i32.const 1
-  ${made}
-  local.get $acc
-  struct.new $list.cons
-  local.set $acc
-  br 0
-end
-end
-local.get $acc`,
+${tail}`,
       };
     }
   }

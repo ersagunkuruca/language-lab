@@ -14,7 +14,7 @@ import { runMain } from "../../ters/src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
-import { CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, CONS, INT_OPS, NIL, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
 import { compiledDefs, lowerCore } from "../src/core-js.ts";
@@ -29,7 +29,7 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean; made?: boolean } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean; made?: boolean; big?: boolean; array?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   // With `record`, the same as a record of the program's own, spot(row, name)
   // (C63g); with "floats", its row is a Float64.
@@ -41,7 +41,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   const rem = (i: Id, m: number) => k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(m))), k.thunk(() => k.int(0)));
   const third = (i: Id) => (opts.remainders ? rem(i, 37) : k.call(INT_OPS.shiftDown, i, k.int(3)));
   const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, third(i)) : third(i), k.call(SHOW_ANY, opts.remainders ? rem(i, 11) : k.call(INT_OPS.shiftDown, i, k.int(5))));
-  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : k.call(INT_OPS.shiftDown, i, k.int(1));
+  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : opts.big ? k.call(INT_OPS.sub, k.call(INT_OPS.mul, k.call(INT_OPS.shiftDown, i, k.int(1)), k.int(2 ** 40)), k.int(2 ** 45)) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   // With `made`, counts is a function of how many, called once: not one
   // value wherever it is named.
@@ -53,7 +53,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   k.define(counts, opts.made ? k.fn(["size"], (size) => counted(size)) : counted(k.int(n)));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const at = (m: Id, x: Id) => k.call(S.first, k.thunk(() => k.call(L("value at"), m, x)), k.thunk(() => k.int(-1)));
-  const probe = opts.pairs || opts.record ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : k.int(5);
+  const probe = opts.pairs || opts.record ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : opts.big ? k.int(5 * 2 ** 40 - 2 ** 45) : k.int(5);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.let("m", opts.made ? k.call(counts, k.int(n)) : k.x(counts), (m) => k.seq(
     show(k.call(L("map size"), m)),
@@ -62,6 +62,8 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
     ...(opts.old ? [k.let("more", k.call(L("put"), m, probe, k.int(1000)), (more) => k.seq(show(at(more, probe)), show(at(m, probe))))] : []),
     // Its keys too (`keys of`, a list of the keys alone on every target).
     ...(opts.list ? [show(k.call(L("entries of"), m)), show(k.call(L("keys of"), m))] : []),
+    // And as an Array.
+    ...(opts.array ? [show(k.call(ARRAY_OPS.of, k.call(L("keys of"), m)))] : []),
     ...(opts.remove ? [k.let("less", k.call(L("remove key"), m, probe), (less) => k.seq(show(k.call(L("map size"), less)), show(k.call(L("has key"), less, probe))))] : []),
   ))));
   return { code: base(k.code), names: baseNames(k.names), main, own: [counts, main] };
@@ -277,6 +279,10 @@ test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records
     setProgram(300, { old: true, remainders: true }),
     program(300, { pairs: true, old: true, remove: true, list: true, remainders: true }),
     program(300, { record: "ints", old: true, remove: true, list: true, remainders: true }),
+    // Int keys, i31s, then some past 2^30, hashed, compared and sorted as
+    // Ints (C211c: an i31 without a call).
+    program(300, { old: true, remove: true, list: true, array: true }),
+    program(300, { old: true, remove: true, list: true, array: true, big: true }),
   ];
   for (const p of programs) {
     const c = chosen(p, false, true);
@@ -287,8 +293,8 @@ test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records
     const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true });
     assert.deepEqual([...lowered.refused.values()], []);
     assert.equal(lowered.tables.length, 1);
-    const got: string[] = [];
-    await runWasm(lowered, emitWasm(lowered), lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
+    const got: string[] = [], m = emitWasm(lowered);
+    await runWasm(lowered, m, lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
     assert.deepEqual(got, lines);
   }
 });
