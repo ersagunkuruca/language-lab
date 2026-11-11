@@ -14,28 +14,14 @@ import { base, baseNames, loadProgram, optionsWith, programModules, programStore
 import { equal, mainProblem, pageProblem, runMain, runProgram, showerFor, valueMain, type Value, type World } from "../src/lang/run.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
-import { pageDocument } from "../src/lang/page.ts";
 import { showType, STRING } from "../src/lang/types.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { S, SHOW_ANY } from "../src/lang/std.ts";
 import { choose, representationsIn } from "../src/lang/represent.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
-import { CFLAGS, emitC } from "../../compiler/src/c.ts";
-import { emitWasm } from "../../compiler/src/wasm.ts";
-import { mapsInPlaceCounted, ownedArrays } from "../../compiler/src/owned-arrays.ts";
-import { columns } from "../../compiler/src/columns.ts";
-import { untaggedLoops } from "../../compiler/src/untagged-ints.ts";
-import { parallelColumnMaps } from "../../compiler/src/par-columns.ts";
-import { intoAsSets, ownedRecords } from "../../compiler/src/owned-records.ts";
-import { lowerScalar } from "../../compiler/src/scalar.ts";
-import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
-import { withInverses } from "../../compiler/src/inverses.ts";
 import { execFileSync } from "node:child_process";
-import { recordings, webCorePage } from "./web.ts";
 import { appFolder } from "./app.ts";
-import { nativeAppFolder } from "./native-app.ts";
-import { soundOf } from "./sound.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
@@ -45,6 +31,24 @@ import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } from "./logs.ts";
+// The compilers, and what imports them, read only for a command that
+// compiles: `ters check` and the module commands start without them
+// (I193: Node reading the compiler's sources was a third of a check).
+const compiles = !["check", "hosts", "publish", "broken", "fetch", "diff", "merge"].includes(process.argv[2] ?? "");
+const { pageDocument } = compiles ? await import("../src/lang/page.ts") : ({} as typeof import("../src/lang/page.ts"));
+const { CFLAGS, emitC } = compiles ? await import("../../compiler/src/c.ts") : ({} as typeof import("../../compiler/src/c.ts"));
+const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({} as typeof import("../../compiler/src/wasm.ts"));
+const { mapsInPlaceCounted, ownedArrays } = compiles ? await import("../../compiler/src/owned-arrays.ts") : ({} as typeof import("../../compiler/src/owned-arrays.ts"));
+const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
+const { untaggedLoops } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
+const { parallelColumnMaps } = compiles ? await import("../../compiler/src/par-columns.ts") : ({} as typeof import("../../compiler/src/par-columns.ts"));
+const { intoAsSets, ownedRecords } = compiles ? await import("../../compiler/src/owned-records.ts") : ({} as typeof import("../../compiler/src/owned-records.ts"));
+const { lowerScalar } = compiles ? await import("../../compiler/src/scalar.ts") : ({} as typeof import("../../compiler/src/scalar.ts"));
+const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
+const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
+const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
+const { nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
+const { soundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
 
 const USAGE = `ters: the command line for Ters, the language
 usage:
