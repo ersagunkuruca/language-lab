@@ -596,3 +596,18 @@ test("show of an array, in C (I156)", { skip }, async () => {
   const inputs = [[], [7n], [1n, -2n, 3n]].map((ys) => [toList(ys.map(norm))] as Value[]);
   sameAndFreed(build(lowered), inputs.map((xs): [number, Value[]] => [i, xs]), (_, xs) => first(r.call(r.value(g), ...xs))!, () => "g");
 });
+
+// C58l: std's Pool lent to `pool item`, which only reads its items and
+// generations: swarm-pool's lookups neither copy the pool in nor give it
+// back, and it says what the evaluator says.
+test("a record whose array fields a function only reads is lent to it (C58l: swarm-pool's pool item)", { skip }, () => {
+  const out = mkdtempSync(join(tmpdir(), "c-pool-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/swarm-pool");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(out, "swarm")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  const c = readFileSync(join(out, "swarm.c"), "utf8");
+  assert.match(c, /lab_pool_item_b\(p0, /);
+  assert.doesNotMatch(c, /lab_pool_item_b\(Pool_dup\(/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", "--evaluator", at, "20", "10"]).stdout.toString();
+  assert.match(evaluator, /motes after 20 ticks/);
+  assert.equal(spawnSync(join(out, "swarm"), ["20", "10"]).stdout.toString(), evaluator);
+});
