@@ -9,7 +9,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { CONS, NIL, S } from "../../ters/src/lang/std.ts";
+import { CONS, HTML_V, NIL, S, UNIT_V } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { compiledDefs } from "../src/core-js.ts";
 import { toList } from "../../ters/src/lang/run.ts";
@@ -80,4 +80,24 @@ test("the hoisted program's types are carried, not checked again, and the verifi
   assert.deepEqual(v.problems, []);
   // The let it made is checked like any function.
   assert.ok(v.checked > 20, `${v.checked} nodes`);
+});
+
+// A pure call moved out of a page's handler runs where the let is, so its
+// function's row is that place's, not the handler's: bounce's carried
+// types gave `items of list tree` every effect a handler may do, inside a
+// function that does only Cells, and the verifier refused 11 calls (I207).
+test("a call moved out of a handler takes the row of the place it moves to (I207)", () => {
+  const k = new Lang(LIBRARY.code);
+  const total = k.def("total of");
+  k.define(total, k.fn(["xs"], (xs) => k.fold(xs, [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["h", "t"], results: [null, "r"], body: ([h], [, r]) => k.call(B.add, h, r!) },
+  ])));
+  const click = k.def("click");
+  k.define(click, k.fn(["xs"], (xs) => k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.let("t", k.call(total, xs), () => k.x(UNIT_V))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const h = hoistInvariants(code, info, names);
+  assert.ok(h.hoisted > 0);
+  assert.deepEqual(verify(h.code, elaborate(h.code, h.info), [click]).problems, []);
 });
