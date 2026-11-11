@@ -98,6 +98,9 @@ export interface Info {
   // With `of`, the expression is a function and its result is lifted
   // (L208c2): `of` is the function's type as it was.
   embedded?: Map<Id, { def: Id; from: Type; to: Type; of?: Type & { t: "fn" } }>;
+  // A library check kept on disk: what it was made from, by hash
+  // (library-store.ts), the same in every process.
+  keptAs?: string;
 }
 
 // An implementation's place in Info.implementations: its interface and the
@@ -165,6 +168,10 @@ export interface LibraryStore {
   save(lib: Code, opts: Options, pins: [Id, unknown][], info: Info, kind: LibraryCheck): void;
 }
 let libraryStore: LibraryStore | null = null;
+// The cache a check uses when it is given none (I193i): `ters` keeps its
+// groups on disk, so a program's unchanged groups aren't checked again.
+let defaultCache: CheckCache | undefined;
+export function cacheChecks(c: CheckCache | undefined) { defaultCache = c; }
 export function keepLibraryChecks(store: LibraryStore | null) { libraryStore = store; underChecks.length = 0; }
 let checkingUnder = false;
 // On its layer (E253b), the nodes that aren't the layer's are known: the
@@ -864,7 +871,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   let passed: Map<Id, [Call, number][]> | null = null, passedFor: Id[] | null = null;
   let current: Id[] = [];
   const recursiveCalls: { call: Call; params: Type[]; args: Type[] }[] = [];
-  const cached = opts.cache?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
+  const cached = (opts.cache ?? defaultCache)?.begin({ code, info, s, deps, layer, opts, valueDefs, typeDefs: code.defs.filter((d) => isTypeDef(d)) });
   for (const group of groups) {
     current = group;
     if (cached?.take(group)) continue;

@@ -129,7 +129,9 @@ function canonical(sc: Scheme, s: Subst, frozen: boolean): string {
 // Each layer under a check (the library's, L216) by a number, for keys.
 const layerIds = new WeakMap<Info, number>();
 let layerCount = 0;
-const layerId = (l: Info | null) => { if (!l) return 0; let n = layerIds.get(l); if (n === undefined) layerIds.set(l, (n = ++layerCount)); return n; };
+// A layer kept on disk (library-store.ts) is named by what it was made
+// from, the same in every process, so a group's key can be kept too.
+const layerId = (l: Info | null): number | string => { if (!l) return 0; if (l.keptAs) return l.keptAs; let n = layerIds.get(l); if (n === undefined) layerIds.set(l, (n = ++layerCount)); return n; };
 
 // A definition's nodes as text. Nodes are never changed in place, so each
 // one's text is kept with it.
@@ -149,6 +151,9 @@ const textOf = (n: Node) => { let t = nodeText.get(n); if (t === undefined) node
 // to two texts: when the texts are forgotten, numbering goes on.
 const defTexts = new Map<Id, { nodes: Node[]; n: number }>();
 const textNumbers = new Map<string, number>();
+// And back, for a key kept on disk, which another process reads: its
+// numbers are its own, the texts the same.
+const numberTexts = new Map<number, string>();
 let textCount = 0;
 const defText = (code: Code, d: Id): number => {
   const ids = subtree(code, d);
@@ -158,8 +163,9 @@ const defText = (code: Code, d: Id): number => {
   const text = nodes.map(textOf).join(",");
   let n = textNumbers.get(text);
   if (n === undefined) {
-    if (textNumbers.size > 50_000) { textNumbers.clear(); defTexts.clear(); }
+    if (textNumbers.size > 50_000) { textNumbers.clear(); defTexts.clear(); numberTexts.clear(); }
     textNumbers.set(text, (n = ++textCount));
+    numberTexts.set(n, text);
   }
   defTexts.set(d, { nodes, n });
   return n;
@@ -170,15 +176,31 @@ const interned = new Map<string, number>();
 let internCount = 0;
 const intern = (t: string) => { let n = interned.get(t); if (n === undefined) { if (interned.size > 64) interned.clear(); interned.set(t, (n = ++internCount)); } return n; };
 
+// Where a cache keeps its groups between processes (I193i): `ters` keeps
+// them on disk (library-store.ts groupStore), by the key's hash. Only a
+// group checked over a layer kept on disk is, as only its key is the
+// same in another process.
+export interface GroupStore { load(key: string): Closed | undefined; save(key: string, c: Closed): void }
+export type { Closed };
+
 export class CheckCache {
   private kept = new Map<string, Closed>();
   hits = 0;
   misses = 0;
   private limit: number;
-  constructor(limit = 4000) { this.limit = limit; }
+  private store: GroupStore | undefined;
+  constructor(limit = 4000, store?: GroupStore) { this.limit = limit; this.store = store; }
   get size() { return this.kept.size; }
-  private get(k: string) { const c = this.kept.get(k); if (c) { this.kept.delete(k); this.kept.set(k, c); } return c; }
-  private set(k: string, c: Closed) {
+  // `stored`: the key as another process would write it, for a group
+  // kept on disk.
+  private get(k: string, stored: (() => string) | null) {
+    let c = this.kept.get(k);
+    if (c) { this.kept.delete(k); this.kept.set(k, c); }
+    else if (stored && this.store && (c = this.store.load(stored()))) this.kept.set(k, c);
+    return c;
+  }
+  private set(k: string, c: Closed, stored: (() => string) | null) {
+    if (stored) this.store?.save(stored(), c);
     this.kept.set(k, c);
     // The least recently used go first.
     while (this.kept.size > this.limit) this.kept.delete(this.kept.keys().next().value!);
@@ -193,7 +215,7 @@ export class CheckCache {
     // palette's trial of one filling, thrown away, and keying either costs
     // more than it saves.
     if (!layer) return undefined;
-    const start = s.next;
+    const start = s.next, onDisk = !!layer.keptAs && !!this.store;
     // What every group sees: the data types, the values (implementations
     // and embeddings are values), the options and the layer under. The
     // layer's own definitions are as it checked them.
@@ -211,13 +233,21 @@ export class CheckCache {
       const t = info.owner.get(f.target), td = t ? code.nodes[(code.nodes[t] as NodeOf<"def">)?.body ?? ""] : undefined;
       return td?.kind === "typedef" && !!td.interface;
     };
-    const global = intern(JSON.stringify([
+    const globalText = JSON.stringify([
       layerId(layer), idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => defText(code, d)),
       a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => defText(code, d)),
+    ]);
+    const global = intern(globalText);
+    // The same with every number a text of this process's spelled out.
+    const spelled = (n: number) => numberTexts.get(n) ?? "";
+    let globalSpelled: string | undefined;
+    const globalOnDisk = () => (globalSpelled ??= JSON.stringify([layer.keptAs, idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
+      a.typeDefs.filter((d) => !under.types.has(d)).map((d) => spelled(defText(code, d))),
+      a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => spelled(defText(code, d))),
     ]));
-    const missed: { group: Id[]; key: string; from: number; to: number }[] = [];
-    const keyOf = (group: Id[]): string | null => {
+    const missed: { group: Id[]; key: string; stored: (() => string) | null; from: number; to: number }[] = [];
+    const keyOf = (group: Id[]): { key: string; stored: (() => string) | null } | null => {
       const own = new Set(group);
       const seen: string[] = [];
       for (const d of [...new Set(group.flatMap(deps))].filter((x) => !own.has(x)).sort()) {
@@ -225,16 +255,18 @@ export class CheckCache {
         if (!sc) return null;
         seen.push(d, canonical(sc, s, layer?.schemes.get(d) === sc), info.divergent.has(d) ? "!" : "");
       }
-      return JSON.stringify([global, group.map((d) => defText(code, d)), group.map((d) => opts.pins?.[d] ?? null), seen]);
+      const texts = group.map((d) => defText(code, d)), pins = group.map((d) => opts.pins?.[d] ?? null);
+      // On disk the group's ids too: a kept result names its nodes by id.
+      return { key: JSON.stringify([global, texts, pins, seen]), stored: onDisk ? () => JSON.stringify([globalOnDisk(), group, texts.map(spelled), pins, seen]) : null };
     };
     const finish = () => { const last = missed[missed.length - 1]; if (last && last.to < 0) last.to = s.wanted.length; };
     return {
       // Copies the group's kept result in, or says it has none.
       take: (group: Id[]): boolean => {
         finish();
-        const key = keyOf(group);
-        const c = key === null ? undefined : this.get(key);
-        if (!c) { this.misses++; if (key !== null) missed.push({ group, key, from: s.wanted.length, to: -1 }); return false; }
+        const k = keyOf(group);
+        const c = k === null ? undefined : this.get(k.key, k.stored);
+        if (!c) { this.misses++; if (k !== null) missed.push({ group, key: k.key, stored: k.stored, from: s.wanted.length, to: -1 }); return false; }
         this.hits++;
         const o = new Opener(s.next);
         s.next += c.size;
@@ -352,7 +384,7 @@ export class CheckCache {
           }
           c.size = cl.map.size;
           c.rows = cl.rows;
-          this.set(m.key, c);
+          this.set(m.key, c, m.stored);
         });
       },
     };

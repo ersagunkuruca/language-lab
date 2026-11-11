@@ -56,3 +56,21 @@ test("a library node's type read back from the kept check is the one made here",
     assert.deepEqual(read, here);
   } finally { keepLibraryChecks(process.env.LAB_NO_LIBRARY_STORE ? null : libraryStore); }
 });
+
+// I193i: each group's check kept by a key another process writes the same
+// way (texts, not this process's numbers): a cache made anew over the same
+// store takes every group, and the check is the same.
+test("a program's groups kept on disk are taken by a fresh cache, the same check", async () => {
+  const { CheckCache } = await import("../src/lang/check-cache.ts");
+  const kept = new Map<string, unknown>();
+  const store = { load: (k: string) => kept.get(k) as never, save: (k: string, c: unknown) => { kept.set(k, structuredClone(c)); } };
+  for (const ex of ["calc", "wc"]) {
+    const p = loadProgram(join(root, "examples", ex));
+    const first = new CheckCache(4000, store);
+    const a = said(p.code, infer(p.code, p.pres.names, undefined, { ...checkOptions, cache: first }));
+    const again = new CheckCache(4000, store);
+    const b = said(p.code, infer(p.code, p.pres.names, undefined, { ...checkOptions, cache: again }));
+    assert.ok(again.hits > 0 && again.misses === 0, `${ex}: ${again.hits} hits, ${again.misses} misses`);
+    assert.deepEqual(b, a);
+  }
+});

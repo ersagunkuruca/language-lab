@@ -7,7 +7,9 @@ import { pathToFileURL } from "node:url";
 import { merge, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
-import { infer, type Info, type Options } from "../src/lang/infer.ts";
+import { cacheChecks, infer, type Info, type Options } from "../src/lang/infer.ts";
+import { CheckCache } from "../src/lang/check-cache.ts";
+import { groupStore } from "../src/lang/library-store.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { addToStore, lineageOf, pointsAt, previousVersion, publishVersion, sameLines, upgrade, upgradeNames, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
 import { base, baseNames, loadProgram, optionsWith, programModules, programStore } from "../src/lang/load.ts";
@@ -121,6 +123,10 @@ function fail(message: string): never {
   process.stderr.write(`ters: ${message}\n`);
   process.exit(2);
 }
+
+// Each definition group's check kept on disk (I193i): a program's
+// unchanged definitions aren't checked again by the next command.
+if (!process.env.LAB_NO_LIBRARY_STORE) cacheChecks(new CheckCache(4000, groupStore));
 
 function load(path: string): Program {
   if (!existsSync(path)) fail(`no such program: ${path}`);

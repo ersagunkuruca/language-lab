@@ -17,6 +17,7 @@ import { deserialize, serialize } from "node:v8";
 import type { Code, Id } from "../model.ts";
 import { root } from "../io.ts";
 import { keepLibraryChecks, type Info, type LibraryCheck, type LibraryStore, type Options } from "./infer.ts";
+import type { Closed, GroupStore } from "./check-cache.ts";
 import { Subst } from "./types.ts";
 import { LIBRARY } from "./library.ts";
 import { filledLibrary } from "./ports.ts";
@@ -69,12 +70,35 @@ const codeHash = (code: Code) => {
   return k;
 };
 const ids = (xs: Iterable<Id> | undefined) => (xs ? [...xs].sort() : null);
-const fileOf = (lib: Code, opts: Options, pins: [Id, unknown][], kind: LibraryCheck) => {
+const keyOf = (lib: Code, opts: Options, pins: [Id, unknown][], kind: LibraryCheck) => {
   const h = createHash("sha1");
   h.update(checkerHash());
   h.update(codeHash(lib));
   h.update(JSON.stringify([ids(opts.hidden), ids(opts.insiders), ids(opts.library), pins]));
-  return join(DIR, `library-${kind}-${h.digest("hex").slice(0, 20)}.v8`);
+  return `${kind}-${h.digest("hex").slice(0, 20)}`;
+};
+const fileOf = (lib: Code, opts: Options, pins: [Id, unknown][], kind: LibraryCheck) => join(DIR, `library-${keyOf(lib, opts, pins, kind)}.v8`);
+
+// Each definition group's check (check-cache.ts) kept on disk by its key's
+// hash (I193i): a key names the layer it was checked over by that layer's
+// keptAs, so it holds the checker's source and the library too. A few
+// thousand are kept; the oldest go now and then.
+const GROUPS = join(DIR, "groups"), KEEP_GROUPS = 8000;
+const groupFile = (key: string) => join(GROUPS, `${createHash("sha1").update(key).digest("hex").slice(0, 24)}.v8`);
+export const groupStore: GroupStore = {
+  load(key) { try { return deserialize(readFileSync(groupFile(key))) as Closed; } catch { return undefined; } },
+  save(key, c) {
+    try {
+      mkdirSync(GROUPS, { recursive: true });
+      const file = groupFile(key), tmp = `${file}.${process.pid}.tmp`;
+      writeFileSync(tmp, serialize(c));
+      renameSync(tmp, file);
+      if (Math.random() < 0.01) {
+        const kept = readdirSync(GROUPS);
+        if (kept.length > KEEP_GROUPS) for (const { f } of kept.map((f) => ({ f, t: statSync(join(GROUPS, f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(KEEP_GROUPS / 2)) rmSync(join(GROUPS, f), { force: true });
+      }
+    } catch { /* checked again next time */ }
+  },
 };
 
 // A Subst's hooks are the check's own functions: a check over the library
@@ -91,6 +115,7 @@ export const libraryStore: LibraryStore = {
       const info = deserialize(bytes) as Info;
       info.subst = Object.assign(new Subst(), info.subst);
       info.options = opts;
+      info.keptAs = keyOf(lib, opts, pins, kind);
       return info;
     } catch { return undefined; }
   },
@@ -102,6 +127,7 @@ export const libraryStore: LibraryStore = {
       const file = fileOf(lib, opts, pins, kind), tmp = `${file}.${process.pid}.tmp`;
       writeFileSync(tmp, bytes);
       renameSync(tmp, file);
+      info.keptAs = keyOf(lib, opts, pins, kind);
       keepOld(`library-${kind}-`);
     } catch { /* a check not kept is checked again next time */ }
   },
