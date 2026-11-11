@@ -254,6 +254,38 @@ const divisions = [...bigs.flatMap((a, i) => [[a, bigs[(i * 5 + 1) % bigs.length
   [0x800000000000000000000000n * 0x10000n - 1n, 0x800000000000000000000001n]].map((xs) => xs.map(norm));
 const bigPairs = bigs.flatMap((a, i) => [[a, bigs[(i * 7 + 3) % bigs.length]], [a, a], [a, 3n], [-(2n ** 63n), a]].map((xs) => xs.map(norm)));
 
+// C207w: a loop's values stepped inline on WebAssembly (untagged-ints.ts
+// valueLoop, wasm.ts): a round whose a + b or a − b goes past an i64
+// starts again as written, so the answer is the evaluator's either side.
+test("a loop's Int adds and subtracts past an i64 on WebAssembly give the evaluator's answers", async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { base, baseNames } = await import("../../ters/src/lang/load.ts");
+  const { infer } = await import("../../ters/src/lang/infer.ts");
+  const { INT_OPS } = await import("../../ters/src/lang/std.ts");
+  const { untaggedLoops } = await import("../src/untagged-ints.ts");
+  const k = new Lang(LIBRARY.code);
+  const defs = ["up", "down"].map((name) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["n", "acc", "by"], (n, acc, by) => k.if(k.call(INT_OPS.less, k.int(0), n),
+      k.call(d, k.call(INT_OPS.sub, n, k.int(1)), k.call(name === "up" ? INT_OPS.add : INT_OPS.sub, acc, by), by), acc)));
+    return d;
+  });
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  const lowered = lowerScalar(code, info, names, defs, { data: true });
+  assert.ok(untaggedLoops(lowered, true) >= 2);
+  const w = await instantiate(emitWasm(lowered)) as unknown as Exports;
+  const r = makeRunner(code, info, { print: () => {} });
+  const edge = 2n ** 63n;
+  for (const d of defs) {
+    const f = lowered.funcs.find((g) => g.def === d && !g.inner)!;
+    for (const [acc, by] of [[edge - 5n, 2n], [-edge + 5n, -2n], [-edge + 5n, 2n], [edge - 5n, -2n], [0n, 7n]]) {
+      const xs = [norm(6n), norm(acc), norm(by)];
+      assert.equal(flat(answer(w, f, (w[f.name] as (...a: unknown[]) => unknown)(...xs.map((x) => toWasm(w, x, "int"))))), flat(outcome(r, d, xs)), `${k.names[d]} ${acc} ${by}`);
+    }
+  }
+});
+
 // BACKLOG C49: a fold over characters named by a let first is fused too.
 test("a fold over characters named by a let first walks the text in WebAssembly, with no list", async () => {
   const { Lang } = await import("../../ters/src/lang/dsl.ts");
