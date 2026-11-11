@@ -292,3 +292,14 @@ test("a remainder by a positive literal is worked out with no try, as it always 
     assert.deepEqual(f(x), [...r.call(r.value(wrapped), x as Value)][0], String(x));
   }
 });
+
+test("a map of Int keys never removed from is a direct map; one removed from is not (C215)", () => {
+  const pond = load("../../compiler/gaps/pond"), swarm = load("swarm");
+  // As ters compile has them: lists as arrays, maps as hash tables.
+  const specs = (p: ReturnType<typeof load>) => {
+    const main = p.named("main"), t = represented({ title: "", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: [], options: p.options }, main, false, true);
+    return printed(lowerCore(t.code, t.info, t.names, [main])).tables;
+  };
+  assert.ok(specs(pond).some((t) => t.direct), "pond's food");
+  assert.ok(!specs(swarm).some((t) => t.direct), "swarm's motes are removed");
+});

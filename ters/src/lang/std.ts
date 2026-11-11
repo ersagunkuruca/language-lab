@@ -1021,6 +1021,76 @@ export const ARRAY_OPS = {
   }),
 };
 
+// A Map whose Int keys sit at their own slot of an array while they are
+// small (C215, as C58m's direct tables on C; influenced by Lua 5's array
+// part for tables, Ierusalimschy, de Figueiredo, Celes): a read is one
+// index, not a hash (pond's food, cells 0 to 2303, read 25 times by each
+// fish each tick). Compiled JS makes one for a table of Int keys none of
+// whose kind is ever removed (core-js.ts tableSpec), so a program's other
+// tables stay plain Maps and each read meets one kind of map (all of a
+// program's tables as these, swarm's counter keys ran 10% slower). A key
+// goes in the array while it is below twice the keys there and 64; at the
+// first that doesn't, its entries go to a Map (`o`) for good, as on C.
+// Its entries are in key order, not the order put: every listing of a
+// table sorts them or checks they are sorted (numberKeys).
+const HOLE: unique symbol = Symbol("hole");
+const UNDEF: unique symbol = Symbol("undefined");
+const slot = (k: unknown): k is number => typeof k === "number" && (k | 0) === k && k >= 0;
+export class DirectMap {
+  a: unknown[] = [];
+  n = 0;
+  o: Map<unknown, unknown> | null = null;
+  constructor(from?: Iterable<[unknown, unknown]>) { if (from) for (const [k, v] of from) this.set(k, v); }
+  get size(): number { return this.o ? this.o.size : this.n; }
+  get(k: unknown): unknown {
+    if (this.o) return this.o.get(k);
+    if (slot(k) && k < this.a.length) { const v = this.a[k]; return v === HOLE || v === UNDEF ? undefined : v; }
+    return undefined;
+  }
+  has(k: unknown): boolean {
+    if (this.o) return this.o.has(k);
+    return slot(k) && k < this.a.length && this.a[k] !== HOLE;
+  }
+  set(k: unknown, v: unknown): this {
+    if (this.o) { this.o.set(k, v); return this; }
+    const x = v === undefined ? UNDEF : v;
+    if (slot(k) && k < this.a.length) { if (this.a[k] === HOLE) this.n++; this.a[k] = x; return this; }
+    if (slot(k) && k < 2 * this.n + 64) {
+      const len = Math.max(k + 1, 2 * this.a.length);
+      while (this.a.length < len) this.a.push(HOLE);
+      this.n++;
+      this.a[k] = x;
+      return this;
+    }
+    // Its entries to a Map, for good.
+    const o = new Map<unknown, unknown>();
+    this.a.forEach((w, j) => { if (w !== HOLE) o.set(j, w === UNDEF ? undefined : w); });
+    this.a = []; this.n = 0;
+    (this.o = o).set(k, v);
+    return this;
+  }
+  delete(k: unknown): boolean {
+    if (this.o) return this.o.delete(k);
+    if (!(slot(k) && k < this.a.length) || this.a[k] === HOLE) return false;
+    this.a[k] = HOLE;
+    this.n--;
+    return true;
+  }
+  *entries(): IterableIterator<[unknown, unknown]> {
+    if (this.o) { yield* this.o.entries(); return; }
+    const a = this.a;
+    for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) yield [i, v === UNDEF ? undefined : v]; }
+  }
+  *keys(): IterableIterator<unknown> { for (const [k] of this.entries()) yield k; }
+  *values(): IterableIterator<unknown> { for (const [, v] of this.entries()) yield v; }
+  [Symbol.iterator](): IterableIterator<[unknown, unknown]> { return this.entries(); }
+  forEach(f: (v: unknown, k: unknown, m: this) => void): void { for (const [k, v] of this.entries()) f(v, k, this); }
+}
+// An empty direct table, and the value at an Int key of one (core-rt.ts),
+// its own function so that its reads meet only DirectMaps.
+export const directTable = (): Table => new Table(new DirectMap() as unknown as Map<unknown, unknown>, true);
+export const directRead = (t: Table, key: unknown, none: unknown): unknown => { const m = t.m, v = m.get(key); return v === undefined && !m.has(key) ? none : v; };
+
 // A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
 // representation, its keys Ints and Texts, the ones a JS Map holds by value
 // (an Int has one spelling, int.ts), and tuples of them, held by their
@@ -1077,7 +1147,7 @@ function reroot(t: Table) {
 }
 // A put (set) or remove: a new newest version, t the change back to it.
 function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
-  if (t.shared) { const m = new Map(t.m); if (set) m.set(key, v); else m.delete(key); return new Table(m); }
+  if (t.shared) { const m = t.m instanceof DirectMap ? new DirectMap(t.m) as unknown as Map<unknown, unknown> : new Map(t.m); if (set) m.set(key, v); else m.delete(key); return new Table(m); }
   const m = t.m, had = m.has(key), old = m.get(key);
   if (!set && !had) return t;
   if (set) m.set(key, v); else m.delete(key);
@@ -1134,7 +1204,16 @@ STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.
 // third of its run). Null for any other keys.
 // The same for the keys alone: Int keys, put in order, as they are, as a
 // list over one array (bytes.ts ItemsList), which `array of` reads in place.
+// A DirectMap's keys and values, read off its array in order (C215).
+function direct(m: Map<unknown, unknown>): { ks: number[]; vs: unknown[] } | null {
+  if (!(m instanceof DirectMap) || m.o) return null;
+  const ks: number[] = [], vs: unknown[] = [], a = m.a;
+  for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) { ks.push(i); vs.push(v === UNDEF ? undefined : v); } }
+  return { ks, vs };
+}
 function numberKeys(m: Map<unknown, unknown>): object | null {
+  const d = direct(m);
+  if (d) return new ItemsList(d.ks, 0);
   const ks: number[] = [];
   let sorted = true;
   for (const k of m.keys()) {
@@ -1147,9 +1226,10 @@ function numberKeys(m: Map<unknown, unknown>): object | null {
   return new ItemsList(ks, 0);
 }
 function numberEntries(m: Map<unknown, unknown>): object | null {
-  const ks: number[] = [], vs: unknown[] = [];
+  const d = direct(m);
+  const ks: number[] = d ? d.ks : [], vs: unknown[] = d ? d.vs : [];
   let sorted = true;
-  for (const [k, v] of m) {
+  if (!d) for (const [k, v] of m) {
     if (typeof k !== "number") return null;
     if (sorted && ks.length && k < ks[ks.length - 1]) sorted = false;
     ks.push(k); vs.push(v);

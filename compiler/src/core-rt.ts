@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, tableRead, tablePutOwned, tableRemoveOwned, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
@@ -97,12 +97,14 @@ const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 // What the runtime needs of the program's tables, as plain data a module
 // can carry: whether each is a Hash set.
 // `keys`: which of a map's entries lists are its keys alone.
-export interface TableSpec { set: boolean; keys?: boolean[] }
+// `direct`: an Int key's map none of whose kind is removed from, made a
+// DirectMap (std.ts, C215).
+export interface TableSpec { set: boolean; keys?: boolean[]; direct?: true }
 function tableFn(op: string, t: TableSpec, e?: number): (...xs: unknown[]) => unknown {
   const bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
   const impl = (id: Id) => STD_IMPL[id] as (...xs: unknown[]) => unknown;
   switch (op) {
-    case "empty": return () => impl(TABLE_OPS.empty)();
+    case "empty": return t.direct ? directTable : () => impl(TABLE_OPS.empty)();
     case "put": return (m, k, v) => impl(TABLE_OPS.put)(m, k, v);
     case "remove": return (m, k) => impl(TABLE_OPS.remove)(m, k);
     // Where every table has one holder (owned-tables.ts): changed in place.
@@ -110,10 +112,10 @@ function tableFn(op: string, t: TableSpec, e?: number): (...xs: unknown[]) => un
     case "removeOwned": return (m, k) => tableRemoveOwned(m as Table, k);
     case "has": return (m, k) => bool(impl(TABLE_OPS.has)(m, k));
     case "size": return (m) => impl(TABLE_OPS.size)(m);
-    case "at": return (m, k) => { const v = tableRead(m as Table, k, FAIL); if (v === FAIL) throw FAIL; return v; };
+    case "at": return (m, k) => { const v = (t.direct ? directRead : tableRead)(m as Table, k, FAIL); if (v === FAIL) throw FAIL; return v; };
     // The same, no answer given back as FAIL, not thrown: printed where
     // the caller checks it (core-js.ts, C59).
-    case "atv": return (m, k) => tableRead(m as Table, k, FAIL);
+    case "atv": return t.direct ? (m, k) => directRead(m as Table, k, FAIL) : (m, k) => tableRead(m as Table, k, FAIL);
     case "entries": return t.set ? (m) => impl(HASH_SET_OPS.items)(m) : t.keys?.[e ?? -1] ? (m) => impl(TABLE_OPS.keys)(m) : (m) => impl(TABLE_OPS.entries)(m);
   }
   return () => { throw new Unsupported(`table.${op}`); };

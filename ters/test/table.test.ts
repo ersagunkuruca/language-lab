@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CONS, STD_IMPL, Table, TABLE_OPS } from "../src/lang/std.ts";
+import { CONS, DirectMap, STD_IMPL, Table, TABLE_OPS } from "../src/lang/std.ts";
 
 const put = STD_IMPL[TABLE_OPS.put] as (t: Table, k: unknown, v: unknown) => Table;
 const remove = STD_IMPL[TABLE_OPS.remove] as (t: Table, k: unknown) => Table;
@@ -79,4 +79,18 @@ test("a table of Int keys lists them in order, put in order or not (C58b')", () 
     if (rand(20) === 0) assert.deepEqual(listed(t), [...want].sort(([a], [b]) => a - b), `step ${i}`);
   }
   assert.deepEqual(listed(t), [...want].sort(([a], [b]) => a - b));
+});
+
+test("a direct map keeps small Int keys in its array and agrees with a Map, past its array too (C215)", () => {
+  const d = new DirectMap(), m = new Map<unknown, unknown>();
+  const both = (f: (x: DirectMap | Map<unknown, unknown>) => unknown) => assert.deepEqual(f(d), f(m));
+  for (let k = 0; k < 300; k++) { d.set(k, k * 2); m.set(k, k * 2); }
+  assert.equal(d.o, null, "keys put in order stay in the array");
+  d.set(5, undefined); m.set(5, undefined); d.delete(7); m.delete(7); d.delete(7); m.delete(7);
+  both((x) => [x.size, x.has(5), x.get(5), x.has(7), x.get(7), x.has(299), x.get(300)]);
+  both((x) => [...x.entries()].sort((a, b) => (a[0] as number) - (b[0] as number)));
+  // A key far past the keys there, a negative one, a Text: hashed for good.
+  for (const k of [100000, -3, "a"]) { d.set(k, 1); m.set(k, 1); }
+  assert.ok(d.o, "hashed");
+  both((x) => [x.size, x.get(100000), x.get(-3), x.get("a"), x.get(299), x.has(7)]);
 });
