@@ -536,9 +536,171 @@ local.get $nv`,
       let made: string;
       if (keyList(t, d)) made = key(item);
       else { types.pair = item; made = `${key((item as RType).fields[0].t)}\nlocal.get $m\nstruct.get $tstore 2\nlocal.get $p\narray.get $tvals\nstruct.new $pair`; }
+      const at = (x: string) => `local.get $ks\nlocal.get $a\nlocal.get $${x}\narray.get $tst\narray.get $tkeys`;
+      const qBeforeP = `${at("q")}\n${at("p")}\ncall $${fn("cmp")}\ni32.const 0\ni32.lt_s`;
+      // Int keys, all i31s (a counter's, swarm's motes, C211): sorted by a
+      // radix sort of key − least, a byte a pass, carrying the slots, as
+      // c.ts's lab__isort does; the merge sort then has nothing to do.
+      // Where they aren't, or there are fewer than 64, the merge sort.
+      const intKey = ks.length === 1 && ks[0][0] === "int" && ks[0][1].length === 0;
+      const loop = (body: string) => `i32.const 0\nlocal.set $j\nblock void\nloop void\nlocal.get $j\nlocal.get $n\ni32.ge_u\nbr_if 1\n${body}\nlocal.get $j\ni32.const 1\ni32.add\nlocal.set $j\nbr 0\nend\nend`;
+      const digit = "local.get $ka\nlocal.get $j\narray.get $tst\nlocal.get $sh\ni32.shr_u\ni32.const 255\ni32.and";
+      const radix = !intKey ? "" : `local.get $n
+i32.const 64
+i32.ge_u
+if void
+i32.const 1
+local.set $ok
+i32.const 2147483647
+local.set $rlo
+i32.const -2147483648
+local.set $rhi
+${loop(`${at("j")}
+local.tee $kq
+ref.test i31
+i32.eqz
+if void
+i32.const 0
+local.set $ok
+br 2
+end
+local.get $kq
+ref.cast i31
+i31.get_s
+local.tee $x
+local.get $rlo
+i32.lt_s
+if void
+local.get $x
+local.set $rlo
+end
+local.get $x
+local.get $rhi
+i32.gt_s
+if void
+local.get $x
+local.set $rhi
+end`)}
+local.get $ok
+if void
+local.get $n
+array.new_default $tst
+local.set $ka
+local.get $n
+array.new_default $tst
+local.set $kb
+${loop(`local.get $ka
+local.get $j
+${at("j")}
+ref.cast i31
+i31.get_s
+local.get $rlo
+i32.sub
+array.set $tst`)}
+i32.const 0
+local.set $sh
+block void
+loop void
+local.get $rhi
+local.get $rlo
+i32.sub
+local.get $sh
+i32.shr_u
+i32.eqz
+br_if 1
+i32.const 257
+array.new_default $tst
+local.set $cnt
+${loop(`local.get $cnt
+${digit}
+i32.const 1
+i32.add
+local.tee $x
+local.get $cnt
+local.get $x
+array.get $tst
+i32.const 1
+i32.add
+array.set $tst`)}
+i32.const 1
+local.set $x
+block void
+loop void
+local.get $x
+i32.const 257
+i32.ge_u
+br_if 1
+local.get $cnt
+local.get $x
+local.get $cnt
+local.get $x
+array.get $tst
+local.get $cnt
+local.get $x
+i32.const 1
+i32.sub
+array.get $tst
+i32.add
+array.set $tst
+local.get $x
+i32.const 1
+i32.add
+local.set $x
+br 0
+end
+end
+${loop(`${digit}
+local.set $x
+local.get $cnt
+local.get $x
+array.get $tst
+local.set $p
+local.get $cnt
+local.get $x
+local.get $p
+i32.const 1
+i32.add
+array.set $tst
+local.get $b
+local.get $p
+local.get $a
+local.get $j
+array.get $tst
+array.set $tst
+local.get $kb
+local.get $p
+local.get $ka
+local.get $j
+array.get $tst
+array.set $tst`)}
+local.get $a
+local.set $c
+local.get $b
+local.set $a
+local.get $c
+local.set $b
+local.get $ka
+local.set $c
+local.get $kb
+local.set $ka
+local.get $c
+local.set $kb
+local.get $sh
+i32.const 8
+i32.add
+local.tee $sh
+i32.const 32
+i32.lt_u
+br_if 0
+end
+end
+local.get $n
+local.set $w
+end
+end`;
       return {
         ...base, list: d.key, params: [["t", "table"]], result: "list", uses: [fn("reroot"), fn("cmp")],
-        locals: [["m", "tstore"], ["a", "tst"], ["b", "tst"], ["c", "tst"], ["ks", "tkeys"], ["n", "i32"], ["j", "i32"], ["w", "i32"], ["lo", "i32"], ["mid", "i32"], ["hi", "i32"], ["p", "i32"], ["q", "i32"], ["o", "i32"], ["acc", "list"]],
+        locals: [["m", "tstore"], ["a", "tst"], ["b", "tst"], ["c", "tst"], ["ks", "tkeys"], ["n", "i32"], ["j", "i32"], ["w", "i32"], ["lo", "i32"], ["mid", "i32"], ["hi", "i32"], ["p", "i32"], ["q", "i32"], ["o", "i32"], ["acc", "list"], ...(intKey ? [["kq", "key"], ["ok", "i32"], ["rlo", "i32"], ["rhi", "i32"], ["x", "i32"], ["sh", "i32"], ["ka", "tst"], ["kb", "tst"], ["cnt", "tst"]] as [string, VT][] : [])],
         body: `local.get $t
 call $${fn("reroot")}
 local.get $t
@@ -584,6 +746,7 @@ end
 end
 i32.const 1
 local.set $w
+${radix}
 block void
 loop void
   local.get $w
@@ -641,19 +804,7 @@ loop void
         if i32
           i32.const 1
         else
-          local.get $ks
-          local.get $a
-          local.get $q
-          array.get $tst
-          array.get $tkeys
-          local.get $ks
-          local.get $a
-          local.get $p
-          array.get $tst
-          array.get $tkeys
-          call $${fn("cmp")}
-          i32.const 0
-          i32.lt_s
+          ${qBeforeP}
         end
       else
         i32.const 0
