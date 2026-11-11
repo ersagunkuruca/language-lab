@@ -676,7 +676,7 @@ export function pageWorker(): boolean {
   };
   return true;
 }
-interface WebJob { job: number; f: unknown; runs: [number, unknown][]; how: AwayHow | How; ways?: number; steps: number | null }
+interface WebJob { job: number; f: unknown; join?: unknown; runs: [number, unknown][]; how: AwayHow | How; ways?: number; steps: number | null }
 // A run's answer, with the steps it spent under a page's budget; `out`: it ran out.
 type WebAnswer = Answer & { used?: number; out?: true };
 const webSize = () => Math.max(0, Math.min(7, ((globalThis as { navigator?: { hardwareConcurrency?: number } }).navigator?.hardwareConcurrency ?? 1) - 1));
@@ -694,24 +694,27 @@ export const pageMapsOnWorkers = () => pageMaps;
 type AwayHow = "map" | "keep" | FoldHow;
 const isFold = (how: AwayHow): how is FoldHow => how !== "map" && how !== "keep";
 // A run of the job's items here: a map's or keep's items, or a fold's Int.
-const unitOf = (items: unknown[], f: Fn, how: AwayHow): unknown => (isFold(how) ? together(items, f, how) : run(items, f, how === "keep"));
+const unitOf = (items: unknown[], f: Fn, how: AwayHow, join?: Fn): unknown => (isFold(how) ? together(items, f, how, join) : run(items, f, how === "keep"));
 // A run of a job sent to a worker: a map's items, or a search's piece.
-const webUnit = (m: WebJob, f: unknown, x: unknown): unknown => (m.how === "count" || m.how === "all" || m.how === "first" ? answers(f, piece(x as number, m.ways!), m.how) : unitOf((x as unknown[]).map(dec), f as Fn, m.how));
+const webUnit = (m: WebJob, f: unknown, x: unknown): unknown => (m.how === "count" || m.how === "all" || m.how === "first" ? answers(f, piece(x as number, m.ways!), m.how) : unitOf((x as unknown[]).map(dec), f as Fn, m.how, m.join === undefined ? undefined : dec(m.join) as Fn));
 // The map of xs by f, given to k: on the page's workers where there are
 // any and the map is worth them, else here and at once.
-export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, k: (v: unknown) => unknown): unknown {
+// A record of Ints's fold (how "with", C42g) is put together by join.
+export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, join: Fn | undefined, k: (v: unknown) => unknown): unknown {
   const unbudgeted = fuel === Infinity || fuel === undefined;
-  const inTurn = () => (isFold(how) ? foldInOrder(xs, f, z as Int, how) : mapInOrder(xs, f, how === "keep"));
-  if (canShare()) return k(!unbudgeted ? inTurn() : isFold(how) ? foldPure(xs, f, z as Int, how, site) : mapPure(xs, f, site, how === "keep"));
+  const inTurn = () => (isFold(how) ? foldInOrder(xs, f, z as Int, how, join) : mapInOrder(xs, f, how === "keep"));
+  if (canShare()) return k(!unbudgeted ? inTurn() : isFold(how) ? foldPure(xs, f, z as Int, how, site, join) : mapPure(xs, f, site, how === "keep"));
   const w = web;
   if (!w || !unbudgeted) return k(inTurn());
   // A fold's items from the last, as the fold in turn meets them.
   const items = isFold(how) ? itemsOf(xs).reverse() : itemsOf(xs), t0 = performance.now();
   // On the GPU (C61 d′), where this site has a kernel and it pays.
   // A fold's Ints added or kept there too (C42f), the empty list's last.
-  if (how !== "with" && gpuWorth(site, items.length)) {
-    const a = int32s(items), c = capsOf(f, gpuSites[site], isFold(how) ? IDENTITY[how] : undefined);
-    if (a && c) return gpuMap(items, a, c, xs, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()));
+  // A record of Ints's (C42g) each field's, given back as a record like z.
+  if (gpuWorth(site, items.length)) {
+    const m = gpuSites[site], ids = how === "with" ? m.hows?.map((h) => IDENTITY[h]) : isFold(how) ? [IDENTITY[how]] : [];
+    const a = int32s(items), c = ids && capsOf(f, m, ids);
+    if (a && c) return gpuMap(items, a, c, xs, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how, join), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()), how === "with" ? z : undefined);
   }
   // Before there are workers: here, timed, and workers started for the next.
   if (!w.workers) {
@@ -721,20 +724,21 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
     return k(v);
   }
   if (!w.workers.length || !items.length) return k(inTurn());
-  const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
+  const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
   if (es.includes(NO)) return k(inTurn());
   const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size);
-  return awayRuns(w.workers, n, { f: g, how }, (i) => es.slice(i * size, (i + 1) * size), (i) => unitOf(items.slice(i * size, (i + 1) * size), f, how), (values) => {
+  return awayRuns(w.workers, n, { f: g, how, ...(j ? { join: j } : {}) }, (i) => es.slice(i * size, (i + 1) * size), (i) => unitOf(items.slice(i * size, (i + 1) * size), f, how, join), (values) => {
     perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
-    return k(isFold(how) ? (values as Int[]).reduce(both(how), z as Int) : sameKind(xs, (values as unknown[][]).flat()));
+    return k(isFold(how) ? (values as Int[]).reduce(both(how, join), z as Int) : sameKind(xs, (values as unknown[][]).flat()));
   }, () => { setStepsLeft(-1); throw new OutOfSteps(); });
 }
 
 // A page's maps on the GPU (C61 d′, gpu-maps.ts): each site's kernel,
 // and what an item took there and on the CPU, to keep the quicker.
-interface GpuMap { how: "map" | "keep" | "add" | "max" | "min"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
+interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[] }
 // A fold's kernel is its item's arm, given the rest's Int as the join's
-// identity, first among what it captured (C42f, gpu-maps.ts).
+// identity, first among what it captured (C42f, gpu-maps.ts); a record
+// of Ints's each field's (C42g).
 const IDENTITY = { add: 0, max: -2147483648, min: 2147483647 } as const;
 let gpuSites: Record<number, GpuMap> = {};
 const gpuPerItem: number[] = [];
@@ -763,8 +767,8 @@ function int32s(items: unknown[]): Int32Array | null {
 }
 // What the function captured, as i32s (a Bool 0 or 1), where each is
 // what the kernel takes.
-function capsOf(f: Fn, m: GpuMap, first?: number): Int32Array | null {
-  const caps = [...(first === undefined ? [] : [first]), ...((f as Closure).caps ?? [])];
+function capsOf(f: Fn, m: GpuMap, first: number[]): Int32Array | null {
+  const caps = [...first, ...((f as Closure).caps ?? [])];
   if (caps.length !== m.caps.length) return null;
   const a = new Int32Array(Math.max(1, caps.length));
   for (let j = 0; j < caps.length; j++) {
@@ -773,6 +777,13 @@ function capsOf(f: Fn, m: GpuMap, first?: number): Int32Array | null {
     else { if (typeof x !== "number" || (x | 0) !== x) return null; a[j] = x; }
   }
   return a;
+}
+// A record of the type of r, of these fields: as compiled JavaScript
+// makes it (core-js.ts, a class of fields f0, f1, …), or as the runtime's
+// data, fields and all.
+function recordLike(r: unknown, fields: number[]): unknown {
+  if (Object.prototype.hasOwnProperty.call(r, "fields")) return Object.assign(Object.create(Object.getPrototypeOf(r)), r, { fields });
+  return new (r as { constructor: new (...a: number[]) => unknown }).constructor(...fields);
 }
 // Whether this site's map goes to the GPU now: one that took over 5 ms
 // and had 1,000 items on the CPU tries it once, and keeps it while it is
@@ -789,10 +800,11 @@ function gpuWorth(site: number, n: number): boolean {
 // The map or keep on the GPU: each item's answer and steps, an item the
 // GPU gave back worked out here, in order; the steps spent from the
 // handler's, the run out of them where in order their sum passes it.
-function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknown, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: () => unknown): unknown {
+// A record's fields (C42g, like: a record of the type) come k to an item.
+function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknown, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: () => unknown, like?: unknown): unknown {
   // Each item's budget at most 2²⁴, which an f32 counts down exactly; one
   // that takes more is given back.
-  const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now();
+  const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now(), k = m.hows?.length ?? 1;
   let out: Int32Array | undefined, spent: Float32Array | undefined;
   const answered = (async () => {
     const g = await gpuOf();
@@ -801,11 +813,11 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
     dev.pushErrorScope("validation");
     if (!g.pipes.has(site)) g.pipes.set(site, dev.createComputePipelineAsync({ layout: "auto", compute: { module: dev.createShaderModule({ code: m.wgsl }), entryPoint: "lab_main" } }));
     const pipe = await g.pipes.get(site)! as { getBindGroupLayout(i: number): unknown };
-    const bytes = Math.max(4, n * 4);
-    const ins = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
+    const bytes = Math.max(4, n * 4), outBytes = bytes * k;
+    const ins = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: outBytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
     const capped = dev.createBuffer({ size: caps.byteLength, usage: STORAGE | COPY_DST });
     dev.queue.writeBuffer(capped, 0, caps);
-    const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: bytes * 2, usage: MAP_READ | COPY_DST });
+    const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: outBytes + bytes, usage: MAP_READ | COPY_DST });
     const head = new ArrayBuffer(16);
     new Float32Array(head, 0, 1)[0] = budget; new Uint32Array(head, 4, 1)[0] = n;
     // Each item's steps −1 till the kernel writes them: one it never ran
@@ -814,7 +826,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
     const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: (m.caps.length ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
     const enc = dev.createCommandEncoder(), p = enc.beginComputePass(), groups = Math.ceil(n / 64);
     p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); p.end();
-    enc.copyBufferToBuffer(outs, 0, back, 0, bytes); enc.copyBufferToBuffer(steps, 0, back, bytes, bytes);
+    enc.copyBufferToBuffer(outs, 0, back, 0, outBytes); enc.copyBufferToBuffer(steps, 0, back, outBytes, bytes);
     dev.queue.submit([enc.finish()]);
     const wrong = await dev.popErrorScope();
     if (wrong) { for (const b of [ins, outs, steps, job, capped, back]) b.destroy(); return; }
@@ -822,7 +834,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
     const all = back.getMappedRange().slice(0);
     back.unmap();
     for (const b of [ins, outs, steps, job, capped, back]) b.destroy();
-    out = new Int32Array(all, 0, n); spent = new Float32Array(all, bytes, n);
+    out = new Int32Array(all, 0, n * k); spent = new Float32Array(all, outBytes, n);
   })().catch(() => undefined);
   const finish = (): unknown => {
     // No GPU after all: in turn, and never again here.
@@ -842,7 +854,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
         }
       } else {
         if (left !== null) { used += spent[i]; if (used > left) { setStepsLeft(-1); throw new OutOfSteps(); } }
-        v = m.how === "keep" ? out[i] === 1 : out[i];
+        v = m.how === "keep" ? out[i] === 1 : like !== undefined ? recordLike(like, Array.from(out.subarray(i * k, i * k + k))) : out[i];
       }
       if (m.how === "keep") { if (v) kept.push(items[i]); } else kept.push(v);
     }
@@ -904,7 +916,7 @@ export function searchAway(search: unknown, fuel: unknown, site: number, how: Ho
 // order, or `over` where, in order, they ran out of the steps they had.
 // With `decided`, the job ends at the first run, in order, that decides
 // it: the runs after it, as in turn, spend nothing and can't abort.
-function awayRuns(helpers: Worker[], n: number, kind: Pick<WebJob, "f" | "how" | "ways">, data: (i: number) => unknown, unit: (i: number) => unknown, done: (values: unknown[]) => unknown, over: () => unknown, decided?: (v: unknown) => boolean): unknown {
+function awayRuns(helpers: Worker[], n: number, kind: Pick<WebJob, "f" | "join" | "how" | "ways">, data: (i: number) => unknown, unit: (i: number) => unknown, done: (values: unknown[]) => unknown, over: () => unknown, decided?: (v: unknown) => boolean): unknown {
   const id = ++job;
   // Run i to the helper i mod (workers + 1), the last of them this thread:
   // the costly runs of a picture (its middle rows) spread over all.

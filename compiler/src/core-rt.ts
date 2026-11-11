@@ -652,7 +652,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
   switch (op) {
     case "startTimer": return (ms) => timers.start(clock(), ms as number);
     // A map on a page's workers (C61 c′, branches-rt.ts), given the rest.
-    case "mapAway": return (xs, f, fuel, site, how, z, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, (v) => RUNTIME.ap(k as never, v));
+    case "mapAway": return (xs, f, fuel, site, how, z, join, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, typeof join === "number" ? undefined : join as (x: unknown) => unknown, (v) => RUNTIME.ap(k as never, v));
     // A count or an all of a search there likewise (C61 c′4).
     case "searchAway": return (search, array, fuel, site, how, k) => searchAway(search, fuel, site as number, how as "count", (v) => RUNTIME.ap(k as never, how === "count" ? v : how === "first" ? ((v as Value[]).length ? (v as Value[])[0] : FAIL) : array ? arrayOf(v as Value[]) : toList(v as Value[])));
     case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };

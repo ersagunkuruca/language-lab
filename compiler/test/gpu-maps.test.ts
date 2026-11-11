@@ -30,7 +30,7 @@ const chromiumPath = (): string | undefined => {
 // `test`: the keep's test, which may capture the handler's b.
 const TEST = "(i) => 100 < ‹steps to one›(i, 0)";
 function collatzPage(first: number, then: number, keepTest = TEST, said?: string): string {
-  const program = join(dir, `collatz-${first}-${then}-${said ? "fold" : keepTest === TEST ? "plain" : "captures"}`);
+  const program = join(dir, `collatz-${first}-${then}-${said ? (said === SUM ? "fold" : "walks") : keepTest === TEST ? "plain" : "captures"}`);
   cpSync(join(import.meta.dirname, "../../ters/examples/collatz"), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
@@ -53,6 +53,16 @@ test("a fold adding each item's Int in a page's handler gets a WebGPU kernel of 
   const html = readFileSync(collatzPage(9000, 9000, TEST, SUM), "utf8");
   assert.match(html, /pageGpu\(\{0:\{how:"add",result:"int",caps:\["int"\]/);
   assert.match(html, /\(lab_xs\[i\], lab_caps\[0\]\)/);
+});
+
+// C42g: a fold to a record of Ints (collatz's `walks of`: each field
+// added or kept larger), its kernel given each field's identity.
+const WALKS = 'write(said, show(b) ++ ": " ++ ((w) => show(w.total) ++ " " ++ show(w.most))(‹walks of›(range(b))))';
+test("a fold to a record of Ints in a page's handler gets a WebGPU kernel writing each field, given each field's identity (C42g)", () => {
+  const html = readFileSync(collatzPage(9000, 9000, TEST, WALKS), "utf8");
+  assert.match(html, /pageGpu\(\{0:\{how:"with",result:"int",caps:\["int","int"\],hows:\["add","max"\]/);
+  assert.match(html, /\(lab_xs\[i\], \w+\(lab_caps\[0\], lab_caps\[1\]\)\)/);
+  assert.match(html, /lab_out\[i \* 2u \+ 1u\] = r\.\w+;/);
 });
 
 test("collatz's keep in a page's handler gets a WebGPU kernel of its test (C61 d′)", () => {
@@ -119,5 +129,10 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
     assert.equal(sum!.said[0], sum!.said[1]);
     assert.match(sum!.said[0], /^9000: \d+$/);
     assert.ok(sum!.submits > 0, "the second press went to the GPU");
+    // C42g: the walks' total and most on the GPU, the CPU's.
+    const walks = await run(collatzPage(9000, 9000, TEST, WALKS), 2);
+    assert.equal(walks!.said[0], walks!.said[1]);
+    assert.match(walks!.said[0], /^9000: \d+ 261$/);
+    assert.ok(walks!.submits > 0, "the second press went to the GPU");
   } finally { await browser.close(); }
 });
