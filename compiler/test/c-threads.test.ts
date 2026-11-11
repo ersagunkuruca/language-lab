@@ -19,6 +19,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { ABORT_OP, CONS, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
+import { B } from "../../ters/src/prelude.ts";
 import { INT } from "../../ters/src/lang/types.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -85,6 +86,18 @@ test("a map's items run on threads, sharing a big Int and a list, and give the e
   assert.equal(one.out, p.evaluator);
   assert.ok(many.threads > 0, "no item ran on another thread");
   assert.equal(one.threads, 0);
+});
+
+// A map of Float64s: its items hold no counts, so none is marked shared
+// (it was `undefined_share`, which didn't link: a search's map of
+// queens' columns).
+test("a map of an array of Float64s runs on threads, the evaluator's array", { skip }, () => {
+  const p = built(/lab_par_map_\d\(/, true, (k) => k.let("xs", k.call(lib("map"), k.call(INT_OPS.range, k.int(12)), k.fn(["i"], (i) => k.call(INT_OPS.toNumber, i))), (xs) =>
+    k.let("ys", k.call(lib("map"), xs, k.fn(["x"], (x) => k.call(B.add, x, k.call(INT_OPS.toNumber, work(k, k.int(3), k.int(1)))))), (ys) =>
+      k.seq(k.call(S.print, k.call(SHOW_ANY, k.call(L("item at"), ys, k.int(1), k.lit(-1)))), k.call(S.print, k.call(SHOW_ANY, ys))))));
+  assert.match(p.evaluator, /^\d+\n\[/);
+  assert.equal(p.run("3").out, p.evaluator);
+  assert.equal(p.run("0").out, p.evaluator);
 });
 
 // Items 0 to 3 abort, on other threads, after the last ones have
@@ -270,6 +283,20 @@ test("collatz's fold of a record of Ints runs on threads natively and prints the
   const many = runs(["300000", "300"], "3");
   assert.match(many.stderr.toString(), /items on threads: [1-9]/);
   assert.equal(many.stdout.toString(), runs(["300000", "300"], "0").stdout.toString());
+});
+
+// fingerprint natively (C42e): its numbers' walks a map of an array,
+// shared on the threads, and the hash put together in turn.
+test("fingerprint's walks run on threads natively and it prints the evaluator's (C42e)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-fingerprint-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/fingerprint");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "fingerprint")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "12", "--evaluator"]).stdout.toString();
+  const runs = (args: string[], workers: string) => spawnSync(join(dir, "fingerprint"), args, { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
+  for (const workers of ["3", "0"]) assert.equal(runs(["12"], workers).stdout.toString(), evaluator, `${workers} workers`);
+  const many = runs(["400"], "3");
+  assert.match(many.stderr.toString(), /items on threads: [1-9]/);
+  assert.equal(many.stdout.toString(), runs(["400"], "0").stdout.toString());
 });
 
 // divisors natively (C207b, C207c): `array of` a range is the array filled

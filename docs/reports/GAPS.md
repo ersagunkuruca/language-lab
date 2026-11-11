@@ -2937,7 +2937,7 @@ ticks, 4 cores:
   200 ms of herd's 200 ticks. *Fixed in C61f*: it shares once the items
   done say all of them would take a millisecond.
 - **H4. Compiled JavaScript runs herd's map on no worker** (2.0 s): its
-  function reads a Map. Row C61.
+  function reads a Map. Row C208.
 - **H5. One core, JavaScript and WebAssembly are 1.5x native** (2.0 and
-  2.07 s against 1.36): the sines are most of it; not looked at yet.
+  2.07 s against 1.36): the sines are most of it; not looked at yet (C208).
 

@@ -7,6 +7,7 @@ import { infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
+import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 
 export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[] }
 
@@ -32,7 +33,12 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   // it is read, not rewritten or run, so the represented program leaves it out.
   const reps = new Set(p.reps.map((r) => r.def));
   const defs = p.own.filter((d) => { const b = (p.code.nodes[d] as { body?: Id | null }).body; return (!b || p.code.nodes[b]?.kind !== "typedef") && !reps.has(d); });
-  const lib = withLibraryRepresentations(p.code, p.info, p.names, main, p.own, p.reps, { hostMaps, tables, sound });
+  // A fold's costly work on each item made a map first (fold-items.ts,
+  // C42e), so the map's list is chosen for as any other: an array, whose
+  // map C shares out on its threads.
+  const shared = process.env.NO_FOLD_ITEMS ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
+  const pinfo = shared.shared ? infer(shared.code, p.names, undefined, p.options as Parameters<typeof infer>[3]) : p.info;
+  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
   for (const of of new Set(p.reps.map((r) => r.of))) {
@@ -43,7 +49,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
     code = represent(code, defs, rep);
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
-  if (!chosen.length) return held ? p : p0;
+  if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held ? p : p0;
   code = { ...code, defs: code.defs.filter((d) => !reps.has(d)) };
   // The library's representations may call the constructors they stand for.
   const options = p.options as Parameters<typeof infer>[3];

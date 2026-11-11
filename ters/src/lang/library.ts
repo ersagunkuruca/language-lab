@@ -9,7 +9,7 @@ import steady0 from "../../library/steady.json" with { type: "json" };
 import cases0 from "../../library/cases.json" with { type: "json" };
 import numbers0 from "../../library/numbers.json" with { type: "json" };
 import { merge, shapeHooks, type Code, type Id } from "../model.ts";
-import { fillOnce, usesGiveTheirPorts } from "./ports.ts";
+import { fillLater, usesGiveTheirPorts } from "./ports.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
 import { adopt, library, type Module } from "./modules.ts";
@@ -60,7 +60,8 @@ shapeHooks.usesGiveTheirPorts = (nodes) => usesGiveTheirPorts(nodes, LIBRARY.cod
 export const UNHOSTED = declarePureHosts(LIBRARY_HOSTS, LIBRARY.code.defs, LIBRARY.names);
 // Checked once, under every program that leaves it as it is (L216); and
 // so is the copy the compilers read, its uses with no body filled (C161).
-checkOnce(LIBRARY.code, LIBRARY.names, [fillOnce(LIBRARY.code)]);
+const filledLib = fillLater(LIBRARY.code);
+checkOnce(LIBRARY.code, LIBRARY.names, () => [filledLib()]);
 
 // A program's own part: what isn't in the library.
 export const ownPart = (code: Code): Code => ({

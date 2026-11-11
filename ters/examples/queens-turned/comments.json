@@ -1,0 +1,7 @@
+{
+  "a0ba7fdb": "One row at a time: pick any column (one of), keep it only if it's safe (else fail). The handler decides whether that means the first board, all of them, or how many.",
+  "278fcb01": "The fold returns a function of the distance to the row being placed, so each earlier queen is checked at its own distance.",
+  "45cfd833": "The first board of n queens on an n by n board, none attacking another, that a half turn leaves the same (n the first argument, 11 when there is none): the first answer of turned board's search, a column a row from the last row placed, or an empty list when there is none.",
+  "program": "The boards of n queens counted, queens' search shared out by its first row's columns (C43).\nTextbook: the n queens puzzle (Max Bezzel, 1848; Franz Nauck, 1850, for any n).",
+  "ipsees0133vjic471q5621qk7q": "A board of size queens that turning it half way round leaves the same: the queen of each row, turned, is the queen of the row as far from the other end. The search goes through queens' boards in order and fails each that isn't."
+}

@@ -681,7 +681,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const drop = (t: LType, x: string) => (cell(t) ? `lab_drop(${x});` : t === "int" ? `lab_int_drop(${x});` : `${sname.get((t as RType).key)}_drop(${x});`);
   const dec = (t: LType, x: string) => (cell(t) ? `lab_dec(${x});` : t === "int" ? `lab_int_dec(${x});` : `${sname.get((t as RType).key)}_dec(${x});`);
   // The same, marking what it reaches shared (L101, SHARE_C).
-  const share = (t: LType, x: string) => (cell(t) ? `lab_share(${x});` : t === "int" ? `lab_int_share(${x});` : `${sname.get((t as RType).key)}_share(${x});`);
+  // A number or a flag holds no counts: nothing to mark (a map of an
+  // array of Float64s, queens' columns).
+  const share = (t: LType, x: string) => (!counted(t) ? "" : cell(t) ? `lab_share(${x});` : t === "int" ? `lab_int_share(${x});` : `${sname.get((t as RType).key)}_share(${x});`);
   // The type of a runtime function's answer.
   const rtType = (fn: string): LType => {
     const col = COL_FN.exec(fn);
