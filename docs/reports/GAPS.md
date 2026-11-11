@@ -3092,5 +3092,5 @@ gain about matched (2.6x against its 1.8x). JS's workers are still left.
 *Where it stands (2026-11-11):* P1, P2, P5, P3 (in part) and P4 fixed
 (#2410 to #2423): native one thread 18.2 to 1.12 s (ideal 0.175), 4
 threads 0.63 s (ideal 0.099); JS 20.9 to 5.4 s (ideal 0.47).
-Left as a row: I212 (M1, a match from text). C215 (JS food map as an
-array) since done: JS 4.3 s.
+I212 (M1, a match from text) and C215 (JS food map as an array) since
+done: JS 4.3 s.
