@@ -285,6 +285,20 @@ test("collatz's fold of a record of Ints runs on threads natively and prints the
   assert.equal(many.stdout.toString(), runs(["300000", "300"], "0").stdout.toString());
 });
 
+// fingerprint natively (C42e): its numbers' walks a map of an array,
+// shared on the threads, and the hash put together in turn.
+test("fingerprint's walks run on threads natively and it prints the evaluator's (C42e)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-fingerprint-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/fingerprint");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "fingerprint")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "12", "--evaluator"]).stdout.toString();
+  const runs = (args: string[], workers: string) => spawnSync(join(dir, "fingerprint"), args, { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
+  for (const workers of ["3", "0"]) assert.equal(runs(["12"], workers).stdout.toString(), evaluator, `${workers} workers`);
+  const many = runs(["400"], "3");
+  assert.match(many.stderr.toString(), /items on threads: [1-9]/);
+  assert.equal(many.stdout.toString(), runs(["400"], "0").stdout.toString());
+});
+
 // divisors natively (C207b, C207c): `array of` a range is the array filled
 // at once, no list made; the sum of a map is one fold, no mapped array
 // made (fuse-steps.ts); and the answer is the evaluator's.

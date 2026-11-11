@@ -19,5 +19,7 @@ the same as working them out in turn.
 Measured 2026-11-11 on 4 cores, below 3000: 6.1 to 8.0 s in turn, 2.1 s
 with the walks on three workers and the main thread. TERS_WORKERS=0 keeps
 every run on the main thread; TERS_BRANCHES=say says how many runs went to
-workers. Built native, the walks stay on one thread for now: C's threads
-share an array's map, and this map is of a list.
+workers. Built native
+(`ters native examples/fingerprint -o fingerprint`), the numbers are an
+array and the walks go to C's threads: 1.55 s on one thread, 0.44 s on
+four, the same fingerprint.

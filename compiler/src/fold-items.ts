@@ -81,7 +81,9 @@ export function shareFoldItems(code: Code, info: Info): { code: Code; shared: nu
 // Whether b reads the rest's result r (or its fields) only to add an Int
 // to it or to keep the larger or smaller: a join of C42b-d's, which shares
 // the putting together too (scalar.ts `itemFold`), so it stays theirs.
-const ADD = "builtin.int.add", LESS = "builtin.int.less";
+// Before arithmetic is resolved (ters/cli/represented.ts), + and < are
+// still the one + and <.
+const ADDS = new Set(["builtin.int.add", "builtin.arith.add"]), LESSES = new Set(["builtin.int.less", "builtin.arith.less"]);
 function joins(code: Code, b: Id, r: Id): boolean {
   const up = new Map<Id, Id>();
   for (const id of subtree(code, b)) for (const k of children(code.nodes[id])) up.set(k, id);
@@ -94,7 +96,8 @@ function joins(code: Code, b: Id, r: Id): boolean {
     if (pn && isCall(pn) && pn.args?.length === 1 && code.nodes[pn.fn]?.kind === "ref" && code.nodes[(code.nodes[pn.fn] as NodeOf<"ref">).target]?.kind === "field") { at = p!; p = up.get(at); }
     const q = p && code.nodes[p];
     if (!q) return false;
-    if (isCall(q)) return isRef(q.fn, ADD) || isRef(q.fn, LESS);
+    const fn = isCall(q) ? code.nodes[q.fn] : undefined;
+    if (isCall(q)) return fn?.kind === "ref" && (ADDS.has(fn.target) || LESSES.has(fn.target));
     // Or what a case of an if (a match) gives.
     return q.kind === "arm" && q.body === at && code.nodes[up.get(p!) ?? ""]?.kind === "match";
   });
