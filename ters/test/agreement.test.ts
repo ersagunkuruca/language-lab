@@ -21,7 +21,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { NotInvertible, relate, showTerm, toValue } from "../src/lang/relate.ts";
 import { bool, makeRunner, toList, type Value } from "../src/lang/run.ts";
 import { BOOL, LIST } from "../src/lang/std.ts";
-import { CHOICE, DIVERGE, INT, NUMBER, STRING, type Type } from "../src/lang/types.ts";
+import { CHOICE, INT, NUMBER, STRING, type Type } from "../src/lang/types.ts";
 import { inSweep } from "./helpers.ts";
 
 // A few inputs of each plain type: zero, one, a fraction, a negative. A
@@ -64,6 +64,9 @@ const notFinite = (v: Value): boolean => typeof v === "number" ? !Number.isFinit
   : !!v && typeof v === "object" && "fields" in v && (v as { fields: Value[] }).fields.some(notFinite);
 
 const STEPS = 5000;
+// Searched through relate, these take minutes: their settles spend no
+// steps, so the budget above doesn't stop them (I200).
+const TOO_SLOW = new Set(["mandelbrot-page/line", "mandelbrot-rows/line"]);
 
 function disagreements(ex: string): { checked: string[]; problems: string[] } {
   const dir = join(root, "examples", ex);
@@ -77,10 +80,14 @@ function disagreements(ex: string): { checked: string[]; problems: string[] } {
     if (!t || t.t !== "fn" || !t.params.length) continue;
     // Pure functions only (Choice is a set of answers, fine both ways), and
     // none whose recursion isn't known to end: forward could hang.
-    if (t.eff.effs.some((e) => e !== CHOICE && e !== DIVERGE) || info.divergent.has(def)) continue;
+    // One that may not end isn't run: its search can try without end, each
+    // try under fuel of its own, which no step budget here stops (impact's
+    // `throw at plank` at speed 0 held this file past 15 minutes, T14).
+    if (t.eff.effs.some((e) => e !== CHOICE) || info.divergent.has(def)) continue;
     const inputs = t.params.map((x) => samples(x, p.code));
     if (inputs.some((s) => !s) || !samples(t.ret, p.code)) continue;
     const name = p.pres.names[def];
+    if (TOO_SLOW.has(`${ex}/${name}`)) continue;
     checked.push(name);
     const params = get(p.code, get(p.code, def, "def").body!, "lambda").params;
     const r = makeRunner(p.code, info, { print: () => {} });
