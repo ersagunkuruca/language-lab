@@ -140,6 +140,16 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (!m || x.k !== "rt") return x;
     return { ...x, fn: `array.${m[1] === "of" ? `of${x.args.length}` : m[1] === "length" ? "size32" : "at32"}.${m[2]}` };
   };
+  // An array function given untagged Ints (untagged-ints.ts's copies,
+  // `i64.box` of an i64): its `.i64` body, which takes them as they are,
+  // not the wrapper taking them back (C211d: queens-count's `at`).
+  const viaI64 = (e: SExpr): SExpr => {
+    const x = mapKids(e, viaI64);
+    if (x.k !== "rt" || !/^array\.\w+\.a\d+$/.test(x.fn)) return x;
+    const f = runtime(x.fn), boxed = (a: SExpr) => a.k === "rt" && a.fn === "i64.box";
+    if (f.result === "int" || !f.uses.includes(`${x.fn}.i64`) || f.params.length !== x.args.length || !f.params.every(([, t], j) => t !== "int" || boxed(x.args[j]))) return x;
+    return { ...x, fn: `${x.fn}.i64`, args: x.args.map((a, j) => (f.params[j][1] === "int" && a.k === "rt" ? a.args[0] : a)) };
+  };
   // A program's own operation nothing handles (scalar.ts `perform:`): a
   // world operation the host answers, which may fail with the reason.
   const performs = (e: SExpr): SExpr => {
@@ -151,7 +161,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (bad) throw new Error(`${h.name} takes or gives ${bad.k === "list" ? "a list" : bad.k === "record" ? "a record" : "a value"}, which doesn't cross to the host in WebAssembly yet`);
     return { k: "world", op: `host:${eff}:${i}`, aborts: true, args: x.args, t: x.host!.t, ins: h.ins.map((y) => HOST_TYPES[y.k]!) };
   };
-  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f)).map((f) => (lowered.tables.length ? { ...f, body: keysArrays(lowered, f.body) } : f));
+  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f)).map((f) => (lowered.tables.length ? { ...f, body: keysArrays(lowered, f.body) } : f)).map((f) => ({ ...f, body: viaI64(f.body) }));
   // A text constant longer than array.new_fixed takes (10,000 bytes; the
   // cases module's collation tables, L214e5b4) is made of pieces joined.
   const longIn = (e: SExpr): boolean => (e.k === "text" && e.v.length > TEXT_PIECE / 4) || kids(e).some(longIn);
