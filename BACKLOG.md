@@ -160,6 +160,12 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 
+### Someday
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C210 | A quantum target for the reversible part: a function that is `det` both ways over fixed-width Ints printed as Toffoli/CNOT gates in OpenQASM 3, with Bennett's uncompute added by the compiler. Superposition and measurement would be a language layer (Choice with amplitudes), not part of this row. Waits until the current goals are done and Ersagun asks. Example: a 4-bit adder's circuit agrees with the evaluator on all 256 inputs in a small permutation simulator | [REVERSIBLE-AND-QUANTUM-2026-11-11](docs/design/targets/REVERSIBLE-AND-QUANTUM-2026-11-11.md) §6 | P3 | L | |
+
 ## L: Language and library
 
 Numbers first (Ersagun, 2026-10-24 07:01), then the rest of
