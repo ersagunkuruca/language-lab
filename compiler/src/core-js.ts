@@ -883,9 +883,12 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 }
 
 // The module's functions given to branches-rt.ts by name, before its
-// definitions are handed out (its last line, `return {`).
+// definitions are handed out (its last line, `return {`). Not a
+// relation's mode (modes.ts, `…$mode0`): it is printed inside the body
+// `R.moded` is given, so it isn't in scope here (I206: backwards' compiled
+// module threw on load, f5057927$mode0 is not defined).
 function withFunctionsNamed(js: string, call = "R.branchesFrom(import.meta.url, "): string {
-  const fns = [...new Set([...js.matchAll(/^\s*function\*?\s+(f[\w$]*)\s*\(/gm)].map((m) => m[1]))];
+  const fns = [...new Set([...js.matchAll(/^\s*function\*?\s+(f[\w$]*)\s*\(/gm)].map((m) => m[1]))].filter((f) => !/\$mode\d+(\$into)?$/.test(f));
   const at = js.lastIndexOf("\nreturn {");
   return `${js.slice(0, at)}\n${call}{ ${fns.join(", ")} }, R.closure, R.Aborted);${js.slice(at)}`;
 }
