@@ -23,6 +23,8 @@ import { withFloat32 } from "../../ters/src/lang/float32.ts";
 import { represent } from "../../ters/src/lang/represent.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { S } from "../../ters/src/lang/std.ts";
+import { stageProgram } from "../../ters/src/lang/stage.ts";
+import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -192,4 +194,18 @@ test("relate takes a known gradient forward: the ball's normal through the PGA m
   const [want] = [...(r.call(r.value(p.ball.ballNormal), pt) as Iterable<Value>)];
   assert.ok(a, `no answer in ${steps} steps`);
   assert.deepEqual(toValue(a.values.out), want);
+});
+
+// Staged, the program carries its types with no check again (I203): the
+// verifier vouches for the arithmetic made, the calls put back and the
+// copies kept.
+test("a staged program's carried types verify (I203)", () => {
+  const p = pga();
+  const open = Object.values(p.defs);
+  const s = stageProgram(p.code, p.info, p.names, open);
+  assert.notEqual(s.code, p.code);
+  const own = s.code.defs.filter((d) => !(d in p.code.nodes) || open.includes(d));
+  const v = verify(s.code, elaborate(s.code, s.info, own), own);
+  assert.deepEqual(v.problems, []);
+  assert.ok(v.checked > 200, `${v.checked} nodes`);
 });

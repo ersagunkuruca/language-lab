@@ -545,7 +545,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[] }[] }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -808,7 +808,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   let mapSites = 0;
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
-  const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[] }[] = [];
+  const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
   for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1480,7 +1480,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             // the GPU's kernel takes them after the item.
             if (fnAway?.k === "closure" && (fnAway.src && "binders" in fnAway.src || !fnAway.caps.length)) awayMaps.push({ site: (site as { v: number }).v, fn: n.args[1], how: kind, caps: fnAway.src && "binders" in fnAway.src ? fnAway.src.binders : [] });
             const shared: SExpr = away
-              ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }], t, suspends: true }
+              ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }, { k: "num", v: 0 }], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.
@@ -2890,7 +2890,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // Otherwise as below.
         // Or a record of Ints (C42d).
       const each = (result === "int" || isRecord(result)) && !underBudget && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f, result) : null;
-      if (each && !(each.join && waitsIn(f))) {
+      if (each) {
         const arr = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn);
         // In C (C202d), an array's, on the threads, which time it themselves.
         if (opts.threads) { if (arr) return { k: "rt", fn: `par:fold:${each.how}`, args: [s.args[0], each.fn, each.nil, ...(each.join ? [each.join] : [])], host: { t: res, partial: true } }; }
@@ -2899,10 +2899,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const l = f.locals.push(lt) - 1, xs: SExpr = { k: "local", i: l }, site: SExpr = { k: "num", v: mapSites++ };
         // In a function that may wait, on a page's workers too (C61 c′),
         // and an Int added or kept on the GPU (C42f, gpu-maps.ts): the
-        // item's arm, given the rest's Int as the join's identity.
-        if (waitsIn(f) && each.how !== "with") awayMaps.push({ site: (site as { v: number }).v, fn: each.arm.id, how: each.how, caps: each.free, params: [each.arm.binds[0], each.arm.results[1]!] });
+        // item's arm, given the rest's Int as the join's identity; a
+        // record of Ints's (C42g) given each field's.
+        if (waitsIn(f)) awayMaps.push({ site: (site as { v: number }).v, fn: each.arm.id, how: each.how, caps: each.free, params: [each.arm.binds[0], each.arm.results[1]!], ...(each.hows ? { hows: each.hows } : {}) });
         const shared: SExpr = waitsIn(f)
-          ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil], t: "int", suspends: true }
+          ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil, each.join ?? { k: "num", v: 0 }], t: res, suspends: true }
           : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : [])] };
         return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: res } };
         }
@@ -3043,7 +3044,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Or a record of Ints, each field the rest's field added to or compared
   // with an Int of the item's (C42d): the item's record, and a function
   // putting two together field by field, which the runtime uses (`with`).
-  function itemFold(st: DType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, result: LType): { fn: SExpr; nil: SExpr; how: string; join?: SExpr; arm: NodeOf<"arm">; free: Id[] } | null {
+  function itemFold(st: DType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, result: LType): { fn: SExpr; nil: SExpr; how: string; join?: SExpr; hows?: ("add" | "max" | "min")[]; arm: NodeOf<"arm">; free: Id[] } | null {
     const ci = st.cases.findIndex((c) => c.variant === CONS), ni = st.cases.findIndex((c) => c.variant === NIL);
     const cons = arms.find((a) => a.variant === CONS), nil = arms.find((a) => a.variant === NIL);
     if (st.cases.length !== 2 || ci < 0 || ni < 0 || !cons || !nil || cons.binds.length !== 2 || !cons.results[1] || cons.results[0]) return null;
@@ -3125,7 +3126,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     j.body = { k: "make", t: rec, args: hows.map((h, i): SExpr => h === "add" ? { k: "rt", fn: "int.add", args: [x(i), y(i)] } : { k: "if", cond: { k: "rt", fn: "int.less", args: [x(i), y(i)] }, then: h === "max" ? y(i) : x(i), else: h === "max" ? x(i) : y(i), t: "int" }) };
     const ji = funcs.push(j) - 1;
     closureCode.add(ji);
-    return { ...out, join: { k: "closure", t: jt, fn: ji, shape: jshape, caps: [] } };
+    return { ...out, hows, join: { k: "closure", t: jt, fn: ji, shape: jshape, caps: [] } };
   }
 
   // A fold to an Int whose arms that fold a child each add something to

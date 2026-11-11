@@ -135,6 +135,11 @@ test("a fold in a function a page's handler calls goes to the workers too: the f
   assert.equal(alone.first, "1000: 59431, most 178");
   assert.deepEqual(shared, { ...alone, sent: shared.sent });
   assert.ok(shared.sent > 0, "the numbers went to the workers");
+  // A fold to a record of Ints (C42g, `walks of`), put together by its join.
+  const [one, many] = await twice(collatzPage("collatz-walks", 'write(said, show(b) ++ ": " ++ ((w) => show(w.total) ++ ", most " ++ show(w.most))(‹walks of›(range(b))))', 1000));
+  assert.equal(one.first, "1000: 59431, most 178");
+  assert.deepEqual(many, { ...one, sent: many.sent });
+  assert.ok(many.sent > 0, "the numbers went to the workers");
 });
 
 test("a count, an all and a first of a search in a page's handler go to the workers, by its first two choices", async () => {
