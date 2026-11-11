@@ -23,11 +23,14 @@ import { emitWgsl } from "./wgsl.ts";
 // or a Bool, which the kernel is given after the item.
 // A fold's (C42f) is its item's arm, given the rest's Int first among the
 // captures: the join's identity, so the arm gives the item's own Int.
-export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
+// A record of Ints's fold (C42g, how "with") is given each field's
+// identity (hows: each field's join), and writes its fields one after
+// another for each item.
+export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min" | "with"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[]; hows?: ("add" | "max" | "min")[] }
 
 // The kernel's own part: the items in, the answers and the steps out, and
 // the budget and the count of items.
-const kernel = (entry: string, bool: boolean, fuel: boolean, none: boolean, caps: ("int" | "bool")[]) => `${fuel ? "" : "var<private> lab_fuel: f32;\n"}${none ? "" : "var<private> lab_none: bool;\n"}
+const kernel = (entry: string, bool: boolean, fuel: boolean, none: boolean, caps: ("int" | "bool")[], rec?: { name: string; fields: string[] }) => `${fuel ? "" : "var<private> lab_fuel: f32;\n"}${none ? "" : "var<private> lab_none: bool;\n"}
 struct LabJob { budget: f32, n: u32 }
 @group(0) @binding(0) var<storage, read> lab_xs: array<i32>;
 @group(0) @binding(1) var<storage, read_write> lab_out: array<i32>;
@@ -38,9 +41,9 @@ struct LabJob { budget: f32, n: u32 }
   if (i >= lab_job.n) { return; }
   lab_fuel = lab_job.budget;
   lab_none = false;
-  let r = ${entry}(${["lab_xs[i]", ...caps.map((c, j) => (c === "bool" ? `lab_caps[${j}] != 0i` : `lab_caps[${j}]`))].join(", ")});
+  let r = ${entry}(${["lab_xs[i]", ...(rec ? [`${rec.name}(${rec.fields.map((_, j) => `lab_caps[${j}]`).join(", ")})`] : []), ...caps.slice(rec ? rec.fields.length : 0).map((c, j) => { const at = j + (rec ? rec.fields.length : 0); return c === "bool" ? `lab_caps[${at}] != 0i` : `lab_caps[${at}]`; })].join(", ")});
   if (lab_fuel < 0.0 || lab_none) { lab_spent[i] = -1.0; return; }
-  lab_out[i] = ${bool ? "select(0i, 1i, r)" : "r"};
+${rec ? rec.fields.map((x, j) => `  lab_out[i * ${rec.fields.length}u + ${j}u] = r.${x};`).join("\n") : `  lab_out[i] = ${bool ? "select(0i, 1i, r)" : "r"};`}
   lab_spent[i] = lab_job.budget - lab_fuel;
 }
 `;
@@ -75,13 +78,18 @@ export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
       const fi = l.funcs.findIndex((g) => g.def === id && !g.inner);
       const f = l.funcs[fi];
       const before = arm ? 2 : 1;
-      if (!f || f.params.length !== before + m.caps.length || f.params.some((p) => p !== "int32" && p !== "i32") || f.params[0] !== "int32" || (arm && f.params[1] !== "int32") || (f.result !== "int32" && f.result !== "i32") || (arm && f.result !== "int32")) continue;
-      const caps = f.params.slice(1).map((p) => (p === "i32" ? "bool" : "int") as "int" | "bool");
+      // A record of Ints's fold (C42g): the rest and the answer that
+      // record, its fields all i32.
+      const rec = m.how === "with" && f && typeof f.result === "object" && "fields" in f.result && f.result.fields.length === m.hows?.length && f.result.fields.every((x) => x.t === "int32") && typeof f.params[1] === "object" && "key" in f.params[1] && f.params[1].key === f.result.key ? f.result : null;
+      if (m.how === "with" && !rec) continue;
+      const flat = f && (rec ? [f.params[0], ...rec.fields.map((x) => x.t), ...f.params.slice(2)] : f.params);
+      if (!f || !flat || f.params.length !== before + m.caps.length || flat.some((p) => p !== "int32" && p !== "i32") || flat[0] !== "int32" || (arm && !rec && f.params[1] !== "int32") || (!rec && f.result !== "int32" && f.result !== "i32") || (arm && !rec && f.result !== "int32")) continue;
+      const caps = flat.slice(1).map((p) => (p === "i32" ? "bool" : "int") as "int" | "bool");
       if (m.how === "keep" && f.result !== "i32") continue;
       const sh = emitWgsl(l);
-      const entry = sh.entries.get(fi);
-      if (!entry) continue;
-      out[m.site] = { how: m.how as GpuMap["how"], result: f.result === "i32" ? "bool" : "int", caps, wgsl: sh.wgsl + kernel(entry, f.result === "i32", sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), caps) };
+      const entry = sh.entries.get(fi), struct = rec && sh.structs.get(rec.key);
+      if (!entry || (rec && !struct)) continue;
+      out[m.site] = { how: m.how as GpuMap["how"], result: f.result === "i32" ? "bool" : "int", caps, ...(rec ? { hows: m.hows as ("add" | "max" | "min")[] } : {}), wgsl: sh.wgsl + kernel(entry, f.result === "i32", sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), caps, struct || undefined) };
     } catch { /* not one the GPU takes */ }
   }
   return out;
