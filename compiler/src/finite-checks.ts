@@ -187,6 +187,8 @@ export function finiteChecks(ir: CoreIR, only?: number[]): number {
       if (carried(e)) return true;
       if (e.k === "op" && e.op === "abs") return finite(e.args[0], k);
       if (e.k === "op" && e.op === "floor") return nonneg(e.args[0], k);
+      // A sum of two, while it's finite (`safe`'s distance stepping by 1).
+      if (e.k === "op" && e.op === "add") return nonneg(e.args[0], k) && nonneg(e.args[1], k) && finite(e, k);
       if (checkOf(e) !== null) return e.k === "if" && nonneg(e.else, new Set([...k, checkOf(e)!]));
       if (e.k === "let") return nonneg(e.body, k);
       return false;
