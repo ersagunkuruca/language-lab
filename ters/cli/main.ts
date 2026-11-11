@@ -280,6 +280,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     intoAsSets(lowered);
     // A loop computing on Ints alone, with them as i64s (C207k).
     untaggedLoops(lowered, true);
+    // A choice over a range's items as one i64, no list (C207u).
+    if (!process.env.NO_RANGE_CHOICES) rangeChoices(lowered);
   }
   return { lowered, root };
 }
