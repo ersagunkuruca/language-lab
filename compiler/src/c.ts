@@ -101,11 +101,15 @@ const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // its slot.
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 // untagged-ints.ts's ops on a loop's counts (C207e).
-const I64_FN = /^i64\.(eq|less|add|sub|toNumber|box|unbox|small|lit)$/;
+const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit)$/;
 // A count stepped past the small Ints: some 2^62 steps, never in practice.
 const I64_C = `static void lab__i64_past(void) { fflush(stdout); fputs("a count went past 2^62\\n", stderr); exit(1); }
 static inline int64_t lab__i64_add(int64_t a, int64_t b) { int64_t r = a + b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
 static inline int64_t lab__i64_sub(int64_t a, int64_t b) { int64_t r = a - b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }`;
+// A loop's value stepped (C207i): whether it left the small range.
+const I64V_C = `static inline int lab__i64_addv(int64_t a, int64_t b, int64_t *r) { *r = a + b; return *r < lab__min || *r > lab__max; }
+static inline int lab__i64_subv(int64_t a, int64_t b, int64_t *r) { *r = a - b; return *r < lab__min || *r > lab__max; }
+static inline int lab__i64_mulv(int64_t a, int64_t b, int64_t *r) { return __builtin_mul_overflow(a, b, r) || *r < lab__min || *r > lab__max; }`;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
@@ -564,7 +568,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const funcs = lowered.funcs.map((f) => ({ ...f, locals: [...f.locals], body: settle(f.body) }));
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
-  let i64Used = false;
+  let i64Used = false; let i64vUsed = false;
   const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -988,6 +992,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? [`static ${TL}double lab_fuel = INFINITY; // outside any budget, as much as it takes`] : []),
     ...[...int32Used].map((op) => INT32_C[op]!),
     ...(i64Used ? [I64_C] : []),
+    ...(i64vUsed ? [I64V_C] : []),
     ...(text.some((t) => t.includes("lab_mod(")) ? ["static double lab_mod(double a, double b) { return fmod(fmod(a, b) + b, b); }"] : []),
     // A Float64 with no answer or too big (L125c2, stops.ts): the reason
     // to standard error and exit 1, as an Abort nothing handled does.
@@ -1727,7 +1732,15 @@ int main(int argc, char **argv) {
               return local(a.i);
             });
             if (i64[1] === "add" || i64[1] === "sub") i64Used = true;
-            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0] } as Record<string, string>)[i64[1]];
+            // A value leaving the small range: the round again as written
+            // (C207i, untagged-ints.ts valueLoop).
+            if (i64[1].endsWith("v")) {
+              i64vUsed = true;
+              const v = temp("i64");
+              pre.push(`${d}if (lab__i64_${i64[1]}(${xs[0]}, ${xs[1]}, &${v})) goto lab_bail;`);
+              return v;
+            }
+            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, and: `(${xs[0]} & ${xs[1]})`, shr: `(${xs[0]} >> ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0] } as Record<string, string>)[i64[1]];
             if (!gone.length) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(...gone.map((j) => `${d}${drop(f.locals[j], local(j))}`));
@@ -2163,6 +2176,8 @@ int main(int argc, char **argv) {
     const body = loops
       ? ["  for (;;) {", ...spend("    "), ...unread("    "), ...block(f.body, "return", "    ", new Set()), "  }"]
       : [...spend("  "), ...unread("  "), ...block(f.body, "return", "  ", new Set())];
+    // A round that left the small range, as written (C207i).
+    if (f.bail !== undefined && body.some((x) => x.includes("goto lab_bail;"))) body.push("lab_bail:", `  return ${names.get(f.bail)}(${f.params.map((t, j) => (t === "i64" ? `LAB_SMALL(p${j})` : `p${j}`)).join(", ")});`);
     // Only the locals the body uses (the lowering's own for budgets aren't).
     const words = new Set(body.join("\n").match(/\w+/g)), named = decls.filter((x) => words.has(/(\w+);$/.exec(x)![1]));
     const text = [`// ${f.name.replace(/\n/g, " ")}`, `${header(i, !!mine)} {`, ...named, ...body, "}"].join("\n");

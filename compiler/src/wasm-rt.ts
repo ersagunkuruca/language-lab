@@ -7445,7 +7445,7 @@ export const runtime = (name: string): RtFn => {
   }
   // A loop's counts untagged (C207e, untagged-ints.ts): only their shapes
   // here; c.ts prints them, and nothing else lowers them.
-  const i64 = /^i64\.(eq|less|add|sub|toNumber|box|unbox|small|lit)$/.exec(name);
+  const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit)$/.exec(name);
   if (i64) return { name, params: [], result: ({ eq: "i32", less: "i32", small: "i32", toNumber: "f64", box: "int" } as Record<string, VT>)[i64[1]] ?? "i64", locals: [], uses: [], body: "unreachable", native: true };
   // An array function's copy for one item type (C66): the template, told which.
   const at = /^(array\.\w+)\.a(\d+)(\.i64)?$/.exec(name);
