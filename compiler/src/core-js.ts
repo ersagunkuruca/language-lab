@@ -41,6 +41,7 @@ import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type U
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
+import { gpuMaps } from "./gpu-maps.ts";
 import { ARRAY_RT, endsAsBefore, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
@@ -1107,7 +1108,10 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const js0 = bare ? moduleTags(ir, !!hosts || worklet !== undefined).js : emitCoreJs(ir).js;
   // A map on the page's workers (C61 c′): the functions by name, and the
   // page's own script, which each worker runs (core-page.ts).
-  const js = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
+  const js1 = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
+  // Its maps the GPU may run, each as a kernel (C61 d′, gpu-maps.ts).
+  const kernels = worlds.includes("mapAway") ? gpuMaps(ir) : {};
+  const js = Object.keys(kernels).length ? `R.pageGpu(${JSON.stringify(kernels)});\n${js1}` : js1;
   const code = codeFor(ir, js);
   return wrapped(page, [
     using("startCorePage", page),

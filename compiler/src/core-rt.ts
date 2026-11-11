@@ -20,7 +20,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
+import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker, mapAway, searchAway, chooseSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
 
 export class Unsupported extends Error {}
@@ -412,7 +412,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };
 export const RUNTIME = {
-  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded, branchesFrom, branchWorker, pageBranches, pageWorker,
+  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker,
   fail: (): never => { throw FAIL; },
   // A step of a definition that may not finish: free, except under a
   // page's budget (run.ts withSteps), where running out is the part's

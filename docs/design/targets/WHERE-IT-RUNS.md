@@ -262,10 +262,32 @@ What this leaves, in order:
     is the first piece's, in order, that has one. The pieces after that
     one, as in turn, spend no steps and can't abort; the main thread
     runs none of its own after one of its pieces finds an answer.
-- **(d′) The GPU for an Int map,** with the trial of finding 4. The
-  example: collatz's `keep` (its walk is in Int, a lot of work an item; a
-  number whose walk passes 32 bits gives up there and is tested again on
-  the CPU).
+- **(d′) The GPU for an Int map: done 2026-11-11** (gpu-maps.ts,
+  branches-rt.ts `gpuMap`, compiler/test/gpu-maps.test.ts):
+  - **Which maps.** A map or keep in a page's handler, which already goes
+    to the page's workers (c′), whose function the shader lowering takes
+    from an Int to an Int or a Bool. Its body is lowered as if under a
+    budget the kernel sets (scalar.ts `stepped`), Ints as i32 (and, or, xor
+    and shifted down now among them). A function that closes over the
+    handler's values isn't one yet.
+  - **Steps.** The kernel counts steps as the page does: one for each
+    round of a loop or call the checker couldn't see end. Each item gets
+    what is left of the handler's budget, at most 2²⁴, which an f32 counts
+    down exactly. The item's steps come back with its answer and are spent
+    in order, so a handler runs out where it does on the CPU. collatz
+    below 300000: 35,969,673 steps on both.
+  - **Given back.** An item that ran out of its budget, passed 32 bits or
+    had no answer in a search is worked out again on the CPU, in order.
+  - **When.** A map that took the CPU over 5 ms with 1,000 items tries the
+    GPU once, and keeps it while it is the quicker. Finding 4 said 20 ms
+    and 10,000 items. But a handler's million steps take the CPU about
+    9 ms (collatz below 9000), so a map that big never comes.
+  - **Result.** On SwiftShader (the GPU emulated on 4 cores), collatz below
+    9000: 9 ms on the CPU, 7 to 9 ms on the GPU after a first 41 ms (the
+    pipeline's compile). Below 300000, with the step budget raised by hand:
+    400 ms on the CPU, 240 to 320 ms on the GPU. A real GPU should do
+    better. Under the million-step budget, though, there is little for it
+    to win.
 - **(e) Divide and conquer: done 2026-11-10 on Node** (examples/fibonacci,
   pure-branches.ts `parallelHalves`, branches-rt.ts `bothPure`):
   - **Which calls.** A call in a definition's body given two calls of

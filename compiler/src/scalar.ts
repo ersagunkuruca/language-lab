@@ -133,6 +133,10 @@ const INT32: Record<Id, Op> = {
   [INT_OPS.less]: "iless", [INT_OPS.toNumber]: "itof",
   [INT_OPS.quotient]: "iquot", [INT_OPS.remainder]: "irem", [INT_OPS.power]: "ipow", [INT_OPS.wholePart]: "iwhole",
 };
+// And on the GPU (C61 d′, collatz's walk in bits): and, or, xor of two
+// i32s are the Int's, exactly; shifted down is an arithmetic shift, and
+// a negative count (a shift up) gives up there.
+const INT32_BITS: Record<Id, Op> = { [INT_OPS.bitAnd]: "iand", [INT_OPS.bitOr]: "ior", [INT_OPS.bitXor]: "ixor", [INT_OPS.shiftDown]: "ishr" };
 // Builtins on Int and Text that are runtime functions (`data`).
 export const RT: Record<Id, string> = {
   [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
@@ -493,6 +497,7 @@ export const OPS = {
   iless: { t: "i32" }, ieq: { t: "i32" }, itof: { t: "f64" },
   // One answer or none (`shader`): none sets the shader's flag.
   iquot: { t: "int32" }, irem: { t: "int32" }, ipow: { t: "int32" }, iwhole: { t: "int32" },
+  iand: { t: "int32" }, ior: { t: "int32" }, ixor: { t: "int32" }, ishr: { t: "int32" },
   // A 32-bit machine word held in an i32 and read unsigned (C150f,
   // machine-words.ts): + − × and negate wrap, `uless` compares unsigned.
   uadd: { t: "i32" }, usub: { t: "i32" }, umul: { t: "i32" }, uneg: { t: "i32" },
@@ -538,7 +543,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string }[] }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -597,7 +602,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `hosted`: the program's own effects its host answers where nothing
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -610,11 +615,11 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -791,6 +796,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A call's inputs already worked out, as locals (a map that may be shared, C42).
   const given = new Map<Id, SExpr[]>();
   let mapSites = 0;
+  // A page's map or keep on its workers (C61 c′): its site and the node of
+  // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
+  const awayMaps: { site: number; fn: Id; how: string }[] = [];
   for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1400,6 +1408,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           return { k: "rt", fn: RT[target], args: RT_LATE.has(RT[target]) ? args().map((a, i) => (stype(zonk(n.args[i])) === "f64" ? fin(f, a) : a)) : args() };
         }
         if (!opts.data && INT32[target]) return { k: "op", op: INT32[target], args: args() };
+        if (!opts.data && opts.shader && INT32_BITS[target]) return { k: "op", op: INT32_BITS[target], args: args() };
         // A partial function's x / 0 has no answer there (L125b), unless the
         // checker found this call always answered: then it can only stop.
         // Inside a search's body too: there the search gives the no answer
@@ -1456,6 +1465,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             // waits), a map goes on by the rest (C61 c′): on a page its runs
             // go to workers there, by postMessage (branches-rt.ts mapAway).
             const kind = parallelList.get(n.id)!;
+            if ((kind === "map" || kind === "keep") && waitsIn(f)) awayMaps.push({ site: (site as { v: number }).v, fn: n.args[1], how: kind });
             const shared: SExpr = (kind === "map" || kind === "keep") && waitsIn(f)
               ? { k: "world", op: "mapAway", aborts: true, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
@@ -4355,6 +4365,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const from = funcs.length, shaped = shapes.length;
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!), given = defaults(r);
     rootVars = new Set(raw ? vars(raw).filter((v) => !given.has(v)) : []);
+    // `stepped` (C61 d′): each root is run under a budget the caller sets,
+    // as a page's step budget runs a map's function on the GPU.
+    underBudget = !!opts.stepped;
     try { func(r, given); several_(from); modCons(from); } catch (e) {
       if (!(e instanceof Refused)) throw e;
       if (funcs.length > from && index.get(r) !== undefined && index.get(r)! >= from) {
@@ -4365,13 +4378,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         for (const j of closureCode) if (j >= from) closureCode.delete(j);
         refused.set(r, e.message);
       } else if (!refused.has(r)) unstarted.set(r, e.message.replace(`calls ${nm(r)}, which `, ""));
-    }
+    } finally { underBudget = false; }
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   funcs.forEach((g, j) => { g.body = tidied(g, j).body; });
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a
