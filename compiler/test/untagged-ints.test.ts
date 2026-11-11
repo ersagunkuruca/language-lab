@@ -33,7 +33,8 @@ test("collatz's loop keeps its values as int64_ts on C, and prints what ters run
   assert.equal(made.status, 0, made.stderr);
   const c = readFileSync(`${out}.c`, "utf8");
   assert.match(c, /steps_to_one_counted\(int64_t p0, int64_t p1\)/);
-  assert.match(c, /lab__i64_mulv\(p0, INT64_C\(3\), &\w+\)\) goto lab_bail;/);
+  // C207q: 3n + 1 tests n once against the bounds it can be in.
+  assert.match(c, /if \(p0 > \(lab__max - INT64_C\(1\)\) \/ INT64_C\(3\) \|\| p0 < \(lab__min - INT64_C\(1\)\) \/ INT64_C\(3\)\) goto lab_bail;\n\s*\w+ = p0 \* INT64_C\(3\) \+ INT64_C\(1\);/);
   assert.match(c, /lab_bail:\n  return lab_steps_to_one_as_written\(LAB_SMALL\(p0\), LAB_SMALL\(p1\)\);/);
   const args = ["3000", "100"];
   const native = spawnSync(out, args, { encoding: "utf8", env: { ...process.env, TERS_WORKERS: "0" } }), run = spawnSync(process.execPath, [ters, "run", ex, ...args], { encoding: "utf8" });

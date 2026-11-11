@@ -115,6 +115,17 @@ export function untaggedLoops(ir: CoreIR, wasm = false): number {
 // in the round but computing, so the round starts again with the loop as
 // written (`bail`, c.ts: `goto lab_bail`), which takes the Int as big;
 // a count past 2^62 is no different here.
+// int.add of int.mul by a literal and a literal, either way round.
+const POS = 1n << 20n;
+function mulAdd(args: SExpr[]): { x: SExpr; k: SExpr; c: SExpr } | null {
+  for (const [m, c] of [[args[0], args[1]], [args[1], args[0]]]) {
+    if (!small(c) || m.k !== "rt" || m.fn !== "int.mul" || m.args.length !== 2) continue;
+    for (const [x, k] of [[m.args[0], m.args[1]], [m.args[1], m.args[0]]]) {
+      if (k.k === "int" && k.v > 0n && k.v < POS && c.k === "int" && c.v > -POS && c.v < POS) return { x, k, c };
+    }
+  }
+  return null;
+}
 const VALUE_FN: Record<string, string> = { "int.add": "i64.addv", "int.sub": "i64.subv", "int.mul": "i64.mulv", "int.bitAnd": "i64.and" };
 class Not extends Error {}
 // `total` (WebAssembly): the copy is no partial function, even where the
@@ -140,6 +151,14 @@ function valueLoop(ir: CoreIR, i: number, total = false): boolean {
   const val = (e: SExpr, lets: Lets): SExpr => {
     if (e.k === "local" && ints.has(e.i)) return e;
     if (small(e)) return lit(e);
+    // k·x + c for small literals k > 0 and c (collatz's 3n + 1): on C one
+    // test of x against the two bounds, not one per step (C207q).
+    const ma = !total && e.k === "rt" && e.fn === "int.add" && e.args.length === 2 ? mulAdd(e.args) : null;
+    if (ma) {
+      locals.push("i64");
+      lets.push([locals.length - 1, { k: "rt", fn: "i64.muladdv", args: [atom(ma.x, lets), lit(ma.k), lit(ma.c)] }]);
+      return { k: "local", i: locals.length - 1 };
+    }
     // Each step named, so a printer checks it before going on.
     if (e.k === "rt" && VALUE_FN[e.fn] && e.args.length === 2) {
       const x: SExpr = { k: "rt", fn: VALUE_FN[e.fn], args: e.args.map((a) => atom(a, lets)) };
