@@ -200,7 +200,15 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
             else if (t.t !== "fn" || !t.eff.effs.includes((dp.self as Extract<Type, { t: "con" }>).id)) bad(id, "an effect's operation performs its effect");
             break;
           }
-          if (dp.td.effect || dp.td.interface || (target.kind === "field" && dp.td.variants.length !== 1)) { skip(dp.td.effect ? "an effect's operation" : dp.td.interface ? "an interface's operation" : "a field several cases share"); break; }
+          // An interface's operation (infer.ts fieldType): its field's type,
+          // the interface's type parameters at the type implementing it.
+          if (dp.td.interface && target.kind === "field" && dp.td.variants.length === 1) {
+            const i = (code.nodes[dp.td.variants[0]] as NodeOf<"variant">).fields.indexOf(n.target), f = dp.fields(dp.td.variants[0])[i];
+            if (!f) { skip("a field's type not written as types"); break; }
+            if (!instance(f, t, general(new Set()))) bad(id, "an interface's operation is used at an instance of its type");
+            break;
+          }
+          if (dp.td.effect || (dp.td.interface && target.kind === "field") || (target.kind === "field" && dp.td.variants.length !== 1)) { skip(dp.td.effect ? "an effect's operation" : dp.td.interface ? `an interface's ${target.kind}` : "a field several cases share"); break; }
           let want: Type | null;
           if (target.kind === "variant") { const fs = dp.fields(n.target); want = fs.every(Boolean) ? (fs.length ? { t: "fn", params: fs as Type[], ret: dp.self, eff: { effs: [], tail: null } } : dp.self) : null; }
           else { const i = (code.nodes[dp.td.variants[0]] as NodeOf<"variant">).fields.indexOf(n.target), f = dp.fields(dp.td.variants[0])[i]; want = f ? { t: "fn", params: [dp.self], ret: f, eff: { effs: [], tail: null } } : null; }
