@@ -98,6 +98,16 @@ test("crew's Run main, opened as the editor opens it, runs its plan", async () =
   assert.ok(printedLines(said).includes("critical path: fetch → compile-core → test → package (23 minutes)"), printedLines(said).join("\n"));
 });
 
+// Round 13's program in the picker: Run main on the picker's 30 ticks and
+// 100 fish, as the editor opens it, ends with its checks all 0.
+test("pond's Run main, opened as the editor opens it, lives its pond", async () => {
+  const { code, names, pins, files, def, run } = example("pond");
+  const said = await inWorker({ code, names, pins, def, title: "pond", files, args: run?.args });
+  const end = said.at(-1)!;
+  assert.equal(end.error, undefined, String(end.error));
+  assert.ok(printedLines(said).includes("Checks: 0 outside the pond, 0 spent, 0 overfull patches, 0 too old."), printedLines(said).join("\n"));
+});
+
 // break's main asks for each ball's first touch by solving a gap function
 // it is given: the equation solver's, which the core IR lowers as `ters run`
 // does. It ran in the evaluator, 30 s against well under a second (I191).
