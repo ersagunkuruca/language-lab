@@ -10,6 +10,7 @@
 // it imports), so a change to any of them makes a new one. Only a few are
 // kept; the oldest go. LAB_NO_LIBRARY_STORE=1 turns it off.
 
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -32,9 +33,11 @@ const KEEP = 12;
 // 128 files, and invertible/'s): a change to the rest (a page's printer,
 // the evaluator's tracer) keeps them (I193h). Found by reading the
 // imports, a few ms.
-let checker: string | undefined;
-const checkerHash = () => {
-  if (checker) return checker;
+const graphs = new Map<string, string>();
+const checkerHash = () => graphHash(join(root, "src", "lang", "library-store.ts"));
+function graphHash(entry: string): string {
+  const had = graphs.get(entry);
+  if (had) return had;
   const seen = new Set<string>(), h = createHash("sha1");
   const go = (f: string) => {
     if (seen.has(f)) return;
@@ -47,9 +50,11 @@ const checkerHash = () => {
       try { if (statSync(t).isFile()) go(t); } catch { /* not a file of ours */ }
     }
   };
-  go(join(root, "src", "lang", "library-store.ts"));
-  return (checker = h.digest("hex"));
-};
+  go(entry);
+  const out = h.digest("hex");
+  graphs.set(entry, out);
+  return out;
+}
 
 const codes = new WeakMap<Code, string>();
 // The library, and the library filled, are made from its files and the
@@ -139,9 +144,10 @@ const keepOld = (prefix: string) => {
   const kept = readdirSync(DIR).filter((f) => f.startsWith(prefix) && f.endsWith(".v8")).map((f) => ({ f, t: statSync(join(DIR, f)).mtimeMs })).sort((a, b) => b.t - a.t);
   for (const { f } of kept.slice(KEEP)) rmSync(join(DIR, f), { force: true });
 };
-export const keeper: Keeper = (name, of, make) => {
+export const keeper: Keeper = (name, of, make, source) => {
   const h = createHash("sha1");
   h.update(checkerHash());
+  if (source) h.update(graphHash(fileURLToPath(source)));
   h.update(codeHash(of));
   const file = join(DIR, `${name}-${h.digest("hex").slice(0, 20)}.v8`);
   try { return deserialize(readFileSync(file)); } catch { /* not kept yet */ }

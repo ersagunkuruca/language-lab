@@ -29,6 +29,7 @@ import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../mode
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
+import { keptAcrossRuns } from "./kept.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, INT_OPS, LITERAL, LITERAL_V, S } from "./std.ts";
 import { INT, NUMBER, OverMap, type Row, type Scheme, type Type } from "./types.ts";
@@ -140,8 +141,29 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   let byCost = seeds.get(under);
   if (!byCost) seeds.set(under, (byCost = new Map()));
   if (!byCost.has(costOf)) {
-    const r = scanningOnLayer(lib, () => resolving(lib, under, names, costOf, null, true));
-    byCost.set(costOf, "layer" in r ? { ...r, layer: lib } : null);
+    const make = () => { const r = scanningOnLayer(lib, () => resolving(lib, under, names, costOf, null, true)); return "layer" in r ? r : null; };
+    let r: ReturnType<typeof make>;
+    if (costOf === NEUTRAL) {
+      // The neutral one, every program's, kept between runs (I193o): its
+      // types are the library's kept check's variables, the same each run.
+      // Kept as the nodes it changed and those it took out, so the rest
+      // are the library's own (scans and copies tell them apart by object).
+      const kept = keptAcrossRuns("library-resolved", lib, () => {
+        const m = make();
+        if (!m) return null;
+        const changed: Record<Id, Node> = {};
+        for (const id in m.nodes) if (m.nodes[id] !== lib.nodes[id]) changed[id] = m.nodes[id];
+        return { ...m, nodes: changed, gone: Object.keys(lib.nodes).filter((id) => !(id in m.nodes)) };
+      }, import.meta.url);
+      if (kept) {
+        const { gone, nodes: changed, ...rest } = kept;
+        const nodes: Record<Id, Node> = { ...lib.nodes };
+        for (const id of gone) delete nodes[id];
+        for (const id in changed) nodes[id] = Object.isFrozen(changed[id]) ? changed[id] : Object.freeze(changed[id]);
+        r = { ...rest, nodes };
+      } else r = null;
+    } else r = make();
+    byCost.set(costOf, r ? { ...r, layer: lib } : null);
   }
   return byCost.get(costOf) ?? null;
 }
