@@ -585,7 +585,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "items", "length", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -832,23 +832,29 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // is written as name_b, which callers in the program call; `name`, the
   // one the host and closures call, gives the inputs back to name_b and
   // drops them after. A loop's inputs are set again each round, so a
-  // function that loops keeps its own.
+  // function that loops keeps its own, unless every round passes it on as
+  // it is (C207r: queens' columns, read by `safe`'s loop).
   const viaClosure = new Set(kept.flatMap((i) => walk(funcs[i].body).flatMap((e) => (e.k === "closure" ? [e.fn] : []))));
   const lent = new Map<number, Set<number>>();
   for (const i of kept) {
     const f = funcs[i];
-    if (viaClosure.has(i) || calls(f.body).some((x) => x.fn === i && x.tail)) continue;
+    if (viaClosure.has(i)) continue;
+    const rounds = calls(f.body).filter((x) => x.fn === i && x.tail);
+    const same = (j: number) => rounds.every((x) => x.args[j].k === "local" && (x.args[j] as { i: number }).i === j);
     // One that makes a new value of the input's type is an update (machine's
     // `stored`): it keeps the input, so the fields it moves on have one
     // holder and are changed in place.
     const made = new Set(walk(f.body).flatMap((e) => (e.k === "make" || e.k === "new" || e.k === "list" ? [e.t.key] : [])));
-    const c = new Set(f.params.flatMap((t, j) => (((isRecord(t) && !t.mutable && counted(t)) || isData(t)) && !made.has((t as RType).key) ? [j] : [])));
+    const shared = (t: LType) => ((isRecord(t) && !t.mutable && counted(t)) || isData(t)) && !made.has((t as RType).key);
+    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (isArray(t) && same(j)) ? [j] : [])));
     if (c.size) lent.set(i, c);
   }
   // Whether e uses local j other than as a field's record or a lent input.
   const owns = (e: SExpr, j: number): boolean => {
     if (e.k === "local") return e.i === j;
     if ((e.k === "get" || e.k === "field" || e.k === "tag") && e.rec.k === "local" && e.rec.i === j) return false;
+    // An array's item or length read from it (C207g, C207r).
+    if (e.k === "rt" && /^array\.(get|length)\.a\d+$/.test(e.fn) && e.args[0].k === "local" && e.args[0].i === j) return e.args.slice(1).some((x) => owns(x, j));
     if (e.k === "call") return e.args.some((a, k) => (a.k === "local" && a.i === j ? !lent.get(e.fn)?.has(k) : owns(a, j)));
     return kids(e).some((x) => owns(x, j));
   };
@@ -1805,11 +1811,12 @@ int main(int argc, char **argv) {
           // as a column read is, not dup'd for the read and dropped in it;
           // dropped once here when the local isn't used after.
           const get = ARRAY_FN.exec(e.fn);
-          if (get?.[1] === "get" && e.args[0].k === "local") {
-            const fb = `array.getb.a${get[2]}`, j = e.args[0].i;
+          // And its length (C207r), the array lent the same way.
+          if ((get?.[1] === "get" || get?.[1] === "length") && e.args[0].k === "local") {
+            const fb = `array.${get[1] === "get" ? "getb" : "lengthb"}.a${get[2]}`, j = e.args[0].i;
             arrayFns.add(fb);
-            const [kx] = args([e.args[1]], pre, d, after);
-            const c = `${cName(fb)}(${local(j)}, ${kx})`;
+            const kx = get[1] === "get" ? args([e.args[1]], pre, d, after) : [];
+            const c = `${cName(fb)}(${[local(j), ...kx].join(", ")})`;
             if (!isCounted(j) || after.has(j)) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(`${d}${drop(f.locals[j], local(j))}`);
@@ -3230,6 +3237,7 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   return r;
 }`);
     if (has("length")) out.push(`static lab_int lab_array_length_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); lab_drop(a); return n; }`);
+    if (has("lengthb")) out.push(`static inline lab_int lab_array_lengthb_a${i}(lab_cell *a) { return LAB_SMALL(((${V} *)a)->n); }`);
     // No answer past the end.
     if (has("at")) out.push(`static ${T} lab_array_at_a${i}(lab_cell *a, lab_int k) {
   ${V} *v = (${V} *)a;
