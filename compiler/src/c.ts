@@ -277,6 +277,14 @@ static void lab_pool_run(void (*fn)(void *), void *arg) {
   pthread_mutex_unlock(&lab_pool_m);
 }
 // Items that took a millisecond on this thread are worth sharing.
+// Or, for a map's items, when the items done so far say all of them
+// would take a millisecond (examples/herd: a map each tick of some 6 ms,
+// which waited a millisecond of every tick on this thread).
+static int lab_par_ahead(const struct timespec *t0, int64_t done, int64_t n) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return ((double)(t.tv_sec - t0->tv_sec) * 1e3 + (double)(t.tv_nsec - t0->tv_nsec) / 1e6) * (double)n >= (double)done;
+}
 static int lab_par_worth(const struct timespec *t0) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
@@ -934,7 +942,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   kidsOf(fieldsOf, dec);
   if (threads) {
     kidsOf(sharesOf, share);
-    for (const k of [...boxes.map((b) => b.key), ...[...tables.keys()].map((k) => `table ${k}`)]) sharesOf.push(`case ${tnum.get(k)}: lab_share_no = 1; break;`);
+    for (const k of boxes.map((b) => b.key)) sharesOf.push(`case ${tnum.get(k)}: lab_share_no = 1; break;`);
+    // A table read on the threads (examples/herd's map, its function
+    // reading the animals): its newest version, whose store nobody changes
+    // while they run; an older one is rerooted when read, so it stays here.
+    for (const t of tables.values()) sharesOf.push(`case ${tnum.get(`table ${t.key}`)}: ${tableUsed(t) ? `lab__share_t${t.index}(c);` : "lab_share_no = 1;"} break;`);
   }
   for (const b of boxes) fieldsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${dec(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
   for (const t of tables.values()) {
@@ -971,7 +983,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...counts,
     ...(opts.page ? [READS_C] : []),
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
-    ...(threads ? [`static void lab_shares(lab_cell *c) { switch (c->type) { ${sharesOf.filter(Boolean).join(" ")} default: break; } }`] : []),
+    ...(threads ? [...[...tables.values()].filter(tableUsed).map((t) => `static void lab__share_t${t.index}(lab_cell *c);`), `static void lab_shares(lab_cell *c) { switch (c->type) { ${sharesOf.filter(Boolean).join(" ")} default: break; } }`] : []),
     ...(text.some((t) => t.includes("lab_none")) ? [`static ${TL}int lab_none = 0; // no answer inside a search (C166)`] : []),
     ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? [`static ${TL}double lab_fuel = INFINITY; // outside any budget, as much as it takes`] : []),
     ...[...int32Used].map((op) => INT32_C[op]!),
@@ -2214,6 +2226,9 @@ int main(int argc, char **argv) {
   // de Moura and Leijen, Perceus (PLDI 2021); Baker's shallow binding
   // ("Shallow binding makes functional arrays fast", 1991), as Conchon and
   // Filliâtre's persistent arrays (2007).
+  function tableUsed(t: TType): boolean {
+    return [...arrayFns].some((f) => TABLE_FN.exec(f) && Number(TABLE_FN.exec(f)![2]) === t.index);
+  }
   function tableC(t: TType): string[] {
     const fns = [...arrayFns].filter((f) => TABLE_FN.exec(f) && Number(TABLE_FN.exec(f)![2]) === t.index);
     if (!fns.length) return [];
@@ -2293,7 +2308,14 @@ static inline void lab__grow_t${i}(${S} *t) {
   t->cap = cap; t->used = t->n;
   for (uint32_t j = 0; j < old; j++) if (st[j] == 1) { int f; uint32_t at = lab__find_t${i}(t, ks[j], &f); t->st[at] = 1; t->ks[at] = ks[j]; t->vs[at] = vs[j]; }
   free(st); free(ks); free(vs);
-}
+}${threads ? `
+// Shared with the threads (lab_shares): the newest version's keys and
+// values; an older version is changed when read, so it stays here.
+static void lab__share_t${i}(lab_cell *c) {
+  ${S} *m = ((${T} *)c)->cur;
+  if (!m) { lab_share_no = 1; return; }
+  for (uint32_t j = 0; j < m->cap; j++) if (m->st[j] == 1) { ${counted(kt) ? share(kt, "m->ks[j]") : ""} ${counted(t.value) ? share(t.value, "m->vs[j]") : ""} }
+}` : ""}
 // Make t the newest version (std.ts reroot): undo, from the newest back,
 // each change between it and t, each undone one becoming the change that
 // redoes it. The newer of two holds no count on the older.
@@ -2332,7 +2354,7 @@ static lab_cell *lab__change_t${i}(lab_cell *c, ${K} k, int set, ${V} v) {
   if (set) lab__grow_t${i}(m);
   int f; uint32_t j = lab__find_t${i}(m, k, &f);
   if (!set && !f) { ${dropK("k")} return c; }
-  if (t->h.rc == 1) {
+  if (${threads ? "(t->h.rc & ~LAB_SHARED)" : "t->h.rc"} == 1) {
     if (set && f) { ${V} old = m->vs[j]; m->vs[j] = v; ${dropV("old")} (void)old; ${dropK("k")} }
     else if (set) { if (m->st[j] == 0) m->used++; m->st[j] = 1; m->ks[j] = k; m->vs[j] = v; m->n++; }
     else { ${dropK("m->ks[j]")} ${dropV("m->vs[j]")} m->st[j] = 2; m->n--; ${dropK("k")} }
@@ -2975,7 +2997,7 @@ static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"
     if (lab_st) { k = left - 1; goto failed; }
     j.bad[--left] = 0;${tests ? `
     if (${decides("j.out[left]")}) { k = left; goto found; }` : ""}
-    if (left > 0 && lab_par_worth(&t0)) break;
+    if (left > 0 && lab_par_ahead(&t0, n - left, n)) break;
   }
   if (left > 0${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
     lab_share_no = 0;
@@ -3432,7 +3454,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
         if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
         if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
         for (const k of kids(n)) order(k);
-        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || (!COL_FN.test(n.fn) && runtime(n.fn).partial)))) pure = false;
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || isPar(n.fn) || isSplit(n.fn) || (!COL_FN.test(n.fn) && runtime(n.fn).partial)))) pure = false;
       };
       order(t);
       const ls: { i: number; value: SExpr }[] = [];
