@@ -235,16 +235,22 @@ export function seeds(host: SeedHost) {
   // page back between pieces.
   function* exploring(page: Value, over: () => boolean, started: () => void): Generator<void> {
     const fired = new Map<unknown, number>(), todo: Value[] = [];
-    const draw = function* () {
+    const draw = function* (stop = over) {
       const fresh: Value[] = [];
-      for (const [at, fs] of yield* drawOnce(page, over)) {
+      for (const [at, fs] of yield* drawOnce(page, stop)) {
         const n = fired.get(at) ?? 0;
         if (n < ANOTHER_TAP && n < fs.length) { fired.set(at, n + 1); fresh.push(fs[n]); }
       }
       todo.unshift(...fresh);
     };
-    yield* draw();
-    started();
+    // A first drawing main's time ran out in goes on in the handlers' time:
+    // started again from the top, a drawing never reached the page's last
+    // views (I205: Spacetime's last section, the only caller of `scalar
+    // part`, which opened with no value).
+    let begun = false;
+    const first = () => { if (!over()) return false; if (begun) return true; begun = true; started(); return over(); };
+    yield* draw(first);
+    if (!begun) started();
     yield;
     while (todo.length && !over()) { tryCall(todo.shift()!, NO_EVENT); yield* draw(); yield; }
   }
