@@ -3043,8 +3043,9 @@ type checks (11.5% of JS's samples); on C `lab__floordiv` isn't inlined
 rather than looping, now gets a copy on int64s as C207i's loops do, with
 `side cells` its literal, the remainder by 48 worked out in place and
 `wrapped cell` and `cell key` written into `neighbour`; inputs out of the
-small range go to it as written. Native one thread 2.0 to 1.35 s. JS and
-WebAssembly are left.
+small range go to it as written. Native one thread 2.0 to 1.35 s; then
+`weight of`, a Float64 made from Ints, the same way (G13-P4b): 1.28 to
+1.12 s. JS and WebAssembly are left.
 
 **P5. Threads make it slower (perf, the multithreading goal).** Native on
 4 threads takes 8.3 s against 4.2 on one (25 s of CPU); JS's workers 7.1
