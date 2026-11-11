@@ -8,6 +8,7 @@
   "ters/test/editing.test.ts": 286.2,
   "ters/test/draws.test.ts": 194.8,
   "compiler/test/core-js.test.ts": 184.1,
+  "compiler/test/carried-types.test.ts": 130,
   "ters/test/toplevel.test.ts": 173.4,
   "compiler/test/c.test.ts": 115.7,
   "ters/test/modes.test.ts": 100.8,
