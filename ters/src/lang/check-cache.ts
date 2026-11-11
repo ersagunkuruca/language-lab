@@ -344,7 +344,8 @@ export class CheckCache {
         for (const c of s.subs) {
           const f = s.resolveRow(c.from).tail, t = s.resolveRow(c.to).tail;
           const gf = f === null ? undefined : varGroup.get(f), gt = t === null ? undefined : varGroup.get(t);
-          if (gf !== gt) { if (gf !== undefined) bad.add(gf); if (gt !== undefined) bad.add(gt); }
+          // Into a closed row: the sub is the from side's group's alone.
+          if (gf !== gt && !(t === null && gf !== undefined)) { if (gf !== undefined) bad.add(gf); if (gt !== undefined) bad.add(gt); }
         }
         bad.delete(-1);
         const typeOfBy = new Map<number, [Id, Type][]>();
