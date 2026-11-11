@@ -26,6 +26,7 @@ import { emitWasm } from "../../compiler/src/wasm.ts";
 import { mapsInPlaceCounted, ownedArrays } from "../../compiler/src/owned-arrays.ts";
 import { columns } from "../../compiler/src/columns.ts";
 import { untaggedLoops } from "../../compiler/src/untagged-ints.ts";
+import { parallelColumnMaps } from "../../compiler/src/par-columns.ts";
 import { intoAsSets, ownedRecords } from "../../compiler/src/owned-records.ts";
 import { lowerScalar } from "../../compiler/src/scalar.ts";
 import { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } from "../../compiler/src/core-js.ts";
@@ -251,6 +252,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
     // And a loop's counting Ints as plain int64s (C207e, untagged-ints.ts).
     untaggedLoops(lowered);
+    // And such a map stepping slot by slot on the threads (par-columns.ts).
+    parallelColumnMaps(lowered);
   }
   // On WebAssembly (no counts), a map writes into its array where every
   // array of its type has one holder, as on JavaScript (owned-arrays.ts).
