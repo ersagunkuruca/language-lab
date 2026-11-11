@@ -313,6 +313,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **table size** : `(Table a b) -> Int`. How many keys the table has.
 - **table value at** : `(Table a b, a) -[Choice]-> b`. The key's value, or no answer when the table doesn't have the key.
 - **table entries** : `(Table a b) -> List (a, b)`. The table's entries as (key, value) tuples, in compare's order of their keys: the map it stands for.
+- **table keys list** : `(Table a b) -> List a`. The table's keys, in compare's order: the map's `keys of`, with no pair made for each entry.
 - **empty hash set** : `() -> Hash set a`. A hash set with no items: how a set is stored when the compiler sees that every set has one holder (C63d). Programs say Set; the compiler picks this.
 - **hash set add** : `(Hash set a, a) -> Hash set a`. The set with the item in it. It changes the set itself, so the compiler uses it only where nobody can see the set before the change.
 - **hash set remove** : `(Hash set a, a) -> Hash set a`. The set without the item, changed in place like add.
@@ -332,6 +333,16 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **set size** : `(Set a) -> Int`. How many items the set has.
 - **smallest item** : `(Set a) -[Choice]-> a`. The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).
 - **largest item** : `(Set a) -[Choice]-> a`. The set's largest item, in compare's order; no answer when the set is empty.
+- **Pool** (type). A collection that gives out its own keys: an item added gets a key, and the key finds it until it is removed. A removed item's slot is used again, but an old key finds nothing rather than the new item (generational keys, as game engines keep their entities).
+- **Pool key** (type). A key a pool gave out: its slot and the slot's generation when it was given.
+- **empty pool** : `Pool a`. A pool with nothing in it. added to pool puts an item in and next key, asked just before, is the key it gets.
+- **next key** : `(Pool a) -> Pool key`. The key the next item added to the pool will get: a free slot's, of its next generation, or a new slot's.
+- **added to pool** : `(Pool a, a) -> Pool a`. The pool with the item put in, in a free slot when there is one; next key, asked just before, is its key.
+- **pool item** : `(Pool a, Pool key) -[Choice]-> a`. The item a key was given for; no answer when it was removed, even if its slot holds another item now.
+- **replaced in pool** : `(Pool a, Pool key, a) -> Pool a`. The pool with the item under the key replaced, the key still finding it; the pool as it is when the key finds nothing.
+- **removed from pool** : `(Pool a, Pool key) -> Pool a`. The pool without the item under the key. Its slot is free again, and the key and every copy of it find nothing from now on.
+- **pool size** : `(Pool a) -> Int`. How many items the pool holds. Kept, not counted.
+- **pool keys** : `(Pool a) -> List Pool key`. The keys of the pool's items, in the order of their slots.
 
 ## Queues
 
