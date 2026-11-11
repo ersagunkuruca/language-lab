@@ -79,6 +79,27 @@ export function untaggedLoops(ir: CoreIR, wasm = false): number {
     const go: SExpr = { k: "call", fn: g, tail: true, args: f.params.map((_, j): SExpr => (params.has(j) ? { k: "rt", fn: "i64.unbox", args: [{ k: "local", i: j }] } : { k: "local", i: j })) };
     ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: f.body, t: f.result } };
     made++;
+    // A call giving counts known small (a small literal, an array's length:
+    // queens' `safe` from 0 to the queens placed) goes to the copy at once.
+    const given = (e: SExpr) => small(e) || (e.k === "rt" && /^array\.length\.a\d+$/.test(e.fn));
+    ir.funcs.forEach((h, k) => {
+      if (k === i || k === g) return;
+      // A length is let first (i64.unbox takes a local), in order.
+      const enter = (e: SExpr): SExpr => {
+        if (!(e.k === "call" && e.fn === i && !e.cps && ps.every((j) => given(e.args[j])))) return mapKids(e, enter);
+        const lets: [number, SExpr][] = [];
+        const args = e.args.map((a, j): SExpr => {
+          const b = enter(a);
+          if (!params.has(j) || small(a)) return params.has(j) ? { k: "rt", fn: "i64.lit", args: [a] } : b;
+          const at = h.locals.push("int") - 1;
+          lets.push([at, b]);
+          return { k: "rt", fn: "i64.unbox", args: [{ k: "local", i: at }] };
+        });
+        if (lets.length && e.args.some((a, j) => !params.has(j) && kids(a).length)) return mapKids(e, enter);
+        return lets.reduceRight((body: SExpr, [at, value]) => ({ k: "let", i: at, value, body }), { ...e, fn: g, args });
+      };
+      h.body = enter(h.body);
+    });
   }
   // A Float64 made from a count needs no overflow check (C207j).
   if (copies.length && !envSet("NO_FINITE")) finiteChecks(ir, copies);
