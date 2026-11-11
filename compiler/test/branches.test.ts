@@ -177,6 +177,17 @@ test("fingerprint works out its numbers' walks on workers and hashes them in tur
   assert.equal(small[0], inEvaluator[0]);
 });
 
+test("pond's plans are made on workers from its fish sent by shape, the same pond as in turn (C216)", async () => {
+  // Its fish are a pool of optional records holding records and Ints:
+  // they cross as each one's shape and its numbers (branches-rt.ts byShape).
+  const dir = mkdtempSync(join(tmpdir(), "branches-"));
+  const made = await run([ters, "compile", join(here, "../gaps/pond"), "-o", "pond.mjs"], {}, dir);
+  assert.equal(made[2], 0, made[1]);
+  const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
+  assert.equal(side[0], alone[0]);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+});
+
 test("collatz keeps its long walks on workers, the same numbers in the same order as in turn and in the evaluator (C43)", async () => {
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/collatz"), "-o", "collatz.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/collatz"), "2000", "100"], {})]);
