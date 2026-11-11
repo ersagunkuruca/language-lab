@@ -35,6 +35,7 @@
     { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"] },
     { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "files": ["plan.txt"] } },
     { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"] },
+    { "program": "pond", "label": "Bigger program: pond, fish kept in a pool", "folders": ["compiler/gaps/pond"], "run": { "args": ["30", "100"] } },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
