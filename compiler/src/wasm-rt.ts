@@ -7455,8 +7455,11 @@ export const runtime = (name: string): RtFn => {
     const op = i64[1];
     // A range's items as one int64 (C207p): on C only.
     if (op === "range" || op === "rangeSplit") return { name, params: [["x", "f64"]], result: "i64", locals: [], uses: [], native: true, body: "unreachable" };
-    // k·x + c tested once (C207q): on C only.
-    if (op === "muladdv") return { name, params: [["x", "i64"], ["k", "i64"], ["c", "i64"]], result: "i64", locals: [], uses: [], native: true, body: "unreachable" };
+    // k·x + c tested once (C207q): wasm.ts writes it inline, x a local.
+    if (op === "muladdv") return {
+      name, params: [["x", "i64"], ["k", "i64"], ["c", "i64"]], result: "i64", locals: [], uses: [], native: true,
+      body: "local.get $x\ni64.const 9223372036854775807\nlocal.get $c\ni64.sub\nlocal.get $k\ni64.div_s\ni64.gt_s\nlocal.get $x\ni64.const -9223372036854775808\nlocal.get $c\ni64.sub\nlocal.get $k\ni64.div_s\ni64.lt_s\ni32.or\nif i64\ni64.const -9223372036854775808\nelse\nlocal.get $x\nlocal.get $k\ni64.mul\nlocal.get $c\ni64.add\nend",
+    };
     const two: [string, VT][] = [["a", "i64"], ["b", "i64"]];
     const plain: Record<string, [string, VT]> = { eq: ["i64.eq", "i32"], less: ["i64.lt_s", "i32"], and: ["i64.and", "i64"], shr: ["i64.shr_s", "i64"] };
     if (plain[op]) return { name, params: two, result: plain[op][1], locals: [], uses: [], native: true, body: `local.get $a\nlocal.get $b\n${plain[op][0]}` };
