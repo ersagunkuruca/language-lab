@@ -29,15 +29,15 @@ const chromiumPath = (): string | undefined => {
 // steps to reach 1, b `first` the first time and `then` after.
 // `test`: the keep's test, which may capture the handler's b.
 const TEST = "(i) => 100 < ‹steps to one›(i, 0)";
-function collatzPage(first: number, then: number, keepTest = TEST): string {
-  const program = join(dir, `collatz-${first}-${then}-${keepTest === TEST ? "plain" : "captures"}`);
+function collatzPage(first: number, then: number, keepTest = TEST, said?: string): string {
+  const program = join(dir, `collatz-${first}-${then}-${said ? "fold" : keepTest === TEST ? "plain" : "captures"}`);
   cpSync(join(import.meta.dirname, "../../ters/examples/collatz"), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
   s.define("main", "function", []);
   s.step("main", "said", 'cell("")');
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
-  const count = '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), ' + keepTest + '))';
+  const count = said ?? '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), ' + keepTest + '))';
   s.replace(hole, `tag("main", [button("Count", (event) => ((b) => ${count})(if length(read(said)) = 0 then ${first} else ${then})), p([text(() => read(said))])])`);
   s.save();
   const out = join(program, "page.html");
@@ -45,6 +45,15 @@ function collatzPage(first: number, then: number, keepTest = TEST): string {
   assert.equal(r.status, 0, r.stderr);
   return out;
 }
+
+// C42f: a fold adding an Int for each item, in a function the handler
+// calls (collatz's `steps of all`), as a kernel of its item's arm.
+const SUM = 'write(said, show(b) ++ ": " ++ show(‹steps of all›(range(b))))';
+test("a fold adding each item's Int in a page's handler gets a WebGPU kernel of its item's arm, the rest's Int given as 0 (C42f)", () => {
+  const html = readFileSync(collatzPage(9000, 9000, TEST, SUM), "utf8");
+  assert.match(html, /pageGpu\(\{0:\{how:"add",result:"int",caps:\["int"\]/);
+  assert.match(html, /\(lab_xs\[i\], lab_caps\[0\]\)/);
+});
 
 test("collatz's keep in a page's handler gets a WebGPU kernel of its test (C61 d′)", () => {
   const html = readFileSync(collatzPage(9000, 9000), "utf8");
@@ -105,5 +114,10 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
     const captures = await run(collatzPage(9000, 9000, "(i) => if i < b then 100 < ‹steps to one›(i, 0) else false"), 2);
     assert.deepEqual(captures!.said, ["9000: 3292 [27, 31, 41]", "9000: 3292 [27, 31, 41]"]);
     assert.ok(captures!.submits > 0, "the second press went to the GPU");
+    // C42f: the fold's sum on the GPU, the CPU's.
+    const sum = await run(collatzPage(9000, 9000, TEST, SUM), 2);
+    assert.equal(sum!.said[0], sum!.said[1]);
+    assert.match(sum!.said[0], /^9000: \d+$/);
+    assert.ok(sum!.submits > 0, "the second press went to the GPU");
   } finally { await browser.close(); }
 });

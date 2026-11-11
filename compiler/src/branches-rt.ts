@@ -708,7 +708,11 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
   // A fold's items from the last, as the fold in turn meets them.
   const items = isFold(how) ? itemsOf(xs).reverse() : itemsOf(xs), t0 = performance.now();
   // On the GPU (C61 d′), where this site has a kernel and it pays.
-  if (!isFold(how) && gpuWorth(site, items.length)) { const a = int32s(items), c = capsOf(f, gpuSites[site]); if (a && c) return gpuMap(items, a, c, xs, f, site, k); }
+  // A fold's Ints added or kept there too (C42f), the empty list's last.
+  if (how !== "with" && gpuWorth(site, items.length)) {
+    const a = int32s(items), c = capsOf(f, gpuSites[site], isFold(how) ? IDENTITY[how] : undefined);
+    if (a && c) return gpuMap(items, a, c, xs, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()));
+  }
   // Before there are workers: here, timed, and workers started for the next.
   if (!w.workers) {
     const v = inTurn();
@@ -728,7 +732,10 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
 
 // A page's maps on the GPU (C61 d′, gpu-maps.ts): each site's kernel,
 // and what an item took there and on the CPU, to keep the quicker.
-interface GpuMap { how: "map" | "keep"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
+interface GpuMap { how: "map" | "keep" | "add" | "max" | "min"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
+// A fold's kernel is its item's arm, given the rest's Int as the join's
+// identity, first among what it captured (C42f, gpu-maps.ts).
+const IDENTITY = { add: 0, max: -2147483648, min: 2147483647 } as const;
 let gpuSites: Record<number, GpuMap> = {};
 const gpuPerItem: number[] = [];
 let gpuMapsRun = 0;
@@ -756,8 +763,8 @@ function int32s(items: unknown[]): Int32Array | null {
 }
 // What the function captured, as i32s (a Bool 0 or 1), where each is
 // what the kernel takes.
-function capsOf(f: Fn, m: GpuMap): Int32Array | null {
-  const caps = (f as Closure).caps ?? [];
+function capsOf(f: Fn, m: GpuMap, first?: number): Int32Array | null {
+  const caps = [...(first === undefined ? [] : [first]), ...((f as Closure).caps ?? [])];
   if (caps.length !== m.caps.length) return null;
   const a = new Int32Array(Math.max(1, caps.length));
   for (let j = 0; j < caps.length; j++) {
@@ -782,7 +789,7 @@ function gpuWorth(site: number, n: number): boolean {
 // The map or keep on the GPU: each item's answer and steps, an item the
 // GPU gave back worked out here, in order; the steps spent from the
 // handler's, the run out of them where in order their sum passes it.
-function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknown, f: Fn, site: number, k: (v: unknown) => unknown): unknown {
+function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknown, f: Fn, site: number, done: (vs: unknown[]) => unknown, inTurn: () => unknown): unknown {
   // Each item's budget at most 2²⁴, which an f32 counts down exactly; one
   // that takes more is given back.
   const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now();
@@ -819,7 +826,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
   })().catch(() => undefined);
   const finish = (): unknown => {
     // No GPU after all: in turn, and never again here.
-    if (!out || !spent) { gpuSites = { ...gpuSites }; delete gpuSites[site]; return k(mapInOrder(xs, f, m.how === "keep")); }
+    if (!out || !spent) { gpuSites = { ...gpuSites }; delete gpuSites[site]; return inTurn(); }
     gpuMapsRun++;
     let used = 0;
     const kept: unknown[] = [];
@@ -841,7 +848,7 @@ function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknow
     }
     if (left !== null) setStepsLeft(left - used);
     gpuPerItem[site] = (performance.now() - t0) / Math.max(1, n);
-    return k(sameKind(xs, kept));
+    return done(kept);
   };
   const p = new Pending(answered, "the GPU's run", false);
   p.resume = () => [finish()];
