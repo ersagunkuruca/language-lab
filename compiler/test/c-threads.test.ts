@@ -421,11 +421,18 @@ test("queens-first natively checks a loop's unchanged numbers once, its columns 
 // langford natively (C43i): a first whose answer is an array goes on the
 // threads, split by its first two choices, and finds the evaluator's
 // pairing, or none where every piece fails (n = 10).
-test("langford natively splits its first by two choices and finds the evaluator's pairing or none (C43i)", { skip }, () => {
+test("langford natively splits its first by two choices, checks no sum in `free`, and finds the evaluator's pairing or none (C43i, C207y)", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "c-first-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/langford");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "langford")]);
   assert.equal(built.status, 0, built.stderr.toString());
-  assert.match(readFileSync(join(dir, "langford.c"), "utf8"), /lab_par_fjob_\d+/);
+  const c = readFileSync(join(dir, "langford.c"), "utf8");
+  assert.match(c, /lab_par_fjob_\d+/);
+  // C207y: `free`'s numbers are counts and range items plus 1, at most
+  // 2^1000, so their sums need no check, and its loop stops once false.
+  const loop = /\nint32_t lab_free_at_Float64_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  assert.ok(loop, "the counted loop");
+  assert.doesNotMatch(loop[0], /lab_stop/);
+  assert.match(loop[0], /for \(;;\) \{\n\s*if \(p\d+\) \{/);
   for (const n of ["7", "10"]) {
     const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", "--evaluator", at, n]).stdout.toString();
     assert.match(evaluator, n === "7" ? /\[11, 3, 1, 7, 4, 2, 0\]/ : /: \[\]/);
