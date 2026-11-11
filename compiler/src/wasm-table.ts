@@ -178,20 +178,20 @@ end
 unreachable`,
       };
     case "grow":
-      // Room for one more, at most 3/4 used: the full slots moved into
-      // twice the room (or the same, when removed ones took it).
+      // Room for one more, at most half used, removed slots counted: the
+      // full slots moved into twice the room, or the same where at most a
+      // quarter of it is full, as on C (C207x: swarm's motes come and go,
+      // and at 3/4 a lookup walked past their removed slots).
       return {
         ...base, params: [["m", "tstore"]], result: "void", locals: [["cap", "i32"], ["old", "i32"], ["ost", "tst"], ["oks", "tkeys"], ["ovs", "tvals"], ["j", "i32"], ["at", "i32"]], uses: [fn("find")],
         body: `${S(4)}
 i32.const 1
 i32.add
-i32.const 4
+i32.const 2
 i32.mul
 ${S(0)}
 array.len
 local.tee $old
-i32.const 3
-i32.mul
 i32.le_u
 if void
   return
@@ -199,7 +199,7 @@ end
 ${S(3)}
 i32.const 1
 i32.add
-i32.const 2
+i32.const 4
 i32.mul
 local.get $old
 i32.gt_u
