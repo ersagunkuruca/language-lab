@@ -826,6 +826,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     more = false;
     for (const [i, ps] of lent) for (const j of [...ps]) if (owns(funcs[i].body, j)) { ps.delete(j); more = true; }
   }
+  // Nor one whose array or table field it takes out (swarm's `tick`
+  // giving its map to `moved`): lent, the caller still holds that field,
+  // so each change to it is a copy or a new version rather than in place.
+  const container = (e: SExpr, j: number): boolean => (e.k === "get" && e.rec.k === "local" && e.rec.i === j && (isArray(e.t.fields[e.i].t) || isTable(e.t.fields[e.i].t))) || kids(e).some((x) => container(x, j));
+  for (const [i, ps] of lent) for (const j of [...ps]) if (container(funcs[i].body, j)) ps.delete(j);
   for (const [i, ps] of [...lent]) if (!ps.size) lent.delete(i);
   const bnames = new Map([...lent.keys()].map((i) => [i, ident(`${names.get(i)}_b`)]));
   const text = kept.map((i) => func(funcs[i], i));
