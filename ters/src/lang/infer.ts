@@ -120,7 +120,11 @@ export const implementationOf = (info: Info, iface: Id, t: Type): Id | undefined
 // declares itself is private to that program (L165): any of its
 // definitions may build it, as a module's own may build its type's.
 // cache: group results kept between checks (L215a, check-cache.ts).
-export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache }
+// `bodiesLater` (I193): a pinned definition's body isn't typed; its scheme
+// is its pin, and its nodes' types are found when asked for (libraryLater).
+// `firstVar`: where the check's type variables start, so a library's
+// bodies typed later (WHOLE_VARS) never share one with a check over it.
+export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache; bodiesLater?: boolean; firstVar?: number }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
@@ -153,9 +157,12 @@ export function checkOnce(code: Code | null, names: Names = {}, also: Code[] | (
 // reads it rather than checking the library again; the editor keeps none.
 // `lib` and `pins` are what the check was of: the library's code and the
 // pins of its own definitions.
+// `kind`: the library's skeleton (its definitions' types, from their
+// pins) or its whole check (every node's), kept apart (libraryLater).
+export type LibraryCheck = "skeleton" | "whole";
 export interface LibraryStore {
-  load(lib: Code, opts: Options, pins: [Id, unknown][]): Info | undefined;
-  save(lib: Code, opts: Options, pins: [Id, unknown][], info: Info): void;
+  load(lib: Code, opts: Options, pins: [Id, unknown][], kind: LibraryCheck): Info | undefined;
+  save(lib: Code, opts: Options, pins: [Id, unknown][], info: Info, kind: LibraryCheck): void;
 }
 let libraryStore: LibraryStore | null = null;
 export function keepLibraryChecks(store: LibraryStore | null) { libraryStore = store; underChecks.length = 0; }
@@ -168,6 +175,86 @@ const onLib = (code: Code, lib: Code) => {
   for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false;
   return true;
 };
+// The library's check as a program sees it (I193): its skeleton, each
+// definition's type from its pin, made without typing a body (0.4 s of
+// the whole check's 1.7). A node inside a definition is typed when one is
+// first asked for (a compiler, arith.ts): then the whole library is
+// checked, its type variables from WHOLE_VARS on, where no check over the
+// skeleton reaches, and its substitution and each node's facts join the
+// skeleton's, which the checks over it read through to.
+const WHOLE_VARS = 1 << 26;
+class LaterMap<K, V> extends Map<K, V> {
+  private base: Map<K, V>;
+  private inside: (k: K) => boolean;
+  private made: () => Map<K, V>;
+  // Once the whole check is made, every read is its (it has the
+  // definitions' too).
+  private whole: Map<K, V> | undefined;
+  constructor(base: Map<K, V>, inside: (k: K) => boolean, made: () => Map<K, V>) { super(); this.base = base; this.inside = inside; this.made = made; }
+  private all() { return (this.whole ??= this.made()); }
+  override get(k: K) { return this.whole ? this.whole.get(k) : this.inside(k) ? this.all().get(k) : this.base.get(k); }
+  override has(k: K) { return this.whole ? this.whole.has(k) : this.inside(k) ? this.all().has(k) : this.base.has(k); }
+  override get size() { return this.all().size; }
+  override set(k: K, v: V): this { this.base.set(k, v); return this; }
+  override entries() { return this.all().entries(); }
+  override keys() { return this.all().keys(); }
+  override values() { return this.all().values(); }
+  override [Symbol.iterator]() { return this.all().entries(); }
+  override forEach(f: (v: V, k: K, m: Map<K, V>) => void) { this.all().forEach(f); }
+}
+class LaterSet<K> extends Set<K> {
+  private base: Set<K>;
+  private inside: (k: K) => boolean;
+  private made: () => Set<K>;
+  private whole: Set<K> | undefined;
+  constructor(base: Set<K>, inside: (k: K) => boolean, made: () => Set<K>) { super(); this.base = base; this.inside = inside; this.made = made; }
+  private all() { return (this.whole ??= this.made()); }
+  override has(k: K) { return this.whole ? this.whole.has(k) : this.inside(k) ? this.all().has(k) : this.base.has(k); }
+  override get size() { return this.all().size; }
+  override add(k: K): this { this.base.add(k); return this; }
+  override values() { return this.all().values(); }
+  override keys() { return this.all().values(); }
+  override entries() { return this.all().entries(); }
+  override [Symbol.iterator]() { return this.all().values(); }
+  override forEach(f: (v: K, k: K, s: Set<K>) => void) { this.all().forEach(f); }
+}
+// The library checks whose bodies were typed (for the tests).
+const typedWhole = new WeakSet<Info>();
+export const bodiesTyped = (layer: Info) => typedWhole.has(layer);
+// The library's checks made again (or read back) from the next check on.
+export function forgetLibraryChecks() { underChecks.length = 0; }
+function libraryLater(lib: Code, skeleton: Info, check: () => Info): Info {
+  const defs = new Set(lib.defs);
+  let whole: Info | undefined;
+  const inside = (k: Id) => (whole || !defs.has(k)) && k in lib.nodes;
+  const made = (): Info => {
+    if (whole) return whole;
+    whole = check();
+    typedWhole.add(later);
+    // The whole check's substitution joins the skeleton's: its variables
+    // are its own (WHOLE_VARS), so nothing a check over the skeleton bound
+    // changes. Its definitions' schemes stand for the pins' from now on,
+    // the same types, so a body's variables are its scheme's.
+    skeleton.subst.join(whole.subst);
+    for (const [d, sc] of whole.schemes) skeleton.schemes.set(d, sc);
+    return whole;
+  };
+  const map = <V,>(base: Map<Id, V> | undefined, of: (w: Info) => Map<Id, V> | undefined) => new LaterMap<Id, V>(base ?? new Map(), inside, () => of(made()) ?? new Map());
+  const set = (base: Set<Id> | undefined, of: (w: Info) => Set<Id> | undefined) => new LaterSet<Id>(base ?? new Set(), inside, () => of(made()) ?? new Set());
+  const later: Info = {
+    ...skeleton,
+    typeOf: new LaterMap<Id, Type>(skeleton.typeOf, inside, () => made().typeOf),
+    opAt: map(skeleton.opAt, (w) => w.opAt),
+    solveAt: map(skeleton.solveAt, (w) => w.solveAt),
+    reshape: map(skeleton.reshape, (w) => w.reshape),
+    copyOf: map(skeleton.copyOf, (w) => w.copyOf),
+    embedded: map(skeleton.embedded, (w) => w.embedded),
+    holes: map(skeleton.holes, (w) => w.holes),
+    answered: set(skeleton.answered, (w) => w.answered),
+    spread: set(skeleton.spread, (w) => w.spread),
+  };
+  return later;
+}
 function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
   if (!underAll || checkingUnder) return null;
   const all = underAll, lib = onLib(code, all.code) ? all.code : (typeof all.also === "function" ? (all.also = all.also()) : all.also).find((c) => onLib(code, c));
@@ -184,13 +271,17 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
   const same = (a: Options) => a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library && samePins(a);
   let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
-    const stored = libraryStore?.load(lib, opts, mine);
-    if (stored) kept = { lib, opts, info: stored };
-    else {
+    const names = underAll.names;
+    const check = (kind: LibraryCheck): Info => {
+      const stored = libraryStore?.load(lib, opts, mine, kind);
+      if (stored) return stored;
       checkingUnder = true;
-      try { kept = { lib, opts, info: infer(lib, underAll.names, undefined, opts) }; } finally { checkingUnder = false; }
-      if (!kept.info.errors.length) libraryStore?.save(lib, opts, mine, kept.info);
-    }
+      let info: Info;
+      try { info = infer(lib, names, undefined, kind === "skeleton" ? { ...opts, bodiesLater: true } : { ...opts, firstVar: WHOLE_VARS }); } finally { checkingUnder = false; }
+      if (!info.errors.length) libraryStore?.save(lib, opts, mine, info, kind);
+      return info;
+    };
+    kept = { lib, opts, info: libraryLater(lib, check("skeleton"), () => check("whole")) };
     // A few kept, the latest first: a caller that makes its options anew
     // each time would otherwise keep a library check for each.
     underChecks.unshift(kept);
@@ -221,6 +312,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // stay: showing its types reads them.)
   if (layer) s.wanted = [];
   else if (reuse) s.next = reuse.from.subst.next;
+  else if (opts.firstVar) s.next = opts.firstVar;
   // An input whose type has settled to Int: a counter written with untyped
   // literals counts towards its bound (I199, counting.ts).
   const settledInt = (param: Id) => { const t = info.typeOf.get(param); if (!t) return false; const r = s.resolve(t); return r.t === "con" && r.id === INT; };
@@ -776,6 +868,13 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   for (const group of groups) {
     current = group;
     if (cached?.take(group)) continue;
+    // Pinned, its body typed later: what callers see is the pin, and
+    // whether it may not finish is read from its shape alone.
+    if (opts.bodiesLater && group.every((d) => opts.pins?.[d])) {
+      if ((group.length > 1 || deps(group[0]).includes(group[0])) && !terminates(code, group)) for (const d of group) info.divergent.add(d);
+      for (const d of group) { const sc = fresh(opts.pins![d], s); info.schemes.set(d, sc); info.typeOf.set(d, sc.type); }
+      continue;
+    }
     for (const d of group) mono.set(d, s.fresh());
     for (const d of group) {
       const body = (code.nodes[d] as NodeOf<"def">).body;
