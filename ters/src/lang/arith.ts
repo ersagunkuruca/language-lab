@@ -683,6 +683,20 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
       ...(left(sc.arith).length ? { arith: left(sc.arith) } : {}), ...(left(sc.less).length ? { less: left(sc.less) } : {}), ...(left(sc.ordered).length ? { ordered: left(sc.ordered) } : {}), ...(left(sc.fractional).length ? { fractional: left(sc.fractional) } : {}) });
   }
 
+  // A definition whose body was resolved at a type (a library `sum` with a
+  // literal 0 in it, at Int) has that type, and its scheme says so: closing
+  // its scheme's variables to their default (Float64, when the program's
+  // substitution doesn't know a library body's variable) left the three
+  // disagreeing, which verify.ts refused (REVIEW-2026-11-11 §2, I207).
+  const valueVar = (t: Type): boolean => t.t === "var" || (t.t === "con" ? t.args.some(valueVar) : t.params.some(valueVar) || valueVar(t.ret));
+  for (const d of defs) {
+    const n = nodes[d], sc = schemes.get(d);
+    if (n?.kind !== "def" || !n.body || !sc || unresolved.has(d)) continue;
+    const bt = typeOf.get(n.body);
+    if (!bt || valueVar(bt) || JSON.stringify(bt) === JSON.stringify(sc.type)) continue;
+    schemes.set(d, { ...sc, vars: [], type: bt });
+    typeOf.set(d, bt);
+  }
   return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames };
 }
 
