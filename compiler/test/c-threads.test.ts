@@ -367,7 +367,7 @@ test("a fold over a tree whose leaves abort on threads aborts at the first in or
 // queens-count natively (C207f): `safe`'s fold to a function of the
 // distance, applied at once, is a loop from the first queen placed, no
 // closure per queen, and the count is the evaluator's.
-test("queens-count natively checks a column by a loop over the queens placed, and counts the evaluator's boards (C207f, C207n)", { skip }, () => {
+test("queens-count natively checks a column by a loop over the queens placed, and counts the evaluator's boards (C207f, C207n, C207p)", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "c-forward-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/queens-count");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "queens")]);
   assert.equal(built.status, 0, built.stderr.toString());
@@ -380,6 +380,11 @@ test("queens-count natively checks a column by a loop over the queens placed, an
   assert.ok(loop, "the counted loop");
   assert.doesNotMatch(loop[0], /lab_stop/);
   assert.match(loop[0], /\} else \{[^{}]*return 0;/);
+  // C207p: its choice of a column counts through the range, no list made.
+  assert.match(c, /lab__i64_range_split\(/);
+  const place = /\nint32_t lab_queens_fold_items\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  assert.ok(place, "the placement");
+  assert.doesNotMatch(place[0], /lab_array_items_a\d+\(/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "6"]).stdout.toString();
   assert.match(evaluator, /boards of 6 queens: 4/);
   for (const workers of ["3", "0"]) for (const n of ["6", "8"]) {
