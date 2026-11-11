@@ -530,7 +530,11 @@ end
 end`,
       };
     case "change":
-      // A put (set) or remove: a new newest version, c the change back to it.
+    case "changeOwned": {
+      // A put (set) or remove: a new newest version, c the change back to
+      // it; or (changeOwned, where owned-tables.ts says nobody else holds
+      // the table, as on JavaScript) written into c, no version made.
+      const owned = op === "changeOwned";
       return {
         ...base, params: [["c", "table"], ["k", "key"], ["set", "i32"], ["v", "value"]], result: "table", locals: [...slots, ["nv", "table"], ["old", "value"], ["z", "value"], ["zk", "key"]], uses: [fn("reroot"), fn("grow"), fn("find"), ...(direct ? [fn("undirect")] : [])],
         body: `local.get $c
@@ -594,7 +598,7 @@ else
   array.set $tvals
   ${bump(3, -1)}
 end
-local.get $m
+${owned ? "local.get $c" : `local.get $m
 ref.null $tbl
 local.get $zk
 i32.const 0
@@ -616,14 +620,21 @@ struct.set $tbl 3
 local.get $c
 local.get $old
 struct.set $tbl 4
-local.get $nv`,
+local.get $nv`}`,
       };
+    }
     case "empty":
       return { ...base, params: [], result: "table", locals: [["z", "value"], ["zk", "key"]], uses: [fn("store")], body: `i32.const 8\ncall $${fn("store")}\nref.null $tbl\nlocal.get $zk\ni32.const 0\nlocal.get $z\nstruct.new $tbl` };
     case "put":
-      return { ...base, params: [["t", "table"], ["k", "key"], ["v", "value"]], result: "table", locals: [], uses: [fn("change")], body: `local.get $t\nlocal.get $k\ni32.const 1\nlocal.get $v\ncall $${fn("change")}` };
+    case "putOwned": {
+      const ch = fn(op === "put" ? "change" : "changeOwned");
+      return { ...base, params: [["t", "table"], ["k", "key"], ["v", "value"]], result: "table", locals: [], uses: [ch], body: `local.get $t\nlocal.get $k\ni32.const 1\nlocal.get $v\ncall $${ch}` };
+    }
     case "remove":
-      return { ...base, params: [["t", "table"], ["k", "key"]], result: "table", locals: [["z", "value"]], uses: [fn("change")], body: `local.get $t\nlocal.get $k\ni32.const 0\nlocal.get $z\ncall $${fn("change")}` };
+    case "removeOwned": {
+      const ch = fn(op === "remove" ? "change" : "changeOwned");
+      return { ...base, params: [["t", "table"], ["k", "key"]], result: "table", locals: [["z", "value"]], uses: [ch], body: `local.get $t\nlocal.get $k\ni32.const 0\nlocal.get $z\ncall $${ch}` };
+    }
     case "has":
       return { ...base, params: [["t", "table"], ["k", "key"]], result: "i32", locals: [], uses: [fn("reroot"), fn("find")], body: `local.get $t\ncall $${fn("reroot")}\nlocal.get $t\nstruct.get $tbl 0\nlocal.get $k\ncall $${fn("find")}\ni32.const 31\ni32.shr_u` };
     case "size":

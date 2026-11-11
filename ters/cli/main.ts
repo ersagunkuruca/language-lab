@@ -41,6 +41,7 @@ const { pageDocument } = compiles ? await import("../src/lang/page.ts") : ({} as
 const { CFLAGS, emitC } = compiles ? await import("../../compiler/src/c.ts") : ({} as typeof import("../../compiler/src/c.ts"));
 const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({} as typeof import("../../compiler/src/wasm.ts"));
 const { mapsInPlaceCounted, ownedArrays } = compiles ? await import("../../compiler/src/owned-arrays.ts") : ({} as typeof import("../../compiler/src/owned-arrays.ts"));
+const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
 const { untaggedLoops } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
 const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
@@ -284,6 +285,9 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     if (!process.env.NO_RANGE_CHOICES) rangeChoices(lowered);
     // And `array of range x` of Ints filled with no list (C207v).
     if (!process.env.NO_RANGE_ARRAYS) rangeArrays(lowered);
+    // A table nobody else holds changed in place, no version made, as on
+    // JavaScript (owned-tables.ts, C58p).
+    if (!process.env.NO_OWN_TABLES) ownedTables(lowered, q.code, q.info, q.names, root);
   }
   return { lowered, root };
 }
