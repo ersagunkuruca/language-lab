@@ -3028,6 +3028,11 @@ each call (perf, scent is 71% of native).** The smell of food sums a
 (`[-2, -1, 0, 1, 2]`), is rebuilt at every call (`lab_offsets` 18%),
 and each map makes a list that the sum then folds. The ideal is two
 counted loops over a 25-entry weight table.
+*Fixed in part on C (G13-P3):* `offsets` was made afresh because a
+definition's value isn't kept where threads run (C173b kept it only
+without them). It is now made once by whichever thread asks first and
+kept uncounted for every thread: native one thread 2.9 to 1.9 s, 4
+threads 1.1 to 0.86 s. The lists `sum(map(…))` makes are left.
 
 **P4. Int arithmetic through the generic runtime (perf, about 15%).**
 `first(remainder(c, side cells), else 0)`: `remainder` is a Choice (none

@@ -220,18 +220,25 @@ static inline void lab_drop(lab_cell *c) { if (c && LAB_RC(c) && lab__last(c)) l
 // lab_shares (made with lab_fields). A table or a box can't be shared (its
 // store is changed in place), and lab_share_no says one was met: the map
 // then runs on one thread.
+// lab_forever marks a definition's value the same way, but as never
+// counted (a count of 0, as a constant's): held for good, read by every
+// thread with no count changed (round 13 P3).
 const SHARE_C = `static int lab_share_no = 0;
-static lab_cell **lab_share_st = 0;
-static size_t lab_share_n = 0, lab_share_cap = 0;
+static _Thread_local lab_cell **lab_share_st = 0;
+static _Thread_local size_t lab_share_n = 0, lab_share_cap = 0;
+static _Thread_local int lab_share_forever = 0;
 static void lab_share(lab_cell *c) {
-  if (!c || !c->rc || (c->rc & LAB_SHARED)) return;
-  c->rc |= LAB_SHARED;
+  if (!c || !c->rc) return;
+  if (lab_share_forever) c->rc = 0;
+  else if (c->rc & LAB_SHARED) return;
+  else c->rc |= LAB_SHARED;
   if (lab_share_n == lab_share_cap) { lab_share_cap = lab_share_cap ? 2 * lab_share_cap : 64; lab_share_st = realloc(lab_share_st, lab_share_cap * sizeof *lab_share_st); if (!lab_share_st) lab_oom(); }
   lab_share_st[lab_share_n++] = c;
 }
 static inline void lab_int_share(lab_int x) { if (!LAB_IS_SMALL(x)) lab_share((lab_cell *)LAB_BIG(x)); }
 static void lab_shares(lab_cell *c);
-static void lab_shared(void) { while (lab_share_n) lab_shares(lab_share_st[--lab_share_n]); }`;
+static void lab_shared(void) { while (lab_share_n) lab_shares(lab_share_st[--lab_share_n]); }
+static void lab_forever(lab_cell *c) { lab_share_forever = 1; lab_share(c); lab_shared(); lab_share_forever = 0; }`;
 
 // The threads a map's items are shared out on (L101): started at the
 // first map worth it and kept, as many as the cores less one (or
@@ -647,7 +654,21 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // lets go of them after each call, so its count of cells left is still 0.
   // An array too (C30): the static's count makes replace at copy it, as
   // it does any array another holds.
-  const once = new Set(kept.filter((i) => { const f = funcs[i]; return !threads && f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || isArray(f.result)); }));
+  // With threads, a value that is a cell holding no table, box or
+  // function is worked out once too, by whichever thread first asks, and
+  // kept for good, never counted (lab_forever), so the threads share it
+  // with no count to fight over: pond's `offsets` and `directions`, made
+  // afresh at every fish's every smell (round 13 P3). Not in the test
+  // harness, which counts every cell back to 0.
+  const plain = (t: LType, seen = new Set<string>()): boolean => {
+    if (typeof t === "string") return true;
+    if (isTable(t) || isFn(t) || (isRecord(t) && t.mutable)) return false;
+    if (seen.has(t.key)) return true;
+    seen.add(t.key);
+    return isArray(t) ? plain(t.item, seen) : isData(t) ? t.cases.every((c) => c.fields.every((x) => plain(x.t, seen))) : isRecord(t) ? t.fields.every((x) => plain(x.t, seen)) : false;
+  };
+  const forever = threads && !opts.harness;
+  const once = new Set(kept.filter((i) => { const f = funcs[i]; return (!threads || (forever && f.result !== "text" && !isRecord(f.result) && plain(f.result))) && f.value && !f.params.length && !f.partial && !f.spends && (f.result === "text" || isRecord(f.result) || isData(f.result) || isArray(f.result)); }));
 
   // Types: every record, data type and function type the kept functions
   // mention, and the shapes of their closures.
@@ -1047,7 +1068,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
     ...(threads && ranges.size ? [RANGE_C, ...[...ranges].map(([gi, view]) => rangeC(gi, view, fuelled))] : []),
     ...(threads && boths.size ? [dcC(fuelled), ...[...boths].map((gi) => bothC(gi, stops, fuelled))] : []),
-    ...[...once].map((i) => `static ${ty(funcs[i].result)} lab_m${i}; static int lab_m${i}_has = 0;`),
+    ...[...once].map((i) => (threads
+      // Two threads may both make it: the first kept wins, and the other's
+      // is never freed (it is never counted either).
+      ? `static lab_cell *lab_m${i} = 0;\nstatic lab_cell *lab_m${i}_make(void) { lab_cell *x = ${names.get(i)}(), *z = 0; lab_forever(x); return __atomic_compare_exchange_n(&lab_m${i}, &z, x, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE) ? x : z; }`
+      : `static ${ty(funcs[i].result)} lab_m${i}; static int lab_m${i}_has = 0;`)),
     ...(opts.harness ? [`static void lab_memo_clear(void) { ${[...once].map((i) => `if (lab_m${i}_has) { ${counted(funcs[i].result) ? drop(funcs[i].result, `lab_m${i}`) : ""} lab_m${i}_has = 0; }`).join(" ")} }`] : []),
     "",
     text.join("\n\n"),
@@ -1913,6 +1938,11 @@ int main(int argc, char **argv) {
         case "tag": return borrow(e.rec, "i32", (r) => `(int32_t)${r}->tag`, pre, d, after);
         case "call": {
           const ps = lent.get(e.fn);
+          if (once.has(e.fn) && threads) {
+            const v = temp(funcs[e.fn].result);
+            pre.push(`${d}${v} = __atomic_load_n(&lab_m${e.fn}, __ATOMIC_ACQUIRE);`, `${d}if (!${v}) ${v} = lab_m${e.fn}_make();`);
+            return v;
+          }
           if (once.has(e.fn)) {
             const m = `lab_m${e.fn}`, t = funcs[e.fn].result, v = temp(t);
             pre.push(`${d}if (!${m}_has) { ${m} = ${names.get(e.fn)}(); ${m}_has = 1; }`, `${d}${v} = ${counted(t) ? dup(t, m) : m};`);
