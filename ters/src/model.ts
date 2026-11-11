@@ -609,13 +609,13 @@ const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => 
     // A base not itself derived is scanned once for each kind of pick, and
     // listing its ~44,000 nodes took 18 ms of each 20 ms scan: they are
     // listed once, as its picks are kept.
-    let ns = derived.has(code) ? undefined : baseNodes.get(code);
-    if (!ns && !derived.has(code)) baseNodes.set(code, (ns = Object.values(code.nodes)));
+    let ns = derived.has(code) ? undefined : baseNodes.get(code.nodes);
+    if (!ns && !derived.has(code)) baseNodes.set(code.nodes, (ns = Object.values(code.nodes)));
     all.set(kind, (out = ns ? ns.filter(keep).map((n) => n.id) : nodesWhere(code, kind, keep)));
   }
   return out;
 };
-const baseNodes = new WeakMap<Code, Node[]>();
+const baseNodes = new WeakMap<object, Node[]>();
 // A program put on a layer of code under it, the library (load.ts base,
 // L217). `scanningOnLayer` reads it, for one step that doesn't change it,
 // as derived from the layer by the nodes that aren't the layer's own (the

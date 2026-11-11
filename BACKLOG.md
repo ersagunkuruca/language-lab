@@ -204,7 +204,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L240 | A Markov chain's stationary distribution as an editor example on `settled` (L239): a quickly mixing chain, a slowly mixing one with its large bound, and a periodic one with no answer. Example: the three in the editor's examples, each answer or none shown | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | S | |
 | L241 | The compiler picks Newton for `settled` when its step has a few Float64 unknowns and a derivative (derivatives, as `inverse` does). Example: `x = cos(x)` as `settled` in 4 steps instead of 52 plain rounds, to 1e-9 from 1.0 | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | M | |
 
 ### Grammars, modules and sharing
