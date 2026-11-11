@@ -14,14 +14,16 @@
 
 import type { Code, Id } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
-import type { Type } from "../../ters/src/lang/types.ts";
+import { DIVERGE, type Type } from "../../ters/src/lang/types.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { lowerScalar, type CoreIR } from "./scalar.ts";
 import { emitWgsl } from "./wgsl.ts";
 
 // caps: what the function captured, in the closure's order, each an Int
 // or a Bool, which the kernel is given after the item.
-export interface GpuMap { how: "map" | "keep"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
+// A fold's (C42f) is its item's arm, given the rest's Int first among the
+// captures: the join's identity, so the arm gives the item's own Int.
+export interface GpuMap { how: "map" | "keep" | "add" | "max" | "min"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
 
 // The kernel's own part: the items in, the answers and the steps out, and
 // the budget and the count of items.
@@ -48,9 +50,16 @@ struct LabJob { budget: f32, n: u32 }
 export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
   const out: Record<number, GpuMap> = {};
   for (const m of ir.awayMaps ?? []) {
-    const lam = ir.code.nodes[m.fn];
-    const t0 = ir.info.typeOf.get(m.fn), t = t0 && ir.info.subst.zonk(t0);
-    if (lam?.kind !== "lambda" || lam.params.length !== 1 || t?.t !== "fn") continue;
+    const node = ir.code.nodes[m.fn];
+    const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
+    // A map's function, or a fold's item arm as a function of the item and
+    // the rest's Int, run by steps under the handler's budget as a function
+    // that may not finish is (Diverge).
+    const arm = node?.kind === "arm" && m.params?.length === 2 ? node : null;
+    const lam = arm ? { id: m.fn, kind: "lambda" as const, params: m.params!, body: arm.body } : node;
+    const it = arm && zonk(m.params![0]), rt = arm && zonk(m.params![1]);
+    const t = arm ? (it && rt ? { t: "fn" as const, params: [it, rt], ret: rt, eff: { effs: [DIVERGE], tail: null } } : undefined) : zonk(m.fn);
+    if (lam?.kind !== "lambda" || lam.params.length !== (arm ? 2 : 1) || t?.t !== "fn") continue;
     try {
       // The function lifted to a definition taking what it captured after
       // the item, as parameters of the same binders.
@@ -65,13 +74,14 @@ export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
       if (l.refused.has(id)) continue;
       const fi = l.funcs.findIndex((g) => g.def === id && !g.inner);
       const f = l.funcs[fi];
-      if (!f || f.params.length !== 1 + m.caps.length || f.params.some((p) => p !== "int32" && p !== "i32") || f.params[0] !== "int32" || (f.result !== "int32" && f.result !== "i32")) continue;
+      const before = arm ? 2 : 1;
+      if (!f || f.params.length !== before + m.caps.length || f.params.some((p) => p !== "int32" && p !== "i32") || f.params[0] !== "int32" || (arm && f.params[1] !== "int32") || (f.result !== "int32" && f.result !== "i32") || (arm && f.result !== "int32")) continue;
       const caps = f.params.slice(1).map((p) => (p === "i32" ? "bool" : "int") as "int" | "bool");
       if (m.how === "keep" && f.result !== "i32") continue;
       const sh = emitWgsl(l);
       const entry = sh.entries.get(fi);
       if (!entry) continue;
-      out[m.site] = { how: m.how as "map" | "keep", result: f.result === "i32" ? "bool" : "int", caps, wgsl: sh.wgsl + kernel(entry, f.result === "i32", sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), caps) };
+      out[m.site] = { how: m.how as GpuMap["how"], result: f.result === "i32" ? "bool" : "int", caps, wgsl: sh.wgsl + kernel(entry, f.result === "i32", sh.wgsl.includes("var<private> lab_fuel"), sh.wgsl.includes("var<private> lab_none"), caps) };
     } catch { /* not one the GPU takes */ }
   }
   return out;
