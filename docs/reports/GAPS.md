@@ -2925,7 +2925,7 @@ ticks, 4 cores:
 |---|---|---|
 | by hand (C) | 1.31 s | 0.40 s |
 | `ters native` | 1.36 s | 0.46 s (was 1.40: C61f) |
-| `ters compile` | 2.0 s | no worker used |
+| `ters compile` | 2.0 s | 1.0 s (C209a; was 2.0, no worker used) |
 | `ters wasi` | 2.07 s | |
 
 - **H1. A map on the threads stopped the C printer** (readFirst asked the
@@ -2937,7 +2937,7 @@ ticks, 4 cores:
   200 ms of herd's 200 ticks. *Fixed in C61f*: it shares once the items
   done say all of them would take a millisecond.
 - **H4. Compiled JavaScript runs herd's map on no worker** (2.0 s): its
-  function reads a Map. *Measured in C208*: letting workers start on time counted over the ticks, and a Map cross as its entries, uses them but buys 6% (2.0 to 1.88 s) for twice the CPU, as each tick copies the animals both ways; shared memory would be needed. By hand with columns in a SharedArrayBuffer (compiler/gaps/herd.shared.mjs): 0.49 s on 4 cores. Row C209.
+  function reads a Map. *Measured in C208*: letting workers start on time counted over the ticks, and a Map cross as its entries, uses them but buys 6% (2.0 to 1.88 s) for twice the CPU, as each tick copies the animals both ways; shared memory would be needed. By hand with columns in a SharedArrayBuffer (compiler/gaps/herd.shared.mjs): 0.49 s on 4 cores. *Halved in C209a* (2.0 to 1.0 s: the table and the answers cross as columns in a SharedArrayBuffer). The rest, measured in C209: a steady tick's map is balanced (main and 3 workers end within 0.2 ms); the tick's work is 10.6 ms against 8.5 by hand (each loop step's fuel and Int checks, records), and 1.4 ms a tick runs on the main thread alone (table sent 0.4, answers made records 0.25, storing and births 0.5, workers' start 0.3), each under 10%. Closing more would take the table kept as columns between ticks, not made from records each tick.
 - **H5. One core, JavaScript and WebAssembly are 1.5x native** (2.0 and
   2.07 s against 1.36): the sines are most of it; *measured in C208*: mostly V8's sine (the plain loop 0.89 s in JavaScript against 0.73 in C).
 

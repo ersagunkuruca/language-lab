@@ -23,8 +23,9 @@ a machine with 4 cores:
 | | one core | 4 cores |
 |---|---|---|
 | hand-written C (compiler/gaps/herd.ideal.c) | 1.31 s | 0.40 s |
+| hand-written JavaScript (compiler/gaps/herd.shared.mjs) | 1.69 s | 0.53 s |
 | `ters native` | 1.36 s | 0.46 s |
-| `ters compile` (Node) | 2.0 s | |
+| `ters compile` (Node) | 2.0 s | 1.0 s |
 | `ters wasi` (Node's WASI) | 2.07 s | |
 
 Natively the map of each tick first stopped the compiler (a map on the
