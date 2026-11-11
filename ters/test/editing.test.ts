@@ -610,7 +610,8 @@ async function keptOnReload() {
   if (saved.length > 300_000) errors.push(`${where}: the store holds ${saved.length} characters`);
   const again = openEditor(saved);
   open.push(again);
-  await new Promise((r) => setTimeout(r, 50));
+  // The page draws once the checks it kept are read (checkStore.ts).
+  for (let t = 0; t < 100 && !again.texts("[data-def]").some((t) => t.trim() === "kept"); t++) await new Promise((r) => setTimeout(r, 50));
   if (!again.texts("[data-def]").some((t) => t.trim() === "kept")) errors.push(`${where}: kept isn't there when the page is opened again`);
 }
 

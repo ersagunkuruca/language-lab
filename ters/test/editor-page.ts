@@ -18,8 +18,45 @@ const editor = new URL("../../editor/", import.meta.url).pathname;
 const bundle = await build({
   entryPoints: [editor + "main.ts"], bundle: true, format: "iife", target: "es2022", write: false,
   plugins: [examplesPlugin(JSON.parse(readFileSync(editor + "examples.json", "utf8")))],
-  define: { CORE_PAGE_RUNTIME: JSON.stringify(await corePageRuntime()), RUN_WORKER: '""', CORE_WORKLET_RUNTIME: JSON.stringify(await coreWorkletRuntime()) },
+  define: { CORE_PAGE_RUNTIME: JSON.stringify(await corePageRuntime()), RUN_WORKER: '""', CORE_WORKLET_RUNTIME: JSON.stringify(await coreWorkletRuntime()), CHECKS_KEY: '"test"' },
 });
+
+// The checks a page keeps in the browser (editor/checkStore.ts), kept here
+// for the process, as a browser keeps them between visits: each page after
+// a file's first reads the library's check and its resolved arithmetic
+// back, not made again (T14: about 5 s of each page). Only what checkStore
+// asks of IndexedDB: one store, put, and a cursor over it.
+const keptChecks = new Map<string, unknown>();
+const later = (f: () => void) => void setTimeout(f, 0);
+const indexedDB = {
+  open() {
+    const db = {
+      transaction() {
+        const tx = { oncomplete: null as (() => void) | null, onerror: null, onabort: null, objectStore: () => store };
+        const done = () => later(() => tx.oncomplete?.());
+        const store = {
+          put(v: unknown, k: string) { keptChecks.set(k, structuredClone(v)); done(); },
+          openCursor() {
+            const keys = [...keptChecks.keys()];
+            const req: { result: unknown; onsuccess: (() => void) | null } = { result: null, onsuccess: null };
+            const step = () => {
+              const k = keys.shift();
+              req.result = k === undefined ? null : { key: k, value: structuredClone(keptChecks.get(k)), delete: () => void keptChecks.delete(k), continue: () => queueMicrotask(step) };
+              req.onsuccess?.();
+              if (k === undefined) done();
+            };
+            later(step);
+            return req;
+          },
+        };
+        return tx;
+      },
+    };
+    const req = { result: db, onsuccess: null as (() => void) | null, onupgradeneeded: null, onerror: null, onblocked: null };
+    later(() => req.onsuccess?.());
+    return req;
+  },
+};
 const js = bundle.outputFiles[0].text;
 // The page without its script and the web fonts, which happy-dom would fetch.
 const html = readFileSync(editor + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", "").replace(/<link[^>]*fonts\.googleapis[^>]*>/g, "");
@@ -39,6 +76,7 @@ export function openEditor(saved?: string) {
   // What Node has and happy-dom doesn't pass on, a worker that never
   // answers, and no canvas to draw on (a shader's preview says so).
   w.structuredClone = structuredClone;
+  w.indexedDB = indexedDB;
   // No server: what the page fetches beside itself (prebuilt.ts's compiled
   // examples) isn't there, as when the editor is opened from a file. happy-dom
   // would ask port 80 and report the refused connection as the page's error.
