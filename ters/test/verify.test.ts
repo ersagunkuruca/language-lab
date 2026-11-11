@@ -53,3 +53,19 @@ test("a typing changed at a call, a use or a function is refused", () => {
   }
   assert.ok(tried >= 3, `${tried} kinds tried`);
 });
+
+test("a function whose row leaves out what a call in it does is refused", () => {
+  const p = loadProgram(join(root, "examples", "wc"));
+  const info = infer(p.code, p.pres.names, undefined, checkOptions);
+  const e = elaborate(p.code, info), own = p.own.defs;
+  // Each own function whose row names an effect: drop one, and some must
+  // be refused (the ones with a call in them that does it).
+  let refused = 0;
+  for (const id of own.flatMap((d) => subtree(p.code, d))) {
+    const t = e.types.get(id);
+    if (p.code.nodes[id]?.kind !== "lambda" || t?.t !== "fn" || !t.eff.effs.length) continue;
+    const changed: Elaboration = { ...e, types: new Map(e.types).set(id, { ...t, eff: { ...t.eff, effs: t.eff.effs.slice(1) } }) };
+    if (verify(p.code, changed, own).problems.length) refused++;
+  }
+  assert.ok(refused > 0, "no dropped effect was refused");
+});
