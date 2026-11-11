@@ -64,9 +64,6 @@ const notFinite = (v: Value): boolean => typeof v === "number" ? !Number.isFinit
   : !!v && typeof v === "object" && "fields" in v && (v as { fields: Value[] }).fields.some(notFinite);
 
 const STEPS = 5000;
-// Searched through relate, these take minutes: their settles spend no
-// steps, so the budget above doesn't stop them (I200).
-const TOO_SLOW = new Set(["mandelbrot-page/line", "mandelbrot-rows/line"]);
 
 function disagreements(ex: string): { checked: string[]; problems: string[] } {
   const dir = join(root, "examples", ex);
@@ -87,7 +84,6 @@ function disagreements(ex: string): { checked: string[]; problems: string[] } {
     const inputs = t.params.map((x) => samples(x, p.code));
     if (inputs.some((s) => !s) || !samples(t.ret, p.code)) continue;
     const name = p.pres.names[def];
-    if (TOO_SLOW.has(`${ex}/${name}`)) continue;
     checked.push(name);
     const params = get(p.code, get(p.code, def, "def").body!, "lambda").params;
     const r = makeRunner(p.code, info, { print: () => {} });

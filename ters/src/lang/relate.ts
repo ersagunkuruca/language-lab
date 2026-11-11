@@ -134,7 +134,9 @@ type Wait =
 
 // `spend` is the search's step budget, carried in the state so the
 // equation solver, which runs outside the interpreter, spends from it too.
-interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean; asleep?: Asleep; read?: Reading }
+// `work`: what settle spends from (budgeted, below), which a `with fuel`
+// inside doesn't replace, as the program's fuel counts its own steps.
+interface State { sub: Sub; eqs: Eq[]; waits: Wait[]; next: number; spend?: () => boolean; work?: () => boolean; asleep?: Asleep; read?: Reading }
 
 // How far a backward read of a text got (BACKLOG L70c, GRAMMARS-2026-11-02
 // step 3): running a function backwards from a known text, each piece the
@@ -496,6 +498,7 @@ const evalExpr = evaluateSolverExpr as unknown as (e: Expr, env: Record<string, 
 // fully known, solve one that the solver can, wake a waiting constraint.
 // Each of these may branch, so this returns a stream.
 function settle(s: State): Stream {
+  if (s.work && !s.work()) return null;
   // The solver may take up to six equations together: with that few in
   // all, they're all at hand.
   if (s.asleep?.eqs && s.eqs.length + s.asleep.eqs <= AWAKE) s = wakeEqs(s);
@@ -757,6 +760,8 @@ export interface Options {
   // calling a recursive definition). Returning false ends the search there:
   // this is how `with fuel` bounds a backwards search.
   spend?: () => boolean;
+  // Called at each settle (budgeted, below).
+  work?: () => boolean;
   // The names generic `show` prints cases with; std's if not given.
   names?: Names;
   // What `random()` answers with, inside `seeded` (set by its reading below).
@@ -927,7 +932,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       let whole = true;
       for (let pass = 0; whole; pass++) {
         table.hit = false;
-        const [vs, s0] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, read: s.read }, open.length);
+        const [vs, s0] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, work: opts.work, read: s.read }, open.length);
         const inner = now.map((a, i) => (a instanceof LVar ? vs[open.indexOf(i)] : deep(a, s)));
         const found: Term[][] = [], seen = new Set<string>();
         // Its plan is made for what is known now, whatever the caller planned.
@@ -1154,7 +1159,7 @@ export function interpreter(given: Code, opts: Options = {}) {
           constants.set(target, null);
           let found: Term | null = null, answers = 0;
           try {
-            const [[x], s1] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend }, 1);
+            const [[x], s1] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, work: opts.work }, 1);
             for (const st of pull(value(x)(s1))) {
               const g = everyEq(st).length || everyWait(st).length ? undefined : ground(x, st);
               if (!g || ++answers > 1) { found = null; break; }
@@ -1956,11 +1961,25 @@ export interface Answer {
   residual: string[];
 }
 
+// Settling (checking the equations, solving some, waking waits) spends
+// no step, so a search's step counts stay those of its unfoldings. But
+// settles can wake one another for good with no step between
+// (mandelbrot's line backwards, 1,200 equations asleep, I200): past FREE
+// settles in a row, each is a step too.
+const FREE = 64;
+function budgeted(opts: Options): Options {
+  const spend = opts.spend;
+  if (!spend || opts.work) return opts;
+  let since = 0;
+  return { ...opts, spend: () => { since = 0; return spend(); }, work: () => ++since <= FREE || spend() };
+}
+
 // Run `fn` with the ports in `known` given and every other port solved for.
 // The ports of a function are its params (binder ids) and "out". Lazy: take
 // as many answers as you need. May not end if there is no answer and the
 // search space is infinite; pass `spend` to bound it.
 export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts: Options = {}): Generator<Answer> {
+  opts = budgeted(opts);
   const it = interpreter(code, opts);
   // A definition given by its name (values.ts) is its function.
   const given = (v: unknown): Term => {
@@ -1970,7 +1989,7 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
   };
   const at: Record<string, Term> = Object.fromEntries(Object.entries(known).map(([k, v]) => [k, given(v)]));
   const read: Reading | undefined = opts.stuck && typeof known.out === "string" ? { text: known.out, at: 0, expected: new Set(), found: new Map() } : undefined;
-  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, read };
+  const start: State = { sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, work: opts.work, read };
   const ports = portsOf(code, fn, Object.keys(known));
   let answers = 0;
   const [vs, s] = freshVars(start, ports.length);
@@ -2002,8 +2021,9 @@ export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts
 
 // Does some value make f true? This is `for some` run forward.
 export function satisfiable(code: Code, f: unknown, opts: Options = {}): boolean {
+  opts = budgeted(opts);
   const it = interpreter(code, opts);
-  const [[x], s] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend }, 1);
+  const [[x], s] = freshVars({ sub: new Sub(), eqs: [], waits: [], next: 0, spend: opts.spend, work: opts.work }, 1);
   for (const _ of pull(it.apply(fromValue(f), [x], boolT(true))(s))) return true;
   return false;
 }
