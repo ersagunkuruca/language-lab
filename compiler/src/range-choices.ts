@@ -1,4 +1,4 @@
-// A choice over a range's items made with no list (BACKLOG C207, on C and JavaScript).
+// A choice over a range's items made with no list (BACKLOG C207, on C, WebAssembly and JavaScript).
 // queens' `choose column from range n` lowers to a loop over a list
 // (scalar.ts's "choose"): each placement fills an array with 0 … n − 1
 // (`range`), makes a list of its items (`items of`), and the loop takes

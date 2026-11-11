@@ -7453,8 +7453,14 @@ export const runtime = (name: string): RtFn => {
   const i64 = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv)$/.exec(name);
   if (i64) {
     const op = i64[1];
-    // A range's items as one int64 (C207p): on C only.
-    if (op === "range" || op === "rangeSplit") return { name, params: [["x", "f64"]], result: "i64", locals: [], uses: [], native: true, body: "unreachable" };
+    // A range's items as one int64 (C207p; C207u on WebAssembly, which
+    // splits no choice): its end in the 31 bits above the next item's,
+    // and a range whose list wouldn't fit in memory a trap.
+    if (op === "range") return {
+      name, params: [["x", "f64"]], result: "i64", locals: [["m", "f64"]], uses: [], native: true,
+      body: "local.get $x\nlocal.get $x\nf64.ne\nlocal.get $x\nf64.const 0\nf64.le\ni32.or\nif i64\ni64.const 0\nelse\nlocal.get $x\nf64.floor\nlocal.tee $m\nf64.const 2147483647\nf64.gt\nif void\nunreachable\nend\nlocal.get $m\ni64.trunc_f64_s\ni64.const 31\ni64.shl\nend",
+    };
+    if (op === "rangeSplit") return { name, params: [["x", "f64"]], result: "i64", locals: [], uses: [], native: true, body: "unreachable" };
     // k·x + c tested once (C207q): wasm.ts writes it inline, x a local.
     if (op === "muladdv") return {
       name, params: [["x", "i64"], ["k", "i64"], ["c", "i64"]], result: "i64", locals: [], uses: [], native: true,

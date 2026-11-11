@@ -55,13 +55,17 @@ test("ters wasi counts divisors with i64s, printing what ters run prints", async
 });
 
 // C211d: queens-count's fold reads its array at a counted position, an
-// i64, with array.get's .i64 body, not boxed and taken back.
+// i64, with array.get's .i64 body, not boxed and taken back. And its
+// choice of a column counts through the range, no list made (C207u),
+// an empty board's too.
 test("ters wasi counts the queens with array reads at i64s, printing what ters run prints", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "lab-wasi-")), args = ["6"];
+  const dir = mkdtempSync(join(tmpdir(), "lab-wasi-"));
   const made = spawnSync(process.execPath, [lab, "wasi", join(examples, "queens-count"), "-o", join(dir, "p.wasm")], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
-  const want = spawnSync(process.execPath, [lab, "run", join(examples, "queens-count"), ...args], { encoding: "utf8" });
-  assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status]);
+  for (const args of [["6"], ["0"]]) {
+    const want = spawnSync(process.execPath, [lab, "run", join(examples, "queens-count"), ...args], { encoding: "utf8" });
+    assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status], args[0]);
+  }
 });
 
 // C211: a table of Int keys lists its entries by a radix sort on
