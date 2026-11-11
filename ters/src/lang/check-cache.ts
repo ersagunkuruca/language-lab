@@ -54,6 +54,9 @@ interface Closed {
   noWorld: number[];
   needs: [number, Id, Id][];
   subs: { from: Row; to: Row; at?: Id }[];
+  // Uses of an interface's operation at the group's own variables, kept
+  // live for showing its types (infer.ts generalize: "Kept live too").
+  effectsAt?: { t: Type; iface: Id; field: number; row: Row; at: Id }[];
 }
 
 // Renumbers the variables of the types it is given, in the order they are
@@ -279,6 +282,7 @@ export class CheckCache {
         for (const [v, i, at] of c.needs) { const m = s.needs.get(o.v(v)) ?? new Map<Id, Id>(); m.set(i, at); s.needs.set(o.v(v), m); }
         for (const x of c.subs) s.subs.push({ from: o.row(x.from), to: o.row(x.to), ...(x.at !== undefined ? { at: x.at } : {}) });
         for (const w of c.wanted) s.wanted.push({ t: o.type(w.t), iface: w.iface, at: w.at });
+        for (const e of c.effectsAt ?? []) s.effectsAt.push({ t: o.type(e.t), iface: e.iface, field: e.field, row: o.row(e.row), at: e.at });
         for (const [d, sc] of c.schemes) info.schemes.set(d, o.scheme(sc));
         for (const d of c.divergent) info.divergent.add(d);
         for (const [id, t] of c.typeOf) info.typeOf.set(id, o.type(t));
@@ -341,6 +345,7 @@ export class CheckCache {
         for (const [id, e] of info.embedded ?? []) { note(e.from, where(id)); note(e.to, where(id)); if (e.of) note(e.of, where(id)); }
         for (const [d, sc] of info.schemes) { if (layer?.schemes.get(d) === sc) continue; note(sc.type, where(d)); }
         for (const w of s.wanted) note(w.t, w.at ? where(w.at) : -1);
+        for (const e of s.effectsAt) { note(e.t, where(e.at)); noteRow(e.row, where(e.at)); }
         for (const c of s.subs) {
           const f = s.resolveRow(c.from).tail, t = s.resolveRow(c.to).tail;
           const gf = f === null ? undefined : varGroup.get(f), gt = t === null ? undefined : varGroup.get(t);
@@ -369,6 +374,8 @@ export class CheckCache {
             wanted: s.wanted.slice(m.from, m.to).map((w) => ({ t: cl.type(w.t), iface: w.iface, at: w.at })),
             plain: [], numbers: [], arith: [], fractional: [], whole: [], noWorld: [], needs: [], subs: [],
           };
+          const at = s.effectsAt.filter((e) => groupOf.get(e.at) === i);
+          if (at.length) c.effectsAt = at.map((e) => ({ t: cl.type(e.t), iface: e.iface, field: e.field, row: cl.row(e.row), at: e.at }));
           for (const x of s.subs) {
             const f = s.resolveRow(x.from).tail;
             if (f !== null && varGroup.get(f) === i) c.subs.push({ from: cl.row(x.from), to: cl.row(x.to), ...(x.at !== undefined ? { at: x.at } : {}) });
