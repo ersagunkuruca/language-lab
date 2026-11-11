@@ -43,3 +43,13 @@ test("ters wasi runs collatz's loop on i64s, printing what ters run prints", asy
   const want = spawnSync(process.execPath, [lab, "run", join(examples, "collatz"), ...args], { encoding: "utf8" });
   assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status]);
 });
+
+// C211: a table of Int keys lists its entries by a radix sort on
+// WebAssembly (64 or more keys, all i31s); swarm's `keys of` each tick.
+test("ters wasi lists swarm's motes in order, printing what ters run prints", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "lab-wasi-")), args = ["60", "30"];
+  const made = spawnSync(process.execPath, [lab, "wasi", join(examples, "swarm"), "-o", join(dir, "p.wasm")], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr);
+  const want = spawnSync(process.execPath, [lab, "run", join(examples, "swarm"), ...args], { encoding: "utf8" });
+  assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status]);
+});
