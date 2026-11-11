@@ -585,7 +585,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -854,19 +854,24 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     if (e.k === "local") return e.i === j;
     if ((e.k === "get" || e.k === "field" || e.k === "tag") && e.rec.k === "local" && e.rec.i === j) return false;
     // An array's item or length read from it (C207g, C207r).
-    if (e.k === "rt" && /^array\.(get|length)\.a\d+$/.test(e.fn) && e.args[0].k === "local" && e.args[0].i === j) return e.args.slice(1).some((x) => owns(x, j));
+    if (e.k === "rt" && /^array\.(get|length|at)\.a\d+$/.test(e.fn) && e.args[0].k === "local" && e.args[0].i === j) return e.args.slice(1).some((x) => owns(x, j));
     if (e.k === "call") return e.args.some((a, k) => (a.k === "local" && a.i === j ? !lent.get(e.fn)?.has(k) : owns(a, j)));
     return kids(e).some((x) => owns(x, j));
   };
-  for (let more = true; more;) {
-    more = false;
-    for (const [i, ps] of lent) for (const j of [...ps]) if (owns(funcs[i].body, j)) { ps.delete(j); more = true; }
-  }
   // Nor one whose array or table field it takes out (swarm's `tick`
   // giving its map to `moved`): lent, the caller still holds that field,
   // so each change to it is a copy or a new version rather than in place.
-  const container = (e: SExpr, j: number): boolean => (e.k === "get" && e.rec.k === "local" && e.rec.i === j && (isArray(e.t.fields[e.i].t) || isTable(e.t.fields[e.i].t))) || kids(e).some((x) => container(x, j));
-  for (const [i, ps] of lent) for (const j of [...ps]) if (container(funcs[i].body, j)) ps.delete(j);
+  // A field let to a local that is only read or lent on in turn is not
+  // taken out (C58l: `pool item` reads its pool's items and generations).
+  const isBox = (e: SExpr, j: number): e is SExpr & { k: "get" } => e.k === "get" && e.rec.k === "local" && e.rec.i === j && (isArray(e.t.fields[e.i].t) || isTable(e.t.fields[e.i].t));
+  const container = (e: SExpr, j: number): boolean => {
+    if (e.k === "let" && isBox(e.value, j)) return owns(e.body, e.i) || container(e.body, j);
+    return isBox(e, j) || kids(e).some((x) => container(x, j));
+  };
+  for (let more = true; more;) {
+    more = false;
+    for (const [i, ps] of lent) for (const j of [...ps]) if (owns(funcs[i].body, j) || container(funcs[i].body, j)) { ps.delete(j); more = true; }
+  }
   for (const [i, ps] of [...lent]) if (!ps.size) lent.delete(i);
   const bnames = new Map([...lent.keys()].map((i) => [i, ident(`${names.get(i)}_b`)]));
   const text = kept.map((i) => func(funcs[i], i));
@@ -1812,11 +1817,14 @@ int main(int argc, char **argv) {
           // dropped once here when the local isn't used after.
           const get = ARRAY_FN.exec(e.fn);
           // And its length (C207r), the array lent the same way.
-          if ((get?.[1] === "get" || get?.[1] === "length") && e.args[0].k === "local") {
-            const fb = `array.${get[1] === "get" ? "getb" : "lengthb"}.a${get[2]}`, j = e.args[0].i;
+          // An item at (C58l), no answer past the end: lent only while the
+          // array is used after, so that no path has it to drop.
+          if ((get?.[1] === "get" || get?.[1] === "length" || (get?.[1] === "at" && e.args[0].k === "local" && (!isCounted(e.args[0].i) || after.has(e.args[0].i)))) && e.args[0].k === "local") {
+            const fb = `array.${get[1] === "get" ? "getb" : get[1] === "at" ? "atb" : "lengthb"}.a${get[2]}`, j = e.args[0].i;
             arrayFns.add(fb);
-            const kx = get[1] === "get" ? args([e.args[1]], pre, d, after) : [];
+            const kx = get[1] !== "length" ? args([e.args[1]], pre, d, after) : [];
             const c = `${cName(fb)}(${[local(j), ...kx].join(", ")})`;
+            if (get[1] === "at") return checked(c, rtType(e.fn), pre, d, after);
             if (!isCounted(j) || after.has(j)) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(`${d}${drop(f.locals[j], local(j))}`);
@@ -3290,6 +3298,12 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   ${T} x = ${cp(rd(`((${B} *)v->b)`, "v->s + LAB_VAL(k)"))};
   lab_drop(a);
   return x;
+}`);
+    // Item k, or no answer past the end, the array lent (C58l).
+    if (has("atb")) out.push(`static ${T} lab_array_atb_a${i}(lab_cell *a, lab_int k) {
+  ${V} *v = (${V} *)a;
+  if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); lab_st = 1; return ${zero(a.item)}; }
+  return ${cp(rd(`((${B} *)v->b)`, "v->s + LAB_VAL(k)"))};
 }`);
     // Item k where k is known to be in the array (equal and compare's loop).
     if (has("getb")) out.push(`static inline ${T} lab_array_getb_a${i}(lab_cell *a, lab_int k) { return ${cp(rd(`((${B} *)((${V} *)a)->b)`, `((${V} *)a)->s + LAB_VAL(k)`))}; }`);
