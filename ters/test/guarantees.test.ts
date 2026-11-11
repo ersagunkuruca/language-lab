@@ -11,7 +11,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { relate } from "../src/lang/relate.ts";
 import { makeRunner, runMain, toList, type Value } from "../src/lang/run.ts";
-import { CONS, INT_OPS as I, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { ARITH, CONS, INT_OPS as I, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { CHOICE, CONSOLE, DIVERGE, showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
@@ -171,6 +171,23 @@ test("bounded counting: an Int counted towards a bound it is compared with is to
   assert.deepEqual(p.errors, []);
   for (const d of ["up", "up to n", "down"]) assert.ok(!p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
   for (const d of ["chase", "ping pong", "float count", "unguarded"]) assert.ok(p.effects(defs[d]).includes(DIVERGE), `${d}: ${p.type(defs[d])}`);
+});
+
+// I199: literals written without a type (as the text reader leaves them)
+// count an input whose type has settled to Int; while it is any Number
+// (a Float64 among them), the definition may not finish.
+test("bounded counting: untyped literals count an input that is an Int", () => {
+  const defs: Record<string, Id> = {};
+  const p = program((k) => {
+    const def = (name: string, params: string[], body: (self: Id, ...ps: Id[]) => Id) => { const d = k.def(name); defs[name] = d; k.define(d, k.fn(params, (...ps) => body(d, ...ps))); };
+    // if 0 < left then down(x, left − 1) else left + 0 (an Int's +)
+    def("int down", ["x", "left"], (self, x, l) => k.if(k.call(ARITH.less, k.lit(0), l), k.call(self, x, k.call(ARITH.sub, l, k.lit(1))), k.call(I.add, l, k.int(0))));
+    // the same with any Number
+    def("any down", ["x", "left"], (self, x, l) => k.if(k.call(ARITH.less, k.lit(0), l), k.call(self, x, k.call(ARITH.sub, l, k.lit(1))), x));
+  });
+  assert.deepEqual(p.errors, []);
+  assert.ok(!p.effects(defs["int down"]).includes(DIVERGE), p.type(defs["int down"]));
+  assert.ok(p.effects(defs["any down"]).includes(DIVERGE), p.type(defs["any down"]));
 });
 
 test("only functions can be recursive: a value defined in terms of itself is refused", () => {

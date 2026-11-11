@@ -16,6 +16,12 @@
 //
 // The termination check in infer.ts and the mode check in modes.ts both
 // take a counted input as one that strictly shrinks at that call.
+//
+// A literal written without a type (`left − 1` through the text reader)
+// is some number, Float64 when nothing says (WHAT-NUMBER-MEANS.md). Given
+// `isInt`, which says an input's type has settled to Int, such a literal
+// counts or bounds that input as an Int literal does (I199): it is at the
+// input's type.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { isCall, isUse, useKids } from "../model.ts";
@@ -29,7 +35,9 @@ const DOWN = new Set<Id>([INT_OPS.sub, ARITH.sub]);
 type Guard = { input: number; up: boolean; bound: string };
 interface SelfCall { call: Id; unchanged: Set<number>; counts: { input: number; up: boolean; bound: string }[] }
 
-const isPositiveInt = (n: Node | undefined) => n?.kind === "lit" && n.of === INT && Number(n.value) > 0;
+// An Int literal, or a whole number with no type when the input it meets is an Int.
+const isIntLit = (n: Node | undefined, intInput: boolean) => n?.kind === "lit" && (n.of === INT || (intInput && n.of === undefined && typeof n.value === "number" && Number.isInteger(n.value)));
+const isPositiveInt = (n: Node | undefined, intInput: boolean) => isIntLit(n, intInput) && Number((n as NodeOf<"lit">).value) > 0;
 
 // Expressions and binders under a node (types and variants left out).
 function kids(n: Node): Id[] {
@@ -47,12 +55,14 @@ function kids(n: Node): Id[] {
 
 // The calls of `self` in its own body whose inputs count towards a bound,
 // as `${call}:${input}`.
-export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">): Set<string> {
+export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">, isInt?: (param: Id) => boolean): Set<string> {
   const nodes = code.nodes;
   const inputOf = (id: Id) => { const n = nodes[id]; if (n?.kind !== "ref") return undefined; const i = lam.params.indexOf(n.target); return i < 0 ? undefined : i; };
-  const boundOf = (id: Id): string | null => {
+  const intInput = (j: number | undefined) => j !== undefined && !!isInt?.(lam.params[j]);
+  // The bound an input on the other side (`other`) is compared with.
+  const boundOf = (id: Id, other: number | undefined): string | null => {
     const n = nodes[id];
-    if (n?.kind === "lit" && n.of === INT) return `lit ${n.value}`;
+    if (isIntLit(n, intInput(other))) return `lit ${(n as NodeOf<"lit">).value}`;
     const i = inputOf(id);
     return i === undefined ? null : `input ${i}`;
   };
@@ -69,7 +79,7 @@ export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">): Set<s
     // the larger, the larger down towards the smaller.
     const [lo, hi] = holds ? [n.args[0], n.args[1]] : [n.args[1], n.args[0]];
     const out: Guard[] = [];
-    const ilo = inputOf(lo), ihi = inputOf(hi), bh = boundOf(hi), bl = boundOf(lo);
+    const ilo = inputOf(lo), ihi = inputOf(hi), bh = boundOf(hi, ilo), bl = boundOf(lo, ihi);
     if (ilo !== undefined && bh !== null) out.push({ input: ilo, up: true, bound: bh });
     if (ihi !== undefined && bl !== null) out.push({ input: ihi, up: false, bound: bl });
     return out;
@@ -94,7 +104,7 @@ export function countedCalls(code: Code, self: Id, lam: NodeOf<"lambda">): Set<s
         if (!up && !down) return;
         // x + c or c + x; x − c
         const [x, c] = up && inputOf(m.args[0]) === undefined ? [m.args[1], m.args[0]] : [m.args[0], m.args[1]];
-        if (inputOf(x) !== j || !isPositiveInt(nodes[c])) return;
+        if (inputOf(x) !== j || !isPositiveInt(nodes[c], intInput(j))) return;
         const g = guards.find((g) => g.input === j && g.up === up);
         if (g) call.counts.push({ input: j, up, bound: g.bound });
       });
