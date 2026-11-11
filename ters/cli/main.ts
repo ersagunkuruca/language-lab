@@ -43,7 +43,7 @@ const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({}
 const { mapsInPlaceCounted, ownedArrays } = compiles ? await import("../../compiler/src/owned-arrays.ts") : ({} as typeof import("../../compiler/src/owned-arrays.ts"));
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
-const { untaggedLoops } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
+const { untaggedLoops, untaggedFunctions } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
 const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
 const { rangeChoices, rangeArrays } = compiles ? await import("../../compiler/src/range-choices.ts") : ({} as typeof import("../../compiler/src/range-choices.ts"));
 const { parallelColumnMaps } = compiles ? await import("../../compiler/src/par-columns.ts") : ({} as typeof import("../../compiler/src/par-columns.ts"));
@@ -265,6 +265,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
     // And a loop's counting Ints as plain int64s (C207e, untagged-ints.ts).
     untaggedLoops(lowered);
+    // And a function only computing on Ints, called (round 13 P4).
+    if (!process.env.NO_UNTAGGED_FNS) untaggedFunctions(lowered);
     // And a loop folding a Bool with `and` stopping once it's false (C207m).
     if (!process.env.NO_EARLY_AND) earlyAnd(lowered);
     // And a choice over a range's items as one int64, no list (C207p).

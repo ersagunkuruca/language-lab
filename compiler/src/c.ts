@@ -101,7 +101,7 @@ const ARRAY_FN = /^array\.(\w+)\.a(\d+)$/;
 // its slot.
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 // untagged-ints.ts's ops on a loop's counts (C207e).
-const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv)$/;
+const I64_FN = /^i64\.(eq|less|add|sub|addv|subv|mulv|and|shr|toNumber|box|unbox|small|lit|range|rangeSplit|muladdv|mod)$/;
 // A count stepped past the small Ints: some 2^62 steps, never in practice.
 const I64_C = `static void lab__i64_past(void) { fflush(stdout); fputs("a count went past 2^62\\n", stderr); exit(1); }
 static inline int64_t lab__i64_add(int64_t a, int64_t b) { int64_t r = a + b; if (r < lab__min || r > lab__max) lab__i64_past(); return r; }
@@ -1808,7 +1808,7 @@ int main(int argc, char **argv) {
               pre.push(`${d}if (lab__i64_${i64[1]}(${xs[0]}, ${xs[1]}, &${v})) goto lab_bail;`);
               return v;
             }
-            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, and: `(${xs[0]} & ${xs[1]})`, shr: `(${xs[0]} >> ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0] } as Record<string, string>)[i64[1]];
+            const c = ({ eq: `(${xs[0]} == ${xs[1]})`, less: `(${xs[0]} < ${xs[1]})`, add: `lab__i64_add(${xs[0]}, ${xs[1]})`, sub: `lab__i64_sub(${xs[0]}, ${xs[1]})`, and: `(${xs[0]} & ${xs[1]})`, mod: `(((${xs[0]} % ${xs[1]}) + ${xs[1]}) % ${xs[1]})`, shr: `(${xs[0]} >> ${xs[1]})`, toNumber: `((double)${xs[0]})`, box: `LAB_SMALL(${xs[0]})`, unbox: `LAB_VAL(${xs[0]})`, small: `LAB_IS_SMALL(${xs[0]})`, lit: xs[0] } as Record<string, string>)[i64[1]];
             if (!gone.length) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(...gone.map((j) => `${d}${drop(f.locals[j], local(j))}`));

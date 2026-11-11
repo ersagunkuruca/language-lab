@@ -16,7 +16,7 @@ import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { book } from "../gaps/ledger.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { TRUE } from "../../ters/src/lang/std.ts";
-import { isRecord, lowerScalar, type DType, type LType, type CoreIR, type RType } from "../src/scalar.ts";
+import { isRecord, kids, lowerScalar, type DType, type LType, type CoreIR, type RType, type SExpr } from "../src/scalar.ts";
 import { CFLAGS, emitC } from "../src/c.ts";
 import { load } from "../src/program.ts";
 import { withInverses } from "../src/inverses.ts";
@@ -25,6 +25,7 @@ import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { withLibraryRepresentations } from "../../ters/src/lang/library-reps.ts";
 import { checkOptions } from "../../ters/src/lang/load.ts";
 import { represented } from "../../ters/cli/represented.ts";
+import { untaggedFunctions } from "../src/untagged-ints.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { area, choices, numberTexts, fuzzFinds, fuzzFindInputs, caseNameInputs, caseNames, changeInputs, changes, escapes, randomInputs, randoms, fractionInputs, fractions, maths, ordered, orderedInputs, roses, sameLists, showInputs, shows, stopsWith, worldly } from "../src/fixtures.ts";
 
@@ -438,6 +439,29 @@ test("with threads, a definition's value is made once and kept uncounted for eve
   assert.match(c, /lab_par/, "the plans are mapped on the threads");
   assert.match(c, new RegExp(`static lab_cell \\*lab_m${offsets}_make\\(void\\) \\{ lab_cell \\*x = lab_offsets\\(\\), \\*z = 0; lab_forever\\(x\\);`));
   assert.doesNotMatch(c.slice(c.indexOf("\ndouble lab_scent_at_b(")), /= lab_offsets\(\);/);
+});
+
+test("a function only computing on Ints runs on int64s, and as written past them, with the evaluator's answers (round 13 P4)", { skip }, () => {
+  const p = load("../../compiler/gaps/pond");
+  const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
+  assert.ok(untaggedFunctions(lowered) > 0);
+  const at = (name: string) => lowered.funcs.findIndex((g) => g.name === name && !g.inner);
+  const neighbour = lowered.funcs.findIndex((g) => g.name === "neighbour untagged");
+  assert.ok(neighbour >= 0 && lowered.funcs[neighbour].params.every((t) => t === "i64"));
+  // wrapped cell and cell key written into it: no calls left, side cells a literal.
+  const calls: string[] = [];
+  (function walk(e: SExpr) { if (e.k === "call") calls.push(lowered.funcs[e.fn].name); kids(e).forEach(walk); })(lowered.funcs[neighbour].body);
+  assert.deepEqual(calls, []);
+  const { c } = emitC(lowered);
+  assert.match(c, /% INT64_C\(48\)\) \+ INT64_C\(48\)\) % INT64_C\(48\)/);
+  const r = makeRunner(p.code, p.info, { print: () => {} });
+  const big = [0n, 1n, -1n, 47n, -49n, 1000n, (1n << 61n) - 1n, -(1n << 61n), (1n << 62n) - 7n, 1n << 70n, -(1n << 70n) + 3n];
+  const work: [number, Value[]][] = [];
+  for (const x of big) for (const y of [0n, -5n, 1n << 61n, 1n << 70n]) {
+    work.push([at("neighbour"), [x, y, -3n, x].map(norm)], [at("cell key"), [x, y].map(norm)]);
+  }
+  for (const x of big) work.push([at("wrapped cell"), [norm(x)]]);
+  sameAndFreed(build(lowered), work, (i, xs) => first(r.call(r.value(lowered.funcs[i].def), ...xs))!, (i) => lowered.funcs[i].name);
 });
 
 test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {
