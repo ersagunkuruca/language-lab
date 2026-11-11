@@ -1199,7 +1199,14 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // Run forward, a definition that ends by lengths (spine.ts, I84) ends
   // here too, given functions that don't lead back to it.
   const groups = new Map<Id, Id[]>();
-  const byLength = (k: string) => {
+  // What each definition reaches, walked once per analyzer: each byLength
+  // asked it again of every definition d reaches (I203: a fifth of
+  // bounce's check for running).
+  const reached = new Map<Id, Set<Id>>();
+  const reaches = (x: Id) => { let r = reached.get(x); if (!r) reached.set(x, (r = new Set(dependencies(code, x)))); return r; };
+  const lengths = new Map<string, boolean>();
+  const byLength = (k: string) => { let v = lengths.get(k); if (v === undefined) lengths.set(k, (v = endsByLength(k))); return v; };
+  const endsByLength = (k: string) => {
     const [lam, known, ...given] = k.split("|"), body = nodes[lam];
     const d = code.defs.find((d) => (nodes[d] as NodeOf<"def">).body === lam);
     if (!d || body?.kind !== "lambda" || known !== body.params.map((_, i) => String(i)).sort().join(",")) return false;
@@ -1207,8 +1214,8 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     // The whole group d calls itself through (agent's pull, pull left and
     // restart), each read by its own body: d alone sees no call back (L232).
     let group = groups.get(d);
-    if (!group) { const deps = dependencies(code, d); group = [d, ...deps.filter((x) => x !== d && nodes[x]?.kind === "def" && dependencies(code, x).includes(d))]; groups.set(d, group); }
-    return fns.every((f) => f.startsWith("def:") && !dependencies(code, f.slice(4)).includes(d)) && spineTerminates(code, group, (x) => { const b = (nodes[x] as NodeOf<"def">).body; return b ? nodes[b] : null; });
+    if (!group) { group = [d, ...[...reaches(d)].filter((x) => x !== d && nodes[x]?.kind === "def" && reaches(x).has(d))]; groups.set(d, group); }
+    return fns.every((f) => f.startsWith("def:") && !reaches(f.slice(4)).has(d)) && spineTerminates(code, group, (x) => { const b = (nodes[x] as NodeOf<"def">).body; return b ? nodes[b] : null; });
   };
   // Size-change: every composed graph from a mode back to itself that's
   // its own square needs a port that strictly shrinks around it.

@@ -5,7 +5,7 @@
 // (std.ts Table, rerooted), so a program that reads an old version of a
 // map after a put gets the table too and prints the same.
 
-import { test } from "node:test";
+import { beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { B } from "../../ters/src/prelude.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -23,6 +23,13 @@ import { kids, lowerScalar, type SExpr } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile as cc, skip } from "./c-harness.ts";
+
+// Each test after a turn of the event loop (I204): a check's trials are
+// kept by WeakRef while the library may still join (types.ts Subst.trial),
+// and a WeakRef holds what it refers to until the job queue empties. The
+// tests' promises chain without one, so every check of the file stayed
+// live and the file ran out of memory.
+beforeEach(() => new Promise((r) => setImmediate(r)));
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
