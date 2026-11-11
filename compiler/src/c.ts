@@ -283,6 +283,9 @@ static int lab_par_worth(const struct timespec *t0) {
   return (double)(t.tv_sec - t0->tv_sec) * 1e3 + (double)(t.tv_nsec - t0->tv_nsec) / 1e6 >= 1;
 }`;
 
+const RANGE_C = `#define LAB_RUN 4096
+typedef struct { lab_cell *a; int64_t n, next; } lab_range_job;`;
+
 // Divide and conquer on the threads (C61e3, scalar.ts `par:both`): a
 // function's two calls of itself, the second pushed where any thread may
 // take it, the first made here, then the second waited for, or made here
@@ -386,7 +389,7 @@ const isFiber = (fn: string) => FIBER.test(fn);
 const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
 type SearchHow = "count" | "all" | "first";
 const folds = (job: string) => job === "add" || job === "max" || job === "min" || job === "with";
-const isPar = (fn: string) => fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
+const isPar = (fn: string) => fn.startsWith("par:range:") || fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -708,6 +711,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const statics = new Map<string, { name: string; decl: string }>(), rts = new Set<string>(), arrayFns = new Set<string>();
   // The functions whose two calls of themselves go on the threads (C61e3).
   const boths = new Set<number>();
+  // In-place maps over slots on the threads (C201, par-columns.ts): the
+  // run function's index, and its array's view.
+  const ranges = new Map<number, string>();
   // `array of` a table's keys (C58j): [table, entries list, array] each.
   const keyArrays: [number, number, number][] = [];
   // Each map on threads, by its array types and function type (parC).
@@ -986,6 +992,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...fiberC,
     ...kept.map((i) => `${header(i)};`),
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
+    ...(threads && ranges.size ? [RANGE_C, ...[...ranges].map(([gi, view]) => rangeC(gi, view, fuelled))] : []),
     ...(threads && boths.size ? [dcC(fuelled), ...[...boths].map((gi) => bothC(gi, stops, fuelled))] : []),
     ...[...once].map((i) => `static ${ty(funcs[i].result)} lab_m${i}; static int lab_m${i}_has = 0;`),
     ...(opts.harness ? [`static void lab_memo_clear(void) { ${[...once].map((i) => `if (lab_m${i}_has) { ${counted(funcs[i].result) ? drop(funcs[i].result, `lab_m${i}`) : ""} lab_m${i}_has = 0; }`).join(" ")} }`] : []),
@@ -1645,6 +1652,14 @@ int main(int argc, char **argv) {
             arrayFns.add(fn);
             return stated(`${cName(fn)}(${args(r0.args, pre, d, after).join(", ")})`, lowered.arrays[Number(ofRange[2])], pre, d);
           }
+          // C201: an in-place map's slots in runs on the threads
+          // (par-columns.ts): the count and the array lent; 1 if it ran.
+          const rg = /^par:range:(\d+)$/.exec(e.fn);
+          if (rg) {
+            if (!e.args.every((a) => a.k === "local")) throw new Error(`${e.fn} takes locals`);
+            ranges.set(Number(rg[1]), aname.get((typeOf(e.args[1], f.locals) as AType).key)!.view);
+            return stated(`lab_range_${rg[1]}(${e.args.map((a) => local((a as SExpr & { k: "local" }).i)).join(", ")})`, "i32", pre, d);
+          }
           // C61e3: two calls of a function on the threads (dcC, bothC).
           if (e.fn === "par:both.on") return stated("lab_dc_on()", "i32", pre, d);
           const bo = /^par:both(\.second)?:(\d+)$/.exec(e.fn);
@@ -1705,7 +1720,9 @@ int main(int argc, char **argv) {
           const colRead = COL_FN.exec(e.fn);
           if (colRead && (colRead[1] === "length" || colRead[2] !== undefined)) {
             arrayFns.add(e.fn);
-            if (!e.args.every((a) => a.k === "local")) {
+            // A loop's count (C207e) as the index: small, so lent as it is.
+            const boxed = (a: SExpr) => a.k === "rt" && a.fn === "i64.box" && a.args[0].k === "local";
+            if (!e.args.every((a) => a.k === "local" || boxed(a))) {
               // Given, not lent: held in temps and dropped after the read.
               const ts = e.args.map((a) => typeOf(a, f.locals));
               const xs = args(e.args, pre, d, after).map((x, k) => (counted(ts[k]) ? stated(x, ts[k], pre, d) : x));
@@ -1713,9 +1730,9 @@ int main(int argc, char **argv) {
               xs.forEach((x, k) => counted(ts[k]) && pre.push(`${d}${drop(ts[k], x)}`));
               return v;
             }
-            const is = e.args.map((a) => (a as SExpr & { k: "local" }).i);
-            const gone = is.filter((j, k) => isCounted(j) && !after.has(j) && !is.slice(k + 1).includes(j));
-            const c = `${cName(e.fn)}(${is.map(local).join(", ")})`;
+            const is = e.args.map((a) => (a.k === "local" ? a.i : -1));
+            const gone = is.filter((j, k) => j >= 0 && isCounted(j) && !after.has(j) && !is.slice(k + 1).includes(j));
+            const c = `${cName(e.fn)}(${e.args.map((a) => (a.k === "local" ? local(a.i) : `LAB_SMALL(${local(((a as SExpr & { k: "rt" }).args[0] as SExpr & { k: "local" }).i)})`)).join(", ")})`;
             if (!gone.length) return c;
             const v = stated(c, rtType(e.fn), pre, d);
             pre.push(...[...new Set(gone)].map((j) => `${d}${drop(f.locals[j], local(j))}`));
@@ -2869,6 +2886,28 @@ failed:
   return 0;
 }`;
   }
+  // The runs of an in-place map's slots (C201, par-columns.ts): each
+  // thread takes the next RUN slots from the last down, and runs the loop
+  // over them where they are. Only for an array with one holder, so that
+  // each write is in place, of slots enough to be worth waking the pool.
+  function rangeC(gi: number, view: string, fuelled: boolean): string {
+    return `static void lab_range_work_${gi}(void *p) {
+  lab_range_job *j = p;
+  int64_t k;
+  while ((k = __atomic_fetch_add(&j->next, LAB_RUN, __ATOMIC_RELAXED)) < j->n) {
+    int64_t hi = j->n - k, lo = hi > LAB_RUN ? hi - LAB_RUN : 0;
+    ${names.get(gi)}(lo, hi, j->a, 0);
+    if (lab_on_pool) __atomic_fetch_add(&lab_par_items, hi - lo, __ATOMIC_RELAXED);
+  }
+}
+static int lab_range_${gi}(int64_t n, lab_cell *a) {
+  if (n < 16 * LAB_RUN || a->rc != 1 || ((${view} *)a)->b->rc != 1${fuelled ? " || lab_fuel != INFINITY" : ""} || !lab_pool_ready()) return 0;
+  lab_range_job j = { a, n, 0 };
+  lab_pool_run(lab_range_work_${gi}, &j);
+  return 1;
+}`;
+  }
+
   function parC(p: { n: number; ta: AType; tf: FType; to: AType; job: ParJob; tj?: FType }, stops: boolean, fuelled: boolean): string {
     const { n, ta, tf, to, job, tj } = p, keep = job !== "map", fold = folds(job), tests = job === "all" || job === "any" || job === "first", J = `lab_par_job_${n}`, Ti = ty(ta.item), out = keep ? tf.result : to.item, To = ty(out);
     const decides = (x: string) => (job === "all" ? `!${x}` : x);
