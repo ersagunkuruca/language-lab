@@ -72,9 +72,12 @@ export interface ShaderFunc { def: Id; name: string; wgsl: string; params: GType
 // for a time; `js`, the body of that function of `time`, for a picture
 // built ahead (shaders.html), which can't carry a function.
 export interface Framed { wgsl: string; count: number; values: (time: number) => number[]; js: string }
-export interface Shader { wgsl: string; funcs: ShaderFunc[]; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed }
+// entries: every function printed, by its index in lowered.funcs, those
+// under a budget too: a kernel of the runtime's own (C61 d′) sets the
+// budget itself.
+export interface Shader { wgsl: string; funcs: ShaderFunc[]; entries: Map<number, string>; refused: Map<Id, string>; structs: Map<string, { name: string; fields: string[] }>; matrices: Set<number>; framed?: Framed }
 const INFIX: Partial<Record<Op, string>> = {
-  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==",
+  add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "==", beq: "==", and: "&&", or: "||", iless: "<", ieq: "==", iand: "&", ior: "|", ixor: "^",
 };
 // An Int in a shader is an i32 (C66c). WGSL's i32 arithmetic wraps; a
 // result past 32 bits isn't the evaluator's, so it gives up as a budget
@@ -82,7 +85,7 @@ const INFIX: Partial<Record<Op, string>> = {
 // fallback, and outside any budget the answer isn't the evaluator's (as
 // outside a budget anywhere). The overflow tests are Hacker's Delight's
 // (Warren, 2-13): a sum overflows when both inputs' signs differ from its.
-const INT_CALL: Partial<Record<Op, string>> = { iadd: "lab_iadd", isub: "lab_isub", imul: "lab_imul", ineg: "lab_ineg", iabs: "lab_iabs", iquot: "lab_iquot", irem: "lab_irem", ipow: "lab_ipow", iwhole: "lab_iwhole" };
+const INT_CALL: Partial<Record<Op, string>> = { iadd: "lab_iadd", isub: "lab_isub", imul: "lab_imul", ineg: "lab_ineg", iabs: "lab_iabs", iquot: "lab_iquot", irem: "lab_irem", ipow: "lab_ipow", iwhole: "lab_iwhole", ishr: "lab_ishr" };
 // The ones that may have no answer, which set lab_none (scalar.ts `shader`).
 const NONE_OPS = new Set<Op>(["iquot", "irem", "ipow", "iwhole"]);
 const INT_HELPERS: Partial<Record<Op, string>> = {
@@ -138,6 +141,12 @@ const INT_HELPERS: Partial<Record<Op, string>> = {
     if (k > 0i) { b = lab_imul(b, b); }
   }
   return r;
+}`,
+  // floor(a / 2^n), as int.ts's shiftDown; a shift up gives up.
+  ishr: `fn lab_ishr(a: i32, n: i32) -> i32 {
+  if (n < 0i) { lab_fuel = -1.0; return 0i; }
+  if (n > 31i) { return select(0i, -1i, a < 0i); }
+  return a >> u32(n);
 }`,
   iwhole: `fn lab_iwhole(x: f32) -> i32 {
   // NaN or infinite, by the bits: a GPU may take x != x to be false.
@@ -659,6 +668,7 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
     // Only what can be called from outside a budget is a place to start.
     // A search with no answer outside any `first` isn't one either.
     funcs: kept.filter((i) => !funcs[i].budgeted && !funcs[i].partial && !isArray(funcs[i].result) && !arrayParams(i)).map((i) => ({ def: funcs[i].def, name: funcs[i].name, wgsl: wname.get(`${i}`)!, params: funcs[i].params as GType[], result: funcs[i].result as GType })),
+    entries: new Map(kept.filter((i) => wname.has(`${i}`)).map((i) => [i, wname.get(`${i}`)!])),
     refused,
     structs,
     matrices,
