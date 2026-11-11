@@ -7454,6 +7454,12 @@ export const runtime = (name: string): RtFn => {
     const op = i64[1], two: [string, VT][] = [["a", "i64"], ["b", "i64"]];
     const plain: Record<string, [string, VT]> = { eq: ["i64.eq", "i32"], less: ["i64.lt_s", "i32"], and: ["i64.and", "i64"], shr: ["i64.shr_s", "i64"] };
     if (plain[op]) return { name, params: two, result: plain[op][1], locals: [], uses: [], native: true, body: `local.get $a\nlocal.get $b\n${plain[op][0]}` };
+    // A count stepped (C207e; C211b on WebAssembly): past 2^62 it stops,
+    // as on C, where that many steps never finish in practice.
+    if (op === "add" || op === "sub") return {
+      name, params: two, result: "i64", locals: [["r", "i64"]], uses: [], native: true,
+      body: `local.get $a\nlocal.get $b\ni64.${op}\nlocal.tee $r\ni64.const 4611686018427387904\ni64.add\ni64.const 0\ni64.lt_s\nif void\nunreachable\nend\nlocal.get $r`,
+    };
     if (op === "toNumber") return { name, params: [["a", "i64"]], result: "f64", locals: [], uses: [], native: true, body: "local.get $a\nf64.convert_i64_s" };
     if (op === "box") return { name, params: [["a", "i64"]], result: "int", locals: [], uses: ["int.of"], native: true, body: "local.get $a\ncall $int.of" };
     if (op === "unbox") return { name, params: [["x", "int"]], result: "i64", locals: [], uses: ["int.small"], native: true, body: "local.get $x\ncall $int.small" };

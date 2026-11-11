@@ -44,6 +44,16 @@ test("ters wasi runs collatz's loop on i64s, printing what ters run prints", asy
   assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status]);
 });
 
+// C211b: divisors' counted loop steps its counts as i64s on WebAssembly,
+// as on C (C207e), and prints what ters run prints.
+test("ters wasi counts divisors with i64s, printing what ters run prints", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "lab-wasi-")), args = ["1000", "100"];
+  const made = spawnSync(process.execPath, [lab, "wasi", join(examples, "divisors"), "-o", join(dir, "p.wasm")], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr);
+  const want = spawnSync(process.execPath, [lab, "run", join(examples, "divisors"), ...args], { encoding: "utf8" });
+  assert.deepEqual(await wasi(join(dir, "p.wasm"), args, dir), [want.stdout, want.status]);
+});
+
 // C211: a table of Int keys lists its entries by a radix sort on
 // WebAssembly (64 or more keys, all i31s); swarm's `keys of` each tick.
 test("ters wasi lists swarm's motes in order, printing what ters run prints", async () => {

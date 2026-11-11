@@ -27,9 +27,8 @@ const small = (e: SExpr) => e.k === "int" && e.v > -SMALL && e.v < SMALL;
 const STEP = new Set(["int.add", "int.sub"]);
 const COMPARE: Record<string, string> = { "int.equal": "i64.eq", "int.less": "i64.less" };
 
-// `valuesOnly` (WebAssembly, C207k): only loops that compute on Ints
-// alone, whose rounds start again as written; counts stay tagged there.
-export function untaggedLoops(ir: CoreIR, valuesOnly = false): number {
+// `wasm` (WebAssembly, C207k, C211b): a value loop's copy is total there.
+export function untaggedLoops(ir: CoreIR, wasm = false): number {
   const n0 = ir.funcs.length, copies: number[] = [];
   let made = 0;
   for (let i = 0; i < n0; i++) {
@@ -41,8 +40,7 @@ export function untaggedLoops(ir: CoreIR, valuesOnly = false): number {
       kids(e).forEach(walk);
     })(f.body);
     if (!calls.length || other) continue;
-    if (valueLoop(ir, i, valuesOnly)) { made++; continue; }
-    if (valuesOnly) continue;
+    if (valueLoop(ir, i, wasm)) { made++; continue; }
     // The counts: parameters, then the lets stepping one of them.
     let params = new Set(f.params.flatMap((t, j) => (t === "int" ? [j] : [])));
     let counts = new Set<number>();
