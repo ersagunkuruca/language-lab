@@ -113,6 +113,8 @@ export function filled(code: Code): Code {
   }
   if (!out) {
     const bare = bareIn(code, Object.keys(code.nodes));
+    // The library filled now, if this is a program on it.
+    if (bare.length && toFill && bare.some((id) => id in toFill!.nodes) && onBase(code, toFill)) baseNow();
     if (!bare.length) out = code;
     else if (base && bare.some((id) => id in base!.lib.nodes) && onBase(code, base.lib)) {
       // The library's own uses are filled once, in the same nodes for
@@ -171,16 +173,22 @@ function filledFrom(code: Code): Code {
 
 // The library under every program, filled once (fillOnce, from library.ts):
 // its uses with no body filled, and the nodes that made.
-let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null;
+// Filled when first asked for (I193: 0.09 s of every process, which a
+// check alone never needs).
+let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null, toFill: Code | null = null;
+const baseNow = () => { if (!base && toFill) fillOnce(toFill); return base; };
 const onBase = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
-// The library filled by fillOnce, if it has been.
-export const filledLibrary = (): Code | undefined => base?.filled;
+// The library filled by fillOnce, if it has been or is to be.
+export const filledLibrary = (): Code | undefined => baseNow()?.filled;
 export function fillOnce(lib: Code): Code {
   const out: Code = { ...lib, nodes: { ...lib.nodes } };
   fillUses(out, bareIn(lib, Object.keys(lib.nodes)));
   base = { lib, filled: out, fills: Object.fromEntries(Object.entries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
+  toFill = null;
   return out;
 }
+// The library to fill once when first asked for: its filled copy.
+export function fillLater(lib: Code): () => Code { toFill = lib; base = null; return () => baseNow()!.filled; }
 
 
 // A saved use that binds its ports and has a body, moved to today's shape

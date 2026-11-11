@@ -144,9 +144,10 @@ const bool: Type = { t: "con", id: BOOL, args: [] };
 // own, unchanged; a program that edits one is checked whole.
 // `also`: the same library in other forms a program may sit on, each kept
 // apart: the compilers' copy with its uses filled (ports.ts fillOnce).
-let underAll: { codes: Code[]; names: Names } | null = null;
+// `also` may be made when first needed (ports.ts fillLater).
+let underAll: { code: Code; also: Code[] | (() => Code[]); names: Names } | null = null;
 const underChecks: { lib: Code; opts: Options; info: Info }[] = [];
-export function checkOnce(code: Code | null, names: Names = {}, also: Code[] = []) { underAll = code && { codes: [code, ...also], names }; underChecks.length = 0; }
+export function checkOnce(code: Code | null, names: Names = {}, also: Code[] | (() => Code[]) = []) { underAll = code && { code, also, names }; underChecks.length = 0; }
 // Where a process keeps the library's check between runs (I193): lab, the
 // MCP and the tests, in Node, keep it on disk (library-store.ts), so each
 // reads it rather than checking the library again; the editor keeps none.
@@ -169,7 +170,7 @@ const onLib = (code: Code, lib: Code) => {
 };
 function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
   if (!underAll || checkingUnder) return null;
-  const lib = underAll.codes.find((c) => onLib(code, c));
+  const all = underAll, lib = onLib(code, all.code) ? all.code : (typeof all.also === "function" ? (all.also = all.also()) : all.also).find((c) => onLib(code, c));
   if (!lib) return null;
   const libDefs = new Set(lib.defs);
   const only = new Set(code.defs.filter((d) => !libDefs.has(d)));
