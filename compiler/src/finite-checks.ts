@@ -57,7 +57,9 @@ function steady(f: SFunc): Set<number> {
   return out;
 }
 
-export function finiteChecks(ir: CoreIR): number {
+// `only`: these functions alone, copying none (C207j: the counted copies
+// untagged-ints.ts makes, whose int64_t counts are finite as numbers).
+export function finiteChecks(ir: CoreIR, only?: number[]): number {
   const { funcs } = ir;
   // Functions called only directly, made by the lowering: their callers
   // are all in sight.
@@ -70,7 +72,8 @@ export function finiteChecks(ir: CoreIR): number {
   const baseOf = new Map<number, number>(), knownOf = new Map<number, number[]>();
   let dropped = 0, made = 0;
   const done = new Set<number>();
-  const queue: { j: number; known: Set<number> }[] = funcs.map((_, j) => ({ j, known: new Set<number>() }));
+  const queue: { j: number; known: Set<number> }[] = (only ?? funcs.map((_, j) => j)).map((j) => ({ j, known: new Set<number>() }));
+  if (only) closed.clear();
   // A copy of function j knowing inputs `known` finite.
   const copyOf = (j: number, known: number[]): number => {
     const key = `${j}:${known.join(",")}`;
@@ -92,6 +95,8 @@ export function finiteChecks(ir: CoreIR): number {
     const f = funcs[q.j], stable = steady(f);
     const finite = (e: SExpr, k: Set<number>): boolean => {
       if (e.k === "num") return Number.isFinite(e.v);
+      // A count untagged (C207e): an int64_t, below 2^63.
+      if (e.k === "rt" && e.fn === "i64.toNumber") return true;
       if (e.k === "local") return k.has(e.i);
       if (e.k === "op" && (e.op === "abs" || e.op === "floor" || e.op === "neg")) return finite(e.args[0], k);
       if (e.k === "op" && (e.op === "add" || e.op === "sub")) {

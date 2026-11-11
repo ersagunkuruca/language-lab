@@ -19,6 +19,8 @@
 // literals; i64.box (a count as an Int), i64.small (an Int is small),
 // i64.unbox (a small Int's count) and i64.lit (a literal as a count).
 import { kids, mapKids, type CoreIR, type SExpr, type SFunc } from "./scalar.ts";
+import { finiteChecks } from "./finite-checks.ts";
+import { envSet } from "./zero-parts.ts";
 
 const SMALL = 1n << 61n;
 const small = (e: SExpr) => e.k === "int" && e.v > -SMALL && e.v < SMALL;
@@ -26,7 +28,7 @@ const STEP = new Set(["int.add", "int.sub"]);
 const COMPARE: Record<string, string> = { "int.equal": "i64.eq", "int.less": "i64.less" };
 
 export function untaggedLoops(ir: CoreIR): number {
-  const n0 = ir.funcs.length;
+  const n0 = ir.funcs.length, copies: number[] = [];
   let made = 0;
   for (let i = 0; i < n0; i++) {
     const f = ir.funcs[i];
@@ -69,6 +71,7 @@ export function untaggedLoops(ir: CoreIR): number {
     };
     const copy: SFunc = { ...f, name: `${f.name} counted`, inner: true, params: f.params.map((t, j) => (params.has(j) ? "i64" : t)), locals: f.locals.map((t, j) => (w.has(j) ? "i64" : t)), body: rw(f.body) };
     ir.funcs.push(copy);
+    copies.push(g);
     // As written: to the copy when the counts given are small.
     const ps = [...params];
     const cond = ps.map((j): SExpr => ({ k: "rt", fn: "i64.small", args: [{ k: "local", i: j }] })).reduce((a, b) => ({ k: "op", op: "and", args: [a, b] }));
@@ -76,6 +79,8 @@ export function untaggedLoops(ir: CoreIR): number {
     ir.funcs[i] = { ...f, body: { k: "if", cond, then: go, else: f.body, t: f.result } };
     made++;
   }
+  // A Float64 made from a count needs no overflow check (C207j).
+  if (copies.length && !envSet("NO_FINITE")) finiteChecks(ir, copies);
   return made;
 }
 
