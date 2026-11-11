@@ -6966,6 +6966,72 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       local.get $n
       struct.new $arr`,
   },
+  // `array of range x` (C207v): the Ints 0 … x − 1 written straight into
+  // the buffer, no list between, as C's lab_array_range fills it; a range
+  // too long for memory a trap.
+  "array.range": {
+    params: [["x", "int"]], result: "array", locals: [["n", "i32"], ["it", "items"], ["i", "i32"], ["room", "i32"]], uses: [],
+    body: `
+      local.get $x
+      i64.const 0
+      i64.le_s
+      if void
+      else
+        local.get $x
+        i64.const 268435456
+        i64.gt_s
+        if void
+          unreachable
+        end
+        local.get $x
+        i32.wrap_i64
+        local.set $n
+      end
+      local.get $n
+      i32.const 4
+      local.get $n
+      i32.const 4
+      i32.gt_u
+      select
+      local.set $room
+      local.get $n
+      local.get $room
+      i32.const 1
+      i32.shl
+      i32.add
+      array.new_default $items
+      local.set $it
+      block void
+      loop void
+        local.get $i
+        local.get $n
+        i32.ge_u
+        br_if 1
+        local.get $it
+        local.get $room
+        local.get $i
+        i32.add
+        local.get $i
+        ref.i31
+        array.set $items
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $it
+      local.get $room
+      local.get $room
+      local.get $n
+      i32.add
+      i32.const 0
+      struct.new $buf
+      local.get $room
+      local.get $n
+      struct.new $arr`,
+  },
   "array.items": {
     params: [["a", "array"]], result: "list", locals: [["it", "items"], ["s", "i32"], ["i", "i32"], ["acc", "list"]], uses: [],
     body: `
