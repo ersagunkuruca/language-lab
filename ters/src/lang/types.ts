@@ -252,6 +252,10 @@ export class Subst {
   // not change while the trial is in use, and keeps only what it adds.
   trial(): Subst {
     const s = new Subst();
+    // (Kept so a join reaches it, below; the gone ones dropped now and then.)
+    const trials = (this.trials ??= []);
+    if (trials.length >= 64 && trials.length % 64 === 0) this.trials = trials.filter((r) => r.deref());
+    this.trials.push(new WeakRef(s));
     s.types = new OverMap(this.types);
     s.rows = new OverMap(this.rows);
     s.next = this.next;
@@ -270,6 +274,29 @@ export class Subst {
     s.wanted = [...this.wanted];
     s.effectsAt = [...this.effectsAt];
     return s;
+  }
+
+  trials?: WeakRef<Subst>[];
+  // What another substitution knows joins this one, its variables none of
+  // this one's (a library's bodies typed later, infer.ts libraryLater):
+  // its bindings read through by every trial, and its lists, which a trial
+  // copies, given to each trial made already too.
+  join(from: Subst): void {
+    for (const [v, t] of from.types) this.types.set(v, t);
+    for (const [v, r] of from.rows) this.rows.set(v, r);
+    for (const v of from.plain) this.plain.add(v);
+    for (const v of from.numbers) this.numbers.add(v);
+    for (const [v, a] of from.arith) this.arith.set(v, a);
+    for (const v of from.fractional) this.fractional.add(v);
+    for (const v of from.whole) this.whole.add(v);
+    for (const [v, n] of from.needs) this.needs.set(v, n);
+    this.joinLists(from);
+  }
+  private joinLists(from: Subst): void {
+    this.subs.push(...from.subs);
+    this.effectsAt.push(...from.effectsAt);
+    for (const v of from.noWorld) this.noWorld.add(v);
+    for (const r of this.trials ?? []) r.deref()?.joinLists(from);
   }
 
   fresh(plain = false, numbers = false, arith?: Arith): Type {
