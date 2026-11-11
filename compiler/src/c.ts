@@ -2502,9 +2502,22 @@ ${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) r
     // Int keys, all small and within 2^32 of each other (a counter's), are
     // sorted by a radix sort of (key − least, slot) words: no compare
     // called per pair (swarm's `keys of` each tick spent a third of its
-    // run in qsort and the compare). 0 where it doesn't hold.
+    // run in qsort and the compare). 0 where it doesn't hold. A direct
+    // table's slots hold a counter's keys in order already, but for one
+    // turn round the end (C58n): at most one step down, and the last key
+    // below the first, is a rotation, put right without a sort.
     if (lists.length && int) out.push(`static int lab__isort_t${i}(${S} *t, uint32_t *ix, uint32_t n) {
   if (n < 64) return 0;
+  uint32_t down = 0, at = 0;
+  for (uint32_t j = 1; j < n && down < 2; j++) if (lab__ci_t${i}(t->ks[ix[j - 1]], t->ks[ix[j]]) > 0) { down++; at = j; }
+  if (down == 0) return 1;
+  if (down == 1 && lab__ci_t${i}(t->ks[ix[n - 1]], t->ks[ix[0]]) < 0) {
+    uint32_t *r = malloc(n * sizeof(uint32_t));
+    if (!r) lab_oom();
+    memcpy(r, ix + at, (n - at) * sizeof(uint32_t)); memcpy(r + (n - at), ix, at * sizeof(uint32_t));
+    memcpy(ix, r, n * sizeof(uint32_t)); free(r);
+    return 1;
+  }
   int64_t lo = INT64_MAX, hi = INT64_MIN;
   for (uint32_t j = 0; j < n; j++) {
     lab_int k = t->ks[ix[j]];

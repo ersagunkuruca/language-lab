@@ -36,7 +36,7 @@ const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names
 // Counts n keys (Ints, or Float64s with `floats`), then shows the count,
 // a few lookups and whether keys are there. With `old`, it also keeps the
 // map before one more put and shows both.
-function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean; made?: boolean; big?: boolean; array?: boolean } = {}) {
+function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: boolean; list?: boolean; pairs?: boolean; record?: "ints" | "floats"; remainders?: boolean; made?: boolean; big?: boolean; array?: boolean; past?: boolean } = {}) {
   const k = new Lang(LIBRARY.code);
   // With `record`, the same as a record of the program's own, spot(row, name)
   // (C63g); with "floats", its row is a Float64.
@@ -48,7 +48,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   const rem = (i: Id, m: number) => k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(m))), k.thunk(() => k.int(0)));
   const third = (i: Id) => (opts.remainders ? rem(i, 37) : k.call(INT_OPS.shiftDown, i, k.int(3)));
   const pairKey = (i: Id) => k.call(Spot ? Spot.v.spot : PAIR_V, opts.record === "floats" ? k.call(INT_OPS.toNumber, third(i)) : third(i), k.call(SHOW_ANY, opts.remainders ? rem(i, 11) : k.call(INT_OPS.shiftDown, i, k.int(5))));
-  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : opts.big ? k.call(INT_OPS.sub, k.call(INT_OPS.mul, k.call(INT_OPS.shiftDown, i, k.int(1)), k.int(2 ** 40)), k.int(2 ** 45)) : k.call(INT_OPS.shiftDown, i, k.int(1));
+  const key = (i: Id) => opts.pairs || opts.record ? pairKey(i) : opts.floats ? k.call(B.mul, k.call(S.mod, i, k.lit(37)), k.lit(0.5)) : opts.remainders ? k.call(S.first, k.thunk(() => k.call(INT_OPS.remainder, i, k.int(151))), k.thunk(() => k.int(0))) : opts.big ? k.call(INT_OPS.sub, k.call(INT_OPS.mul, k.call(INT_OPS.shiftDown, i, k.int(1)), k.int(2 ** 40)), k.int(2 ** 45)) : opts.past ? k.call(INT_OPS.add, k.call(INT_OPS.shiftDown, i, k.int(1)), k.int(1000)) : k.call(INT_OPS.shiftDown, i, k.int(1));
   const counts = k.def("counts");
   // With `made`, counts is a function of how many, called once: not one
   // value wherever it is named.
@@ -60,7 +60,7 @@ function program(n: number, opts: { floats?: boolean; old?: boolean; remove?: bo
   k.define(counts, opts.made ? k.fn(["size"], (size) => counted(size)) : counted(k.int(n)));
   const show = (x: Id) => k.call(S.print, k.call(SHOW_ANY, x));
   const at = (m: Id, x: Id) => k.call(S.first, k.thunk(() => k.call(L("value at"), m, x)), k.thunk(() => k.int(-1)));
-  const probe = opts.pairs || opts.record ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : opts.big ? k.int(5 * 2 ** 40 - 2 ** 45) : k.int(5);
+  const probe = opts.pairs || opts.record ? pairKey(k.int(7)) : opts.floats ? k.lit(2.5) : opts.past ? k.int(1005) : opts.big ? k.int(5 * 2 ** 40 - 2 ** 45) : k.int(5);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.let("m", opts.made ? k.call(counts, k.int(n)) : k.x(counts), (m) => k.seq(
     show(k.call(L("map size"), m)),
@@ -249,9 +249,11 @@ test("in C, a map of Int keys is C's hash table, and prints what the definition 
 // C58m: a table of Int keys in C starts direct, each key at its own
 // value's slot, and is hashed at its first key that would take another's
 // slot (`big`'s keys are multiples of 2^40, so all meet): both print what
-// the definition prints, old versions, removes and listings too.
+// the definition prints, old versions, removes and listings too. With
+// `past`, keys 1000 to 1149 turn round the slots' end at 1024, so the
+// slots in order are the keys rotated (C58n).
 test("in C, a map of Int keys keeps each key at its own slot until two would meet, and prints what the definition prints (C58m)", { skip }, () => {
-  for (const o of [{}, { big: true }]) {
+  for (const o of [{}, { big: true }, { past: true }]) {
     const p = program(300, { ...o, old: true, remove: true, list: true, array: true });
     const c = chosen(p, false, true);
     assert.deepEqual(c.chosen, ["Map as hash table"]);
