@@ -34,8 +34,6 @@ const site = here + "../";
 // The example programs (BACKLOG E205): the editor's picker and the pages.
 const manifest = JSON.parse(readFileSync(here + "examples.json", "utf8")) as Manifest;
 // What the editor's "Save page" puts before a page's compiled program.
-// The worker Run uses (editor/runWorker.ts), as text the editor starts.
-const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false });
 // The runtimes and the examples are text elements of the page, read when
 // they're needed, not parts of the script parsed before the first drawing
 // (BACKLOG E204): main.ts reads them by id.
@@ -44,7 +42,11 @@ const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true,
 const sources = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? sources(`${dir}/${e.name}`) : /\.(ts|js|json|ters)$/.test(e.name) ? [`${dir}/${e.name}`] : []);
 const checksKey = createHash("sha1");
 for (const f of [...sources(site + "ters/src"), ...sources(site + "ters/library"), ...sources(site + "invertible/src")].sort()) checksKey.update(f.slice(site.length)).update(readFileSync(f));
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CHECKS_KEY: JSON.stringify(checksKey.digest("hex").slice(0, 16)) } });
+const CHECKS_KEY = JSON.stringify(checksKey.digest("hex").slice(0, 16));
+// The worker Run uses (editor/runWorker.ts), as text the editor starts. It
+// reads the checks the page kept, under the same name.
+const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { CHECKS_KEY } });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CHECKS_KEY } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
 // The core IR's page and audio runtimes (E244): Save page prints from the
