@@ -27,6 +27,7 @@ import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
+import { loadChecks } from "./checkStore.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
 // code or built with the site (E245c), so the run needs no checking or
@@ -105,7 +106,18 @@ function checked(given: SentCode, names: Names, pins: Pins, def: Id): ReturnType
   return lib;
 }
 
-self.onmessage = (e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>) => {
+// The checks this build kept in the browser (checkStore.ts), read before
+// the first ask: the worker checked the library anew each time it was
+// started (I203), its whole check and its bodies, though the page had
+// kept them.
+const checksRead = loadChecks();
+const asked: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>[] = [];
+if (checksRead) {
+  self.onmessage = (e) => { asked.push(e); };
+  void checksRead.then(() => { self.onmessage = answer; for (const e of asked.splice(0)) answer(e); });
+} else self.onmessage = answer;
+
+function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>) {
   answers = null; paused = false;
   if ("warm" in e.data) {
     const { code, names, pins, def } = e.data;
@@ -195,7 +207,7 @@ self.onmessage = (e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | Wher
     flush();
     post({ error: (err as Error).message, files: [...wrote], ...(stuck ? { stuck } : {}) });
   }
-};
+}
 
 // A world that refuses what a program from a file wasn't allowed (E229):
 // each of the effect's answers fails with the reason.
