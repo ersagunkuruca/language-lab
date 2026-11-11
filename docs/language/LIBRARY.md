@@ -333,6 +333,7 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **set size** : `(Set a) -> Int`. How many items the set has.
 - **smallest item** : `(Set a) -[Choice]-> a`. The set's smallest item, in compare's order; no answer when the set is empty, so first(smallest item(s), else d) gives a default. Nearest first in a set of pair(distance, place).
 - **largest item** : `(Set a) -[Choice]-> a`. The set's largest item, in compare's order; no answer when the set is empty.
+- **grow** : `(Set a, Set a, (a) -[e]-> List a) -[e]-> Set a`. The least set holding start and closed under more: with an item, the items more gives of it, as long as universe has them. grow(nodes, as set([a]), (x) ↦ neighbours of x) is the nodes reached from a. It ends within set size(universe) rounds, so it can't run forever (Kleene's and Knaster and Tarski's least fixed point, on a finite set).
 - **Pool** (type). A collection that gives out its own keys: an item added gets a key, and the key finds it until it is removed. A removed item's slot is used again, but an old key finds nothing rather than the new item (generational keys, as game engines keep their entities).
 - **Pool key** (type). A key a pool gave out: its slot and the slot's generation when it was given.
 - **empty pool** : `Pool a`. A pool with nothing in it. added to pool puts an item in and next key, asked just before, is the key it gets.

@@ -22,6 +22,12 @@ import { kids, mapKids, type CoreIR, type SExpr, type SFunc } from "./scalar.ts"
 import { envSet } from "./zero-parts.ts";
 
 const COPIES = 64;
+// Moderate (C207y): a Float64 at most 2^1000 from zero, a fact kept as
+// MOD + the local's number. Two such add up to a finite number, and one
+// such plus a number at most 2^940 from zero is again such: past 2^54,
+// adding half an ulp or less gives the same number back.
+const MODERATE = 2 ** 1000, MOD = 1 << 20;
+const tiny = (x: SExpr) => x.k === "num" && Math.abs(x.v) <= 2 ** 940;
 
 // `if not ((l - l) = 0) then stop … else e`: the shape scalar.ts `fin` makes.
 function checkOf(e: SExpr): number | null {
@@ -68,6 +74,9 @@ function steady(f: SFunc): Set<number> {
 // with a runtime function this doesn't know, or a host giving data, has
 // none. Read items are then finite, and the distance between two of them
 // is too: queens' `safe` checked both on every item.
+// They are also at most 2^1000 (C207y): a range's items and counts are
+// below 2^63, as counting further takes more than 2^62 steps, and a
+// number put in is one so too.
 const ITEM_READS = /^array\.(get|getb|at|first)\.a(\d+)$/;
 const ARRAY_OPS = new Set(["empty", "length", "items", "rest", "get", "getb", "at", "first", "of", "pushFront", "push", "replaceAt", "range", "rangeF"]);
 // A search that counts or finds the first answer (c.ts `par:`, JavaScript's
@@ -105,7 +114,8 @@ export function carriers(ir: CoreIR): Carriers | null {
       scan(f.body);
       const seen = new Set<number>();
       const nonneg = (e: SExpr): boolean => {
-        if (e.k === "num") return Number.isFinite(e.v) && e.v >= 0;
+        if (e.k === "num") return Number.isFinite(e.v) && e.v >= 0 && e.v <= MODERATE;
+        if (e.k === "rt" && e.fn === "i64.toNumber") return true;
         if (e.k === "field") return datas.has(e.t.key);
         if (e.k === "rt") { const m = ITEM_READS.exec(e.fn); return !!m && arrays.has(Number(m[2])); }
         if (e.k === "local") {
@@ -116,6 +126,8 @@ export function carriers(ir: CoreIR): Carriers | null {
         }
         if (e.k === "if" && checkOf(e) !== null) return nonneg(e.else);
         if (e.k === "op" && (e.op === "floor" || e.op === "abs")) return nonneg(e.args[0]);
+        // One plus a number from 0 to 2^940 (C207y): `free`'s number + 1.
+        if (e.k === "op" && e.op === "add") { const [a, b] = e.args, up = (x: SExpr) => tiny(x) && (x as { v: number }).v >= 0; return (nonneg(a) && up(b)) || (up(a) && nonneg(b)); }
         return false;
       };
       const walk = (e: SExpr) => {
@@ -206,11 +218,24 @@ export function finiteChecks(ir: CoreIR, only?: number[]): number {
         const [a, b] = e.args;
         const small = (x: SExpr) => x.k === "num" && Math.abs(x.v) < 2 ** 970;
         // Two not below zero: their difference is no further from zero.
-        return (finite(a, k) && small(b)) || (small(a) && finite(b, k)) || (e.op === "sub" && nonneg(a, k) && nonneg(b, k));
+        // Two moderate ones (C207y): at most 2^1001.
+        return (finite(a, k) && small(b)) || (small(a) && finite(b, k)) || (e.op === "sub" && nonneg(a, k) && nonneg(b, k)) || (moderate(a, k) && moderate(b, k));
       }
       if (checkOf(e) !== null) return e.k === "if" && finite(e.else, new Set([...k, checkOf(e)!]));
       if (e.k === "let") return finite(e.body, k);
       if (e.k === "if") return finite(e.then, k) && finite(e.else, k);
+      return false;
+    };
+    const moderate = (e: SExpr, k: Set<number>): boolean => {
+      if (e.k === "num") return Math.abs(e.v) <= MODERATE;
+      if (carried(e)) return true;
+      if (e.k === "rt" && e.fn === "i64.toNumber") return true;
+      if (e.k === "local") return k.has(MOD + e.i);
+      if (e.k === "op" && (e.op === "abs" || e.op === "floor" || e.op === "neg")) return moderate(e.args[0], k);
+      if (e.k === "op" && (e.op === "add" || e.op === "sub")) { const [a, b] = e.args; return (moderate(a, k) && tiny(b)) || (tiny(a) && moderate(b, k)); }
+      if (checkOf(e) !== null) return e.k === "if" && moderate(e.else, new Set([...k, checkOf(e)!]));
+      if (e.k === "let") return moderate(e.body, k);
+      if (e.k === "if") return moderate(e.then, k) && moderate(e.else, k);
       return false;
     };
     // e rewritten knowing k, and what's known finite once it has run.
@@ -228,6 +253,7 @@ export function finiteChecks(ir: CoreIR, only?: number[]): number {
           const k2 = new Set(v.k);
           if (stable.has(e.i) && finite(v.e, v.k)) k2.add(e.i); else k2.delete(e.i);
           if (stable.has(e.i) && nonneg(v.e, v.k)) k2.add(-1 - e.i); else k2.delete(-1 - e.i);
+          if (stable.has(e.i) && moderate(v.e, v.k)) { k2.add(MOD + e.i); k2.add(e.i); } else k2.delete(MOD + e.i);
           const b = go(e.body, k2);
           return { e: { ...e, value: v.e, body: b.e }, k: b.k };
         }
@@ -243,7 +269,7 @@ export function finiteChecks(ir: CoreIR, only?: number[]): number {
           let fn = e.fn;
           if (closed.has(e.fn) && !e.cps) {
             const g = funcs[e.fn];
-            const known = args.flatMap((a, j) => (g.params[j] !== "f64" ? [] : [...(finite(a, kk) ? [j] : []), ...(nonneg(a, kk) ? [-1 - j] : [])]));
+            const known = args.flatMap((a, j) => (g.params[j] !== "f64" ? [] : [...(finite(a, kk) ? [j] : []), ...(nonneg(a, kk) ? [-1 - j] : []), ...(moderate(a, kk) ? [MOD + j] : [])]));
             const base = baseOf.get(e.fn) ?? e.fn, had = knownOf.get(e.fn) ?? [];
             const all = [...new Set([...had, ...known])].sort((x, y) => x - y);
             if (all.length > had.length) {
@@ -267,7 +293,7 @@ export function finiteChecks(ir: CoreIR, only?: number[]): number {
     };
     // And the inputs every call gives a carried item (C207l).
     const given = cs?.params[q.j] ?? (q.j < (cs?.params.length ?? 0) ? new Set<number>() : cs?.params[baseOf.get(q.j) ?? -1]) ?? new Set<number>();
-    const start = new Set([...q.known, ...[...given].flatMap((j) => [j, -1 - j])].filter((j) => stable.has(j < 0 ? -1 - j : j)));
+    const start = new Set([...q.known, ...[...given].flatMap((j) => [j, -1 - j, MOD + j])].filter((j) => stable.has(j < 0 ? -1 - j : j >= MOD ? j - MOD : j)));
     f.body = go(f.body, start).e;
   }
   return dropped;

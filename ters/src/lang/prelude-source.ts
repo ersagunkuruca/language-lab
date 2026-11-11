@@ -1504,6 +1504,22 @@ export function buildPrelude(): Module {
   const union = setOp("set union", unionItems);
   const intersection = setOp("set intersection", interItems);
   const difference = setOp("set difference", diffItems);
+  // The least set holding start and closed under more, inside universe
+  // (L237): each round adds what more gives of the items the last round
+  // added (only those, as semi-naive Datalog does) that universe has and
+  // the set hasn't yet. Every round but the last adds an item of universe,
+  // so it ends within set size(universe) rounds: `left` counts them down to
+  // 0 (counting.ts), and it is total with no Diverge.
+  const growRounds = k.def("grow rounds");
+  k.define(growRounds, k.fn(["left", "universe", "more", "set", "newest"], (left, uni, more, seen, newest) =>
+    k.if(k.call(INT_OPS.less, k.int(0), left),
+      k.let("found", k.call(difference, k.call(intersection, k.fold(k.call(items, newest), [
+        { variant: NIL, names: [], body: () => k.x(emptySet) },
+        { variant: CONS, names: ["item", "rest"], results: [null, "found of rest"], body: ([x], [, r]) => k.call(union, r!, k.call(asSet, k.call(more, x))) },
+      ]), uni), seen), (found) =>
+        k.if(k.equal(k.call(setSize, found), k.int(0)), seen, k.call(growRounds, k.call(INT_OPS.sub, left, k.int(1)), uni, more, k.call(union, seen, found), found))),
+      seen)));
+  const grow = def("grow", ["universe", "start", "more"], (uni, start, more) => k.call(growRounds, k.call(setSize, uni), uni, more, start, start));
 
   // Errors as data (L67): `attempt` runs an action and keeps its answer or
   // its Abort as an Outcome, the way `optional` keeps a Choice; `value or
@@ -2165,7 +2181,7 @@ export function buildPrelude(): Module {
   const embeddings = [
     embed("int in float64", k.x(INT_OPS.toNumber)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, grow, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows: Id[] = [showExt];
@@ -2267,6 +2283,8 @@ export function buildPrelude(): Module {
     [entries]: "The entries as (key, value) tuples, in key order.",
     [mapSize]: "How many keys the map holds.",
     [emptySet]: "The set with no items.",
+    [grow]: "The least set holding start and closed under more: with an item, the items more gives of it, as long as universe has them. grow(nodes, as set([a]), (x) ↦ neighbours of x) is the nodes reached from a. It ends within set size(universe) rounds, so it can't run forever (Kleene's and Knaster and Tarski's least fixed point, on a finite set).",
+    [growRounds]: "A helper of grow: its rounds, counted down from universe's size. Not offered.",
     [asSet]: "The set of a list's items: in compare's order, each once.",
     [addItem]: "The set with item in it.",
     [removeItem]: "The set without item.",
@@ -2429,9 +2447,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }
