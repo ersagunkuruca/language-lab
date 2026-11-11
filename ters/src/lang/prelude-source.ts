@@ -1521,6 +1521,61 @@ export function buildPrelude(): Module {
       seen)));
   const grow = def("grow", ["universe", "start", "more"], (uni, start, more) => k.call(growRounds, k.call(setSize, uni), uni, more, start, start));
 
+  // Fixed points of a contraction (L239, FIXPOINT.md): a list of Float64s
+  // x with step(x) within tolerance of x, the sum of the differences of
+  // its parts (the L1 norm, in which a step of PageRank or of a Markov
+  // chain shrinks by its damping). Banach: if each step shrinks by q < 1, then
+  // after a step of size d the fixed point is within d · q / (1 − q), and
+  // a step of size d₀ is followed by one at most d₀ · qᵏ after k more, so
+  // the rounds needed are counted before they run. `settled` reads q off
+  // its first rounds (the largest ratio of consecutive step sizes),
+  // with a margin: half way from the largest to 1, since one step can
+  // shrink by less than its first ones did (PageRank's 0.71, 0.85 later).
+  // `settled by` is given it. A later step that shrinks by less than q is
+  // no answer (Choice), as is q ≥ 1: it never runs on, so no Diverge.
+  const stepSize = k.def("step size");
+  k.define(stepSize, k.fn(["from", "to"], (a, b) => k.fold(k.call(zipped, a, b), [
+    { variant: NIL, names: [], body: () => k.lit(0) },
+    { variant: CONS, names: ["pair", "rest"], results: [null, "size of rest"], body: ([pr], [, r]) => k.match(pr, [
+      { variant: PAIR_V, names: ["x", "y"], body: ([x, y]) => n.add(k.call(S.abs, n.sub(x, y)), r!) },
+    ]) },
+  ])));
+  // The rounds after a step of size d until d · qᵏ · q / (1 − q) ≤ tolerance, and two more for rounding.
+  const roundsNeeded = k.def("rounds needed");
+  k.define(roundsNeeded, k.fn(["rate", "size", "tolerance"], (q, d, tol) =>
+    k.if(k.call(S.less, q, k.lit(1e-12)), k.int(2),
+      k.let("rounds", k.call(S.floor, n.div(k.call(B.log, n.div(n.mul(tol, n.sub(k.lit(1), q)), n.mul(d, q))), k.call(B.log, q))), (m) =>
+        k.call(INT_OPS.add, k.call(INT_OPS.wholePart, k.if(k.call(S.less, m, k.lit(0)), k.lit(0), m)), k.int(2))))));
+  const settledRounds = k.def("settled rounds");
+  k.define(settledRounds, k.fn(["left", "step", "rate", "tolerance", "x", "size"], (left, step, q, tol, x, d) =>
+    k.if(k.call(INT_OPS.less, k.int(0), left),
+      k.let("next", k.call(step, x), (nx) => k.let("next size", k.call(stepSize, x, nx), (d2) =>
+        // A millionth of slack for rounding: a step that shrinks by exactly q measures a hair over.
+        k.if(k.call(S.less, n.mul(n.mul(q, k.lit(1.000001)), d), d2), k.call(S.fail),
+          k.if(k.call(S.not, k.call(S.less, n.mul(tol, n.sub(k.lit(1), q)), n.mul(d2, q))), nx,
+            k.call(settledRounds, k.call(INT_OPS.sub, left, k.int(1)), step, q, tol, nx, d2))))),
+      k.call(S.fail))));
+  // Rounds from a step of size d at rate q: done already, or counted.
+  const settledFrom = (step: Id, q: Id, tol: Id, x: Id, d: Id) =>
+    k.if(k.call(S.not, k.call(S.less, n.mul(tol, n.sub(k.lit(1), q)), n.mul(d, q))), x,
+      k.call(settledRounds, k.call(roundsNeeded, q, d, tol), step, q, tol, x, d));
+  // Its first rounds: the rate is the largest ratio of consecutive step sizes seen.
+  const settlingRounds = k.def("settling rounds");
+  k.define(settlingRounds, k.fn(["left", "step", "tolerance", "x", "size", "rate"], (left, step, tol, x, d, q) =>
+    k.if(k.equal(d, k.lit(0)), x,
+      k.if(k.call(INT_OPS.less, k.int(0), left),
+        k.let("next", k.call(step, x), (nx) => k.let("next size", k.call(stepSize, x, nx), (d2) =>
+          k.let("ratio", n.div(d2, d), (r) =>
+            k.call(settlingRounds, k.call(INT_OPS.sub, left, k.int(1)), step, tol, nx, d2, k.if(k.call(S.less, q, r), r, q))))),
+        k.if(k.call(S.less, q, k.lit(1)), k.let("margin", n.mul(k.lit(0.5), n.add(q, k.lit(1))), (m) => settledFrom(step, m, tol, x, d)), k.call(S.fail))))));
+  const settled = def("settled", ["start", "step", "tolerance"], (start, step, tol) =>
+    k.let("first", k.call(step, start), (x1) => k.call(settlingRounds, k.int(4), step, tol, x1, k.call(stepSize, start, x1), k.lit(0))));
+  const settledBy = def("settled by", ["start", "step", "rate", "tolerance"], (start, step, q, tol) =>
+    k.if(k.and(k.call(S.not, k.call(S.less, q, k.lit(0))), k.call(S.less, q, k.lit(1))),
+      k.let("first", k.call(step, start), (x1) => k.let("size", k.call(stepSize, start, x1), (d) =>
+        k.if(k.equal(d, k.lit(0)), x1, settledFrom(step, q, tol, x1, d)))),
+      k.call(S.fail)));
+
   // Errors as data (L67): `attempt` runs an action and keeps its answer or
   // its Abort as an Outcome, the way `optional` keeps a Choice; `value or
   // abort` is the Abort again, the way `value of` is the Choice. Rust's
@@ -2181,7 +2236,7 @@ export function buildPrelude(): Module {
   const embeddings = [
     embed("int in float64", k.x(INT_OPS.toNumber)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, grow, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, grow, settled, settledBy, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows: Id[] = [showExt];
@@ -2285,6 +2340,12 @@ export function buildPrelude(): Module {
     [emptySet]: "The set with no items.",
     [grow]: "The least set holding start and closed under more: with an item, the items more gives of it, as long as universe has them. grow(nodes, as set([a]), (x) ↦ neighbours of x) is the nodes reached from a. It ends within set size(universe) rounds, so it can't run forever (Kleene's and Knaster and Tarski's least fixed point, on a finite set).",
     [growRounds]: "A helper of grow: its rounds, counted down from universe's size. Not offered.",
+    [settled]: "A list x with step(x) within tolerance of x (the sum of its parts' differences), reached by running step from start. It reads the rate q at which steps shrink off its first rounds (half way from the largest it sees to 1), counts the rounds it needs from q (Banach's bound), and stops once the step size d has d · q / (1 − q) ≤ tolerance. No answer when the steps don't shrink, or a later step shrinks by less than q, so it never runs forever. q is an estimate: when a step's rate is known, as PageRank's damping is, settled by is given it and its answer is within tolerance of the true fixed point.",
+    [settledBy]: "settled with the rate given: each step is at most rate times the one before (0 ≤ rate < 1). No answer when a step breaks that.",
+    [stepSize]: "A helper of settled: the sum of the differences of two lists' parts. Not offered.",
+    [roundsNeeded]: "A helper of settled: the rounds counted from the rate and the step size. Not offered.",
+    [settledRounds]: "A helper of settled: its counted rounds. Not offered.",
+    [settlingRounds]: "A helper of settled: its first rounds, which read the rate. Not offered.",
     [asSet]: "The set of a list's items: in compare's order, each once.",
     [addItem]: "The set with item in it.",
     [removeItem]: "The set without item.",
@@ -2447,9 +2508,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }
