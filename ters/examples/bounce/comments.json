@@ -25,7 +25,7 @@
   "9dgqtvrfuqp47ffngl5vdooh2h": "Four bodies in the flat world: a triangle, a square, a pentagon and a hexagon, each spinning in the plane e₁e₂, the only plane there is.",
   "64dt3ih2jvv3mmpdq5a0rfv21g": "The walls of the solid world, a cube drawn as a body that never moves.",
   "22hsr695shskeg5vvhel87b4do": "Four bodies in the solid world: a tetrahedron, two cubes and an octahedron. Each spins in a plane of its own, a sum of e₁e₂, e₁e₃ and e₂e₃, which a flat world could not have.",
-  "vdd5aqucbjr5vsojuh86ciradp": "The body with a random push added along each axis, and a random spin in the plane across and down (the product of two vectors at right angles is the bivector of their plane).",
+  "vdd5aqucbjr5vsojuh86ciradp": "The body with a random push added along each axis, up to 6.5 a second either way, and a gentle random spin, up to 3 turns of a radian a second, in the plane across and down (the product of two vectors at right angles is the bivector of their plane). A body resting on the floor needs about 3.2 upwards to reach the ceiling against gravity 3 and the air, so about one kick in four sends it there; the others give it a parabola.",
   "vic7ppovl6rm0l10v702u25bvi": "The page's style sheet, in the house look of the other demos.",
   "7v26ipfggnog83ntfu6q7pasob": "Who this page borrows from, shown on the page (CREDITS.md).",
   "q6fprd5d91m463m938t0mf6mrc": "One world on the page: its title, a line about it, and its picture, drawn again whenever its bodies change.",
