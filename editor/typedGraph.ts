@@ -410,11 +410,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const fed = b && at ? fedBy(b) : null;
     return fed && fed.ports.length === at![1] ? portKey(fed.use, at![0]) : null;
   };
-  // Drawn without its dot: one port, whose refs are wires from it; or
-  // several, all read by part.
+  // Drawn without its dot: one port, whose one ref is a wire from it; or
+  // several, all read by part. A one-port value read twice keeps its dot,
+  // as any shared value does: without it the port fed two inputs with no
+  // dot to see, select or drag, and a drag of the port onto either input
+  // was refused as "already that" (I201, Ersagun 2026-11-11).
   const dotless = (b: Id): boolean => {
     const fed = fedBy(b);
-    return !!fed && (fed.ports.length === 1 || (lets(code).refs.get(b) ?? []).every((r) => { const p = lets(code).reader.get(r); return !!p && !!partOf(p); }));
+    return !!fed && (fed.ports.length === 1 ? (lets(code).refs.get(b) ?? []).length <= 1 : (lets(code).refs.get(b) ?? []).every((r) => { const p = lets(code).reader.get(r); return !!p && !!partOf(p); }));
   };
   // A loose part's own result: its output wires the part back in, even
   // when it is a lone pill (a literal has no other output).
