@@ -2911,3 +2911,33 @@ Each was worked around, and the workaround is in the driver or the seed.
    shared (1.4x).
 4. L231, a relation's solve written as text, so a program reads it both
    ways.
+
+## herd: entities by key, on several cores (2026-11-11)
+
+examples/herd keeps about 2,000 animals in a `Map Int Animal`, each
+following another by key; 50 are born and some 50 go each tick, and each
+tick maps every animal through a function that only computes (128 sines).
+compiler/gaps/herd.ideal.c is the same written by hand: arrays by id, the
+live ids in order, the new states computed on 4 threads then applied. 200
+ticks, 4 cores:
+
+| | one core | 4 cores |
+|---|---|---|
+| by hand (C) | 1.31 s | 0.40 s |
+| `ters native` | 1.36 s | 0.46 s (was 1.40: C61f) |
+| `ters compile` | 2.0 s | no worker used |
+| `ters wasi` | 2.07 s | |
+
+- **H1. A map on the threads stopped the C printer** (readFirst asked the
+  runtime about `par:map`). *Fixed in C61f.*
+- **H2. A table could not be shared with the threads**, so a map whose
+  function reads one ran on one thread. *Fixed in C61f*: its newest
+  version is shared.
+- **H3. A map waited a millisecond of items each call before sharing**:
+  200 ms of herd's 200 ticks. *Fixed in C61f*: it shares once the items
+  done say all of them would take a millisecond.
+- **H4. Compiled JavaScript runs herd's map on no worker** (2.0 s): its
+  function reads a Map. Row C61.
+- **H5. One core, JavaScript and WebAssembly are 1.5x native** (2.0 and
+  2.07 s against 1.36): the sines are most of it; not looked at yet.
+

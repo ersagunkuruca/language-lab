@@ -41,6 +41,7 @@ const setup: Record<string, () => string[]> = {
   "queens-first": () => ["8"],
   drift: () => ["50"],
   swarm: () => ["40", "20"],
+  herd: () => ["20", "10"],
   chapters: () => { writeFileSync(join(dir, "book.md"), chaptersBook(3, 5)); return ["book.md", "out"]; },
   ledger: () => { writeFileSync(join(dir, "book.csv"), ledgerBook(60, 6)); return ["book.csv"]; },
   notebook: () => [join(examples, "notebook/notes.txt")],
