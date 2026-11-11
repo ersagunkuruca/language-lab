@@ -266,6 +266,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     ownedRecords(lowered, q.code, q.info, q.names, root);
     columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
     intoAsSets(lowered);
+    // A loop computing on Ints alone, with them as i64s (C207k).
+    untaggedLoops(lowered, true);
   }
   return { lowered, root };
 }

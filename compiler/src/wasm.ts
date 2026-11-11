@@ -268,7 +268,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     rt(name).uses.forEach(need);
   };
   const rtCalls = (e: SExpr): void => {
-    if (e.k === "rt") { if (STACK.test(e.fn)) stackArity.set(e.fn, e.args.length); need(e.fn); }
+    if (e.k === "rt") { if (STACK.test(e.fn)) stackArity.set(e.fn, e.args.length); need(e.fn); if (stepped(e)) need("i64.box"); }
     if (e.k === "op" && e.op === "mod") need("number.mod");
     if (e.k === "op" && INT32_RT.includes(e.op)) need(`int32.${e.op}`);
     kids(e).forEach(rtCalls);
@@ -702,13 +702,17 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         : [0x41, e.v < 0n ? 1 : 0, ...limbs(e.v).flatMap((l) => [0x41, ...sBig(BigInt(l))]), 0xfb, 0x08, ...u(u32sIndex), ...u(limbs(e.v).length), 0xfb, 0x00, ...u(hugeIndex)];
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
       case "rt": {
+        if (e.fn === "i64.lit" && e.args[0].k === "int") return [0x42, ...sBig(e.args[0].v)];
         const fast = intFast(e, (i) => ["", [0x20, ...u(i)]], ["", [0x10, ...u(resolve.func(e.fn))]]);
         if (fast) return fast.flatMap((x) => x[1]);
       }
       return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^handler:/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
       case "local": return [0x20, ...u(e.i)];
-      case "let": return [...code1(e.value), 0x21, ...u(e.i), ...code1(e.body)];
+      case "let":
+        // A loop's value stepped past an i64 (C207k): the round again as written.
+        if (stepped(e.value)) return [...code1(e.value), 0x22, ...u(e.i), 0x42, ...sBig(I64_LEAST), 0x51, 0x04, 0x40, ...f.params.flatMap((_, j) => [0x20, ...u(j), 0x10, ...u(resolve.func("i64.box"))]), 0x10, ...u(fnIndex(f.bail!)), ...(funcs[f.bail!].partial && !f.partial ? [0x04, 0x40, 0x00, 0x0b] : []), 0x0f, 0x0b, ...code1(e.body)];
+        return [...code1(e.value), 0x21, ...u(e.i), ...code1(e.body)];
       case "if": return [...code1(e.cond), 0x04, ...typeOf(e.t), ...code(e.then, d + 1, fl), 0x05, ...code(e.else, d + 1, fl), 0x0b];
       case "call": {
         // A tail call only to a function that gives what this one gives.
@@ -875,13 +879,16 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         : [`${d}i32.const ${e.v < 0n ? 1 : 0}`, ...limbs(e.v).map((l) => `${d}i32.const ${l}`), `${d}array.new_fixed $u32s ${limbs(e.v).length}`, `${d}struct.new $huge`].join("\n");
       case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
       case "rt": {
+        if (e.fn === "i64.lit" && e.args[0].k === "int") return `${d}i64.const ${e.args[0].v}`;
         const fast = intFast(e, (i) => [`local.get ${local(f, i)}`, []], [`call $${e.fn}`, []]);
         if (fast) return fast.map((x) => `${d}${x[0]}`).join("\n");
       }
       return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^handler:/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;
       case "local": return `${d}local.get ${local(f, e.i)}`;
-      case "let": return `${w(e.value)}\n${d}local.set ${local(f, e.i)}\n${w(e.body)}`;
+      case "let":
+        if (stepped(e.value)) return `${w(e.value)}\n${d}local.tee ${local(f, e.i)}\n${d}i64.const ${I64_LEAST}\n${d}i64.eq\n${d}(if (then ${f.params.map((_, j) => `local.get ${local(f, j)} call $i64.box `).join("")}call ${id(funcs[f.bail!])} ${funcs[f.bail!].partial && !f.partial ? "(if (then unreachable)) " : ""}return)) ;; past an i64: as written\n${w(e.body)}`;
+        return `${w(e.value)}\n${d}local.set ${local(f, e.i)}\n${w(e.body)}`;
       case "if": return `${w(e.cond)}\n${d}(if (result ${ty(e.t)})\n${d}  (then\n${wat(e.then, f, d + "    ", ld + 1, fl)})\n${d}  (else\n${wat(e.else, f, d + "    ", ld + 1, fl)}))`;
       case "call": {
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
@@ -1019,6 +1026,10 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   return { bytes, wat: text + "\n", exports: [...entries.map(([f]) => exportName(f)), ...helpers.map((x) => x.name), ...rtExports.map((f) => RT_EXPORTS[f.name])], floats, ...(lowered.stops?.length ? { stops: lowered.stops } : {}), ...(opts.hosts && worldOps.some((x) => x.op.startsWith("host:")) ? { hosts: opts.hosts } : {}) };
 }
 
+// A loop's value stepped (C207k, untagged-ints.ts valueLoop): i64's least
+// when it went past an i64.
+const I64_LEAST = -(2n ** 63n);
+const stepped = (e: SExpr) => e.k === "rt" && /^i64\.(addv|subv|mulv)$/.test(e.fn);
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
 const mentionsText = (e: SExpr): boolean => e.k === "text" || kids(e).some(mentionsText);
 const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets);
