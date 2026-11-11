@@ -39,6 +39,7 @@ const setup: Record<string, () => string[]> = {
   divisors: () => ["1000", "100"],
   "queens-count": () => ["6"],
   "queens-first": () => ["8"],
+  langford: () => ["7"],
   drift: () => ["50"],
   swarm: () => ["40", "20"],
   "swarm-pool": () => ["40", "20"],

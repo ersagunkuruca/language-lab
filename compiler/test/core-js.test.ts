@@ -46,6 +46,7 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
   // Their defaults are sized for compiled code (I202).
   "swarm-pool": () => [["20", "10"], {}],
   herd: () => [["20", "10"], {}],
+  langford: () => [["7"], {}],
   "queens-first": () => [["8"], {}],
 };
 

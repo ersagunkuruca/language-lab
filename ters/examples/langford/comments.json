@@ -1,0 +1,6 @@
+{
+  "a0ba7fdb": "A Langford pairing of 1 to n: each number twice in a row of 2n places, with k places between the two k's. One number at a time from n down: pick where its pair starts (one of), keep it only if both places are free (else fail). The handler decides whether that means the first pairing, all of them, or how many.",
+  "278fcb01": "Is a pair of number at start and start + number + 1 clear of the pairs placed already? placed holds where each larger number's pair starts, number + 1 first: the fold returns a function of that number, so each placed pair is checked where it lies.",
+  "45cfd833": "The first Langford pairing of n (the first argument, 13 when there is none): the first answer of langford's search, or an empty list when there is none, as for 13, where every piece of the search fails.",
+  "program": "The boards of n queens counted, queens' search shared out by its first row's columns (C43).\nTextbook: the n queens puzzle (Max Bezzel, 1848; Franz Nauck, 1850, for any n)."
+}
