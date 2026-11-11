@@ -23,7 +23,7 @@
 // Prior art: Cilk's work stealing (Blumofe et al. 1995), here with one
 // claim per branch, as the branches are few.
 
-import { ArrayView, arrayOf, CONS, NIL } from "../../ters/src/lang/std.ts";
+import { ArrayView, arrayOf, CONS, NIL, Table } from "../../ters/src/lang/std.ts";
 import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run.ts";
 import { add, type Int } from "../../ters/src/lang/int.ts";
 import { Pending } from "../../ters/src/lang/cells.ts";
@@ -50,6 +50,8 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
     return caps.includes(NO) ? NO : { $f: name, caps };
   }
   if (x instanceof Uint8Array || x instanceof Float64Array || x instanceof Int32Array) return x;
+  if (x instanceof Table) return encodeTable(x, names);
+  if (Array.isArray(x)) { const r = recordsAsColumns(x); if (r) return r; }
   if (Array.isArray(x)) { const xs = x.map((v) => encode(v, names)); return xs.includes(NO) ? NO : xs; }
   const t = x as { tag?: unknown; fields?: unknown[] };
   if (t.tag !== undefined && Array.isArray(t.fields)) {
@@ -58,11 +60,76 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
   }
   return NO;
 }
+// A table read by a job (examples/herd's map of animals, BACKLOG C209):
+// one whose keys are numbers and whose values are records of one case
+// whose fields are numbers crosses as columns in a SharedArrayBuffer, the
+// keys and then each field, which every worker reads where it is; a
+// record is made only for a key a worker looks up. Any other table, as
+// its entries.
+function encodeTable(t: Table, names: Map<Fn, string>): unknown {
+  const m = t.m, n = m.size;
+  let tag: unknown, w = -1;
+  for (const [k, v] of m) {
+    const r = v as { tag?: unknown; fields?: unknown[] };
+    if (typeof k !== "number" || typeof r !== "object" || r === null || r.tag === undefined || !Array.isArray(r.fields) || (w >= 0 && (r.tag !== tag || r.fields.length !== w)) || !r.fields.every((f) => typeof f === "number")) { w = -2; break; }
+    tag = r.tag; w = r.fields.length;
+  }
+  if (w >= 0 && n) {
+    const sab = new SharedArrayBuffer(8 * n * (w + 1)), cols = new Float64Array(sab);
+    let i = 0;
+    for (const [k, v] of m) { cols[i] = k as number; const fs = (v as { fields: number[] }).fields; for (let f = 0; f < w; f++) cols[n * (f + 1) + i] = fs[f]; i++; }
+    return { $s: sab, n, w, tag };
+  }
+  const es: unknown[] = [];
+  for (const [k, v] of m) { const ek = encode(k, names), ev = encode(v, names); if (ek === NO || ev === NO) return NO; es.push(ek, ev); }
+  return { $m: es };
+}
+// A run's answers that are records of one case whose fields are numbers
+// (herd's animals moved): their fields, record by record, in one
+// Float64Array, which crosses as bytes rather than as objects.
+function recordsAsColumns(xs: unknown[]): unknown {
+  if (xs.length < 4) return undefined;
+  const r0 = xs[0] as { tag?: unknown; fields?: unknown[] };
+  if (typeof r0 !== "object" || r0 === null || r0.tag === undefined || !Array.isArray(r0.fields)) return undefined;
+  const tag = r0.tag, w = r0.fields.length, out = new Float64Array(xs.length * w);
+  for (let i = 0; i < xs.length; i++) {
+    const r = xs[i] as { tag?: unknown; fields?: unknown[] };
+    if (typeof r !== "object" || r === null || r.tag !== tag) return undefined;
+    const fs = r.fields!;
+    if (fs.length !== w) return undefined;
+    for (let f = 0; f < w; f++) { const v = fs[f]; if (typeof v !== "number") return undefined; out[i * w + f] = v; }
+  }
+  return { $r: out, w, tag };
+}
+// A worker's view of such a table: its keys found by row, its records made
+// when read. A job only computes, so nothing changes it.
+class SharedEntries {
+  rows = new Map<number, number>();
+  cols: Float64Array; n: number; w: number; tag: unknown;
+  constructor(sab: SharedArrayBuffer, n: number, w: number, tag: unknown) {
+    this.cols = new Float64Array(sab); this.n = n; this.w = w; this.tag = tag;
+    for (let i = 0; i < n; i++) this.rows.set(this.cols[i], i);
+  }
+  get size() { return this.n; }
+  has(k: unknown) { return this.rows.has(k as number); }
+  get(k: unknown) { const i = this.rows.get(k as number); return i === undefined ? undefined : this.at(i); }
+  at(i: number) { const fields: number[] = []; for (let f = 0; f < this.w; f++) fields.push(this.cols[this.n * (f + 1) + i]); return { tag: this.tag, fields }; }
+  *entries(): IterableIterator<[unknown, unknown]> { for (let i = 0; i < this.n; i++) yield [this.cols[i], this.at(i)]; }
+  *keys(): IterableIterator<unknown> { for (let i = 0; i < this.n; i++) yield this.cols[i]; }
+  *values(): IterableIterator<unknown> { for (let i = 0; i < this.n; i++) yield this.at(i); }
+  [Symbol.iterator]() { return this.entries(); }
+  forEach(f: (v: unknown, k: unknown) => void) { for (let i = 0; i < this.n; i++) f(this.at(i), this.cols[i]); }
+  set(): never { throw new Error("a shared table is read only"); }
+  delete(): never { throw new Error("a shared table is read only"); }
+}
 function decode(x: unknown, fns: Record<string, Fn>, closure: (code: Fn, caps: unknown[]) => Fn): unknown {
   if (x === null || typeof x !== "object" || ArrayBuffer.isView(x)) return x;
   if (Array.isArray(x)) return x.map((v) => decode(v, fns, closure));
-  const o = x as { $a?: unknown[]; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
+  const o = x as { $a?: unknown[]; $r?: Float64Array; $s?: SharedArrayBuffer; $m?: unknown[]; n?: number; w?: number; tag?: unknown; $f?: string; caps?: unknown[]; $t?: unknown; fields?: unknown[] };
   if (o.$a) return arrayOf(o.$a.map((v) => decode(v, fns, closure)));
+  if (o.$r) { const xs: unknown[] = [], c = o.$r, w = o.w!; for (let i = 0; i < c.length; i += w) { const fields = new Array<number>(w); for (let f = 0; f < w; f++) fields[f] = c[i + f]; xs.push({ tag: o.tag, fields }); } return xs; }
+  if (o.$s) return new Table(new SharedEntries(o.$s, o.n!, o.w!, o.tag) as unknown as Map<unknown, unknown>, true);
+  if (o.$m) { const m = new Map<unknown, unknown>(); for (let i = 0; i < o.$m.length; i += 2) m.set(decode(o.$m[i], fns, closure), decode(o.$m[i + 1], fns, closure)); return new Table(m, true); }
   if (o.$f !== undefined) return closure(fns[o.$f], o.caps!.map((v) => decode(v, fns, closure)));
   return { tag: o.$t, fields: o.fields!.map((v) => decode(v, fns, closure)) };
 }
@@ -183,8 +250,11 @@ class Thrown { e: unknown; constructor(e: unknown) { this.e = e; } }
 const attempt = (go: () => unknown): unknown => { try { return go(); } catch (e) { return new Thrown(e); } };
 // Starting workers costs a quick program about 45 ms at its exit (Node
 // tears down the ones still loading), so they are started only once a
-// unit has taken this long, and from then on kept.
+// unit has taken this long, and from then on kept. Counted over every
+// job on this thread before them (`ran`): a map run each tick for some 10
+// ms (examples/herd) is worth them as much as one long map.
 const WORTH = 20;
+let ran = 0;
 
 // A job's units shared out: `here(i)` runs unit i on this thread, `send()`
 // is what workers need to run them (NO where something can't cross),
@@ -207,8 +277,9 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     while (left > 0) {
       values[--left] = attempt(() => here(left));
       // Started here, or by a job inside this unit (a map in a branch).
-      if (left > 0 && main && mod && (pool || performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
+      if (left > 0 && main && mod && (pool || ran + performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
     }
+    if (main) ran += performance.now() - t0;
   }
   const helpers = pool ?? [], payload = left > 0 && helpers.length ? send() : NO;
   if (payload === NO) for (; left > 0; left--) values[left - 1] = attempt(() => here(left - 1));
@@ -272,8 +343,9 @@ function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => unkno
     for (; next < n; ) {
       if (ends(values[next] = attempt(() => here(next)))) return values.slice(0, next + 1);
       next++;
-      if (next < n && main && mod && (pool || performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
+      if (next < n && main && mod && (pool || ran + performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
     }
+    if (main) ran += performance.now() - t0;
     if (next >= n) return values;
   }
   const helpers = pool ?? [], payload = helpers.length ? send() : NO;
