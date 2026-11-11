@@ -72,6 +72,7 @@ import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fuseSteps } from "./fuse-steps.ts";
+import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -4400,6 +4401,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A shader keeps its own (its loops must end).
   const setsFuel = (e: SExpr): boolean => e.k === "budget" || (e.k === "rt" && e.fn.startsWith("fuel.") && e.fn !== "fuel.get") || kids(e).some(setsFuel);
   if (opts.data && !funcs.some((f) => setsFuel(f.body))) for (const f of funcs) f.spends = false;
+  // A Float64 checked finite once where it can't fail again (C207h).
+  if (opts.data && !envSet("NO_FINITE")) finiteChecks(ir);
   return ir;
 }
 

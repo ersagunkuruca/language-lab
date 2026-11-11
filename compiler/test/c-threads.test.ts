@@ -354,3 +354,16 @@ test("queens-count natively checks a column by a loop over the queens placed, an
     assert.equal(out, n === "6" ? evaluator : "boards of 8 queens: 92\n", `${workers} workers, ${n}`);
   }
 });
+
+// queens-first natively (C207h): `safe`'s loop checks the column and the
+// distance on its first step only, its later steps running a copy that
+// knows them finite, and the board is the evaluator's.
+test("queens-first natively checks a loop's unchanged numbers once, and finds the evaluator's board (C207h)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-finite-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/queens-first");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "queens")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  assert.match(readFileSync(join(dir, "queens.c"), "utf8"), /lab_safe_fold_forward_finite\w*\(/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "8"]).stdout.toString();
+  assert.match(evaluator, /\[3, 1, 6, 2, 5, 7, 4, 0\]/);
+  for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "queens"), ["8"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);
+});
