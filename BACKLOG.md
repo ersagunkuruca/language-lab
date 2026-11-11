@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | C58 (free lists; a Pool type asked of Ersagun), then C59; mobile rows wait. Then Language or Compiler rows agreed with those lanes |
 | C Compiler and targets | "Compiler lane" | C60 (drift: the map written into its own array, then columns), then C42's other associative folds; C187 is blocked on V8; C184 with the Editor lane |
-| L Language and library | "Language lane" | L238 (FIXPOINT.md); I203's editor half is with the Editor lane (L182 is with the Editor lane) |
+| L Language and library | "Language lane" | the next goal row (stable references, free lists, multithreading) agreed with the lane that holds it; I203's editor half is with the Editor lane (L182 is with the Editor lane) |
 | L Language and library | "Language lane B" | the next goal row agreed with its lane (C43's first on C waits for an example); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
 
@@ -203,7 +203,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L238 | Design note FIXPOINT.md: a `fixpoint` where the program states only the equation and the compiler picks the way (semi-naive rounds over only the new facts, Newton, plain rounds), and how each ends: a finite universe (L237), a contraction checked at run time so not converging is Choice instead of Diverge (Banach, 1922), else Diverge; whether monotone functions belong in types as in Datafun. Prior art: semi-naive Datalog (Bancilhon, 1986), Flix (Madsen, Yee and Lhoták, PLDI 2016), Datafun (Arntzenius and Krishnaswami, ICFP 2016); relate.ts's tabling and `inverse` already solve some fixed points. Example: the note, with PageRank or a Markov chain's stationary distribution as its worked program | Ersagun's fixed-point discussion (thread "Explore solving by fixed-point iteration", 2026-11-11) | P3 | L | |
 
 ### Grammars, modules and sharing
 
