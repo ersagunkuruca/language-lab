@@ -385,7 +385,7 @@ test("queens-count natively checks a column by a loop over the queens placed, an
 // queens-first natively (C207h): `safe`'s loop checks the column and the
 // distance on its first step only, its later steps running a copy that
 // knows them finite, and the board is the evaluator's.
-test("queens-first natively checks a loop's unchanged numbers once, its columns never, and finds the evaluator's board (C207h, C207l)", { skip }, () => {
+test("queens-first natively checks a loop's unchanged numbers once, its columns never, and finds the evaluator's board (C207h, C207l, C207m)", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "c-finite-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/queens-first");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "queens")]);
   assert.equal(built.status, 0, built.stderr.toString());
@@ -397,6 +397,8 @@ test("queens-first natively checks a loop's unchanged numbers once, its columns 
   const loop = /\nint32_t lab_safe_fold_forward_finite_counted\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
   assert.ok(loop, "the counted loop");
   assert.doesNotMatch(loop[0], /lab_stop/);
+  // C207m: and once its answer is false it gives false there and then.
+  assert.match(loop[0], /\} else \{[^{}]*return 0;/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "8"]).stdout.toString();
   assert.match(evaluator, /\[3, 1, 6, 2, 5, 7, 4, 0\]/);
   for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "queens"), ["8"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);

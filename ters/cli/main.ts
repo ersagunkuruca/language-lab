@@ -41,6 +41,7 @@ const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({}
 const { mapsInPlaceCounted, ownedArrays } = compiles ? await import("../../compiler/src/owned-arrays.ts") : ({} as typeof import("../../compiler/src/owned-arrays.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
 const { untaggedLoops } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
+const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
 const { parallelColumnMaps } = compiles ? await import("../../compiler/src/par-columns.ts") : ({} as typeof import("../../compiler/src/par-columns.ts"));
 const { intoAsSets, ownedRecords } = compiles ? await import("../../compiler/src/owned-records.ts") : ({} as typeof import("../../compiler/src/owned-records.ts"));
 const { lowerScalar } = compiles ? await import("../../compiler/src/scalar.ts") : ({} as typeof import("../../compiler/src/scalar.ts"));
@@ -256,6 +257,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
     // And a loop's counting Ints as plain int64s (C207e, untagged-ints.ts).
     untaggedLoops(lowered);
+    // And a loop folding a Bool with `and` stopping once it's false (C207m).
+    if (!process.env.NO_EARLY_AND) earlyAnd(lowered);
     // And such a map stepping slot by slot on the threads (par-columns.ts).
     parallelColumnMaps(lowered);
   }
