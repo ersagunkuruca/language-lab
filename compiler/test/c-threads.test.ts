@@ -417,3 +417,18 @@ test("queens-first natively checks a loop's unchanged numbers once, its columns 
   assert.match(evaluator, /\[3, 1, 6, 2, 5, 7, 4, 0\]/);
   for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "queens"), ["8"], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `${workers} workers`);
 });
+
+// langford natively (C43i): a first whose answer is an array goes on the
+// threads, split by its first two choices, and finds the evaluator's
+// pairing, or none where every piece fails (n = 10).
+test("langford natively splits its first by two choices and finds the evaluator's pairing or none (C43i)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-first-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/langford");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "langford")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  assert.match(readFileSync(join(dir, "langford.c"), "utf8"), /lab_par_fjob_\d+/);
+  for (const n of ["7", "10"]) {
+    const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", "--evaluator", at, n]).stdout.toString();
+    assert.match(evaluator, n === "7" ? /\[11, 3, 1, 7, 4, 2, 0\]/ : /: \[\]/);
+    for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "langford"), [n], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `n = ${n}, ${workers} workers`);
+  }
+});

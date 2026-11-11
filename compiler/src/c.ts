@@ -2744,7 +2744,7 @@ static ${R} lab_both_${gi}(${params}) {
   // all of them), and how many that choice had, then each list type's
   // split: the list of that one item, or none past the last.
   function splitC(TL: string): string {
-    // A count or an all splits by its first two choices (C43 deeper
+    // A count, an all or (C43i) a first splits by its first two choices (C43 deeper
     // splits): lab__split2 the item kept at the second, taken up once the
     // first is split, and lab__seen2 how many that one had.
     return [`static ${TL}int64_t lab__split = -1, lab__seen = -1, lab__split2 = -1, lab__seen2 = -1;
@@ -2902,24 +2902,28 @@ again:
 }`;
   }
   // A first of a search split by its first choice (C203c), as compiled
-  // JavaScript's (branches-rt.ts searchPure with first): the run keeping
-  // the first item here, then the others from the front on the threads, a
-  // thread taking none past the first with an answer (stop). Here, in
-  // order, the first run with an answer is the answer, one that aborted or
-  // wasn't run running again here first; none with an answer fails (1),
-  // for the default. bad: 1 not run or aborted, 2 no answer, 0 answered.
+  // JavaScript's (branches-rt.ts searchPure with first), and since C43i by
+  // its first two, as a count is (C43g): the run keeping the first item of
+  // both here, which says how many each had; then, in order, the second
+  // choice's other items under the first's first and the first choice's
+  // other items each keeping its second's first (which say how many their
+  // second had); then, under each of those before the first with an answer,
+  // its second choice's other items. Each such set of runs goes from the
+  // front on the threads, a thread taking none past the first with an
+  // answer (stop). Here, in order, the first run with an answer is the
+  // answer, one that aborted or wasn't run running again here first; none
+  // with an answer fails (1), for the default. bad: 1 not run or aborted,
+  // 2 no answer, 0 answered.
   function firstSearchC(p: { n: number; tf: FType }, stops: boolean, fuelled: boolean): string {
     const { n, tf } = p, J = `lab_par_fjob_${n}`, call = (f: string) => `((${fname.get(tf.key)})((lab_closure *)${f})->code)(${f})`;
     const t = tf.result, T = ty(t);
-    const free = `${counted(t) ? `for (int64_t m = 0; m < n; m++) if (m != k && !j.bad[m]) ${drop(t, "j.out[m]")}
-  ` : ""}free(j.out); free(j.bad);
-  lab_drop(f);`;
-    return `typedef struct { lab_cell *f; ${T} *out; char *bad; int64_t next, stop, n; } ${J};
+    return `typedef struct { lab_cell *f; ${T} *out; char *bad; int64_t *ji, *jj, *seen; int64_t next, stop, n; } ${J};
 static void lab_par_fone_${n}(${J} *j, int64_t k) {
   lab_cell *f = lab_dup(j->f);
-  lab__split = k + 1; lab__seen = -1;
+  lab__split = j->ji[k]; lab__split2 = j->jj[k]; lab__seen = -1; lab__seen2 = -1;
   j->out[k] = ${call("f")};
-  lab__split = -1;
+  j->seen[k] = lab__seen2;
+  lab__split = -1; lab__split2 = -1;
 }
 static void lab_par_fwork_${n}(void *p) {
   ${J} *j = p;
@@ -2938,47 +2942,88 @@ static void lab_par_fwork_${n}(void *p) {
       while (s > k && !__atomic_compare_exchange_n(&j->stop, &s, k, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
     }
   }
-  lab__split = -1;${stops ? `
+  lab__split = -1; lab__split2 = -1;${stops ? `
   lab_stop_at = was;` : ""}
 }
+static ${J} lab_par_fjobs_${n}(lab_cell *f, int64_t m) {
+  int64_t z = m ? m : 1;
+  ${J} j = { f, malloc((size_t)z * sizeof(${T})), malloc((size_t)z), malloc((size_t)z * 8), malloc((size_t)z * 8), malloc((size_t)z * 8), 0, m, m };
+  if (!j.out || !j.bad || !j.ji || !j.jj || !j.seen) lab_oom();
+  memset(j.bad, 1, (size_t)z);
+  return j;
+}
+// Its answers but the one at keep (-1: none) given back, and the job freed.
+static void lab_par_ffree_${n}(${J} *j, int64_t keep) {
+  ${counted(t) ? `for (int64_t m = 0; m < j->n; m++) if (m != keep && !j->bad[m]) ${drop(t, "j->out[m]")}
+  ` : ""}free(j->out); free(j->bad); free(j->ji); free(j->jj); free(j->seen);
+}
+// The jobs run here in order till the search has taken a millisecond,
+// then the rest on the threads (par 1; -1 when what it holds can't be
+// shared), then in order here: the first with an answer (-1: none; -2: one
+// aborted, lab_st saying how).
+static int64_t lab_par_frun_${n}(${J} *j, int *par, const struct timespec *t0) {
+  int64_t lo;
+  for (lo = 0; lo < j->n; lo++) {
+    if (!*par && lab_par_worth(t0)${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
+      lab_share_no = 0;
+      lab_share(j->f);
+      lab_shared();
+      *par = lab_share_no ? -1 : 1;
+    }
+    if (*par == 1) break;
+    lab_par_fone_${n}(j, lo);
+    if (lab_st == 1) { lab_st = 0; j->bad[lo] = 2; continue; }
+    if (lab_st) return -2;
+    j->bad[lo] = 0;
+    return lo;
+  }
+  if (lo < j->n) { j->next = lo; lab_pool_run(lab_par_fwork_${n}, j); }
+  for (int64_t k = lo; k < j->n; k++) {
+    if (j->bad[k] == 2) continue;
+    if (j->bad[k] == 1) {
+      lab_par_fone_${n}(j, k);
+      if (lab_st == 1) { lab_st = 0; j->bad[k] = 2; continue; }
+      if (lab_st) return -2;
+      j->bad[k] = 0;
+    }
+    return k;
+  }
+  return -1;
+}
 static ${T} lab_par_search_${n}(lab_cell *f) {
-  int64_t was = lab__split, outer = lab__seen, n, k;
+  int64_t was = lab__split, was2 = lab__split2, outer = lab__seen, outer2 = lab__seen2, n1, m0, k, i, m, b, ka, kc;
+  int par = 0;
   struct timespec t0;
   lab_cell *g = lab_dup(f);
   ${T} r;
   clock_gettime(CLOCK_MONOTONIC, &t0);
-  lab__split = 0; lab__seen = -1;
+  lab__split = 0; lab__split2 = 0; lab__seen = -1; lab__seen2 = -1;
   r = ${call("g")};
-  n = lab__seen - 1; lab__split = was; lab__seen = outer;
-  if (lab_st != 1 || n <= 0) { lab_drop(f); return r; }
+  n1 = lab__seen; m0 = lab__seen2;
+  lab__split = was; lab__split2 = was2; lab__seen = outer; lab__seen2 = outer2;
+  if (n1 < 1) n1 = 1;
+  if (m0 < 1) m0 = 1;
+  if (lab_st != 1 || (n1 == 1 && m0 == 1)) { lab_drop(f); return r; }
   lab_st = 0;
-  ${J} j = { f, malloc((size_t)n * sizeof(${T})), malloc((size_t)n), 0, n, n };
-  if (!j.out || !j.bad) lab_oom();
-  memset(j.bad, 1, (size_t)n);
-  if (lab_par_worth(&t0)${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
-    lab_share_no = 0;
-    lab_share(f);
-    lab_shared();
-    if (!lab_share_no) lab_pool_run(lab_par_fwork_${n}, &j);
-  }
-  for (k = 0; k < n; k++) {
-    if (j.bad[k] == 2) continue;
-    if (j.bad[k] == 1) {
-      lab_par_fone_${n}(&j, k);
-      if (lab_st == 1) { lab_st = 0; j.bad[k] = 2; continue; }
-      if (lab_st) goto failed;
-      j.bad[k] = 0;
-    }
-    r = j.out[k];
-    ${free}
-    return r;
-  }
-  k = -1;
-  ${free}
+  // The first item's second choice's others, then the first choice's others.
+  ${J} a = lab_par_fjobs_${n}(f, m0 - 1 + n1 - 1), c;
+  for (b = 0, k = 1; k < m0; k++) { a.ji[b] = 0; a.jj[b] = k; b++; }
+  for (i = 1; i < n1; i++) { a.ji[b] = i; a.jj[b] = 0; b++; }
+  ka = lab_par_frun_${n}(&a, &par, &t0);
+  if (ka == -2) { lab_par_ffree_${n}(&a, -1); lab_drop(f); return 0; }
+  // Under each first item before the answer's, its second choice's others.
+  i = ka < 0 ? n1 : a.ji[ka];
+  for (m = 0, k = 1; k < i; k++) m += a.seen[m0 - 2 + k] > 1 ? a.seen[m0 - 2 + k] - 1 : 0;
+  c = lab_par_fjobs_${n}(f, m);
+  for (b = 0, k = 1; k < i; k++) for (int64_t q = 1; q < a.seen[m0 - 2 + k]; q++) { c.ji[b] = k; c.jj[b] = q; b++; }
+  kc = lab_par_frun_${n}(&c, &par, &t0);
+  if (kc == -2) { lab_par_ffree_${n}(&a, -1); lab_par_ffree_${n}(&c, -1); lab_drop(f); return 0; }
+  if (kc >= 0) { r = c.out[kc]; lab_par_ffree_${n}(&a, -1); lab_par_ffree_${n}(&c, kc); lab_drop(f); return r; }
+  lab_par_ffree_${n}(&c, -1);
+  if (ka >= 0) { r = a.out[ka]; lab_par_ffree_${n}(&a, ka); lab_drop(f); return r; }
+  lab_par_ffree_${n}(&a, -1);
+  lab_drop(f);
   lab_st = 1;
-  return 0;
-failed:
-  ${free}
   return 0;
 }`;
   }

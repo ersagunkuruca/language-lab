@@ -3581,7 +3581,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // An all likewise (C203b), its answers a list, joined in order; a
     // first (C203c), the runs' first answer in order, the default where
     // none has one (as JavaScript's, not of one solve or call of one).
-    const firstC = kind === "first" && !!dflt && (isData(t) || t === "int" || t === "f64") && !soleSolve(search) && !soleCall(search);
+    const firstC = kind === "first" && !!dflt && (isData(t) || isArray(t) || t === "int" || t === "f64") && !soleSolve(search) && !soleCall(search);
     // Only a search with several answers, as in JavaScript.
     // (Its closure made, as there, to learn that; then left unused.)
     const severalC = () => { const c = expr(n.args[0], env, f, false); return c.k === "closure" && !!c.t.several; };
