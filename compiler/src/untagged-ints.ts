@@ -151,9 +151,9 @@ function valueLoop(ir: CoreIR, i: number, total = false): boolean {
   const val = (e: SExpr, lets: Lets): SExpr => {
     if (e.k === "local" && ints.has(e.i)) return e;
     if (small(e)) return lit(e);
-    // k·x + c for small literals k > 0 and c (collatz's 3n + 1): on C one
-    // test of x against the two bounds, not one per step (C207q).
-    const ma = !total && e.k === "rt" && e.fn === "int.add" && e.args.length === 2 ? mulAdd(e.args) : null;
+    // k·x + c for small literals k > 0 and c (collatz's 3n + 1): one test
+    // of x against the two bounds, not one per step (C207q).
+    const ma = e.k === "rt" && e.fn === "int.add" && e.args.length === 2 ? mulAdd(e.args) : null;
     if (ma) {
       locals.push("i64");
       lets.push([locals.length - 1, { k: "rt", fn: "i64.muladdv", args: [atom(ma.x, lets), lit(ma.k), lit(ma.c)] }]);

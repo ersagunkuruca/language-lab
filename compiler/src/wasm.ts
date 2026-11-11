@@ -690,6 +690,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     const r: Ins[] = [...val(a), ...val(b), op];
     return guarded("eqref", [...r, ["i32.const 1", [0x41, 1]], ["i32.shl", [0x74]], ["i32.const 1", [0x41, 1]], ["i32.shr_s", [0x75]], ...r, ["i32.eq", [0x46]], IF("eqref"), ...r, ["ref.i31", [0xfb, 0x1c]], ELSE, ...slow, END]);
   };
+  const I64_OPS: Record<string, number> = { "i64.eq": 0x51, "i64.less": 0x53, "i64.and": 0x83, "i64.shr": 0x87 };
   // A function that calls itself last (and spends no fuel, and always
   // answers) runs as a loop: its body in a `loop`, the call its inputs set
   // and a branch back (C60 w2: drift's map, a tail call an item).
@@ -713,6 +714,19 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
       case "rt": {
         if (e.fn === "i64.lit" && e.args[0].k === "int") return [0x42, ...sBig(e.args[0].v)];
+        // A loop's i64 compares, masks and shifts as instructions, no call.
+        const op = I64_OPS[e.fn];
+        if (op !== undefined && e.args.length === 2) return [...e.args.flatMap(code1), op];
+        // k·x + c (C207q): x against the bounds k and c give, worked out
+        // here, then x · k + c, or i64's least for the round as written.
+        if (e.fn === "i64.muladdv") {
+          const [, kk, cc] = e.args.map((a) => (a.k === "rt" && a.fn === "i64.lit" && a.args[0].k === "int" ? a.args[0].v : null));
+          if (e.args[0].k === "local" && kk !== null && cc !== null) {
+            const MAX = (1n << 63n) - 1n, MIN = -(1n << 63n), q = (a: bigint) => a / kk!;
+            const xs = code1(e.args[0]);
+            return [...xs, 0x42, ...sBig(q(MAX - cc!)), 0x55, ...xs, 0x42, ...sBig(q(MIN - cc!)), 0x53, 0x72, 0x04, 0x7e, 0x42, ...sBig(I64_LEAST), 0x05, ...xs, 0x42, ...sBig(kk), 0x7e, 0x42, ...sBig(cc!), 0x7c, 0x0b];
+          }
+        }
         const fast = intFast(e, (i) => ["", [0x20, ...u(i)]], ["", [0x10, ...u(resolve.func(e.fn))]]);
         if (fast) return fast.flatMap((x) => x[1]);
       }
@@ -1039,7 +1053,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
 // A loop's value stepped (C207k, untagged-ints.ts valueLoop): i64's least
 // when it went past an i64.
 const I64_LEAST = -(2n ** 63n);
-const stepped = (e: SExpr) => e.k === "rt" && /^i64\.(addv|subv|mulv)$/.test(e.fn);
+const stepped = (e: SExpr) => e.k === "rt" && /^i64\.(addv|subv|mulv|muladdv)$/.test(e.fn);
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
 const mentionsText = (e: SExpr): boolean => e.k === "text" || kids(e).some(mentionsText);
 const budgets = (e: SExpr): boolean => e.k === "budget" || kids(e).some(budgets);
