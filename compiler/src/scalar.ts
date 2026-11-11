@@ -544,7 +544,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string }[] }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[] }[] }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -799,7 +799,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   let mapSites = 0;
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
-  const awayMaps: { site: number; fn: Id; how: string }[] = [];
+  const awayMaps: { site: number; fn: Id; how: string; caps: Id[] }[] = [];
   for (const n of opts.host || fibers ? Object.values(code.nodes) : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1466,9 +1466,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             // waits), a map goes on by the rest (C61 c′): on a page its runs
             // go to workers there, by postMessage (branches-rt.ts mapAway).
             const kind = parallelList.get(n.id)!;
-            if ((kind === "map" || kind === "keep") && waitsIn(f)) awayMaps.push({ site: (site as { v: number }).v, fn: n.args[1], how: kind });
-            const shared: SExpr = (kind === "map" || kind === "keep") && waitsIn(f)
-              ? { k: "world", op: "mapAway", aborts: true, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }], t, suspends: true }
+            const away = (kind === "map" || kind === "keep") && waitsIn(f), fnAway = away ? expr(n.args[1], env, f, false) : undefined;
+            // What its function captured, in the closure's order (C61 d′):
+            // the GPU's kernel takes them after the item.
+            if (fnAway?.k === "closure" && (fnAway.src && "binders" in fnAway.src || !fnAway.caps.length)) awayMaps.push({ site: (site as { v: number }).v, fn: n.args[1], how: kind, caps: fnAway.src && "binders" in fnAway.src ? fnAway.src.binders : [] });
+            const shared: SExpr = away
+              ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.

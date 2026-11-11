@@ -627,7 +627,7 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
   // A fold's items from the last, as the fold in turn meets them.
   const items = isFold(how) ? itemsOf(xs).reverse() : itemsOf(xs), t0 = performance.now();
   // On the GPU (C61 d′), where this site has a kernel and it pays.
-  if (!isFold(how) && gpuWorth(site, items.length)) { const a = int32s(items); if (a) return gpuMap(items, a, xs, f, site, k); }
+  if (!isFold(how) && gpuWorth(site, items.length)) { const a = int32s(items), c = capsOf(f, gpuSites[site]); if (a && c) return gpuMap(items, a, c, xs, f, site, k); }
   // Before there are workers: here, timed, and workers started for the next.
   if (!w.workers) {
     const v = inTurn();
@@ -647,7 +647,7 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
 
 // A page's maps on the GPU (C61 d′, gpu-maps.ts): each site's kernel,
 // and what an item took there and on the CPU, to keep the quicker.
-interface GpuMap { how: "map" | "keep"; result: "int" | "bool"; wgsl: string }
+interface GpuMap { how: "map" | "keep"; result: "int" | "bool"; wgsl: string; caps: ("int" | "bool")[] }
 let gpuSites: Record<number, GpuMap> = {};
 const gpuPerItem: number[] = [];
 let gpuMapsRun = 0;
@@ -656,7 +656,7 @@ export const pageMapsOnGpu = () => gpuMapsRun;
 export function pageGpu(sites: Record<number, GpuMap>): void { gpuSites = sites; }
 type Gpu = { dev: GPUDeviceLike; pipes: Map<number, Promise<unknown>> };
 // What of WebGPU this uses, typed loosely (the compiler has no DOM types).
-type GPUDeviceLike = { createBuffer(d: object): GpuBuf; createShaderModule(d: object): unknown; createComputePipelineAsync(d: object): Promise<{ getBindGroupLayout(i: number): unknown }>; createBindGroup(d: object): unknown; createCommandEncoder(): { beginComputePass(): { setPipeline(p: unknown): void; setBindGroup(i: number, g: unknown): void; dispatchWorkgroups(x: number, y: number): void; end(): void }; copyBufferToBuffer(a: GpuBuf, ao: number, b: GpuBuf, bo: number, n: number): void; finish(): unknown }; queue: { writeBuffer(b: GpuBuf, o: number, d: ArrayBufferView): void; submit(c: unknown[]): void } };
+type GPUDeviceLike = { pushErrorScope(f: string): void; popErrorScope(): Promise<unknown>; createBuffer(d: object): GpuBuf; createShaderModule(d: object): unknown; createComputePipelineAsync(d: object): Promise<{ getBindGroupLayout(i: number): unknown }>; createBindGroup(d: object): unknown; createCommandEncoder(): { beginComputePass(): { setPipeline(p: unknown): void; setBindGroup(i: number, g: unknown): void; dispatchWorkgroups(x: number, y: number): void; end(): void }; copyBufferToBuffer(a: GpuBuf, ao: number, b: GpuBuf, bo: number, n: number): void; finish(): unknown }; queue: { writeBuffer(b: GpuBuf, o: number, d: ArrayBufferView): void; submit(c: unknown[]): void } };
 type GpuBuf = { mapAsync(m: number): Promise<void>; getMappedRange(): ArrayBuffer; unmap(): void; destroy(): void };
 let gpu: Promise<Gpu | null> | undefined;
 const gpuOf = (): Promise<Gpu | null> => (gpu ??= (async () => {
@@ -671,6 +671,19 @@ const STORAGE = 0x80, COPY_SRC = 0x4, COPY_DST = 0x8, UNIFORM = 0x40, MAP_READ =
 function int32s(items: unknown[]): Int32Array | null {
   const a = new Int32Array(items.length);
   for (let i = 0; i < items.length; i++) { const x = items[i]; if (typeof x !== "number" || (x | 0) !== x) return null; a[i] = x; }
+  return a;
+}
+// What the function captured, as i32s (a Bool 0 or 1), where each is
+// what the kernel takes.
+function capsOf(f: Fn, m: GpuMap): Int32Array | null {
+  const caps = (f as Closure).caps ?? [];
+  if (caps.length !== m.caps.length) return null;
+  const a = new Int32Array(Math.max(1, caps.length));
+  for (let j = 0; j < caps.length; j++) {
+    const x = caps[j];
+    if (m.caps[j] === "bool") { if (typeof x !== "boolean") return null; a[j] = x ? 1 : 0; }
+    else { if (typeof x !== "number" || (x | 0) !== x) return null; a[j] = x; }
+  }
   return a;
 }
 // Whether this site's map goes to the GPU now: one that took over 5 ms
@@ -688,7 +701,7 @@ function gpuWorth(site: number, n: number): boolean {
 // The map or keep on the GPU: each item's answer and steps, an item the
 // GPU gave back worked out here, in order; the steps spent from the
 // handler's, the run out of them where in order their sum passes it.
-function gpuMap(items: unknown[], xs32: Int32Array, xs: unknown, f: Fn, site: number, k: (v: unknown) => unknown): unknown {
+function gpuMap(items: unknown[], xs32: Int32Array, caps: Int32Array, xs: unknown, f: Fn, site: number, k: (v: unknown) => unknown): unknown {
   // Each item's budget at most 2²⁴, which an f32 counts down exactly; one
   // that takes more is given back.
   const m = gpuSites[site], left = stepsLeft(), budget = Math.min(left ?? 16777216, 16777216), n = items.length, t0 = performance.now();
@@ -697,23 +710,30 @@ function gpuMap(items: unknown[], xs32: Int32Array, xs: unknown, f: Fn, site: nu
     const g = await gpuOf();
     if (!g) return;
     const { dev } = g;
+    dev.pushErrorScope("validation");
     if (!g.pipes.has(site)) g.pipes.set(site, dev.createComputePipelineAsync({ layout: "auto", compute: { module: dev.createShaderModule({ code: m.wgsl }), entryPoint: "lab_main" } }));
     const pipe = await g.pipes.get(site)! as { getBindGroupLayout(i: number): unknown };
     const bytes = Math.max(4, n * 4);
-    const ins = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC });
+    const ins = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_DST }), outs = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC }), steps = dev.createBuffer({ size: bytes, usage: STORAGE | COPY_SRC | COPY_DST });
+    const capped = dev.createBuffer({ size: caps.byteLength, usage: STORAGE | COPY_DST });
+    dev.queue.writeBuffer(capped, 0, caps);
     const job = dev.createBuffer({ size: 16, usage: UNIFORM | COPY_DST }), back = dev.createBuffer({ size: bytes * 2, usage: MAP_READ | COPY_DST });
     const head = new ArrayBuffer(16);
     new Float32Array(head, 0, 1)[0] = budget; new Uint32Array(head, 4, 1)[0] = n;
-    dev.queue.writeBuffer(ins, 0, xs32); dev.queue.writeBuffer(job, 0, new Uint8Array(head));
-    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [ins, outs, steps, job].map((b, binding) => ({ binding, resource: { buffer: b } })) });
+    // Each item's steps −1 till the kernel writes them: one it never ran
+    // is worked out here.
+    dev.queue.writeBuffer(ins, 0, xs32); dev.queue.writeBuffer(job, 0, new Uint8Array(head)); dev.queue.writeBuffer(steps, 0, new Float32Array(Math.max(1, n)).fill(-1));
+    const bg = dev.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: (m.caps.length ? [ins, outs, steps, job, capped] : [ins, outs, steps, job]).map((b, binding) => ({ binding, resource: { buffer: b } })) });
     const enc = dev.createCommandEncoder(), p = enc.beginComputePass(), groups = Math.ceil(n / 64);
     p.setPipeline(pipe); p.setBindGroup(0, bg); p.dispatchWorkgroups(Math.min(groups, 65535), Math.ceil(groups / 65535)); p.end();
     enc.copyBufferToBuffer(outs, 0, back, 0, bytes); enc.copyBufferToBuffer(steps, 0, back, bytes, bytes);
     dev.queue.submit([enc.finish()]);
+    const wrong = await dev.popErrorScope();
+    if (wrong) { for (const b of [ins, outs, steps, job, capped, back]) b.destroy(); return; }
     await back.mapAsync(MAP_READ);
     const all = back.getMappedRange().slice(0);
     back.unmap();
-    for (const b of [ins, outs, steps, job, back]) b.destroy();
+    for (const b of [ins, outs, steps, job, capped, back]) b.destroy();
     out = new Int32Array(all, 0, n); spent = new Float32Array(all, bytes, n);
   })().catch(() => undefined);
   const finish = (): unknown => {

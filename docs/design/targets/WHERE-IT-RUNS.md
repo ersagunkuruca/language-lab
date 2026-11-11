@@ -269,7 +269,8 @@ What this leaves, in order:
     from an Int to an Int or a Bool. Its body is lowered as if under a
     budget the kernel sets (scalar.ts `stepped`), Ints as i32 (and, or, xor
     and shifted down now among them). A function that closes over the
-    handler's values isn't one yet.
+    handler's values does too since C61d′2, the Ints and Bools it
+    captured given to the kernel after the item, in the closure's order.
   - **Steps.** The kernel counts steps as the page does: one for each
     round of a loop or call the checker couldn't see end. Each item gets
     what is left of the handler's budget, at most 2²⁴, which an f32 counts
@@ -277,7 +278,9 @@ What this leaves, in order:
     in order, so a handler runs out where it does on the CPU. collatz
     below 300000: 35,969,673 steps on both.
   - **Given back.** An item that ran out of its budget, passed 32 bits or
-    had no answer in a search is worked out again on the CPU, in order.
+    had no answer in a search is worked out again on the CPU, in order. So
+    is every item of a run the GPU refused (a validation error) or never
+    wrote: each item's steps start at −1.
   - **When.** A map that took the CPU over 5 ms with 1,000 items tries the
     GPU once, and keeps it while it is the quicker. Finding 4 said 20 ms
     and 10,000 items. But a handler's million steps take the CPU about

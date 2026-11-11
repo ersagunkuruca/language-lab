@@ -27,15 +27,17 @@ const chromiumPath = (): string | undefined => {
 
 // The collatz page: its handler keeps the numbers below b taking over 100
 // steps to reach 1, b `first` the first time and `then` after.
-function collatzPage(first: number, then: number): string {
-  const program = join(dir, `collatz-${first}-${then}`);
+// `test`: the keep's test, which may capture the handler's b.
+const TEST = "(i) => 100 < ‹steps to one›(i, 0)";
+function collatzPage(first: number, then: number, keepTest = TEST): string {
+  const program = join(dir, `collatz-${first}-${then}-${keepTest === TEST ? "plain" : "captures"}`);
   cpSync(join(import.meta.dirname, "../../ters/examples/collatz"), program, { recursive: true });
   const s = new Session(program);
   s.remove("main");
   s.define("main", "function", []);
   s.step("main", "said", 'cell("")');
   const hole = /□#(\w+)/.exec(s.view("main"))![1];
-  const count = '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), (i) => 100 < ‹steps to one›(i, 0)))';
+  const count = '((n) => write(said, show(b) ++ ": " ++ show(length(n)) ++ " " ++ show(take(n, 3))))(keep(range(b), ' + keepTest + '))';
   s.replace(hole, `tag("main", [button("Count", (event) => ((b) => ${count})(if length(read(said)) = 0 then ${first} else ${then})), p([text(() => read(said))])])`);
   s.save();
   const out = join(program, "page.html");
@@ -51,6 +53,10 @@ test("collatz's keep in a page's handler gets a WebGPU kernel of its test (C61 d
   // The walk is a loop counting its steps, its bits as i32 and/shift.
   assert.match(html, /lab_fuel = lab_fuel - 1\.0;/);
   assert.match(html, /lab_ishr/);
+  // A test capturing b: b the kernel's input after the item.
+  const captures = readFileSync(collatzPage(9000, 9000, "(i) => if i < b then 100 < ‹steps to one›(i, 0) else false"), "utf8");
+  assert.match(captures, /caps:\["int"\]/);
+  assert.match(captures, /\(lab_xs\[i\], lab_caps\[0\]\)/);
 });
 
 const exe = chromiumPath();
@@ -59,7 +65,7 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
   const browser = await chromium.launch({ executablePath: exe, args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader"] });
   try {
     // Each page: the clock 100 times the real one, so the first press's
-    // map is measured past the GPU's 5 ms; the GPU's submits counted.
+    // map is measured past the GPU's 5 ms; the GPU's answers read back counted.
     const run = async (file: string, presses: number) => {
       const page = await browser.newPage();
       const said: string[] = [];
@@ -67,10 +73,11 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
       await page.addInitScript(() => {
         const now = performance.now.bind(performance);
         performance.now = () => now() * 100;
-        const w = window as unknown as { submits: number; GPUQueue?: { prototype: { submit(...a: unknown[]): unknown } } };
+        const w = window as unknown as { submits: number };
         w.submits = 0;
-        const q = w.GPUQueue?.prototype;
-        if (q) { const submit = q.submit; q.submit = function (...a: unknown[]) { w.submits++; return submit.apply(this, a); }; }
+        // Read back: only a run with no validation error gets that far.
+        const b = (window as unknown as { GPUBuffer?: { prototype: { getMappedRange(...a: unknown[]): unknown } } }).GPUBuffer?.prototype;
+        if (b) { const read = b.getMappedRange; b.getMappedRange = function (...a: unknown[]) { w.submits++; return read.apply(this, a); }; }
       });
       await page.goto(`file://${file}`);
       if (!(await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu))) return null;
@@ -94,5 +101,9 @@ test("the page's second press runs the keep on the GPU: the CPU's answer, and ou
     const over = await run(collatzPage(9000, 20000), 2);
     assert.deepEqual(over!.said, ["9000: 3292 [27, 31, 41]", "didn't finish", "9000: 3292 [27, 31, 41]"]);
     assert.ok(over!.submits > 0, "the second press went to the GPU");
+    // A test that captures the handler's b.
+    const captures = await run(collatzPage(9000, 9000, "(i) => if i < b then 100 < ‹steps to one›(i, 0) else false"), 2);
+    assert.deepEqual(captures!.said, ["9000: 3292 [27, 31, 41]", "9000: 3292 [27, 31, 41]"]);
+    assert.ok(captures!.submits > 0, "the second press went to the GPU");
   } finally { await browser.close(); }
 });
