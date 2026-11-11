@@ -221,6 +221,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // stay: showing its types reads them.)
   if (layer) s.wanted = [];
   else if (reuse) s.next = reuse.from.subst.next;
+  // An input whose type has settled to Int: a counter written with untyped
+  // literals counts towards its bound (I199, counting.ts).
+  const settledInt = (param: Id) => { const t = info.typeOf.get(param); if (!t) return false; const r = s.resolve(t); return r.t === "con" && r.id === INT; };
   // A filling tried by the palette adds no types, so their parts' owners
   // are the earlier check's.
   const owner = reuse && ![...reuse.only].some((d) => (code.nodes[(code.nodes[d] as NodeOf<"def">)?.body ?? ""] as Node | undefined)?.kind === "typedef") ? reuse.from.owner : ownerOfTypeParts(code);
@@ -828,7 +831,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const body = (code.nodes[d] as NodeOf<"def">).body;
       if (body && code.nodes[body].kind !== "lambda") err(d, `${nm(d)} is defined in terms of itself; only a function can be recursive`);
     }
-    if (recursive && !terminates(code, group)) {
+    if (recursive && !terminates(code, group, undefined, settledInt)) {
       for (const d of group) {
         info.divergent.add(d);
         const t = s.resolve(mono.get(d)!);
@@ -931,7 +934,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const self = s.fresh();
     const t = expr(a, new Map(env).set(p, self), row);
     unifyAt(a, self, t);
-    if (!terminates(code, [p], () => code.nodes[a] as NodeOf<"lambda">)) {
+    if (!terminates(code, [p], () => code.nodes[a] as NodeOf<"lambda">, settledInt)) {
       const r = s.resolve(t);
       try { if (r.t === "fn") s.unifyRow(r.eff, { effs: [DIVERGE], tail: s.next++ }); }
       catch (e) { if (e instanceof EffectError) err(a, `${nm(p)} might not finish, and it is used where only a function that surely finishes fits`); else throw e; }
@@ -2379,12 +2382,12 @@ function appliesTo(code: Code, c: Id): Applies {
 
 // `lambdaOf`: the function each member is, a definition's body by default
 // (a recursive let's binder names its lambda).
-function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }): boolean {
+function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }, isInt?: (param: Id) => boolean): boolean {
   // By pieces first; then by spines, which follows a list through a
   // function's result (spine.ts, I84).
-  return byPieces(code, group, lambdaOf) || spineTerminates(code, group, lambdaOf);
+  return byPieces(code, group, lambdaOf, isInt) || spineTerminates(code, group, lambdaOf);
 }
-function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null): boolean {
+function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null, isInt?: (param: Id) => boolean): boolean {
   const inGroup = new Set(group);
   // Guarded corecursion (L16, NUMBERS.md stage 5; Coquand 1993, Giménez
   // 1995): a group whose every call into itself is in a function stored in
@@ -2424,7 +2427,7 @@ function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null): bo
     const lam = lambdaOf(d);
     if (lam?.kind !== "lambda") return false;
     // An Int counted towards a bound shrinks at that call (L46, counting.ts).
-    const counted = group.length === 1 ? countedCalls(code, d, lam) : new Set<string>();
+    const counted = group.length === 1 ? countedCalls(code, d, lam, isInt) : new Set<string>();
     // size.get(b): for each input i that b is (false) or is a piece of (true)
     const size = new Map<Id, Map<number, boolean>>(lam.params.map((p, i) => [p, new Map([[i, false]])]));
     const sizeOf = (id: Id | undefined): Map<number, boolean> | undefined => {
