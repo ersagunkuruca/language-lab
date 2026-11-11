@@ -36,8 +36,9 @@ export function withBodies(code: Code, info: Info, names: Names): { code: Code; 
   return r;
 }
 
-// BODIES_CHECK=1 checks the filled program again, to compare.
-const checkAgain = () => typeof process !== "undefined" && !!process.env?.BODIES_CHECK;
+// TERS_RECHECK=1 checks the filled program again, to compare (as hoist.ts
+// and stage.ts do then).
+const checkAgain = () => typeof process !== "undefined" && !!process.env?.TERS_RECHECK;
 
 // The filled program's types without checking it again (I203): a use
 // filled (ports.ts fillUses) gives what it gave, its binders and their
