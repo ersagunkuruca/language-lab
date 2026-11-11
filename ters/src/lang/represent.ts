@@ -341,8 +341,15 @@ function holders(code: Code, def: Id, t: Id): Id[] {
   }
   return [...out];
 }
-function makesOrMatches(code: Code, def: Id, typedef: Id): boolean {
-  return subtree(code, def).some((id) => { const n = code.nodes[id]; const v = n.kind === "ref" ? n.target : n.kind === "arm" ? n.variant : null; return !!v && code.nodes[v]?.kind === "variant" && ownerOf(code, v) === typedef; });
+// The types whose cases a definition makes or matches.
+function madeOrMatched(code: Code, def: Id): Set<Id> {
+  const out = new Set<Id>();
+  for (const id of subtree(code, def)) {
+    const n = code.nodes[id], v = n.kind === "ref" ? n.target : n.kind === "arm" ? n.variant : null;
+    const o = v && code.nodes[v]?.kind === "variant" ? ownerOf(code, v) : null;
+    if (o) out.add(o);
+  }
+  return out;
 }
 let owners: { code: Code; of: Map<Id, Id> } | null = null;
 function ownerOf(code: Code, variant: Id): Id | null {
@@ -477,7 +484,18 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     for (const d of directRefs(code, def)) reach(d);
     // A holder's every definition goes with it, reached or not, since the
     // program is checked again whole.
-    for (const h of holders(code, def, t)) if (!todo.has(h)) { reach(h); for (const d of code.defs) if (makesOrMatches(code, d, h)) reach(d); }
+    for (const h of holders(code, def, t)) if (!todo.has(h)) { reach(h); for (const d of makersOf(h)) reach(d); }
+  };
+  // The definitions making or matching each type, in the program's order,
+  // found in one walk: each holder walked every definition again (I203:
+  // an eighth of bounce's check for running).
+  let makers: Map<Id, Id[]> | null = null;
+  const makersOf = (h: Id): Id[] => {
+    if (!makers) {
+      makers = new Map();
+      for (const d of code.defs) for (const td of madeOrMatched(code, d)) { let ds = makers.get(td); if (!ds) makers.set(td, (ds = [])); ds.push(d); }
+    }
+    return makers.get(h) ?? [];
   };
   entries.forEach(reach);
 
