@@ -125,6 +125,8 @@ export function seeds(host: SeedHost) {
     if (!calledDefs(doc().code).has(def)) return undefined;
     const short = mainCalls(info, entry).get(body.id);
     if (short || longRuns.has(doc().code)) return short ?? mainCalls(info, entry, true).get(body.id);
+    const sofar = longPaused.get(doc().code)?.got.get(body.id);
+    if (sofar) return sofar;
     // The long run (up to 1.6 s) waits until the definition has drawn, and
     // draws it again if it found a value for it (I158: Spacetime's
     // `reversed` opened in 2.2 s, nearly all of it this run).
@@ -133,7 +135,7 @@ export function seeds(host: SeedHost) {
       if (doc().code !== was || longRuns.has(was)) return;
       // What was kept for it before (nothing) goes, or the drawing reads
       // it again (I196: newton opened empty when main's short run ran out).
-      longCalls(info, entry, () => { if (doc().code === was && longRuns.get(was)?.get(body.id) && ui.def === open) { seeds.get(was)?.m.delete(def); render(); } });
+      longCalls(info, entry, body.id, () => { if (doc().code === was && (longRuns.get(was) ?? longPaused.get(was)?.got)?.get(body.id) && ui.def === open) { seeds.get(was)?.m.delete(def); render(); } });
     };
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
     return undefined;
@@ -270,6 +272,9 @@ export function seeds(host: SeedHost) {
     } finally { if (!pieces) done = true; }
     if (!pieces) return undefined;
     const rest = pieces;
+    // Between pieces it isn't main's run either: a long run waits there
+    // until a definition it hasn't reached opens (longCalls).
+    done = true;
     return (function* () {
       let left = Math.max(0, end - performance.now());
       try {
@@ -278,7 +283,8 @@ export function seeds(host: SeedHost) {
           end = from + left;
           sliceEnd = from + SLICE_MS;
           let more = false;
-          try { more = withSteps(steps, () => !rest.next().done); } catch { more = false; } finally { sliceEnd = Infinity; }
+          done = false;
+          try { more = withSteps(steps, () => !rest.next().done); } catch { more = false; } finally { sliceEnd = Infinity; done = true; }
           left -= performance.now() - from;
           if (!more) break;
           yield;
@@ -362,24 +368,37 @@ export function seeds(host: SeedHost) {
   // drawn (I158), and given back to the page between its pieces (I172: as
   // one task, up to 1.6 s, it froze Tumble after `contains` drew). `then`
   // once it has ended, unless the code changed meanwhile.
-  const longGoing = new WeakSet<Code>();
-  function longCalls(info: T.Info, main: Id, then: () => void): void {
+  // It stops once the definition it runs for has a value, and goes on
+  // from there when one it hasn't reached opens (I189: Spacetime's
+  // `scalar part` had its value in the first piece and waited 1 s more on
+  // the page's views).
+  const longGoing = new WeakMap<Code, { want: Id; then: () => void }>();
+  const longPaused = new WeakMap<Code, { got: Map<Id, Value[]>; rest: Generator<void> }>();
+  function longCalls(info: T.Info, main: Id, want: Id, then: () => void): void {
     const code = doc().code;
     if (longRuns.has(code)) return then();
-    if (longGoing.has(code)) return;
+    const going = longGoing.get(code);
+    if (going) { Object.assign(going, { want, then }); return; }
     const body = defBody(main);
     // A picture's function runs at its pixels, a few short runs: at once.
     if (body?.kind === "lambda" && body.params.length) { mainCalls(info, main, true); return then(); }
-    const got = new Map<Id, Value[]>(), copies = mainCopies.get(code) ?? new Map<Id, Id>();
-    mainCopies.set(code, copies);
-    const args = mainArgs(info, main, []);
-    const rest = args && runFrom(info, main, args, [LONG.steps, LONG.main, LONG.handlers], got, copies);
+    let { got, rest } = longPaused.get(code) ?? { got: new Map<Id, Value[]>(), rest: undefined as Generator<void> | undefined };
+    longPaused.delete(code);
+    if (!rest) {
+      const copies = mainCopies.get(code) ?? new Map<Id, Id>();
+      mainCopies.set(code, copies);
+      const args = mainArgs(info, main, []);
+      rest = (args && runFrom(info, main, args, [LONG.steps, LONG.main, LONG.handlers], got, copies)) || undefined;
+    }
     const ended = () => { longGoing.delete(code); longRuns.set(code, got); then(); };
     if (!rest) return ended();
-    longGoing.add(code);
+    const run = rest, now = { want, then };
+    longGoing.set(code, now);
     const piece = () => {
-      if (doc().code !== code) { rest.return(undefined); longGoing.delete(code); return; }
-      if (rest.next().done) ended(); else setTimeout(piece, 0);
+      if (doc().code !== code) { run.return(undefined); longGoing.delete(code); return; }
+      if (run.next().done) { longGoing.delete(code); longRuns.set(code, got); now.then(); }
+      else if (got.has(now.want)) { longGoing.delete(code); longPaused.set(code, { got, rest: run }); now.then(); }
+      else setTimeout(piece, 0);
     };
     setTimeout(piece, 0);
   }
