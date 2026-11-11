@@ -234,3 +234,29 @@ test("a field two types have, on a value nothing types yet, is refused until `as
   assert.match(call("replace", { at: "pocket gap", find: "□", text: "p.place - x" }).text, /reads as a Ball or as a Pocket/);
   assert.match(text("replace", { at: "pocket gap", find: "□", text: "p.place - x", as: "Pocket" }), /\(Pocket, Float64\) -> Float64/);
 });
+
+test("a match is written as the view prints it, its cases on lines or after `;`s, one inside another (I212)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  // pond's herons over (round 13 wrote it as a define, a split and a
+  // replace per case), in one replace: the input's type from the cases.
+  text("define", { name: "herons again", kind: "function", params: ["m", "ids"] });
+  const herons = text("replace", { at: "herons again", find: "□", text: "match ids\n  nil → m\n  cons(head, tail) → herons again(put(m, head, start heron(head)), tail)" });
+  assert.match(herons, /herons again›#\w+ : \(Map Int Heron, List Int\) -> Map Int Heron/);
+  assert.match(herons, /cons\(head#\w+, tail#\w+\) → ‹herons again›\(put\(m, head, ‹start heron›\(head\)\), tail\)/);
+  text("define", { name: "struck again", kind: "function", params: ["p", "ids"] });
+  assert.match(text("replace", { at: "struck again", find: "□", text: "match ids; nil -> p; cons(h, t) -> struck again(struck(p, h), t)" }), /\(Pond, List Int\) -> Pond/);
+  // The checker finds each the same as the one written case by case.
+  assert.match(text("check"), /`herons over` is the same as `herons again`/);
+  assert.match(text("check"), /`struck by` is the same as `struck again`/);
+  // A case's body may be a match, on deeper lines.
+  text("define", { name: "pairs", kind: "function", params: ["xs"] });
+  assert.match(text("replace", { at: "pairs", find: "□", text: "match xs\n  nil → 0\n  cons(a, rest) →\n    match rest\n      nil → 0\n      cons(b, more) → 1 + pairs(more)" }), /\(List a\) -> b where b is a Number/);
+  // Cases no type has together are refused.
+  text("define", { name: "nothing", kind: "function", params: ["xs"] });
+  assert.match(call("replace", { at: "nothing", find: "□", text: "match xs; nil -> 0; cons(h, t) -> 1; other -> 2" }).text, /no data type has the cases nil, cons, other/);
+});
