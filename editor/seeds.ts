@@ -227,7 +227,7 @@ export function seeds(host: SeedHost) {
   // on the board picks a neighbour; each lane's timer).
   const ANOTHER_TAP = 3;
   // The longest a piece of the run after main's runs before giving the page
-  // back; the first drawing, part of main's own run, isn't cut.
+  // back; the first drawing, part of main's own run, is cut too.
   const SLICE_MS = 100;
   let sliceEnd = Infinity;
   // A piece at a time (I172): it yields after the first drawing, and after
@@ -267,7 +267,13 @@ export function seeds(host: SeedHost) {
         });
         // A page's views run later, as it's drawn: draw it once here, so
         // what they call has values too (I29 b).
-        if (tr.result !== undefined) { pieces = exploring(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; }); pieces.next(); }
+        // Its first drawing a piece too (I189: Spacetime's page drew its views
+        // for 0.4 s, the whole of main's budget, in one task).
+        if (tr.result !== undefined) {
+          pieces = exploring(tr.result, () => performance.now() > end, () => { end = performance.now() + handlersMs; });
+          sliceEnd = performance.now() + SLICE_MS;
+          try { pieces.next(); } finally { sliceEnd = Infinity; }
+        }
       });
     } finally { if (!pieces) done = true; }
     if (!pieces) return undefined;
