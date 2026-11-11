@@ -3,9 +3,10 @@
 Design note for BACKLOG.md L238 (thread "Explore solving by fixed-point
 iteration", 2026-11-11). Written 2026-11-11.
 
-**Status.** Design, mostly not built. `grow` (L237, in the prelude) is
-built: it covers the finite, growing case below. The rest is a proposal,
-with the rows it would become at the end.
+**Status.** `grow` (L237) and `settled` / `settled by` over a List
+Float64 (L239) are in the prelude. What was learned building `settled` is
+under "What building it changed". The Markov chain example (L240) and
+Newton (L241) are rows.
 
 ## The problem
 
@@ -83,13 +84,13 @@ way. Any other step is a contraction or plain iteration, below.
 settled(start, step, tolerance)
 ```
 
-This proposed definition gives a point x with `step(x)` within
-`tolerance` of x, for a step over Float64s, a record of them or a list of
-them. Distance is the largest difference in any part (the max norm). It
-runs plain rounds and checks the contraction as it goes:
+This gives a point x with `step(x)` within `tolerance` of x, for a step
+over a list of Float64s (a record of them waits for an example). Distance
+is the sum of the parts' differences (the L1 norm; see below for why not
+the max norm). It runs plain rounds and checks the contraction as it goes:
 
-1. Run a few rounds and take q̂ as the largest ratio `dₖ₊₁ / dₖ` seen
-   between the sizes of consecutive steps. If q̂ ≥ 1, there is no answer
+1. Run four rounds and take q̂ half way from the largest ratio `dₖ₊₁ / dₖ`
+   seen between the sizes of consecutive steps to 1. If q̂ ≥ 1, there is no answer
    (Choice): the step isn't contracting from this start.
 2. From q̂ and d₀, the number of rounds is bounded:
    N = ⌈log(tolerance · (1 − q̂) / d₀) / log q̂⌉. The loop counts N down,
@@ -102,10 +103,10 @@ runs plain rounds and checks the contraction as it goes:
 
 So `settled` is `-[Choice]->` and never Diverge. The check is honest about
 what it knows:
-- For a linear step (PageRank, a Markov chain), the observed ratio
-  approaches the true rate, so the answer is within tolerance.
-- For a non-linear step, q̂ is an estimate. An answer could then be off by
-  more than the tolerance if the step contracts less elsewhere.
+- When the rate is known, as PageRank's damping is, `settled by` is given
+  it and the answer is within tolerance.
+- Otherwise q̂ is an estimate. An answer could then be off by more than the
+  tolerance if the step contracts less elsewhere.
 
 The note to write with it says so. A program that knows its rate can say
 so instead: `settled by(start, step, q, tolerance)` takes q as given, needs
@@ -119,6 +120,22 @@ rounds are cheap and local, and they share out over workers. So the
 compiler would choose:
 - **Newton:** a few unknowns and a step it can differentiate.
 - **Plain rounds:** everything else.
+
+### What building it changed
+
+- **The norm is L1, not max.** PageRank's step shrinks by 0.85 in the sum
+  of differences, every step. In the max norm its step-to-step ratio on the
+  ten-page test graph swings between 0.43 and 0.98, so `settled by(…,
+  0.85, …)` measured in the max norm had no answer. A step that contracts
+  in the max norm instead (value iteration) shrinks in L1 by at most n
+  times as much, so it may need `settled` rather than `settled by`.
+- **`settled` takes a margin.** Its first ratios on the same graph are
+  0.51, 0.64, 0.57, 0.71, and later ones reach 0.85. So after four rounds
+  it takes q half way from the largest ratio seen to 1 (0.85 there), not
+  the largest itself.
+- **A millionth of slack.** A step that shrinks by exactly q measures a
+  hair over it after rounding, so a step fails only when it shrinks by
+  less than q · 1.000001.
 
 ## The worked program: PageRank
 
@@ -135,11 +152,10 @@ page rank(links) = settled(evenly(links), (r) ↦ rank step(links, r), 1e-9)
 ```
 
 The step is a contraction with q = 0.85 in the sum of absolute
-differences (the L1 norm). From an even start, d₀ ≤ 2, so it ends within
-⌈log(1e-9 · 0.15 / 2) / log 0.85⌉ = 144 rounds. In the max norm, which
-`settled` measures, the observed ratio approaches the chain's second
-eigenvalue, which is at most 0.85. With `settled by(…, 0.85, 1e-9)` the
-bound is known before the first round.
+differences (the L1 norm), which `settled` measures. From an even start,
+d₀ ≤ 2, so it ends within ⌈log(1e-9 · 0.15 / 2) / log 0.85⌉ = 144 rounds.
+With `settled by(…, 0.85, 1e-9)` the bound is known before the first
+round. test/settled.test.ts runs both on ten pages.
 
 A Markov chain's stationary distribution π = π · P is the same program,
 with P's rows in place of the links. It has an answer when the chain is
@@ -193,9 +209,9 @@ source. That waits for an example that needs it.
 
 ## Rows this would become
 
-These are proposed. None is in BACKLOG.md until Ersagun picks them.
+L239 is built; L240 and L241 are BACKLOG rows at P3.
 
-- **`settled` and `settled by` in the prelude.** They run plain rounds with
+- **`settled` and `settled by` in the prelude** (L239, built). They run plain rounds with
   the contraction check above, so the type is Choice and never Diverge.
   Example: PageRank on a ten-page graph, evaluated and compiled the same,
   within 144 rounds.

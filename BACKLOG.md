@@ -204,9 +204,8 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L239 | `settled(start, step, tolerance)` and `settled by(start, step, q, tolerance)` in the prelude: plain rounds of a step over Float64s (a record or list of them), the contraction checked as it runs (the largest ratio of successive step sizes, q̂ < 1, else no answer), the rounds bounded from q̂ and the first step (Banach), so the type is Choice and never Diverge. Prior art: Banach (1922), PageRank (Brin and Page, 1998). Example: PageRank on a ten-page graph, evaluated and compiled the same, within 144 rounds to 1e-9 | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | M | |
-| L240 | A Markov chain's stationary distribution as an editor example on `settled` (L239): a quickly mixing chain, a slowly mixing one with its large bound, and a periodic one with no answer. Example: the three in the editor's examples, each answer or none shown | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | S | after L239 |
-| L241 | The compiler picks Newton for `settled` when its step has a few Float64 unknowns and a derivative (derivatives, as `inverse` does). Example: `x = cos(x)` as `settled` in 4 steps instead of 52 plain rounds, to 1e-9 from 1.0 | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | M | after L239 |
+| L240 | A Markov chain's stationary distribution as an editor example on `settled` (L239): a quickly mixing chain, a slowly mixing one with its large bound, and a periodic one with no answer. Example: the three in the editor's examples, each answer or none shown | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | S | |
+| L241 | The compiler picks Newton for `settled` when its step has a few Float64 unknowns and a derivative (derivatives, as `inverse` does). Example: `x = cos(x)` as `settled` in 4 steps instead of 52 plain rounds, to 1e-9 from 1.0 | [FIXPOINT.md](docs/design/relations-and-effects/FIXPOINT.md) (L238), Ersagun's fixed-point discussion 2026-11-11 | P3 | M | |
 
 ### Grammars, modules and sharing
 
