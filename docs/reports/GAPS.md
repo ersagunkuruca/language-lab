@@ -3008,7 +3008,7 @@ for two reasons:
   patches`, a value, can't.
 *Fixed locally*, both one-line rules (library-reps.ts: copy what calls a
 copy too; infer.ts: an array's front is as large as the array): the
-numbers above; the same lines. Its own PR next.
+numbers above; the same lines (#2410).
 
 **P2. The pool is copied for every fish carried out (perf, about 25% of
 native after P1, O(n²)).** `applied(p, plan)` makes a new Pond with the
@@ -3017,6 +3017,10 @@ replace copies the pool's arrays (`lab__copy_a1` 9%, `Pool_drop` 15%,
 `lab_dec` 15%). The ideal changes one slot in place. This is the stable
 references goal: a Pool held by one Pond that the next one replaces is
 one holder (C56/C58p's in-place rule, for records' fields).
+*Fixed on C (G13-P2):* a record given whole to a function that makes a
+new one of its type is given only the fields that function reads, zeros
+for the rest, so the caller takes the school with one holder: native 4.2
+to 3.1 s, the same lines.
 
 **P3. `sum(map(offsets, …))` builds lists, and `offsets` is made afresh
 each call (perf, scent is 71% of native).** The smell of food sums a

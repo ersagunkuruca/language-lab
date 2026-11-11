@@ -391,6 +391,19 @@ test("a record's fields are read before it is given away, so a changed field has
   assert.ok(stored.indexOf("Machine_drop(p0);\n", stored.indexOf("lab_value_of_b(p0, p1)")) < stored.indexOf("lab_replace_at("), stored);
 });
 
+// Round 13 P2: pond's `applied` gives the pond whole to `with school`,
+// which makes the next pond from it and reads every field but the school
+// and the patches: it is given a pond of only those, so the school taken
+// from the old one, changed and given on, has one holder.
+test("a record given whole to a function reading only some of its fields is given those, so the rest are taken with one holder (round 13 P2)", () => {
+  const p = load("../../compiler/gaps/pond"), main = p.named("main");
+  const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
+  const at = c.indexOf("\nPond lab_applied", c.indexOf("// applied\n")), body = c.slice(at, c.indexOf("\n}\n", at));
+  assert.doesNotMatch(body, /Pond_dup\(p0\)/);
+  assert.match(body, /Pond_drop\(p0\);[^]*lab_replaced_in_pool/);
+  assert.match(body, /\(\(Pond\)\{ \(\(Pool\)\{ \(\(lab_cell \*\)0\)/);
+});
+
 test("fractions in C: the evaluator's answers in lowest terms, past 2⁶⁴ too, none at a zero bottom, and every cell freed", { skip }, () => {
   const p = fractions();
   const lowered = lowerScalar(p.code, p.info, p.names, Object.values(p.defs), { data: true });
