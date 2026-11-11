@@ -246,6 +246,15 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | A function's inputs are one tuple and its results another, so `f(x, y)` is `f(p)` and a relation is the same box with no favourite direction (design, PORTS-2026-11-01.md) | Ersagun's idea / Prior art | Ersagun asked for one view of inputs, results and relations (2026-11-01). Done before: Standard ML, where every function takes one argument, maybe a tuple (Milner, Tofte, Harper and MacQueen, *The Definition of Standard ML*); multiple values in Go, Lua and Common Lisp, and WebAssembly's multi-value. Considered: Swift's tuple splat, removed by SE-0029 and SE-0110 as ambiguous. Influence: the category of relations and its string diagrams. A list port drawn as growing sockets: prior art Blender's multi-input sockets. |
 | Hashes that ignore port order and the order of commutative operands (design, PORTS-2026-11-01.md §7) | Ersagun's idea / Prior art | Ersagun asked (2026-11-01) for `x*x+y*y` and `y*y+x*x` to hash the same. Done before: tree canonization (Aho, Hopcroft and Ullman, 1974), canonical graph labelling (McKay's nauty), matching modulo associativity and commutativity in Maude (Clavel, Eker, Meseguer et al.), equality saturation with e-graphs (egg, Willsey et al., POPL 2021). |
 
+## Reversible and quantum computing (designed, not built)
+
+| What | Label | Who and where |
+|---|---|---|
+| Erasing a bit costs at least kT·ln 2; compute, copy, then uncompute | Prior art | Rolf Landauer, IBM J. Res. Dev. 1961; Charles H. Bennett, "Logical reversibility of computation", IBM J. Res. Dev. 1973. REVERSIBLE-AND-QUANTUM-2026-11-11.md |
+| A reversible subset of Ters (det both ways, Janus-style checked `if`) | Prior art | Janus (Christopher Lutz and Howard Derby, 1982; Tetsuo Yokoyama and Robert Glück, PEPM 2007); Toffoli and Fredkin's reversible gates (1980, 1982) |
+| Uncompute added by the compiler | Influence | Silq (Bichsel, Baader, Gehr and Vechev, PLDI 2020); Q#'s `within … apply` |
+| A quantum target printing OpenQASM 3 (C210) | Prior art | OpenQASM 3 (Cross and others, 2022); Grover's search (STOC 1996) as the match for `for some` |
+
 ## Derivatives
 
 | What | Label | Who and where |
