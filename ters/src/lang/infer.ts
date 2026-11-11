@@ -276,11 +276,20 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
   const libPins = (a: Options) => (a.pins ? Object.entries(a.pins).filter(([d]) => libDefs.has(d)) : []);
   const mine = libPins(opts);
   const samePins = (a: Options) => { if (a.pins === opts.pins) return true; const p = libPins(a); return p.length === mine.length && p.every(([d, x], i) => mine[i][0] === d && mine[i][1] === x); };
-  const same = (a: Options) => a.hidden === opts.hidden && a.insiders === opts.insiders && a.library === opts.library && samePins(a);
+  // So are its insiders: those of a program's own (a representation's
+  // definitions library-reps.ts made for it, new ids each run) don't make
+  // another check, nor one kept on disk that no later run finds (swarm's
+  // whole library checked each compile, 1.5 s).
+  const libInsiders = (a: Options) => (a.insiders ? [...a.insiders].filter((d) => libDefs.has(d)).sort() : undefined);
+  const insiders = libInsiders(opts), insidersText = JSON.stringify(insiders);
+  const sameInsiders = (a: Options) => a.insiders === opts.insiders || JSON.stringify(libInsiders(a)) === insidersText;
+  const same = (a: Options) => a.hidden === opts.hidden && sameInsiders(a) && a.library === opts.library && samePins(a);
   let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
     const names = underAll.names;
+    const libOpts: Options = insiders ? { ...opts, insiders } : opts;
     const check = (kind: LibraryCheck): Info => {
+      const opts = libOpts;
       const stored = libraryStore?.load(lib, opts, mine, kind);
       if (stored) return stored;
       checkingUnder = true;
