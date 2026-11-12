@@ -156,11 +156,20 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   const lines = r.stdout.toString().split("\n").map((s) => s.trim());
   // Chromium: main 40 40 280, h1 40 40 280, a lane's h2 8 below the lane's top, 272 wide.
   assert.match(lines[1], /^main 40 40 280 /);
-  assert.match(lines[2], /^h1 40 40 280 /);
+  // Its font-size, 1.4em of the 15 it is in (not of an h1's own 2em): 21,
+  // three lines of 31.5, as Chromium.
+  assert.match(lines[2], /^h1 40 40 280 94.5$/);
   const lane = lines.findIndex((s) => s.startsWith("div 40") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
   assert.equal(lines[lane + 1].split(" ")[0], "h2");
   assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);
   assert.equal(h2[3], 272);
+  // A lane's foot, a flex row centred (align-items): the 96 box (flex:
+  // none) and its note shrunk into what's left, 166 wide, as Chromium.
+  const box = lines.findIndex((s) => / 96 96 bg /.test(s)), at = (i: number) => lines[i].split(" ").slice(1, 5).map(Number);
+  const note = lines.findIndex((s, i) => i > box && s.startsWith("p 146 "));
+  assert.equal(at(note)[2], 166);
+  const foot = at(box - 2), b = at(box), n = at(note);
+  assert.ok(Math.abs(b[1] - foot[1] - (foot[3] - 96) / 2) < 0.01 && Math.abs(n[1] - foot[1] - (foot[3] - n[3]) / 2) < 0.01, `${foot} ${b} ${n}`);
 });
 
 // Pictures drawn in C (C199f): each shape's box against its svg, as

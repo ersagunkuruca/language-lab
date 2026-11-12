@@ -8,7 +8,7 @@ plan, as rows C199a to C199e.
 **Status.** Route A chosen (Ersagun, 2026-11-10). C199a to C199d are
 done: cells in C and WebAssembly, a page's Html mounted from C on a view
 host, dice as an Android APK with no webview, and its layout and style in
-C. C199e (iOS) waits on Ersagun's call. Today a phone runs a Ters page in a webview:
+C, and C199e, the same page on an iPhone simulator with UIKit's views. Today a phone runs a Ters page in a webview:
 `ters build-app` makes an installable web app that is also a Capacitor
 project (WEB.md "Mobile", C198), and the hand-run "Android app" workflow
 (#2146) builds its debug APK.
@@ -172,7 +172,19 @@ What a page's parts become under route A:
   Chromium puts them at 360 wide (compiler/test/c-page.test.ts, the
   headless screen `page: "ui-headless"`), and the JNI screen on the
   stand-in tells the same places (c-native-app.test.ts).
-- **C199e. The iOS shell.** A Swift view host over UIKit. Building and
-  testing it needs a macOS runner, which costs about ten times a Linux
-  minute against the $20 Actions budget, so it waits for Ersagun's call.
-  Example: dice on an iPhone simulator.
+- **C199e. The iOS shell.** Done: `ters build-native-app --ios` writes
+  the same page C as Android's with Screen.m, the screen in Objective-C
+  over UIKit rather than Swift, since it takes ters_ui's C calls with no
+  bridge (ters/cli/ios-app.ts). Boxes are UIViews (borders on single
+  sides as layers, overflow: auto as a box whose bounds move under a pan),
+  texts UILabels with CSS's line height, inputs UITextFields and
+  UITextViews, pictures drawn with Core Graphics, frames on CADisplayLink,
+  pause and resume from the app's notifications (iOS has no back button).
+  Fibers switch by setjmp (LAB_FIBER_SJLJ), as iOS has no ucontext.
+  build.sh builds the simulator's app with clang alone, no Xcode project.
+  The hand-run "iOS app" workflow (macos-latest, free on the public repo)
+  builds it, installs it on an iPhone simulator and starts it with
+  `-ters-taps`, which taps buttons by their text and prints what the page
+  shows and where. Example: dice on an iPhone simulator rolls, and
+  throws a hundred (2026-11-12). Left for a phone: signing with a team in
+  Xcode, and an icon.

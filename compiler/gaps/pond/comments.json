@@ -1,7 +1,7 @@
 {
   "uvdvd25vhpohlb08s64msmd5s4": "A point or a direction in the pond, in metres. The pond wraps round at its edges (a torus), so a fish swimming off one side comes back on the other.",
   "b5kvo5c98jlgoptkb8rkboophf": "A fish: where it is, which way it swims, its energy (it dies at none), its age in ticks, the fish it follows by its key in the school (its own key when it leads itself; a key that finds nothing once that fish is gone) and its own random seed.",
-  "icu7knv88hvu4hi2as6teu8u81": "A cell of the pond's floor and how much food grows on it, from 0 to the capacity.",
+  "@hnldsfjt8r7e887ap8nu7t5qoc": "A cell of the pond's floor and how much food grows on it, from 0 to the capacity.",
   "pum6llvrkvfrl8f1hrip2qr70h": "What a fish means to do this tick, worked out from the pond as it was: where it swims to (next), the cell it then eats from and how much it wants. Plans are made for every fish at once, then carried out in turn.",
   "2jg115goq8taq3g4cgqe034auh": "A heron wading in the pond: where it stands, the fish it hunts by its key, how many fish it has caught, and how many ticks it still rests after a catch.",
   "nlkooaq8j8c55j2p34mhvorr8q": "The pond at a tick: the school of fish (a pool, so a fish that dies frees its slot for the next one born), the patches of food by cell, the herons by number, what has happened so far, and the log (newest first).",

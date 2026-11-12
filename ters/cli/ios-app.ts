@@ -1,7 +1,7 @@
 // A page as a native iPhone app, no webview (C199e, NATIVE-APPS.md):
 // `ters build-native-app --ios`. The same C as the Android app's (c.ts,
 // `page: "ui"`: the page mounted, styled and laid out by c-layout.ts), on a
-// screen of UIKit views drawn by Page.m, which takes ters_ui's C calls
+// screen of UIKit views drawn by Screen.m, which takes ters_ui's C calls
 // directly (Objective-C, so no bridge is needed between it and C). The
 // folder builds with build.sh on a Mac with Xcode: an app for the iPhone
 // simulator, the "iOS app" workflow's check.
@@ -20,7 +20,7 @@ export function iosAppFolder(title: string, c: string): Record<string, string> {
   const id = nativeAppId(title);
   return {
     "page.c": c,
-    "Page.m": PAGE_M(tersUiDecl(c)),
+    "Screen.m": PAGE_M(tersUiDecl(c)),
     "Info.plist": `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -44,7 +44,7 @@ export function iosAppFolder(title: string, c: string): Record<string, string> {
     "build.sh": `#!/bin/sh
 # The app for the iPhone simulator, as ${title}.app here (Xcode's command
 # line tools). The page's C as C (c-layout.ts names a variable id, which
-# Objective-C keeps for itself), Page.m as Objective-C; fibers by
+# Objective-C keeps for itself), Screen.m as Objective-C (named apart from page.c, since a Mac's disk doesn't tell page.o from Page.o); fibers by
 # setjmp, since iOS has no ucontext.
 set -e
 cd "$(dirname "$0")"
@@ -54,8 +54,8 @@ TARGET=$ARCH-apple-ios15.0$([ "$SDK" = iphonesimulator ] && echo -simulator)
 APP="${title.replace(/["$`\\]/g, "")}.app"
 rm -rf "$APP" build && mkdir -p "$APP" build
 xcrun -sdk "$SDK" clang -target "$TARGET" -c page.c -o build/page.o -O2 -ffp-contract=off -fwrapv -DLAB_FIBER_SJLJ -w
-xcrun -sdk "$SDK" clang -target "$TARGET" -c Page.m -o build/Page.o -O2 -fobjc-arc
-xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/Page.o -o "$APP/page" -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
+xcrun -sdk "$SDK" clang -target "$TARGET" -c Screen.m -o build/screen.o -O2 -fobjc-arc
+xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
 cp Info.plist "$APP/"
 codesign --force --sign - "$APP"
 echo "$APP"
@@ -64,7 +64,7 @@ echo "$APP"
 
 Made by \`ters build-native-app --ios\` (NATIVE-APPS.md, C199e): the program
 is C (page.c), which also styles and lays out its page, and the page is
-UIKit's own views (Page.m), with no webview. \`sh build.sh\` on a Mac with
+UIKit's own views (Screen.m), with no webview. \`sh build.sh\` on a Mac with
 Xcode builds ${title}.app for the iPhone simulator; then
 \`xcrun simctl install booted "${title}.app"\` and
 \`xcrun simctl launch booted ${id}\`. For a phone, the app needs signing
@@ -389,12 +389,22 @@ static NSString *textsOf(UIView *v) {
   for (UIView *k in v.subviews) { if (k.hidden) continue; NSString *t = textsOf(k); if (t.length) [a addObject:t]; }
   return [a componentsJoinedByString:@" "];
 }
+// And where the first texts are on the screen, in points.
+static void placed(UIView *v, NSMutableArray *out) {
+  if (out.count >= 12 || v.hidden) return;
+  if ([v isKindOfClass:[UILabel class]] && ((UILabel *)v).text.length) {
+    CGRect r = [v convertRect:v.bounds toView:nil];
+    [out addObject:[NSString stringWithFormat:@"%@ at %.0f,%.0f %.0fx%.0f", ((UILabel *)v).text, r.origin.x, r.origin.y, r.size.width, r.size.height]];
+  }
+  for (UIView *k in v.subviews) placed(k, out);
+}
 static void shown(NSString *when) {
-  printf("---- %s\n%s\n", when.UTF8String, textsOf(P.page).UTF8String);
+  NSMutableArray *at = [NSMutableArray new];
+  placed(P.page, at);
+  printf("---- %s\n%s\n%s\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String);
   fflush(stdout);
 }
 - (void)check:(NSArray<NSString *> *)taps {
-  shown(@"started");
   if (!taps.count) return;
   NSString *t = taps[0];
   NSArray *rest = [taps subarrayWithRange:NSMakeRange(1, taps.count - 1)];
@@ -498,7 +508,7 @@ static void shown(NSString *when) {
   self.window.rootViewController = page;
   [self.window makeKeyAndVisible];
   NSString *taps = [NSUserDefaults.standardUserDefaults stringForKey:@"ters-taps"];
-  if (taps) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [page check:[taps componentsSeparatedByString:@"|"]]; });
+  if (taps) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ shown(@"started"); [page check:[taps componentsSeparatedByString:@"|"]]; });
   return YES;
 }
 @end
