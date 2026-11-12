@@ -55,22 +55,30 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   };
   const resolved = (x: Id): Id => { for (let s = stand(x); s; s = stand(x)) x = s; return x; };
   // What a thunk reaches outside other searches: definitions with Choice.
+  // A search whose choices come from outside what is copied, a function
+  // it was given (`first(() => chances())`, chances an input that
+  // chooses), keeps its first: taking first ways in the copies leaves that
+  // function's choices, which the check sees only as the input's open row.
   const copies = new Map<Id, Id>();
-  const reach = (root: Id) => {
-    const walk = (at: Id) => {
+  const reach = (root: Id): boolean => {
+    let open = false;
+    const walk = (at: Id, own: Set<Id>) => {
       const id = resolved(at), n = code.nodes[id];
       if (!n) return;
       if (n.kind === "ref") {
         const d = code.nodes[n.target];
-        if (d?.kind === "def" && d.body && !copies.has(d.id) && chooses(typeOf(d.id))) { copies.set(d.id, freshId()); walk(d.body); }
+        if (d?.kind === "def") {
+          if (d.body && !copies.has(d.id) && chooses(typeOf(d.id))) { copies.set(d.id, freshId()); walk(d.body, new Set(subtree(code, d.body))); }
+        } else if (!own.has(n.target) && chooses(typeOf(id))) open = true;
         return;
       }
       if (n.kind === "call" && barrier(n)) return;
-      for (const [a, slot] of Object.entries(SCHEMA[n.kind] ?? {})) if (slot === "child") for (const c of idsIn((n as Record<string, unknown>)[a])) walk(c);
+      for (const [a, slot] of Object.entries(SCHEMA[n.kind] ?? {})) if (slot === "child") for (const c of idsIn((n as Record<string, unknown>)[a])) walk(c, own);
     };
-    walk(root);
+    walk(root, new Set(subtree(code, root)));
+    return open;
   };
-  for (const s of sites) reach((code.nodes[s] as { args: Id[] }).args[0]);
+  const open = new Set(sites.filter((s) => reach((code.nodes[s] as { args: Id[] }).args[0])));
   const nodes: Record<Id, Node> = { ...code.nodes };
   const outNames: Names = { ...names };
   // A copy of a tree, its choices taken at their first item and its
@@ -111,7 +119,7 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   let taken = 0;
   for (const [s, th] of thunks) {
     const t = checked.typeOf.get(th), z = t && checked.subst.zonk(t);
-    if (z?.t === "fn" && !checked.subst.resolveRow(z.eff).effs.includes(CHOICE)) { nodes[s] = { ...nodes[(nodes[th] as { body: Id }).body], id: s } as Node; taken++; }
+    if (!open.has(s) && z?.t === "fn" && !checked.subst.resolveRow(z.eff).effs.includes(CHOICE)) { nodes[s] = { ...nodes[(nodes[th] as { body: Id }).body], id: s } as Node; taken++; }
     else nodes[s] = code.nodes[s];
   }
   if (!taken) return { code, info, names, taken: 0 };
