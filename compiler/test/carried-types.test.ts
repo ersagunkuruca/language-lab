@@ -25,10 +25,10 @@ const dir = mkdtempSync(join(tmpdir(), "carried-"));
 // Examples with no main compile to nothing to compare (pages of shaders,
 // a library of algebra).
 const NO_MAIN = new Set(["archive", "mandelbrot", "quadratic", "raymarch", "rmold", "shaders"]);
-// Known to differ, with the same output: bounce's carried compile keeps 520
-// functions and 23 record classes against the recheck's 493 and 28 (BACKLOG
-// I207). When one comes out the same, take it off this list.
-const KNOWN: Record<string, string> = { bounce: "I207: a later pass reads the first check's info where a recheck types the program's copies differently" };
+// Known to differ, with the same output (none since I207d: bounce's
+// differed while its checks again lost what made `nth` end). When one is
+// added, take it off once it comes out the same.
+const KNOWN: Record<string, string> = {};
 
 function compiled(name: string, recheck: boolean): string {
   const out = join(dir, `${name}${recheck ? ".re" : ""}.mjs`);

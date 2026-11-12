@@ -2374,6 +2374,16 @@ function matchersOf(code: Code): Set<Id> {
   }
   return m;
 }
+// The piece makers of each program a representation was put into
+// (represent.ts calls notePieces): a match put in place (C93) leaves no
+// `match by` call behind, and a compile cuts the program to what its roots
+// reach, so the program it checks again holds neither the call nor the
+// matcher that say `list tree without first(tree)` is a piece of the tree.
+// Without them bounce's `nth` was held to Diverge in the compile's checks
+// again, though the program's own check found it ends (I207). A fact about
+// a definition, by its id, wherever it is.
+const piecesSeen = new Set<Id>();
+export function notePieces(code: Code): void { for (const g of piecesOf(code)) piecesSeen.add(g); }
 // What a representation's match gives its cases as the rest, made from its
 // input by one function (`list tree without first(tree)`, `rest of
 // array(a)`): a piece of that input. Where the match is put in place
@@ -2550,7 +2560,7 @@ function byPieces(code: Code, group: Id[], lambdaOf: (d: Id) => Node | null, isI
       const n = id === undefined ? null : code.nodes[id];
       if (n?.kind === "ref") return size.get(n.target);
       const g = isCall(n) && n.args.length === 1 ? code.nodes[n.fn] : null;
-      if (isCall(n) && g?.kind === "ref" && piecesOf(code).has(g.target)) {
+      if (isCall(n) && g?.kind === "ref" && (piecesOf(code).has(g.target) || piecesSeen.has(g.target))) {
         const of = sizeOf(n.args[0]);
         return of && new Map([...of.keys()].map((i) => [i, true]));
       }
