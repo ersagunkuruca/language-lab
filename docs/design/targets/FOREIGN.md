@@ -182,8 +182,10 @@ the tag, calls the method with the inputs read back as its parameters'
 types (long, double, String, boolean) and places the `android.view.View`
 it gives (a text saying why, where it can't). The C layout can't ask a
 View its height, so the box is as high as the operation's input named
-`height` (CSS px), else 240 px, and as wide as its parent. Not yet: iOS's
-(with C199e).
+`height` (CSS px), else 240 px, and as wide as its parent. In the iPhone app (`--ios`) the same element names a function of the
+program's hosts/ios.m, `UIView *host_…(…)`, whose inputs are int64_t,
+double, NSString * or BOOL as the operation's; Screen.m calls it by that
+name and places the UIView it gives (cli/ios-app.ts).
 
 ## What std's own builtins become
 
