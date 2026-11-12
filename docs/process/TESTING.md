@@ -249,7 +249,9 @@ part of Playwright's page the smoke used: `locator` (with `hasText`,
 (pointer and mouse down and up, then click or the context menu), `fill`,
 `selectOption`, `keyboard.press` and `type`. A gesture by position
 (`boundingBox`, `mouse`, `evaluate`) says it needs a browser. So
-`test/editing.test.ts` holds the smoke's scenarios word for word, and a
+`test/editing-scenarios.ts` holds the smoke's scenarios word for word (run
+in thirds by `editing.test.ts`, `editing-2.test.ts` and `editing-3.test.ts`,
+side by side), and a
 scenario moves when it passes there: 13 of 31, about 100 s, each checked
 to fail when its expectation is changed. They left editor/smoke.ts.
 

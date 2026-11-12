@@ -3,7 +3,7 @@
 // phone layout, Run in a worker, a page in its iframe and Save page, and
 // reactive.html. Per program: its first definition's keyboard, menus,
 // Tidy, the map and folding. Every definition drawn is test/draws.test.ts
-// and the editing gestures are test/editing.test.ts, both in Node and per
+// and the editing gestures are test/editing-scenarios.ts, both in Node and per
 // change. A scenario that passes there moves there.
 //
 //   npm run build-editor && npm run smoke [-- url of another build]
