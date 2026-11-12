@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, freshId, isCall, subtree } from "../../ters/src/model.ts";
+import { dependencies, freshId, isCall, SCHEMA, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -23,6 +23,7 @@ import { writeReader } from "../../ters/src/lang/reader.ts";
 import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
 import { INT_OPS, NONE, S, SOME, TEXT_OPS } from "../../ters/src/lang/std.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { analyzer } from "../../ters/src/lang/modes.ts";
 
 const prelude = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
 const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate"), SPACED = prelude("spaced");
@@ -53,16 +54,34 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     more[x] = names[p] ?? "x";
     out.nodes[id] = { id, kind: "call", fn, given: { out: y }, binds: { [p]: x }, body: ref(x) } satisfies Bound;
   };
+  // A tree again with ids of its own, its references to its own binders
+  // to the new ones (a function written in conjugate's call, used twice).
+  const copy = (root: Id): Id => {
+    const map = new Map<Id, Id>(subtree(out, root).map((x) => [x, freshId()]));
+    const to = (x: Id) => map.get(x) ?? x;
+    const remap = (v: unknown): unknown =>
+      typeof v === "string" ? to(v) : Array.isArray(v) ? v.map((x) => (typeof x === "string" ? to(x) : x)) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "string" ? to(x) : x])) : v;
+    for (const [id, nid] of map) {
+      const n = out.nodes[id], c: Record<string, unknown> = { ...n, id: nid };
+      for (const [a, slot] of Object.entries(SCHEMA[n.kind] ?? {})) if (slot === "child" || (slot === "ref" && n.kind === "ref")) c[a] = remap((n as Record<string, unknown>)[a]);
+      out.nodes[nid] = c as unknown as Node;
+      if (names[id]) more[nid] = names[id];
+    }
+    return map.get(root)!;
+  };
   const expanded: Id[] = [];
   for (const id of Object.keys(code.nodes)) {
     const c = calls(CONJUGATE, id);
-    if (!c || c.args.length !== 2 || !param(c.args[0])) continue;
+    if (!c || c.args.length !== 2) continue;
+    const fl = out.nodes[c.args[0]], lam = fl?.kind === "lambda" && fl.params.length === 1;
+    if (!param(c.args[0]) && !lam) continue;
     const g = out.nodes[c.args[1]];
     if (g?.kind !== "lambda" && g?.kind !== "ref") continue;
     // conjugate(F, g) → (x) => inverse(F, g(F(x)))
     const x = add({ kind: "binder" } as Omit<Node, "id">);
     more[x] = "x";
-    const inner = add({ kind: "call", fn: ref(INVERSE!), args: [c.args[0], add({ kind: "call", fn: c.args[1], args: [add({ kind: "call", fn: ref((out.nodes[c.args[0]] as NodeOf<"ref">).target), args: [ref(x)] } as Omit<Node, "id">)] } as Omit<Node, "id">)] } as Omit<Node, "id">);
+    const applyF = lam ? copy(c.args[0]) : ref((out.nodes[c.args[0]] as NodeOf<"ref">).target);
+    const inner = add({ kind: "call", fn: ref(INVERSE!), args: [c.args[0], add({ kind: "call", fn: c.args[1], args: [add({ kind: "call", fn: applyF, args: [ref(x)] } as Omit<Node, "id">)] } as Omit<Node, "id">)] } as Omit<Node, "id">);
     out.nodes[id] = { id, kind: "lambda", params: [x], body: inner } as Node;
     expanded.push(id);
   }
@@ -71,7 +90,12 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
   // others, for that input (C110 s5: calc's `read expression`, whose printer
   // takes the level it prints at as well, can then be read by descent,
   // core-solve.ts).
-  const around = (fn: Id): { f: Id; params: Id[]; at: number; args: Id[] } | null => {
+  let modeAn: ReturnType<typeof analyzer> | undefined;
+  const single = (f: Id, known: string[]) => {
+    const v = (modeAn ??= analyzer({ nodes: { ...out.nodes }, defs: [...out.defs] }, names)).ofMode(f, known);
+    return !!v && v.ends && !v.stuck.length && !v.dynamic.length && !v.answers.many;
+  };
+  const around = (fn: Id): { f: Id; params: Id[]; at: number; args: Id[]; printer: boolean } | null => {
     const l = out.nodes[fn];
     if (l?.kind !== "lambda" || l.params.length !== 1) return null;
     const c = out.nodes[l.body];
@@ -81,11 +105,15 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     const uses = (a: Id) => subtree(out, a).some((x) => { const r = out.nodes[x]; return r?.kind === "ref" && r.target === l.params[0]; });
     const at = c.args.findIndex((a) => { const r = out.nodes[a]; return r?.kind === "ref" && r.target === l.params[0]; });
     if (at < 0 || c.args.some((a, j) => j !== at && uses(a))) return null;
-    // Only a printer for now: its first input matched on, read by descent.
-    // (pedal's multiband ran wrong as a solve on its function this way.)
+    // A printer: its first input matched on, read by descent. Otherwise
+    // only a function whose mode here gives one answer or none, fixed
+    // before it runs (quarter turn about's `seen from`), where answers
+    // can't come in another order (pedal's multiband ran wrong as a solve
+    // on its function this way).
     const m = out.nodes[body.body];
-    if (at !== 0 || m?.kind !== "match" || (out.nodes[m.scrutinee] as NodeOf<"ref"> | undefined)?.target !== body.params[0]) return null;
-    return { f: f.target, params: body.params, at, args: c.args };
+    const printer = at === 0 && m?.kind === "match" && (out.nodes[m.scrutinee] as NodeOf<"ref"> | undefined)?.target === body.params[0];
+    if (!printer && !single(f.target, ["out", ...c.args.map((_, j) => String(j)).filter((j) => j !== String(at))])) return null;
+    return { f: f.target, params: body.params, at, args: c.args, printer };
   };
   // A printer's reader, written once as a definition (reader.ts, C110
   // s7c): every target runs it, C and WebAssembly too, where a solve on
@@ -156,7 +184,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     const a = around(c.args[0]);
     if (!a) continue;
     // The line read by the printer's reader: its reading, or no answer.
-    const line = readerOf(a.f);
+    const line = a.printer ? readerOf(a.f) : null;
     if (line) {
       const k = new Lang(out);
       const read = k.match(k.call(line, c.args[1], ...a.args.filter((_, j) => j !== a.at)), [
