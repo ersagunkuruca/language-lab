@@ -290,3 +290,19 @@ test("steps on lines, a match on a value, and otherwise are read as the view pri
   assert.match(two, /ds#\w+ = \[xs, xs\]/);
   assert.doesNotMatch(two, /^\+.*□/m);
 });
+
+// Round 14's rota wrote `Set (Tuple2 Text Int)` for the view's
+// `Set (Text, Int)`, and `(Text)` for a word after an argument in
+// parentheses (I217 M1).
+test("a tuple type and a word after a type in parentheses are read as the view prints them (I217 M1)", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "rota");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  assert.match(text("define", { name: "Plan", kind: "type", first: "plan(taken: Set (Text, Int), who: Map (Tuple2 Text Int) Text, pairs: List (Text, Int, Float64))" }),
+    /taken#\w+: Set \(Tuple2 Text Int\), who#\w+: Map \(Tuple2 Text Int\) Text, pairs#\w+: List \(Tuple3 Text Int Float64\)/);
+  assert.match(text("add_field", { at: "Plan", name: "pick", type: "((Text, Int)) -> (Int, Int)" }), /pick#\w+: \(Tuple2 Text Int\) -> Tuple2 Int Int/);
+});

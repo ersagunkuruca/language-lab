@@ -1,12 +1,14 @@
 // A type written as the MCP's view prints it, read back into type nodes
 // (I183): `Float64`, `List Ball`, `(a, Ball, Float64) -> Float64`,
-// `(a) -[Choice]-> Float64`. A name is a builtin type, a data type or
+// `(a) -[Choice]-> Float64`, `Set (Text, Int)` (a tuple's parts in
+// parentheses with no arrow after them). A name is a builtin type, a data type or
 // effect the program or the library defines, or one of `params` (the
 // interface's `a`, a type's own parameters); a name of several words is
 // read as the longest that names one.
 
 import type { Code, Id, NodeData } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
+import { tupleType } from "../src/lang/std.ts";
 
 export type Build = (add: (n: NodeData) => Id) => Id;
 
@@ -47,13 +49,21 @@ export function readType(text: string, known: Map<string, Id>, params: Map<strin
   const want = (t: Tok["t"]) => { if (peek()?.t !== t) throw new Error(`expected ${t === "word" ? "a type" : t} in ${text}`); return ts[i++]; };
   const lookup = (s: string): Id | undefined => params.get(s) ?? known.get(s);
   const effect = (s: string) => { const id = known.get(s); if (!id) throw new Error(`no effect ${s}`); return id; };
-  // A name, then its arguments: single words or types in parentheses.
+  // Types in parentheses, the `(` read: one is that type, several a tuple
+  // of them (`(Text, Int)`, I217 M1).
+  const grouped = (): Build => {
+    const parts = [whole()];
+    while (peek()?.t === ",") { i++; parts.push(whole()); }
+    want(")");
+    if (parts.length === 1) return parts[0];
+    return (add) => add({ kind: "tref", target: tupleType(parts.length), args: parts.map((p) => p(add)) });
+  };
+  // A name, then its arguments: single words or types in parentheses, in
+  // any order (`Map (Tuple2 Text Int) Text`).
   const applied = (): Build => {
     if (peek()?.t === "(") {
       i++;
-      const inner = whole();
-      want(")");
-      return inner;
+      return grouped();
     }
     const words: string[] = [];
     while (peek()?.t === "word") words.push(ts[i++].s);
@@ -63,7 +73,13 @@ export function readType(text: string, known: Map<string, Id>, params: Map<strin
     if (!n) throw new Error(`no type named ${words.join(" ")}`);
     const head = lookup(words.slice(0, n).join(" "))!;
     const args: Build[] = words.slice(n).map((w) => { const id = lookup(w); if (!id) throw new Error(`no type named ${w}`); return (add) => add({ kind: "tref", target: id, args: [] }); });
-    while (peek()?.t === "(") { i++; args.push(whole()); want(")"); }
+    for (;;) {
+      if (peek()?.t === "(") { i++; args.push(grouped()); continue; }
+      const w = peek()?.t === "word" ? lookup(ts[i].s) : undefined;
+      if (!w) break;
+      i++;
+      args.push((add) => add({ kind: "tref", target: w, args: [] }));
+    }
     return (add) => add({ kind: "tref", target: head, args: args.map((a) => a(add)) });
   };
   // `(x, y) -> z`, `x -> z`, or a type alone.
@@ -76,6 +92,9 @@ export function readType(text: string, known: Map<string, Id>, params: Map<strin
       if (peek()?.t !== ")") { ins.push(whole()); while (peek()?.t === ",") { i++; ins.push(whole()); } }
       want(")");
       if (peek()?.t !== "->") {
+        // Several with no arrow: a tuple, which may be given arguments
+        // no further.
+        if (ins.length > 1) { const parts = ins; return (add) => add({ kind: "tref", target: tupleType(parts.length), args: parts.map((p) => p(add)) }); }
         if (ins.length !== 1) throw new Error(`a list of types needs -> after it in ${text}`);
         i = save;
         ins = [applied()];
