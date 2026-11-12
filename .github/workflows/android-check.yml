@@ -1,5 +1,6 @@
 # A native app tried on an Android emulator (C199f): `ters
-# build-native-app`, the APK built as "Android app" builds it, installed
+# build-native-app` (or, with `kind` webview, `ters build-app` in
+# Capacitor's webview, C198), the APK built as "Android app" builds it, installed
 # on an emulator, started, and tapped (.github/android/check.py), so the
 # run's log shows the views before and after each tap and any crash, and
 # its artifact the screens. Run by hand only, since a run costs build
@@ -17,6 +18,19 @@ on:
         description: "Taps, by a view's text, square:N (a view N dp square) or scroll:N (N dp down), separated by |"
         default: "Hint|scroll:300|square:44"
         required: true
+      kind:
+        description: "native (C and Android's views) or webview (Capacitor)"
+        type: choice
+        options: [native, webview]
+        default: native
+      api:
+        description: "Android API level of the emulator (30 is Android 11, whose own WebView is Chrome 83; 34 is Android 14)"
+        default: "30"
+        required: true
+      offline:
+        description: "Wi-Fi and mobile data off before the app starts"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,15 +54,31 @@ jobs:
         working-directory: ters
       - name: Debug key
         run: mkdir -p ~/.android && cp .github/android/debug.keystore ~/.android/debug.keystore
+      - name: ters build-app
+        if: inputs.kind == 'webview'
+        working-directory: ters
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: node cli/ters.ts build-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app"
+      - name: Webview debug APK
+        if: inputs.kind == 'webview'
+        working-directory: ${{ runner.temp }}/app
+        run: |
+          npm install @capacitor/core@8 @capacitor/cli@8 @capacitor/android@8
+          npx cap add android
+          cd android && ./gradlew assembleDebug --no-daemon
       - name: ters build-native-app
+        if: inputs.kind == 'native'
         working-directory: ters
         env:
           PROGRAM: ${{ inputs.program }}
         run: node cli/ters.ts build-native-app "examples/$PROGRAM" -o "$RUNNER_TEMP/app/android"
       - uses: gradle/actions/setup-gradle@v4
+        if: inputs.kind == 'native'
         with:
           gradle-version: "8.11.1"
       - name: Native debug APK
+        if: inputs.kind == 'native'
         working-directory: ${{ runner.temp }}/app/android
         run: gradle assembleDebug --no-daemon
       - name: App id
@@ -65,15 +95,19 @@ jobs:
         env:
           TAPS: ${{ inputs.taps }}
           APP: ${{ steps.app.outputs.id }}
+          KIND: ${{ inputs.kind }}
+          OFFLINE: ${{ inputs.offline }}
           APK_DIR: ${{ runner.temp }}/app/android/app/build/outputs/apk/debug
         with:
-          api-level: 30
+          api-level: ${{ inputs.api }}
           arch: x86_64
           target: google_apis
           disable-animations: true
           script: |
             adb install -r "$APK_DIR"/*.apk
+            if [ "$OFFLINE" = true ]; then adb shell svc wifi disable; adb shell svc data disable; adb shell ping -c 1 -W 2 8.8.8.8 || echo "offline: no network"; fi
             python3 .github/android/check.py "$APP"
+            if [ "$KIND" = webview ]; then node .github/android/webview.mjs "$APP"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

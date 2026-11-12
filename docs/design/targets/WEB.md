@@ -121,7 +121,14 @@ L99).
   (checked again 2026-11-09, C198). The Actions workflow "Android app"
   (.github/workflows/android-app.yml, run by hand with an example's name)
   builds the Capacitor project into a debug APK, kept as the run's
-  artifact to install on a phone. Device features (camera, location, notifications) become
+  artifact to install on a phone. "Android check" (with `kind` webview)
+  installs that APK on an emulator, turns its network off, and reads and
+  taps the page through the WebView's DevTools socket
+  (.github/android/webview.mjs): dice rolls, and throws a hundred, on
+  Android 14 offline (2026-11-12, C198). Android 11's own WebView
+  (Chrome 83, as an emulator without Play's updates has it) doesn't run a
+  built page: the script is ES2022 and uses replaceChildren; a phone's
+  WebView, which Play keeps current, does. Device features (camera, location, notifications) become
   world operations in that world's handler. Nothing mobile-specific enters
   the language (REVIEW.md §7.4).
 
