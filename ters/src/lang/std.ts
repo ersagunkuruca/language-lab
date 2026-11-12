@@ -131,7 +131,7 @@ export const PAGE_VIEW: readonly Id[] = discharge("a page's text, part or attrib
 // answered, the next stretch a step of its own. Another event meanwhile
 // runs too, the two taking turns at their waits. Await is named by its
 // id: it is defined further down.
-export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, WAIT, "std.await", NETWORK, RANDOM, LOG, "std.settings"],
+export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [CELLS, UPDATE, CONSOLE, FILES, ABORT, DIVERGE, TIME, WAIT, "std.await", NETWORK, RANDOM, LOG, "std.settings", "std.permissions"],
   "the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered");
 // A sound (AUDIO.md): a function from a block of samples to the block to
 // play, made by a function that makes its cells. The runtime runs the
@@ -1804,9 +1804,8 @@ export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings
 // browser's prompt, Android's permission dialog) and answers whether it was
 // given. `what` is one meaning on every platform: "camera", "microphone",
 // "location" or "notifications"; one a platform doesn't know is no. A
-// command line has no such dialog and answers yes. A page's handler may
-// not ask yet: putting it in PAGE_HANDLER changes Html's identity, so the
-// library's modules are republished with it (node library/build.ts).
+// command line has no such dialog and answers yes. A page's handler may ask
+// (PAGE_HANDLER): it waits for the answer as for a fetch.
 // Its types by fixed ids, so no other std id moves (a library's hashes
 // hang on them).
 export const PERMISSIONS = typedef("std.permissions", "Permissions", [], [["ask permission", [["what", () => fixedTref("std.permissions.ask permission.what.type", STRING)]], () => fixedTref("std.permissions.ask permission.returns", BOOL)]], true);
