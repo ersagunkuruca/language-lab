@@ -1,0 +1,19 @@
+# A made-up week at a small night shelter: the days, the shifts and how
+# many people each needs, who can work what, and who is away.
+days Mon Tue Wed Thu Fri Sat Sun
+shift early 2
+shift late 2
+shift night 1
+person Ada 5 early late
+person Ben 6 early late night
+person Cy 5 late night
+person Dee 6 early late
+person Eli 4 early night
+person Fay 6 early late night
+person Gus 5 early late
+person Hal 5 early late night
+person Ivy 4 late
+off Ada Sat Sun
+off Cy Mon
+off Gus Wed Thu
+rest night early
