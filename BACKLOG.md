@@ -115,7 +115,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L235b | A view of the platform's own in the iOS app: hosts' UIView for an operation giving Html, as the Android app's (native-views.ts, the shell's box() by the `ters-view` tag; DONE.md L235 steps) | L235, Ersagun 2026-11-10 13:47 | P3 | S | Compiler lane, with C199e |
 | L236b | Android's permission dialog for `ask permission` (std Permissions, DONE.md L236 steps) in the native app: needs a C page handler that waits for the answer (requestPermissions, onRequestPermissionsResult), as a web page's handler waits for a fetch | L236, Ersagun 2026-11-10 13:47 | P3 | M | Compiler lane |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
