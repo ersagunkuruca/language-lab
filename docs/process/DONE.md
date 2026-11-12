@@ -18,6 +18,10 @@ superseded.
 
 | id | item | why |
 |---|---|---|
+| C200 | tumble's lists stored as the costs choose | Closed 2026-11-12 as waiting for an example (Ersagun's yes): measured not worth building (tumble's board read by position is small). Comes back as a new row when a program needs it |
+| C59 | Flat inline layout for data built once and read (FlatBuffers) | Closed 2026-11-12 as waiting for an example (Ersagun's yes): the design step (FLAT-LAYOUT.md) found no example over 10%; the likely first case is a program's saved file. Comes back as a new row when a program needs it |
+| C57 | A region per scope (Tofte–Talpin) | Closed 2026-11-12 as waiting for an example (Ersagun's yes): measured 2026-11-10, no example gains (REGIONS.md, #2249). Comes back as a new row when a program needs it |
+| C42 | Associative folds on a thread pool | Closed 2026-11-12 as waiting for an example (Ersagun's yes to closing rows no example needs and that measured a tiny gain): maps, keeps, Int sums and max/min, records of Ints, any join (C42e), a page's on workers and the GPU (C42f/g), and counts into a Map on C's threads (C42h/i, tally 1.9 to 0.49 s) are done. Left, each measured with no gain on the examples we have: the same on JavaScript (workers start in 0.45 s against tally's 0.4 s of work), and other joins whose putting together is costly. Comes back as a new row when a program needs it |
 | L241 | The compiler picks Newton for `settled` when its step has a few Float64 unknowns and a derivative | Closed 2026-11-12, Ersagun's pick: `settled` works on lists, and Newton on n unknowns needs a Jacobian Ters can't take of a list step; one number's fixed point is already `inverse((x) => x − cos(x), 0.0)`, by Newton |
 | P2, P3 | Batch deploys for Actions cost; a per-repo budget or a public repo | Ersagun 2026-11-10 16:10: the repo is public, so standard runners (macOS too) cost nothing |
 | L107 | Drop strict positivity (a data type taking itself as a function's input in its fields) | Ersagun 2026-11-10 16:09: keep the rule for now. Reopen if a real program needs it |
