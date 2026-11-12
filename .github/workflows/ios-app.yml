@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       program:
-        description: "Example to build (a folder in ters/examples)"
+        description: "Example to build (a folder in ters/examples, or own-view)"
         default: dice
         required: true
       taps:
@@ -34,11 +34,15 @@ jobs:
           cache-dependency-path: ters/package-lock.json
       - run: npm ci
         working-directory: ters
+      # own-view: a program whose page holds a view of the platform's own,
+      # drawn by its hosts/ios.m (L235, .github/ios/own-view.ts).
       - name: ters build-native-app --ios
         working-directory: ters
         env:
           PROGRAM: ${{ inputs.program }}
-        run: node cli/ters.ts build-native-app "examples/$PROGRAM" --ios -o "$RUNNER_TEMP/app"
+        run: |
+          if [ "$PROGRAM" = own-view ]; then node ../.github/ios/own-view.ts "$RUNNER_TEMP/own-view"; from="$RUNNER_TEMP/own-view"; else from="examples/$PROGRAM"; fi
+          node cli/ters.ts build-native-app "$from" --ios -o "$RUNNER_TEMP/app"
       - name: Simulator app
         run: sh "$RUNNER_TEMP/app/build.sh"
       - name: On an iPhone simulator
@@ -54,7 +58,7 @@ jobs:
           id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
           xcrun simctl install "$dev" "$app"
           xcrun simctl launch --terminate-running-process --stdout="$PWD/out.txt" --stderr="$PWD/err.txt" "$dev" "$id" -ters-taps "$TAPS"
-          sleep $(( 6 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
+          sleep $(( 8 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
           xcrun simctl io "$dev" screenshot "$GITHUB_WORKSPACE/screen.png"
           echo "---- the app's output"; cat out.txt
           echo "---- its errors"; cat err.txt
