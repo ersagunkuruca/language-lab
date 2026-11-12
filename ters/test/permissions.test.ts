@@ -35,9 +35,7 @@ test("main asks for a permission: a command line says yes, another world as it l
   assert.deepEqual(out, ["camera: yes", "location: no"]);
 });
 
-// A page's handler can't ask yet (std.ts: the handler's row would change
-// Html's identity, and the library's modules are republished with it), but
-// the browser's world answers it as it answers a fetch: Pending until the
+// The browser's world answers it as it answers a fetch: Pending until the
 // person answers, then the answer.
 test("the browser's world asks the person and answers once they have (L236)", async () => {
   const { browserWorld } = await import("../src/lang/browser.ts");
@@ -50,4 +48,24 @@ test("the browser's world asks the person and answers once they have (L236)", as
   await new Promise((r) => setTimeout(r, 10));
   assert.equal(w.askPermission!("camera"), true);
   assert.deepEqual(asked, ["camera"], "asked once");
+});
+
+test("a page's click asks, waits for the person's answer, and goes on with it (L236)", async () => {
+  const { showPage } = await import("../src/lang/page.ts");
+  const { fakeDoc } = await import("./fakedom.ts");
+  const { HTML_V } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.call(S.print, asked(k, "microphone"))))), k.list(k.call(HTML_V.text, k.thunk(() => k.lit("record")))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const printed: string[] = [];
+  let answer!: (b: boolean) => void;
+  const page = showPage({ code, info, names, main, program: "t", doc: fakeDoc(), store: { getItem: () => null, setItem: () => {}, removeItem: () => {}, length: 0, key: () => null }, frame: () => {},
+    console: { log: (l: string) => printed.push(l), error: (l: string) => printed.push(l) }, permission: () => new Promise<boolean>((r) => (answer = r)) });
+  (page.root as unknown as { fire(name: string): void }).fire("click");
+  assert.deepEqual(printed, [], "waiting for the person");
+  answer(false);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(printed, ["microphone: no"]);
 });

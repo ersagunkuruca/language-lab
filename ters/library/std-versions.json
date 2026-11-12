@@ -21,7 +21,8 @@
     "0j0i7cfb8bnkc6nk9jv5mvdufr"
   ],
   "std.attribute": [
-    "det5mo66dvho3qooftccbt5l18"
+    "det5mo66dvho3qooftccbt5l18",
+    "0qc1viencqhhd21jlc8qpletdn"
   ],
   "std.await": [
     "0aqlsnjom5acg5ccjq99h8vmhu"
@@ -60,7 +61,8 @@
     "g7pfmhep87s6vqgl5deat8o96s"
   ],
   "std.html": [
-    "iam6vso97un2hp94dotbmgna08"
+    "iam6vso97un2hp94dotbmgna08",
+    "8uqdk5pdpmm2t653gqhrabf3u0"
   ],
   "std.input": [
     "ht1k8cnv511l1unh0vife736t5"
@@ -105,6 +107,9 @@
   "std.outcome": [
     "lmi44oakeqlfmpprr2vvpgh9un"
   ],
+  "std.permissions": [
+    "gtdudc7ammi5tmdb3eua88i74s"
+  ],
   "std.pipe": [
     "ik42jbjsg6nunt58ng7tptmi65"
   ],
@@ -146,7 +151,8 @@
     "8n9fln8pcfdsoorp9ptcro388j"
   ],
   "std.row.handler": [
-    "5kbqoinm0vu3rsrvn1mcq1cdpf"
+    "5kbqoinm0vu3rsrvn1mcq1cdpf",
+    "qsoe97qt3nvb2ghslq7l4da726"
   ],
   "std.row.sound": [
     "9tqjhsc6uum3movotr8ei3uo3d"

@@ -1,6 +1,6 @@
 {
   "q05rgdoc9r94bqp9sqolltaha5": "One line of the file that means something: a road between two towns and its length, a trip to find the shortest way for, or a question of which towns are near one. A trip and a near keep their line number, for the error if a town isn't on any road.",
-  "q3nd39v7no5jp7abb80ro6ote2": "The shortest way to a town found so far: how long it is, and the town it comes from (the start comes from itself).",
+  "@vad58gfmd5sglhm22tanvf02jh": "The shortest way to a town found so far: how long it is, and the town it comes from (the start comes from itself).",
   "6c3rrhuu0ug865qlijih80rjem": "Dijkstra's search part way: the towns reached but not settled, as (distance, town) pairs in a set, so the nearest comes first; and the best way found to every town reached.",
   "t8cfl3t8djdheird94e2di29of": "A road as Kruskal's method wants it: its length first, so roads sort shortest first, ties by name.",
   "n81iottbvaeh2u0tj0feg5ip9p": "Union-find: each town's parent (a town with none is its own), and the size of each tree by its root.",
