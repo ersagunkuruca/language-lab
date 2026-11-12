@@ -159,6 +159,9 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   // Its font-size, 1.4em of the 15 it is in (not of an h1's own 2em): 21,
   // three lines of 31.5, as Chromium.
   assert.match(lines[2], /^h1 40 40 280 94.5$/);
+  // Its triangles and diamonds (clip-path: polygon) in their 36 boxes.
+  assert.ok(lines.some((l) => / bg FFF3A712 outline 18,1.44 34.92,33.84 1.08,33.84$/.test(l)));
+  assert.ok(lines.some((l) => / bg FF6C4AB6 outline 18,0 36,18 18,36 0,18$/.test(l)));
   const lane = lines.findIndex((s) => s.startsWith("div 40") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
   assert.equal(lines[lane + 1].split(" ")[0], "h2");
   assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);
