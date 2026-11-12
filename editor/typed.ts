@@ -325,7 +325,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   }
   // Why each reading didn't fit, in the order tried.
   const why: string[] = [];
-  for (const t of all_) {
+  const fitOf = (t: Typed): TEdit => {
     // Whole numbers first at what their places take: a plain literal would
     // fit an Int's place too (it's some Number), but read as a Float64 it
     // couldn't hold 12345678901234567890 exactly.
@@ -334,8 +334,26 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
       if (fit.ok) return fit;
       first ??= fit;
     }
-    const plain = written(code, names, info, hole, text, t, false, defId);
-    if (plain.ok) return plain;
+    return written(code, names, info, hole, text, t, false, defId);
+  };
+  for (const t of all_) {
+    const plain = fitOf(t);
+    if (plain.ok) {
+      // A meaning guessed at a type nothing settled (I218 M10): each
+      // other type's reading that fits too is offered beside it.
+      const at = guessedAt(t);
+      if (!at) return plain;
+      const ok = new Map<string, TEdit>([[at, plain]]);
+      for (const u of all_) {
+        const k = guessedAt(u);
+        if (!k || ok.has(k)) continue;
+        const e = fitOf(u);
+        if (e.ok) ok.set(k, e);
+      }
+      if (ok.size < 2) return plain;
+      const choices = [...ok].map(([k, edit]) => ({ label: `as ${k}`, edit }));
+      return { ...(plain as TEdit & { ok: true }), choices };
+    }
     first ??= plain;
     why.push(plain.reason);
   }
@@ -655,7 +673,40 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // among them (+ for every number type), the order is left as it was.
   const generic = t.alts.some((op) => op.startsWith("builtin.arith."));
   const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op), f: +(!generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."))) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.f - b.f || a.k - b.k).map((x) => x.op);
+  // When every meaning settles an open input, each at a type of its own
+  // (length of a List or of a Text, I218 M10), which is meant is a guess:
+  // each type is named, and a reading that fits at more than one is
+  // offered as each (fillValue), not taken silently. Int's and Float64's
+  // twins and the generic arithmetic stay as ordered above.
+  const at = (op: Id): string | null => {
+    const i = args.findIndex((a, j) => open(a) && fixedAt(op, j));
+    const p = i < 0 ? undefined : paramAt(op, i).p;
+    return p?.t === "con" ? p.id : null;
+  };
+  const twin = (a: Id, b: Id) => a.replace(/^builtin\.int\./, "builtin.") === b.replace(/^builtin\.int\./, "builtin.");
+  if (!generic && settles(alts[0])) {
+    const types = new Map(alts.map((op) => [op, at(op)] as const).filter((e): e is [Id, string] => e[1] !== null));
+    const other = alts.slice(1).some((op) => types.has(op) && types.get(op) !== types.get(alts[0]) && !twin(op, alts[0]));
+    if (other && types.has(alts[0])) return { op: alts[0], args, alts, guess: Object.fromEntries([...types].map(([op, ty]) => [op, ty])) };
+  }
   return { op: alts[0], args, alts };
+}
+
+// The types a reading's guessed meanings take (leaveOpen), as "a Text":
+// null when it guessed none.
+function guessedAt(t: Typed): string | null {
+  const out: string[] = [];
+  const go = (x: Typed): void => {
+    if ("params" in x) return go(x.body);
+    if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
+    if ("let" in x) return [x.be, x.rest].forEach(go);
+    if (!("op" in x)) return;
+    x.args.forEach(go);
+    const ty = x.guess?.[x.op];
+    if (ty) { const n = display[ty] ?? ty; out.push(`${/^[AEIOU]/.test(n) ? "an" : "a"} ${n}`); }
+  };
+  go(t);
+  return out.length ? out.join(", ") : null;
 }
 
 // Each way to read what's typed, one id per called name: at most 16.
@@ -692,7 +743,7 @@ function readings(t: Typed): Typed[] {
   if (!("op" in t)) return [t];
   let out: Typed[][] = [[]];
   for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
-  return (t.alts ?? [t.op]).flatMap((op) => out.map((args) => ({ op, args }))).slice(0, 16);
+  return (t.alts ?? [t.op]).flatMap((op) => out.map((args) => ({ op, args, ...(t.guess ? { guess: t.guess } : {}) }))).slice(0, 16);
 }
 
 // What's typed, as values at the leaves of the operators the blocks draw
@@ -707,7 +758,7 @@ function readings(t: Typed): Typed[] {
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple. A relation, (s, d) → a, b = condition, has
 // its results among its inputs and the condition as its body (L225e).
-type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[] } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
+type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id> } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
