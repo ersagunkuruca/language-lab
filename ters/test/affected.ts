@@ -80,7 +80,7 @@ const tests = sources.filter((f) => /\.test\.(ts|js)$/.test(f));
 // A test that bundles the editor reaches what the editor imports, and its
 // page, though it imports neither.
 const editorPage = ["editor/main.ts", "editor/page.html"];
-const bundles: Record<string, string[]> = { "ters/test/draws.test.ts": [...editorPage, "editor/smoke-saved.json"], "ters/test/editing.test.ts": editorPage };
+const bundles: Record<string, string[]> = { "ters/test/draws.test.ts": [...editorPage, "editor/smoke-saved.json"], "ters/test/editing.test.ts": editorPage, "ters/test/editing-2.test.ts": editorPage, "ters/test/editing-3.test.ts": editorPage };
 const chosen = tests.filter((t) => {
   if (all || setup || timing) return true;
   const reach = closure([t, ...(bundles[t] ?? [])]);
