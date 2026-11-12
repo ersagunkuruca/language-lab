@@ -426,3 +426,26 @@ test("a picture's texts drawn in C at their anchors, sized and painted by the sh
   assert.match(texts[1], / FF1D1D1F 2 bold "rapidity →"$/);
   assert.deepEqual([b[0] - svg[1], b[1] - svg[2]].map((x) => Math.round(x * 100) / 100), [196 * s, 90 * s].map((x) => Math.round(x * 100) / 100));
 });
+
+// The font shorthand (pedal's `.drive`): a bare number before the size is
+// the weight, not a size of 600; weight and line height are normal when it
+// doesn't give them, and a size/line gives both, as Chromium reads them.
+test("the font shorthand in C: its weight, size and line height (C195)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [["style", "line-height: 3; font-weight: bold"]], [
+    el("div", [["style", "font: 600 14px ui-monospace, monospace"]], [text("drive 32")]),
+    el("div", [["style", "font: 20px/30px serif"]], [text("twenty")]),
+    el("div", [["style", "font: italic bold 10px/2 sans-serif"]], [text("ten")]),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const divs = r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter((s) => s.startsWith("div "));
+  const h = divs.map((s) => Number(s.split(" ")[4]));
+  assert.deepEqual(h.map((x) => Math.round(x * 100) / 100), [16.8, 30, 20], divs.join("\n"));
+});

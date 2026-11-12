@@ -114,6 +114,7 @@ const PAGE_M = (decl: string, foreign: string) => String.raw`// The page: made a
 #import <UserNotifications/UserNotifications.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 ${decl}
 void *ters_ui_start(ters_ui *ui, double width, int dark);
@@ -498,11 +499,18 @@ static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clea
 // whose texts read so, and the texts shown are printed before and after.
 static NSString *textsOf(UIView *v) {
   if ([v isKindOfClass:[UILabel class]]) return ((UILabel *)v).text ?: @"";
+  if ([v isKindOfClass:[UITextField class]]) return [NSString stringWithFormat:@"[%@]", ((UITextField *)v).text ?: @""];
   NSMutableArray *a = [NSMutableArray new];
   for (UIView *k in v.subviews) { if (k.hidden) continue; NSString *t = textsOf(k); if (t.length) [a addObject:t]; }
   return [a componentsJoinedByString:@" "];
 }
 // And where the first texts are on the screen, in points.
+// The text fields, in the page's order.
+static void fieldsOf(UIView *v, NSMutableArray<UITextField *> *out) {
+  if (v.hidden) return;
+  if ([v isKindOfClass:[UITextField class]]) { [out addObject:(UITextField *)v]; return; }
+  for (UIView *k in v.subviews) fieldsOf(k, out);
+}
 static void placed(UIView *v, NSMutableArray *out) {
   if (out.count >= 12 || v.hidden) return;
   if ([v isKindOfClass:[UILabel class]] && ((UILabel *)v).text.length) {
@@ -525,6 +533,20 @@ static void shown(NSString *when) {
   NSArray *rest = [taps subarrayWithRange:NSMakeRange(1, taps.count - 1)];
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
     BOOL done = NO;
+    // "type N text": the Nth text field (from 1) typed into, as a person
+    // would, its input handler told.
+    if ([t hasPrefix:@"type "]) {
+      NSArray<NSString *> *w = [t componentsSeparatedByString:@" "];
+      NSMutableArray<UITextField *> *fs = [NSMutableArray new];
+      fieldsOf(self.page, fs);
+      NSInteger n = w.count > 2 ? w[1].integerValue : 0;
+      if (n >= 1 && n <= (NSInteger)fs.count) {
+        UITextField *f = fs[n - 1];
+        f.text = [[w subarrayWithRange:NSMakeRange(2, w.count - 2)] componentsJoinedByString:@" "];
+        [self typed:f];
+        done = YES;
+      }
+    }
     for (NSNumber *k in [self.heard.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
       NSNumber *h = self.heard[k][@"click"];
       if (!h || done || ![textsOf(self.views[k]) isEqualToString:t]) continue;
@@ -630,6 +652,12 @@ static void shown(NSString *when) {
 
 int main(int argc, char *argv[]) {
   setvbuf(stdout, NULL, _IOLBF, 0);
+  // What the page keeps (the world's files, a page's saved values) goes in
+  // the app's Application Support, not beside the app, which is read-only.
+  @autoreleasepool {
+    NSURL *d = [NSFileManager.defaultManager URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:nil];
+    if (d && chdir(d.fileSystemRepresentation)) perror(d.fileSystemRepresentation);
+  }
   @autoreleasepool { return UIApplicationMain(argc, argv, nil, NSStringFromClass([TApp class])); }
 }
 `;
