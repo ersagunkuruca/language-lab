@@ -183,8 +183,8 @@ static aaudio_data_callback_result_t j_snd_cb(AAudioStream *st, void *user, void
     for (int32_t i = 0; i < k; i++) for (int c = 0; c < ch; c++) out[(at + i) * ch + c] = p->mono[i];
     at += k;
   }
-  double a, b;
-  if (ters_sound_heard(p->n, &a, &b)) __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d: in %.4f out %.4f", p->n, a, b);
+  double a, b, d;
+  if (ters_sound_heard(p->n, &a, &b, &d)) __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d: in %.4f out %.4f changed %.4f", p->n, a, b, d);
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 static void *j_snd_close(void *x) {

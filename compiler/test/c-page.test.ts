@@ -492,11 +492,11 @@ test("a page's sound in C plays its block function on another thread, with the p
   assert.match(lines[2], /^played 0: 1\.000000 1\.000000 1\.000000 1\.000000 /);
   // Over the first second it played (from the tap: 1024 + 48000 samples,
   // the first block silent and 896 at 0.5): how loud its input and output were.
-  assert.equal(lines[3], "heard 0: in 0.2500 out 0.9906");
+  assert.equal(lines[3], "heard 0: in 0.2500 out 0.9906 changed 0.7418");
   assert.equal(lines[4], "sound 1 on microphone");
   // The microphone's sine, a block later.
   const mic = lines[5].split(" ").slice(2, 6).map(Number), sine = (i: number) => 0.5 * Math.sin((2 * Math.PI * 441 * i) / 48000);
   mic.forEach((x, i) => assert.ok(Math.abs(x - sine(i)) < 1e-6, `${x} ${sine(i)}`));
-  assert.match(lines[6], /^heard 1: in 0\.3536 out 0\.35\d\d$/);
+  assert.match(lines[6], /^heard 1: in 0\.3536 out 0\.35\d\d changed 0\.0\d\d\d$/);
   assert.equal(lines[7], "sound 0 off strum.wav");
 });

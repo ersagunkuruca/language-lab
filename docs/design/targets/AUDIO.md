@@ -19,7 +19,13 @@ nearly nine times real time. A2 is done: `listen(microphone, pedal)` on a
 button plays live in a page (`ters build-web examples/pedal`, and
 apps/pedal.html on the site), from the microphone or a recording, with
 Softer and Harder turning the drive as it plays and Clean/Driven to compare; test/sound-browser.ts
-plays it in Chromium from a fake microphone. A3 is done: the pedal ends in
+plays it in Chromium from a fake microphone. The same page plays in the
+native apps (C217, NATIVE-APPS.md): the C page keeps each `listen`, and
+the platform's audio thread (AAudio on Android, AVAudioEngine on iOS) asks
+the page's C for samples, the block function run 128 at a time at the
+device's rate with the page's own cells, the page's thread and the audio
+thread taking turns under one lock; the recording ships in the app (read
+as WAV in C) and the microphone is asked for. A3 is done: the pedal ends in
 a compressor whose level follows the samples one by one, across blocks, in
 a cell (so it is the same at any block size), 4 to 1 over 0.5; compiled it
 plays 2063 blocks a second. A filter crossover is left out: a filter keeps
@@ -172,8 +178,9 @@ real program.
   loops over arrays. WebAssembly (WASM.md) next if the profile asks for it,
   since a worklet can instantiate a module too; and natively (`ters native`,
   NATIVE.md) when the pedal wants to be a plugin, because a C function from
-  a block to a block is exactly what LV2, VST3 and CLAP host. Native comes
-  for nothing only once cells are in C, so it waits.
+  a block to a block is exactly what LV2, VST3 and CLAP host. Cells are in
+  C now, and a native app's page plays its sound (C217); a plugin is still
+  to come.
 - **Stereo?** Later, and in the language: a stereo block is a pair of
   blocks, `listen` takes a function on pairs.
 

@@ -1598,7 +1598,7 @@ int main(int argc, char **argv) {
       printf("played %d:", p.n);
       for (int i = 128; i < 128 + 4 && i < p.frames; i++) printf(" %.6f", p.out[i]);
       printf(" rms %.6f\n", p.frames ? sqrt(sq / p.frames) : 0);
-      double hi, ho; if (ters_sound_heard(p.n, &hi, &ho)) printf("heard %d: in %.4f out %.4f\n", p.n, hi, ho);
+      double hi, ho, hb; if (ters_sound_heard(p.n, &hi, &ho, &hb)) printf("heard %d: in %.4f out %.4f changed %.4f\n", p.n, hi, ho, hb);
       free(p.out); free(s);
       u_show(root);
       continue;

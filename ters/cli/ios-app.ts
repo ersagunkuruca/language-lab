@@ -119,7 +119,7 @@ function foreignViews(views: IosView[]): string {
 // detaching a node waits for a render that may be waiting for the lock.
 const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
 void ters_sound_play(int n, const float *in, float *out, int frames);
-int ters_sound_heard(int n, double *in, double *out);
+int ters_sound_heard(int n, double *in, double *out, double *by);
 int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate);
 #include <stdatomic.h>
 #define S_SOUNDS 64
@@ -142,7 +142,7 @@ static BOOL s_session(int n) {
   SE = [AVAudioEngine new];
   // Once a second, how loud each sound's input and output were.
   s_timer = [NSTimer scheduledTimerWithTimeInterval:1 repeats:YES block:^(NSTimer *t) {
-    for (int k = 0; k < S_SOUNDS; k++) { double i, o; if (s_on[k] && ters_sound_heard(k, &i, &o)) printf("sound %d: in %.4f out %.4f\n", k, i, o); }
+    for (int k = 0; k < S_SOUNDS; k++) { double i, o, b; if (s_on[k] && ters_sound_heard(k, &i, &o, &b)) printf("sound %d: in %.4f out %.4f changed %.4f\n", k, i, o, b); }
   }];
   return YES;
 }

@@ -1356,7 +1356,7 @@ ${sound ? `// A page's sound (C217, AUDIO.md): each listen main put on an elemen
 #include <string.h>
 #define TERS_BLOCK 128
 #define TERS_SOUND_H (1 << 24)
-typedef struct ters_snd { lab_cell *play; void *view; int mic, on, at, handler; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK]; float *rec; size_t rn, rp; double rate, sq_in, sq_out, heard_in, heard_out; long counted; int heard; char said[200]; } ters_snd;
+typedef struct ters_snd { lab_cell *play; void *view; int mic, on, at, handler; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK]; float *rec; size_t rn, rp; double rate, sq_in, sq_out, sq_by, heard_in, heard_out, heard_by; long counted; int heard; char said[200]; } ters_snd;
 static ters_snd *ters_snds;
 static int ters_nsnd;
 // What went wrong with sound n, once for each reason: on stderr, and on
@@ -1411,24 +1411,28 @@ void ters_sound_play(int n, const float *in, float *out, int frames) {
     if (!s) { out[i] = 0; continue; }
     float x = s->mic ? (in ? in[i] : 0) : s->rn ? s->rec[s->rp] : 0;
     if (!s->mic && s->rn && ++s->rp == s->rn) s->rp = 0;
+    // out[i] is what the block function made of the input a block ago,
+    // the sample this x takes the place of.
+    float was = s->in[s->at];
     s->in[s->at] = x;
     out[i] = s->out[s->at];
-    s->sq_in += (double)x * x; s->sq_out += (double)out[i] * out[i];
+    s->sq_in += (double)x * x; s->sq_out += (double)out[i] * out[i]; s->sq_by += (double)(out[i] - was) * (out[i] - was);
     if (++s->at == TERS_BLOCK) { ters_snd_block(s); s->at = 0; }
   }
   if (s && s->rate > 0 && (s->counted += frames) >= s->rate) {
-    s->heard_in = sqrt(s->sq_in / (double)s->counted); s->heard_out = sqrt(s->sq_out / (double)s->counted);
-    s->sq_in = s->sq_out = 0; s->counted = 0; s->heard = 1;
+    s->heard_in = sqrt(s->sq_in / (double)s->counted); s->heard_out = sqrt(s->sq_out / (double)s->counted); s->heard_by = sqrt(s->sq_by / (double)s->counted);
+    s->sq_in = s->sq_out = s->sq_by = 0; s->counted = 0; s->heard = 1;
   }
   ters_page_unlock();
 }
 // How loud sound n's input and output were over the last second it
-// played (root mean square), once for each second: 1 when a new one is
-// there.
-int ters_sound_heard(int n, double *in, double *out) {
+// played (root mean square), and how much the output differs from its
+// input (the root mean square of their difference, 0 when it plays what
+// came in), once for each second: 1 when a new one is there.
+int ters_sound_heard(int n, double *in, double *out, double *by) {
   ters_page_lock();
   int r = 0;
-  if (n >= 0 && n < ters_nsnd && ters_snds[n].heard) { *in = ters_snds[n].heard_in; *out = ters_snds[n].heard_out; ters_snds[n].heard = 0; r = 1; }
+  if (n >= 0 && n < ters_nsnd && ters_snds[n].heard) { *in = ters_snds[n].heard_in; *out = ters_snds[n].heard_out; *by = ters_snds[n].heard_by; ters_snds[n].heard = 0; r = 1; }
   ters_page_unlock();
   return r;
 }
@@ -1492,7 +1496,7 @@ static void ters_snd_toggle(int k) {
     return;
   }
   memset(s->in, 0, sizeof s->in); memset(s->out, 0, sizeof s->out);
-  s->at = 0; s->rp = 0; s->sq_in = s->sq_out = 0; s->counted = 0; s->heard = 0; s->said[0] = 0;
+  s->at = 0; s->rp = 0; s->sq_in = s->sq_out = s->sq_by = 0; s->counted = 0; s->heard = 0; s->said[0] = 0;
   ters_h->set_attribute(ters_h->ctx, s->view, "data-said", 9, "", 0);
   s->on = 1;
   double rate = ters_h->sound ? ters_h->sound(ters_h->ctx, k, 1, s->mic, s->address, s->an) : 0;
