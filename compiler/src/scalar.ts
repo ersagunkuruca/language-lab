@@ -86,11 +86,11 @@ import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { countsInto } from "./fold-chunks.ts";
-import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, type ListJob } from "../../ters/src/lang/pure-branches.ts";
+import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { WORLD_OPS as OP_OF_BUILTIN } from "../../ters/src/lang/std.ts";
+import { WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
 import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
@@ -824,7 +824,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // C (C44b): the code a handler of one handles runs on a fiber of its
   // own, which a perform leaves and the rest goes back to.
   const fibers = !!opts.handlers && !opts.host;
-  let parallel: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, foldsShared: Set<Id> | undefined, counts: Map<Id, "count" | "all" | "first"> | undefined;
+  let parallel: Set<Id> | undefined, inPlace: Set<Id> | undefined, parallelList: Map<Id, ListJob> | undefined, foldsShared: Set<Id> | undefined, counts: Map<Id, "count" | "all" | "first"> | undefined;
   const countsShared = () => (counts ??= parallelCounts(code, info));
   // In C (C203), a count's, an all's or a first's search split.
   const splitsC = () => countsShared().size > 0;
@@ -1557,6 +1557,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             const found: SExpr = { k: "rt", fn: "par:first", args: args(), host: { t: tx, partial: true } };
             given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
             try { return { k: "let", i: one, value: found, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
+          }
+        }
+        // A together whose actions only compute, with no fibers to run
+        // them on (WebAssembly, C187) nor threads: each action in place,
+        // in order, its answer kept, which is what a together of them
+        // gives (an abort stops the ones after it, as run in order).
+        if (fibers && !opts.threads && target === TOGETHER && (inPlace ??= pureTogethers(code, info)).has(n.id)) {
+          const lt = stype(zonk(id)), items = writtenItems(code.nodes, n.args[0]);
+          const c = lt && isData(lt) ? lt.cases.findIndex((x) => x.variant === CONS) : -1;
+          if (lt && isData(lt) && c >= 0 && items) {
+            const head = lt.cases[c].fields.find((x) => x.t !== lt)!.t;
+            const ran = items.map((a) => ({ i: f.locals.push(head) - 1, value: expr((code.nodes[a] as NodeOf<"lambda">).body, env, f, false) }));
+            const list: SExpr = { k: "list", t: lt, c, items: ran.map((r) => local(r.i)), item: f.locals.push(head) - 1, acc: f.locals.push(lt) - 1 };
+            return ran.reduceRight<SExpr>((body, r) => ({ k: "let", i: r.i, value: r.value, body }), list);
           }
         }
         if (fibers && (target === TOGETHER || target === RACE)) {
