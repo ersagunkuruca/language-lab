@@ -389,12 +389,22 @@ static NSString *textsOf(UIView *v) {
   for (UIView *k in v.subviews) { if (k.hidden) continue; NSString *t = textsOf(k); if (t.length) [a addObject:t]; }
   return [a componentsJoinedByString:@" "];
 }
+// And where the first texts are on the screen, in points.
+static void placed(UIView *v, NSMutableArray *out) {
+  if (out.count >= 12 || v.hidden) return;
+  if ([v isKindOfClass:[UILabel class]] && ((UILabel *)v).text.length) {
+    CGRect r = [v convertRect:v.bounds toView:nil];
+    [out addObject:[NSString stringWithFormat:@"%@ at %.0f,%.0f %.0fx%.0f", ((UILabel *)v).text, r.origin.x, r.origin.y, r.size.width, r.size.height]];
+  }
+  for (UIView *k in v.subviews) placed(k, out);
+}
 static void shown(NSString *when) {
-  printf("---- %s\n%s\n", when.UTF8String, textsOf(P.page).UTF8String);
+  NSMutableArray *at = [NSMutableArray new];
+  placed(P.page, at);
+  printf("---- %s\n%s\n%s\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String);
   fflush(stdout);
 }
 - (void)check:(NSArray<NSString *> *)taps {
-  shown(@"started");
   if (!taps.count) return;
   NSString *t = taps[0];
   NSArray *rest = [taps subarrayWithRange:NSMakeRange(1, taps.count - 1)];
@@ -498,7 +508,7 @@ static void shown(NSString *when) {
   self.window.rootViewController = page;
   [self.window makeKeyAndVisible];
   NSString *taps = [NSUserDefaults.standardUserDefaults stringForKey:@"ters-taps"];
-  if (taps) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ [page check:[taps componentsSeparatedByString:@"|"]]; });
+  if (taps) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ shown(@"started"); [page check:[taps componentsSeparatedByString:@"|"]]; });
   return YES;
 }
 @end
