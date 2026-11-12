@@ -2293,6 +2293,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   }
   // In a way's slots once equations solved together are written (no slot).
   const SOLVED_TOGETHER = "\u0000together";
+  // relate.ts interleaves a search's arms at each suspension (Ersagun,
+  // 2026-11-12: compiled code is to give the interpreter's own order). The
+  // mode plans that collect every answer depth first (eachAnswer, unfoldFn)
+  // stay off until that order is written; true runs them as depth first.
+  const DEPTH_FIRST = false;
   // A plan's goals in order, then its choice of arms, then done; a way
   // that fails is no answer (the function is partial).
   function modePlan(an: ReturnType<typeof analyzer>, plan: ModePlanT, env0: Map<Id, number>, done: (env: Map<Id, number>, h: SFunc) => SExpr, g: SFunc, start = 0): SExpr {
@@ -2408,6 +2413,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             const r0 = funcs[m.fn].result, one = all ? (r0 as DType).cases.find((x) => x.variant === CONS)!.fields[0].t : r0;
             const outsOf = (x: SExpr) => m.outs.map((p, j): [Id, SExpr] => [port(p), m.outs.length === 1 ? x : { k: "get", rec: x, t: one as RType, i: j }]);
             const call: SExpr = { k: "call", fn: m.fn, args: vals.map((x) => local(x)), tail: false };
+            if (all && !DEPTH_FIRST) throw new ModeUnsupported("a call where every answer is wanted, whose order may interleave");
             if (all) return eachAnswer(i, call, r0 as DType, env, outsOf);
             const r = g.locals.push(r0) - 1;
             return { k: "let", i: r, value: call, body: binds(env, outsOf(local(r)), next) };
@@ -2436,9 +2442,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             n.args.forEach((x, j) => { const d = fixedOf.get(g)?.get(an.slot(x)); if (d && ins.includes(String(j))) passed[String(j)] = d; });
             const vals = ins.map((p) => get(port(p)));
             if (vals.some((x, j) => x === undefined && !(ins[j] in passed))) throw new ModeUnsupported("a mode's input not known");
-            // Collecting every answer: each of the callee's, in order, with
-            // the rest of the plan after it (depth first, as relate.ts).
+            // Collecting every answer: relate.ts interleaves a callee's
+            // answers with the rest at each suspension, an order this
+            // doesn't write yet (eachAnswer is depth first).
             if (collecting.has(g)) {
+              if (!DEPTH_FIRST) throw new ModeUnsupported("a call where every answer is wanted, whose order may interleave");
               const m = modeFn(head.target, ins, true, passed);
               const lt = funcs[m.fn].result as DType, one = lt.cases.find((x) => x.variant === CONS)!.fields[0].t;
               return eachAnswer(i, { k: "call", fn: m.fn, args: vals.filter((_, j) => !(ins[j] in passed)).map((x) => local(x!)), tail: false }, lt, env, (x) => m.outs.map((p, j): [Id, SExpr] => [port(p), m.outs.length === 1 ? x : { k: "get", rec: x, t: one as RType, i: j }]));
@@ -2510,6 +2518,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // One level down of a fold run backwards, every answer: the
           // fold's arms as a mode function of their own (unfoldFn).
           if (!collecting.has(g)) throw new ModeUnsupported("an unfold where one answer is wanted");
+          if (!DEPTH_FIRST) throw new ModeUnsupported("unfolding where every answer is wanted, whose order may interleave");
           const part = get(e.part), result = get(e.result);
           if ((part === undefined) === (result === undefined)) throw new ModeUnsupported("an unfold with both or neither of its ends known");
           const known = part !== undefined ? "part" : "result";
