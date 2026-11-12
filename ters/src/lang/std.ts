@@ -1188,7 +1188,20 @@ const keyOrder = (a: unknown, b: unknown): number => {
 // beside its value (`Keyed`), for the entries; an Int or Text key is held
 // as it is.
 class Keyed { key: unknown; value: unknown; constructor(key: unknown, value: unknown) { this.key = key; this.value = value; } }
-const spelling = (x: unknown): string => (typeof x === "string" ? JSON.stringify(x) : typeof x === "object" && x !== null ? `(${(x as { fields: unknown[] }).fields.map(spelling).join(",")})` : String(x));
+// A Text is quoted as it is unless it holds a quote, a backslash or a
+// control character (then as JSON spells it), and a tuple's parts joined
+// as they are spelled, with nothing made for each part (I215: rota's
+// `(day, shift)` keys spelled through JSON.stringify, map and join were a
+// quarter of its run).
+const plain = /^[^"\\\u0000-\u001f]*$/;
+const spelling = (x: unknown): string => {
+  if (typeof x === "string") return plain.test(x) ? `"${x}"` : JSON.stringify(x);
+  if (typeof x !== "object" || x === null) return String(x);
+  const fs = (x as { fields: unknown[] }).fields;
+  let s = "(";
+  for (let i = 0; i < fs.length; i++) s += (i ? "," : "") + spelling(fs[i]);
+  return s + ")";
+};
 const held = (key: unknown) => (typeof key === "object" && key !== null ? spelling(key) : key);
 const valueOf = (v: unknown) => (v instanceof Keyed ? v.value : v);
 // The value at key, or `none` when there is none: no list of answers made
