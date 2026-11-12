@@ -10,12 +10,16 @@ on:
   workflow_dispatch:
     inputs:
       program:
-        description: "Example to build (a folder in ters/examples, or own-view)"
+        description: "Example to build (a folder in ters/examples, own-view or permission)"
         default: dice
         required: true
       taps:
         description: "Buttons to tap, by their text, separated by |"
         default: "Roll|Throw 100"
+        required: false
+      privacy:
+        description: "Before starting: grant or revoke the microphone, or leave it unasked (empty)"
+        default: ""
         required: false
 
 permissions:
@@ -35,19 +39,21 @@ jobs:
       - run: npm ci
         working-directory: ters
       # own-view: a program whose page holds a view of the platform's own,
-      # drawn by its hosts/ios.m (L235, .github/ios/own-view.ts).
+      # drawn by its hosts/ios.m (L235, .github/ios/own-view.ts);
+      # permission: one asking for the microphone (L236b, .github/ios/permission.ts).
       - name: ters build-native-app --ios
         working-directory: ters
         env:
           PROGRAM: ${{ inputs.program }}
         run: |
-          if [ "$PROGRAM" = own-view ]; then node ../.github/ios/own-view.ts "$RUNNER_TEMP/own-view"; from="$RUNNER_TEMP/own-view"; else from="examples/$PROGRAM"; fi
+          if [ "$PROGRAM" = own-view ]; then node ../.github/ios/own-view.ts "$RUNNER_TEMP/own-view"; from="$RUNNER_TEMP/own-view"; elif [ "$PROGRAM" = permission ]; then node ../.github/ios/permission.ts "$RUNNER_TEMP/permission"; from="$RUNNER_TEMP/permission"; else from="examples/$PROGRAM"; fi
           node cli/ters.ts build-native-app "$from" --ios -o "$RUNNER_TEMP/app"
       - name: Simulator app
         run: sh "$RUNNER_TEMP/app/build.sh"
       - name: On an iPhone simulator
         env:
           TAPS: ${{ inputs.taps }}
+          PRIVACY: ${{ inputs.privacy }}
         run: |
           cd "$RUNNER_TEMP/app"
           dev=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in sorted(d, reverse=True) if "iOS" in r for x in d[r] if x["name"].startswith("iPhone")))')
@@ -57,6 +63,7 @@ jobs:
           app=$(ls -d *.app)
           id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
           xcrun simctl install "$dev" "$app"
+          case "$PRIVACY" in grant|revoke) xcrun simctl privacy "$dev" "$PRIVACY" microphone "$id";; esac
           xcrun simctl launch --terminate-running-process --stdout="$PWD/out.txt" --stderr="$PWD/err.txt" "$dev" "$id" -ters-taps "$TAPS"
           sleep $(( 8 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
           xcrun simctl io "$dev" screenshot "$GITHUB_WORKSPACE/screen.png"
