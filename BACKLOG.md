@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | C58 (free lists; a Pool type asked of Ersagun); mobile rows wait. Then Language or Compiler rows agreed with those lanes |
-| C Compiler and targets | "Compiler lane" | C217 (a page's sound in the native apps); C187 is blocked on V8; C195 is done (#2515) |
+| C Compiler and targets | "Compiler lane" | C187 is blocked on V8; C195 is done (#2515) |
 | L Language and library | "Language lane" | the next goal row (stable references, free lists, multithreading) agreed with the lane that holds it; I203's editor half is with the Editor lane (L182 is with the Editor lane) |
 | L Language and library | "Language lane B" | the next goal row agreed with its lane (C43's first on C waits for an example); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
 | T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
@@ -108,7 +108,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C217 | A page's sound in the native apps: pedal on iOS and Android plays what it plays in a browser. The C page skips `listen` ("a page's sound plays only in a browser"), so its Guitar in and A strum buttons do nothing natively. The C page keeps each `listen` (its input and block function) and runs the block function on the platform's audio thread, in blocks of 128 of the device's rate, with the page's own cells (one heap, the page's thread and the audio thread taking turns under one lock, where the browser runs main again in the worklet). A recording ships with the app (pedal's strum.wav, read as WAV in C), the microphone is asked for. iOS plays through AVAudioEngine, Android through AAudio. Example: pedal's A strum, driven, on the iPhone simulator and the Android emulator, its output's loudness printed per second, and Harder changing what plays | Compiler lane 2026-11-12 (coordinator: native sound next) | P2 | M | Compiler lane |
 
 
 ### Mobile (Ersagun 2026-11-09: a goal; native compilation per platform a stretch goal, instead of a webview. Down since 2026-11-10 14:49, behind stable references, free lists and multithreading: "Platform stuff will eventually be solved anyway")
