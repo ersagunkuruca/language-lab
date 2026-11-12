@@ -52,8 +52,8 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
-// L123), which takes the evaluator minutes, stored as ters run stores it or
-// not (the evaluator's speed is L118c, BACKLOG I195).
+// L123), which takes the evaluator 9 minutes: core-js-agent.test.ts checks
+// it in the nightly (I195).
 const skip = new Set(["agent"]);
 // numbers counts in Peano Nat as defined: the evaluator runs out of memory
 // and the printer's recursion out of stack. It is checked as `ters run`
@@ -294,7 +294,7 @@ test("a remainder by a positive literal is worked out with no try, as it always 
   }
 });
 
-test("a map of Int keys never removed from is a direct map; one removed from is not (C215)", () => {
+test("a map of Int keys is a direct map, removed from or not (C215, C60)", () => {
   const pond = load("../../compiler/gaps/pond"), swarm = load("swarm");
   // As ters compile has them: lists as arrays, maps as hash tables.
   const specs = (p: ReturnType<typeof load>) => {
@@ -302,5 +302,5 @@ test("a map of Int keys never removed from is a direct map; one removed from is 
     return printed(lowerCore(t.code, t.info, t.names, [main])).tables;
   };
   assert.ok(specs(pond).some((t) => t.direct), "pond's food");
-  assert.ok(!specs(swarm).some((t) => t.direct), "swarm's motes are removed");
+  assert.ok(specs(swarm).some((t) => t.direct), "swarm's motes, removed as they die");
 });

@@ -1022,64 +1022,91 @@ export const ARRAY_OPS = {
 };
 
 // A Map whose Int keys sit at their own slot of an array while they are
-// small (C215, as C58m's direct tables on C; influenced by Lua 5's array
-// part for tables, Ierusalimschy, de Figueiredo, Celes): a read is one
-// index, not a hash (pond's food, cells 0 to 2303, read 25 times by each
-// fish each tick). Compiled JS makes one for a table of Int keys none of
-// whose kind is ever removed (core-js.ts tableSpec), so a program's other
-// tables stay plain Maps and each read meets one kind of map (all of a
-// program's tables as these, swarm's counter keys ran 10% slower). A key
-// goes in the array while it is below twice the keys there and 64; at the
-// first that doesn't, its entries go to a Map (`o`) for good, as on C.
+// close together (C215, as C58m's direct tables on C; influenced by Lua 5's
+// array part for tables, Ierusalimschy, de Figueiredo, Celes): a read is
+// one index, not a hash (pond's food, cells 0 to 2303, read 25 times by
+// each fish each tick). Compiled JS makes one for each table of Int keys
+// (core-js.ts tableSpec). The array starts at a key `b`, so keys a counter
+// gives out and that are removed as they go (swarm's motes, C60) slide up
+// it: a key past its end moves the live ones to a new array from the least
+// of them. A key goes in the array while the live keys and it span at most
+// twice the keys there and 64; at the first that doesn't, its entries go to
+// a Map (`o`) for good, as on C.
 // Its entries are in key order, not the order put: every listing of a
 // table sorts them or checks they are sorted (numberKeys).
 const HOLE: unique symbol = Symbol("hole");
 const UNDEF: unique symbol = Symbol("undefined");
 const slot = (k: unknown): k is number => typeof k === "number" && (k | 0) === k && k >= 0;
 export class DirectMap {
+  // a[i] holds key b + i (C60: a counter's keys, some removed, slide up).
   a: unknown[] = [];
+  b = 0;
   n = 0;
   o: Map<unknown, unknown> | null = null;
-  constructor(from?: Iterable<[unknown, unknown]>) { if (from) for (const [k, v] of from) this.set(k, v); }
+  constructor(from?: Iterable<[unknown, unknown]>) {
+    if (from instanceof DirectMap && !from.o) { this.a = from.a.slice(); this.b = from.b; this.n = from.n; return; }
+    if (from) for (const [k, v] of from) this.set(k, v);
+  }
   get size(): number { return this.o ? this.o.size : this.n; }
   get(k: unknown): unknown {
     if (this.o) return this.o.get(k);
-    if (slot(k) && k < this.a.length) { const v = this.a[k]; return v === HOLE || v === UNDEF ? undefined : v; }
+    if (slot(k)) { const v = this.a[k - this.b]; return v === HOLE || v === UNDEF ? undefined : v; }
     return undefined;
   }
   has(k: unknown): boolean {
     if (this.o) return this.o.has(k);
-    return slot(k) && k < this.a.length && this.a[k] !== HOLE;
+    if (!slot(k)) return false;
+    const v = this.a[k - this.b];
+    return v !== undefined && v !== HOLE;
   }
   set(k: unknown, v: unknown): this {
     if (this.o) { this.o.set(k, v); return this; }
     const x = v === undefined ? UNDEF : v;
-    if (slot(k) && k < this.a.length) { if (this.a[k] === HOLE) this.n++; this.a[k] = x; return this; }
-    if (slot(k) && k < 2 * this.n + 64) {
-      const len = Math.max(k + 1, 2 * this.a.length);
-      while (this.a.length < len) this.a.push(HOLE);
-      this.n++;
-      this.a[k] = x;
-      return this;
+    if (slot(k)) {
+      const i = k - this.b, a = this.a;
+      if (i >= 0 && i < a.length) { if (a[i] === HOLE) this.n++; a[i] = x; return this; }
+      if (this.place(k)) { this.a[k - this.b] = x; this.n++; return this; }
     }
     // Its entries to a Map, for good.
     const o = new Map<unknown, unknown>();
-    this.a.forEach((w, j) => { if (w !== HOLE) o.set(j, w === UNDEF ? undefined : w); });
-    this.a = []; this.n = 0;
+    this.a.forEach((w, j) => { if (w !== HOLE) o.set(this.b + j, w === UNDEF ? undefined : w); });
+    this.a = []; this.n = 0; this.b = 0;
     (this.o = o).set(k, v);
     return this;
   }
+  // Room for key k, its live keys moved so the slots run from the least
+  // live key (or k) on, with as many again free past them: false when
+  // those are over twice the keys there and 64 apart.
+  private place(k: number): boolean {
+    const a = this.a;
+    let f = 0, l = a.length - 1;
+    if (this.n === 0) { f = 0; l = -1; } else { while (a[f] === HOLE) f++; while (a[l] === HOLE) l--; }
+    const lo = this.n ? Math.min(k, this.b + f) : k, hi = this.n ? Math.max(k, this.b + l) : k;
+    const width = hi - lo + 1;
+    if (width > 2 * (this.n + 1) + 64) return false;
+    // Room on the side k came from: past the end for keys going up, in
+    // front for keys going down.
+    const front = k < this.b + f && this.n ? width : 0;
+    const len = Math.max(16, 2 * width + front);
+    const na = new Array(len).fill(HOLE);
+    const nb = lo - front;
+    for (let j = f; j <= l; j++) na[this.b + j - nb] = a[j];
+    this.a = na; this.b = nb;
+    return true;
+  }
   delete(k: unknown): boolean {
     if (this.o) return this.o.delete(k);
-    if (!(slot(k) && k < this.a.length) || this.a[k] === HOLE) return false;
-    this.a[k] = HOLE;
+    if (!slot(k)) return false;
+    const i = k - this.b;
+    if (!(i >= 0 && i < this.a.length) || this.a[i] === HOLE) return false;
+    this.a[i] = HOLE;
     this.n--;
     return true;
   }
   *entries(): IterableIterator<[unknown, unknown]> {
     if (this.o) { yield* this.o.entries(); return; }
     const a = this.a;
-    for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) yield [i, v === UNDEF ? undefined : v]; }
+    for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) yield [this.b + i, v === UNDEF ? undefined : v]; }
   }
   *keys(): IterableIterator<unknown> { for (const [k] of this.entries()) yield k; }
   *values(): IterableIterator<unknown> { for (const [, v] of this.entries()) yield v; }
@@ -1220,13 +1247,16 @@ STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.
 // A DirectMap's keys and values, read off its array in order (C215).
 function direct(m: Map<unknown, unknown>): { ks: number[]; vs: unknown[] } | null {
   if (!(m instanceof DirectMap) || m.o) return null;
-  const ks: number[] = [], vs: unknown[] = [], a = m.a;
-  for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) { ks.push(i); vs.push(v === UNDEF ? undefined : v); } }
+  const ks: number[] = [], vs: unknown[] = [], a = m.a, b = m.b;
+  for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) { ks.push(b + i); vs.push(v === UNDEF ? undefined : v); } }
   return { ks, vs };
 }
 function numberKeys(m: Map<unknown, unknown>): object | null {
-  const d = direct(m);
-  if (d) return new ItemsList(d.ks, 0);
+  if (m instanceof DirectMap && !m.o) {
+    const ks: number[] = new Array(m.n), a = m.a, b = m.b;
+    for (let i = 0, j = 0; j < ks.length; i++) if (a[i] !== HOLE) ks[j++] = b + i;
+    return new ItemsList(ks, 0);
+  }
   const ks: number[] = [];
   let sorted = true;
   for (const k of m.keys()) {
