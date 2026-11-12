@@ -238,7 +238,7 @@ export function hostSkeletonC(code: Code, names: Names, own: Id[]): string {
 // operation named by its id, as hosts/c.c has a C function. What crosses
 // is Java's own: an Int a long, a Float64 a double, a Text a String, a Bool
 // a boolean. An exception thrown is the program's Abort.
-const JAVA_TYPE: Partial<Record<Shape["k"], string>> = { int: "long", float: "double", text: "String", bool: "boolean", unit: "void" };
+const JAVA_TYPE: Partial<Record<Shape["k"], string>> = { int: "long", float: "double", text: "String", bool: "boolean", unit: "void", view: "android.view.View" };
 export function hostSkeletonJava(code: Code, names: Names, own: Id[], pkg: string): string {
   const lines = [`package ${pkg};`, "", "// Answers for this program's own effects in its Android app (FOREIGN.md),", "// one static method per operation, named by its id. MainActivity.current", "// is the app (a Context) for Android's own APIs; an exception thrown is", "// the program's Abort.", "public final class Hosts {"];
   for (const d of own) {

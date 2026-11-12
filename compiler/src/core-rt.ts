@@ -676,6 +676,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     };
     case "myLocale": return () => ({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
     case "myTimeZone": return () => (rt.world?.timeZone ?? hostZone)();
+    case "askPermission": return (what) => (rt.world?.askPermission ?? (() => true))(what as string);
     case "fetchText": return (u) => tried(() => w("fetchText")(u as string));
     // A fetch as a ticket (L150b, C182), as run.ts starts one: in the
     // background where the world can, else fetched now and ready at once.

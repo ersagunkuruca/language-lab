@@ -287,8 +287,18 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   seen (visibilitychange to hidden; onPause), resume seen again (visible;
   onResume after a pause, not the app's start). The iOS shell (C199e)
   maps its own the same way. They are events a page answers, not
-  operations it performs; asking for a permission is an operation (L236
-  step two).
+  operations it performs.
+- **Asking for a permission** (L236): `ask permission("camera")` is std's
+  Permissions effect, one operation with one meaning: "camera",
+  "microphone", "location" or "notifications", answered true or false
+  (one the platform doesn't know is false). main may ask; a command line
+  has no such dialog and answers yes, and compiled JavaScript asks the same
+  world. The browser's world asks as it fetches, waiting for the person's
+  answer (browser.ts: getUserMedia, the geolocation prompt,
+  Notification.requestPermission). Not yet: a page's handler asking, since
+  adding Permissions to the Handler row changes Html's identity and the
+  library's modules are republished with it (node library/build.ts); and C,
+  WebAssembly and the Android app's permission dialog.
 
 ## The order of the work, one PR each
 
