@@ -94,3 +94,20 @@ test("a direct map keeps small Int keys in its array and agrees with a Map, past
   assert.ok(d.o, "hashed");
   both((x) => [x.size, x.get(100000), x.get(-3), x.get("a"), x.get(299), x.has(7)]);
 });
+
+// I215: a tuple key's Text is quoted as it is unless it holds a quote, a
+// backslash or a control character; keys that would spell alike if
+// quoted naively stay apart.
+test("tuple keys whose Texts hold quotes, commas, brackets and backslashes stay apart", () => {
+  const has = STD_IMPL[TABLE_OPS.has] as (t: Table, k: unknown) => { tag: unknown };
+  const pair = (a: unknown, b: unknown) => ({ tag: "tuple", fields: [a, b] });
+  const texts = ["a", "a\",\"b", "a\\", "a\\\"", "\"", "", ",", "(", ")", "a\n", "a\u0001", "Mon", "x\",1),(\"y"];
+  // A table's keys are all of one type: pairs of Texts.
+  const keys = texts.flatMap((a) => texts.map((b) => pair(a, b)));
+  let t = empty();
+  keys.forEach((k, i) => (t = put(t, k, i)));
+  assert.equal(listed(t).length, keys.length);
+  keys.forEach((k, i) => { assert.equal(has(t, pair(...(k.fields as [unknown, unknown]))).tag, has(t, k).tag); assert.deepEqual(listed(put(empty(), k, i)), [[k, i]]); });
+  const read = (k: unknown) => listed(t).find(([key]) => JSON.stringify(key) === JSON.stringify(k))?.[1];
+  keys.forEach((k, i) => assert.equal(read(k), i));
+});
