@@ -1187,6 +1187,19 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const pr = ci(A, "std.attribute.property"), on = ci(A, "std.attribute.on");
     const TF = H.cases[tx].fields[0].t as FType, PF = H.cases[pt].fields[0].t as FType, VF = A.cases[pr].fields[1].t as FType, EF = A.cases[on].fields[1].t as FType;
     const E = EF.params[0] as RType;
+    // A page's sound (C217): listen's input and its block function, from
+    // a List Float64 to a List Float64.
+    const li = ci(A, "std.attribute.listen");
+    const SF = li >= 0 ? (A.cases[li].fields[1].t as FType) : null, IN = li >= 0 ? (A.cases[li].fields[0].t as DType) : null;
+    const listOf = (t: unknown) => {
+      const d = t as DType;
+      if (!d || typeof d !== "object" || !("cases" in d) || d.cases.length !== 2) return null;
+      const tag = d.cases.findIndex((c) => c.fields.length > 0), head = tag < 0 ? -1 : d.cases[tag].fields.findIndex((x) => x.t !== d);
+      return tag < 0 || head < 0 || d.cases[tag].fields[head].t !== "f64" ? null : { d, cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head, rest: 1 - head };
+    };
+    const sin = SF ? listOf(SF.params[0]) : null, sout = SF ? listOf(SF.result) : null;
+    const sound = !!(SF && IN && sin && sout && fname.has(SF.key));
+    const mic = sound ? ci(IN!, "std.input.microphone") : -1, rec = sound ? ci(IN!, "std.input.recording") : -1;
     // A handler that asks for a permission waits for the person's answer
     // (L236b), as a browser page's does: it runs on a fiber of its own,
     // which parks where it asks; the page shows what it wrote so far, and
@@ -1254,7 +1267,7 @@ static int ters_ev_start(void) {
 }
 // The person answered what a parked handler asked: 1 yes, 0 no. It goes
 // on, and the page shows what changed. 0 when the handler stopped.
-int ters_page_permission(int yes) {
+static int ters__page_permission(int yes) {
   if (!ters_ev_parked) return 1;
   ters_ev_parked = 0; ters_ev_said = yes;
   return ters_shown(ters_ev_go(&ters_ev_at));
@@ -1278,7 +1291,25 @@ typedef struct ters_host {
   // elements again, they are new, and their animations start again
   // (c-layout.ts). May be null.
   void (*renew)(void *ctx, void *el);
+  // A page's sound (C217): sound n's speaker opened (on 1) or closed (on
+  // 0), from the microphone (mic 1) or the recording at address. The rate
+  // it plays at, or 0 when it can't (ters_sound_say says why). Its audio
+  // thread then asks ters_sound_play for samples. May be null: no sound.
+  double (*sound)(void *ctx, int n, int on, int mic, const char *address, size_t an);
 } ters_host;
+// The page is the screen's thread's, and the audio thread's while it
+// plays a block (C217): each comes in through this lock, which one
+// thread may take again inside (an event run from ters_ui_pointer).
+#include <pthread.h>
+static pthread_mutex_t ters_mu = PTHREAD_MUTEX_INITIALIZER;
+static _Thread_local int ters_mu_depth;
+void ters_page_lock(void) { if (!ters_mu_depth++) pthread_mutex_lock(&ters_mu); }
+void ters_page_unlock(void) { if (!--ters_mu_depth) pthread_mutex_unlock(&ters_mu); }
+void *ters_page_start(ters_host *h);
+int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
+int ters_page_clock(void);
+int ters_page_frame(void);
+int ters_page_permission(int yes);
 static ters_host *ters_h;
 // Run after the page changed (c-layout.ts lays it out again).
 static void (*ters_after)(void);
@@ -1293,6 +1324,8 @@ typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; in
 // Whether what is mounted now is inside an svg element: a part there is an
 // SVG group, as html.ts makes it, not a lab-part.
 static int ters_svg;
+// How many parts are being drawn now: a listen inside one doesn't play.
+static int ters_parts;
 static lab_cell **ters_handlers;
 static int ters_nh, ters_ch;
 static ters_m *ters_root;
@@ -1311,7 +1344,189 @@ static int ters_handler(lab_cell *f) {
   ters_handlers[ters_nh] = f;
   return ters_nh++;
 }
-static void ters_show(ters_m *m, ters_attr *a) {
+${sound ? `// A page's sound (C217, AUDIO.md): each listen main put on an element
+// (not inside a part, as in a browser), with its input and block function.
+// A tap on the element starts it and another stops it: the screen
+// (ters_host's sound) opens the speaker, and the microphone or not, and
+// its audio thread asks ters_sound_play for samples. The block function
+// runs there on the page's own cells (the knob a handler writes, the
+// level the compressor keeps): one heap, which the page's thread and the
+// audio thread take in turns (ters_page_lock), where a browser runs main
+// again in its worklet and sends the writes across.
+#include <string.h>
+#define TERS_BLOCK 128
+#define TERS_SOUND_H (1 << 24)
+typedef struct ters_snd { lab_cell *play; void *view; int mic, on, at, handler; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK]; float *rec; size_t rn, rp; double rate, sq_in, sq_out, sq_by, heard_in, heard_out, heard_by; long counted; int heard; char said[200]; } ters_snd;
+static ters_snd *ters_snds;
+static int ters_nsnd;
+// What went wrong with sound n, once for each reason: on stderr, and on
+// its element (data-said, as a browser page's) when on the page's thread.
+static void ters_snd_said(ters_snd *s, const char *why, int page) {
+  if (!strcmp(s->said, why)) return;
+  snprintf(s->said, sizeof s->said, "%s", why);
+  fprintf(stderr, "sound: %s\\n", why);
+  if (page) ters_h->set_attribute(ters_h->ctx, s->view, "data-said", 9, why, strlen(why));
+}
+void ters_sound_say(int n, const char *why) {
+  ters_page_lock();
+  if (n >= 0 && n < ters_nsnd) ters_snd_said(&ters_snds[n], why, 1);
+  ters_page_unlock();
+}
+// The sounds main put on the page.
+int ters_sound_count(void) { return ters_nsnd; }
+// One block: the input as a List Float64 to the block function, and what
+// it gives to the speaker. A block that stops, or gives other than 128
+// samples, plays silence (and says so once).
+static void ters_snd_block(ters_snd *s) {
+  lab_cell *l = (lab_cell *)&${sin?.nil};
+  for (int k = TERS_BLOCK; k-- > 0;) { ${sin?.cons} *c = lab_new(sizeof(${sin?.cons}), ${sin?.type}, ${sin?.tag}); c->f${sin?.head} = s->in[k]; c->f${sin?.rest} = l; l = (lab_cell *)c; }
+  lab_dup(s->play);
+  lab_cell *r = ${SF ? call(SF, "s->play", ["l"]) : "0"};
+  if (lab_st) {
+    char why[200];
+    if (lab_st == 2) snprintf(why, sizeof why, "a block stopped, and played silence: %.*s", (int)LAB_TN(lab_reason), (const char *)LAB_TB(lab_reason));
+    else snprintf(why, sizeof why, "a block had no answer, and played silence");
+    lab_st = 0;
+    ters_snd_said(s, why, 0);
+    memset(s->out, 0, sizeof s->out);
+    return;
+  }
+  int n = 0;
+  for (lab_cell *x = r; x->tag == ${sout?.tag}; x = ((${sout?.cons} *)x)->f${sout?.rest}) { if (n < TERS_BLOCK) s->out[n] = (float)((${sout?.cons} *)x)->f${sout?.head}; n++; }
+  lab_drop(r);
+  if (n != TERS_BLOCK) {
+    char why[80];
+    snprintf(why, sizeof why, "a block gave %d samples for %d, and played silence", n, TERS_BLOCK);
+    ters_snd_said(s, why, 0);
+    memset(s->out, 0, sizeof s->out);
+  }
+}
+// frames samples of sound n into out, on the screen's audio thread: from
+// in (the microphone's, mono) or the recording, a block behind, as the
+// block function plays them 128 at a time. Silence while it's stopped.
+void ters_sound_play(int n, const float *in, float *out, int frames) {
+  ters_page_lock();
+  ters_snd *s = n >= 0 && n < ters_nsnd && ters_snds[n].on ? &ters_snds[n] : 0;
+  for (int i = 0; i < frames; i++) {
+    if (!s) { out[i] = 0; continue; }
+    float x = s->mic ? (in ? in[i] : 0) : s->rn ? s->rec[s->rp] : 0;
+    if (!s->mic && s->rn && ++s->rp == s->rn) s->rp = 0;
+    // out[i] is what the block function made of the input a block ago,
+    // the sample this x takes the place of.
+    float was = s->in[s->at];
+    s->in[s->at] = x;
+    out[i] = s->out[s->at];
+    s->sq_in += (double)x * x; s->sq_out += (double)out[i] * out[i]; s->sq_by += (double)(out[i] - was) * (out[i] - was);
+    if (++s->at == TERS_BLOCK) { ters_snd_block(s); s->at = 0; }
+  }
+  if (s && s->rate > 0 && (s->counted += frames) >= s->rate) {
+    s->heard_in = sqrt(s->sq_in / (double)s->counted); s->heard_out = sqrt(s->sq_out / (double)s->counted); s->heard_by = sqrt(s->sq_by / (double)s->counted);
+    s->sq_in = s->sq_out = s->sq_by = 0; s->counted = 0; s->heard = 1;
+  }
+  ters_page_unlock();
+}
+// How loud sound n's input and output were over the last second it
+// played (root mean square), and how much the output differs from its
+// input (the root mean square of their difference, 0 when it plays what
+// came in), once for each second: 1 when a new one is there.
+int ters_sound_heard(int n, double *in, double *out, double *by) {
+  ters_page_lock();
+  int r = 0;
+  if (n >= 0 && n < ters_nsnd && ters_snds[n].heard) { *in = ters_snds[n].heard_in; *out = ters_snds[n].heard_out; *by = ters_snds[n].heard_by; ters_snds[n].heard = 0; r = 1; }
+  ters_page_unlock();
+  return r;
+}
+// A recording for sound n, as a WAV file's bytes (PCM of 8 to 32 bits,
+// or 32-bit floats, any channels mixed to one), at the rate it plays at.
+// 0 when they aren't one (ters_sound_say has said why).
+static uint32_t ters_le(const unsigned char *b, int n) { uint32_t x = 0; for (int i = n; i-- > 0;) x = x << 8 | b[i]; return x; }
+int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate) {
+  ters_page_lock();
+  ters_snd *s = n >= 0 && n < ters_nsnd ? &ters_snds[n] : 0;
+  int fmt = 0, ch = 0, bits = 0; uint32_t from = 0; const unsigned char *data = 0; size_t dn = 0;
+  if (s && len >= 12 && !memcmp(b, "RIFF", 4) && !memcmp(b + 8, "WAVE", 4)) {
+    for (size_t at = 12; at + 8 <= len;) {
+      size_t sz = ters_le(b + at + 4, 4), body = at + 8;
+      if (body + sz > len) sz = len - body;
+      if (!memcmp(b + at, "fmt ", 4) && sz >= 16) {
+        fmt = (int)ters_le(b + body, 2); ch = (int)ters_le(b + body + 2, 2); from = ters_le(b + body + 4, 4); bits = (int)ters_le(b + body + 14, 2);
+        if (fmt == 0xFFFE && sz >= 26) fmt = (int)ters_le(b + body + 24, 2);
+      } else if (!memcmp(b + at, "data", 4)) { data = b + body; dn = sz; }
+      at = body + sz + (sz & 1);
+    }
+  }
+  int width = bits / 8;
+  if (!s || !data || ch < 1 || !from || rate <= 0 || !((fmt == 1 && width >= 1 && width <= 4) || (fmt == 3 && bits == 32))) {
+    if (s) ters_snd_said(s, "the recording isn't a WAV file of PCM or 32-bit float samples", 1);
+    ters_page_unlock();
+    return 0;
+  }
+  size_t frames = dn / (size_t)(width * ch);
+  float *mono = malloc(sizeof *mono * (frames ? frames : 1));
+  if (!mono) lab_oom();
+  for (size_t i = 0; i < frames; i++) {
+    double sum = 0;
+    for (int c = 0; c < ch; c++) {
+      const unsigned char *p = data + (i * (size_t)ch + (size_t)c) * (size_t)width;
+      double v;
+      if (fmt == 3) { float f; memcpy(&f, p, 4); v = f; }
+      else if (width == 1) v = (p[0] - 128) / 128.0;
+      else { uint32_t u = ters_le(p, width); int sh = 32 - 8 * width; v = (double)((int32_t)(u << sh) >> sh) / (double)(1u << (8 * width - 1)); }
+      sum += v;
+    }
+    mono[i] = (float)(sum / ch);
+  }
+  // At the rate it plays at, each sample between the two nearest.
+  size_t rn = frames ? (size_t)((double)frames * rate / from) : 0;
+  float *r = malloc(sizeof *r * (rn ? rn : 1));
+  if (!r) lab_oom();
+  for (size_t i = 0; i < rn; i++) { double t = (double)i * from / rate; size_t k = (size_t)t; double w = t - (double)k; r[i] = (float)(mono[k] * (1 - w) + (k + 1 < frames ? mono[k + 1] : mono[k]) * w); }
+  free(mono);
+  free(s->rec); s->rec = r; s->rn = rn; s->rp = 0;
+  ters_page_unlock();
+  return 1;
+}
+// A tap on sound k's element: it starts, or stops.
+static void ters_snd_toggle(int k) {
+  ters_snd *s = &ters_snds[k];
+  if (s->on) {
+    s->on = 0;
+    if (ters_h->sound) ters_h->sound(ters_h->ctx, k, 0, s->mic, s->address, s->an);
+    ters_h->set_attribute(ters_h->ctx, s->view, "data-playing", 12, "false", 5);
+    return;
+  }
+  memset(s->in, 0, sizeof s->in); memset(s->out, 0, sizeof s->out);
+  s->at = 0; s->rp = 0; s->sq_in = s->sq_out = s->sq_by = 0; s->counted = 0; s->heard = 0; s->said[0] = 0;
+  ters_h->set_attribute(ters_h->ctx, s->view, "data-said", 9, "", 0);
+  s->on = 1;
+  double rate = ters_h->sound ? ters_h->sound(ters_h->ctx, k, 1, s->mic, s->address, s->an) : 0;
+  if (rate <= 0) {
+    s->on = 0;
+    if (!s->said[0]) ters_snd_said(s, "this screen plays no sound", 1);
+    ters_h->set_attribute(ters_h->ctx, s->view, "data-playing", 12, "false", 5);
+    return;
+  }
+  s->rate = rate;
+  ters_h->set_attribute(ters_h->ctx, s->view, "data-playing", 12, "true", 4);
+}
+// A listen on element m: its sound, started by a tap (a click handler of
+// its own runs too).
+static void ters_snd_add(ters_m *m, lab_cell *a) {
+  ters_snds = realloc(ters_snds, sizeof *ters_snds * (size_t)(ters_nsnd + 1));
+  if (!ters_snds) lab_oom();
+  ters_snd *s = &ters_snds[ters_nsnd];
+  memset(s, 0, sizeof *s);
+  s->play = ${field(A, li, 1, "a")}; lab_dup(s->play);
+  lab_cell *to = ${field(A, li, 0, "a")};
+  s->mic = to->tag == ${mic};
+  if (to->tag == ${rec}) { lab_cell *t = ${field(IN!, rec, 0, "to")}; s->an = LAB_TN(t); s->address = malloc(s->an + 1); if (!s->address) lab_oom(); memcpy(s->address, LAB_TB(t), s->an); s->address[s->an] = 0; }
+  s->view = m->view;
+  s->handler = -1;
+  for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${on} && LAB_TN(m->attrs[j].name) == 5 && !memcmp(LAB_TB(m->attrs[j].name), "click", 5)) { s->handler = m->attrs[j].handler; break; }
+  if (s->handler < 0) ters_h->listen(ters_h->ctx, m->view, "click", 5, TERS_SOUND_H + ters_nsnd);
+  ters_nsnd++;
+}
+` : ""}static void ters_show(ters_m *m, ters_attr *a) {
   lab_cell *v = ters_view(a->f);
   int live = (LAB_TN(a->name) == 5 && !memcmp(LAB_TB(a->name), "value", 5)) || (LAB_TN(a->name) == 7 && !memcmp(LAB_TB(a->name), "checked", 7));
   // None: an attribute is taken off; a field's value or tick stays.
@@ -1346,9 +1561,10 @@ static void ters_fill(ters_m *m, lab_cell *h) {
     t->kind = a->tag;
     if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
     else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
-    else fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);
+    else ${sound ? `if (ters_parts) fputs("a listen inside a part doesn't play: put it where main returns it\\n", stderr);` : `fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);`}
   }
-  j = 0;
+  ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) if (${field(LA, la.c, la.head, "x")}->tag == ${li}) ters_snd_add(m, ${field(LA, la.c, la.head, "x")});
+  ` : ""}j = 0;
   for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) { m->kids[j] = ters_mount(${field(LH, lh.c, lh.head, "x")}); ters_h->append(ters_h->ctx, m->view, m->kids[j]->view); }
 }
 static ters_m *ters_mount(lab_cell *h) {
@@ -1415,7 +1631,7 @@ static void ters_lay(ters_m *m, lab_cell *h) {
     for (lab_cell *x = ${field(H, el, 1, "h")}; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}, j++) {
       lab_cell *a = ${field(LA, la.c, la.head, "x")};
       if (a->tag == ${pr}) { lab_cell *f = ${field(A, pr, 1, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_show(m, &m->attrs[j]); }
-      else { lab_cell *f = ${field(A, on, 1, "a")}; lab_dup(f); lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = f; }
+      else if (a->tag == ${on}) { lab_cell *f = ${field(A, on, 1, "a")}; lab_dup(f); lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = f; }
     }
     j = 0;
     for (lab_cell *x = ${field(H, el, 2, "h")}; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) ters_lay(m->kids[j], ${field(LH, lh.c, lh.head, "x")});
@@ -1432,6 +1648,7 @@ static void ters_renew(ters_m *m) {
   else if (m->kind == ${pt}) ters_renew(m->part);
 }
 static void ters_part(ters_m *m) {
+  ters_parts++;
   lab_dup(m->f);
   // Whether a cell it read last time was written since, and what it reads
   // now (its own reads: a part inside notes its own).
@@ -1442,10 +1659,11 @@ static void ters_part(ters_m *m) {
   lab_cell *h = ${call(PF, "m->f")};
   free(m->reads); m->reads = lab_rd; m->nreads = lab_nrd;
   lab_rd = rd; lab_nrd = nrd; lab_crd = crd; lab_rding = rding;
-  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); return; }
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); ters_parts--; return; }
   if (m->part && ters_fits(m->part, h)) { ters_lay(m->part, h); if (stale && ters_h->renew) ters_renew(m->part); }
   else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
   lab_drop(h);
+  ters_parts--;
 }
 // Everything shown, run again.
 static int ters_no_clock, ters_clock;
@@ -1456,7 +1674,7 @@ static void ters_refresh(ters_m *m) {
   for (int j = 0; j < m->nk; j++) ters_refresh(m->kids[j]);
 }
 ${waits ? "static int ters_ask(const char *what, size_t n);\n" : ""}// main's page on host h: its root's view, or null when main has no answer.
-void *ters_page_start(ters_host *h) {
+static void *ters__page_start(ters_host *h) {
   ters_h = h;
   ${waits ? "lab_ask = ters_ask;\n  " : ""}${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   lab_cell *html = ${names.get(i)}();
@@ -1485,12 +1703,14 @@ static int ters_shown(int ok) {
   if (ters_after) ters_after();
   return ok;
 }
-${waits ? PARKED_C : "int ters_page_permission(int yes) { (void)yes; return 1; }"}
+${waits ? PARKED_C : "static int ters__page_permission(int yes) { (void)yes; return 1; }"}
 // An event given to handler n: what was typed or chosen, the key, where
 // the pointer is and the seconds since the frame before. Then the page
 // shows what changed. 0 when the handler stopped (an abort).
-int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) {
-  if (n < 0 || n >= ters_nh || !ters_handlers[n]) return 1;
+static int ters__page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) {
+  ${sound ? `if (n >= TERS_SOUND_H && n < TERS_SOUND_H + ters_nsnd) { ters_snd_toggle(n - TERS_SOUND_H); return ters_shown(1); }
+  for (int k = 0; k < ters_nsnd; k++) if (ters_snds[k].handler == n && n >= 0) ters_snd_toggle(k);
+  ` : ""}if (n < 0 || n >= ters_nh || !ters_handlers[n]) return 1;
   lab_cell *f = ters_handlers[n];
   lab_dup(f);
   ${ty(E)} e = { lab__text_of(value, vn), lab__text_of(key, kn), x, y, seconds };
@@ -1498,10 +1718,10 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
   return ters_shown(ters_ev_run(f, e));
 }
 // Whether what the page shows read the clock, so it runs again each frame.
-int ters_page_clock(void) { return ters_clock || (ters_moving && ters_moving(0)); }
+static int ters__page_clock(void) { return ters_clock || (ters_moving && ters_moving(0)); }
 // A frame: what the page shows runs again, if it read the clock. Whether
 // it still does.
-int ters_page_frame(void) {
+static int ters__page_frame(void) {
   int moving = ters_moving && ters_moving(0);
   if (!ters_clock && !moving) return 0;
   if (ters_clock) {
@@ -1514,6 +1734,12 @@ int ters_page_frame(void) {
   if (ters_moving) moving = ters_moving(1);
   return ters_clock || moving;
 }
+// Each way in, under the page's lock.
+void *ters_page_start(ters_host *h) { ters_page_lock(); void *r = ters__page_start(h); ters_page_unlock(); return r; }
+int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) { ters_page_lock(); int r = ters__page_event(n, value, vn, key, kn, x, y, seconds); ters_page_unlock(); return r; }
+int ters_page_clock(void) { ters_page_lock(); int r = ters__page_clock(); ters_page_unlock(); return r; }
+int ters_page_frame(void) { ters_page_lock(); int r = ters__page_frame(); ters_page_unlock(); return r; }
+int ters_page_permission(int yes) { ters_page_lock(); int r = ters__page_permission(yes); ters_page_unlock(); return r; }
 ${mode === "headless" ? HEADLESS_C : mode === "ui" ? LAYOUT_C : mode === "ui-headless" ? LAYOUT_C + UI_HEADLESS_C : ""}`;
   }
 

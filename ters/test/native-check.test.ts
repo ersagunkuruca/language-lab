@@ -35,11 +35,10 @@ test("an image, a checkbox and a text along a path are refused; a text field and
   assert.deepEqual(r.leftOut, ["the property box-shadow"]);
 });
 
-// spacetime's pictures' texts are drawn (C199f); its sliders' solves
-// aren't in C yet (C195).
-test("ters build-native-app refuses spacetime for its solves, not for its pictures' texts", () => {
+// spacetime's pictures' texts are drawn (C199f), and its sliders' solves
+// are C now (C195).
+test("ters build-native-app builds spacetime, its solves and its pictures' texts", () => {
   const out = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-native-app", join(import.meta.dirname, "../examples/spacetime"), "-o", join(mkdtempSync(join(tmpdir(), "native-")), "app")], { encoding: "utf8" });
-  assert.notEqual(out.status, 0);
-  assert.doesNotMatch(out.stderr, /<text>/);
-  assert.match(out.stderr, /relational interpreter/);
+  assert.equal(out.status, 0, out.stderr);
+  assert.doesNotMatch(out.stderr, /<text>|relational interpreter/);
 });

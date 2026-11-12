@@ -188,3 +188,17 @@ What a page's parts become under route A:
   shows and where. Example: dice on an iPhone simulator rolls, and
   throws a hundred (2026-11-12). Left for a phone: signing with a team in
   Xcode, and an icon.
+- **C217. A page's sound.** Done: the C page keeps each `listen` (its input
+  and block function) and plays it on the platform's audio thread, AAudio
+  on Android and AVAudioEngine on iOS, which ask `ters_sound_play` for
+  samples at the device's rate; the block function runs 128 at a time
+  with the page's own cells, the page's thread and the audio thread taking
+  turns under one lock (`ters_page_lock`). Streams are stopped and nodes
+  detached off the lock, since that waits for a callback that may be
+  waiting for it. A recording the page names ships in the app (Android's
+  assets, the iOS bundle) and is read as WAV in C; the microphone is asked
+  for when a page listens to it, and plays silence till it is allowed.
+  Once a second the app logs each sound's loudness in and out and how
+  much it changed what came in. Example: pedal's A strum plays on the
+  Android emulator and the iPhone simulator, Clean changing nearly
+  nothing and Harder changing more (2026-11-12).

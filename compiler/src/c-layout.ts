@@ -57,6 +57,11 @@ typedef struct ters_ui {
   // yes, 0 no, -1 asked, answered later by ters_page_permission. May be
   // null: yes.
   int (*ask)(void *ctx, const char *what, size_t n);
+  // A page's sound (C217): sound n started (on 1) or stopped, from the
+  // microphone (mic 1) or the recording at address (the app's own file).
+  // The rate it plays at, or 0 when it can't (ters_sound_say says why);
+  // its audio thread then asks ters_sound_play for samples. May be null.
+  double (*sound)(void *ctx, int n, int on, int mic, const char *address, size_t an);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -1361,7 +1366,7 @@ static int tl_moving(int step) {
 // (and then leave, as a finger leaves when it lifts), 3 cancelled. The
 // handlers of the shape under it and of the groups and picture round it,
 // with the point in the picture's units. Whether any listened.
-int ters_ui_pointer(void *view, int kind, double x, double y) {
+static int ters__ui_pointer(void *view, int kind, double x, double y) {
   tl_n *e = tl_find_view(tl_root, view);
   if (!e || !e->drawn) return 0;
   tl_n *shapes[1024]; int n = tl_drawn(e, shapes, 1024, 0);
@@ -1382,11 +1387,12 @@ int ters_ui_pointer(void *view, int kind, double x, double y) {
 // An element a part drew again: its animation starts again (as a
 // browser's new element's would) when it next has one.
 static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
-static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew };
+static double tl_sound(void *c, int n, int on, int mic, const char *a, size_t an) { (void)c; return tl_ui->sound ? tl_ui->sound(tl_ui->ctx, n, on, mic, a, an) : 0; }
+static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew, tl_sound };
 // main's page on screen ui, width wide (in the units its texts measure
 // in), dark or not: the root's view.
 static int tl_ask(const char *what, size_t n) { return tl_ui->ask(tl_ui->ctx, what, n); }
-void *ters_ui_start(ters_ui *ui, double width, int dark) {
+static void *ters__ui_start(ters_ui *ui, double width, int dark) {
   tl_ui = ui; tl_width = width; tl_dark = dark;
   if (ui->ask) ters_asker = tl_ask;
   ters_after = tl_layout;
@@ -1397,11 +1403,15 @@ void *ters_ui_start(ters_ui *ui, double width, int dark) {
   return tl_root->view;
 }
 // The screen's width or colour scheme changed.
-void ters_ui_resize(double width, int dark) {
+static void ters__ui_resize(double width, int dark) {
   tl_width = width;
   if (dark != tl_dark) { tl_dark = dark; free(tl_sheet); tl_sheet = 0; free(tl_rules); tl_rules = 0; tl_nrules = 0; free(tl_kfs); tl_kfs = 0; tl_nkf = 0; }
   tl_layout();
 }
+// Each way in, under the page's lock (C217).
+int ters_ui_pointer(void *view, int kind, double x, double y) { ters_page_lock(); int r = ters__ui_pointer(view, kind, x, y); ters_page_unlock(); return r; }
+void *ters_ui_start(ters_ui *ui, double width, int dark) { ters_page_lock(); void *r = ters__ui_start(ui, width, dark); ters_page_unlock(); return r; }
+void ters_ui_resize(double width, int dark) { ters_page_lock(); ters__ui_resize(width, dark); ters_page_unlock(); }
 `;
 
 // A screen for tests (C199d): it keeps each box's place and paint, and
@@ -1517,8 +1527,43 @@ static void u_frame(uv *v, double s) {
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 // The person is asked (L236b), and answers later with permission:yes.
 static int u_ask(void *c, const char *what, size_t n) { (void)c; printf("ask %.*s\n", (int)n, what); return -1; }
+#ifdef TERS_BLOCK
+// Its sound (C217): a recording is the file at its address, at 48000 a
+// second; play:N:FRAMES plays sound n on a thread of its own, as a
+// screen's audio thread would, the microphone a sine at 441 Hz of 0.5.
+static double u_sound(void *c, int n, int on, int mic, const char *a, size_t an) {
+  (void)c;
+  printf("sound %d %s %s\n", n, on ? "on" : "off", mic ? "microphone" : a);
+  if (!on || mic) return 48000;
+  char *path = tl_dup(a, an); FILE *f = fopen(path, "rb"); free(path);
+  if (!f) { ters_sound_say(n, "no such recording"); return 0; }
+  unsigned char *b = 0; size_t len = 0, got; unsigned char chunk[4096];
+  while ((got = fread(chunk, 1, sizeof chunk, f)) > 0) { b = realloc(b, len + got); memcpy(b + len, chunk, got); len += got; }
+  fclose(f);
+  int ok = ters_sound_recording(n, b, len, 48000);
+  free(b);
+  return ok ? 48000 : 0;
+}
+typedef struct { int n, frames; float *out; } u_playing;
+static void *u_play(void *x) {
+  u_playing *p = x;
+  float in[100];
+  for (int at = 0; at < p->frames; at += 100) {
+    int k = p->frames - at < 100 ? p->frames - at : 100;
+    for (int i = 0; i < k; i++) in[i] = (float)(0.5 * sin(2 * 3.141592653589793 * 441 * (at + i) / 48000.0));
+    ters_sound_play(p->n, in, p->out + at, k);
+  }
+  return 0;
+}
+#endif
 int main(int argc, char **argv) {
-  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask };
+  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask,
+#ifdef TERS_BLOCK
+    u_sound
+#else
+    0
+#endif
+  };
   double width = 360; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
@@ -1543,6 +1588,22 @@ int main(int argc, char **argv) {
       u_show(root);
       continue;
     }
+#ifdef TERS_BLOCK
+    if (!strcmp(s, "play") && more) {
+      // play:N:FRAMES: what sound n plays, its first samples and loudness.
+      u_playing p = { atoi(id), atoi(more), 0 };
+      p.out = calloc((size_t)p.frames + 1, sizeof *p.out);
+      pthread_t t; pthread_create(&t, 0, u_play, &p); pthread_join(t, 0);
+      double sq = 0; for (int i = 0; i < p.frames; i++) sq += (double)p.out[i] * p.out[i];
+      printf("played %d:", p.n);
+      for (int i = 128; i < 128 + 4 && i < p.frames; i++) printf(" %.6f", p.out[i]);
+      printf(" rms %.6f\n", p.frames ? sqrt(sq / p.frames) : 0);
+      double hi, ho, hb; if (ters_sound_heard(p.n, &hi, &ho, &hb)) printf("heard %d: in %.4f out %.4f changed %.4f\n", p.n, hi, ho, hb);
+      free(p.out); free(s);
+      u_show(root);
+      continue;
+    }
+#endif
     if (!strcmp(s, "permission")) {
       // permission:yes (or no): the person's answer to what was asked.
       ters_page_permission(!strcmp(id, "yes"));
