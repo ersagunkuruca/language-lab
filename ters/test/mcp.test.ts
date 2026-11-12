@@ -380,3 +380,22 @@ test("a handler is written as the view prints it: handle …, an operation's cas
   assert.match(text("eval", { text: "plus one(5)" }), /^= 6 :/);
   assert.match(call("replace", { at: "plus one", find: "0", text: "handle n; ask(x) → 1" }).text, /no effect has an operation ask/);
 });
+
+// rota had no `fold` in text, so it wrote `as set` and a recursion (I218 M12).
+test("a fold is written as the view prints it, each folded value named after with (I218 M12)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "total", kind: "function", params: ["xs"] });
+  const total = text("replace", { at: "total", find: "□", text: "fold xs\n  nil → 0\n  cons(h, t) with so far → h + so far" });
+  assert.match(total, /fold xs/);
+  assert.match(total, /cons\(h#\w+, t#\w+\) with ‹so far›#\w+ → h \+ ‹so far›/);
+  assert.match(text("eval", { text: "total([1, 2, 3])" }), /^= 6 :/);
+  text("define", { name: "count", kind: "function", params: ["xs"] });
+  text("replace", { at: "count", find: "□", text: "fold xs; nil → 0; cons(h, t) with n → n + 1" });
+  assert.match(text("eval", { text: "count([4, 4, 4, 4])" }), /^= 4 :/);
+  assert.match(call("replace", { at: "count", find: "0", text: "fold xs; nil → 0" }).text, /a fold writes every case/);
+});
