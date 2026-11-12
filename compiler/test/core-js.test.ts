@@ -294,7 +294,7 @@ test("a remainder by a positive literal is worked out with no try, as it always 
   }
 });
 
-test("a map of Int keys never removed from is a direct map; one removed from is not (C215)", () => {
+test("a map of Int keys is a direct map, removed from or not (C215, C60)", () => {
   const pond = load("../../compiler/gaps/pond"), swarm = load("swarm");
   // As ters compile has them: lists as arrays, maps as hash tables.
   const specs = (p: ReturnType<typeof load>) => {
@@ -302,5 +302,5 @@ test("a map of Int keys never removed from is a direct map; one removed from is 
     return printed(lowerCore(t.code, t.info, t.names, [main])).tables;
   };
   assert.ok(specs(pond).some((t) => t.direct), "pond's food");
-  assert.ok(!specs(swarm).some((t) => t.direct), "swarm's motes are removed");
+  assert.ok(specs(swarm).some((t) => t.direct), "swarm's motes, removed as they die");
 });

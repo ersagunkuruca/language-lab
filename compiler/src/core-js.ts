@@ -102,18 +102,15 @@ function builtinOf(name: string): BuiltinOf | undefined {
 }
 // Which of a map's entries lists are its keys alone (`keys of`): a list
 // whose items are of the key's type.
-// `removed`: the tables some code removes from; one of Int keys none of
-// whose kind is removed from is a DirectMap (std.ts, C215: pond's food).
-export const tableSpec = (t: TType, removed = new Set<number>()): TableSpec => {
+// A table of Int keys is a DirectMap (std.ts, C215: pond's food; C60:
+// swarm's motes, removed as they die, the keys there sliding up).
+export const tableSpec = (t: TType): TableSpec => {
   const keys = t.set ? [] : t.entries.map((d) => keyList(t, d));
-  const direct = t.keyT === "int" && !removed.has(t.index) ? { direct: true as const } : {};
+  const direct = t.keyT === "int" ? { direct: true as const } : {};
   return keys.some((x) => x) ? { set: t.set, keys, ...direct } : { set: t.set, ...direct };
 };
 const tableSpecs = (ir: CoreIR): TableSpec[] => {
-  const removed = new Set<number>();
-  const walk = (e: SExpr) => { if (e.k === "rt") { const m = /^table\.remove(?:Owned)?\.t(\d+)$/.exec(e.fn); if (m) removed.add(Number(m[1])); } kids(e).forEach(walk); };
-  ir.funcs.forEach((f) => walk(f.body));
-  return ir.tables.map((t) => tableSpec(t, removed));
+  return ir.tables.map((t) => tableSpec(t));
 };
 
 const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
