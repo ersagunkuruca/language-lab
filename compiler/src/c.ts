@@ -789,7 +789,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // run function's index, and its array's view.
   const ranges = new Map<number, string>();
   // The folds counting into a Map run in runs on the threads (C42h).
-  const chunked = new Set<number>();
+  const chunked = new Map<number, number | null>();
   // `array of` a table's keys (C58j): [table, entries list, array] each.
   const keyArrays: [number, number, number][] = [];
   // Each map on threads, by its array types and function type (parC).
@@ -1787,11 +1787,12 @@ int main(int argc, char **argv) {
           }
           const sh = /^par:(count|all|first):search$/.exec(e.fn);
           if (sh) return checked(`lab_par_search_${countSite(typeOf(e.args[0], f.locals) as FType, sh[1] as SearchHow)}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
-          const ch = /^par:chunks:(\d+)$/.exec(e.fn);
+          const ch = /^par:chunks:(\d+)(?::(\d+))?$/.exec(e.fn);
           if (ch) {
-            const gi = Number(ch[1]), g = funcs[gi], ti = (g.result as TType).index;
-            chunked.add(gi);
-            arrayFns.add(`table.atb.t${ti}`).add(`table.put.t${ti}`).add(`array.length.a${(g.params[0] as AType).index}`);
+            const gi = Number(ch[1]), g = funcs[gi];
+            chunked.set(gi, ch[2] === undefined ? null : Number(ch[2]));
+            if (ch[2] === undefined) { const ti = (g.result as TType).index; arrayFns.add(`table.atb.t${ti}`).add(`table.put.t${ti}`); }
+            arrayFns.add(`array.length.a${(g.params[0] as AType).index}`);
             return stated(`lab_par_chunks_${gi}(${args(e.args, pre, d, after).join(", ")})`, g.result, pre, d);
           }
           if (isPar(e.fn)) {
@@ -3206,13 +3207,15 @@ static ${T} lab_par_search_in_${n}(lab_cell *f) {
   // A fold counting into a Map (C42h): its array's items in runs from the
   // last, as the fold meets them, each thread counting its runs by the
   // fold's own loop (gi, from empty) and adding them into its Map; the
-  // threads' Maps then added together. Under some runs' worth, in turn.
+  // threads' Maps then added together: a hash table's by mergeC, a
+  // tree's by its compiled join (scalar.ts treeJoin). Under some runs'
+  // worth, in turn.
   function chunkedC(): string[] {
-    const ts = [...tables.values()].filter((t) => [...chunked].some((gi) => (funcs[gi].result as TType).index === t.index));
-    return [...ts.map(mergeC), ...[...chunked].map(chunksC)];
+    const ts = [...tables.values()].filter((t) => [...chunked].some(([gi, ji]) => ji === null && (funcs[gi].result as TType).index === t.index));
+    return [...ts.map(mergeC), ...[...chunked].map(([gi, ji]) => chunksC(gi, ji))];
   }
-  function chunksC(gi: number): string {
-    const g = funcs[gi], at = g.params[0] as AType, ti = (g.result as TType).index, nm = names.get(gi)!, V = aname.get(at.key)!.view, J = `lab_chunks_job_${gi}`;
+  function chunksC(gi: number, ji: number | null): string {
+    const g = funcs[gi], at = g.params[0] as AType, merge = ji === null ? `lab_merge_t${(g.result as TType).index}` : names.get(ji)!, nm = names.get(gi)!, V = aname.get(at.key)!.view, J = `lab_chunks_job_${gi}`;
     return `#define LAB_CHUNK 16384
 typedef struct { lab_cell *xs; int64_t n, next; int slots; lab_cell *out[17]; } ${J};
 static void lab_chunks_work_${gi}(void *p) {
@@ -3224,7 +3227,7 @@ static void lab_chunks_work_${gi}(void *p) {
   while ((k = __atomic_fetch_add(&j->next, LAB_CHUNK, __ATOMIC_RELAXED)) < j->n) {
     int64_t hi = j->n - k, lo = hi > LAB_CHUNK ? hi - LAB_CHUNK : 0;
     lab_cell *r = ${nm}(lab__view_a${at.index}(lab_dup(v->b), v->s + (uint32_t)lo, (uint32_t)(hi - lo)));
-    acc = acc ? lab_merge_t${ti}(acc, r) : r;
+    acc = acc ? ${merge}(acc, r) : r;
     if (lab_on_pool) __atomic_fetch_add(&lab_par_items, hi - lo, __ATOMIC_RELAXED);
   }
   j->out[s] = acc;
@@ -3241,7 +3244,7 @@ static lab_cell *lab_par_chunks_${gi}(lab_cell *xs) {
   lab_pool_run(lab_chunks_work_${gi}, &j);
   lab_unshare(mk);
   lab_cell *acc = 0;
-  for (int s = 0; s < j.slots; s++) if (j.out[s]) acc = acc ? lab_merge_t${ti}(acc, j.out[s]) : j.out[s];
+  for (int s = 0; s < j.slots; s++) if (j.out[s]) acc = acc ? ${merge}(acc, j.out[s]) : j.out[s];
   lab_drop(xs);
   return acc;
 }
