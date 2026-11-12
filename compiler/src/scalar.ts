@@ -2345,7 +2345,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // with several answers or a pause, and the segments are bound in turn.
   // A goal with at most one answer and no pause is the same either way,
   // so each runs inside its segment.
-  type Kit = { st: DType; th: FType; mplus: number; empty: SExpr };
+  type Closure = { fn: number; shape: number; t: FType };
+  type Kit = { st: DType; th: FType; mplus: number; empty: SExpr; asAny: Closure; forced: Closure; forceLater: number; fromAny: { i: number }; made: [number, SFunc][] };
   const kits = new Map<string, Kit>();
   const plainFn = (params: LType[], result: LType): FType => {
     const key = `fn(${params.map(keyOf).join(",")})>${keyOf(result)}`;
@@ -2366,56 +2367,203 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const closed = (c: { fn: number; shape: number; t: FType }, caps: SExpr[]): SExpr => ({ k: "closure", t: c.t, fn: c.fn, shape: c.shape, caps });
   const lc = (i: number): SExpr => ({ k: "local", i });
   const force = (h: SFunc, th: FType, x: SExpr, tail = false): SExpr => ({ k: "apply", fn: x, t: th, args: [], tail, tmp: h.locals.push(th) - 1 });
-  const STREAM_NIL = "\u0000stream.none", STREAM_ANS = "\u0000stream.answer", STREAM_PAUSE = "\u0000stream.pause";
-  // The stream of T's: its type, a thunk's, mplus, and the thunk of none.
+  const STREAM_NIL = "\u0000stream.none", STREAM_ANS = "\u0000stream.answer", STREAM_PAUSE = "\u0000stream.pause", STREAM_LATER = "\u0000stream.later";
+  // A pause binds were put after: relate.ts's Later (I221). A stream of
+  // T's has a fourth case, later(under, goals): the suspension underneath,
+  // as a thunk of any stream, and the binds waiting on it, as data. bind
+  // on a pause adds its goal to the list instead of wrapping a closure
+  // round it, so a long list read back (a bind on a bind on … a pause, one
+  // per item) is forced in a loop, not one call per item, and a pause met
+  // again carries its goals along as they are. That needs one type for
+  // every stream (any), one for every bind (a frame, one case per bind's
+  // types) and the goals themselves (none, one goal after those before it,
+  // or two runs one after the other), made once and kept when a refused
+  // definition's functions are undone; the functions that look at every
+  // case are written when lowering ends (finishStreams).
+  type Later = { any: DType; frame: DType; goals: DType; susp: DType; frames: DType; stack: DType; th: FType };
+  let laterT: Later | null = null;
+  const dataOf = (key: string, name: string): DType => { const d: DType = { key, name, def: "", cases: [] }; datas.set(key, d); return d; };
+  function laterTypes(): Later {
+    if (laterT) return laterT;
+    const any = dataOf("stream.any", "AnyStream"), frame = dataOf("stream.frame", "Frame"), goals = dataOf("stream.goals", "Goals");
+    const th = plainFn([], any);
+    goals.cases.push({ variant: "\u0000goals.none", name: "none", fields: [] }, { variant: "\u0000goals.one", name: "one", fields: [{ name: "goal", t: frame }, { name: "before", t: goals }] }, { variant: "\u0000goals.two", name: "two", fields: [{ name: "first", t: goals }, { name: "then", t: goals }] });
+    const susp = dataOf("stream.suspended", "Suspended");
+    susp.cases.push({ variant: "\u0000susp.no", name: "no", fields: [] }, { variant: "\u0000susp.yes", name: "yes", fields: [{ name: "under", t: th }, { name: "goals", t: goals }] }, { variant: "\u0000susp.stack", name: "yes, for the stack", fields: [{ name: "under", t: th }, { name: "goals", t: goals }] });
+    const frames = dataOf("stream.frames", "Frames");
+    frames.cases.push({ variant: "\u0000frames.none", name: "none", fields: [] }, { variant: "\u0000frames.more", name: "more", fields: [{ name: "frame", t: frame }, { name: "rest", t: frames }] });
+    const stack = dataOf("stream.goalStack", "GoalStack");
+    stack.cases.push({ variant: "\u0000gstack.none", name: "none", fields: [] }, { variant: "\u0000gstack.more", name: "more", fields: [{ name: "goals", t: goals }, { name: "rest", t: stack }] });
+    return (laterT = { any, frame, goals, susp, frames, stack, th });
+  }
+  // A function made here that may be undone with a refused definition:
+  // live while it is still where it was put.
+  const stillThere = (i: number, f: SFunc) => funcs[i] === f;
+  const innerFn = (name: string, params: LType[], result: LType): { i: number; f: SFunc } => {
+    const f: SFunc = { def: "", name, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    return { i: funcs.push(f) - 1, f };
+  };
+  // The stream of T's: its type and a thunk's (kept), and its functions:
+  // mplus, the thunk of none, any stream from a pause, a later forced.
+  type KitType = { st: DType; th: FType; any: number; T: LType };
+  const kitTypes = new Map<string, KitType>();
   function kit(T: LType): Kit {
     const key = `stream<${keyOf(T)}>`;
     const had = kits.get(key);
-    if (had) return had;
-    const st: DType = { key, name: "Stream", def: "", cases: [] };
-    datas.set(key, st);
-    const th = plainFn([], st);
-    st.cases.push({ variant: STREAM_NIL, name: "none", fields: [] }, { variant: STREAM_ANS, name: "answer", fields: [{ name: "value", t: T }, { name: "rest", t: th }] }, { variant: STREAM_PAUSE, name: "pause", fields: [{ name: "later", t: th }] });
-    const mp: SFunc = { def: "", name: `mplus (${st.key})`, params: [st, th], result: st, locals: [st, th], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
-    const mi = funcs.push(mp) - 1;
-    const empty = closed(closureFn("no more answers", th, [], () => ({ k: "new", t: st, c: 0, args: [] })), []);
-    const k: Kit = { st, th, mplus: mi, empty };
+    if (had && had.made.every(([i, f]) => stillThere(i, f))) return had;
+    const L = laterTypes();
+    let kt = kitTypes.get(key);
+    if (!kt) {
+      const st: DType = { key, name: "Stream", def: "", cases: [] };
+      datas.set(key, st);
+      const th = plainFn([], st);
+      st.cases.push({ variant: STREAM_NIL, name: "none", fields: [] }, { variant: STREAM_ANS, name: "answer", fields: [{ name: "value", t: T }, { name: "rest", t: th }] }, { variant: STREAM_PAUSE, name: "pause", fields: [{ name: "later", t: th }] }, { variant: STREAM_LATER, name: "later", fields: [{ name: "under", t: L.th }, { name: "goals", t: L.goals }] }, { variant: STREAM_LATER + ", for the stack", name: "later, for the stack", fields: [{ name: "under", t: L.th }, { name: "goals", t: L.goals }] });
+      const any = L.any.cases.push({ variant: `\u0000any.${key}`, name: key, fields: [{ name: "stream", t: st }] }) - 1;
+      kitTypes.set(key, (kt = { st, th, any, T }));
+    }
+    const { st, th } = kt;
+    const made: [number, SFunc][] = [];
+    const mk = (name: string, params: LType[], result: LType) => { const r = innerFn(name, params, result); made.push([r.i, r.f]); return r; };
+    const mp = mk(`mplus (${st.key})`, [st, th], st), mi = mp.i;
+    const fl = mk(`a later forced (${st.key})`, [L.th, L.goals], st);
+    const fa = mk(`a stream of any (${st.key})`, [L.any], st);
+    const cf = (name: string, t: FType, capsT: LType[], body: (h: SFunc, caps: number[], params: number[]) => SExpr) => { const c = closureFn(name, t, capsT, body); made.push([c.fn, funcs[c.fn]]); return c; };
+    const empty = closed(cf("no more answers", th, [], () => ({ k: "new", t: st, c: 0, args: [] })), []);
+    const asAny = cf("a pause, as any stream", L.th, [th], (h, [l]) => ({ k: "new", t: L.any, c: kt!.any, args: [force(h, th, lc(l))] }));
+    const forced = cf("a later, forced", th, [L.th, L.goals], (_h, [u, gs]) => ({ k: "call", fn: fl.i, args: [lc(u), lc(gs)], tail: true }));
+    const k: Kit = { st, th, mplus: mi, empty, asAny, forced, forceLater: fl.i, fromAny: fa, made };
     kits.set(key, k);
     // mplus(a, b): a's answer first, then the rest of a with b; at a pause
     // of a, b's turn (relate.ts: () => mplus(b(), a)).
-    const rest = closureFn("mplus, the rest", th, [th, th], (h, [r, b]) => ({ k: "call", fn: mi, args: [force(h, th, lc(r)), lc(b)], tail: true }));
-    const turn = closureFn("mplus, the other's turn", th, [th, th], (h, [b, a]) => ({ k: "call", fn: mi, args: [force(h, th, lc(b)), lc(a)], tail: true }));
-    const s = mp.locals.push(st) - 1, f = (c: number, i: number): SExpr => ({ k: "field", rec: lc(s), t: st, c, i });
-    mp.body = { k: "case", scrut: lc(0), s, t: st, result: st, arms: [
-      force(mp, th, lc(1), true),
+    const rest = cf("mplus, the rest", th, [th, th], (h, [r, b]) => ({ k: "call", fn: mi, args: [force(h, th, lc(r)), lc(b)], tail: true }));
+    const turn = cf("mplus, the other's turn", th, [th, th], (h, [b, a]) => ({ k: "call", fn: mi, args: [force(h, th, lc(b)), lc(a)], tail: true }));
+    const stays = cf("mplus, after a pause for the stack", L.th, [L.th, L.goals, th], (_h, [u, gs, b]) => ({ k: "new", t: L.any, c: kt!.any, args: [{ k: "call", fn: mi, args: [{ k: "call", fn: fl.i, args: [lc(u), lc(gs)], tail: false }, lc(b)], tail: false }] }));
+    const s = mp.f.locals.push(st) - 1, f = (c: number, i: number): SExpr => ({ k: "field", rec: lc(s), t: st, c, i });
+    mp.f.body = { k: "case", scrut: lc(0), s, t: st, result: st, arms: [
+      force(mp.f, th, lc(1), true),
       { k: "new", t: st, c: 1, args: [f(1, 0), closed(rest, [f(1, 1), lc(1)])] },
       { k: "new", t: st, c: 2, args: [closed(turn, [lc(1), f(2, 0)])] },
+      { k: "new", t: st, c: 2, args: [closed(turn, [lc(1), closed(forced, [f(3, 0), f(3, 1)])])] },
+      // A pause for the stack takes no turn (relate.ts: pause(() =>
+      // mplus(a(), b)), still for the stack).
+      { k: "new", t: st, c: 4, args: [closed(stays, [f(4, 0), f(4, 1), lc(1)]), { k: "new", t: L.goals, c: 0, args: [] }] },
     ] };
+    // A later forced (relate.ts laterOf): what's underneath, run; a pause
+    // again keeps the goals as they are, anything else has them applied.
+    const r = fl.f.locals.push(L.any) - 1, sp = fl.f.locals.push(L.susp) - 1, ss = fl.f.locals.push(L.susp) - 1, applied = fl.f.locals.push(L.any) - 1;
+    fl.f.body = { k: "let", i: r, value: force(fl.f, L.th, lc(0)), body: { k: "let", i: sp, value: { k: "call", fn: streamFn("suspended"), args: [lc(r), lc(1)], tail: false }, body: { k: "case", scrut: lc(sp), s: ss, t: L.susp, result: st, arms: [
+      { k: "let", i: applied, value: { k: "call", fn: streamFn("goals applied"), args: [lc(r), lc(1)], tail: false }, body: { k: "call", fn: fa.i, args: [lc(applied)], tail: true } },
+      { k: "new", t: st, c: 3, args: [{ k: "field", rec: lc(ss), t: L.susp, c: 1, i: 0 }, { k: "field", rec: lc(ss), t: L.susp, c: 1, i: 1 }] },
+      { k: "new", t: st, c: 4, args: [{ k: "field", rec: lc(ss), t: L.susp, c: 2, i: 0 }, { k: "field", rec: lc(ss), t: L.susp, c: 2, i: 1 }] },
+    ] } } };
     return k;
+  }
+  // The functions over every stream and every bind, by name: made when
+  // first called for, written when lowering ends.
+  const streamFns = new Map<string, { i: number; f: SFunc }>();
+  function streamFn(name: "suspended" | "goals applied" | "frames of" | "frames applied" | "a frame applied"): number {
+    const had = streamFns.get(name);
+    if (had && stillThere(had.i, had.f)) return had.i;
+    const L = laterTypes();
+    const sig: Record<string, [LType[], LType]> = { "suspended": [[L.any, L.goals], L.susp], "goals applied": [[L.any, L.goals], L.any], "frames of": [[L.stack, L.frames], L.frames], "frames applied": [[L.any, L.frames], L.any], "a frame applied": [[L.frame, L.any], L.any] };
+    const made = innerFn(`streams: ${name}`, ...sig[name]);
+    streamFns.set(name, made);
+    const g = made.f, F = (t: DType, x: number, c: number, i: number): SExpr => ({ k: "field", rec: lc(x), t, c, i });
+    // The goals in the order they run, from the last back (relate.ts
+    // laterOf): a goal goes in front of what is already listed, then
+    // those before it are taken; of two runs, the later one first.
+    if (name === "frames of") {
+      const s = g.locals.push(L.stack) - 1, gs = g.locals.push(L.goals) - 1;
+      g.body = { k: "case", scrut: lc(0), s, t: L.stack, result: L.frames, arms: [lc(1), { k: "let", i: gs, value: F(L.stack, s, 1, 0), body: { k: "case", scrut: lc(gs), s: g.locals.push(L.goals) - 1, t: L.goals, result: L.frames, arms: [
+        { k: "call", fn: made.i, args: [F(L.stack, s, 1, 1), lc(1)], tail: true },
+        { k: "call", fn: made.i, args: [{ k: "new", t: L.stack, c: 1, args: [F(L.goals, gs, 1, 1), F(L.stack, s, 1, 1)] }, { k: "new", t: L.frames, c: 1, args: [F(L.goals, gs, 1, 0), lc(1)] }], tail: true },
+        { k: "call", fn: made.i, args: [{ k: "new", t: L.stack, c: 1, args: [F(L.goals, gs, 2, 1), { k: "new", t: L.stack, c: 1, args: [F(L.goals, gs, 2, 0), F(L.stack, s, 1, 1)] }] }, lc(1)], tail: true },
+      ] } }] };
+    }
+    if (name === "frames applied") {
+      const s = g.locals.push(L.frames) - 1;
+      g.body = { k: "case", scrut: lc(1), s, t: L.frames, result: L.any, arms: [lc(0), { k: "call", fn: made.i, args: [{ k: "call", fn: streamFn("a frame applied"), args: [F(L.frames, s, 1, 0), lc(0)], tail: false }, F(L.frames, s, 1, 1)], tail: true }] };
+    }
+    if (name === "goals applied") {
+      g.body = { k: "call", fn: streamFn("frames applied"), args: [lc(0), { k: "call", fn: streamFn("frames of"), args: [{ k: "new", t: L.stack, c: 1, args: [lc(1), { k: "new", t: L.stack, c: 0, args: [] }] }, { k: "new", t: L.frames, c: 0, args: [] }], tail: false }], tail: true };
+    }
+    return made.i;
+  }
+  // Each bind's frame: its case of Frame, by the bind's types.
+  const frameCases = new Map<string, number>();
+  const frameOf = new Map<number, { T: string; U: string; bi: number; b: SFunc }>();
+  // Written when lowering ends: the functions that take every case of
+  // any stream or of a frame.
+  function finishStreams() {
+    if (!laterT) return;
+    const L = laterT;
+    const liveKits = new Map([...kits].filter(([, k]) => k.made.every(([i, f]) => stillThere(i, f))));
+    for (const [, k] of liveKits) {
+      const g = funcs[k.fromAny.i], s = g.locals.push(L.any) - 1;
+      g.body = { k: "case", scrut: lc(0), s, t: L.any, result: k.st, arms: L.any.cases.map((_, c) => c === kitTypes.get(k.st.key)!.any ? { k: "field", rec: lc(s), t: L.any, c, i: 0 } as SExpr : { k: "new", t: k.st, c: 0, args: [] }) };
+    }
+    const sus = streamFns.get("suspended");
+    if (sus && stillThere(sus.i, sus.f)) {
+      const g = sus.f, s = g.locals.push(L.any) - 1;
+      const no: SExpr = { k: "new", t: L.susp, c: 0, args: [] };
+      g.body = { k: "case", scrut: lc(0), s, t: L.any, result: L.susp, arms: L.any.cases.map((c, j) => {
+        const k = liveKits.get(c.name), st = k?.st ?? kitTypes.get(c.name)!.st, x = g.locals.push(st) - 1;
+        const f = (cc: number, i: number): SExpr => ({ k: "field", rec: lc(x), t: st, c: cc, i });
+        return { k: "case", scrut: { k: "field", rec: lc(s), t: L.any, c: j, i: 0 }, s: x, t: st, result: L.susp, arms: [no, no,
+          k ? { k: "new", t: L.susp, c: 1, args: [closed(k.asAny, [f(2, 0)]), lc(1)] } : no,
+          { k: "new", t: L.susp, c: 1, args: [f(3, 0), { k: "new", t: L.goals, c: 2, args: [f(3, 1), lc(1)] }] },
+          { k: "new", t: L.susp, c: 2, args: [f(4, 0), { k: "new", t: L.goals, c: 2, args: [f(4, 1), lc(1)] }] },
+        ] } as SExpr;
+      }) };
+    }
+    const ap = streamFns.get("a frame applied");
+    if (ap && stillThere(ap.i, ap.f)) {
+      const g = ap.f, s = g.locals.push(L.frame) - 1;
+      // No bind made, so no frame is: nothing to look at.
+      if (!L.frame.cases.length) g.body = lc(1);
+      else g.body = { k: "case", scrut: lc(0), s, t: L.frame, result: L.any, arms: L.frame.cases.map((_, c) => {
+        const fr = frameOf.get(c), kt = fr && liveKits.get(fr.T), ku = fr && liveKits.get(fr.U);
+        if (!fr || !stillThere(fr.bi, fr.b) || !kt || !ku) return lc(1);
+        return { k: "new", t: L.any, c: kitTypes.get(fr.U)!.any, args: [{ k: "call", fn: fr.bi, args: [{ k: "call", fn: kt.fromAny.i, args: [lc(1)], tail: false }, { k: "field", rec: lc(s), t: L.frame, c, i: 0 }], tail: false }] } as SExpr;
+      }) };
+    }
   }
   const unitOf = (T: LType, x: SExpr): SExpr => { const k = kit(T); return { k: "new", t: k.st, c: 1, args: [x, k.empty] }; };
   const pauseOf = (T: LType, later: SExpr): SExpr => ({ k: "new", t: kit(T).st, c: 2, args: [later] });
   // bind(a, g): g on each answer of a, its answers before the rest's (an
-  // answer g gives none for is passed over in a loop, as relate.ts does).
+  // answer g gives none for is passed over in a loop, as relate.ts does);
+  // on a pause, a later with g as its last goal.
   function bindFn(T: LType, U: LType): number {
     const key = `bind ${keyOf(T)} > ${keyOf(U)}`;
     if (index.has(key)) return index.get(key)!;
-    const kt = kit(T), ku = kit(U), gt = plainFn([T], ku.st);
+    const kt = kit(T), ku = kit(U), gt = plainFn([T], ku.st), L = laterTypes();
     const b: SFunc = { def: "", name: `bind (${kt.st.key} to ${ku.st.key})`, params: [kt.st, gt], result: ku.st, locals: [kt.st, gt], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const bi = funcs.push(b) - 1;
     index.set(key, bi);
-    const later = closureFn("bind, later", ku.th, [kt.th, gt], (h, [t, g]) => ({ k: "call", fn: bi, args: [force(h, kt.th, lc(t)), lc(g)], tail: true }));
+    let fc = frameCases.get(key);
+    if (fc === undefined) frameCases.set(key, (fc = L.frame.cases.push({ variant: `\u0000frame.${key}`, name: key, fields: [{ name: "goal", t: gt }] }) - 1));
+    frameOf.set(fc, { T: kt.st.key, U: ku.st.key, bi, b });
+    const goal = (g: SExpr, before: SExpr): SExpr => ({ k: "new", t: L.goals, c: 1, args: [{ k: "new", t: L.frame, c: fc!, args: [g] }, before] });
+    const none: SExpr = { k: "new", t: L.goals, c: 0, args: [] };
+    // The rest bound too (relate.ts: () => bind(rest(), g)): a later for
+    // the stack, so a rest under a rest under … is forced in a loop, not
+    // one call inside another per level (relate.ts deeper).
+    const rest = closureFn("bind, the rest", ku.th, [kt.th, gt], (_h, [t, g]) => ({ k: "new", t: ku.st, c: 4, args: [closed(kt.asAny, [lc(t)]), goal(lc(g), none)] }));
     const s = b.locals.push(kt.st) - 1, f = (c: number, i: number): SExpr => ({ k: "field", rec: lc(s), t: kt.st, c, i });
     const res = b.locals.push(ku.st) - 1, s2 = b.locals.push(ku.st) - 1;
     const onAnswer: SExpr = { k: "let", i: res, value: { k: "apply", fn: lc(1), t: gt, args: [f(1, 0)], tail: false, tmp: b.locals.push(gt) - 1 }, body: { k: "case", scrut: lc(res), s: s2, t: ku.st, result: ku.st, arms: [
       { k: "call", fn: bi, args: [force(b, kt.th, f(1, 1)), lc(1)], tail: true },
-      { k: "call", fn: ku.mplus, args: [lc(res), closed(later, [f(1, 1), lc(1)])], tail: true },
-      { k: "call", fn: ku.mplus, args: [lc(res), closed(later, [f(1, 1), lc(1)])], tail: true },
+      { k: "call", fn: ku.mplus, args: [lc(res), closed(rest, [f(1, 1), lc(1)])], tail: true },
+      { k: "call", fn: ku.mplus, args: [lc(res), closed(rest, [f(1, 1), lc(1)])], tail: true },
+      { k: "call", fn: ku.mplus, args: [lc(res), closed(rest, [f(1, 1), lc(1)])], tail: true },
+      { k: "call", fn: ku.mplus, args: [lc(res), closed(rest, [f(1, 1), lc(1)])], tail: true },
     ] } };
     b.body = { k: "case", scrut: lc(0), s, t: kt.st, result: ku.st, arms: [
       { k: "new", t: ku.st, c: 0, args: [] },
       onAnswer,
-      { k: "new", t: ku.st, c: 2, args: [closed(later, [f(2, 0), lc(1)])] },
+      { k: "new", t: ku.st, c: 3, args: [closed(kt.asAny, [f(2, 0)]), goal(lc(1), none)] },
+      { k: "new", t: ku.st, c: 3, args: [f(3, 0), goal(lc(1), f(3, 1))] },
+      { k: "new", t: ku.st, c: 4, args: [f(4, 0), goal(lc(1), f(4, 1))] },
     ] };
     return bi;
   }
@@ -2448,6 +2596,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       lc(1),
       { k: "call", fn: pri, args: [force(pr, k.th, f(1, 1)), { k: "new", t: lt, c: cons, args: [f(1, 0), lc(1)] }], tail: true },
       { k: "call", fn: pri, args: [force(pr, k.th, f(2, 0)), lc(1)], tail: true },
+      { k: "call", fn: pri, args: [{ k: "call", fn: k.forceLater, args: [f(3, 0), f(3, 1)], tail: false }, lc(1)], tail: true },
+      { k: "call", fn: pri, args: [{ k: "call", fn: k.forceLater, args: [f(4, 0), f(4, 1)], tail: false }, lc(1)], tail: true },
     ] };
     const all: SFunc = { def: "", name: `${k.st.key}, every answer`, params: [k.st], result: lt, locals: [k.st], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const empty: SExpr = { k: "new", t: lt, c: nil, args: [] };
@@ -5346,6 +5496,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     } finally { underBudget = false; }
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
+  finishStreams();
   funcs.forEach((g, j) => { g.body = tidied(g, j).body; });
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
