@@ -141,6 +141,19 @@ function that performs one is partial, so a wrong answer is an Abort
 there too. Not yet: L186's log doesn't keep a host's answers, in C,
 WebAssembly or JavaScript.
 
+## Asking whether the platform answers an effect (L234)
+
+`supports(() => take photo())` is true when every effect the function
+would perform is answered where the program runs: std's own, one marked
+pure, one the program handles itself, or one this platform's host file
+answers (hosts/js.js by id, hosts/c.c by `host_<id>`). The function is
+never run. A program chooses with an ordinary `if`, no directive. Each
+command answers it for its platform before checking main against that
+platform (src/lang/supports.ts): the answer is written in and the `if`
+becomes the branch it takes, so a native build without a camera has no
+camera code and isn't refused for it. `ters check` still sees both
+branches.
+
 ## What std's own builtins become
 
 Nothing, at first. Arithmetic, text and lists stay builtins: the

@@ -417,6 +417,10 @@ export const S = {
   hence: builtin("hence", "hence", pure([bool, bool], bool)),
   exists: builtin("exists", "for some", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([a], bool, e)], bool, e); }),
   fail: builtin("fail", "fail", (s) => fn([], s.fresh(), s.freshRow([CHOICE]))),
+  // Whether every effect the function would perform is answered where the
+  // program runs (supports.ts, L234). The function is never run, so its
+  // effects aren't the call's.
+  supports: builtin("supports", "supports", (s) => fn([fn([], s.fresh(), s.freshRow())], bool, s.freshRow())),
   // An implementation's field left to the interface's ways (WAYS.md, L96):
   // arith.ts puts the cheapest way that ends in given code in its place,
   // so nothing ever runs this.
