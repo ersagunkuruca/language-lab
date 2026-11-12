@@ -226,6 +226,37 @@ test("equations solved together give the solver's answer on WebAssembly and C", 
   assert.equal(await throughLab(k), '["(4, 2)", "(3, 2)", "(0.3, -0.1)", "(-0.333333333, 1)", "(2e+300, 0)", "(7.3, 7.3)"]\n');
 });
 
+// backwards and conjugate (C195h): every answer of a relational search in
+// relate.ts's own order, its streams written out (pauses at a fold, a
+// recursive call and each level unfolded; mplus and bind as relate.ts).
+test("backwards prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/backwards")), /square roots of each\(\[4, 9\]\) = /);
+});
+test("conjugate prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/conjugate")), /multiband\(\[4, 2, 5, 5, 1, 3\]\) = /);
+});
+
+// A list split three ways by a relation written for lists of anything:
+// relate.ts takes the next split's turn at each pause (its mplus), so the
+// answers interleave ([1] | [] | [2, 3] before [] | [1, 2, 3] | []); written
+// depth first they wouldn't, and the relation is written at Ints, as used.
+test("every three-way split of a list comes in relate.ts's interleaved order on WebAssembly and C", async () => {
+  const k = new Lang(LIBRARY.code);
+  const app = k.def("joined");
+  k.define(app, k.fn(["xs", "ys"], (xs, ys) => k.match(xs, [
+    { variant: NIL, names: [], body: () => ys },
+    { variant: CONS, names: ["a", "rest"], body: ([a, rest]) => k.call(CONS, a, k.call(app, rest, ys)) },
+  ])));
+  const three = k.def("three joined");
+  k.define(three, k.fn(["xs", "ys", "zs"], (xs, ys, zs) => k.call(app, xs, k.call(app, ys, zs))));
+  const [x, y, z] = (k.code.nodes[(k.code.nodes[three] as { body: string }).body] as { params: string[] }).params;
+  const ways = k.def("three ways to");
+  k.define(ways, k.fn(["l"], (l) => k.call(S.all, k.thunk(() => k.solve(three, { out: l }, { [x]: "x", [y]: "y", [z]: "z" }, ({ [x]: a, [y]: b, [z]: c }) => k.listOf(a, b, c))))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.call(ways, k.listOf(k.lit(1), k.lit(2), k.lit(3)))));
+  assert.equal(await throughLab(k), "[[[], [], [1, 2, 3]], [[], [1], [2, 3]], [[], [1, 2], [3]], [[1], [], [2, 3]], [[], [1, 2, 3], []], [[1], [2], [3]], [[1], [2, 3], []], [[1, 2], [], [3]], [[1, 2], [3], []], [[1, 2, 3], [], []]]\n");
+});
+
 // Pedal's bands (Haar's split, a list built by cons and matched two items
 // at a time) run backwards through conjugate, on WebAssembly and C.
 test("Haar's bands run backwards through conjugate give on WebAssembly and C what ters run gives", async () => {

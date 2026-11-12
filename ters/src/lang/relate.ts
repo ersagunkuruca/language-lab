@@ -406,16 +406,23 @@ const unit = (s: State): Stream => [s, () => null];
 // out. Past a depth the work is suspended instead, and goes on from a
 // fresh stack. A suspension spends no fuel; a search shallower than that
 // runs exactly as before.
+// Such a pause is only for the stack: mplus goes on with the same arm
+// after it, so the order of answers is the same at any depth (a pause the
+// search makes for fairness, step below, takes the next arm's turn). The
+// order is then the program's, not the host's stack, and compiled code
+// gives it too (C195).
 let depth = 0;
 const DEEP = 400;
+type Pause = (() => Stream) & { stack?: true };
+const pause = (f: () => Stream): Stream => Object.assign(f, { stack: true as const });
 function deeper(f: () => Stream): Stream {
-  if (depth > DEEP) return f;
+  if (depth > DEEP) return pause(f);
   depth++;
   try { return f(); } finally { depth--; }
 }
 function mplus(a: Stream, b: () => Stream): Stream {
   if (a === null) return deeper(b);
-  if (typeof a === "function") return () => mplus(b(), a);
+  if (typeof a === "function") return (a as Pause).stack ? pause(() => mplus(a(), b)) : () => mplus(b(), a);
   const rest = a[1];
   return [a[0], () => mplus(deeper(rest), b)];
 }
@@ -437,7 +444,7 @@ function suspendBind(later: Later, g: Goal): Stream {
   };
   t.under = under;
   t.goals = goals;
-  return t;
+  return (under as Pause).stack ? pause(t) : t;
 }
 function bind(a: Stream, g: Goal): Stream {
   // A run of answers that g rejects at once is walked in a loop: as
