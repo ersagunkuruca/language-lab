@@ -753,8 +753,19 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   const quoted = /^‹([^‹›()]+)›$/.exec(t);
   if (quoted) return typedOut(quoted[1], code, names, scope);
   const named = scope.get(t);
-  if (named) return { ref: named };
-  const r = parseValue(text, code, names);
+  // A library definition named as a case with no fields is the case, as
+  // the view prints it: `unit` is the Unit value, not std's Choice `unit`
+  // (I218 M8).
+  if (named) {
+    const v = LIBRARY.code.nodes[named]?.kind === "def" ? parseValue(t, code, names) : undefined;
+    if (!v || "error" in v || namesDef(v.value)) return { ref: named };
+  }
+  // A name bound here is the binder, not a case of the same name read as
+  // part of a value: `[after, before]` in a case whose fields are after
+  // and before is those fields, not Order's (I218 M9).
+  const bare = t.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  const shadows = [...scope].some(([n, id]) => !code.defs.includes(id) && new RegExp(`(?<![\\p{L}\\p{N}_'])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_'])`, "u").test(bare));
+  const r = shadows ? { error: "a binder" } as const : parseValue(text, code, names);
   // A value naming a definition (`[styles, …]`, `some(save name)`) is
   // read as the code it is, a reference: as a value it pointed at
   // nothing (E187).

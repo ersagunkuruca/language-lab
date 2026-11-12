@@ -261,6 +261,23 @@ test("a match is written as the view prints it, its cases on lines or after `;`s
   assert.match(call("replace", { at: "nothing", find: "□", text: "match xs; nil -> 0; cons(h, t) -> 1; other -> 2" }).text, /no data type has the cases nil, cons, other/);
 });
 
+// Names that read as something else in round 14's rota (I218 M8, M9).
+test("unit is the Unit value, and a case's field is itself, not a library case of its name (I218 M8 M9)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "rota");
+  cpSync("../compiler/gaps/rota", dir, { recursive: true });
+  text("open", { path: dir });
+  // M8: the view prints the Unit value `unit`, and reads it back so, not
+  // as std's Choice `unit`, a function.
+  text("define", { name: "checked", kind: "function", params: ["b"] });
+  assert.match(text("replace", { at: "checked", find: "□", text: 'if b then unit else abort("no")' }), /checked›?#\w+ : \(Bool\) -\[Abort\]-> Unit/);
+  // M9: `after` is the case's field, not Order's after.
+  text("define", { name: "afters", kind: "function", params: ["xs"] });
+  assert.match(text("replace", { at: "afters", find: "□", text: "match xs\n  nil → nil\n  cons(after, before) → [after, after]" }), /afters›?#\w+ : \(List a\) -> List a/);
+});
+
 // Round 14's rota driver wrote each of these round the MCP (I217).
 test("steps on lines, a match on a value, and otherwise are read as the view prints them (I217 M3-M5)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
