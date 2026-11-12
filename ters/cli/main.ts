@@ -18,7 +18,7 @@ import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { showType, STRING } from "../src/lang/types.ts";
 import { Lang } from "../src/lang/dsl.ts";
-import { S, SHOW_ANY } from "../src/lang/std.ts";
+import { HTML_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { choose, representationsIn } from "../src/lang/represent.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
@@ -662,7 +662,14 @@ switch (command) {
     // The views hosts/ios.m draws (L235), each a function of its inputs
     // giving a UIView, which Screen.m calls by name.
     const iosViews = Object.values(ops).filter((h) => h.out.k === "view" && objc && new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(objc)).map((h) => ({ name: hostCName(h.op), ins: h.ins.map((x) => x.k) }));
-    for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c, objc, iosViews) : nativeAppFolder(p.title, c, java))) {
+    // Its sound (C217): the C plays its blocks when the page listens; the
+    // app asks for the microphone if the page names one, and carries the
+    // recordings it names from the program's folder, as build-web does.
+    const sound = c.includes("ters_sound_play(") ? {
+      mic: Object.values(p.code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
+      files: Object.fromEntries(recordings(p.code).filter((f) => statSync(path).isDirectory() && existsSync(join(path, f))).map((f) => [f, new Uint8Array(readFileSync(join(path, f)))])),
+    } : undefined;
+    for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }

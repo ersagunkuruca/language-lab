@@ -449,3 +449,54 @@ test("the font shorthand in C: its weight, size and line height (C195)", { skip 
   const h = divs.map((s) => Number(s.split(" ")[4]));
   assert.deepEqual(h.map((x) => Math.round(x * 100) / 100), [16.8, 30, 20], divs.join("\n"));
 });
+
+// A page's sound in C (C217): a button that plays a recording through a
+// block function scaling it by a cell's gain, a button writing the gain,
+// and one playing the microphone as it comes. Played on a thread of its
+// own, as a screen's audio thread does, a block behind; the gain the
+// handler wrote is what the next block plays.
+test("a page's sound in C plays its block function on another thread, with the page's cells (C217)", { skip }, async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { ARITH, CELL_OPS, CONS, NIL } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const louder = k.def("louder");
+  k.define(louder, k.fn(["g", "xs"], (g, xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.list() },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, k.call(ARITH.mul, g, x), k.call(louder, g, rest)) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("gain", k.call(CELL_OPS.cell, k.lit(2)), (gain) => el("div", [], [
+    el("button", [prop("id", "play"), k.call(HTML_V.listen, k.call(HTML_V.recording, k.lit("strum.wav")), k.fn(["b"], (b) => k.call(louder, k.call(CELL_OPS.read, gain), b)))], [text("play")]),
+    el("button", [prop("id", "up"), k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.call(CELL_OPS.write, gain, k.lit(4))))], [text("up")]),
+    el("button", [prop("id", "mic"), k.call(HTML_V.listen, k.x(HTML_V.microphone), k.fn(["b"], (b) => b))], [text("mic")]),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  // A second of 0.25, as 16-bit PCM at 24000 a second (played at 48000).
+  const at = mkdtempSync(join(tmpdir(), "sound-")), n = 24000, wav = Buffer.alloc(44 + 2 * n);
+  wav.write("RIFF", 0); wav.writeUInt32LE(36 + 2 * n, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(24000, 24); wav.writeUInt32LE(48000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(2 * n, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(8192, 44 + 2 * i);
+  writeFileSync(join(at, "strum.wav"), wav);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["click:play", "play:0:1024", "click:up", "play:0:48000", "click:mic", "play:1:48000", "click:play"], { cwd: at });
+  assert.equal(r.status, 0, r.stderr.toString());
+  const lines = r.stdout.toString().split("\n").filter((s) => /^(sound|played|heard) /.test(s));
+  assert.equal(lines[0], "sound 0 on strum.wav");
+  // 0.25 doubled, then four times once the handler wrote 4.
+  assert.match(lines[1], /^played 0: 0\.500000 0\.500000 0\.500000 0\.500000 rms 0\.467707$/);
+  assert.match(lines[2], /^played 0: 1\.000000 1\.000000 1\.000000 1\.000000 /);
+  // Over the first second it played (from the tap: 1024 + 48000 samples,
+  // the first block silent and 896 at 0.5): how loud its input and output were.
+  assert.equal(lines[3], "heard 0: in 0.2500 out 0.9906");
+  assert.equal(lines[4], "sound 1 on microphone");
+  // The microphone's sine, a block later.
+  const mic = lines[5].split(" ").slice(2, 6).map(Number), sine = (i: number) => 0.5 * Math.sin((2 * Math.PI * 441 * i) / 48000);
+  mic.forEach((x, i) => assert.ok(Math.abs(x - sine(i)) < 1e-6, `${x} ${sine(i)}`));
+  assert.match(lines[6], /^heard 1: in 0\.3536 out 0\.35\d\d$/);
+  assert.equal(lines[7], "sound 0 off strum.wav");
+});

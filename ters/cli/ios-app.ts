@@ -6,7 +6,7 @@
 // folder builds with build.sh on a Mac with Xcode: an app for the iPhone
 // simulator, the "iOS app" workflow's check.
 
-import { nativeAppId } from "./native-app.ts";
+import { nativeAppId, type AppSound } from "./native-app.ts";
 
 // ters_ui as c-layout.ts declares it, cut from the page's own C so the
 // two can't differ.
@@ -24,13 +24,18 @@ export interface IosView { name: string; ins: string[] }
 // an app that asks without these stops.
 const ASKABLE = ["NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationWhenInUseUsageDescription"].map((k) => `  <key>${k}</key><string>This page asks for it.</string>\n`).join("");
 
+const MIC = "  <key>NSMicrophoneUsageDescription</key><string>This page listens to it.</string>\n";
+
 // `objc`: the program's hosts/ios.m, whose functions give the views of the
 // platform's own the page places (`views`).
-export function iosAppFolder(title: string, c: string, objc?: string, views: IosView[] = []): Record<string, string> {
+export function iosAppFolder(title: string, c: string, objc?: string, views: IosView[] = [], sound?: AppSound): Record<string, string | Uint8Array> {
   const id = nativeAppId(title);
+  const asks = c.includes("lab_world_askPermission(");
   return {
     "page.c": c,
-    "Screen.m": PAGE_M(tersUiDecl(c), foreignViews(views)),
+    "Screen.m": PAGE_M(tersUiDecl(c), foreignViews(views), !!sound),
+    // The recordings the page plays (C217), copied into the app by build.sh.
+    ...Object.fromEntries(Object.entries(sound?.files ?? {}).map(([a, b]) => [`recordings/${a}`, b])),
     ...(objc ? { "hosts.m": objc } : {}),
     "Info.plist": `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -48,7 +53,7 @@ export function iosAppFolder(title: string, c: string, objc?: string, views: Ios
   <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
   <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
   <key>UILaunchScreen</key><dict/>
-${c.includes("lab_world_askPermission(") ? ASKABLE : ""}  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+${asks ? ASKABLE : sound?.mic ? MIC : ""}  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 </dict>
 </plist>
 `,
@@ -70,6 +75,7 @@ HOSTS=
 if [ -f hosts.m ]; then xcrun -sdk "$SDK" clang -target "$TARGET" -c hosts.m -o build/hosts.o -O2 -fobjc-arc; HOSTS=build/hosts.o; fi
 xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o $HOSTS -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework AVFoundation -framework CoreLocation -framework UserNotifications -lm
 cp Info.plist "$APP/"
+if [ -d recordings ]; then cp -R recordings/. "$APP/"; fi
 codesign --force --sign - "$APP"
 echo "$APP"
 `,
@@ -105,7 +111,140 @@ function foreignViews(views: IosView[]): string {
   return [...decls, "static UIView *foreignView(NSArray<NSString *> *p) {", ...calls, "  return nil;", "}"].join("\n");
 }
 
-const PAGE_M = (decl: string, foreign: string) => String.raw`// The page: made and laid out in C (page.c) and drawn with UIKit's views,
+// A page's sound (C217) through AVAudioEngine: one engine, a source node
+// for each sound playing, whose render block (the audio thread) asks
+// ters_sound_play for samples; a microphone is the input node's tap, kept
+// in a ring the render block reads. The engine is changed on the main
+// queue after the page's turn ends, never under the page's lock, since
+// detaching a node waits for a render that may be waiting for the lock.
+const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
+void ters_sound_play(int n, const float *in, float *out, int frames);
+int ters_sound_heard(int n, double *in, double *out);
+int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate);
+#include <stdatomic.h>
+#define S_SOUNDS 64
+#define S_RING 32768
+typedef struct { float ring[S_RING]; _Atomic unsigned w, r; float heard[4096]; } s_ring;
+static AVAudioEngine *SE;
+static AVAudioSourceNode *s_nodes[S_SOUNDS];
+static s_ring *s_rings[S_SOUNDS];
+static int s_mic = -1, s_on[S_SOUNDS];
+static NSTimer *s_timer;
+static void s_say(int n, NSString *why) { ters_sound_say(n, why.UTF8String); }
+static NSString *s_why(NSError *e) { return e.localizedDescription ?: @"no reason given"; }
+// The session and the engine, once a sound plays; the session's rate is
+// the one every sound plays at.
+static BOOL s_session(int n) {
+  if (SE) return YES;
+  AVAudioSession *a = AVAudioSession.sharedInstance;
+  NSError *e = nil;
+  if (![a setCategory:AVAudioSessionCategoryPlayAndRecord mode:AVAudioSessionModeDefault options:AVAudioSessionCategoryOptionDefaultToSpeaker | AVAudioSessionCategoryOptionMixWithOthers error:&e] || ![a setActive:YES error:&e]) { s_say(n, [@"this phone's sound couldn't start: " stringByAppendingString:s_why(e)]); return NO; }
+  SE = [AVAudioEngine new];
+  // Once a second, how loud each sound's input and output were.
+  s_timer = [NSTimer scheduledTimerWithTimeInterval:1 repeats:YES block:^(NSTimer *t) {
+    for (int k = 0; k < S_SOUNDS; k++) { double i, o; if (s_on[k] && ters_sound_heard(k, &i, &o)) printf("sound %d: in %.4f out %.4f\n", k, i, o); }
+  }];
+  return YES;
+}
+// The microphone into sound n's ring, in the input node's format as it
+// comes (its first channel).
+static void s_listen(int n) {
+  AVAudioInputNode *in = SE.inputNode;
+  AVAudioFormat *f = [in outputFormatForBus:0];
+  if (f.sampleRate == 0 || f.channelCount == 0) { s_say(n, @"this phone has no microphone"); return; }
+  if (s_mic >= 0 && s_mic != n) { s_say(n, @"another sound has the microphone"); return; }
+  s_ring *r = s_rings[n];
+  if (s_mic < 0) {
+    [in installTapOnBus:0 bufferSize:512 format:f block:^(AVAudioPCMBuffer *b, AVAudioTime *when) {
+      const float *x = b.floatChannelData ? b.floatChannelData[0] : 0;
+      if (!x) return;
+      unsigned w = atomic_load(&r->w);
+      for (AVAudioFrameCount i = 0; i < b.frameLength; i++) r->ring[(w + i) % S_RING] = x[i];
+      atomic_store(&r->w, w + b.frameLength);
+    }];
+    s_mic = n;
+  }
+  NSError *e = nil;
+  if (!SE.running && ![SE startAndReturnError:&e]) { s_say(n, [@"the microphone couldn't start: " stringByAppendingString:s_why(e)]); return; }
+  printf("sound %d hears the microphone\n", n);
+}
+static void s_start(int n, BOOL mic, double rate) {
+  if (!s_on[n] || s_nodes[n]) return;
+  s_ring *r = s_rings[n];
+  AVAudioFormat *f = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:rate channels:1];
+  AVAudioSourceNode *node = [[AVAudioSourceNode alloc] initWithFormat:f renderBlock:^OSStatus(BOOL *silent, const AudioTimeStamp *t, AVAudioFrameCount frames, AudioBufferList *out) {
+    float *o = out->mBuffers[0].mData;
+    for (AVAudioFrameCount at = 0; at < frames;) {
+      AVAudioFrameCount k = frames - at < 4096 ? frames - at : 4096;
+      const float *in = 0;
+      if (mic) {
+        // What the tap wrote, taken in order; silence while it is behind.
+        unsigned w = atomic_load(&r->w), rd = atomic_load(&r->r);
+        if (w - rd > S_RING) rd = w - S_RING;
+        for (AVAudioFrameCount i = 0; i < k; i++) r->heard[i] = rd != w ? r->ring[rd++ % S_RING] : 0;
+        atomic_store(&r->r, rd);
+        in = r->heard;
+      }
+      ters_sound_play(n, in, o + at, (int)k);
+      at += k;
+    }
+    for (UInt32 b = 1; b < out->mNumberBuffers; b++) memcpy(out->mBuffers[b].mData, o, frames * sizeof(float));
+    return noErr;
+  }];
+  s_nodes[n] = node;
+  [SE attachNode:node];
+  [SE connect:node to:SE.mainMixerNode format:f];
+  NSError *e = nil;
+  if (!SE.running && ![SE startAndReturnError:&e]) { s_say(n, [@"the speaker couldn't start: " stringByAppendingString:s_why(e)]); return; }
+  printf("sound %d playing at %.0f a second\n", n, rate);
+  if (!mic) return;
+  AVAudioSessionRecordPermission p = AVAudioSession.sharedInstance.recordPermission;
+  if (p == AVAudioSessionRecordPermissionGranted) { s_listen(n); return; }
+  if (p == AVAudioSessionRecordPermissionDenied) { s_say(n, @"the microphone wasn't allowed: allow it in Settings, then tap again"); return; }
+  // Asked for once; it plays silence till the person answers.
+  printf("ask microphone\n");
+  [AVAudioSession.sharedInstance requestRecordPermission:^(BOOL yes) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      printf("permission microphone %s\n", yes ? "yes" : "no");
+      if (!s_on[n] || !s_nodes[n]) return;
+      if (yes) s_listen(n); else s_say(n, @"the microphone wasn't allowed: allow it in Settings, then tap again");
+    });
+  }];
+}
+static void s_stop(int n) {
+  if (s_on[n]) return;
+  if (s_mic == n) { [SE.inputNode removeTapOnBus:0]; s_mic = -1; }
+  AVAudioSourceNode *node = s_nodes[n];
+  if (!node) return;
+  s_nodes[n] = nil;
+  [SE disconnectNodeOutput:node];
+  [SE detachNode:node];
+  printf("sound %d stopped\n", n);
+}
+// From the page, under its lock: sound n on or off. The rate is the
+// session's; the engine changes once the page's turn is over.
+static double u_sound(void *c, int n, int on, int mic, const char *a, size_t an) {
+  if (n < 0 || n >= S_SOUNDS) { ters_sound_say(n, "too many sounds on one page"); return 0; }
+  s_on[n] = on;
+  if (!on) { dispatch_async(dispatch_get_main_queue(), ^{ s_stop(n); }); return 0; }
+  if (!s_session(n)) { s_on[n] = 0; return 0; }
+  double rate = AVAudioSession.sharedInstance.sampleRate;
+  if (rate <= 0) rate = 48000;
+  if (!s_rings[n]) s_rings[n] = calloc(1, sizeof(s_ring));
+  atomic_store(&s_rings[n]->r, atomic_load(&s_rings[n]->w));
+  if (!mic) {
+    NSString *name = str(a, an);
+    NSData *d = [NSData dataWithContentsOfFile:[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:name]];
+    if (!d) { s_say(n, [name stringByAppendingString:@": no such recording in the app"]); s_on[n] = 0; return 0; }
+    if (!ters_sound_recording(n, d.bytes, d.length, rate)) { s_on[n] = 0; return 0; }
+  }
+  BOOL m = !!mic;
+  dispatch_async(dispatch_get_main_queue(), ^{ s_start(n, m, rate); });
+  return rate;
+}
+`;
+
+const PAGE_M = (decl: string, foreign: string, sound: boolean) => String.raw`// The page: made and laid out in C (page.c) and drawn with UIKit's views,
 // which C asks for through ters_ui.
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -427,7 +566,8 @@ static int u_ask(void *c, const char *s, size_t n) {
   }
   return 0;
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask };
+${sound ? SOUND_M : ""}
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"} };
 
 @implementation TPage
 - (void)viewDidLoad {

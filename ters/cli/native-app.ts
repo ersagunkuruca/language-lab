@@ -19,7 +19,10 @@ export const nativeAppId = (title: string) => `app.ters.${title.toLowerCase().re
 // The project, as paths and contents. `c` is the page's C.
 // `java`: the program's hosts/android.java (C204), the app's Hosts class.
 const ASKABLE = ["CAMERA", "RECORD_AUDIO", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS"].map((p) => `  <uses-permission android:name="android.permission.${p}" />\n`).join("");
-export function nativeAppFolder(title: string, c: string, java?: string): Record<string, string | Uint8Array> {
+// `sound` (C217): the page plays sound, from the microphone or not, and
+// the recordings it plays, by their addresses, shipped as assets.
+export interface AppSound { mic: boolean; files: Record<string, Uint8Array> }
+export function nativeAppFolder(title: string, c: string, java?: string, sound?: AppSound): Record<string, string | Uint8Array> {
   const hue = parseInt(createHash("sha256").update(title).digest("hex").slice(0, 4), 16) % 360;
   const dir = PACKAGE.replace(/\./g, "/");
   // A page that asks for permissions (L236b) names those Android may give.
@@ -34,14 +37,14 @@ android {
   compileSdk 35
   // TERS_VERSION_CODE: each build numbered higher (the "Android app"
   // workflow gives its run number), so a new build installs over the old.
-  defaultConfig { applicationId "${nativeAppId(title)}"; minSdk 24; targetSdk 35; versionCode((System.getenv("TERS_VERSION_CODE") ?: "1").toInteger()); versionName "1" }
+  defaultConfig { applicationId "${nativeAppId(title)}"; minSdk ${sound ? 26 : 24}; targetSdk 35; versionCode((System.getenv("TERS_VERSION_CODE") ?: "1").toInteger()); versionName "1" }
   compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
   externalNativeBuild { cmake { path "src/main/cpp/CMakeLists.txt" } }
 }
 `,
     "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-${asks ? ASKABLE : ""}  <application android:label="${xml(title)}" android:icon="@mipmap/ic_launcher">
+${asks ? ASKABLE : sound?.mic ? '  <uses-permission android:name="android.permission.RECORD_AUDIO" />\n' : ""}  <application android:label="${xml(title)}" android:icon="@mipmap/ic_launcher">
     <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" android:configChanges="uiMode|orientation|screenSize|screenLayout|smallestScreenSize">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -59,10 +62,11 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_FLAGS "\${CMAKE_C_FLAGS} -O2 -ffp-contract=off -fwrapv")
 add_library(page SHARED page.c)
 target_link_libraries(page m)
-`,
+${sound ? "# A page's sound (C217): AAudio, the app's assets, the log.\ntarget_compile_definitions(page PRIVATE TERS_SOUND_APP)\ntarget_link_libraries(page aaudio android log)\n" : ""}`,
     "app/src/main/cpp/page.c": `${c}\n${JNI_C}`,
     [`app/src/main/java/${dir}/MainActivity.java`]: ACTIVITY,
     ...(java ? { [`app/src/main/java/${dir}/Hosts.java`]: java } : {}),
+    ...Object.fromEntries(Object.entries(sound?.files ?? {}).map(([a, b]) => [`app/src/main/assets/${a}`, b])),
     "README.md": `# ${title}, as a native Android app
 
 Made by \`ters build-native-app\` (NATIVE-APPS.md, C199c): the program is
@@ -145,7 +149,132 @@ static void j_outline(void *c, void *v, const double *xy, size_t n) {
   (*ters_j)->DeleteLocalRef(ters_j, a);
 }
 static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ters_js(what, n); jint r = (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[18], t); (*ters_j)->DeleteLocalRef(ters_j, t); return r; }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_outline, j_ask };
+#ifdef TERS_SOUND_APP
+// A page's sound (C217) through AAudio: an output stream for each sound
+// playing, its callback (AAudio's own thread) asking ters_sound_play for
+// samples, with a microphone's input stream read as it goes. A recording
+// is the app's asset at its address. Opened and started under the page's
+// lock (neither waits for a callback); stopped and closed on a thread of
+// their own, since closing waits for a callback that may be waiting for
+// the lock.
+#include <aaudio/AAudio.h>
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
+#include <android/log.h>
+#include <pthread.h>
+#define J_SOUNDS 64
+typedef struct { AAudioStream *out, *in; int n, waiting; float mono[1024], heard[1024]; } j_snd;
+static j_snd j_snds[J_SOUNDS];
+static AAssetManager *j_assets;
+static jobject j_assets_ref;
+static aaudio_data_callback_result_t j_snd_cb(AAudioStream *st, void *user, void *data, int32_t frames) {
+  j_snd *p = user;
+  float *out = data;
+  int ch = AAudioStream_getChannelCount(st);
+  for (int32_t at = 0; at < frames;) {
+    int32_t k = frames - at < 1024 ? frames - at : 1024;
+    const float *in = 0;
+    if (p->in) {
+      int32_t got = AAudioStream_read(p->in, p->heard, k, 0);
+      for (int32_t i = got < 0 ? 0 : got; i < k; i++) p->heard[i] = 0;
+      in = p->heard;
+    }
+    ters_sound_play(p->n, in, p->mono, k);
+    for (int32_t i = 0; i < k; i++) for (int c = 0; c < ch; c++) out[(at + i) * ch + c] = p->mono[i];
+    at += k;
+  }
+  double a, b;
+  if (ters_sound_heard(p->n, &a, &b)) __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d: in %.4f out %.4f", p->n, a, b);
+  return AAUDIO_CALLBACK_RESULT_CONTINUE;
+}
+static void *j_snd_close(void *x) {
+  AAudioStream **s = x;
+  for (int i = 0; i < 2; i++) if (s[i]) { AAudioStream_requestStop(s[i]); AAudioStream_close(s[i]); }
+  free(s);
+  return 0;
+}
+// The microphone's stream for sound p, at rate.
+static int j_snd_mic(j_snd *p, int32_t rate) {
+  AAudioStreamBuilder *b;
+  if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return 0;
+  AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_INPUT);
+  AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
+  AAudioStreamBuilder_setChannelCount(b, 1);
+  AAudioStreamBuilder_setSampleRate(b, rate);
+  AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+  aaudio_result_t r = AAudioStreamBuilder_openStream(b, &p->in);
+  AAudioStreamBuilder_delete(b);
+  if (r != AAUDIO_OK) { char why[160]; snprintf(why, sizeof why, "the microphone couldn't be opened: %s", AAudio_convertResultToText(r)); ters_sound_say(p->n, why); p->in = 0; return 0; }
+  AAudioStream_requestStart(p->in);
+  return 1;
+}
+static int j_has_mic(void) {
+  jstring t = ters_js("android.permission.RECORD_AUDIO", 31);
+  jclass k = (*ters_j)->GetObjectClass(ters_j, ters_a);
+  jmethodID m = (*ters_j)->GetMethodID(ters_j, k, "checkSelfPermission", "(Ljava/lang/String;)I");
+  jint r = m ? (*ters_j)->CallIntMethod(ters_j, ters_a, m, t) : -1;
+  if ((*ters_j)->ExceptionCheck(ters_j)) { (*ters_j)->ExceptionClear(ters_j); r = -1; }
+  (*ters_j)->DeleteLocalRef(ters_j, t);
+  return r == 0;
+}
+static double j_sound(void *c, int n, int on, int mic, const char *address, size_t an) {
+  (void)c;
+  if (n < 0 || n >= J_SOUNDS) { ters_sound_say(n, "too many sounds on one page"); return 0; }
+  j_snd *p = &j_snds[n];
+  if (!on) {
+    AAudioStream **s = malloc(2 * sizeof *s);
+    s[0] = p->out; s[1] = p->in; p->out = p->in = 0; p->waiting = 0;
+    pthread_t t;
+    if (pthread_create(&t, 0, j_snd_close, s)) j_snd_close(s); else pthread_detach(t);
+    return 0;
+  }
+  p->n = n;
+  AAudioStreamBuilder *b;
+  if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) { ters_sound_say(n, "this phone has no AAudio for sound"); return 0; }
+  AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
+  AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
+  AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+  AAudioStreamBuilder_setDataCallback(b, j_snd_cb, p);
+  aaudio_result_t r = AAudioStreamBuilder_openStream(b, &p->out);
+  AAudioStreamBuilder_delete(b);
+  if (r != AAUDIO_OK) { char why[160]; snprintf(why, sizeof why, "the speaker couldn't be opened: %s", AAudio_convertResultToText(r)); ters_sound_say(n, why); p->out = 0; return 0; }
+  int32_t rate = AAudioStream_getSampleRate(p->out);
+  if (mic) {
+    // Asked for once; the stream opens when the person allows it, and
+    // plays silence till then.
+    if (j_has_mic()) j_snd_mic(p, rate);
+    else { p->waiting = 1; jstring t = ters_js("microphone", 10); (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[18], t); (*ters_j)->DeleteLocalRef(ters_j, t); }
+  } else {
+    AAsset *a = 0;
+    if (j_assets) { char *name = malloc(an + 1); memcpy(name, address, an); name[an] = 0; a = AAssetManager_open(j_assets, name, AASSET_MODE_BUFFER); free(name); }
+    if (!a) { char why[200]; snprintf(why, sizeof why, "%.*s: no such recording in the app", (int)an, address); ters_sound_say(n, why); AAudioStream_close(p->out); p->out = 0; return 0; }
+    int ok = ters_sound_recording(n, AAsset_getBuffer(a), (size_t)AAsset_getLength(a), rate);
+    AAsset_close(a);
+    if (!ok) { AAudioStream_close(p->out); p->out = 0; return 0; }
+  }
+  r = AAudioStream_requestStart(p->out);
+  if (r != AAUDIO_OK) { char why[160]; snprintf(why, sizeof why, "the speaker couldn't start: %s", AAudio_convertResultToText(r)); ters_sound_say(n, why); AAudioStream_close(p->out); p->out = 0; return 0; }
+  __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d playing at %d a second, %s", n, (int)rate, mic ? "from the microphone" : address);
+  return rate;
+}
+// The person allowed the microphone, or not: what waited for it opens.
+static void j_snd_allowed(int yes) {
+  for (int n = 0; n < J_SOUNDS; n++) {
+    j_snd *p = &j_snds[n];
+    if (!p->waiting || !p->out) continue;
+    p->waiting = 0;
+    if (yes) j_snd_mic(p, AAudioStream_getSampleRate(p->out));
+    else ters_sound_say(n, "the microphone wasn't allowed: allow it in the app's settings, then tap again");
+  }
+}
+#endif
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_outline, j_ask,
+#ifdef TERS_SOUND_APP
+  j_sound
+#else
+  0
+#endif
+};
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
@@ -166,6 +295,13 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
     if (c) { if (chdir(c)) perror(c); (*env)->ReleaseStringUTFChars(env, d, c); }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
   }
+#ifdef TERS_SOUND_APP
+  // The app's assets, where a page's recordings are.
+  jmethodID ga = (*env)->GetMethodID(env, k, "getAssets", "()Landroid/content/res/AssetManager;");
+  jobject am = ga ? (*env)->CallObjectMethod(env, self, ga) : 0;
+  if (am) { j_assets_ref = (*env)->NewGlobalRef(env, am); j_assets = AAssetManager_fromJava(env, j_assets_ref); }
+  if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+#endif
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -190,7 +326,13 @@ static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
 // move, 2 up, 3 cancelled. Whether the page listened.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePointer(JNIEnv *env, jobject self, jint id, jint kind, jdouble x, jdouble y) { (void)self; ters_j = env; return ters_ui_pointer(ters_view_of(id), kind, x, y); }
 // The person's answer to the permission the page asked for (L236b).
-JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePermission(JNIEnv *env, jobject self, jint yes) { (void)self; ters_j = env; return ters_page_permission(yes); }
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePermission(JNIEnv *env, jobject self, jint yes) {
+  (void)self; ters_j = env;
+#ifdef TERS_SOUND_APP
+  ters_page_lock(); j_snd_allowed(yes); ters_page_unlock();
+#endif
+  return ters_page_permission(yes);
+}
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeClock(JNIEnv *env, jobject self) { (void)env; (void)self; return ters_page_clock(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeFrame(JNIEnv *env, jobject self) { (void)self; ters_j = env; return ters_page_frame(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, jobject self, jint h, jstring value, jstring key, jdouble x, jdouble y, jdouble seconds) {
