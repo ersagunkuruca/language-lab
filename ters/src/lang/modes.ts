@@ -85,7 +85,7 @@ export type Exec = { waits?: true } & (
   // A function written here.
   | { k: "closure"; node: Id }
   // A call, and the mode its function runs in when that's known here.
-  | { k: "call"; node: Id; callee?: Mode }
+  | { k: "call"; node: Id; callee?: Mode; together?: number }
   // Two slots that are one value.
   | { k: "same"; a: Id; b: Id }
   // The value examined is this case, with these fields.
@@ -144,7 +144,7 @@ interface Branch { goals: Goal[]; gives: Id[]; sizes: [Id, Size][]; text: string
 // posts: relate.ts can post it before it's ready, as a constraint that
 // waits and never branches (join text, show), which a choice it constrains
 // can then see.
-interface Goal { text: string; slots: Id[]; numeric?: boolean; posts?: boolean; exec: Exec; ready(st: St): Firing | null }
+interface Goal { text: string; slots: Id[]; numeric?: boolean; op?: string; posts?: boolean; exec: Exec; ready(st: St): Firing | null }
 
 interface St {
   known: Set<Id>;
@@ -557,11 +557,19 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
         const eqs = st.goals.filter((g) => g.numeric).map((g, i) => ({ g, i, u: unknowns(g) })).sort((a, b) => a.u - b.u || a.i - b.i).map((e) => e.g);
         if (!eqs.length) break;
         st.goals = st.goals.filter((g) => !g.numeric);
+        // Linear equations (+ − −x, and · ÷ by something known) have one
+        // answer or none: the solver eliminates them (relate.ts solveSome).
+        const linear = eqs.every((g) => {
+          const unknown = (i: number) => !st.known.has(g.slots[i]);
+          return g.op === "add" || g.op === "sub" || g.op === "neg" || (g.op === "mul" && !(unknown(0) && unknown(1))) || (g.op === "div" && !unknown(1));
+        });
         for (const g of eqs) for (const s of g.slots) learn(s);
-        st.answers = both(st.answers, MANY);
+        st.answers = both(st.answers, linear ? CHECK : MANY);
         st.dynamic.push(`equations solved together: ${eqs.map((g) => g.text).join(", ")}`);
         st.order.push("equations together");
-        steps.push(...eqs.map((g) => g.exec));
+        // The first marked with how many there are (scalar.ts writes the
+        // block as one solve; relate.ts runs each as it is).
+        steps.push(...eqs.map((g, i) => (i ? g.exec : { ...g.exec, together: eqs.length } as Exec)));
         st.soft = true;
         continue;
       }
@@ -921,7 +929,7 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
       // × and ÷ (a zero), several for the rest (both square roots, every
       // 2πk, cut off at 64 in relate.ts).
       for (let i = 0; i < o; i++) ways.push({ needs: [...ins.filter((j) => j !== i), o], gives: [i], answers: exact ? ONE : op === "mul" || op === "div" ? CHECK : MANY });
-      return sided(text, sides, call, ways, { numeric: true });
+      return sided(text, sides, call, ways, { numeric: true, op });
     }
     const fnArg = (i: number) => fnAt(n.args[i], ctx);
     const forwardOf = (i: number): Way => {

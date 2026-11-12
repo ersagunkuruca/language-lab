@@ -10,7 +10,7 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { INT_OPS, NONE, SHOW_ANY, S, SOME } from "../../ters/src/lang/std.ts";
+import { INT_OPS, NONE, PAIR_V, SHOW_ANY, S, SOME } from "../../ters/src/lang/std.ts";
 import { spawnSync } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -208,4 +208,20 @@ test("a relational solve with several answers gives each on WebAssembly and C as
   const main = k.def("main");
   k.define(main, k.call(SHOW_ANY, k.listOf(k.call(SHOW_ANY, k.listOf(...[5, 0, -2, 0.25].map((v) => k.call(sizes, k.lit(v))))), k.call(SHOW_ANY, k.listOf(...["abc", "", "çğ✨"].map((t) => k.call(cuts, k.lit(t))))))));
   assert.equal(await throughLab(k), `["[[-5, 5], [0], [], [-0.25, 0.25]]", "[[\\"|abc\\", \\"a|bc\\", \\"ab|c\\", \\"abc|\\"], [\\"|\\"], [\\"|çğ✨\\", \\"ç|ğ✨\\", \\"çğ|✨\\", \\"çğ✨|\\"]]"]\n`);
+});
+
+// Equations the interpreter solves together (C195, examples/conjugate's
+// bands run backwards): a + b and a − b known, halved, written as the
+// solver's plan for them, each unknown rounded as it rounds.
+test("equations solved together give the solver's answer on WebAssembly and C", async () => {
+  const k = new Lang(LIBRARY.code);
+  const n = (v: number) => k.lit(v);
+  const halves = k.def("halves");
+  k.define(halves, k.fn(["p"], (p) => k.match(p, [{ variant: PAIR_V, names: ["a", "b"], body: ([a, b]) =>
+    k.call(PAIR_V, k.call(B.div, k.call(B.add, a, b), n(2)), k.call(B.div, k.call(B.sub, a, b), n(2))) }])));
+  const h = firstParam(k, halves), back = k.def("back");
+  k.define(back, k.fn(["s", "d"], (s, d) => k.call(S.first, k.thunk(() => k.solve(halves, { out: k.call(PAIR_V, s, d) }, { [h]: "p" }, ({ [h]: y }) => k.call(SHOW_ANY, y))), k.thunk(() => k.lit("none")))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.listOf(...[[3, 1], [2.5, 0.5], [0.1, 0.2], [1 / 3, -2 / 3], [1e300, 1e300], [7.3, -0]].map(([s, d]) => k.call(back, n(s), n(d))))));
+  assert.equal(await throughLab(k), '["(4, 2)", "(3, 2)", "(0.3, -0.1)", "(-0.333333333, 1)", "(2e+300, 0)", "(7.3, 7.3)"]\n');
 });
