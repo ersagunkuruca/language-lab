@@ -2909,7 +2909,38 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             if (head.target === S.concat && a === undefined && b === undefined && sg) {
               const { fn, lt } = cutsFn();
               const pair = lt.cases.find((x) => x.variant === CONS)!.fields[0].t as RType;
-              const list: SExpr = { k: "call", fn, args: [R, len(R), { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }], tail: false };
+              // How long the first side can be (relate.ts fits' past): a
+              // number shown has no space, so in "1 22 333 …" the front of
+              // `show(n) ++ " " ++ rest` ends by the first space plus the
+              // " ". Longer cuts would fail its wait at once; without the
+              // bound each item read back tried every cut of the rest.
+              const limitOf = (side: Id, depth: number): SExpr | null => {
+                if (depth === 0) return null;
+                const sl = an.slot(side);
+                for (const k of env.keys()) {
+                  const w = isMark(k) ? posted.get(k) : undefined;
+                  if (w?.k !== "call") continue;
+                  const m = code.nodes[w.node] as Call, hd = code.nodes[m.fn];
+                  if (hd?.kind !== "ref" || an.slot(m.id) !== sl) continue;
+                  if (hd.target === S.show) {
+                    const r = g.locals.push("int") - 1;
+                    return { k: "attempt", body: { k: "rt", fn: "text.find", args: [R, { k: "text", v: " " }] }, res: r, ok: local(r), otherwise: len(R), t: "int" };
+                  }
+                  if (hd.target !== S.concat) return null;
+                  const tail = get(m.args[1]);
+                  if (tail === undefined) return null;
+                  const inner = limitOf(m.args[0], depth - 1);
+                  return inner && { k: "rt", fn: "int.add", args: [inner, len(local(tail))] };
+                }
+                return null;
+              };
+              const limit = limitOf(n.args[0], 2);
+              let upTo = len(R);
+              if (limit) {
+                const lim = g.locals.push("int") - 1, all = g.locals.push("int") - 1;
+                upTo = { k: "let", i: lim, value: limit, body: { k: "let", i: all, value: len(R), body: { k: "if", cond: { k: "rt", fn: "int.less", args: [local(lim), local(all)] }, then: local(lim), else: local(all), t: "int" } } };
+              }
+              const list: SExpr = { k: "call", fn, args: [R, upTo, { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }], tail: false };
               return branchAt(i, { k: "call", fn: fromListFn(lt), args: [list], tail: false }, pair, env, (x) => [[n.args[0], { k: "get", rec: x, t: pair, i: 0 }], [n.args[1], { k: "get", rec: x, t: pair, i: 1 }]], false);
             }
             if (head.target === S.concat && a === undefined && b === undefined && collecting.has(g)) {

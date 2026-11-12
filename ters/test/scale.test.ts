@@ -108,25 +108,27 @@ test("merge refuses two different nodes under one id, and allows the same node t
   assert.throws(() => merge(a, other), (e) => e instanceof MergeClash && e.ids[0] === "x");
 });
 
-test("the printer is a parser at real sizes: show numbers read back from 500 numbers", async () => {
+test("the printer is a parser at real sizes: show numbers read back from 20,000 numbers", async () => {
   const { relate, toValue } = await import("../src/lang/relate.ts");
   const { fromList } = await import("../src/lang/run.ts");
   const { library } = await import("../src/lang/programs.ts");
   const k = new Lang();
   const lib = library(k);
   const code = base(k.code);
-  const numbers = Array.from({ length: 500 }, (_, i) => i * 7);
+  const numbers = Array.from({ length: 20_000 }, (_, i) => (i * 7) % 1000);
   const t = performance.now();
   // Every answer: the search also has to rule out every other reading.
   const answers = [...relate(code, lib.showNumbers, { out: numbers.join(" ") })];
   assert.equal(answers.length, 1);
   const xs = Object.values(answers[0].values).map((v) => toValue(v)).find((v) => typeof v === "object");
   assert.deepEqual(fromList(xs!), numbers);
-  // It was cubic: 400 numbers took four minutes. Now about linear. (Each
-  // level of a fold run backwards starts on a fresh stack, so the length
-  // isn't bounded by the JS stack any more: 3,000 numbers read back in
-  // about a second and a half.)
-  assert.ok(performance.now() - t < 5000, `took ${performance.now() - t} ms`);
+  // It was cubic: 400 numbers took four minutes (REVIEW.md §2). Each level
+  // of a fold run backwards starts on a fresh stack; since L24 the answer
+  // is handed back with a stack of its own (it overflowed at 5,000), the
+  // cuts stop where a number shown can't go on, and the goals after a
+  // suspension aren't rebuilt at each step (each was quadratic): 20,000
+  // numbers in about half a second, where they took 47 s.
+  assert.ok(performance.now() - t < 10_000, `took ${performance.now() - t} ms`);
 });
 
 test("slice near the start of a long text with emoji reads only that far (docs/reports/GAPS.md G19)", () => {
