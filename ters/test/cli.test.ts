@@ -47,6 +47,19 @@ test("wc, run and compiled: counts, totals, options, a missing file, standard in
   }
 });
 
+// A main that is a value (lockstep's is a Text) is printed compiled too,
+// as ters run, wasi and native print it; compiled JavaScript printed
+// nothing (found in a sweep of every example, 2026-11-12).
+test("ters compile prints a main that is a value, as ters run does", () => {
+  const lockstep = join(import.meta.dirname, "../examples/lockstep");
+  const run = node([lab, "run", lockstep]);
+  assert.equal(run.code, 0, run.err);
+  assert.match(run.out, /^position .+, velocity .+\n$/);
+  const compiled = join(dir, "lockstep.mjs");
+  assert.equal(node([lab, "compile", lockstep, "-o", compiled]).code, 0);
+  assert.deepEqual(node([compiled]), { code: 0, err: "", out: run.out });
+});
+
 // examples/numbers is written on Peano Nat; its representations let
 // ters store Nat as an Int (NUMBERS.md), so 18! runs, evaluated and compiled.
 test("ters runs and compiles numbers on the representation the chooser picks", () => {

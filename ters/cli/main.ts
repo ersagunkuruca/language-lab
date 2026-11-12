@@ -555,14 +555,18 @@ switch (command) {
     const source = (inCheckout: boolean): string => {
       // Only what main reaches (C168): a definition nothing calls isn't
       // compiled, so an unreached solve doesn't bring in the node table.
-      const lowered = lowerCore(p.code, p.info, p.names, [main]);
-      const why = lowered.refused.get(main);
+      // A main that is a value (a Text, say) is printed, as `ters run`,
+      // `ters wasi` and `ters native` print it: compiled as it was, its
+      // value was dropped and nothing printed.
+      const { q, root } = !staticPage && valueMain(p.info, main) ? printingMain(p, main) : { q: p, root: main };
+      const lowered = lowerCore(q.code, q.info, q.names, [root]);
+      const why = lowered.refused.get(root);
       if (why) fail(`${p.names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
       const here = (f: string) => resolve(import.meta.dirname, f);
       // Its hosts/js.js, bundled in or imported from beside the program (C137d5).
       const host = pageHost ? { file: inCheckout ? pathToFileURL(pageHost).href : pageHost, ops: hostOpsOf(p.code, p.names) } : undefined;
       map = coreMap(lowered, !!host);
-      return coreModule(lowered, p.names[main] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"), host);
+      return coreModule(lowered, q.names[root] ?? "main", here("../../compiler/src/core-rt.ts"), here("../src/lang/world.ts"), host);
     };
     // Beside the module, its map (C143c): ids only, the editor and tools
     // join the names.
