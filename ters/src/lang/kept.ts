@@ -5,8 +5,9 @@
 import type { Code } from "../model.ts";
 
 // `source`, the module that makes it (its import.meta.url), when that isn't
-// the checker's own: what it imports is in the key too.
-export type Keeper = <T>(name: string, of: Code, make: () => T, source?: string) => T;
+// the checker's own: what it imports is in the key too. `also`, anything
+// else it depends on, such as the kept library check it was made over.
+export type Keeper = <T>(name: string, of: Code, make: () => T, source?: string, also?: string) => T;
 let keeper: Keeper = (_, __, make) => make();
-export const keptAcrossRuns = <T>(name: string, of: Code, make: () => T, source?: string): T => keeper(name, of, make, source);
+export const keptAcrossRuns = <T>(name: string, of: Code, make: () => T, source?: string, also?: string): T => keeper(name, of, make, source, also);
 export function keepAcrossRuns(k: Keeper | null) { keeper = k ?? ((_, __, make) => make()); }

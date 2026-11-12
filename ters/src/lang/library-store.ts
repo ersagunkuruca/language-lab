@@ -150,10 +150,11 @@ const keepOld = (prefix: string) => {
   const kept = readdirSync(DIR).filter((f) => f.startsWith(prefix) && f.endsWith(".v8")).map((f) => ({ f, t: statSync(join(DIR, f)).mtimeMs })).sort((a, b) => b.t - a.t);
   for (const { f } of kept.slice(KEEP)) rmSync(join(DIR, f), { force: true });
 };
-export const keeper: Keeper = (name, of, make, source) => {
+export const keeper: Keeper = (name, of, make, source, also) => {
   const h = createHash("sha1");
   h.update(checkerHash());
   if (source) h.update(graphHash(fileURLToPath(source)));
+  if (also) h.update(also);
   h.update(codeHash(of));
   const file = join(DIR, `${name}-${h.digest("hex").slice(0, 20)}.v8`);
   try { return deserialize(readFileSync(file)); } catch { /* not kept yet */ }
