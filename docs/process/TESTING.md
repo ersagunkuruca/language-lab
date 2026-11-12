@@ -205,6 +205,14 @@ moves `good`; red posts in the project and goes to the top of the backlog
 as a P0. This is where an interaction between distant parts of the code is
 caught, a day late at most.
 
+Since I208 (2026-11-12, Ersagun's OK on the minutes) it runs as parallel
+jobs: four shares of the test files (`affected.ts --all --shard i/4`,
+balanced by ters/test/nightly-times.json, which `SWEEP=all affected.ts
+--time` measures) and the browser tests (`--all --browser-only`); `good`
+moves when all five pass. One job had hit its 30-minute limit every night
+from 10-31: 195 CPU-minutes of test files, core-js alone 24 minutes.
+Measure the times again when a share nears its 45-minute limit.
+
 ### T8. The browser tests leave the per-merge run (2026-10-29)
 
 Ersagun, 2026-10-29: the browser tests take too long and cost either
