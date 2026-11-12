@@ -84,7 +84,7 @@ export const JNI_C = String.raw`
 #include <jni.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[18];
+static jmethodID ters_jm[19];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -136,16 +136,23 @@ static void j_draw(void *c, void *v, const double *ops, size_t n) {
 static void j_clip(void *c, void *v, int on) { (void)c; TERS_J(14, ters_id(v), (jint)on); }
 static void j_scroll(void *c, void *v, double inside) { (void)c; TERS_J(15, ters_id(v), inside); }
 static void j_sides(void *c, void *v, const double *w, uint32_t colour) { (void)c; TERS_J(16, ters_id(v), w[0], w[1], w[2], w[3], (jint)colour); }
-static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ters_js(what, n); jint r = (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[17], t); (*ters_j)->DeleteLocalRef(ters_j, t); return r; }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_ask };
+static void j_outline(void *c, void *v, const double *xy, size_t n) {
+  (void)c;
+  jdoubleArray a = (*ters_j)->NewDoubleArray(ters_j, (jsize)(2 * n));
+  (*ters_j)->SetDoubleArrayRegion(ters_j, a, 0, (jsize)(2 * n), xy);
+  TERS_J(17, ters_id(v), a);
+  (*ters_j)->DeleteLocalRef(ters_j, a);
+}
+static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ters_js(what, n); jint r = (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[18], t); (*ters_j)->DeleteLocalRef(ters_j, t); return r; }
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_outline, j_ask };
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[18][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "ask", "(Ljava/lang/String;)I" } };
-  for (int i = 0; i < 18; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[19][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" }, { "ask", "(Ljava/lang/String;)I" } };
+  for (int i = 0; i < 19; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -389,7 +396,7 @@ public class MainActivity extends Activity {
 
   void clear(int id) { View v = views.get(id); if (v instanceof ViewGroup) ((ViewGroup) v).removeAllViews(); }
 
-  void gone(int id) { views.remove(id); inside.remove(id); painted.remove(id); sided.remove(id); moments.remove(id); }
+  void gone(int id) { views.remove(id); inside.remove(id); painted.remove(id); sided.remove(id); shaped.remove(id); moments.remove(id); }
 
   // The platform's moments (L236, html.ts PLATFORM_EVENTS), each heard by
   // the views on the page that listen for it: the back button or gesture
@@ -448,7 +455,9 @@ public class MainActivity extends Activity {
 
   // A box's paint and its borders on single sides, kept so either can
   // change without the other.
-  private final HashMap<Integer, double[]> painted = new HashMap<>(), sided = new HashMap<>();
+  private final HashMap<Integer, double[]> painted = new HashMap<>(), sided = new HashMap<>(), shaped = new HashMap<>();
+  // A box's shape (clip-path: polygon), its points in dp from its top left.
+  void outline(int id, double[] xy) { if (xy.length >= 6) shaped.put(id, xy); else shaped.remove(id); background(id); }
   void paint(int id, int bg, double radius, double border, int borderColour) { painted.put(id, new double[] { bg, radius, border, borderColour }); background(id); }
   void sides(int id, double top, double right, double bottom, double left, int colour) { sided.put(id, new double[] { top, right, bottom, left, colour }); background(id); }
   private void background(int id) {
@@ -458,6 +467,8 @@ public class MainActivity extends Activity {
     int bg = p == null ? 0 : (int) (long) p[0];
     double border = p == null ? 0 : p[2];
     boolean sides = s != null && (s[0] > 0 || s[1] > 0 || s[2] > 0 || s[3] > 0);
+    double[] shape = shaped.get(id);
+    if (shape != null && bg != 0) { v.setBackground(new Shaped(shape, bg, density)); return; }
     if (bg == 0 && border == 0 && !sides) { v.setBackground(null); return; }
     GradientDrawable d = new GradientDrawable();
     d.setColor(bg);
@@ -479,6 +490,19 @@ public class MainActivity extends Activity {
       if (w[2] > 0) c.drawRect(b.left, b.bottom - w[2], b.right, b.bottom, brush);
       if (w[3] > 0) c.drawRect(b.left, b.top, b.left + w[3], b.bottom, brush);
     }
+    @Override public void setAlpha(int a) {}
+    @Override public void setColorFilter(android.graphics.ColorFilter f) {}
+    @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+  }
+  // A box's paint inside its shape only.
+  static final class Shaped extends android.graphics.drawable.Drawable {
+    private final Path path = new Path(); private final Paint brush = new Paint(Paint.ANTI_ALIAS_FLAG);
+    Shaped(double[] xy, int colour, float density) {
+      brush.setColor(colour);
+      for (int i = 0; i + 1 < xy.length; i += 2) { float x = (float) (xy[i] * density), y = (float) (xy[i + 1] * density); if (i == 0) path.moveTo(x, y); else path.lineTo(x, y); }
+      path.close();
+    }
+    @Override public void draw(Canvas c) { c.save(); c.translate(getBounds().left, getBounds().top); c.drawPath(path, brush); c.restore(); }
     @Override public void setAlpha(int a) {}
     @Override public void setColorFilter(android.graphics.ColorFilter f) {}
     @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }

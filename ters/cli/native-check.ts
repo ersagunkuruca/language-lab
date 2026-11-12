@@ -30,7 +30,7 @@ const INPUT_REFUSED = new Set(["checkbox", "radio", "range", "color", "date", "d
 
 // Properties c-layout.ts reads (tl_decl), and custom properties.
 const READ = new Set(["animation", "animation-delay", "animation-duration", "animation-name", "aspect-ratio", "background", "background-color", "border", "border-bottom",
-  "border-color", "border-left", "border-radius", "border-right", "border-top", "box-sizing", "color", "column-gap", "display", "fill", "fill-opacity", "flex", "flex-basis", "flex-direction", "flex-grow", "flex-shrink", "align-items",
+  "border-color", "border-left", "border-radius", "border-right", "border-top", "box-sizing", "color", "column-gap", "display", "clip-path", "fill", "fill-opacity", "flex", "flex-basis", "flex-direction", "flex-grow", "flex-shrink", "align-items",
   "flex-wrap", "font", "font-size", "font-weight", "gap", "grid-template-columns", "height", "left", "line-height", "margin", "margin-bottom", "margin-top", "max-height",
   "max-width", "min-height", "overflow", "padding", "padding-bottom", "padding-top", "pointer-events", "position", "row-gap", "stroke", "stroke-dasharray",
   "stroke-linejoin", "stroke-opacity", "stroke-width", "text-align", "top", "width"]);

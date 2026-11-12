@@ -68,6 +68,7 @@ public class MainActivity {
   void clip(int id, int on) {}
   void scroll(int id, double h) {}
   void sides(int id, double t, double r, double b, double l, int c) {}
+  void outline(int id, double[] xy) {}
   // The person's answer to a permission asked (L236b): -1, asked; answered by main's permission:yes or permission:no.
   int ask(String what) { System.out.println("ask " + what); return -1; }
   static String g(double x) { if (x == 0) return "0"; return new BigDecimal(x).round(new MathContext(6)).stripTrailingZeros().toPlainString(); }

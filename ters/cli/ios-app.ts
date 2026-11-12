@@ -16,11 +16,18 @@ export function tersUiDecl(c: string): string {
   return m[0];
 }
 
-export function iosAppFolder(title: string, c: string): Record<string, string> {
+// A view hosts/ios.m draws (L235): its function's name and its inputs'
+// kinds, in order.
+export interface IosView { name: string; ins: string[] }
+
+// `objc`: the program's hosts/ios.m, whose functions give the views of the
+// platform's own the page places (`views`).
+export function iosAppFolder(title: string, c: string, objc?: string, views: IosView[] = []): Record<string, string> {
   const id = nativeAppId(title);
   return {
     "page.c": c,
-    "Screen.m": PAGE_M(tersUiDecl(c)),
+    "Screen.m": PAGE_M(tersUiDecl(c), foreignViews(views)),
+    ...(objc ? { "hosts.m": objc } : {}),
     "Info.plist": `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -55,7 +62,9 @@ APP="${title.replace(/["$`\\]/g, "")}.app"
 rm -rf "$APP" build && mkdir -p "$APP" build
 xcrun -sdk "$SDK" clang -target "$TARGET" -c page.c -o build/page.o -O2 -ffp-contract=off -fwrapv -DLAB_FIBER_SJLJ -w
 xcrun -sdk "$SDK" clang -target "$TARGET" -c Screen.m -o build/screen.o -O2 -fobjc-arc
-xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
+HOSTS=
+if [ -f hosts.m ]; then xcrun -sdk "$SDK" clang -target "$TARGET" -c hosts.m -o build/hosts.o -O2 -fobjc-arc; HOSTS=build/hosts.o; fi
+xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o $HOSTS -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
 cp Info.plist "$APP/"
 codesign --force --sign - "$APP"
 echo "$APP"
@@ -79,7 +88,20 @@ const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 // main thread, with views named by numbers from 1 as on Android
 // (native-app.ts ACTIVITY, which this follows). Places and sizes are in
 // points, which are the page's px as Android's dp are.
-const PAGE_M = (decl: string) => String.raw`// The page: made and laid out in C (page.c) and drawn with UIKit's views,
+// Screen.m's call of hosts/ios.m's view by the name a box's tag gives
+// (native-views.ts: the tag, the name and the inputs, each after U+001F),
+// the inputs read back as their kinds; nil where none answers.
+const OBJC_IN: Record<string, [string, (x: string) => string]> = {
+  int: ["int64_t", (x) => `[${x} longLongValue]`], float: ["double", (x) => `[${x} doubleValue]`],
+  text: ["NSString *", (x) => x], bool: ["BOOL", (x) => `[${x} isEqualToString:@"true"]`],
+};
+function foreignViews(views: IosView[]): string {
+  const decls = views.map((v) => `UIView *${v.name}(${v.ins.map((k) => OBJC_IN[k]?.[0] ?? "NSString *").join(", ") || "void"});`);
+  const calls = views.map((v) => `  if ([p[1] isEqualToString:@"${v.name}"] && p.count == ${v.ins.length + 2}) return ${v.name}(${v.ins.map((k, i) => (OBJC_IN[k]?.[1] ?? ((x: string) => x))(`p[${i + 2}]`)).join(", ")});`);
+  return [...decls, "static UIView *foreignView(NSArray<NSString *> *p) {", ...calls, "  return nil;", "}"].join("\n");
+}
+
+const PAGE_M = (decl: string, foreign: string) => String.raw`// The page: made and laid out in C (page.c) and drawn with UIKit's views,
 // which C asks for through ters_ui.
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -93,6 +115,9 @@ int ters_ui_pointer(void *view, int kind, double x, double y);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
 int ters_page_clock(void);
 int ters_page_frame(void);
+
+// The views of the platform's own hosts/ios.m draws (L235).
+${foreign}
 
 static UIColor *colour(uint32_t c) { return [UIColor colorWithRed:((c >> 16) & 255) / 255.0 green:((c >> 8) & 255) / 255.0 blue:(c & 255) / 255.0 alpha:(c >> 24) / 255.0]; }
 static NSString *str(const char *s, size_t n) { return [[NSString alloc] initWithBytes:s length:n encoding:NSUTF8StringEncoding] ?: @""; }
@@ -216,6 +241,17 @@ static void *u_box(void *c, const char *tag, size_t n) {
     return put(f);
   }
   if ([t isEqualToString:@"textarea"]) { UITextView *f = [UITextView new]; f.delegate = P; f.backgroundColor = UIColor.clearColor; f.textContainerInset = UIEdgeInsetsZero; return put(f); }
+  // A view of the platform's own (L235, native-views.ts): the tag names
+  // hosts/ios.m's function and gives its inputs; the view it gives is the
+  // box. One that can't be had says why where it would be.
+  if ([t hasPrefix:@"ters-view\x1f"]) {
+    NSArray<NSString *> *p = [t componentsSeparatedByString:@"\x1f"];
+    UIView *v = p.count > 1 ? foreignView(p) : nil;
+    if (v) return put(v);
+    printf("view %s: hosts/ios.m has none\n", p.count > 1 ? p[1].UTF8String : "?");
+    TLabel *l = [TLabel new]; l.numberOfLines = 0; l.said = [NSString stringWithFormat:@"This view can't be shown here: hosts/ios.m has no %@", p.count > 1 ? p[1] : @"view"]; [l show];
+    return put(l);
+  }
   if ([t isEqualToString:@"svg"]) { TPicture *p = [TPicture new]; p.opaque = NO; p.backgroundColor = UIColor.clearColor; p.contentMode = UIViewContentModeRedraw; p.clipsToBounds = YES; return put(p); }
   return put([TBox new]);
 }
@@ -313,7 +349,20 @@ static void u_listen(void *c, void *v, const char *e, size_t n, int h) {
     P.moments[num][ev] = @(h);
   }
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides };
+// A box's shape (clip-path: polygon): n points in its box, which cut its
+// paint and what's inside it; n 0 is its own box again.
+static void u_outline(void *c, void *v, const double *xy, size_t n) {
+  UIView *a = V(v);
+  if (!a) return;
+  if (n < 3) { a.layer.mask = nil; return; }
+  UIBezierPath *p = [UIBezierPath bezierPath];
+  for (size_t i = 0; i < n; i++) { CGPoint q = CGPointMake(xy[2 * i], xy[2 * i + 1]); if (i) [p addLineToPoint:q]; else [p moveToPoint:q]; }
+  [p closePath];
+  CAShapeLayer *m = [CAShapeLayer layer];
+  m.path = p.CGPath;
+  a.layer.mask = m;
+}
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline };
 
 @implementation TPage
 - (void)viewDidLoad {
@@ -401,7 +450,9 @@ static void placed(UIView *v, NSMutableArray *out) {
 static void shown(NSString *when) {
   NSMutableArray *at = [NSMutableArray new];
   placed(P.page, at);
-  printf("---- %s\n%s\n%s\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String);
+  int shaped = 0;
+  for (UIView *v in P.views.allValues) if (v.layer.mask && !v.hidden) shaped++;
+  printf("---- %s\n%s\n%s\nshaped boxes (clip-path): %d\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String, shaped);
   fflush(stdout);
 }
 - (void)check:(NSArray<NSString *> *)taps {
@@ -508,7 +559,7 @@ static void shown(NSString *when) {
   self.window.rootViewController = page;
   [self.window makeKeyAndVisible];
   NSString *taps = [NSUserDefaults.standardUserDefaults stringForKey:@"ters-taps"];
-  if (taps) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ shown(@"started"); [page check:[taps componentsSeparatedByString:@"|"]]; });
+  if (taps) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{ shown(@"started"); [page check:[[taps componentsSeparatedByString:@"|"] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]]]; });
   return YES;
 }
 @end

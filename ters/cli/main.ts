@@ -478,7 +478,7 @@ function answeredHere(q: Program): Program {
   if (!["run", "compile", "native", "wasi", "build-web", "build-app", "build-native-app"].includes(command)) return q;
   const hostText = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : ""; };
   const has = command === "native" ? cHostHas(hostText("c.c"))
-    : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText("android.java"))
+    : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText(rest.includes("--ios") ? "ios.m" : "android.java"))
     : command === "wasi" ? () => false
     : jsHostHas(hosts);
   const asked = answerSupports(q.code, q.info, answeredEffects(q.code, has));
@@ -652,14 +652,17 @@ switch (command) {
     // --ios (C199e): an iPhone app of the same C on UIKit's views
     // (cli/ios-app.ts); its own effects from hosts/c.c only.
     const ios = rest.includes("--ios");
-    const cHost = own("c.c"), java = ios ? undefined : own("android.java"), ops = hostOpsOf(p.code, p.names);
+    const cHost = own("c.c"), java = ios ? undefined : own("android.java"), objc = ios ? own("ios.m") : undefined, ops = hostOpsOf(p.code, p.names);
     let fromJava = "";
     try { fromJava = java ? androidHostsC(Object.values(ops).filter((h) => h.out.k !== "view" && (!cHost || !new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(cHost))), java) : ""; } catch (e) { fail((e as Error).message); }
     const hosts = { ops, c: cHost || fromJava ? [cHost ?? "", fromJava].join("\n") : undefined };
     const { lowered, root } = nativeLowered(main, false, true);
     let c: string;
     try { c = emitC(lowered, { main: root, page: "ui", hosts }).c; } catch (e) { fail((e as Error).message); }
-    for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c) : nativeAppFolder(p.title, c, java))) {
+    // The views hosts/ios.m draws (L235), each a function of its inputs
+    // giving a UIView, which Screen.m calls by name.
+    const iosViews = Object.values(ops).filter((h) => h.out.k === "view" && objc && new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(objc)).map((h) => ({ name: hostCName(h.op), ins: h.ins.map((x) => x.k) }));
+    for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c, objc, iosViews) : nativeAppFolder(p.title, c, java))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }
