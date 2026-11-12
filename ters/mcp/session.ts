@@ -319,6 +319,8 @@ export class Session {
   // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
   // the ports given by name and the one left out the value.
   private fill(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const steps = this.stepsIn(code, names, hole, text, def);
+    if (steps) return steps;
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def);
     const solve = this.solveIn(code, names, hole, text);
     if (!solve) return this.fillOne(code, names, hole, text, def, as);
@@ -357,6 +359,31 @@ export class Session {
     return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
   }
 
+  // Steps on lines of their own, as the view prints a let (I217 M5):
+  //   c = cost(shift)
+  //   k = c * 2
+  //   k + 1
+  // each step read as `c = …; □`, and the lines after it into that hole,
+  // so the last may be a match on lines (`ds = …` then `match ds`, M4).
+  // Null when the text isn't steps: one line, or a first line that isn't
+  // `name = value` with more at its indent.
+  private stepsIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } | null {
+    const lines = text.replace(/^\s*\n/, "").split("\n").filter((l) => l.trim());
+    if (lines.length < 2) return null;
+    const indent = (l: string) => l.length - l.trimStart().length;
+    const top = indent(lines[0]);
+    const step = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
+    const next = lines.findIndex((l, i) => i > 0 && indent(l) <= top);
+    if (!step || next < 0 || /^match\s/.test(lines[0].trim())) return null;
+    // The step's value may go on over deeper lines.
+    const value = [step[2], ...lines.slice(1, next).map((l) => l.trim())].join(" ");
+    const r = this.fillOne(code, names, hole, `${step[1]} = ${value}; □`, def);
+    if (!r.ok) return r;
+    const call = r.code.nodes[hole], fn = isCall(call) ? r.code.nodes[call.fn] : undefined;
+    if (fn?.kind !== "lambda" || r.code.nodes[fn.body]?.kind !== "hole") return { ok: false, reason: `${step[1]} = ${value} doesn't read as a step` };
+    return this.fill(r.code, r.names, fn.body, lines.slice(next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n"), def);
+  }
+
   // A match written as view prints it (I212), one case a line:
   //   match ids
   //     nil → m
@@ -386,11 +413,25 @@ export class Session {
     }
     const all = baseNames(names);
     const on = norm(head);
-    const binder = T.scopeAt(code, def, hole).filter((b) => all[b] === on).at(-1);
-    if (!binder) return { ok: false, reason: `match reads a variable here, and nothing in scope is named ${on}: give the value a name with a step first` };
-    const read = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
-    const bad = read.findIndex((k) => !k);
+    const scope = T.scopeAt(code, def, hole);
+    const binder = scope.filter((b) => all[b] === on).at(-1);
+    // A match on a value that isn't a name in scope (`match cases of(x)`,
+    // M4): the value named first, as a step, and the match on that name.
+    if (!binder) {
+      if (/^[\p{L}_][\p{L}\p{N}_' ]*$/u.test(on)) return { ok: false, reason: `match reads a variable here, and nothing in scope is named ${on}` };
+      const taken = new Set(scope.map((b) => all[b]));
+      let name = "it";
+      for (let i = 2; taken.has(name); i++) name = `it ${i}`;
+      return this.fill(code, names, hole, `${name} = ${head}\nmatch ${name}\n${cases.map((c) => "  " + c.replace(/\n/g, "\n  ")).join("\n")}`, def);
+    }
+    const parsed = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
+    const bad = parsed.findIndex((k) => !k);
     if (bad >= 0) return { ok: false, reason: `a case reads Case(fields) → value, not ${cases[bad].trim()}` };
+    // `otherwise → value` (M3), as the view folds the cases left: each
+    // case not written gets the value.
+    const otherwise = parsed.filter((k) => norm(k![1]) === "otherwise");
+    if (otherwise.length > 1) return { ok: false, reason: "otherwise is written twice" };
+    const read = parsed.filter((k) => norm(k![1]) !== "otherwise");
     // A variable nothing has typed yet (a new function's input) is split
     // on the data type the cases name, as split's `as` says it.
     const written = read.map((k) => norm(k![1]));
@@ -417,6 +458,11 @@ export class Session {
       fields.forEach((f, i) => { (cur as { names: Names }).names[arm.binds[i]] = f; });
       const body = k[3].trim();
       if (body && body !== "□" && body !== "?") cur = this.fill(cur.code, cur.names, arm.body, body.replace(/[‹›]/g, ""), def);
+    }
+    const rest = otherwise[0]?.[3].trim();
+    if (rest && rest !== "□" && rest !== "?") for (const arm of arms) if (!seen.has(arm.id)) {
+      if (!cur.ok) return cur;
+      cur = this.fill(cur.code, cur.names, arm.body, rest.replace(/[‹›]/g, ""), def);
     }
     return cur;
   }
