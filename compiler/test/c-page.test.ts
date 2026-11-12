@@ -159,6 +159,9 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   // Its font-size, 1.4em of the 15 it is in (not of an h1's own 2em): 21,
   // three lines of 31.5, as Chromium.
   assert.match(lines[2], /^h1 40 40 280 94.5$/);
+  // Its triangles and diamonds (clip-path: polygon) in their 36 boxes.
+  assert.ok(lines.some((l) => / bg FFF3A712 outline 18,1.44 34.92,33.84 1.08,33.84$/.test(l)));
+  assert.ok(lines.some((l) => / bg FF6C4AB6 outline 18,0 36,18 18,36 0,18$/.test(l)));
   const lane = lines.findIndex((s) => s.startsWith("div 40") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
   assert.equal(lines[lane + 1].split(" ")[0], "h2");
   assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);
@@ -170,6 +173,23 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   assert.equal(at(note)[2], 166);
   const foot = at(box - 2), b = at(box), n = at(note);
   assert.ok(Math.abs(b[1] - foot[1] - (foot[3] - 96) / 2) < 0.01 && Math.abs(n[1] - foot[1] - (foot[3] - n[3]) / 2) < 0.01, `${foot} ${b} ${n}`);
+});
+
+// An empty block lets margins collapse through it (C199f): bounce's
+// worlds 16 under its lead (the larger of the lead's 15, the empty div's
+// 0 and the worlds' 16), as Chromium.
+test("bounce laid out in C: margins collapse through an empty block (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/bounce"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const lines = r.stdout.toString().split("\n").map((s) => s.trim().split(" "));
+  const lead = lines.findIndex((s) => s[0] === "p"), worlds = lead + 3; // its text, the empty div, the worlds
+  assert.equal(Number(lines[worlds][2]) - Number(lines[lead][2]) - Number(lines[lead][4]), 16);
+  // Its cards grow to the row (flex: 1 1 320px), 296 wide.
+  assert.equal(lines[worlds + 1][3], "296");
 });
 
 // Pictures drawn in C (C199f): each shape's box against its svg, as

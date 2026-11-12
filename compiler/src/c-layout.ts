@@ -49,6 +49,10 @@ typedef struct ters_ui {
   // A box's borders on single sides (border-bottom and the rest; top,
   // right, bottom, left wide), in colour, inside its box. May be null.
   void (*sides)(void *ctx, void *v, const double *wide, uint32_t colour);
+  // A box's shape (clip-path: polygon; tumble's triangles and diamonds):
+  // n points, x then y, in its box from its top left. Its paint is cut to
+  // it; n 0 is its own box again. May be null.
+  void (*outline)(void *ctx, void *v, const double *xy, size_t n);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -74,6 +78,9 @@ typedef struct {
   // As a flex item: flex-grow, flex-shrink 0 (fixed), flex-basis (set);
   // as a flex box, align-items: 0 stretch, 1 start, 2 center, 3 end.
   double grow, basis; int fixed, set_basis, items;
+  // clip-path: polygon(...): each point's x and y, and whether each is in
+  // % of the box.
+  int npoly; double poly[12][4];
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -93,7 +100,7 @@ typedef struct tl_n {
   int sent, m_bold, m_lines, measured, sent_clip;
   // How high what's inside it is (its height as nothing held it), and what
   // the screen was told of it, for a box that scrolls.
-  double inside, sent_inside, sent_side[5];
+  double inside, sent_inside, sent_side[5], sent_outline[25];
   // The animation running on it (C199f): its name, when it started (ms),
   // whether it ended, and what it does to the box now (moved by ax, ay,
   // scaled by as round its middle, opacity ao).
@@ -541,6 +548,24 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
       q = z;
     }
   }
+  else if (TL_IS("clip-path")) {
+    c->npoly = 0;
+    if (TL_V("polygon(")) {
+      const char *p = v + 8;
+      while (p < e && *p != ')' && c->npoly < 12) {
+        double *q = c->poly[c->npoly];
+        for (int a = 0; a < 2; a++) {
+          while (p < e && (*p == ' ' || *p == ',')) p++;
+          char *z; q[2 * a] = strtod(p, &z);
+          if (z == p) { c->npoly = 0; return; }
+          q[2 * a + 1] = *z == '%'; p = z;
+          while (p < e && *p != ' ' && *p != ',' && *p != ')') p++;
+        }
+        c->npoly++;
+        while (p < e && *p == ' ') p++;
+      }
+    }
+  }
   else if (TL_IS("overflow")) c->clip = TL_V("hidden") || TL_V("clip") ? 1 : TL_V("auto") || TL_V("scroll") ? 2 : 0;
   else if (TL_IS("position")) c->pos = TL_V("absolute") || TL_V("fixed") ? 2 : TL_V("relative") ? 1 : 0;
   else if (TL_IS("width")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->w = x, c->set_w = 1, c->wpct = 0; else if (ok == 2) c->wpct = x, c->set_w = 0; }
@@ -812,6 +837,14 @@ static double tl_flow(tl_n *e, double w) {
     if (block) {
       if (inl) { y += lineh; x = 0; lineh = 0; inl = 0; }
       tl_lay(k, w - k->c.mar[1] - k->c.mar[3]);
+      // An empty block (nothing in it, no padding or border) lets the
+      // margins round it collapse through it, its own too.
+      if (k->h == 0 && !k->c.set_h && !k->c.pad[0] && !k->c.pad[2] && !k->c.bw && !k->c.side[0] && !k->c.side[2]) {
+        double m = below; if (k->c.mar[0] > m) m = k->c.mar[0]; if (k->c.mar[2] > m) m = k->c.mar[2];
+        k->x = ox + k->c.mar[3]; k->y = oy + y - below;
+        y += m - below; below = m;
+        continue;
+      }
       // Margins of blocks one under another collapse to the larger.
       double top = k->c.mar[0] > below ? k->c.mar[0] - below : 0;
       double mx = k->c.mar[3];
@@ -1125,6 +1158,11 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
     double sd[5] = { e->c.side[0] * as, e->c.side[1] * as, e->c.side[2] * as, e->c.side[3] * as, e->c.sidec };
     if (((e->sent & 32) || sd[0] || sd[1] || sd[2] || sd[3]) && (!(e->sent & 32) || memcmp(sd, e->sent_side, sizeof sd))) { e->sent |= 32; memcpy(e->sent_side, sd, sizeof sd); tl_ui->sides(tl_ui->ctx, e->view, sd, e->c.sidec); }
   }
+  if (tl_ui->outline && (e->c.npoly || (e->sent & 64))) {
+    double o[25] = { e->c.npoly };
+    for (int i = 0; i < e->c.npoly; i++) { const double *q = e->c.poly[i]; o[1 + 2 * i] = (q[1] ? e->w * q[0] / 100 : q[0]) * as; o[2 + 2 * i] = (q[3] ? e->h * q[2] / 100 : q[2]) * as; }
+    if (!(e->sent & 64) || memcmp(o, e->sent_outline, sizeof o)) { e->sent |= 64; memcpy(e->sent_outline, o, sizeof o); tl_ui->outline(tl_ui->ctx, e->view, o + 1, (size_t)e->c.npoly); }
+  }
   if (tl_ui->scroll && e->c.clip == 2 && (!(e->sent & 16) || e->sent_inside != e->inside)) { e->sent |= 16; e->sent_inside = e->inside; tl_ui->scroll(tl_ui->ctx, e->view, e->inside); }
   if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
@@ -1360,7 +1398,7 @@ void ters_ui_resize(double width, int dark) {
 // size wide, so places that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
 export const UI_HEADLESS_C = String.raw`
-typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip; double inside, side[4]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
+typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
 static void *u_box(void *c, const char *t, size_t n) { (void)c; return u_new(t, n, 0, 0); }
 static void *u_text(void *c, const char *s, size_t n) { (void)c; return u_new(0, 0, s, n); }
@@ -1378,6 +1416,7 @@ static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv 
 static void u_clip(void *c, void *x, int on) { (void)c; ((uv *)x)->clip = on; }
 static void u_scroll(void *c, void *x, double inside) { (void)c; ((uv *)x)->inside = inside; }
 static void u_sides(void *c, void *x, const double *w, uint32_t colour) { (void)c; uv *v = x; memcpy(v->side, w, sizeof v->side); v->sidec = colour; }
+static void u_outline(void *c, void *x, const double *xy, size_t n) { (void)c; uv *v = x; v->nout = (int)n; memcpy(v->out, xy, sizeof *xy * 2 * n); }
 static void u_place(void *c, void *x, double px, double py, double w, double h, int shown) { (void)c; uv *v = x; v->x = px; v->y = py; v->w = w; v->h = h; v->shown = shown; }
 static void u_paint(void *c, void *x, uint32_t bg, double radius, double border, uint32_t bc) { (void)c; (void)bc; uv *v = x; v->bg = bg; v->radius = radius; v->border = border; }
 static void u_font(void *c, void *x, double size, int bold, uint32_t color, int align, double line) { (void)c; (void)align; (void)line; uv *v = x; v->size = size; v->bold = bold; v->color = color; }
@@ -1410,6 +1449,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && v->clip) printf(" clip");
   if (v->tag && v->clip == 2) printf(" scroll %g", v->inside);
   if (v->tag && (v->side[0] || v->side[1] || v->side[2] || v->side[3])) printf(" sides %g %g %g %g %08X", v->side[0], v->side[1], v->side[2], v->side[3], v->sidec);
+  if (v->tag && v->nout) { printf(" outline"); for (int i = 0; i < v->nout; i++) printf(" %g,%g", v->out[2 * i], v->out[2 * i + 1]); }
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
   putchar('\n');
   // A picture's shapes, one a line: the box round its points on the page
@@ -1460,7 +1500,7 @@ static void u_frame(uv *v, double s) {
 }
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
 int main(int argc, char **argv) {
-  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides };
+  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline };
   double width = 360; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
