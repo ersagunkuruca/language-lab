@@ -36,7 +36,7 @@ test("an iPhone app asks iOS for a permission a page asks for (L236b)", () => {
   const out = spawnSync(process.execPath, [ters, "build-native-app", join(dir, "p"), "--ios", "-o", join(dir, "app")], { encoding: "utf8" });
   assert.equal(out.status, 0, out.stderr);
   const screen = readFileSync(join(dir, "app", "Screen.m"), "utf8");
-  assert.match(screen, /u_outline, u_ask \};/);
+  assert.match(screen, /u_outline, u_ask, (0|u_sound) \};/);
   assert.match(screen, /requestAccessForMediaType/);
   assert.match(readFileSync(join(dir, "app", "Info.plist"), "utf8"), /NSMicrophoneUsageDescription/);
   assert.match(readFileSync(join(dir, "app", "build.sh"), "utf8"), /-framework AVFoundation/);
