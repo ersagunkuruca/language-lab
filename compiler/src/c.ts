@@ -1187,6 +1187,78 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const pr = ci(A, "std.attribute.property"), on = ci(A, "std.attribute.on");
     const TF = H.cases[tx].fields[0].t as FType, PF = H.cases[pt].fields[0].t as FType, VF = A.cases[pr].fields[1].t as FType, EF = A.cases[on].fields[1].t as FType;
     const E = EF.params[0] as RType;
+    // A handler that asks for a permission waits for the person's answer
+    // (L236b), as a browser page's does: it runs on a fiber of its own,
+    // which parks where it asks; the page shows what it wrote so far, and
+    // when the person answers (ters_page_permission) it goes on from
+    // there. The screen is asked from the page's own stack, not the
+    // fiber's (Android's Java checks its stack). An event while a handler
+    // is parked runs at once, and its own asks can't wait: no, unless
+    // already known.
+    const waits = rts.has("world.askPermission");
+    if (waits) rts.add("fibers");
+    const PARKED_C = `#include <string.h>
+static lab__ctx ters_ev_back, ters_ev_at;
+static lab__fiber ters_ev_fiber;
+// in: on the fiber; asking: parked to ask for what; parked: waiting for
+// the person; said: their answer; ok: whether the handler finished well.
+static int ters_ev_in, ters_ev_asking, ters_ev_parked, ters_ev_said, ters_ev_ok;
+static char *ters_ev_what; static size_t ters_ev_wn;
+static lab_cell *ters_ev_f; static ${ty(E)} ters_ev_e;
+// Handled operations' frames (c-rt.ts fibers) the parked handler had
+// above the page's, put back when it goes on.
+static lab__frame **ters_ev_off; static int ters_ev_noff, ters_ev_base; static lab__fiber *ters_ev_fcur;
+static void ters_ev_body(void) {
+  ters_ev_ok = ters_ev_run(ters_ev_f, ters_ev_e);
+  ters_ev_asking = 0;
+  LAB_CSET(&ters_ev_back);
+}
+static int ters_ask(const char *what, size_t n) {
+  if (!ters_asker) return 1;
+  if (!ters_ev_in) { if (ters_ev_parked) return 0; int r = ters_asker(what, n); return r < 0 ? 0 : r; }
+  free(ters_ev_what);
+  ters_ev_what = malloc(n + 1);
+  if (!ters_ev_what) lab_oom();
+  memcpy(ters_ev_what, what, n); ters_ev_what[n] = 0; ters_ev_wn = n;
+  ters_ev_noff = lab__fn - ters_ev_base;
+  ters_ev_off = realloc(ters_ev_off, (size_t)(ters_ev_noff + 1) * sizeof *ters_ev_off);
+  if (!ters_ev_off) lab_oom();
+  for (int j = 0; j < ters_ev_noff; j++) ters_ev_off[j] = lab__fs[ters_ev_base + j];
+  lab__fn = ters_ev_base;
+  lab__fiber *cur = lab__fcur;
+  lab__fcur = ters_ev_fcur;
+  ters_ev_asking = 1;
+  LAB_CSWAP(&ters_ev_at, &ters_ev_back);
+  lab__fcur = cur;
+  for (int j = 0; j < ters_ev_noff; j++) lab__fpush(ters_ev_off[j]);
+  return ters_ev_said;
+}
+// Into the fiber (where the handler starts or waits) until it finishes or
+// waits for the person. Whether the handler finished well (a wait: 1).
+static int ters_ev_go(lab__ctx *to) {
+  for (;;) {
+    ters_ev_fcur = lab__fcur; ters_ev_base = lab__fn;
+    ters_ev_in = 1;
+    LAB_CSWAP(&ters_ev_back, to);
+    ters_ev_in = 0;
+    if (!ters_ev_asking) return ters_ev_ok;
+    int r = ters_asker(ters_ev_what, ters_ev_wn);
+    if (r < 0) { ters_ev_parked = 1; return 1; }
+    ters_ev_said = r; to = &ters_ev_at;
+  }
+}
+static int ters_ev_start(void) {
+  if (!ters_ev_fiber.stack && !(ters_ev_fiber.stack = malloc(LAB_FIBER_STACK))) lab_oom();
+  LAB_CMAKE(&ters_ev_fiber.ctx, ters_ev_body, ters_ev_fiber.stack, LAB_FIBER_STACK);
+  return ters_ev_go(&ters_ev_fiber.ctx);
+}
+// The person answered what a parked handler asked: 1 yes, 0 no. It goes
+// on, and the page shows what changed. 0 when the handler stopped.
+int ters_page_permission(int yes) {
+  if (!ters_ev_parked) return 1;
+  ters_ev_parked = 0; ters_ev_said = yes;
+  return ters_shown(ters_ev_go(&ters_ev_at));
+}`;
     const call = (f: FType, c: string, xs: string[] = []) => `((${fname.get(f.key)})((lab_closure *)${c})->code)(${[c, ...xs].join(", ")})`;
     const field = (t: DType, c: number, j: number, v: string) => `((${cname(t, c)} *)${v})->f${j}`;
     return `// The page (C199b): main's Html on a view host.
@@ -1383,10 +1455,10 @@ static void ters_refresh(ters_m *m) {
   for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${pr}) ters_show(m, &m->attrs[j]);
   for (int j = 0; j < m->nk; j++) ters_refresh(m->kids[j]);
 }
-// main's page on host h: its root's view, or null when main has no answer.
+${waits ? "static int ters_ask(const char *what, size_t n);\n" : ""}// main's page on host h: its root's view, or null when main has no answer.
 void *ters_page_start(ters_host *h) {
   ters_h = h;
-  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+  ${waits ? "lab_ask = ters_ask;\n  " : ""}${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   lab_cell *html = ${names.get(i)}();
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
   ters_root = ters_mount(html);
@@ -1394,6 +1466,26 @@ void *ters_page_start(ters_host *h) {
   ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
   return ters_root->view;
 }
+// The person's answer to a permission asked (L236b): 1 yes, 0 no, -1
+// not yet (the screen asks and answers later, by ters_page_permission).
+// Null: the screen asks nothing, and the answer is yes.
+static int (*ters_asker)(const char *what, size_t n);
+static int ters_ev_run(lab_cell *f, ${ty(E)} e) {
+  ${ty(EF.result)} r = ${call(EF, "f", ["e"])};
+  (void)r;
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
+  return 1;
+}
+// The page shows what changed.
+static int ters_shown(int ok) {
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
+  ters_refresh(ters_root);
+  lab_nwr = 0;
+  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
+  if (ters_after) ters_after();
+  return ok;
+}
+${waits ? PARKED_C : "int ters_page_permission(int yes) { (void)yes; return 1; }"}
 // An event given to handler n: what was typed or chosen, the key, where
 // the pointer is and the seconds since the frame before. Then the page
 // shows what changed. 0 when the handler stopped (an abort).
@@ -1402,16 +1494,8 @@ int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t
   lab_cell *f = ters_handlers[n];
   lab_dup(f);
   ${ty(E)} e = { lab__text_of(value, vn), lab__text_of(key, kn), x, y, seconds };
-  ${ty(EF.result)} r = ${call(EF, "f", ["e"])};
-  (void)r;
-  int ok = 1;
-  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ok = 0; }
-  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
-  ters_refresh(ters_root);
-  lab_nwr = 0;
-  ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
-  if (ters_after) ters_after();
-  return ok;
+  ${waits ? "if (!ters_ev_parked) { ters_ev_f = f; ters_ev_e = e; return ters_shown(ters_ev_start()); }" : ""}
+  return ters_shown(ters_ev_run(f, e));
 }
 // Whether what the page shows read the clock, so it runs again each frame.
 int ters_page_clock(void) { return ters_clock || (ters_moving && ters_moving(0)); }
