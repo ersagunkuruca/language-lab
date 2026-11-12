@@ -303,7 +303,10 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   requestPermissions from the page's own stack, not the fiber's, and its
   manifest names the permissions when the page asks. An event while a
   handler waits runs at once, and what it asks is no unless already
-  given. Not yet: WebAssembly and the iOS app (its ask is null: yes).
+  given. The iOS app asks the same way (Screen.m's u_ask): AVCaptureDevice
+  for camera and microphone, CLLocationManager for location,
+  UNUserNotificationCenter for notifications, its Info.plist saying why
+  when the page asks. Not yet: WebAssembly.
 
 ## The order of the work, one PR each
 

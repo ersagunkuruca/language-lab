@@ -20,6 +20,10 @@ export function tersUiDecl(c: string): string {
 // kinds, in order.
 export interface IosView { name: string; ins: string[] }
 
+// What iOS shows in its dialog when a page asks for a permission (L236b);
+// an app that asks without these stops.
+const ASKABLE = ["NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationWhenInUseUsageDescription"].map((k) => `  <key>${k}</key><string>This page asks for it.</string>\n`).join("");
+
 // `objc`: the program's hosts/ios.m, whose functions give the views of the
 // platform's own the page places (`views`).
 export function iosAppFolder(title: string, c: string, objc?: string, views: IosView[] = []): Record<string, string> {
@@ -44,7 +48,7 @@ export function iosAppFolder(title: string, c: string, objc?: string, views: Ios
   <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
   <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
   <key>UILaunchScreen</key><dict/>
-  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+${c.includes("lab_world_askPermission(") ? ASKABLE : ""}  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 </dict>
 </plist>
 `,
@@ -64,7 +68,7 @@ xcrun -sdk "$SDK" clang -target "$TARGET" -c page.c -o build/page.o -O2 -ffp-con
 xcrun -sdk "$SDK" clang -target "$TARGET" -c Screen.m -o build/screen.o -O2 -fobjc-arc
 HOSTS=
 if [ -f hosts.m ]; then xcrun -sdk "$SDK" clang -target "$TARGET" -c hosts.m -o build/hosts.o -O2 -fobjc-arc; HOSTS=build/hosts.o; fi
-xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o $HOSTS -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
+xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o $HOSTS -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework AVFoundation -framework CoreLocation -framework UserNotifications -lm
 cp Info.plist "$APP/"
 codesign --force --sign - "$APP"
 echo "$APP"
@@ -105,6 +109,9 @@ const PAGE_M = (decl: string, foreign: string) => String.raw`// The page: made a
 // which C asks for through ters_ui.
 #import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <AVFoundation/AVFoundation.h>
+#import <CoreLocation/CoreLocation.h>
+#import <UserNotifications/UserNotifications.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -115,6 +122,7 @@ int ters_ui_pointer(void *view, int kind, double x, double y);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
 int ters_page_clock(void);
 int ters_page_frame(void);
+int ters_page_permission(int yes);
 
 // The views of the platform's own hosts/ios.m draws (L235).
 ${foreign}
@@ -362,7 +370,63 @@ static void u_outline(void *c, void *v, const double *xy, size_t n) {
   m.path = p.CGPath;
   a.layer.mask = m;
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline };
+// Asking the person for a permission (L236b): 1 when they have given it,
+// 0 when they said no before or iOS has no name for it, or else iOS's own
+// dialog asks them and -1 now; their answer goes on to the handler that
+// asked, which waits for it (ters_page_permission).
+static void shown(NSString *when);
+static void answered(NSString *what, BOOL yes) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    printf("permission %s %s\n", what.UTF8String, yes ? "yes" : "no");
+    ters_page_permission(yes);
+    [P tick];
+    shown(@"after the answer");
+  });
+}
+@interface TWhere : NSObject <CLLocationManagerDelegate>
+@property (nonatomic, strong) CLLocationManager *m;
+@end
+static TWhere *W;
+@implementation TWhere
+- (void)locationManagerDidChangeAuthorization:(CLLocationManager *)m {
+  CLAuthorizationStatus s = m.authorizationStatus;
+  if (s == kCLAuthorizationStatusNotDetermined) return;
+  answered(@"location", s == kCLAuthorizationStatusAuthorizedWhenInUse || s == kCLAuthorizationStatusAuthorizedAlways);
+  W = nil;
+}
+@end
+static int u_ask(void *c, const char *s, size_t n) {
+  NSString *what = str(s, n);
+  if ([what isEqualToString:@"camera"] || [what isEqualToString:@"microphone"]) {
+    AVMediaType t = [what isEqualToString:@"camera"] ? AVMediaTypeVideo : AVMediaTypeAudio;
+    AVAuthorizationStatus a = [AVCaptureDevice authorizationStatusForMediaType:t];
+    if (a == AVAuthorizationStatusAuthorized) return 1;
+    if (a != AVAuthorizationStatusNotDetermined) return 0;
+    printf("ask %s\n", what.UTF8String);
+    [AVCaptureDevice requestAccessForMediaType:t completionHandler:^(BOOL yes) { answered(what, yes); }];
+    return -1;
+  }
+  if ([what isEqualToString:@"location"]) {
+    CLLocationManager *m = [CLLocationManager new];
+    CLAuthorizationStatus a = m.authorizationStatus;
+    if (a == kCLAuthorizationStatusAuthorizedWhenInUse || a == kCLAuthorizationStatusAuthorizedAlways) return 1;
+    if (a != kCLAuthorizationStatusNotDetermined || W) return 0;
+    printf("ask %s\n", what.UTF8String);
+    W = [TWhere new];
+    W.m = m;
+    m.delegate = W;
+    [m requestWhenInUseAuthorization];
+    return -1;
+  }
+  if ([what isEqualToString:@"notifications"]) {
+    // iOS answers at once, without a dialog, when they were asked before.
+    printf("ask %s\n", what.UTF8String);
+    [UNUserNotificationCenter.currentNotificationCenter requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge completionHandler:^(BOOL yes, NSError *e) { answered(what, yes); }];
+    return -1;
+  }
+  return 0;
+}
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask };
 
 @implementation TPage
 - (void)viewDidLoad {
