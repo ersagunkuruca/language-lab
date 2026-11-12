@@ -23,6 +23,10 @@ on:
         type: choice
         options: [native, webview]
         default: native
+      api:
+        description: "Android API level of the emulator (30 is Android 11, whose own WebView is Chrome 83; 34 is Android 14)"
+        default: "30"
+        required: true
       offline:
         description: "Wi-Fi and mobile data off before the app starts"
         type: boolean
@@ -95,7 +99,7 @@ jobs:
           OFFLINE: ${{ inputs.offline }}
           APK_DIR: ${{ runner.temp }}/app/android/app/build/outputs/apk/debug
         with:
-          api-level: 30
+          api-level: ${{ inputs.api }}
           arch: x86_64
           target: google_apis
           disable-animations: true

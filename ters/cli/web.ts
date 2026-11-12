@@ -29,13 +29,6 @@ export function recordings(code: Code): string[] {
   return [...out];
 }
 
-// What a built page's script is written for: ES2020, so a phone whose
-// WebView is older than its browser runs it (C198: Android 11's own
-// WebView, Chrome 83, refused `??=`). esbuild writes the newer syntax the
-// older way; the library's newer APIs (Intl.Segmenter) are asked for only
-// when a text is cut into characters.
-const PAGE_TARGET = "es2020";
-
 // A page (WEB.md) printed from the core IR (C137c9, `ters build-web`),
 // which WebAssembly and C print too, bundled by esbuild into one script
 // inside one HTML file: core-page.ts draws it, and a page with sound
@@ -52,7 +45,7 @@ export async function webCorePage(title: string, code: Code, info: Info, names: 
   const script = corePageScript(lowered, names[main] ?? "main", JSON.parse(at("../../compiler/src/core-page.ts")), title, worklet, asked, true);
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "page.js", loader: "js" },
-    bundle: true, platform: "browser", format: "iife", target: PAGE_TARGET, minify: true, write: false, logLevel: "warning",
+    bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
     plugins: carriesProgram(script) ? [] : [withoutSolver],
   });
   return pageShell(title, out.outputFiles[0].text);
@@ -66,7 +59,7 @@ export async function coreSoundWorklet(lowered: ReturnType<typeof lowerCore>, na
   const script = coreSoundScript(lowered, name, JSON.parse(at("../../compiler/src/core-sound.ts")), hosts);
   const out = await build({
     stdin: { contents: script, resolveDir: here, sourcefile: "worklet.js", loader: "js" },
-    bundle: true, platform: "browser", format: "iife", target: PAGE_TARGET, minify: true, write: false, logLevel: "warning",
+    bundle: true, platform: "browser", format: "iife", target: "es2022", minify: true, write: false, logLevel: "warning",
     plugins: carriesProgram(script) ? [] : [withoutSolver],
   });
   return out.outputFiles[0].text;
@@ -100,7 +93,7 @@ async function prebuilt(entry: string, globalName: string): Promise<string> {
   const { build } = await esbuild();
   const out = await build({
     entryPoints: [join(here, entry)],
-    bundle: true, platform: "browser", format: "iife", globalName, target: PAGE_TARGET, minify: true, write: false, logLevel: "warning",
+    bundle: true, platform: "browser", format: "iife", globalName, target: "es2022", minify: true, write: false, logLevel: "warning",
   });
   return out.outputFiles[0].text;
 }
