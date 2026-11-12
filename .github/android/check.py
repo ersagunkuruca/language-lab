@@ -31,7 +31,9 @@ taps = sys.argv[2:] or [t for t in os.environ.get("TAPS", "").split("|") if t]
 density = int(re.search(r"(\d+)", adb("shell", "wm", "density")).group(1)) / 160
 print("density", density)
 adb("logcat", "-c")
-adb("shell", "am", "start", "-W", "-n", f"{app}/app.ters.page.MainActivity")
+# A webview app (Capacitor, C198) has its activity in the app's own package.
+activity = ".MainActivity" if os.environ.get("KIND") == "webview" else "app.ters.page.MainActivity"
+adb("shell", "am", "start", "-W", "-n", f"{app}/{activity}")
 time.sleep(6)
 before = dump("before")
 print(f"started: {len(nodes(before))} views")
