@@ -193,3 +193,42 @@ public final class Hosts {
   // hosts/c.c answers what it has; hosts/android.java the rest.
   assert.match(run(host(`return "phone";`).replace(/.*${battery}.*\n/, ""), `double ${battery}(void) { return 0.25; }`), /"phone at 25, ready"/);
 });
+
+// A view of the platform's own (L235, native-views.ts): an operation giving
+// Html that hosts/android.java answers is drawn in a box whose tag names
+// Hosts' method and gives its inputs, which the shell's box() calls; the
+// box is as high as the input named height.
+test("a native app's own view is a box naming hosts/android.java's method and its inputs (L235)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { hostCName } = await import("../../ters/src/lang/hosts.ts");
+  const { HTML_V } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const maps = k.effect("Maps", [["map view", [["zoom", () => k.tref("type.int")], ["place", () => k.tref("type.string")], ["height", () => k.tref("type.number")]], () => k.tref("std.html")]]);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("div"), k.list(), k.list(k.call(maps.op["map view"], k.int(3), k.lit("Ankara"), k.lit(300))))));
+  const dir = mkdtempSync(join(tmpdir(), "native-view-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  mkdirSync(join(dir, "hosts"));
+  const method = hostCName(maps.op["map view"]);
+  const java = `package ${PACKAGE};
+public final class Hosts {
+  public static Object ${method}(long zoom, String place, double height) { return null; }
+}
+`;
+  writeFileSync(join(dir, "hosts", "android.java"), java);
+  const ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  const out = spawnSync(process.execPath, [ters, "build-native-app", dir, "-o", join(dir, "app")], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  const inc = join(jdk!, "include");
+  execFileSync("cc", ["-std=c11", "-O2", "-fPIC", "-shared", "-pthread", "-Wall", "-Werror", "-Wno-unknown-pragmas", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable", "-Wno-unknown-warning-option", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", `-I${inc}`, `-I${join(inc, "linux")}`, "-o", join(dir, "libpage.so"), join(dir, "app/app/src/main/cpp/page.c"), "-lm"]);
+  const src = join(dir, "java", ...PACKAGE.split("."));
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "MainActivity.java"), STAND_IN);
+  writeFileSync(join(src, "Hosts.java"), java);
+  execFileSync("javac", ["-d", join(dir, "classes"), join(src, "MainActivity.java"), join(src, "Hosts.java")]);
+  const r = spawnSync("java", [`-Djava.library.path=${dir}`, "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, new RegExp(`\\n  ters-view\u001f${method}\u001f3\u001fAnkara\u001f300 16 16 328 300\\n`));
+});

@@ -56,12 +56,33 @@ export interface Clock {
   send?(request: PlainRequest): Promise<PlainResponse>;
   // Ready after that many milliseconds (a test's; by default setTimeout).
   after?(ms: number): Promise<void>;
+  // A test's person answering a permission (L236); by default the browser asks.
+  permission?(what: string): Promise<boolean>;
 }
 
 const browserFetch = async (url: string): Promise<string> => {
   const r = await fetch(url);
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.text();
+};
+
+// Asking for a permission (L236, std.ts Permissions): each the way the
+// browser asks for it, the stream a camera or microphone gives stopped at
+// once. One the browser has no prompt for is no.
+const browserPermission = async (what: string): Promise<boolean> => {
+  const g = globalThis as unknown as { navigator?: { mediaDevices?: { getUserMedia(c: object): Promise<{ getTracks(): { stop(): void }[] }> }; geolocation?: { getCurrentPosition(ok: () => void, no: () => void): void } }; Notification?: { requestPermission(): Promise<string> } };
+  try {
+    switch (what) {
+      case "camera": case "microphone": {
+        const s = await g.navigator!.mediaDevices!.getUserMedia(what === "camera" ? { video: true } : { audio: true });
+        for (const t of s.getTracks()) t.stop();
+        return true;
+      }
+      case "location": return await new Promise<boolean>((r) => g.navigator!.geolocation!.getCurrentPosition(() => r(true), () => r(false)));
+      case "notifications": return (await g.Notification!.requestPermission()) === "granted";
+      default: return false;
+    }
+  } catch { return false; }
 };
 
 // Any status is a response; only a request that can't be sent fails.
@@ -176,6 +197,8 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     fetchText: (url) => ask(url, () => (clock?.fetch ?? browserFetch)(url), (e) => `could not fetch ${url}: ${e}`, url) as string,
     // Any request (L191b), answered as fetch text is: the page goes on
     // when the response lands, and one event sends each request once.
+    // Asked once per event, as a fetch is: the handler goes on with the answer.
+    askPermission: (what) => ask(`permission ${what}`, () => (clock?.permission ?? browserPermission)(what), (e) => `could not ask for ${what}: ${e}`, what) as boolean,
     sendRequest: (r) => ask(`send ${requestKey(r)}`, () => (clock?.send ?? browserSend)(r), (e) => `could not send ${r.method} ${r.url}: ${e}`, r.url) as PlainResponse,
   };
 }

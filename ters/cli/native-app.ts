@@ -313,6 +313,8 @@ public class MainActivity extends Activity {
       e.setPadding(px(2), 0, px(2), 0);
       e.setIncludeFontPadding(false);
       v = e;
+    } else if (tag.startsWith("ters-view\u001f")) {
+      v = foreignView(tag);
     } else if (tag.equals("svg")) {
       Picture p = new Picture(this, density);
       p.id = next;
@@ -324,6 +326,34 @@ public class MainActivity extends Activity {
       v = f;
     }
     return put(v);
+  }
+
+  // A view of the platform's own (L235, native-views.ts): the tag names
+  // Hosts' method and gives its inputs as text, read back as its
+  // parameters' types; the View it gives is the box. One that can't be had
+  // says why where it would be.
+  private View foreignView(String tag) {
+    String[] p = tag.split("\u001f", -1);
+    try {
+      Class<?> hosts = Class.forName("${PACKAGE}.Hosts");
+      for (java.lang.reflect.Method m : hosts.getMethods()) {
+        if (!m.getName().equals(p[1]) || m.getParameterCount() != p.length - 2) continue;
+        Class<?>[] ts = m.getParameterTypes();
+        Object[] args = new Object[ts.length];
+        for (int i = 0; i < ts.length; i++) {
+          String a = p[i + 2];
+          args[i] = ts[i] == long.class ? (Object) Long.parseLong(a) : ts[i] == double.class ? (Object) Double.parseDouble(a) : ts[i] == boolean.class ? (Object) a.equals("true") : a;
+        }
+        Object v = m.invoke(null, args);
+        if (v instanceof View) return (View) v;
+      }
+      throw new IllegalStateException("Hosts has no view " + p[1]);
+    } catch (Throwable e) {
+      Log.d("ters", "view " + p[1] + ": " + e);
+      TextView t = new TextView(this);
+      t.setText("This view can't be shown here: " + e);
+      return t;
+    }
   }
 
   int text(String s) {

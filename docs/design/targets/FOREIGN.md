@@ -171,8 +171,19 @@ carrying it, so the program puts it among other elements, and html.ts
 mounts the host's own node in its place (evaluated and compiled pages
 alike). Static HTML shows `<ters-view></ters-view>`. A platform with no
 such view says so through `supports(() => map view(3))` (L234), and the
-page shows something else. Not yet: the Android app's view
-(hosts/android.java giving an Android View) and iOS's.
+page shows something else.
+
+In the Android app the page is C, which can't hold an Android View, so
+`ters build-native-app` writes each call of such an operation that
+hosts/android.java answers, before anything is checked, as the element
+that stands for it (src/lang/native-views.ts): tag `ters-view`, Hosts'
+method and the inputs as text, each after U+001F. The shell's `box` sees
+the tag, calls the method with the inputs read back as its parameters'
+types (long, double, String, boolean) and places the `android.view.View`
+it gives (a text saying why, where it can't). The C layout can't ask a
+View its height, so the box is as high as the operation's input named
+`height` (CSS px), else 240 px, and as wide as its parent. Not yet: iOS's
+(with C199e).
 
 ## What std's own builtins become
 

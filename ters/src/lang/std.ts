@@ -1800,6 +1800,17 @@ export const RELEASE_V = "std.release.release";
 // depends on it says so, and a test answers it with a match.
 export const SETTINGS = typedef("std.settings", "Settings", [], [["my locale", [], () => tref("std.locale")], ["my time zone", [], () => tref(STRING)]], true);
 export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings.my time zone";
+// Asking for a permission (L236): the platform asks the person (a
+// browser's prompt, Android's permission dialog) and answers whether it was
+// given. `what` is one meaning on every platform: "camera", "microphone",
+// "location" or "notifications"; one a platform doesn't know is no. A
+// command line has no such dialog and answers yes. A page's handler may
+// not ask yet: putting it in PAGE_HANDLER changes Html's identity, so the
+// library's modules are republished with it (node library/build.ts).
+// Its types by fixed ids, so no other std id moves (a library's hashes
+// hang on them).
+export const PERMISSIONS = typedef("std.permissions", "Permissions", [], [["ask permission", [["what", () => fixedTref("std.permissions.ask permission.what.type", STRING)]], () => fixedTref("std.permissions.ask permission.returns", BOOL)]], true);
+export const ASK_PERMISSION_OP = "std.permissions.ask permission";
 // LU factors is the numbers module's (L207d).
 tn += 10;
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
@@ -1852,7 +1863,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one
