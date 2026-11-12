@@ -38,6 +38,7 @@ import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
 import { SIGS, ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
+import { answeredEffects, jsHostHas, supported } from "./supports.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, pureEffect, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -580,6 +581,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // writes nodes into it (I190: each `for some` checked the whole program
     // again, 1.4 s of the editor's 120 ms run of Numbers' main).
     [S.exists]: (f) => one(bool(satisfiable(code, f, wrote ? {} : { info, names: rt.names }))),
+    // Answered by this run's host (supports.ts, L234), from the function's
+    // type: a command folds it before the run, the editor asks here.
+    [S.supports]: (f) => {
+      const m = (f as unknown as Record<symbol, { lambda?: Id; prim?: Id }>)[META];
+      return one(bool(!m?.lambda || supported(info.typeOf.get(m.lambda), code, answeredEffects(code, jsHostHas(rt.hosts)))));
+    },
     [S.hence]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
     [S.fail]: () => [],
     // A record of Float64s, part by part. Float64 is a record of one part.
