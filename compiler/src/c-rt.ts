@@ -817,6 +817,11 @@ static double lab_world_sleep(double ms) {
   fflush(stdout);
   return 0;
 }` },
+  // Asking for a permission (L236): a command line answers yes; a native
+  // page's runtime sets lab_ask to ask the person (c.ts, L236b), which
+  // may park the handler that asked until they answer.
+  "world.askPermission": { uses: [], c: `static int (*lab_ask)(const char *what, size_t n);
+static int32_t lab_world_askPermission(lab_cell *t) { int r = lab_ask ? lab_ask((const char *)LAB_TB(t), LAB_TN(t)) : 1; lab_drop(t); return r; }` },
   "world.print": { uses: [], c: `static void lab_world_print(lab_cell *t) { fwrite(LAB_TB(t), 1, LAB_TN(t), stdout); putchar('\\n'); lab_drop(t); }` },
   // A seed from the world for Random's generator (C136): four bytes of
   // /dev/urandom, or the time and an address where there is none.

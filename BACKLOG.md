@@ -115,7 +115,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L236b | Android's permission dialog for `ask permission` (std Permissions, DONE.md L236 steps) in the native app: needs a C page handler that waits for the answer (requestPermissions, onRequestPermissionsResult), as a web page's handler waits for a fetch | L236, Ersagun 2026-11-10 13:47 | P3 | M | Compiler lane |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

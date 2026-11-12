@@ -295,8 +295,15 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   ask; a command line has no such dialog and answers yes, and compiled
   JavaScript asks the same world. On a page the handler waits for the
   person's answer as for a fetch (browser.ts: getUserMedia, the
-  geolocation prompt, Notification.requestPermission). Not yet: C,
-  WebAssembly and the Android app's permission dialog.
+  geolocation prompt, Notification.requestPermission). In C (L236b) a
+  command line answers yes too; a native page's handler runs on a fiber
+  of its own (c-rt.ts fibers) and parks where it asks, the page showing
+  what it wrote so far, and the screen's answer (ters_ui's `ask`, then
+  ters_page_permission) goes on from there. The Android app asks with
+  requestPermissions from the page's own stack, not the fiber's, and its
+  manifest names the permissions when the page asks. An event while a
+  handler waits runs at once, and what it asks is no unless already
+  given. Not yet: WebAssembly and the iOS app (its ask is null: yes).
 
 ## The order of the work, one PR each
 
