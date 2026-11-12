@@ -18,7 +18,7 @@ import { base } from "../src/lang/load.ts";
 import { B } from "../src/prelude.ts";
 
 for (const name of ["calculus", "backwards", "queens"]) {
-  test(`every filling the palette offers in ${name} type-checks`, () => {
+  test(`every filling the palette offers in ${name} type-checks`, async () => {
     const p = loadProgram(join(import.meta.dirname, "../examples", name));
     // The example's own calls: the library's (some ten thousand nodes now)
     // made this a half-hour run, each filling a whole check.
@@ -31,6 +31,12 @@ for (const name of ["calculus", "backwards", "queens"]) {
       const info = infer(code);
       for (const f of capped(fillings(code, info, hole), 10)) {
         if (infer(fillHole(code, {}, hole, f).code).errors.length > info.errors.length) bad.push(`${hole}: ${JSON.stringify(f)}`);
+        // Each check's trial of the library's substitution is held by a
+        // WeakRef (types.ts trial), which keeps it until the running job
+        // ends: in one job, every sweep in full kept every program it
+        // checked and ran out of memory at 2 GB (I219). The editor checks
+        // in tasks of their own.
+        await new Promise((ok) => setImmediate(ok));
       }
     }
     assert.deepEqual(bad, []);
