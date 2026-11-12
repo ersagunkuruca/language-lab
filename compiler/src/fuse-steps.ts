@@ -4,11 +4,14 @@
 // xs, each item first given to g. No mapped list or array is made, and g is
 // called in the loop rather than through a closure.
 //
-// The program means the same: map's fold calls g on each item from the
-// last back, as the fold that takes its place does, and the consumer's
-// arms only compute (its type has no effects) and never read the rest
-// (which would be the mapped items), so nothing can tell the two apart.
-// The consumer stays defined, for its other callers.
+// The program means the same: the consumer's arms only compute (its type
+// has no effects) and never read the rest (which would be the mapped
+// items), and g only computes too, so nothing can tell the two apart.
+// map calls g on the items first to last, and the fold that takes its
+// place may meet them last first (scalar.ts `loop`, on the way back up),
+// so a g that acts is left as it is (I219: pig's `games won by B`, a sum
+// of a map of games that each draw from Random, drew its games in the
+// other order). The consumer stays defined, for its other callers.
 //
 // Deforestation (Philip Wadler, "Deforestation: transforming programs to
 // eliminate trees", 1990) in the form of short-cut fusion (Gill,
@@ -52,6 +55,8 @@ function candidate(code: Code, info: Info): (() => Code) | null {
     // a function written there.
     const gn = nodes[g];
     if (gn.kind !== "ref" && gn.kind !== "lambda") continue;
+    const gt = info.typeOf.get(g) && info.subst.zonk(info.typeOf.get(g)!);
+    if (gt?.t !== "fn" || gt.eff.effs.length) continue;
     return () => rewrite(code, id, consumer, xs, g);
   }
   return null;
