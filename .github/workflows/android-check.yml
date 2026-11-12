@@ -103,6 +103,7 @@ jobs:
             adb install -r "$APK_DIR"/*.apk
             if [ "$OFFLINE" = true ]; then adb shell svc wifi disable; adb shell svc data disable; adb shell ping -c 1 -W 2 8.8.8.8 || echo "offline: no network"; fi
             python3 .github/android/check.py "$APP"
+            if [ "$KIND" = webview ]; then node .github/android/webview.mjs "$APP"; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
