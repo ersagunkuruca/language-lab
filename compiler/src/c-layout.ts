@@ -837,6 +837,14 @@ static double tl_flow(tl_n *e, double w) {
     if (block) {
       if (inl) { y += lineh; x = 0; lineh = 0; inl = 0; }
       tl_lay(k, w - k->c.mar[1] - k->c.mar[3]);
+      // An empty block (nothing in it, no padding or border) lets the
+      // margins round it collapse through it, its own too.
+      if (k->h == 0 && !k->c.set_h && !k->c.pad[0] && !k->c.pad[2] && !k->c.bw && !k->c.side[0] && !k->c.side[2]) {
+        double m = below; if (k->c.mar[0] > m) m = k->c.mar[0]; if (k->c.mar[2] > m) m = k->c.mar[2];
+        k->x = ox + k->c.mar[3]; k->y = oy + y - below;
+        y += m - below; below = m;
+        continue;
+      }
       // Margins of blocks one under another collapse to the larger.
       double top = k->c.mar[0] > below ? k->c.mar[0] - below : 0;
       double mx = k->c.mar[3];

@@ -175,6 +175,23 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   assert.ok(Math.abs(b[1] - foot[1] - (foot[3] - 96) / 2) < 0.01 && Math.abs(n[1] - foot[1] - (foot[3] - n[3]) / 2) < 0.01, `${foot} ${b} ${n}`);
 });
 
+// An empty block lets margins collapse through it (C199f): bounce's
+// worlds 16 under its lead (the larger of the lead's 15, the empty div's
+// 0 and the worlds' 16), as Chromium.
+test("bounce laid out in C: margins collapse through an empty block (C199f)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/bounce"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const lines = r.stdout.toString().split("\n").map((s) => s.trim().split(" "));
+  const lead = lines.findIndex((s) => s[0] === "p"), worlds = lead + 3; // its text, the empty div, the worlds
+  assert.equal(Number(lines[worlds][2]) - Number(lines[lead][2]) - Number(lines[lead][4]), 16);
+  // Its cards grow to the row (flex: 1 1 320px), 296 wide.
+  assert.equal(lines[worlds + 1][3], "296");
+});
+
 // Pictures drawn in C (C199f): each shape's box against its svg, as
 // Chromium puts it 360 wide (measured by hand with Playwright: compass's
 // two rings, three lines, a circle through three points and four points;
