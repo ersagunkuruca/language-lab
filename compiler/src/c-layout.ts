@@ -35,7 +35,8 @@ typedef struct ters_ui {
   // to), 2 x y (line to), 3 x1 y1 x2 y2 x y (curve to), 4 (close), and 5
   // fill stroke width dash gap join, which paints the shape so far (fill
   // and stroke ARGB, 0 for none; join 0 miter, 1 round, 2 bevel) and
-  // starts the next.
+  // starts the next, and 6 x y size colour anchor bold n then n UTF-8
+  // bytes, a text (anchor 0 start, 1 middle, 2 end; x y its baseline).
   void (*draw)(void *ctx, void *v, const double *ops, size_t n);
   // Whether a box cuts what's inside it to its bounds, its corners
   // rounded (overflow: hidden; tumble's board, where pieces drop in from
@@ -978,6 +979,21 @@ static void tl_shapes(tl_n *e, tl_ops *d) {
   else if (!strcmp(t, "rect")) { double x = tl_at(e, "x"), y = tl_at(e, "y"), w = tl_at(e, "width"), h = tl_at(e, "height"); if (w > 0 && h > 0) { tl_mv(d, x, y); tl_ln(d, x + w, y); tl_ln(d, x + w, y + h); tl_ln(d, x, y + h); tl_op(d, 4); } }
   else if (!strcmp(t, "line")) { tl_mv(d, tl_at(e, "x1"), tl_at(e, "y1")); tl_ln(d, tl_at(e, "x2"), tl_at(e, "y2")); }
   else if (!strcmp(t, "polyline") || !strcmp(t, "polygon")) tl_points(d, tl_attr(e, "points"), t[4] == 'g');
+  else if (!strcmp(t, "text")) {
+    // A text: 6, where its baseline starts (or its middle or end is, by
+    // text-anchor), its size, colour, anchor and weight, and its UTF-8
+    // bytes, counted (spacetime's labels). The platform draws and places
+    // it, as it measures a box's text. No shape to hit (op0 stays 0).
+    size_t n = 0; for (int j = 0; j < e->nk; j++) if (!e->kids[j]->tag && e->kids[j]->s) n += strlen(e->kids[j]->s);
+    if (!n) return;
+    const char *an = tl_attr(e, "text-anchor");
+    tl_op(d, 6); tl_pt(d, tl_at(e, "x"), tl_at(e, "y"));
+    tl_op(d, e->c.size * d->s); tl_op(d, tl_alpha(e->c.fill, e->c.fop));
+    tl_op(d, an && !strcmp(an, "middle") ? 1 : an && !strcmp(an, "end") ? 2 : 0); tl_op(d, e->c.bold);
+    tl_op(d, (double)n);
+    for (int j = 0; j < e->nk; j++) if (!e->kids[j]->tag && e->kids[j]->s) for (const unsigned char *q = (const unsigned char *)e->kids[j]->s; *q; q++) tl_op(d, *q);
+    return;
+  }
   else return;
   if (d->n == at) return;
   e->op0 = at;
@@ -1345,6 +1361,16 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   double lo[2] = { 1e300, 1e300 }, hi[2] = { -1e300, -1e300 };
   for (size_t i = 0; i < v->nops;) {
     int op = (int)v->ops[i++], m = op == 1 || op == 2 ? 2 : op == 3 ? 6 : 0;
+    if (op == 6) {
+      // A text: where it's anchored on the page, its size, colour, anchor
+      // (0 start, 1 middle, 2 end), weight and itself.
+      size_t len = (size_t)v->ops[i + 6];
+      printf("%*stext-shape %g %g %g %08X %d%s \"", 2 * depth + 2, "", v->ops[i] + x, v->ops[i + 1] + y, v->ops[i + 2], (unsigned)v->ops[i + 3], (int)v->ops[i + 4], v->ops[i + 5] ? " bold" : "");
+      for (size_t k = 0; k < len; k++) putchar((int)v->ops[i + 7 + k]);
+      printf("\"\n");
+      i += 7 + len;
+      continue;
+    }
     for (int k = 0; k < m; k++) { double z = v->ops[i + k] + (k % 2 ? y : x); if (z < lo[k % 2]) lo[k % 2] = z; if (z > hi[k % 2]) hi[k % 2] = z; }
     i += m;
     if (op == 5) {

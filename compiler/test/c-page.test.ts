@@ -15,6 +15,8 @@ import { pageMain, showPage } from "../../ters/src/lang/page.ts";
 import { pageProgram } from "../../ters/test/page-program.ts";
 import { fakeDoc, type FakeEl } from "../../ters/test/fakedom.ts";
 import { lowerScalar } from "../src/scalar.ts";
+import { HTML_V } from "../../ters/src/lang/std.ts";
+import { Lang } from "../../ters/src/lang/dsl.ts";
 import { emitC } from "../src/c.ts";
 import { compile, skip } from "./c-harness.ts";
 
@@ -360,4 +362,38 @@ test("pig in C plays a game, replays the very same one and a thousand quietly (C
   // credits are where Chromium puts them, 16 under the how box.
   assert.match(before, /\n  p 32 (\d+(\.\d+)?) 296 156\n/);
   assert.ok(!/\n  p 32 [\d.]+ 296 0\n/.test(before), "an empty p is laid out");
+});
+
+// A picture's texts in C (C199f, spacetime's labels): drawn by the
+// platform at their anchor, scaled with the picture, painted as the sheet
+// says. Chromium, 360 wide: the svg 328 wide (the body's 16 each side)
+// with a viewBox 200 wide, so a label's x 100 is 164 in and its 15px 24.6.
+test("a picture's texts drawn in C at their anchors, sized and painted by the sheet (C199f)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [], [
+    el("style", [], [text(".label { fill: #6b6b70; font-size: 15px } .title { fill: #1d1d1f; font-weight: 600 }")]),
+    el("svg", [["viewBox", "0 0 200 100"], ["style", "width: 100%"]], [
+      el("text", [["x", "100"], ["y", "20"], ["class", "label"], ["text-anchor", "middle"]], [text("speed of light")]),
+      el("text", [["x", "196"], ["y", "90"], ["class", "title"], ["text-anchor", "end"]], [text("rapidity →")]),
+      el("text", [["x", "4"], ["y", "50"], ["class", "label"]], [text("")]),
+    ]),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const lines = r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim());
+  const svg = lines.find((s) => s.startsWith("svg "))!.split(" ").map(Number), texts = lines.filter((s) => s.startsWith("text-shape "));
+  assert.equal(svg[3], 328);
+  assert.equal(texts.length, 2, "an empty text draws nothing");
+  const at = (s: string) => s.split(" ").slice(1, 4).map(Number);
+  const [a, b] = texts.map(at), s = 328 / 200;
+  assert.deepEqual([a[0] - svg[1], a[1] - svg[2], a[2]].map((x) => Math.round(x * 100) / 100), [100 * s, 20 * s, 15 * s].map((x) => Math.round(x * 100) / 100));
+  assert.match(texts[0], / FF6B6B70 1 "speed of light"$/);
+  assert.match(texts[1], / FF1D1D1F 2 bold "rapidity →"$/);
+  assert.deepEqual([b[0] - svg[1], b[1] - svg[2]].map((x) => Math.round(x * 100) / 100), [196 * s, 90 * s].map((x) => Math.round(x * 100) / 100));
 });
