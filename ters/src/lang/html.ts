@@ -305,6 +305,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           // says how many seconds passed since the frame before, so a
           // simulation can keep to real time whatever the frame rate.
           if (name === "frame") everyFrame(e, (seconds) => handle({ seconds }));
+          else if (PLATFORM_EVENTS.has(name)) platformEvent(e, name, () => handle({}));
           else e.addEventListener(name, handle);
         } else if (a.tag === HTML_V.listen) {
           if (m.listen) m.listen(e, a);
@@ -347,6 +348,46 @@ function pointerRaw(e: El, ev: { clientX?: number; clientY?: number }): [number,
 // leaves it (a redraw that drops it, the page closing), with the seconds
 // since the frame before: 0 the first time, then the browser's frame time
 // (requestAnimationFrame's timestamp) less the last one.
+// The platform's own moments (L236, WEB.md "The platform's moments"),
+// heard with `on` like an element's events, by an element while it is on
+// the page, with one meaning on every platform; each shell maps its own
+// events to them. "back": the back button or gesture, kept by the page
+// rather than leaving it (a browser's popstate, the page keeping a history
+// entry of its own so the first back stays; Android's onBackPressed).
+// "pause": the page no longer seen (visibilitychange to hidden; onPause).
+// "resume": seen again (visible; onResume).
+export const PLATFORM_EVENTS = new Set(["back", "pause", "resume"]);
+interface Win {
+  addEventListener?(type: string, f: () => void): void;
+  removeEventListener?(type: string, f: () => void): void;
+  history?: { pushState(data: unknown, title: string): void };
+  document?: { visibilityState?: string; addEventListener?(type: string, f: () => void): void; removeEventListener?(type: string, f: () => void): void };
+}
+let ownEntry = false;
+function platformEvent(e: El, name: string, fire: () => void, w: Win = globalThis as Win) {
+  // Heard while the element is on the page: once it was and isn't, it stops.
+  let seen = false;
+  const gone = () => { const on = (e as El & { isConnected?: boolean }).isConnected; if (on !== false) seen = true; return on === false && seen; };
+  if (name === "back") {
+    if (!w.addEventListener || !w.history) return;
+    if (!ownEntry) { ownEntry = true; w.history.pushState({ ters: true }, ""); }
+    const f = () => {
+      if (gone()) { w.removeEventListener?.("popstate", f); return; }
+      w.history!.pushState({ ters: true }, "");
+      fire();
+    };
+    w.addEventListener("popstate", f);
+    return;
+  }
+  const d = w.document;
+  if (!d?.addEventListener) return;
+  const f = () => {
+    if (gone()) { d.removeEventListener?.("visibilitychange", f); return; }
+    if ((d.visibilityState === "hidden") === (name === "pause")) fire();
+  };
+  d.addEventListener("visibilitychange", f);
+}
+
 function everyFrame(e: El, tick: (seconds: number) => void) {
   const raf = (globalThis as { requestAnimationFrame?: (f: (ms?: number) => void) => number }).requestAnimationFrame;
   if (!raf) return;
