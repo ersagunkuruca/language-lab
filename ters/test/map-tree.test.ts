@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { B } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
-import { compareValues, makeRunner, runMain, equal, variantOrder, type Data, type Value } from "../src/lang/run.ts";
+import { compareValues, makeRunner, resolvedFor, runMain, equal, variantOrder, type Data, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY, TREES } from "../src/lang/library.ts";
 import { choose, jobProblem, represent } from "../src/lang/represent.ts";
@@ -52,9 +52,17 @@ const printed = (code: ReturnType<typeof program>["code"], names: Record<Id, str
   const lines: string[] = [];
   // The definitions as written, not the sorted list's host ways (I195),
   // so the two ways of storing are compared as algorithms.
+  resolvedFor(code, info, names);
+  const t = performance.now();
   runMain(code, info, main, { print: (s) => lines.push(s), names, libraryHosts: false });
+  ran = performance.now() - t;
   return lines;
 };
+// How long the last `printed` ran main for, its check and its arithmetic's
+// resolving left out: a represented program isn't on the library's layer,
+// so both are the library's whole again (check 1.0 s against 0.2,
+// resolving 0.3 s against none), which says nothing of the tree (I219).
+let ran = 0;
 
 test("each tree job agrees with the definition through meaning, and the tree stays balanced", () => {
   const k = new Lang(LIBRARY.code);
@@ -118,7 +126,7 @@ test("on 1200 words, 400 of them different, the tree is faster than the sorted l
   const p = program(1200);
   const w = withMapTree(p.code, p.names, lib);
   const repd = represent(w.code, p.own, w.rep);
-  const time = (f: () => string[]) => { const t = performance.now(); const out = f(); return { out, ms: performance.now() - t }; };
+  const time = (f: () => string[]) => { const out = f(); return { out, ms: ran }; };
   const a = time(() => printed(p.code, p.names, p.main));
   const b = time(() => printed(repd, w.names, p.main, w.insiders));
   assert.deepEqual(b.out, a.out);
