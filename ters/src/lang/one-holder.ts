@@ -36,8 +36,8 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import { subtree, isCall, type Call, isUse, isBound, bindsOf } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { COMPARE, S, SHOW_ANY } from "./std.ts";
-import { CHOICE, type Type } from "./types.ts";
+import { COMPARE, S, SHOW_ANY, SIGS } from "./std.ts";
+import { CHOICE, Subst, type Type } from "./types.ts";
 
 export interface OneHolder { ok: boolean; problems: string[] }
 
@@ -113,12 +113,21 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     return modes.get(d)?.[i] ?? { share: false, uses: [] };
   };
   // A builtin may keep or give back a value only through a type variable
-  // its result mentions (`first`, a list's `items`); `less` can't.
+  // its result mentions (`first`, a list's `items`); `less` can't. That
+  // holds for a part of a value too: `value at` gives back one of its
+  // map's values, `item at` one of its array's, so what it gives is still
+  // the container's (C60: a record read out of a map and rebuilt in place
+  // changed the map's). A builtin's type is its signature (std.ts SIGS):
+  // the check keeps none for it.
   const occurs = (v: number, t: Type): boolean => t.t === "var" ? t.v === v : t.t === "con" ? t.args.some((a) => occurs(v, a)) : t.params.some((a) => occurs(v, a)) || occurs(v, t.ret);
+  // The variables a value of t holds values of: not a function's, whose
+  // answers it makes rather than holds (map's `f`).
+  const vars = (t: Type): number[] => t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [];
   const generic = (fnRef: Id, i: number) => {
-    const decl = info.typeOf.get((nodes[fnRef] as NodeOf<"ref">).target), dz = decl && info.subst.zonk(decl);
+    const target = (nodes[fnRef] as NodeOf<"ref">).target, sig = SIGS[target];
+    const s = new Subst(), dz = sig ? s.zonk(sig(s)) : undefined;
     const p = dz?.t === "fn" ? dz.params[i] : undefined;
-    return !!p && p.t === "var" && dz?.t === "fn" && occurs(p.v, dz.ret);
+    return !!p && dz?.t === "fn" && vars(s.zonk(p)).some((v) => occurs(v, s.zonk(dz.ret)));
   };
   const fieldIndex = (field: Id) => {
     const v = info.owner.get(field), td = v ? nodes[(nodes[v] as NodeOf<"def">).body!] : null;
