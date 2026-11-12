@@ -864,7 +864,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const k = `t ${v}`;
     if (!statics.has(k)) {
       const name = `lab_s${statics.size}`, b = [...new TextEncoder().encode(v)];
-      statics.set(k, { name, decl: `static struct { lab_cell h; uint32_t n; uint8_t b[${b.length || 1}]; } ${name} = { { 0, LAB_TEXT_T, 0 }, ${b.length}, { ${b.join(", ") || "0"} } };` });
+      statics.set(k, { name, decl: `static struct { lab_cell h; uint32_t n, chars; uint8_t *p; lab_cell *base; uint8_t b[${b.length || 1}]; } ${name} = { { 0, LAB_TEXT_T, 0 }, ${b.length}, ${[...v].length}, ${name}.b, 0, { ${b.join(", ") || "0"} } };` });
     }
     return `((lab_cell *)&${statics.get(k)!.name})`;
   };
@@ -1047,6 +1047,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // while they run; an older one is rerooted when read, so it stays here.
     for (const t of tables.values()) sharesOf.push(`case ${tnum.get(`table ${t.key}`)}: ${tableUsed(t) ? `lab__share_t${t.index}(c);` : "lab_share_no = 1;"} break;`);
   }
+  // A text's view gives up its base (I222).
+  if (ints) { fieldsOf.push("case LAB_TEXT_T: lab_dec(((lab_text *)c)->base); break;"); if (threads) sharesOf.push("case LAB_TEXT_T: lab_share(((lab_text *)c)->base); break;"); }
   for (const b of boxes) fieldsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${dec(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
   for (const t of tables.values()) {
     const T = `lab_Table_t${t.index}`, k = counted(t.keyT) ? dec(t.keyT, "b->ks[j]") : "";
