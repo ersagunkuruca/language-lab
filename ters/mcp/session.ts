@@ -323,6 +323,7 @@ export class Session {
     if (steps) return steps;
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def);
     if (/^\s*handle\s/.test(text)) return this.handleIn(code, names, hole, text, def);
+    if (/^\s*fold\s/.test(text)) return this.foldIn(code, names, hole, text, def);
     const solve = this.solveIn(code, names, hole, text);
     if (!solve) return this.fillOne(code, names, hole, text, def, as);
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
@@ -395,6 +396,58 @@ export class Session {
     const call = r.code.nodes[hole], fn = isCall(call) ? r.code.nodes[call.fn] : undefined;
     if (fn?.kind !== "lambda" || r.code.nodes[fn.body]?.kind !== "hole") return { ok: false, reason: `${step[1]} = ${value} doesn't read as a step` };
     return this.fill(r.code, r.names, fn.body, after, def);
+  }
+
+  // A fold as the view prints it (I218 M12), a case a line or after `;`s,
+  // each recursive field's folded value named after `with`:
+  //   fold xs
+  //     nil → 0
+  //     cons(head, tail) with total → head + total
+  // Every case of the type is written (a fold has no otherwise); a
+  // recursive field with no name after `with` isn't folded there.
+  private foldIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const { head, cases } = casesOf(text, "fold");
+    const all = baseNames(names);
+    const read = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:with\s+([^→]+?))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
+    const bad = read.findIndex((k) => !k);
+    if (bad >= 0) return { ok: false, reason: `a fold's case reads Case(fields) with folded → value, not ${cases[bad].trim()}` };
+    const written = read.map((k) => norm(k![1]));
+    const types = code.defs.filter((d) => {
+      const b = (code.nodes[d] as NodeOf<"def"> | undefined)?.body, td = b ? code.nodes[b] : undefined;
+      return td?.kind === "typedef" && !td.effect && td.variants.length === written.length && written.every((w) => td.variants.some((v) => norm(all[v] ?? "") === w));
+    });
+    const type = types.length === 1 ? types[0] : types.find((d) => !LIBRARY.code.nodes[d]);
+    if (!type) return { ok: false, reason: `no data type has just the cases ${written.join(", ")}: a fold writes every case` };
+    const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
+    const self = new Set([type, td.id]);
+    const nodes = { ...code.nodes }, out: Names = { ...names };
+    const add = (n: Record<string, unknown>): Id => { const id = freshId(); nodes[id] = { id, ...n } as never; return id; };
+    const fills: [Id, string][] = [];
+    const scrutinee = add({ kind: "hole" });
+    fills.push([scrutinee, head]);
+    const arms: Id[] = [];
+    for (const k of read as RegExpExecArray[]) {
+      const variant = td.variants.find((v) => norm(all[v] ?? "") === norm(k[1]))!;
+      const vf = (code.nodes[variant] as NodeOf<"variant">).fields;
+      const fields = k[2]?.trim() ? k[2].split(",").map(norm) : [];
+      if (fields.length && fields.length !== vf.length) return { ok: false, reason: `${norm(k[1])} has ${vf.length} field${vf.length === 1 ? "" : "s"}, not ${fields.length}` };
+      const recursive = vf.map((f) => { const t = code.nodes[(code.nodes[f] as NodeOf<"field">).type]; return t?.kind === "tref" && self.has(t.target); });
+      const folded = k[3]?.trim() ? k[3].split(",").map(norm) : [];
+      if (folded.length > recursive.filter(Boolean).length) return { ok: false, reason: `${norm(k[1])} has ${recursive.filter(Boolean).length} field${recursive.filter(Boolean).length === 1 ? "" : "s"} to fold, not ${folded.length}` };
+      const binds = vf.map((_, i) => { const b = add({ kind: "binder" }); out[b] = fields[i] ?? `field ${i + 1}`; return b; });
+      let r = 0;
+      const results = recursive.map((rec) => { if (!rec || r >= folded.length) return null; const b = add({ kind: "binder" }); out[b] = folded[r++]; return b; });
+      const at = add({ kind: "hole" });
+      fills.push([at, dedent(k[4])]);
+      arms.push(add({ kind: "arm", variant, binds, results, body: at }));
+    }
+    nodes[hole] = { id: hole, kind: "fold", scrutinee, arms } as NodeOf<"fold">;
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: { nodes, defs: code.defs }, names: out };
+    for (const [h, t] of fills) {
+      if (!cur.ok) return cur;
+      if (t && t !== "□" && t !== "?") cur = this.fill(cur.code, cur.names, h, t.replace(/[‹›]/g, ""), def);
+    }
+    return cur;
   }
 
   // A handler as the view prints it (I217 M7), its cases an effect's
