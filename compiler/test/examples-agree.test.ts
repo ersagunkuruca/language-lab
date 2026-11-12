@@ -43,6 +43,7 @@ const setup: Record<string, () => string[]> = {
   drift: () => ["50"],
   swarm: () => ["40", "20"],
   "swarm-pool": () => ["40", "20"],
+  tally: () => ["3000"],
   herd: () => ["20", "10"],
   herd: () => ["20", "10"],
   chapters: () => { writeFileSync(join(dir, "book.md"), chaptersBook(3, 5)); return ["book.md", "out"]; },

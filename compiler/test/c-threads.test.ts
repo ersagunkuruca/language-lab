@@ -299,6 +299,23 @@ test("fingerprint's walks run on threads natively and it prints the evaluator's 
   assert.equal(many.stdout.toString(), runs(["400"], "0").stdout.toString());
 });
 
+// tally natively (C42h): a fold counting words into a Map, counted in
+// runs on the threads, each run's Map its own, the Maps added together.
+test("tally counts its words in runs on threads natively, the Maps added together, and prints the evaluator's (C42h)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-tally-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/tally");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "tally")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  assert.match(readFileSync(join(dir, "tally.c"), "utf8"), /lab_par_chunks_\d+\(/);
+  const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, "3000", "--evaluator"]).stdout.toString();
+  assert.match(evaluator, /^505 different words of 3000/);
+  const runs = (args: string[], workers: string) => spawnSync(join(dir, "tally"), args, { env: { ...process.env, TERS_WORKERS: workers, TERS_BRANCHES: "say" } });
+  for (const workers of ["3", "0"]) assert.equal(runs(["3000"], workers).stdout.toString(), evaluator, `${workers} workers`);
+  // Big enough for runs on the threads: the same as on one.
+  const many = runs(["400000"], "3");
+  assert.match(many.stderr.toString(), /items on threads: [1-9]/);
+  assert.equal(many.stdout.toString(), runs(["400000"], "0").stdout.toString());
+});
+
 // divisors natively (C207b, C207c): `array of` a range is the array filled
 // at once, no list made; the sum of a map is one fold, no mapped array
 // made (fuse-steps.ts); and the answer is the evaluator's.

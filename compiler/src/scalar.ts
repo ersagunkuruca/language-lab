@@ -83,6 +83,7 @@ import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts"
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
+import { countsInto } from "./fold-chunks.ts";
 import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
@@ -2908,6 +2909,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // added or compared (exact, so in any order) after the empty list's.
       // Otherwise as below.
         // Or a record of Ints (C42d).
+      // A fold counting into a Map (C42h, fold-chunks.ts): on C's threads
+      // in runs of an array's items, each run counted from empty by the
+      // same loop as in turn, the runs' Maps then added together.
+      if (opts.threads && !underBudget && !free.length && isTable(result) && result.value === "int" && s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) && (foldsShared ??= parallelFolds(code, info)).has(n.id) && countsInto(code, info, n)) {
+        const at = [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])];
+        const g: SFunc = { def: id, name: `${f.name}.fold.run`, params: [at], result: res, locals: [at], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+        const gi = funcs.push(g) - 1;
+        const ai = arrayItems(data, res, arms, free, new Map(), g, at);
+        if (ai) {
+          const a: SExpr = { k: "local", i: 0 };
+          g.body = { k: "call", fn: ai.fn, args: [a, { k: "rt", fn: `array.length.a${at.index}`, args: [a] }, ai.start], tail: true };
+          return { k: "rt", fn: `par:chunks:${gi}`, args: [s.args[0]], host: { t: res, partial: false } };
+        }
+        funcs.pop();
+      }
       const each = (result === "int" || isRecord(result)) && !underBudget && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f, result) : null;
       if (each) {
         const arr = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn);

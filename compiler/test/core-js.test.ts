@@ -48,6 +48,7 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
   herd: () => [["20", "10"], {}],
   langford: () => [["7"], {}],
   "queens-first": () => [["8"], {}],
+  tally: () => [["3000"], {}],
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
