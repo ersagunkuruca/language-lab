@@ -354,7 +354,7 @@ export class Session {
       const exact = fits.filter((c) => typesIn(c.label.replace(/^as /, "")).join() === want.join());
       const pick = want.length ? (exact.length === 1 ? exact[0] : fits.length === 1 ? fits[0] : undefined) : undefined;
       if (pick?.edit.ok) return pick.edit;
-      return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
+      return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field or a function more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
     }
     if (r.ok || r.reason !== "a name alone is listed already") return r;
     // A name alone, which the editor's palette lists: the nearest in

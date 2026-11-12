@@ -262,7 +262,7 @@ test("a match is written as the view prints it, its cases on lines or after `;`s
 });
 
 // Names that read as something else in round 14's rota (I218 M8, M9).
-test("unit is the Unit value, a case's field is itself, and `as` may name one type of several (I218 M8 M9 M11)", async () => {
+test("unit is the Unit value, a case's field is itself, `as` may name one type of several, and length isn't guessed (I218 M8-M11)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
@@ -283,6 +283,11 @@ test("unit is the Unit value, a case's field is itself, and `as` may name one ty
   text("define", { name: "names of", kind: "function", params: ["p", "q"] });
   assert.match(call("replace", { at: "names of", find: "□", text: "p.name ++ q.name" }).text, /Give `as`/);
   assert.match(text("replace", { at: "names of", find: "□", text: "p.name ++ q.name", as: "Person" }), /: \(Person, Person\) -> Text/);
+  // M10: length of an input nothing settles is a List's or a Text's,
+  // and neither is taken silently.
+  text("define", { name: "size", kind: "function", params: ["x"] });
+  assert.match(call("replace", { at: "size", find: "□", text: "length(x)" }).text, /reads as a List or as a Text/);
+  assert.match(text("replace", { at: "size", find: "□", text: "length(x)", as: "Text" }), /: \(Text\) -> Int/);
 });
 
 // Round 14's rota driver wrote each of these round the MCP (I217).
