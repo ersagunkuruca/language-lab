@@ -372,16 +372,22 @@ export class Session {
     if (lines.length < 2) return null;
     const indent = (l: string) => l.length - l.trimStart().length;
     const top = indent(lines[0]);
-    const step = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
     const next = lines.findIndex((l, i) => i > 0 && indent(l) <= top);
-    if (!step || next < 0 || /^match\s/.test(lines[0].trim())) return null;
+    if (next < 0 || /^match\s/.test(lines[0].trim())) return null;
+    const after = lines.slice(next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n");
+    // `tuple(a, b) = e` (M6): a match on e with its one case, the lines
+    // after it that case's value.
+    const parts = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*\(([^()]*)\)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
+    if (parts) return this.fill(code, names, hole, `match ${[parts[3], ...lines.slice(1, next).map((l) => l.trim())].join(" ")}\n  ${parts[1]}(${parts[2]}) →\n${after.split("\n").map((l) => "    " + l).join("\n")}`, def);
+    const step = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
+    if (!step) return null;
     // The step's value may go on over deeper lines.
     const value = [step[2], ...lines.slice(1, next).map((l) => l.trim())].join(" ");
     const r = this.fillOne(code, names, hole, `${step[1]} = ${value}; □`, def);
     if (!r.ok) return r;
     const call = r.code.nodes[hole], fn = isCall(call) ? r.code.nodes[call.fn] : undefined;
     if (fn?.kind !== "lambda" || r.code.nodes[fn.body]?.kind !== "hole") return { ok: false, reason: `${step[1]} = ${value} doesn't read as a step` };
-    return this.fill(r.code, r.names, fn.body, lines.slice(next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n"), def);
+    return this.fill(r.code, r.names, fn.body, after, def);
   }
 
   // A match written as view prints it (I212), one case a line:
@@ -424,6 +430,18 @@ export class Session {
       for (let i = 2; taken.has(name); i++) name = `it ${i}`;
       return this.fill(code, names, hole, `${name} = ${head}\nmatch ${name}\n${cases.map((c) => "  " + c.replace(/\n/g, "\n  ")).join("\n")}`, def);
     }
+    // List patterns (M2): `[a, b] → …`, `[] → …`, with `otherwise →` for
+    // the lengths not written, read as the matches on nil and cons they
+    // stand for.
+    const lists = cases.map((c) => /^\[([^\]]*)\]\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
+    if (lists.some(Boolean)) {
+      const other = cases.find((c) => /^otherwise\s*(?:→|->)/.test(c.trim()));
+      const bad = cases.find((c, i) => !lists[i] && c !== other);
+      if (bad) return { ok: false, reason: `with list patterns, the other cases are otherwise, not ${bad.trim()}` };
+      const fallback = other ? dedent(other.trim().replace(/^otherwise\s*(?:→|->)/, "")) || "□" : "□";
+      const written = lists.filter(Boolean).map((k) => ({ names: k![1].trim() ? k![1].split(",").map((x) => x.trim()) : [], body: dedent(k![2]) || "□" }));
+      return this.fill(code, names, hole, listMatch(head, 0, written, fallback), def);
+    }
     const parsed = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
     const bad = parsed.findIndex((k) => !k);
     if (bad >= 0) return { ok: false, reason: `a case reads Case(fields) → value, not ${cases[bad].trim()}` };
@@ -456,10 +474,10 @@ export class Session {
       if (fields.length && fields.length !== arm.binds.length) return { ok: false, reason: `${norm(k[1])} has ${arm.binds.length} field${arm.binds.length === 1 ? "" : "s"}, not ${fields.length}` };
       if (!cur.ok) return cur;
       fields.forEach((f, i) => { (cur as { names: Names }).names[arm.binds[i]] = f; });
-      const body = k[3].trim();
+      const body = dedent(k[3]);
       if (body && body !== "□" && body !== "?") cur = this.fill(cur.code, cur.names, arm.body, body.replace(/[‹›]/g, ""), def);
     }
-    const rest = otherwise[0]?.[3].trim();
+    const rest = otherwise[0] && dedent(otherwise[0][3]);
     if (rest && rest !== "□" && rest !== "?") for (const arm of arms) if (!seen.has(arm.id)) {
       if (!cur.ok) return cur;
       cur = this.fill(cur.code, cur.names, arm.body, rest.replace(/[‹›]/g, ""), def);
@@ -900,6 +918,32 @@ function topLevel(text: string, sep: string): string[] {
   out.push(text.slice(from).trim());
   return out;
 }
+// List patterns as matches on nil and cons, one item a level: at the k-th
+// item, a pattern of k items ends there (nil), longer ones go on (cons),
+// and a length no pattern has is the fallback. An item named alike by
+// every pattern still going is the cons's field; else the field is
+// `item k` and each pattern names it with a step.
+function listMatch(on: string, k: number, alive: { names: string[]; body: string }[], fallback: string): string {
+  const ends = alive.find((c) => c.names.length === k);
+  const longer = alive.filter((c) => c.names.length > k);
+  const block = (t: string) => t.split("\n").map((l) => "    " + l).join("\n");
+  const nil = `  nil →\n${block(ends ? ends.body : fallback)}`;
+  if (!longer.length) return `match ${on}\n${nil}\n  cons(item ${k + 1}, rest ${k + 1}) →\n${block(fallback)}`;
+  const named = longer[0].names[k];
+  const field = named !== "_" && longer.every((c) => c.names[k] === named) ? named : `item ${k + 1}`;
+  const next = longer.map((c) => ({ names: c.names, body: c.names[k] === field || c.names[k] === "_" ? c.body : `${c.names[k]} = ${field}\n${c.body}` }));
+  return `match ${on}\n${nil}\n  cons(${field}, rest ${k + 1}) →\n${block(listMatch(`rest ${k + 1}`, k + 1, next, fallback))}`;
+}
+
+// A case's body as its own text: the part on the case's line, and the
+// lines under it at that part's indent, so steps on lines read there too.
+function dedent(text: string): string {
+  const [first, ...more] = text.split("\n");
+  const lines = more.filter((l) => l.trim());
+  const least = Math.min(...lines.map((l) => l.length - l.trimStart().length));
+  return [first.trim(), ...lines.map((l) => l.slice(least))].filter((l, i) => i > 0 || l).join("\n").trim();
+}
+
 const norm = (s: string) => s.replace(/#[0-9a-v]{3,}\b/g, "").replace(/[‹›]/g, "").replace(/·/g, "*").replace(/−/g, "-").replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/\s+/g, " ").trim();
 
 // The editor's own check, which its gestures compare against.
