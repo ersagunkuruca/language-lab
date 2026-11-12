@@ -30,7 +30,7 @@ const INPUT_REFUSED = new Set(["checkbox", "radio", "range", "color", "date", "d
 
 // Properties c-layout.ts reads (tl_decl), and custom properties.
 const READ = new Set(["animation", "animation-delay", "animation-duration", "animation-name", "aspect-ratio", "background", "background-color", "border", "border-bottom",
-  "border-color", "border-left", "border-radius", "border-right", "border-top", "box-sizing", "color", "column-gap", "display", "fill", "fill-opacity", "flex-direction",
+  "border-color", "border-left", "border-radius", "border-right", "border-top", "box-sizing", "color", "column-gap", "display", "fill", "fill-opacity", "flex", "flex-basis", "flex-direction", "flex-grow", "flex-shrink", "align-items",
   "flex-wrap", "font", "font-size", "font-weight", "gap", "grid-template-columns", "height", "left", "line-height", "margin", "margin-bottom", "margin-top", "max-height",
   "max-width", "min-height", "overflow", "padding", "padding-bottom", "padding-top", "pointer-events", "position", "row-gap", "stroke", "stroke-dasharray",
   "stroke-linejoin", "stroke-opacity", "stroke-width", "text-align", "top", "width"]);
@@ -120,17 +120,19 @@ export function nativePageReport(code: Code, root: Id): NativeReport {
       } else if (properties.has(t) && lit(n.args[properties.get(t)!]) === "style") inline.push(...rest.flatMap((a) => textsUnder(a)));
     }
   }
-  const decls = (text: string) => {
+  // A keyframe's transform (translate, scale) and opacity run (c-layout.ts
+  // tl_step); elsewhere they aren't read.
+  const decls = (text: string, frame = false) => {
     for (const part of text.split(";")) {
       const m = /^\s*([-a-zA-Z]+)\s*:/.exec(part);
       if (!m || m[1].startsWith("--")) continue;
       const k = m[1].toLowerCase();
-      if (!READ.has(k) && !MOOT.has(k)) leftOut.add(`the property ${k}`);
+      if (!READ.has(k) && !MOOT.has(k) && !(frame && (k === "transform" || k === "opacity"))) leftOut.add(`the property ${k}`);
     }
   };
   const selectors = (list: string) => {
     for (const sel of list.split(",").map((x) => x.trim()).filter(Boolean)) {
-      const bare = sel.replace(/:where\((.*)\)/, "$1").replace(/:root\b/, "");
+      const bare = sel.replace(/:where\((.*)\)/, "$1").replace(/:root\b/, "").replace(/:(empty|first-child|last-child)\b/g, "");
       const why = /::/.test(bare) ? "a pseudo-element" : /:[a-z-]+/.test(bare) ? `the state ${/:[a-z-]+/.exec(bare)![0]}` : /\[/.test(bare) ? "an attribute selector" : /[+~]/.test(bare) ? "a sibling combinator" : null;
       if (why) leftOut.add(`rules on ${why} (${sel})`);
     }
@@ -142,8 +144,9 @@ export function nativePageReport(code: Code, root: Id): NativeReport {
       // A sheet written whole: each rule's selectors and declarations
       // (a keyframe's from and to are declarations too).
       for (const m of s.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
-        if (!/^\s*(from|to|\d+%)\s*$/.test(m[1])) selectors(m[1]);
-        decls(m[2]);
+        const frame = /^\s*(from|to|\d+%)\s*$/.test(m[1]);
+        if (!frame) selectors(m[1]);
+        decls(m[2], frame);
       }
       for (const m of s.matchAll(/@media\s*([^{]*)\{/g)) media(m[1]);
     } else if (/^\s*(@media|\()/.test(s)) media(s.replace(/^\s*@media/, ""));
@@ -153,6 +156,6 @@ export function nativePageReport(code: Code, root: Id): NativeReport {
     else if (/^\s*-{0,2}[a-zA-Z][-a-zA-Z]*\s*:\s/.test(s) || /;/.test(s)) decls(s);
     else selectors(s);
   }
-  inline.forEach(decls);
+  inline.forEach((s) => decls(s));
   return { refused: [...refused].sort(), leftOut: [...leftOut].sort() };
 }
