@@ -56,11 +56,15 @@ import { TICKET_V } from "../../ters/src/lang/std.ts";
 
 import { FDLIBM_C } from "./c-math.ts";
 import { LAYOUT_C, UI_HEADLESS_C } from "./c-layout.ts";
-import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
+import { BASE, C_TAKEN, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (RESERVED).
-const C_RUNTIME = ["argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+// The prefixes this file puts a number after (lab_m3), or with true any
+// name (lab_print_ and a type's), which a program's own names must not
+// start with either (c-names.test.ts checks both lists against this file).
+export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["host_", true], ["m", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
 import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -610,10 +614,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
   // And the names this file's own runtime parts define (I214).
   const used = new Set<string>([...C_RUNTIME, "iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
-  const ident = (hint: string) => {
-    const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
+  // A type's name is printed bare, so it must not be one of C's either.
+  const ident = (hint: string, bare = false) => {
+    let base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
+    if (C_OWN_PREFIXES.some(([p, any]) => base.startsWith(p) && (any || /^[0-9]/.test(base.slice(p.length))))) base = `d_${base}`;
     let n = base;
-    for (let i = 2; used.has(n); i++) n = `${base}_${i}`;
+    for (let i = 2; used.has(n) || (bare && C_TAKEN.has(n)); i++) n = `${base}_${i}`;
     used.add(n);
     return n;
   };
@@ -718,8 +724,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   }
   shaped.forEach((s) => { collect(shapes[s].t); shapes[s].caps.forEach(collect); });
   const boxes = [...records.values()].filter((r) => r.mutable);
-  const sname = new Map([...records.values()].map((r) => [r.key, ident(r.name)]));
-  const dname = new Map([...data.values()].map((d) => [d.key, ident(d.name)]));
+  const sname = new Map([...records.values()].map((r) => [r.key, ident(r.name, true)]));
+  const dname = new Map([...data.values()].map((d) => [d.key, ident(d.name, true)]));
   const fname = new Map([...fns.keys()].map((k) => [k, ident("Fn")]));
   const shapeName = new Map([...shaped].map((s) => [s, ident(`Closure`)]));
   // Cell types, numbered: data types, boxes, closures' shapes.
