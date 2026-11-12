@@ -82,6 +82,7 @@ const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 export const JNI_C = String.raw`
 // The screen over JNI (C199d): MainActivity's views, by number.
 #include <jni.h>
+#include <unistd.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
 static jmethodID ters_jm[19];
@@ -153,6 +154,18 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
   jclass k = (*env)->GetObjectClass(env, self);
   const char *ms[19][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" }, { "ask", "(Ljava/lang/String;)I" } };
   for (int i = 0; i < 19; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  // What the page keeps (the world's files, a page's saved values) goes
+  // in the app's own files, not in "/", which it can't write.
+  jmethodID fd = (*env)->GetMethodID(env, k, "getFilesDir", "()Ljava/io/File;");
+  if (!fd) (*env)->ExceptionClear(env);
+  else {
+    jobject f = (*env)->CallObjectMethod(env, self, fd);
+    jmethodID ap = f ? (*env)->GetMethodID(env, (*env)->GetObjectClass(env, f), "getAbsolutePath", "()Ljava/lang/String;") : 0;
+    jstring d = ap ? (jstring)(*env)->CallObjectMethod(env, f, ap) : 0;
+    const char *c = d ? (*env)->GetStringUTFChars(env, d, 0) : 0;
+    if (c) { if (chdir(c)) perror(c); (*env)->ReleaseStringUTFChars(env, d, c); }
+    if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+  }
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.

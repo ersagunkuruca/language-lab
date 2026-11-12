@@ -114,6 +114,7 @@ const PAGE_M = (decl: string, foreign: string) => String.raw`// The page: made a
 #import <UserNotifications/UserNotifications.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 
 ${decl}
 void *ters_ui_start(ters_ui *ui, double width, int dark);
@@ -651,6 +652,12 @@ static void shown(NSString *when) {
 
 int main(int argc, char *argv[]) {
   setvbuf(stdout, NULL, _IOLBF, 0);
+  // What the page keeps (the world's files, a page's saved values) goes in
+  // the app's Application Support, not beside the app, which is read-only.
+  @autoreleasepool {
+    NSURL *d = [NSFileManager.defaultManager URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:nil];
+    if (d && chdir(d.fileSystemRepresentation)) perror(d.fileSystemRepresentation);
+  }
   @autoreleasepool { return UIApplicationMain(argc, argv, nil, NSStringFromClass([TApp class])); }
 }
 `;
