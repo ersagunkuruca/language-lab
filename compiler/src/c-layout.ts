@@ -71,6 +71,9 @@ typedef struct {
   // Borders on single sides (top, right, bottom, left), and their colour:
   // laid out as padding is, drawn by ters_ui's sides.
   double side[4]; uint32_t sidec;
+  // As a flex item: flex-grow, flex-shrink 0 (fixed), flex-basis (set);
+  // as a flex box, align-items: 0 stretch, 1 start, 2 center, 3 end.
+  double grow, basis; int fixed, set_basis, items;
 } tl_css;
 typedef struct tl_n {
   char *tag, *s, *id, *cls, *style, **ak, **av;
@@ -461,6 +464,21 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   if (TL_IS("display")) c->display = TL_V("none") ? TL_NONE : TL_V("flex") || TL_V("inline-flex") ? TL_FLEX : TL_V("grid") ? TL_GRID : TL_V("contents") ? TL_CONTENTS : TL_V("inline") ? TL_INLINE : TL_BLOCK, c->row = c->display == TL_FLEX ? 1 : c->row;
   else if (TL_IS("flex-direction")) c->row = !TL_V("column");
   else if (TL_IS("flex-wrap")) c->wrap = TL_V("wrap");
+  else if (TL_IS("align-items")) c->items = TL_V("center") ? 2 : TL_V("flex-start") || TL_V("start") ? 1 : TL_V("flex-end") || TL_V("end") ? 3 : 0;
+  else if (TL_IS("flex-grow")) c->grow = strtod(v, 0);
+  else if (TL_IS("flex-shrink")) c->fixed = strtod(v, 0) == 0;
+  else if (TL_IS("flex-basis")) { double x = tl_len(v, e, c->size, &ok, 0); c->set_basis = ok == 1; if (ok == 1) c->basis = x; }
+  // flex: none, auto, or grow [shrink] [basis].
+  else if (TL_IS("flex")) {
+    if (TL_V("none")) c->grow = 0, c->fixed = 1, c->set_basis = 0;
+    else if (TL_V("auto")) c->grow = 1, c->fixed = 0, c->set_basis = 0;
+    else {
+      char *z; c->grow = strtod(v, &z); c->fixed = 0; c->set_basis = 1; c->basis = 0;
+      const char *q = z; while (q < e && *q == ' ') q++;
+      if (q < e) { char *z2; double sh = strtod(q, &z2); if (z2 != q && (z2 >= e || *z2 == ' ')) { c->fixed = sh == 0; q = z2; while (q < e && *q == ' ') q++; } }
+      if (q < e) { int o2 = 1; double x = tl_len(q, e, c->size, &o2, 0); if (o2 == 1) c->basis = x; else c->set_basis = 0; }
+    }
+  }
   else if (TL_IS("gap")) { const char *a; double r = tl_len(v, e, c->size, &ok, &a); if (ok) { int o2 = 1; double cc = tl_len(a, e, c->size, &o2, 0); c->gap_r = r; c->gap_c = o2 == 1 ? cc : r; } }
   else if (TL_IS("row-gap")) c->gap_r = tl_len(v, e, c->size, &ok, 0);
   else if (TL_IS("column-gap")) c->gap_c = tl_len(v, e, c->size, &ok, 0);
@@ -694,29 +712,66 @@ static double tl_flow(tl_n *e, double w) {
   const tl_css *c = &e->c;
   double ox = c->pad[3] + c->bw, oy = c->pad[0] + c->bw;
   double y = 0;
+  if (c->display == TL_FLEX && c->row) {
+    // A row of items, in lines when it wraps: each as wide as its basis
+    // (or its content), then grown into the line's room by flex-grow, or
+    // shrunk to it; then placed across the line by align-items.
+    int j0 = 0, any = 0;
+    while (j0 < n) {
+      int ln[256], m = 0, j = j0; double used = 0, grow = 0;
+      for (; j < n; j++) {
+        tl_n *k = it[j];
+        if (tl_blank(k)) { k->w = k->h = 0; continue; }
+        if (k->tag && (k->c.display == TL_NONE || k->c.pos == 2)) continue;
+        double mar = k->tag ? k->c.mar[1] + k->c.mar[3] : 0;
+        double edge = k->tag ? k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw : 0;
+        tl_lay(k, k->tag && k->c.set_basis ? (k->c.border_box ? k->c.basis : k->c.basis + edge) : tl_fit(k, w) - mar);
+        double kw = tl_outer_w(k);
+        if (m && c->wrap && used + c->gap_c + kw > w + 0.01) break;
+        used += (m ? c->gap_c : 0) + kw; ln[m++] = j;
+        if (k->tag) grow += k->c.grow;
+      }
+      // Shrunk by their widths (flex-shrink 1), the fixed ones and texts
+      // aside.
+      double room = w - used, shrink = 0;
+      for (int i = 0; i < m; i++) { tl_n *k = it[ln[i]]; if (k->tag && !k->c.set_w && !k->c.fixed) shrink += k->w; }
+      for (int i = 0; i < m; i++) {
+        tl_n *k = it[ln[i]];
+        if (!k->tag || k->c.set_w) continue;
+        if (room > 0.01 && grow > 0 && k->c.grow > 0) tl_lay(k, k->w + room * k->c.grow / grow);
+        else if (room < -0.01 && shrink > 0 && !k->c.fixed) { double x = k->w + room * k->w / shrink; tl_lay(k, x > 0 ? x : 0); }
+      }
+      double x = 0, lineh = 0;
+      for (int i = 0; i < m; i++) if (tl_outer_h(it[ln[i]]) > lineh) lineh = tl_outer_h(it[ln[i]]);
+      for (int i = 0; i < m; i++) {
+        tl_n *k = it[ln[i]];
+        double oh = tl_outer_h(k), dy = c->items == 2 ? (lineh - oh) / 2 : c->items == 3 ? lineh - oh : 0;
+        // Stretched to the line's height (not a picture, which keeps its own).
+        if (!c->items && k->tag && !k->c.set_h && !k->c.set_maxh && strcmp(k->tag, "svg")) k->h = lineh - k->c.mar[0] - k->c.mar[2];
+        if (i) x += c->gap_c;
+        k->x = ox + x + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + dy + (k->tag ? k->c.mar[0] : 0);
+        x += tl_outer_w(k);
+      }
+      if (m) { if (any) y += c->gap_r; y += lineh; any = 1; }
+      j0 = j;
+    }
+    return y;
+  }
   if (c->display == TL_FLEX) {
-    double x = 0, lineh = 0; int first = 1;
+    int first = 1;
     for (int j = 0; j < n; j++) {
       tl_n *k = it[j];
       if (tl_blank(k)) { k->w = k->h = 0; continue; }
       if (k->tag && (k->c.display == TL_NONE || k->c.pos == 2)) continue;
-      if (c->row) {
-        double fw = tl_fit(k, w);
-        tl_lay(k, fw);
-        double kw = tl_outer_w(k);
-        if (!first && c->wrap && x + c->gap_c + kw > w + 0.01) { y += lineh + c->gap_r; x = 0; lineh = 0; first = 1; }
-        if (!first) x += c->gap_c;
-        k->x = ox + x + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + (k->tag ? k->c.mar[0] : 0);
-        x += kw; if (tl_outer_h(k) > lineh) lineh = tl_outer_h(k);
-        first = 0;
-      } else {
-        tl_lay(k, w);
-        if (!first) y += c->gap_r;
-        k->x = ox + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + (k->tag ? k->c.mar[0] : 0);
-        y += tl_outer_h(k); first = 0;
-      }
+      // Across a column: as wide as it (stretch), or as its content.
+      double mar = k->tag ? k->c.mar[1] + k->c.mar[3] : 0, fw = c->items ? tl_fit(k, w) - mar : w;
+      tl_lay(k, fw);
+      double dx = c->items == 2 ? (w - tl_outer_w(k)) / 2 : c->items == 3 ? w - tl_outer_w(k) : 0;
+      if (!first) y += c->gap_r;
+      k->x = ox + dx + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + (k->tag ? k->c.mar[0] : 0);
+      y += tl_outer_h(k); first = 0;
     }
-    return c->row ? y + lineh : y;
+    return y;
   }
   if (c->display == TL_GRID && c->ncols > 0) {
     int nc = c->ncols, m = 0;
