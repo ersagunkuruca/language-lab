@@ -143,18 +143,21 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   if (!byCost.has(costOf)) {
     const make = () => { const r = scanningOnLayer(lib, () => resolving(lib, under, names, costOf, null, true)); return "layer" in r ? r : null; };
     let r: ReturnType<typeof make>;
-    if (costOf === NEUTRAL) {
+    if (costOf === NEUTRAL && under.keptAs) {
       // The neutral one, every program's, kept between runs (I193o): its
       // types are the library's kept check's variables, the same each run.
       // Kept as the nodes it changed and those it took out, so the rest
       // are the library's own (scans and copies tell them apart by object).
+      // Made over the kept check it goes on from, which its key names (I219:
+      // one made over a check with other options was read back for this
+      // one); over a check not kept (the editor's), made in the process.
       const kept = keptAcrossRuns("library-resolved", lib, () => {
         const m = make();
         if (!m) return null;
         const changed: Record<Id, Node> = {};
         for (const id in m.nodes) if (m.nodes[id] !== lib.nodes[id]) changed[id] = m.nodes[id];
         return { ...m, nodes: changed, gone: Object.keys(lib.nodes).filter((id) => !(id in m.nodes)) };
-      }, import.meta.url);
+      }, import.meta.url, under.keptAs);
       if (kept) {
         const { gone, nodes: changed, ...rest } = kept;
         const nodes: Record<Id, Node> = { ...lib.nodes };
