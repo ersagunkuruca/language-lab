@@ -57,7 +57,7 @@ function zero(t: LType, types: Record<string, LType>, name: string): string {
   if (t === "f64") return "f64.const 0";
   if (t === "i32") return "i32.const 0";
   if (t === "int") return "i32.const 0\nref.i31";
-  if (t === "text") return "ref.null $bytes";
+  if (t === "text") return "ref.null $text";
   types[name] = t;
   return `ref.null $${name}`;
 }
@@ -200,10 +200,10 @@ end`;
         body.push("local.get $k", ...steps);
         if (kind === "int") body.push("local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "ref.test i31", "if i64", "local.get $li", "ref.cast i31", "i31.get_s", "i64.extend_i32_s", "else", "local.get $li", "call $int.small", "end", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
         else if (kind === "f64") body.push("i64.reinterpret_f64", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
-        else body.push("local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end");
+        else body.push("call $text.raw", "local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end");
       }
       body.push("local.get $h", "local.get $h", "i32.const 16", "i32.shr_u", "i32.xor", "i32.const -2048144789", "i32.mul", "local.tee $h", "local.get $h", "i32.const 13", "i32.shr_u", "i32.xor");
-      return { ...base, params: [["k", "key"]], result: "i32", locals: [["h", "i32"], ...(kinds.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(kinds.has("int") || kinds.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(kinds.has("text") ? [["lt", "text"], ["i", "i32"]] as [string, VT][] : [])], uses: kinds.has("int") ? ["int.small"] : [], body: body.join("\n") };
+      return { ...base, params: [["k", "key"]], result: "i32", locals: [["h", "i32"], ...(kinds.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(kinds.has("int") || kinds.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(kinds.has("text") ? [["lt", "raw"], ["i", "i32"]] as [string, VT][] : [])], uses: [...(kinds.has("int") ? ["int.small"] : []), ...(kinds.has("text") ? ["text.raw"] : [])], body: body.join("\n") };
     }
     case "eq": {
       // An Int part: the same i31 (or the same Int) without a call; two

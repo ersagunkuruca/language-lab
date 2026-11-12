@@ -20,13 +20,14 @@ import { MATH } from "./wasm-math.ts";
 import { SITES, STOPS } from "./stops.ts";
 
 // A value type, as the runtime functions name them: `text` is a
-// reference to the byte array, `list` to a List Text of the module.
+// reference to a Text (a , I222), `raw` to a plain byte array,
+// `list` to a List Text of the module.
 // `option` an Optional Text, and `void` a result of nothing.
 // `int` an Int (W5): an i31 while it fits in 31 bits, a $big, a $huge;
 // `i64` a plain machine word, which the functions below compute with.
 // `mag` a big Int's magnitude, an array of 32-bit limbs.
 // An array function's (C66) own types: the view, its item, its buffer and the buffer's items.
-export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "raw" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
 
 export interface RtFn {
   name: string;
@@ -6744,7 +6745,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
   },
   // Its bytes back to items, before anything writes (L189f2b).
   "array.widen": {
-    params: [["a", "array"]], result: "void", locals: [["b", "buf"], ["y", "text"], ["it", "items"], ["n", "i32"], ["i", "i32"]], uses: [],
+    params: [["a", "array"]], result: "void", locals: [["b", "buf"], ["y", "raw"], ["it", "items"], ["n", "i32"], ["i", "i32"]], uses: [],
     body: `
       local.get $a
       struct.get $arr 0
@@ -6788,7 +6789,7 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
   // A new Int array of 16 or more items, all 0 to 255, kept as bytes
   // (L189f2b); the slots outside lo to hi are 0.
   "array.narrow": {
-    params: [["a", "array"]], result: "array", locals: [["b", "buf"], ["it", "items"], ["y", "text"], ["lo", "i32"], ["hi", "i32"], ["i", "i32"], ["x", "item"]], uses: [],
+    params: [["a", "array"]], result: "array", locals: [["b", "buf"], ["it", "items"], ["y", "raw"], ["lo", "i32"], ["hi", "i32"], ["i", "i32"], ["x", "item"]], uses: [],
     body: `
       local.get $a
       struct.get $arr 0
@@ -7454,6 +7455,728 @@ const shaderOf = (k: number): Omit<RtFn, "name"> => ({
       i32.const ${k}
       struct.new $arr`,
 });
+// ---- Texts as views (I222)
+//
+// A Text is a $text: a byte array, where in it the text starts and how
+// many bytes it has, and how many characters (-1 till counted). A long
+// slice is a view on its text's array, so taking the rest of a text is
+// constant time, not a copy; a short one is copied, so a few characters
+// don't keep a long text alive. The functions that read a text byte by
+// byte are written here on views; every other one is written on a plain
+// array (`raw`, as R has it) and called through a wrapper that makes each
+// text a plain array (copying only a view) and the array it gives a text
+// (runtime, `.raw`).
+const VIEW = 64;
+// Byte k (an i32 expression) of the text whose array and start are in
+// locals xb and xo.
+const byteOf = (x: string, k: string) => `local.get $${x}b\n${k}\nlocal.get $${x}o\ni32.add\narray.get_u $bytes`;
+// Into xb, xo and xn: text x's array, start and size.
+const openText = (x: string) => `local.get $${x}\nstruct.get $text 0\nlocal.set $${x}b\nlocal.get $${x}\nstruct.get $text 1\nlocal.set $${x}o\nlocal.get $${x}\nstruct.get $text 2\nlocal.set $${x}n`;
+const opened = (x: string): [string, VT][] => [[`${x}b`, "raw"], [`${x}o`, "i32"], [`${x}n`, "i32"]];
+// The characters among bytes from to to of x (opened), into local k.
+const countChars = (x: string, from: string, to: string, i: string, k: string) => `${from}
+local.set $${i}
+block void
+loop void
+  local.get $${i}
+  ${to}
+  i32.ge_u
+  br_if 1
+  ${byteOf(x, `local.get $${i}`)}
+  i32.const 192
+  i32.and
+  i32.const 128
+  i32.ne
+  local.get $${k}
+  i32.add
+  local.set $${k}
+  local.get $${i}
+  i32.const 1
+  i32.add
+  local.set $${i}
+  br 0
+end
+end`;
+const V: Record<string, Omit<RtFn, "name">> = {
+  // A plain array as a text, and a text as a plain array (its own array
+  // when the text is all of it, else a copy).
+  // (Null stays null: the stand-in a function with no answer gives.)
+  "text.of": { params: [["r", "raw"]], result: "text", locals: [], uses: [], native: true, body: "local.get $r\nref.is_null\nif text\nref.null $text\nelse\nlocal.get $r\ni32.const 0\nlocal.get $r\narray.len\ni32.const -1\nref.null $text\nstruct.new $text\nend" },
+  "text.raw": {
+    params: [["t", "text"]], result: "raw", locals: [["r", "raw"], ...opened("t")], uses: [], native: true,
+    body: `local.get $t
+      ref.is_null
+      if void
+        ref.null $bytes
+        return
+      end
+      ${openText("t")}
+      local.get $to
+      i32.eqz
+      local.get $tn
+      local.get $tb
+      array.len
+      i32.eq
+      i32.and
+      if raw
+        local.get $tb
+      else
+        local.get $tn
+        array.new_default $bytes
+        local.tee $r
+        i32.const 0
+        local.get $tb
+        local.get $to
+        local.get $tn
+        array.copy $bytes $bytes
+        local.get $r
+      end`,
+  },
+  // Bytes a up to b of t: a view when long, a copy when short; k its
+  // characters, or -1.
+  "text.part": {
+    params: [["t", "text"], ["a", "i32"], ["b", "i32"], ["k", "i32"]], result: "text", locals: [["r", "raw"]], uses: [], native: true,
+    body: `local.get $b
+      local.get $a
+      i32.sub
+      i32.const ${VIEW}
+      i32.lt_u
+      if text
+        local.get $b
+        local.get $a
+        i32.sub
+        array.new_default $bytes
+        local.tee $r
+        i32.const 0
+        local.get $t
+        struct.get $text 0
+        local.get $t
+        struct.get $text 1
+        local.get $a
+        i32.add
+        local.get $b
+        local.get $a
+        i32.sub
+        array.copy $bytes $bytes
+        local.get $r
+        i32.const 0
+        local.get $b
+        local.get $a
+        i32.sub
+        local.get $k
+        ref.null $text
+        struct.new $text
+      else
+        local.get $t
+        struct.get $text 0
+        local.get $t
+        struct.get $text 1
+        local.get $a
+        i32.add
+        local.get $b
+        local.get $a
+        i32.sub
+        local.get $k
+        local.get $t
+        struct.get $text 4
+        struct.new $text
+      end`,
+  },
+  // For the host, which can't make or read an array itself: a text of n
+  // bytes to fill, filling one, and reading one back.
+  "text.new": { params: [["n", "i32"]], result: "text", locals: [], uses: [], body: "local.get $n\narray.new_default $bytes\ni32.const 0\nlocal.get $n\ni32.const -1\nref.null $text\nstruct.new $text" },
+  "text.put": { params: [["t", "text"], ["i", "i32"], ["b", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nstruct.get $text 0\nlocal.get $i\nlocal.get $t\nstruct.get $text 1\ni32.add\nlocal.get $b\narray.set $bytes\ni32.const 0" },
+  "text.put4": {
+    params: [["t", "text"], ["i", "i32"], ["w", "i32"]], result: "i32", locals: [], uses: [],
+    body: [0, 1, 2, 3].map((k) => `local.get $t\nstruct.get $text 0\nlocal.get $i\ni32.const ${k}\ni32.add\nlocal.get $t\nstruct.get $text 1\ni32.add\nlocal.get $w\ni32.const ${8 * k}\ni32.shr_u\narray.set $bytes`).join("\n") + "\ni32.const 0",
+  },
+  "text.size": { params: [["t", "text"]], result: "i32", locals: [], uses: [], body: "local.get $t\nstruct.get $text 2" },
+  "text.byte": { params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nstruct.get $text 0\nlocal.get $i\nlocal.get $t\nstruct.get $text 1\ni32.add\narray.get_u $bytes" },
+  // Where the character that ends at byte i (> 0) starts: back over
+  // UTF-8's continuation bytes (10xxxxxx).
+  "text.before": {
+    params: [["t", "text"], ["i", "i32"]], result: "i32", locals: opened("t"), uses: [],
+    body: `${openText("t")}
+      block void
+        loop void
+          local.get $i
+          i32.const 1
+          i32.sub
+          local.set $i
+          local.get $i
+          i32.eqz
+          br_if 1
+          ${byteOf("t", "local.get $i")}
+          i32.const 192
+          i32.and
+          i32.const 128
+          i32.eq
+          br_if 0
+        end
+      end
+      local.get $i`,
+  },
+  // The number of characters, counted once.
+  "text.length": {
+    params: [["t", "text"]], result: "int", locals: [["i", "i32"], ["k", "i32"], ...opened("t")], uses: [],
+    body: `local.get $t
+      struct.get $text 3
+      local.tee $k
+      i32.const 0
+      i32.lt_s
+      if void
+        ${openText("t")}
+        i32.const 0
+        local.set $k
+        ${countChars("t", "i32.const 0", "local.get $tn", "i", "k")}
+        local.get $t
+        local.get $k
+        struct.set $text 3
+      end
+      local.get $k
+      i64.extend_i32_u`,
+  },
+  // Where character k starts, in bytes from the text's start; its size
+  // if there are fewer. Every character a byte, it is k.
+  "text.offset": {
+    params: [["t", "text"], ["k", "i32"]], result: "i32", locals: [["i", "i32"], ["c", "i32"], ...opened("t")], uses: [],
+    body: `${openText("t")}
+      local.get $t
+      struct.get $text 3
+      local.get $tn
+      i32.eq
+      if void
+        local.get $k
+        local.get $tn
+        local.get $k
+        local.get $tn
+        i32.lt_u
+        select
+        return
+      end
+      block void
+      loop void
+        local.get $i
+        local.get $tn
+        i32.ge_u
+        br_if 1
+        ${byteOf("t", "local.get $i")}
+        i32.const 192
+        i32.and
+        i32.const 128
+        i32.ne
+        if void
+          local.get $c
+          local.get $k
+          i32.eq
+          br_if 2
+          local.get $c
+          i32.const 1
+          i32.add
+          local.set $c
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      local.get $i`,
+  },
+  // The characters from \`from\` up to, not including, \`to\`, clamped
+  // (text.ts slice). Known in characters, the end past the last one is
+  // found without walking the text.
+  "text.slice": {
+    params: [["t", "text"], ["from", "int"], ["to", "int"]], result: "text", locals: [["a", "i32"], ["b", "i32"], ["k", "i32"], ["n", "i32"], ["i", "i32"], ["j", "i32"]], uses: ["text.clamp", "text.offset", "text.part"],
+    body: `local.get $t
+      struct.get $text 2
+      local.set $n
+      local.get $t
+      struct.get $text 3
+      local.set $k
+      local.get $from
+      local.get $n
+      call $text.clamp
+      local.set $a
+      local.get $to
+      local.get $n
+      call $text.clamp
+      local.set $b
+      local.get $b
+      local.get $a
+      i32.le_u
+      if text
+        i32.const 0
+        array.new_default $bytes
+        i32.const 0
+        i32.const 0
+        i32.const 0
+        ref.null $text
+        struct.new $text
+      else
+        local.get $t
+        local.get $a
+        call $text.offset
+        local.set $i
+        local.get $k
+        i32.const 0
+        i32.ge_s
+        local.get $b
+        local.get $k
+        i32.ge_u
+        i32.and
+        if i32
+          local.get $n
+        else
+          local.get $t
+          local.get $b
+          call $text.offset
+        end
+        local.set $j
+        local.get $i
+        i32.eqz
+        local.get $j
+        local.get $n
+        i32.eq
+        i32.and
+        if text
+          local.get $t
+        else
+          local.get $t
+          local.get $i
+          local.get $j
+          local.get $j
+          local.get $n
+          i32.lt_u
+          if i32
+            local.get $b
+            local.get $a
+            i32.sub
+          else
+            local.get $k
+            local.get $a
+            i32.sub
+            i32.const -1
+            local.get $k
+            i32.const 0
+            i32.ge_s
+            select
+          end
+          call $text.part
+        end
+      end`,
+  },
+  // a ++ b: either, when the other is empty, as it is. A long one goes
+  // in an array with as much room again on the shorter side's end, and
+  // its fill (the text's field 4: a $text whose fields 1 and 2 are where
+  // the array's used bytes start and end) lets a later a ++ b write into
+  // that room instead of copying: b after a when a ends where the used
+  // bytes end, a before b when b starts where they start. No text sees
+  // the bytes outside them, so each text's bytes stay as they were, and
+  // building a text a piece at a time copies each byte a few times, not
+  // once for every piece after it.
+  "text.concat": {
+    params: [["a", "text"], ["b", "text"]], result: "text", locals: [["r", "raw"], ["n", "i32"], ["k", "i32"], ["f", "text"], ["c", "i32"], ["s", "i32"], ...opened("a"), ...opened("b")], uses: [],
+    body: `${openText("a")}
+      ${openText("b")}
+      local.get $an
+      i32.eqz
+      if void
+        local.get $b
+        return
+      end
+      local.get $bn
+      i32.eqz
+      if void
+        local.get $a
+        return
+      end
+      local.get $an
+      local.get $bn
+      i32.add
+      local.set $n
+      local.get $a
+      struct.get $text 3
+      local.get $b
+      struct.get $text 3
+      i32.add
+      i32.const -1
+      local.get $a
+      struct.get $text 3
+      local.get $b
+      struct.get $text 3
+      i32.or
+      i32.const 0
+      i32.ge_s
+      select
+      local.set $k
+      local.get $n
+      i32.const ${VIEW}
+      i32.lt_u
+      if void
+        local.get $n
+        array.new_default $bytes
+        local.tee $r
+        i32.const 0
+        local.get $ab
+        local.get $ao
+        local.get $an
+        array.copy $bytes $bytes
+        local.get $r
+        local.get $an
+        local.get $bb
+        local.get $bo
+        local.get $bn
+        array.copy $bytes $bytes
+        local.get $r
+        i32.const 0
+        local.get $n
+        local.get $k
+        ref.null $text
+        struct.new $text
+        return
+      end
+      local.get $a
+      struct.get $text 4
+      local.tee $f
+      ref.is_null
+      i32.eqz
+      if void
+        local.get $ao
+        local.get $an
+        i32.add
+        local.get $f
+        struct.get $text 2
+        i32.eq
+        local.get $bn
+        local.get $ab
+        array.len
+        local.get $f
+        struct.get $text 2
+        i32.sub
+        i32.le_u
+        i32.and
+        if void
+          local.get $ab
+          local.get $f
+          struct.get $text 2
+          local.get $bb
+          local.get $bo
+          local.get $bn
+          array.copy $bytes $bytes
+          local.get $f
+          local.get $f
+          struct.get $text 2
+          local.get $bn
+          i32.add
+          struct.set $text 2
+          local.get $ab
+          local.get $ao
+          local.get $n
+          local.get $k
+          local.get $f
+          struct.new $text
+          return
+        end
+      end
+      local.get $b
+      struct.get $text 4
+      local.tee $f
+      ref.is_null
+      i32.eqz
+      if void
+        local.get $bo
+        local.get $f
+        struct.get $text 1
+        i32.eq
+        local.get $an
+        local.get $bo
+        i32.le_u
+        i32.and
+        if void
+          local.get $bb
+          local.get $bo
+          local.get $an
+          i32.sub
+          local.tee $s
+          local.get $ab
+          local.get $ao
+          local.get $an
+          array.copy $bytes $bytes
+          local.get $f
+          local.get $s
+          struct.set $text 1
+          local.get $bb
+          local.get $s
+          local.get $n
+          local.get $k
+          local.get $f
+          struct.new $text
+          return
+        end
+      end
+      local.get $n
+      local.get $n
+      i32.add
+      local.tee $c
+      array.new_default $bytes
+      local.set $r
+      local.get $c
+      local.get $n
+      i32.sub
+      i32.const 0
+      local.get $an
+      local.get $bn
+      i32.lt_u
+      select
+      local.set $s
+      local.get $r
+      local.get $s
+      local.get $ab
+      local.get $ao
+      local.get $an
+      array.copy $bytes $bytes
+      local.get $r
+      local.get $s
+      local.get $an
+      i32.add
+      local.get $bb
+      local.get $bo
+      local.get $bn
+      array.copy $bytes $bytes
+      local.get $r
+      local.get $s
+      local.get $n
+      local.get $k
+      local.get $r
+      local.get $s
+      local.get $s
+      local.get $n
+      i32.add
+      i32.const -1
+      ref.null $text
+      struct.new $text
+      struct.new $text`,
+  },
+  // Bytes a up to b.
+  "text.bytes": { params: [["t", "text"], ["a", "i32"], ["b", "i32"]], result: "text", locals: [], uses: ["text.part"], body: "local.get $t\nlocal.get $a\nlocal.get $b\ni32.const -1\ncall $text.part" },
+  // The same bytes.
+  "text.equal": {
+    params: [["a", "text"], ["b", "text"]], result: "i32", locals: [["i", "i32"], ...opened("a"), ...opened("b")], uses: [],
+    body: `${openText("a")}
+      ${openText("b")}
+      local.get $an
+      local.get $bn
+      i32.ne
+      if void
+        i32.const 0
+        return
+      end
+      block void
+      loop void
+        local.get $i
+        local.get $an
+        i32.ge_u
+        br_if 1
+        ${byteOf("a", "local.get $i")}
+        ${byteOf("b", "local.get $i")}
+        i32.ne
+        if void
+          i32.const 0
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      i32.const 1`,
+  },
+  // Code-point order, which is UTF-8's byte order.
+  "text.less": {
+    params: [["a", "text"], ["b", "text"]], result: "i32", locals: [["i", "i32"], ["x", "i32"], ["y", "i32"], ...opened("a"), ...opened("b")], uses: [],
+    body: `${openText("a")}
+      ${openText("b")}
+      block void
+      loop void
+        local.get $i
+        local.get $an
+        i32.ge_u
+        if void
+          local.get $i
+          local.get $bn
+          i32.lt_u
+          return
+        end
+        local.get $i
+        local.get $bn
+        i32.ge_u
+        if void
+          i32.const 0
+          return
+        end
+        ${byteOf("a", "local.get $i")}
+        local.set $x
+        ${byteOf("b", "local.get $i")}
+        local.set $y
+        local.get $x
+        local.get $y
+        i32.ne
+        if void
+          local.get $x
+          local.get $y
+          i32.lt_u
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      unreachable`,
+  },
+  // The first character position where p starts (no answer when nowhere).
+  "text.find": {
+    params: [["t", "text"], ["p", "text"]], result: "int", locals: [["i", "i32"], ["j", "i32"], ["last", "i32"], ["k", "i32"], ...opened("t"), ...opened("p")], uses: [], partial: true,
+    body: `${openText("t")}
+      ${openText("p")}
+      local.get $tn
+      local.get $pn
+      i32.sub
+      local.set $last
+      block void ;; found at i
+      loop void
+        local.get $i
+        local.get $last
+        i32.gt_s
+        if void
+          i64.const 0
+          i32.const 1
+          return
+        end
+        i32.const 0
+        local.set $j
+        block void ;; not at i
+        loop void
+          local.get $j
+          local.get $pn
+          i32.ge_u
+          br_if 3
+          ${byteOf("t", "local.get $i\nlocal.get $j\ni32.add")}
+          ${byteOf("p", "local.get $j")}
+          i32.ne
+          br_if 1
+          local.get $j
+          i32.const 1
+          i32.add
+          local.set $j
+          br 0
+        end
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.set $i
+        br 0
+      end
+      end
+      ${countChars("t", "i32.const 0", "local.get $i", "j", "k")}
+      local.get $k
+      i64.extend_i32_u
+      i32.const 0`,
+  },
+  // A one-character text's code point: more than 4 bytes is none (and
+  // isn't copied to find that out).
+  "text.code": {
+    params: [["t", "text"]], result: "int", locals: [], uses: ["text.code.i64.raw", "text.raw"], partial: true,
+    body: `local.get $t
+      struct.get $text 2
+      i32.const 4
+      i32.gt_u
+      if void
+        i64.const 0
+        i32.const 1
+        return
+      end
+      local.get $t
+      call $text.raw
+      call $text.code.i64.raw`,
+  },
+  // A number read from a text reads only digits, signs (and for a
+  // Number, points and e's): a text with any other byte is no number
+  // without being copied whole first (the rest of a long text tried as
+  // one number, as reading backwards does at each step), and stands in
+  // as " ", which each reader refuses.
+  "text.numeric": {
+    params: [["t", "text"], ["e", "i32"]], result: "raw", locals: [["i", "i32"], ["c", "i32"], ...opened("t")], uses: ["text.raw"],
+    body: `${openText("t")}
+      block void
+        loop void
+          local.get $i
+          local.get $tn
+          i32.ge_u
+          br_if 1
+          ${byteOf("t", "local.get $i")}
+          local.tee $c
+          i32.const 48
+          i32.sub
+          i32.const 10
+          i32.lt_u
+          local.get $c
+          i32.const 45
+          i32.eq
+          i32.or
+          local.get $e
+          local.get $c
+          i32.const 43
+          i32.eq
+          local.get $c
+          i32.const 46
+          i32.eq
+          i32.or
+          local.get $c
+          i32.const 32
+          i32.or
+          i32.const 101
+          i32.eq
+          i32.or
+          i32.and
+          i32.or
+          i32.eqz
+          if void
+            i32.const 32
+            array.new_fixed $bytes 1
+            return
+          end
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $t
+      call $text.raw`,
+  },
+  "int.read": {
+    params: [["t", "text"]], result: R["int.read"].result, locals: [], uses: ["text.numeric", "int.read.raw"], partial: true, native: R["int.read"].native,
+    body: "local.get $t\ni32.const 0\ncall $text.numeric\ncall $int.read.raw",
+  },
+  "int64.read": {
+    params: [["t", "text"]], result: R["int64.read"].result, locals: [], uses: ["text.numeric", "int64.read.raw"], partial: true, native: R["int64.read"].native,
+    body: "local.get $t\ni32.const 0\ncall $text.numeric\ncall $int64.read.raw",
+  },
+  "text.readNumber": {
+    params: [["t", "text"]], result: R["text.readNumber"].result, locals: [], uses: ["text.numeric", "text.readNumber.raw"], partial: true, native: R["text.readNumber"].native,
+    body: "local.get $t\ni32.const 1\ncall $text.numeric\ncall $text.readNumber.raw",
+  },
+};
+
 const hasInt = (f: Omit<RtFn, "name">) => !f.native && [...f.params.map(([, t]) => t), f.result].includes("int");
 const raw = (n: string) => { const f = R[n] ?? WASI[n] ?? MATH[n]; return f && hasInt(f) ? `${n}.i64` : n; };
 // std's Table's functions (C63h): only their shapes, for the lowering and
@@ -7477,7 +8200,7 @@ const TABLES: Record<string, Omit<RtFn, "name" | "body" | "locals" | "uses">> = 
 export function wasiStop(sites: { name?: string }[]): Omit<RtFn, "name"> {
   const named = sites.map((x, j) => [x.name, j] as const).filter((x): x is readonly [string, number] => !!x[0]);
   return {
-    params: [["i", "f64"]], result: "f64", locals: [["s", "f64"], ["t", "text"]], uses: ["wasi.line", "wasi_proc_exit", ...(named.length ? ["text.concat"] : [])],
+    params: [["i", "f64"]], result: "f64", locals: [["s", "f64"], ["t", "raw"]], uses: ["wasi.line.raw", "wasi_proc_exit", ...(named.length ? ["text.concat.raw"] : [])],
     body: `
       local.get $i
       f64.const ${SITES}
@@ -7493,10 +8216,10 @@ export function wasiStop(sites: { name?: string }[]): Omit<RtFn, "name"> {
       ${lit(STOPS[0])}
       local.set $t
       ${STOPS.map((why, i) => `local.get $i\n      f64.const ${i}\n      f64.eq\n      if void\n        ${lit(why)}\n        local.set $t\n      end`).join("\n      ")}
-      ${named.map(([name, j]) => `local.get $s\n      f64.const ${j + 1}\n      f64.eq\n      if void\n        local.get $t\n        ${lit(` (in ${name})`)}\n        call $text.concat\n        local.set $t\n      end`).join("\n      ")}
+      ${named.map(([name, j]) => `local.get $s\n      f64.const ${j + 1}\n      f64.eq\n      if void\n        local.get $t\n        ${lit(` (in ${name})`)}\n        call $text.concat.raw\n        local.set $t\n      end`).join("\n      ")}
       i32.const 2
       local.get $t
-      call $wasi.line
+      call $wasi.line.raw
       i32.const 1
       call $wasi_proc_exit
       unreachable`,
@@ -7586,8 +8309,32 @@ export const runtime = (name: string): RtFn => {
       ].join("\n"),
     };
   }
+  // Texts (I222): a function on plain arrays as R has it (`.raw`), one
+  // written on views (V) as it is, and any other with a Text through a
+  // wrapper.
+  if (name.endsWith(".raw") && !V[name]) return rawForm(plain(name.slice(0, -4), false), name);
+  const f = plain(name, true);
+  if (V[name.endsWith(".i64") ? name.slice(0, -4) : name]) return f;
+  // One whose inputs and answer have no Text, making or reading texts
+  // inside (a WASI line read, a list of a folder's names): on arrays too.
+  if (!hasText(f)) return f.locals.some(([, t]) => t === "text") || /\$bytes|call \$(text|wasi)\./.test(f.body) ? rawForm(f, name) : f;
+  return {
+    name, params: f.params, result: f.result, locals: f.partial ? [["st", "i32"]] : [], uses: [`${name}.raw`, "text.raw", "text.of"], list: f.list, partial: f.partial, native: true,
+    body: [
+      ...f.params.flatMap(([n, t]) => [`local.get $${n}`, ...(t === "text" ? ["call $text.raw"] : [])]),
+      `call $${name}.raw`,
+      ...(f.partial ? ["local.set $st"] : []),
+      ...(f.result === "text" ? ["call $text.of"] : []),
+      ...(f.partial ? ["local.get $st"] : []),
+    ].join("\n"),
+  };
+};
+const hasText = (f: Omit<RtFn, "name">) => [...f.params.map(([, t]) => t), f.result].includes("text");
+// A function as R, WASI or MATH has it (view: or V), with its Ints as
+// i64s (`.i64`) or through a wrapper.
+function plain(name: string, view: boolean): RtFn {
   const base = name.endsWith(".i64") ? name.slice(0, -4) : name;
-  const f = R[base] ?? WASI[base] ?? MATH[base];
+  const f = (view ? V[base] : undefined) ?? R[base] ?? WASI[base] ?? MATH[base];
   if (!f || (base !== name && !hasInt(f))) throw new Error(`no runtime function ${name}`);
   const body = f.body.replace(/call \$([\w.]+)/g, (_, n: string) => `call $${raw(n)}`), uses = f.uses.map(raw);
   if (base !== name) {
@@ -7605,7 +8352,36 @@ export const runtime = (name: string): RtFn => {
       ...(f.partial ? ["local.get $st"] : []),
     ].join("\n"),
   };
-};
+}
+// A function as R writes it, on plain arrays: each text a raw, each call
+// of a function with a Text that function's `.raw`; where a text goes
+// into or comes out of a List Text, an Optional Text or the reason, a
+// text made of the array or the array of the text.
+const textFn = (n: string) => { if (n.startsWith("wasi_") || n === "text.of" || n === "text.raw") return false; try { return hasText(plain(n, false)); } catch { return false; } };
+function rawForm(f: RtFn, name: string): RtFn {
+  const r = (t: VT): VT => (t === "text" ? "raw" : t);
+  const texts = !f.list;
+  const lines = f.body.split("\n").flatMap((l) => {
+    const m = /^(\s*)(\S+)\s*(.*)$/.exec(l);
+    if (!m) return [l];
+    const [, d, op, arg] = m;
+    if (op === "call" && textFn(arg.slice(1))) return [`${d}call ${arg}.raw`];
+    if ((op === "if" || op === "block" || op === "loop") && arg === "text") return [`${d}${op} raw`];
+    if (op === "global.set" && arg === "$reason") return [`${d}call $text.of`, l];
+    if (op === "global.get" && arg === "$reason") return [l, `${d}call $text.raw`];
+    if (texts && op === "call" && arg === "$TextOption.some") return [`${d}call $text.of`, l];
+    if (texts && ((op === "call" && arg === "$TextList.cons") || (op === "struct.new" && arg === "$list.cons"))) return [`${d}local.set $__tail`, `${d}call $text.of`, `${d}local.get $__tail`, l];
+    if (texts && op === "struct.get" && arg === "$list.cons 1") return [l, `${d}call $text.raw`];
+    return [l];
+  });
+  const body = lines.join("\n");
+  const calls = [...body.matchAll(/call \$([\w.]+)/g)].map((x) => x[1]);
+  return {
+    ...f, name, params: f.params.map(([n, t]): [string, VT] => [n, r(t)]), result: r(f.result),
+    locals: [...f.locals.map(([n, t]): [string, VT] => [n, r(t)]), ...(body.includes("$__tail") ? [["__tail", "list"] as [string, VT]] : [])],
+    body, uses: [...new Set([...f.uses.map((n) => (textFn(n) ? `${n}.raw` : n)), ...calls.filter((n) => n === "text.of" || n === "text.raw")])],
+  };
+}
 export const RUNTIME = Object.keys(R);
 
 // ---- the world over WASI (docs/design/targets/WASM.md, W3b-2)
