@@ -156,7 +156,9 @@ test("tumble laid out in C: main's margins, an h1's margin collapsed through mai
   const lines = r.stdout.toString().split("\n").map((s) => s.trim());
   // Chromium: main 40 40 280, h1 40 40 280, a lane's h2 8 below the lane's top, 272 wide.
   assert.match(lines[1], /^main 40 40 280 /);
-  assert.match(lines[2], /^h1 40 40 280 /);
+  // Its font-size, 1.4em of the 15 it is in (not of an h1's own 2em): 21,
+  // three lines of 31.5, as Chromium.
+  assert.match(lines[2], /^h1 40 40 280 94.5$/);
   const lane = lines.findIndex((s) => s.startsWith("div 40") && s.includes(" 272 ")), h2 = lines[lane + 1].split(" ").map(Number);
   assert.equal(lines[lane + 1].split(" ")[0], "h2");
   assert.equal(h2[2] - Number(lines[lane].split(" ")[2]), 8);

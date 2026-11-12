@@ -502,7 +502,8 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
     else { const char *a; double w = tl_len(v, e, c->size, &ok, &a); if (ok) { c->bw = w; a = tl_ws(a, e); while (a < e && *a != ' ') a++; uint32_t x = tl_colour(a, e); c->bc = x == 1 ? 0xFF000000u : x; } }
   }
   else if (TL_IS("border-color")) { uint32_t x = tl_colour(v, e); if (x != 1) c->bc = x; }
-  else if (TL_IS("font-size")) { double s = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->size = s; }
+  // In em and %, of the size it is in (its parent's), not its own.
+  else if (TL_IS("font-size")) { double s = tl_len(v, e, c->up_size, &ok, 0); if (ok == 1) c->size = s; }
   else if (TL_IS("font-weight")) c->bold = TL_V("bold") || (v[0] >= '6' && v[0] <= '9');
   else if (TL_IS("font")) {
     // font: [weight] size[/line] family: the size and line height.
@@ -510,7 +511,7 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
     if (TL_V("inherit")) { c->size = c->up_size; c->line = c->up_line; c->bold = c->up_bold; p = e; }
     while ((p = tl_ws(p, e)) < e) {
       if (TL_V("bold") || (p[0] >= '6' && p[0] <= '9' && p + 3 <= e && p[1] == '0' && p[2] == '0')) c->bold = 1;
-      int o2 = 1; const char *a; double s = tl_len(p, e, c->size, &o2, &a);
+      int o2 = 1; const char *a; double s = tl_len(p, e, c->up_size, &o2, &a);
       if (o2 == 1 && a > p && (a == e || *a == ' ' || *a == '/')) { c->size = s; if (a < e && *a == '/') { char *z; double l = strtod(a + 1, &z); c->line = (z < e && (*z == 'p')) ? l / s : l; } break; }
       while (p < e && *p != ' ') p++;
     }
