@@ -52,6 +52,8 @@ export interface PageOptions {
   recordings?: string;
   // How the page fetches (a test's; by default the browser's).
   fetch?: (url: string) => Promise<string>;
+  // How the person answers a permission (a test's; by default the browser asks).
+  permission?: (what: string) => Promise<boolean>;
   // And for send request (L191b).
   send?: (request: PlainRequest) => Promise<PlainResponse>;
   // How the page waits (a test's; by default setTimeout): C40.
@@ -92,7 +94,7 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells) cells.kept = [];
-  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after });
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission });
   const answered = o.replay ? replaying(o.replay.filter((e) => e.op !== "event"), browser) : browser;
   const world = recordingWorld(o.log ? logged(answered, o.log).world : answered);
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });

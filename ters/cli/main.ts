@@ -31,6 +31,7 @@ import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainD
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { answeredEffects, answerSupports, cHostHas, jsHostHas } from "../src/lang/supports.ts";
+import { nativeViews } from "../src/lang/native-views.ts";
 import { effectOfOperation, hostCName, hostSkeleton, hostSkeletonC, hostSkeletonJava, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } from "./logs.ts";
@@ -480,7 +481,10 @@ function answeredHere(q: Program): Program {
     : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText("android.java"))
     : command === "wasi" ? () => false
     : jsHostHas(hosts);
-  const code = answerSupports(q.code, q.info, answeredEffects(q.code, has));
+  const asked = answerSupports(q.code, q.info, answeredEffects(q.code, has));
+  // A view of the platform's own, as the element the shell draws it in
+  // (native-views.ts, L235).
+  const code = command === "build-native-app" ? nativeViews(asked ?? q.code, q.names, has) ?? asked : asked;
   if (!code) return q;
   const info = infer(code, q.names, undefined, q.options);
   return { ...q, code, info, reps: representationsIn(code, info, q.names, q.own) };
@@ -650,7 +654,7 @@ switch (command) {
     const ios = rest.includes("--ios");
     const cHost = own("c.c"), java = ios ? undefined : own("android.java"), ops = hostOpsOf(p.code, p.names);
     let fromJava = "";
-    try { fromJava = java ? androidHostsC(Object.values(ops).filter((h) => !cHost || !new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(cHost)), java) : ""; } catch (e) { fail((e as Error).message); }
+    try { fromJava = java ? androidHostsC(Object.values(ops).filter((h) => h.out.k !== "view" && (!cHost || !new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(cHost))), java) : ""; } catch (e) { fail((e as Error).message); }
     const hosts = { ops, c: cHost || fromJava ? [cHost ?? "", fromJava].join("\n") : undefined };
     const { lowered, root } = nativeLowered(main, false, true);
     let c: string;
