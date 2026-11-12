@@ -257,6 +257,26 @@ test("every three-way split of a list comes in relate.ts's interleaved order on 
   assert.equal(await throughLab(k), "[[[], [], [1, 2, 3]], [[], [1], [2, 3]], [[], [1, 2], [3]], [[1], [], [2, 3]], [[], [1, 2, 3], []], [[1], [2], [3]], [[1], [2, 3], []], [[1, 2], [], [3]], [[1, 2], [3], []], [[1, 2, 3], [], []]]\n");
 });
 
+// A long text read back (I221): every level of show numbers unfolded is a
+// bind on the level below's pause, and each item's rest a bind on the
+// rest below. Kept as goals on the pause (relate.ts's Later) and as
+// pauses for the stack, 10,000 levels are forced in a loop; as closures
+// round closures they overflowed the stack.
+test("ten thousand numbers read back on WebAssembly and C as ters run reads them", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "solved-")), src = join(import.meta.dirname, "../../ters/examples/backwards");
+  const k = JSON.parse(readFileSync(join(src, "code.json"), "utf8")) as { nodes: Record<string, { kind: string; value?: unknown }> };
+  const numbers = Array.from({ length: 10_000 }, (_, i) => (i * 37) % 1000);
+  for (const n of Object.values(k.nodes)) {
+    if (n.kind === "lit" && n.value === "10 20 30") n.value = numbers.join(" ");
+    // Its budget, raised to what a long text needs.
+    if (n.kind === "lit" && n.value === 10000) n.value = 16_000_000;
+  }
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k));
+  for (const f of ["names.default.json", "comments.json", "examples.json"]) writeFileSync(join(dir, f), readFileSync(join(src, f)));
+  const out = await throughDir(dir, dir);
+  assert.ok(out.includes(`= [${numbers.join(" ")}]`), out.slice(0, 300));
+});
+
 // Pedal's bands (Haar's split, a list built by cons and matched two items
 // at a time) run backwards through conjugate, on WebAssembly and C.
 test("Haar's bands run backwards through conjugate give on WebAssembly and C what ters run gives", async () => {
