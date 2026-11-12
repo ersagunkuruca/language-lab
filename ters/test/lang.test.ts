@@ -61,8 +61,10 @@ test("every filling the palette offers keeps the program free of errors", () => 
     // Every third arm body and function body (all of them takes ~30s).
     const targets = Object.values(p.own.nodes).flatMap((n) => (n.kind === "arm" || n.kind === "lambda" ? [n.body] : [])).filter((_, i) => i % 3 === 0);
     // Five of the targets, rotating with the run, each with eight of its
-    // fillings (T12); all of them nightly. (An eighth of them first, then
-    // ten, left as few as three targets on some runs: too few to count.)
+    // fillings (T12); every target nightly, still with eight each: all of
+    // a target's fillings, a few hundred since the library grew, ran the
+    // nightly out of memory (I219). (An eighth of the targets first, then
+    // ten, left as few as three on some runs: too few to count.)
     for (const target of sweepShare === 1 ? targets : capped(targets, 5)) {
       const holed = replace(p.code, target, () => ({ kind: "hole" }));
       const info = infer(holed, p.pres.names);
@@ -77,8 +79,8 @@ test("every filling the palette offers keeps the program free of errors", () => 
       }
     }
   }
-  // All of it is over 1000; a change checks up to 40.
-  assert.ok(tried > (sweepShare === 1 ? 1000 : 20), `tried ${tried}`);
+  // Every target is over 200 (240 on 2026-11-12); a change checks up to 40.
+  assert.ok(tried > (sweepShare === 1 ? 200 : 20), `tried ${tried}`);
 });
 
 // algebra's main prints `first(show(evaluate(f, 2)), else "undefined")`: the
