@@ -462,3 +462,17 @@ test("langford natively splits its first by two choices, checks no sum in `free`
     for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "langford"), [n], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), evaluator, `n = ${n}, ${workers} workers`);
   }
 });
+
+// I216: rota's `needed` counts a search on the threads, its plan and rota
+// shared: not counted at all while the job runs, put back after, and
+// counted by one thread again once the search is done. The rota is the
+// one `ters run` prints, on 3 workers and on none.
+test("a count's job counts nothing it shares, and rota on the threads prints what `ters run` prints (I216)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "c-freeze-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../gaps/rota");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(dir, "rota")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  assert.match(readFileSync(join(dir, "rota.c"), "utf8"), /lab_freeze\(\); lab_pool_run\(lab_par_cwork_\d+, j\); lab_thaw\(\);/);
+  const plan = join(at, "plan.txt"), run = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, plan]).stdout.toString();
+  assert.match(run, /fairest: nobody works more than \d+ shifts/);
+  for (const workers of ["3", "0"]) assert.equal(spawnSync(join(dir, "rota"), [plan], { env: { ...process.env, TERS_WORKERS: workers } }).stdout.toString(), run, `${workers} workers`);
+});

@@ -60,11 +60,11 @@ import { BASE, C_TAKEN, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type Li
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (RESERVED).
-export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
-export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["host_", true], ["m", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
+export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["b", false], ["both_", true], ["chunks_job_", true], ["chunks_work_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
 import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -193,9 +193,17 @@ static inline void lab_free(lab_cell *c) {
   free(c);
 }
 ${threads ? `#define LAB_SHARED 0x80000000u
-#define LAB_RC(c) __atomic_load_n(&(c)->rc, __ATOMIC_RELAXED)
-static inline lab_cell *lab_dup(lab_cell *c) { uint32_t r; if (c && (r = LAB_RC(c))) { if (r & LAB_SHARED) __atomic_fetch_add(&c->rc, 1, __ATOMIC_RELAXED); else c->rc = r + 1; } return c; }
-static inline int lab__last(lab_cell *c) { uint32_t r = LAB_RC(c); if (r & LAB_SHARED) return __atomic_sub_fetch(&c->rc, 1, __ATOMIC_ACQ_REL) == LAB_SHARED; c->rc = r - 1; return r == 1; }` : `#define LAB_RC(c) ((c)->rc)
+// A count is read plainly: only its shared bit decides, and that bit
+// changes only while one thread runs (lab_share, lab_unshare); a count
+// without it is this thread's alone. The shared way, atomic, out of line,
+// and the rest always in line (I216): GCC kept lab_dup and lab_drop as
+// calls, and with atomic loads, rota on one thread took 0.55 s against
+// 0.39 s with no threads' counts at all.
+#define LAB_RC(c) ((c)->rc)
+__attribute__((noinline)) static void lab__dup_shared(lab_cell *c) { __atomic_fetch_add(&c->rc, 1, __ATOMIC_RELAXED); }
+__attribute__((noinline)) static int lab__last_shared(lab_cell *c) { return __atomic_sub_fetch(&c->rc, 1, __ATOMIC_ACQ_REL) == LAB_SHARED; }
+__attribute__((always_inline)) static inline lab_cell *lab_dup(lab_cell *c) { uint32_t r; if (c && (r = c->rc)) { if (__builtin_expect(!(r & LAB_SHARED), 1)) c->rc = r + 1; else lab__dup_shared(c); } return c; }
+__attribute__((always_inline)) static inline int lab__last(lab_cell *c) { uint32_t r = c->rc; if (__builtin_expect(!(r & LAB_SHARED), 1)) { c->rc = r - 1; return r == 1; } return lab__last_shared(c); }` : `#define LAB_RC(c) ((c)->rc)
 static inline lab_cell *lab_dup(lab_cell *c) { if (c && c->rc) c->rc++; return c; }
 #define lab__last(c) (--(c)->rc == 0)`}
 // One count fewer; a cell that has none left waits on lab_dead.
@@ -258,7 +266,20 @@ static void lab_forever(lab_cell *c) { lab_share_forever = 1; lab_share(c); lab_
 // over, still holding what it shared, so each is live. Else every later
 // count of them, by one thread too, is an atomic one: rota's \`needed\`
 // counted each person and table so for the rest of the run.
-static void lab_unshare(size_t from) { while (lab_mk_n > from) { lab_cell *c = lab_mk[--lab_mk_n]; c->rc &= ~LAB_SHARED; } }`;
+static void lab_unshare(size_t from) { while (lab_mk_n > from) { lab_cell *c = lab_mk[--lab_mk_n]; c->rc &= ~LAB_SHARED; } }
+// And while a count's job runs, the cells marked aren't counted at all
+// (I216): a count of 0, as lab_forever's, put back once every thread is
+// done. The job only reads them: what it makes of them it frees before it
+// ends (lab__dead frees what dies at once), and its answers are Ints, so
+// nothing made holds them after. Else the threads fight over the counts of
+// what they all read: rota's plan, 2 threads slower than 1.
+static _Thread_local uint32_t *lab_fz = 0;
+static _Thread_local size_t lab_fz_cap = 0;
+static void lab_freeze(void) {
+  if (lab_fz_cap < lab_mk_n) { lab_fz_cap = lab_mk_n; lab_fz = realloc(lab_fz, lab_fz_cap * sizeof *lab_fz); if (!lab_fz) lab_oom(); }
+  for (size_t k = 0; k < lab_mk_n; k++) { lab_fz[k] = lab_mk[k]->rc; lab_mk[k]->rc = 0; }
+}
+static void lab_thaw(void) { for (size_t k = 0; k < lab_mk_n; k++) lab_mk[k]->rc = lab_fz[k]; }`;
 
 // The threads a map's items are shared out on (L101): started at the
 // first map worth it and kept, as many as the cores less one (or
@@ -2977,7 +2998,7 @@ static int lab_par_crun_${n}(${J} *j, int64_t m, int *par, const struct timespec
     if (lab_st) { j->next = m; if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0; return 1; }
     j->bad[j->lo] = 0;
   }
-  if (j->lo < m) { j->next = m; lab_pool_run(lab_par_cwork_${n}, j); }
+  if (j->lo < m) { j->next = m;${how === "count" ? " lab_freeze();" : ""} lab_pool_run(lab_par_cwork_${n}, j);${how === "count" ? " lab_thaw();" : ""} }
   j->next = m;
   for (int64_t k = 0; k < m; k++) {
     if (!j->bad[k]) continue;
