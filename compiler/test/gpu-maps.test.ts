@@ -21,8 +21,8 @@ const chromiumPath = (): string | undefined => {
   const root = "/opt/pw-browsers";
   if (!existsSync(root)) return undefined;
   const d = readdirSync(root).find((x) => /^chromium-\d+$/.test(x));
-  const exe = d && join(root, d, "chrome-linux", "chrome");
-  return exe && existsSync(exe) ? exe : undefined;
+  // chrome-linux64 since Chromium 1243 (153), chrome-linux before.
+  return d ? ["chrome-linux64", "chrome-linux"].map((x) => join(root, d, x, "chrome")).find((x) => existsSync(x)) : undefined;
 };
 
 // The collatz page: its handler keeps the numbers below b taking over 100

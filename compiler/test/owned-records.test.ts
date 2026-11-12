@@ -5,7 +5,7 @@
 // prints, in place or not, in compiled JavaScript and as a WASI command
 // (C56: WebAssembly writes the changed fields with `set`).
 
-import { closeSync, mkdtempSync, openSync, readFileSync } from "node:fs";
+import { closeSync, cpSync, mkdtempSync, openSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -13,7 +13,9 @@ import { WASI } from "node:wasi";
 import assert from "node:assert/strict";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
-import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
+import { base, baseNames, checkOptions, loadProgram } from "../../ters/src/lang/load.ts";
+import { Session } from "../../ters/mcp/session.ts";
+import { represented } from "../../ters/cli/represented.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { runProgram } from "../../ters/src/lang/run.ts";
 import { INT_OPS, PAIR_V, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
@@ -87,6 +89,31 @@ test("a closure capturing the record reads it as it was", () => {
   const r = both((q, p) => q.k.let("later", q.k.thunk(() => q.x(p)), (later) => q.k.let("m", q.moved(p), (m) => q.k.call(PAIR_V, q.k.call(later), m))));
   assert.deepEqual(r.compiled, r.evaluator);
   assert.deepEqual(r.wasm, r.evaluator);
+});
+
+// A record read out of a map is still the map's (C60): `value at` gives
+// back one of its values. Rebuilt in place, it changed the one the map
+// holds, and the map read again said 12 where the evaluator says 11.
+test("a record read out of a map and rebuilt leaves the map's as it was", () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "alias-")), "alias");
+  cpSync(join(import.meta.dirname, "../../ters/examples/swarm"), dir, { recursive: true });
+  const s = new Session(dir);
+  const fill = (def: string, text: string) => s.replace(/□#(\w+)/.exec(s.view(def))![1], text);
+  s.define("bump", "function", ["motes", "id"]);
+  fill("bump", "m = first(‹value at›(motes, id), else mote(0.0, 0, 0))\nmote(m.x + 1.0, m.life, m.follows)");
+  s.define("probe", "function", ["n"]);
+  fill("probe", "ms = put(‹empty map›, 1, mote(5.0, 3, 0))\nb = bump(ms, 1)\nc = first(‹value at›(ms, 1), else b)\nc.x + b.x");
+  // main's first step (its whole body) becomes the probe.
+  s.replace(/^(\w+)\s+n#/m.exec(s.view("main"))![1], "print(show(probe(‹item at›(arguments, 0, \"0\"))))");
+  const p = loadProgram(dir), main = p.named("main");
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const evaluator: string[] = [], compiled: string[] = [];
+  runProgram(p.code, info, main, [], { print: (x) => evaluator.push(x), names: p.pres.names });
+  // As ters compile has it: lists as arrays, maps as hash tables.
+  const t = represented({ title: "", code: p.code, own: p.own.defs, names: p.pres.names, info, reps: [], options: p.options }, main, false, true);
+  runCoreMain(lowerCore(t.code, t.info, t.names, [main]), "main", [], { print: (x) => compiled.push(x) });
+  assert.deepEqual(evaluator, ["11"]);
+  assert.deepEqual(compiled, evaluator);
 });
 
 // drift's `moved`, put in the closure code a map calls (zero-parts.ts puts
