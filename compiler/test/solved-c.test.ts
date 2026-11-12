@@ -10,7 +10,7 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { INT_OPS, NONE, PAIR_V, SHOW_ANY, S, SOME } from "../../ters/src/lang/std.ts";
+import { CONS, INT_OPS, NIL, NONE, PAIR_V, SHOW_ANY, S, SOME } from "../../ters/src/lang/std.ts";
 import { spawnSync } from "node:child_process";
 import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -237,4 +237,26 @@ test("equations solved together give the solver's answer on WebAssembly and C", 
   const main = k.def("main");
   k.define(main, k.call(SHOW_ANY, k.listOf(...[[3, 1], [2.5, 0.5], [0.1, 0.2], [1 / 3, -2 / 3], [1e300, 1e300], [7.3, -0]].map(([s, d]) => k.call(back, n(s), n(d))))));
   assert.equal(await throughLab(k), '["(4, 2)", "(3, 2)", "(0.3, -0.1)", "(-0.333333333, 1)", "(2e+300, 0)", "(7.3, 7.3)"]\n');
+});
+
+// Pedal's bands (Haar's split, a list built by cons and matched two items
+// at a time) run backwards through conjugate, on WebAssembly and C.
+test("Haar's bands run backwards through conjugate give on WebAssembly and C what ters run gives", async () => {
+  const k = new Lang(LIBRARY.code);
+  const up = k.def("bands");
+  k.define(up, k.fn(["xs"], (xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["a", "rest"], body: ([a, rest]) => k.match(rest, [
+      { variant: NIL, names: [], body: () => k.call(S.fail) },
+      { variant: CONS, names: ["b", "more"], body: ([b, more]) => k.let("fast", k.call(B.sub, a, b), (fast) =>
+        k.call(CONS, k.call(PAIR_V, k.call(B.add, b, k.call(B.div, fast, k.lit(2))), fast), k.call(up, more))) },
+    ]) },
+  ])));
+  // Haar's split, the bands reversed there, and joined again.
+  const conj = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "conjugate")!, rev = lib("reverse");
+  const turned = k.def("turned");
+  k.define(turned, k.fn(["xs"], (xs) => k.call(S.first, k.thunk(() => k.call(k.call(conj, k.x(up), k.fn(["ys"], (ys) => k.call(rev, ys))), xs)), k.thunk(() => k.listOf()))));
+  const main = k.def("main");
+  k.define(main, k.call(SHOW_ANY, k.listOf(k.call(turned, k.listOf(...[4, 2, 5, 5, 1, 3].map((v) => k.lit(v)))), k.call(turned, k.listOf()))));
+  assert.equal(await throughLab(k), "[[1, 3, 5, 5, 4, 2], []]\n");
 });

@@ -70,7 +70,7 @@ import { writablePlan, type Expr } from "./relation.ts";
 import { relation } from "../../invertible/src/relation.js";
 import { cleanBody, live, NotWritten, roundedKey, writtenExpr, writtenSteps, type Written } from "./solved.ts";
 import { tornRoots } from "./torn.ts";
-import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
+import { solveMode, determinism, analyzer, wrapperOf, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
 import { inlineLists } from "./inline-lets.ts";
 import { fuseSteps } from "./fuse-steps.ts";
 import { shareFoldItems } from "./fold-items.ts";
@@ -2319,6 +2319,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       if (isRecord(t)) return binds(env, fields.map((b, i) => [b, { k: "get", rec: val, t, i }]), k);
       // A Bool (an i32): true or false, no fields.
       if (t === "i32" && (variant === TRUE || variant === FALSE)) return test(variant === TRUE ? val : { k: "op", op: "not", args: [val] }, k(env));
+      // A list held as an array (two-ended arrays): its length, first item
+      // and the rest read in place.
+      if (isArray(t) && (variant === CONS || variant === NIL)) {
+        const v = g.locals.push(t) - 1, size: SExpr = { k: "rt", fn: `array.length.a${t.index}`, args: [local(v)] };
+        const some: SExpr = { k: "rt", fn: "int.less", args: [int(0), size] };
+        return { k: "let", i: v, value: val, body: test(variant === CONS ? some : { k: "op", op: "not", args: [some] },
+          binds(env, variant === CONS ? [[fields[0], { k: "rt", fn: `array.first.a${t.index}`, args: [local(v)] }], [fields[1], { k: "rt", fn: `array.rest.a${t.index}`, args: [local(v)] }]] : [], k)) };
+      }
       if (!isData(t)) throw new ModeUnsupported("a case of a value that isn't data");
       const c = t.cases.findIndex((x) => x.variant === variant);
       if (c < 0) throw new ModeUnsupported("a case of another type");
@@ -2409,6 +2417,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // the solver's plan for them, with what's known as its inputs.
           if (e.together && t.kind === "builtin") return together(i, e.together, env);
           if (t.kind === "def") {
+            // A library wrapper of push front (the list's cons), its answer
+            // known: taken apart as the cons it builds (modes.ts arrayBack).
+            const w = !e.callee && res !== undefined ? wrapperOf(code.nodes, head.target) : null;
+            if (w?.builtin === ARRAY_OPS.pushFront && w.args.length === n.args.length) {
+              const t0 = typeOf(n.id), item = n.args[w.args[1]], rest = n.args[w.args[0]];
+              if (isArray(t0) || (isData(t0) && t0.cases.some((x) => x.variant === CONS))) return apart(env, local(res!), n.id, CONS, [item, rest], next);
+            }
             if (!e.callee || e.callee.spec.length) throw new ModeUnsupported("a call in a mode not planned");
             // Every answer in the interpreter's order holds while nothing
             // suspends (relate.ts mplus takes the next arm's first answer
@@ -2462,6 +2477,19 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
               return eachAnswer(i, { k: "call", fn, args: [R, len(R), { k: "new", t: lt, c: lt.cases.findIndex((x) => x.variant === NIL), args: [] }], tail: false }, lt, env, (x) => [[n.args[0], { k: "get", rec: x, t: pair, i: 0 }], [n.args[1], { k: "get", rec: x, t: pair, i: 1 }]]);
             }
             // Numbers: one unknown, by + − and negation (relate.ts does the same).
+            // An array's front, its answer known (modes.ts arrayBack): none
+            // is the empty array, some pair(item, rest) the rest with the
+            // item pushed on its front.
+            const at = typeOf(n.args[0] ?? ""), ot = typeOf(n.id);
+            if (head.target === ARRAY_OPS.front && a === undefined && isArray(at) && isData(ot)) {
+              const c = ot.cases.findIndex((x) => x.variant === SOME), pt = ot.cases[c]?.fields[0]?.t;
+              if (c >= 0 && pt && isRecord(pt as never)) {
+                const p = g.locals.push(pt as RType) - 1;
+                return { k: "case", scrut: R, s: g.locals.push(ot) - 1, t: ot, result: rt, arms: ot.cases.map((_, j) => (j === c
+                  ? { k: "let", i: p, value: { k: "field", rec: R, t: ot, c, i: 0 }, body: bind(env, n.args[0], { k: "rt", fn: `array.pushFront.a${at.index}`, args: [{ k: "get", rec: local(p), t: pt as RType, i: 1 }, { k: "get", rec: local(p), t: pt as RType, i: 0 }] }, next) }
+                  : bind(env, n.args[0], { k: "rt", fn: `array.empty.a${at.index}`, args: [] }, next))) };
+              }
+            }
             const isInt = INT_OPS.add === head.target || INT_OPS.sub === head.target || INT_OPS.neg === head.target;
             const sub = (x: SExpr, y: SExpr): SExpr => (isInt ? { k: "rt", fn: "int.sub", args: [x, y] } : { k: "op", op: "sub", args: [x, y] });
             const add = (x: SExpr, y: SExpr): SExpr => (isInt ? { k: "rt", fn: "int.add", args: [x, y] } : { k: "op", op: "add", args: [x, y] });
@@ -2547,7 +2575,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (!c || !op) throw new ModeUnsupported("equations solved together that aren't arithmetic");
         return { lhs: term(c.id), rhs: { k: "call", f: op, args: c.args.map(term) } as Expr };
       });
-      const written = writablePlan(relation({ name: "here", ports: [...slots.keys()], eqs: eqs as never[] }) as never, known);
+      const rel = relation({ name: "here", ports: [...slots.keys()], eqs: eqs as never[] }) as never;
+      let written = writablePlan(rel, known), wr: Written = {};
+      // One a branch of may leave a value free (c · x = y, c = 0): no
+      // answer there, as relate.ts's answers drop one with an unknown.
+      if (!written) {
+        const p = writablePlan(rel, known, true);
+        if (p && p.every((x) => x.type !== "tear" && (x.type !== "solve" || x.branches.every((b) => !b.params.length)))) { written = p; wr = { free: () => NONE, eqs: eqs as never }; }
+      }
       if (!written) throw new ModeUnsupported("equations solved together by a plan not written yet");
       const at = (v: string) => env.get(slots.get(v)!) ?? made.get(v) ?? made.set(v, g.locals.push("f64") - 1).get(v)!;
       // Several ways (square's ±√), every answer wanted: each way's answer
@@ -2590,7 +2625,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             const l = wayLater.get(k)!, r = g.locals.push(rt) - 1;
             return { k: "let", i: l, value: later, body: { k: "attempt", body, res: r, ok: local(r), otherwise: local(l), t: rt } };
           }, local(after));
-        });
+        }, undefined, wr);
       } catch (x) { if (x instanceof NotWritten) throw new ModeUnsupported(`equations solved together, with ${x.message}`); throw x; }
     };
     // A choice of arms: the value known, its arm; else each arm in turn,

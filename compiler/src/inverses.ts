@@ -69,6 +69,41 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     }
     return map.get(root)!;
   };
+  // inverse(view, y) where view is an input of the definition it's in
+  // (converter's field): that definition again for each definition a call
+  // gives it there, so the inverse is of a named function (C195). Only
+  // where every call gives a definition or a builtin by name.
+  const enclosing = new Map<Id, { def: Id; at: number }>();
+  for (const d of out.defs) {
+    const l = out.nodes[(out.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""];
+    if (l?.kind === "lambda") l.params.forEach((b, at) => enclosing.set(b, { def: d, at }));
+  }
+  const viaInput = new Map<string, { def: Id; at: number }>();
+  for (const id of Object.keys(out.nodes)) {
+    const c = calls(INVERSE, id) ?? calls(CONJUGATE, id), f0 = c ? out.nodes[c.args[0]] : undefined;
+    const e = f0?.kind === "ref" ? enclosing.get(f0.target) : undefined;
+    if (e && !LIBRARY.code.nodes[e.def]) viaInput.set(`${e.def} ${e.at}`, e);
+  }
+  for (const { def, at } of viaInput.values()) {
+    const sites = Object.keys(out.nodes).filter((x) => calls(def, x));
+    const given = sites.map((x) => { const arg: Id = (out.nodes[x] as NodeOf<"call">).args?.[at] ?? "", a = out.nodes[arg]; const t = a?.kind === "ref" ? out.nodes[a.target] : undefined; return t?.kind === "def" || t?.kind === "builtin" ? (a as NodeOf<"ref">).target : null; });
+    if (!sites.length || given.some((x) => !x)) continue;
+    const made = new Map<Id, Id>();
+    sites.forEach((x, k) => {
+      const g = given[k]!;
+      if (!made.has(g)) {
+        const body = copy((out.nodes[def] as NodeOf<"def">).body!), b = (out.nodes[body] as NodeOf<"lambda">).params[at];
+        for (const y of subtree(out, body)) { const r = out.nodes[y]; if (r?.kind === "ref" && r.target === b) out.nodes[y] = { ...r, target: g }; }
+        const d = freshId();
+        out.nodes[d] = { id: d, kind: "def", body } as Node;
+        out.defs.push(d);
+        more[d] = `${names[def] ?? "definition"} with ${names[g] ?? more[g] ?? LIBRARY.names[g] ?? "a function"}`;
+        made.set(g, d);
+      }
+      const call = out.nodes[x] as NodeOf<"call">;
+      out.nodes[x] = { ...call, fn: ref(made.get(g)!) };
+    });
+  }
   const expanded: Id[] = [];
   for (const id of Object.keys(code.nodes)) {
     const c = calls(CONJUGATE, id);
@@ -171,6 +206,19 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     const c = calls(INVERSE, id);
     if (!c || c.args.length !== 2) continue;
     const f0 = out.nodes[c.args[0]];
+    // inverse(show, t): the number read from t, when t is show's own
+    // spelling of it (relate.ts's show run backwards: no spaces, "1e3" or
+    // "-0" isn't one), on every target.
+    if (f0?.kind === "ref" && f0.target === S.show) {
+      const k = new Lang(out);
+      const read = k.let("text", c.args[1], (t) => k.let("x", k.call(TEXT_OPS.readNumber, k.x(t)), (x) => k.if(k.call(S.equal, k.call(S.show, k.x(x)), k.x(t)), k.x(x), k.call(S.fail))));
+      Object.assign(out.nodes, k.code.nodes);
+      out.nodes[id] = { ...out.nodes[read], id } as Node;
+      delete out.nodes[read];
+      Object.assign(more, k.names);
+      expanded.push(id);
+      continue;
+    }
     if (SPACED && f0?.kind === "ref" && f0.target === SPACED) {
       out.nodes[id] = { id, kind: "call", fn: ref(unspacedDef()), args: [c.args[1]] } as Node;
       expanded.push(id);
