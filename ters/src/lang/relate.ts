@@ -432,15 +432,29 @@ function mplus(a: Stream, b: () => Stream): Stream {
 // suspension, one per item) is forced in a loop, not one call per item
 // (L18).
 type Later = (() => Stream) & { under?: () => Stream; goals?: Goals };
-type Goals = { g: Goal; before: Goals } | null;
+// The goals after a suspension, in the order they run: one goal after
+// those before it, or two runs of them one after the other.
+type Goals = { g: Goal; before: Goals } | { first: Goals; then: Goals } | null;
 function suspendBind(later: Later, g: Goal): Stream {
-  const under = later.under ?? later, goals: Goals = { g, before: later.under ? later.goals! : null };
+  return laterOf(later.under ?? later, { g, before: later.under ? later.goals! : null });
+}
+function laterOf(under: () => Stream, goals: Goals): Stream {
   const t: Later = () => {
+    const r = under();
+    // Suspended again: the goals wait on as they are, not taken apart and
+    // put back one by one, which was once per item read back for every
+    // item (quadratic in a long text).
+    if (typeof r === "function") { const l = r as Later; return laterOf(l.under ?? l, l.under ? { first: l.goals!, then: goals } : goals); }
     const gs: Goal[] = [];
-    for (let x: Goals = goals; x; x = x.before) gs.push(x.g);
-    let r = under();
-    for (let i = gs.length - 1; i >= 0; i--) r = bind(r, gs[i]);
-    return r;
+    const todo: Goals[] = [goals];
+    while (todo.length) {
+      const x = todo.pop()!;
+      if (!x) continue;
+      if ("g" in x) { gs.push(x.g); todo.push(x.before); } else todo.push(x.first, x.then);
+    }
+    let st: Stream = r;
+    for (let i = gs.length - 1; i >= 0; i--) st = bind(st, gs[i]);
+    return st;
   };
   t.under = under;
   t.goals = goals;
@@ -697,7 +711,9 @@ function wake(w: Wait, s: State): Goal | null {
       const front = fits(w.a, s, 2), back = fits(w.b, s, 2);
       const cuts: Goal[] = [];
       for (let i = 0; i <= c.length; i++) {
-        const x = c.slice(0, i), y = c.slice(i);
+        const x = c.slice(0, i);
+        if (front?.past?.(x)) break;
+        const y = c.slice(i);
         if ((!front || front(x)) && (!back || back(y))) {
           if (p !== undefined) { place(r!, x, p); place(r!, y, p + i); }
           cuts.push(conj(eq(w.a, x), eq(w.b, y)));
@@ -745,16 +761,28 @@ function wake(w: Wait, s: State): Goal | null {
 // A quick test of which texts an unknown could turn out to be, from the
 // constraint waiting to produce it (null: no idea, anything fits). Looks a
 // couple of joins deep, never branches.
-function fits(t: Term, s: State, depth: number): ((text: string) => boolean) | null {
+type Fits = ((text: string) => boolean) & { past?: (text: string) => boolean };
+// `past(x)`: neither x nor any longer text starting with it fits, so a
+// search for a cut can stop there (a number shown has no space in it, so
+// in "1 22 333 …" the front of `show(n) ++ " " ++ rest` is never past the
+// first space). Without it, each item read back tried every cut of the
+// rest: quadratic in the text.
+function fits(t: Term, s: State, depth: number): Fits | null {
   t = walk(t, s);
-  if (typeof t === "string") return (x) => x === t;
+  if (typeof t === "string") { const k = t; return Object.assign((x: string) => x === k, { past: (x: string) => !k.startsWith(x) }); }
   if (!(t instanceof LVar) || depth === 0) return null;
   for (const w of everyWait(s)) {
-    if (w.k === "show" && walk(w.s, s) === t) return (x) => x.trim() === x && x !== "" && showNumber(Number(x)) === x;
+    if (w.k === "show" && walk(w.s, s) === t) return Object.assign((x: string) => x.trim() === x && x !== "" && showNumber(Number(x)) === x, { past: (x: string) => /\s/.test(x) });
     if (w.k !== "concat" || walk(w.c, s) !== t) continue;
     const a = walk(w.a, s), b = walk(w.b, s);
-    if (typeof b === "string") { const f = fits(a, s, depth - 1); return (x) => x.endsWith(b) && (!f || f(x.slice(0, x.length - b.length))); }
-    if (typeof a === "string") { const f = fits(b, s, depth - 1); return (x) => x.startsWith(a) && (!f || f(x.slice(a.length))); }
+    if (typeof b === "string") {
+      const f = fits(a, s, depth - 1);
+      return Object.assign((x: string) => x.endsWith(b) && (!f || f(x.slice(0, x.length - b.length))), { past: (x: string) => x.length >= b.length && !!f?.past?.(x.slice(0, x.length - b.length)) });
+    }
+    if (typeof a === "string") {
+      const f = fits(b, s, depth - 1);
+      return Object.assign((x: string) => x.startsWith(a) && (!f || f(x.slice(a.length))), { past: (x: string) => (x.length < a.length ? !a.startsWith(x) : !x.startsWith(a) || !!f?.past?.(x.slice(a.length))) });
+    }
     return null;
   }
   return null;
@@ -2098,11 +2126,34 @@ export function showTerm(t: Term, names?: Record<string, string>): string {
 // still has unknowns in it.
 export function toValue(t: Term): Value | undefined {
   if (t instanceof LVar || hasVars(t)) return undefined;
-  if (isData(t)) return { tag: t.tag, fields: t.fields.map((f) => toValue(f)!) };
-  if (typeof t === "object") {
-    if (t.orig) return t.orig as Value;
-    throw new NotInvertible("a function made while running backwards can't be handed back");
+  return groundValue(t);
+}
+// A term with no unknowns as a value, with a stack of its own, so a list
+// read back from 5000 numbers is as long as it likes (it was one JS call
+// per item, and a check for unknowns at each, which was quadratic).
+function groundValue(t: Term): Value {
+  const leaf = (x: Term): Value => {
+    if (typeof x === "object" && x !== null && !isData(x)) {
+      if ((x as { orig?: unknown }).orig) return (x as { orig: Value }).orig;
+      throw new NotInvertible("a function made while running backwards can't be handed back");
+    }
+    return x as Value;
+  };
+  if (!isData(t)) return leaf(t);
+  type Frame = { d: Extract<Term, { tag: string; fields: Term[] }>; out: Value[] };
+  const root: Value[] = [];
+  const stack: { frame: Frame; into: Value[] }[] = [{ frame: { d: t as Frame["d"], out: [] }, into: root }];
+  while (stack.length) {
+    const top = stack[stack.length - 1], { d, out } = top.frame;
+    if (out.length === d.fields.length) {
+      stack.pop();
+      top.into.push({ tag: d.tag, fields: out } as Value);
+      continue;
+    }
+    const f = d.fields[out.length];
+    if (isData(f)) stack.push({ frame: { d: f as Frame["d"], out: [] }, into: out });
+    else out.push(leaf(f));
   }
-  return t;
+  return root[0];
 }
 

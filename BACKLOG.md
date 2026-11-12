@@ -91,6 +91,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| I221 | Compiled relational streams (C195h) nest one bind per level, and forcing a pause goes through all of them: reading back 10,000 numbers on WebAssembly (examples/backwards' read numbers, its fuel raised) overflows the stack, and the time grows faster than n (0.2 s at 2,000, 1.2 s at 5,000). relate.ts had the same problem and fixed it by keeping the goals after a suspension as data (L18; laterOf since L24). Compiled code needs the same: a pause carries the binds waiting on it as data, not as closures nested inside each other. Example: 20,000 numbers read back on WASM and C as `ters run` reads them ([RESEARCH-L24-2026-11-12](docs/reports/RESEARCH-L24-2026-11-12.md) §3) | L24 | P2 | M | |
 
 ### Speed of compiled code
 
@@ -198,7 +199,6 @@ agent with inertia: built as L119 to L124 (DONE.md).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L24 | Research as it becomes blocking: costs from folds, laws proved by fusion, fast invertible parsing | ROADMAP 8 | P3 | L | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
