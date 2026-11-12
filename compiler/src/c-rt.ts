@@ -11,7 +11,12 @@
 //
 // A Text is a counted cell of UTF-8 bytes and their number. Positions count
 // characters (code points), as in the evaluator. UTF-8's byte order is the
-// code points' order, so `less` compares bytes.
+// code points' order, so `less` compares bytes. A long slice is a view
+// (I222): its bytes are another text's (\`base\`, counted), from p for n,
+// so taking the rest of a text is constant time, not a copy; a short one
+// is copied, so a few characters don't keep a long text alive. Each text
+// knows how many characters it has once counted (\`chars\`, LAB_UNCOUNTED
+// till then), so the length of each rest isn't counted again.
 //
 // The world (N4b) is the console and files over the C library and POSIX,
 // failing with Node's world's words and status 2.
@@ -36,12 +41,15 @@ export const BASE = `#include <string.h>
 #define LAB_TEXT_T 65534
 typedef int64_t lab_int;
 typedef struct { lab_cell h; int32_t neg; uint32_t n; uint32_t d[]; } lab_big;
-typedef struct { lab_cell h; uint32_t n; uint8_t b[]; } lab_text;
+typedef struct { lab_cell h; uint32_t n, chars; uint8_t *p; lab_cell *base; uint8_t b[]; } lab_text;
+#define LAB_UNCOUNTED 0xFFFFFFFFu
+// A slice this long or longer is a view on its text's bytes.
+#define LAB_VIEW 64
 #define LAB_SMALL(v) ((lab_int)(((uint64_t)(int64_t)(v) << 1) | 1u))
 #define LAB_IS_SMALL(x) (((x) & 1) != 0)
 #define LAB_VAL(x) ((int64_t)(x) >> 1)
 #define LAB_BIG(x) ((lab_big *)(intptr_t)(x))
-#define LAB_TB(t) (((lab_text *)(t))->b)
+#define LAB_TB(t) (((lab_text *)(t))->p)
 #define LAB_TN(t) (((lab_text *)(t))->n)
 static const int64_t lab__max = ((int64_t)1 << 62) - 1, lab__min = -((int64_t)1 << 62);
 static inline lab_int lab_int_dup(lab_int x) { if (!LAB_IS_SMALL(x)) lab_dup((lab_cell *)LAB_BIG(x)); return x; }
@@ -49,8 +57,35 @@ static inline void lab_int_drop(lab_int x) { if (!LAB_IS_SMALL(x)) lab_drop((lab
 static inline void lab_int_dec(lab_int x) { if (!LAB_IS_SMALL(x)) lab_dec((lab_cell *)LAB_BIG(x)); }
 static lab_cell *lab__text(size_t n) {
   lab_text *t = lab_new(sizeof(lab_text) + (n ? n : 1), LAB_TEXT_T, 0);
-  t->n = (uint32_t)n;
+  t->n = (uint32_t)n; t->chars = n ? LAB_UNCOUNTED : 0; t->p = t->b; t->base = 0;
   return (lab_cell *)t;
+}
+// Its characters, counted once (texts don't change, so every thread that
+// counts finds the same number).
+static uint32_t lab__chars(lab_cell *c) {
+  lab_text *t = (lab_text *)c;
+  uint32_t k = __atomic_load_n(&t->chars, __ATOMIC_RELAXED);
+  if (k != LAB_UNCOUNTED) return k;
+  k = 0;
+  for (uint32_t i = 0; i < t->n; i++) k += (t->p[i] & 0xC0) != 0x80;
+  if (t->h.rc) __atomic_store_n(&t->chars, k, __ATOMIC_RELAXED);
+  return k;
+}
+// Bytes i up to j of t (taking t): a view when long, a copy when short.
+static lab_cell *lab__part(lab_cell *t, uint32_t i, uint32_t j, uint32_t chars) {
+  lab_text *s = (lab_text *)t, *r;
+  if (j - i < LAB_VIEW || !s->h.rc) {
+    r = (lab_text *)lab__text(j - i);
+    memcpy(r->p, s->p + i, j - i);
+    lab_drop(t);
+  } else {
+    r = lab_new(sizeof(lab_text), LAB_TEXT_T, 0);
+    r->n = j - i; r->p = s->p + i;
+    // A view's base is a text with bytes of its own.
+    if (s->base) { r->base = lab_dup(s->base); lab_drop(t); } else r->base = t;
+  }
+  r->chars = chars;
+  return (lab_cell *)r;
 }
 static lab_cell *lab__text_of(const char *s, size_t n) { lab_cell *t = lab__text(n); memcpy(LAB_TB(t), s, n); return t; }
 // An Int's magnitude as limbs, borrowed: a small one's go in m->sm.
@@ -282,6 +317,7 @@ static inline uint32_t lab__back(const uint8_t *b, uint32_t i) { do i--; while (
 // Byte position of character k (the length if there are fewer).
 static uint32_t lab__at(const uint8_t *b, uint32_t n, int64_t k) {
   uint32_t i = 0;
+  if (k <= 0) return 0;
   for (int64_t c = 0; i < n; i++) if ((b[i] & 0xC0) != 0x80 && c++ == k) return i;
   return n;
 }
@@ -485,6 +521,8 @@ static inline lab_int lab_int_shiftDown(lab_int a, lab_int n) { return LAB_IS_SM
   if (!LAB_TN(b)) { lab_drop(b); return a; }
   lab_cell *t = lab__text((size_t)LAB_TN(a) + LAB_TN(b));
   memcpy(LAB_TB(t), LAB_TB(a), LAB_TN(a)); memcpy(LAB_TB(t) + LAB_TN(a), LAB_TB(b), LAB_TN(b));
+  uint32_t ka = ((lab_text *)a)->chars, kb = ((lab_text *)b)->chars;
+  if (ka != LAB_UNCOUNTED && kb != LAB_UNCOUNTED) ((lab_text *)t)->chars = ka + kb;
   lab_drop(a); lab_drop(b);
   return t;
 }` },
@@ -542,10 +580,10 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   lab_drop(t);
   return r;
 }` },
-  "text.length": { uses: [], c: `static lab_int lab_text_length(lab_cell *t) { int64_t k = 0; for (uint32_t i = 0; i < LAB_TN(t); i++) k += (LAB_TB(t)[i] & 0xC0) != 0x80; lab_drop(t); return LAB_SMALL(k); }` },
+  "text.length": { uses: [], c: `static lab_int lab_text_length(lab_cell *t) { int64_t k = lab__chars(t); lab_drop(t); return LAB_SMALL(k); }` },
   "text.size": { uses: [], c: `static int32_t lab_text_size(lab_cell *t) { int32_t n = (int32_t)LAB_TN(t); lab_drop(t); return n; }` },
   "text.before": { uses: [], c: `static int32_t lab_text_before(lab_cell *t, int32_t i) { int32_t r = (int32_t)lab__back(LAB_TB(t), (uint32_t)i); lab_drop(t); return r; }` },
-  "text.bytes": { uses: [], c: `static lab_cell *lab_text_bytes(lab_cell *t, int32_t a, int32_t b) { lab_cell *r = lab__text_of((const char *)LAB_TB(t) + a, (size_t)(b - a)); lab_drop(t); return r; }` },
+  "text.bytes": { uses: [], c: `static lab_cell *lab_text_bytes(lab_cell *t, int32_t a, int32_t b) { return lab__part(t, (uint32_t)a, (uint32_t)b, LAB_UNCOUNTED); }` },
   // Characters from up to, not including, to, clamped: it never fails.
   "text.slice": {
     uses: [],
@@ -554,11 +592,14 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   lab_int_drop(from); lab_int_drop(to);
   if (a < 0) a = 0;
   if (b <= a) { lab_drop(t); return lab__text(0); }
-  uint32_t i = lab__at(LAB_TB(t), LAB_TN(t), a), j = lab__at(LAB_TB(t), LAB_TN(t), b);
-  if (i == 0 && j == LAB_TN(t)) return t;
-  lab_cell *r = lab__text_of((const char *)LAB_TB(t) + i, j - i);
-  lab_drop(t);
-  return r;
+  // Known in characters, the ends are found without walking the text
+  // where they can be: past its end, or every character a byte.
+  uint32_t n = LAB_TN(t), k = ((lab_text *)t)->chars;
+  if (k != LAB_UNCOUNTED && a >= k) { lab_drop(t); return lab__text(0); }
+  uint32_t i = k == n ? (uint32_t)a : lab__at(LAB_TB(t), n, a);
+  uint32_t j = k != LAB_UNCOUNTED && b >= k ? n : k == n ? (uint32_t)b : i + lab__at(LAB_TB(t) + i, n - i, b - a);
+  if (i == 0 && j == n) return t;
+  return lab__part(t, i, j, j < n ? (uint32_t)(b - a) : k == LAB_UNCOUNTED ? LAB_UNCOUNTED : k - (uint32_t)a);
 }` },
   "text.equal": { uses: [], c: `static int32_t lab_text_equal(lab_cell *a, lab_cell *b) { int r = a == b || (LAB_TN(a) == LAB_TN(b) && !memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a))); lab_drop(a); lab_drop(b); return r; }` },
   "text.less": {
