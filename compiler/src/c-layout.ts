@@ -49,6 +49,10 @@ typedef struct ters_ui {
   // A box's borders on single sides (border-bottom and the rest; top,
   // right, bottom, left wide), in colour, inside its box. May be null.
   void (*sides)(void *ctx, void *v, const double *wide, uint32_t colour);
+  // Asking the person for a permission (L236b, "camera" and the rest): 1
+  // yes, 0 no, -1 asked, answered later by ters_page_permission. May be
+  // null: yes.
+  int (*ask)(void *ctx, const char *what, size_t n);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -1333,8 +1337,10 @@ static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
 static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew };
 // main's page on screen ui, width wide (in the units its texts measure
 // in), dark or not: the root's view.
+static int tl_ask(const char *what, size_t n) { return tl_ui->ask(tl_ui->ctx, what, n); }
 void *ters_ui_start(ters_ui *ui, double width, int dark) {
   tl_ui = ui; tl_width = width; tl_dark = dark;
+  if (ui->ask) ters_asker = tl_ask;
   ters_after = tl_layout;
   ters_moving = tl_moving;
   tl_root = ters_page_start(&tl_host);
@@ -1459,8 +1465,10 @@ static void u_frame(uv *v, double s) {
   for (int j = 0; j < nk && j < v->nk; j++) u_frame(v->kids[j], s);
 }
 static void u_show(uv *root) { printf("page %g %g bg %08X\n", u_pw, u_ph, (unsigned)u_pbg); u_print(root, 0, 0, 0); fputs("\x1e\n", stdout); }
+// The person is asked (L236b), and answers later with permission:yes.
+static int u_ask(void *c, const char *what, size_t n) { (void)c; printf("ask %.*s\n", (int)n, what); return -1; }
 int main(int argc, char **argv) {
-  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides };
+  static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_ask };
   double width = 360; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
@@ -1481,6 +1489,13 @@ int main(int argc, char **argv) {
       // frames:N:MS, N frames MS apart on the test's clock.
       int n = atoi(id); double ms = more ? atof(more) : 16;
       for (int k = 0; k < n; k++) { tl_fake += ms; u_frame(root, ms / 1000); ters_page_frame(); }
+      free(s);
+      u_show(root);
+      continue;
+    }
+    if (!strcmp(s, "permission")) {
+      // permission:yes (or no): the person's answer to what was asked.
+      ters_page_permission(!strcmp(id, "yes"));
       free(s);
       u_show(root);
       continue;
