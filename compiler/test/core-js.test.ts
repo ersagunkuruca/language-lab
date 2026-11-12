@@ -52,8 +52,8 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
-// L123), which takes the evaluator minutes, stored as ters run stores it or
-// not (the evaluator's speed is L118c, BACKLOG I195).
+// L123), which takes the evaluator 9 minutes: core-js-agent.test.ts checks
+// it in the nightly (I195).
 const skip = new Set(["agent"]);
 // numbers counts in Peano Nat as defined: the evaluator runs out of memory
 // and the printer's recursion out of stack. It is checked as `ters run`
