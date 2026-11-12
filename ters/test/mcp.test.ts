@@ -260,3 +260,33 @@ test("a match is written as the view prints it, its cases on lines or after `;`s
   text("define", { name: "nothing", kind: "function", params: ["xs"] });
   assert.match(call("replace", { at: "nothing", find: "□", text: "match xs; nil -> 0; cons(h, t) -> 1; other -> 2" }).text, /no data type has the cases nil, cons, other/);
 });
+
+// Round 14's rota driver wrote each of these round the MCP (I217).
+test("steps on lines, a match on a value, and otherwise are read as the view prints them (I217 M3-M5)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  // M5: lets on lines of their own, the last line the value.
+  text("define", { name: "stepped", kind: "function", params: ["n"] });
+  const stepped = text("replace", { at: "stepped", find: "□", text: "c = n * 2\nk = c + 3\nk * k" });
+  assert.match(stepped, /c#\w+ = n · 2/);
+  assert.match(stepped, /k#\w+ = c \+ 3/);
+  // M3: otherwise is every case not written.
+  text("define", { name: "empty or not", kind: "function", params: ["xs"] });
+  const either = text("replace", { at: "empty or not", find: "□", text: "match xs\n  nil → 0\n  otherwise → 1" });
+  assert.match(either, /cons\(\w*#?\w*,? ?\w*#?\w*\) → 1|otherwise → 1/);
+  assert.doesNotMatch(either, /^\+.*□/m);
+  // M4: a match on a value that isn't a name, and on a name the step
+  // before made.
+  text("define", { name: "first of both", kind: "function", params: ["xs"] });
+  const both = text("replace", { at: "first of both", find: "□", text: "match [xs, xs]\n  nil → xs\n  cons(h, t) → h" });
+  assert.match(both, /it#\w+ = \[xs, xs\]/);
+  assert.doesNotMatch(both, /^\+.*□/m);
+  text("define", { name: "first of two", kind: "function", params: ["xs"] });
+  const two = text("replace", { at: "first of two", find: "□", text: "ds = [xs, xs]\nmatch ds\n  nil → xs\n  cons(h, t) → h" });
+  assert.match(two, /ds#\w+ = \[xs, xs\]/);
+  assert.doesNotMatch(two, /^\+.*□/m);
+});
