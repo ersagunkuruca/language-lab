@@ -345,8 +345,14 @@ export class Session {
     // refused two definitions later). `as` names the one meant.
     if (r.ok && r.choices && r.choices.length > 1) {
       const labels = r.choices.map((c) => c.label.replace(/^as /, ""));
-      const want = as?.trim().replace(/^(an?|the)\s+/i, "").toLowerCase();
-      const pick = want ? r.choices.find((c, i) => labels[i].replace(/^an?\s+/i, "").toLowerCase() === want) : undefined;
+      // Each label names the types its fields are read on ("Person, a
+      // Problem, a Shift"); `as` may name them all or only the ones that
+      // tell the readings apart ("Person", I218 M11).
+      const typesIn = (l: string) => l.split(/\s*(?:,|\band\b)\s*/).map((x) => x.trim().replace(/^(an?|the)\s+/i, "").toLowerCase()).filter(Boolean);
+      const want = as?.trim() ? typesIn(as) : [];
+      const fits = r.choices.filter((_, i) => { const has = typesIn(labels[i]); return want.every((w) => has.includes(w)); });
+      const exact = fits.filter((c) => typesIn(c.label.replace(/^as /, "")).join() === want.join());
+      const pick = want.length ? (exact.length === 1 ? exact[0] : fits.length === 1 ? fits[0] : undefined) : undefined;
       if (pick?.edit.ok) return pick.edit;
       return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
     }

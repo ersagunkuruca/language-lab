@@ -262,7 +262,7 @@ test("a match is written as the view prints it, its cases on lines or after `;`s
 });
 
 // Names that read as something else in round 14's rota (I218 M8, M9).
-test("unit is the Unit value, and a case's field is itself, not a library case of its name (I218 M8 M9)", async () => {
+test("unit is the Unit value, a case's field is itself, and `as` may name one type of several (I218 M8 M9 M11)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
   const { join } = await import("node:path");
   const { tmpdir } = await import("node:os");
@@ -276,6 +276,13 @@ test("unit is the Unit value, and a case's field is itself, not a library case o
   // M9: `after` is the case's field, not Order's after.
   text("define", { name: "afters", kind: "function", params: ["xs"] });
   assert.match(text("replace", { at: "afters", find: "□", text: "match xs\n  nil → nil\n  cons(after, before) → [after, after]" }), /afters›?#\w+ : \(List a\) -> List a/);
+  // M11: `as` names one type of a reading that has several ("Person, a
+  // Shift"): the one reading with only Person is taken.
+  text("rename", { at: "‹shift name›", name: "name" });
+  text("rename", { at: "‹person name›", name: "name" });
+  text("define", { name: "names of", kind: "function", params: ["p", "q"] });
+  assert.match(call("replace", { at: "names of", find: "□", text: "p.name ++ q.name" }).text, /Give `as`/);
+  assert.match(text("replace", { at: "names of", find: "□", text: "p.name ++ q.name", as: "Person" }), /: \(Person, Person\) -> Text/);
 });
 
 // Round 14's rota driver wrote each of these round the MCP (I217).
