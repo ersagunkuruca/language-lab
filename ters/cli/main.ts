@@ -55,6 +55,7 @@ const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, 
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
 const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
+const { iosAppFolder } = compiles ? await import("./ios-app.ts") : ({} as typeof import("./ios-app.ts"));
 import { nativePageReport } from "./native-check.ts";
 const { soundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
 
@@ -83,7 +84,8 @@ usage:
   ters build-web <program> [-o app.html]  one HTML file running the page main returns, from the core IR
   ters build-app <program> [-o folder]   that page as an app for phones: a PWA in folder/www, and a Capacitor project
   ters build-native-app <program> [-o folder]  that page as a native Android app, no webview: its C and Android's
-                                        own views, a Gradle project (gradle assembleDebug builds the APK)
+                                        own views, a Gradle project (gradle assembleDebug builds the APK);
+                                        --ios: an iPhone app on UIKit's views instead (sh build.sh on a Mac)
   ters mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
   ters publish <program> <name…> [-o module.json]
                                         publish the named definitions, and the drafts they use, as their next
@@ -638,7 +640,7 @@ switch (command) {
   case "build-native-app": {
     // The page as C (C199c, NATIVE-APPS.md), mounted on Android's views.
     const o = rest.indexOf("-o");
-    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-android`;
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-${rest.includes("--ios") ? "ios" : "android"}`;
     // What the native page can't show (C205): refused where it would mean
     // something else, listed where it is only left out.
     const said = nativePageReport(p.code, main);
@@ -647,18 +649,21 @@ switch (command) {
     // Its own effects' operations nothing handles (C204): from hosts/c.c as
     // ters native has them, and from hosts/android.java, through JNI.
     const own = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : undefined; };
-    const cHost = own("c.c"), java = own("android.java"), ops = hostOpsOf(p.code, p.names);
+    // --ios (C199e): an iPhone app of the same C on UIKit's views
+    // (cli/ios-app.ts); its own effects from hosts/c.c only.
+    const ios = rest.includes("--ios");
+    const cHost = own("c.c"), java = ios ? undefined : own("android.java"), ops = hostOpsOf(p.code, p.names);
     let fromJava = "";
     try { fromJava = java ? androidHostsC(Object.values(ops).filter((h) => h.out.k !== "view" && (!cHost || !new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(cHost))), java) : ""; } catch (e) { fail((e as Error).message); }
     const hosts = { ops, c: cHost || fromJava ? [cHost ?? "", fromJava].join("\n") : undefined };
     const { lowered, root } = nativeLowered(main, false, true);
     let c: string;
     try { c = emitC(lowered, { main: root, page: "ui", hosts }).c; } catch (e) { fail((e as Error).message); }
-    for (const [file, x] of Object.entries(nativeAppFolder(p.title, c, java))) {
+    for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c) : nativeAppFolder(p.title, c, java))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }
-    process.stderr.write(`ters: wrote ${out}/; build the APK there with: gradle assembleDebug (see ${out}/README.md)\n`);
+    process.stderr.write(ios ? `ters: wrote ${out}/; build the simulator's app there on a Mac with: sh build.sh (see ${out}/README.md)\n` : `ters: wrote ${out}/; build the APK there with: gradle assembleDebug (see ${out}/README.md)\n`);
     break;
   }
   case "render": {

@@ -1,0 +1,70 @@
+# A native page as an iPhone app (C199e, NATIVE-APPS.md): `ters
+# build-native-app --ios`, built for the simulator on a Mac (build.sh),
+# installed on an iPhone simulator, started with taps for it to make
+# (-ters-taps, by a button's text), so the run's log shows the texts
+# shown before and after each, and its artifact the screen and the app.
+# Run by hand only.
+name: iOS app
+
+on:
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Example to build (a folder in ters/examples)"
+        default: dice
+        required: true
+      taps:
+        description: "Buttons to tap, by their text, separated by |"
+        default: "Roll|Throw 100"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: ters build-native-app --ios
+        working-directory: ters
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: node cli/ters.ts build-native-app "examples/$PROGRAM" --ios -o "$RUNNER_TEMP/app"
+      - name: Simulator app
+        run: sh "$RUNNER_TEMP/app/build.sh"
+      - name: On an iPhone simulator
+        env:
+          TAPS: ${{ inputs.taps }}
+        run: |
+          cd "$RUNNER_TEMP/app"
+          dev=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in sorted(d, reverse=True) if "iOS" in r for x in d[r] if x["name"].startswith("iPhone")))')
+          echo "device $dev"
+          xcrun simctl boot "$dev"
+          xcrun simctl bootstatus "$dev" -b
+          app=$(ls -d *.app)
+          id=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Info.plist")
+          xcrun simctl install "$dev" "$app"
+          xcrun simctl launch --terminate-running-process --stdout="$PWD/out.txt" --stderr="$PWD/err.txt" "$dev" "$id" -ters-taps "$TAPS"
+          sleep $(( 6 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
+          xcrun simctl io "$dev" screenshot "$GITHUB_WORKSPACE/screen.png"
+          echo "---- the app's output"; cat out.txt
+          echo "---- its errors"; cat err.txt
+          if xcrun simctl spawn "$dev" launchctl list | grep -q "$id"; then echo "still running"; else echo "NOT RUNNING"; ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | tail -5; exit 1; fi
+          zip -qr "$GITHUB_WORKSPACE/app.zip" "$app"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.program }}-ios
+          path: |
+            screen.png
+            app.zip
+          retention-days: 7
