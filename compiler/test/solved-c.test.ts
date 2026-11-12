@@ -194,6 +194,19 @@ test("relations prints on WebAssembly and C what ters run prints", async () => {
   assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/relations")), /to polar\(0, 2\), canonical = 2, 1\.570796327\n/);
 });
 
+// backwards and conjugate, all of them (C195): every answer of a mode plan
+// depth first, in the order its arms and ways are written: a fold run
+// backwards one level at a time (read numbers' show numbers, multiband's
+// bands), text cut every way and numbers read back from show, map run
+// backwards with its function given (square roots of each), and a solver
+// plan's several ways.
+test("backwards prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/backwards")), /square roots of each\(\[4, 9\]\) = \[2 3\] \[-2 3\] \[2 -3\] \[-2 -3\]\n/);
+});
+test("conjugate prints on WebAssembly and C what ters run prints", async () => {
+  assert.match(await throughDir(join(import.meta.dirname, "../../ters/examples/conjugate")), /multiband\(\[4, 2, 5, 5, 1, 3\]\) = 3\.5 2\.5 5 5 1\.5 2\.5\n$/);
+});
+
 // A relational solve with several answers (C195, backwards' magnitude):
 // in a search, one of every answer, in the interpreter's order.
 test("a relational solve with several answers gives each on WebAssembly and C as ters run does", async () => {

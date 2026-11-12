@@ -413,11 +413,30 @@ function deeper(f: () => Stream): Stream {
   depth++;
   try { return f(); } finally { depth--; }
 }
+// Answers in the order the arms are written: all of a's, then b's (depth
+// first, as every other search in the language). A suspended a keeps the
+// arms waiting after it as a list, so that a long run of them (a list
+// read back, one per item) is forced in a loop, not one call per arm.
 function mplus(a: Stream, b: () => Stream): Stream {
   if (a === null) return deeper(b);
-  if (typeof a === "function") return () => mplus(b(), a);
+  if (typeof a === "function") return thenArm(a, b);
   const rest = a[1];
   return [a[0], () => mplus(deeper(rest), b)];
+}
+type Waiting = (() => Stream) & { first?: () => Stream; arms?: Arms };
+type Arms = { b: () => Stream; before: Arms } | null;
+function thenArm(a: Waiting, b: () => Stream): Stream {
+  const first = a.first ?? a, arms: Arms = { b, before: a.first ? a.arms! : null };
+  const t: Waiting = () => {
+    const bs: (() => Stream)[] = [];
+    for (let x: Arms = arms; x; x = x.before) bs.push(x.b);
+    let r = first();
+    for (let i = bs.length - 1; i >= 0; i--) r = mplus(r, bs[i]);
+    return r;
+  };
+  t.first = first;
+  t.arms = arms;
+  return t;
 }
 // A suspension that bind put goals after: the suspension underneath and
 // the goals, last first. bind on one adds its goal to the list instead of
