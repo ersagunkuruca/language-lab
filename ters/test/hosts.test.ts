@@ -197,3 +197,32 @@ test("an effect is marked pure in the editor only when every operation answers a
   assert.ok(!no.ok && /doesn't give an answer at once/.test(no.reason));
   assert.ok(on.ok && setPure(on.code, on.names, hash.def, false).ok);
 });
+
+// L235: a view of the platform's own (a map, a camera's preview) is an
+// operation of the program's effect that gives Html; the host draws it
+// (a DOM element on the web), and the page places it like any element.
+test("a host's own view is placed on the page like any element, evaluated and compiled (L235)", async () => {
+  const { mountHtml, htmlText, evaluatorCall } = await import("../src/lang/html.ts");
+  const { fakeDoc } = await import("./fakedom.ts");
+  const { Cells } = await import("../src/lang/cells.ts");
+  const { HTML_V } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const maps = k.effect("Maps", [["map view", [["zoom", () => k.tref("type.int")]], () => k.tref("std.html")]]);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("div"), k.list(), k.list(k.call(HTML_V.text, k.thunk(() => k.lit("Where: "))), k.call(maps.op["map view"], k.int(3))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const doc = fakeDoc();
+  const hosts = { [maps.op["map view"]]: (zoom: unknown) => { const e = doc.createElement("canvas"); e.setAttribute("data-zoom", String(zoom)); return e; } };
+  const page = runMain(code, info, main, { print: () => {}, names, hosts });
+  const shown = (mountHtml(page, { cells: new Cells(), doc, call: evaluatorCall }) as unknown as { html(): string }).html();
+  assert.equal(shown, '<div>Where: <canvas data-zoom="3"></canvas></div>');
+  assert.equal(htmlText(page, evaluatorCall), "<div>Where: <ters-view></ters-view></div>");
+  // Not an element: refused at the border.
+  assert.throws(() => runMain(code, info, main, { print: () => {}, names, hosts: { [maps.op["map view"]]: () => "map" } }), /gave "map", not a view/);
+  // The core IR's JavaScript asks the same host.
+  const ir = lowerCore(code, info, names, k.code.defs);
+  const fi = ir.funcs.findIndex((g) => g.name === names[main] && !g.inner);
+  const compiled = loadCoreJs(ir, { print: () => {}, hosts }, hostOpsOf(code, names))[fi]();
+  assert.equal((mountHtml(compiled as never, { cells: new Cells(), doc, call: (f, ...a) => (f as (...x: unknown[]) => unknown)(...a) as never }) as unknown as { html(): string }).html(), '<div>Where: <canvas data-zoom="3"></canvas></div>');
+});

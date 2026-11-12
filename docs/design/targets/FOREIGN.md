@@ -154,6 +154,26 @@ becomes the branch it takes, so a native build without a camera has no
 camera code and isn't refused for it. `ters check` still sees both
 branches.
 
+## A view of the platform's own (L235)
+
+A map, a camera's preview or a video call is drawn by the platform, not
+by the page. The program declares it as it declares any foreign thing: an
+operation of its own effect that gives `Html`,
+
+```
+effect Maps = map view(zoom: Int) → Html
+```
+
+and the host draws it: hosts/js.js's function for the operation gives a
+DOM element. At the border (hosts.ts, shape `view`) anything but an object
+is a wrong answer; an element comes in as an `Html` element `ters-view`
+carrying it, so the program puts it among other elements, and html.ts
+mounts the host's own node in its place (evaluated and compiled pages
+alike). Static HTML shows `<ters-view></ters-view>`. A platform with no
+such view says so through `supports(() => map view(3))` (L234), and the
+page shows something else. Not yet: the Android app's view
+(hosts/android.java giving an Android View) and iOS's.
+
 ## What std's own builtins become
 
 Nothing, at first. Arithmetic, text and lists stay builtins: the

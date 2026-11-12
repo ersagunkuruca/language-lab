@@ -15,6 +15,7 @@ import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
 import { HTML_V } from "./std.ts";
+import { FOREIGN_VIEW } from "./hosts.ts";
 
 export interface Node_ { textContent: string | null }
 export interface El extends Node_ {
@@ -166,6 +167,9 @@ export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
 function draw(v: Value, m: Mount, svg: boolean): Node_ {
   const { doc, cells } = m;
   const d = v as Data;
+  // A view the host drew (L235, hosts.ts): its own node, as it is.
+  const foreign = (d as { [FOREIGN_VIEW]?: Node_ })[FOREIGN_VIEW];
+  if (foreign) return foreign;
   const steps = m.steps ?? PAGE_STEPS;
   cells.around = (update) => withSteps(steps, update);
   const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}, made: () => Node_[] = () => [e]) => {
