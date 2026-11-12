@@ -3,6 +3,7 @@
  "how": "SWEEP=all, each file alone, 4 at once on 4 cores (affected.ts --time)",
  "files": {
   "compiler/test/core-js.test.ts": 1449.9,
+  "compiler/test/core-js-agent.test.ts": 561,
   "compiler/test/c.test.ts": 712.7,
   "compiler/test/examples-agree.test.ts": 648.5,
   "compiler/test/carried-types.test.ts": 520.5,

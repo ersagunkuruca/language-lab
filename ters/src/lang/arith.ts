@@ -148,13 +148,19 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
       // types are the library's kept check's variables, the same each run.
       // Kept as the nodes it changed and those it took out, so the rest
       // are the library's own (scans and copies tell them apart by object).
-      const kept = keptAcrossRuns("library-resolved", lib, () => {
+      // Found by that kept check too: the library checked with other
+      // options numbers its variables otherwise, and a resolving made over
+      // one read over another gave types of neither (I219: fixed.test's
+      // CORDIC solve gave no answer after another test file had kept its
+      // own). A check that isn't kept keeps no resolving.
+      const keep = <T,>(make: () => T): T => (under.keptAs ? keptAcrossRuns("library-resolved", lib, make, import.meta.url, under.keptAs) : make());
+      const kept = keep(() => {
         const m = make();
         if (!m) return null;
         const changed: Record<Id, Node> = {};
         for (const id in m.nodes) if (m.nodes[id] !== lib.nodes[id]) changed[id] = m.nodes[id];
         return { ...m, nodes: changed, gone: Object.keys(lib.nodes).filter((id) => !(id in m.nodes)) };
-      }, import.meta.url);
+      });
       if (kept) {
         const { gone, nodes: changed, ...rest } = kept;
         const nodes: Record<Id, Node> = { ...lib.nodes };

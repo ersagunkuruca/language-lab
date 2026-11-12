@@ -4,11 +4,14 @@
 // xs, each item first given to g. No mapped list or array is made, and g is
 // called in the loop rather than through a closure.
 //
-// The program means the same: map's fold calls g on each item from the
-// last back, as the fold that takes its place does, and the consumer's
-// arms only compute (its type has no effects) and never read the rest
-// (which would be the mapped items), so nothing can tell the two apart.
-// The consumer stays defined, for its other callers.
+// The program means the same: the consumer's arms only compute (its type
+// has no effects) and never read the rest (which would be the mapped
+// items), and g only computes too, so nothing can tell the two apart.
+// map calls g on the items first to last, and the fold that takes its
+// place may meet them last first (scalar.ts `loop`, on the way back up),
+// so a g that acts is left as it is (I219: pig's `games won by B`, a sum
+// of a map of games that each draw from Random, drew its games in the
+// other order). The consumer stays defined, for its other callers.
 //
 // Deforestation (Philip Wadler, "Deforestation: transforming programs to
 // eliminate trees", 1990) in the form of short-cut fusion (Gill,
@@ -16,10 +19,12 @@
 // here the steps are known definitions, so the rewrite is by the
 // consumer's shape rather than a foldr/build rule.
 
-import { mapIds, freshId, subtree, isCall, type Code, type Id, type Node } from "../../ters/src/model.ts";
+import { children, mapIds, freshId, subtree, isCall, type Code, type Id, type Node } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { ARRAY_OPS, CONS } from "../../ters/src/lang/std.ts";
+import { SIGS } from "../../ters/src/lang/std.ts";
+import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
 
 const MAPS = new Set([preludeDef("map"), preludeDef("array map")].filter((x): x is Id => !!x));
 
@@ -52,9 +57,66 @@ function candidate(code: Code, info: Info): (() => Code) | null {
     // a function written there.
     const gn = nodes[g];
     if (gn.kind !== "ref" && gn.kind !== "lambda") continue;
+    if (!onlyComputes(code, info, g)) continue;
     return () => rewrite(code, id, consumer, xs, g);
   }
   return null;
+}
+
+// Whether g, a function written in place or a definition, does nothing but
+// compute (or may run long, which it does in either order): what its body
+// does, not its type, whose row is the place it is written in (main's
+// Console for a lambda in main). Not even an abort: the fold would meet the
+// last item's first.
+function onlyComputes(code: Code, info: Info, g: Id): boolean {
+  const n = code.nodes[g];
+  const effs = n.kind === "lambda" ? does(code, info, n.body) : n.kind === "ref" && code.nodes[n.target]?.kind === "def" ? typeEffects(info, info.schemes.get(n.target)?.type) : null;
+  return !!effs && [...effs].every((e) => e === DIVERGE);
+}
+const typeEffects = (info: Info, t: Type | undefined): Set<Id> | null => {
+  const z = t && info.subst.zonk(t);
+  return z?.t === "fn" ? new Set(z.eff.effs) : null;
+};
+// What an expression does: the effects its calls name, less those a
+// callee handles for a function written in place (`first`'s Choice in
+// its first input's row, not its own), or null when it calls a function
+// whose effects only its caller knows.
+function does(code: Code, info: Info, id: Id): Set<Id> | null {
+  const n = code.nodes[id];
+  if (!n) return new Set();
+  const out = new Set<Id>();
+  const add = (x: Set<Id> | null) => { if (!x) return false; x.forEach((e) => out.add(e)); return true; };
+  if (isCall(n)) {
+    const f = code.nodes[n.fn];
+    if (f?.kind === "lambda") return add(does(code, info, f.body)) && n.args.every((a) => add(does(code, info, a))) ? out : null;
+    if (f?.kind !== "ref") return null;
+    const target = code.nodes[f.target];
+    if (!target || target.kind === "binder" || target.kind === "lambda") return null;
+    let t: Type | undefined;
+    if (target.kind === "def") t = info.schemes.get(target.id)?.type;
+    else if (target.kind === "variant") {
+      const owner = info.owner.get(target.id), td = owner ? code.nodes[(code.nodes[owner] as Extract<Node, { kind: "def" }>).body!] : undefined;
+      if (td?.kind === "typedef" && td.effect) out.add(owner!);
+    } else if (SIGS[f.target]) t = SIGS[f.target](new Subst());
+    const ft = t && info.subst.zonk(t);
+    if (ft?.t === "fn") ft.eff.effs.forEach((e) => out.add(e));
+    for (const [i, a] of n.args.entries()) {
+      const an = code.nodes[a], pt = ft?.t === "fn" ? ft.params[i] && info.subst.zonk(ft.params[i]) : undefined;
+      if (an?.kind === "lambda" && pt?.t === "fn") {
+        const inner = does(code, info, an.body);
+        if (!inner) return null;
+        for (const e of inner) if (!pt.eff.effs.includes(e) || ft?.t === "fn" && ft.eff.effs.includes(e)) out.add(e);
+      } else if (!add(does(code, info, a))) return null;
+    }
+    return out;
+  }
+  if (n.kind === "ref") {
+    const target = code.nodes[n.target];
+    if (target?.kind === "binder") { const t = info.typeOf.get(n.id); if (t && info.subst.zonk(t).t === "fn") return null; }
+    return out;
+  }
+  for (const c of children(n)) if (!add(does(code, info, c))) return null;
+  return out;
 }
 
 interface Consumer { param: Id; fold: Id; items: boolean }
