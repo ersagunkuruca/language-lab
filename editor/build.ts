@@ -13,6 +13,8 @@
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
 //   prebuilt/      the shipped examples compiled ahead (prebuild.ts, E245)
+//   checks.json    the library's checks a fresh page reads (keptChecks.ts,
+//                  I213)
 //   apps/*.html    web apps written in the language (the programs
 //                  editor/examples.json marks page: converter, dice, …),
 //                  each one file built like `ters build-web` (WEB.md)
@@ -20,6 +22,8 @@
 import { build } from "../ters/node_modules/esbuild/lib/main.js";
 import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { statSync } from "node:fs";
 import { markdown } from "./markdown.ts";
 import { mkdirSync } from "node:fs";
 import { corePageRuntime, coreWorkletRuntime, recordings, webCorePage } from "../ters/cli/web.ts";
@@ -55,6 +59,13 @@ const data = text("lab-core-page-runtime", await corePageRuntime()) + text("lab-
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
+// What a fresh page would check of the library first, made in a process
+// of its own (keptChecks.ts, I213).
+{
+  const r = spawnSync(process.execPath, [here + "keptChecks.ts", JSON.parse(CHECKS_KEY), site + "checks.json"], { cwd: here + "../ters", stdio: "inherit" });
+  if (r.status !== 0) throw new Error("keptChecks.ts failed");
+  console.log(`checks.json: ${(statSync(site + "checks.json").size / 1024).toFixed(0)} KB`);
+}
 
 // Each shipped page example and picture compiled once, here (E245,
 // prebuild.ts): the editor takes it from prebuilt/ instead of compiling it.
