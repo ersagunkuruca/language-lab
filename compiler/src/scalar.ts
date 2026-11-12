@@ -1239,6 +1239,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (t && isFn(t)) return builtinValue(n.target, t);
         }
+        // A builtin that is a runtime function (show, text's concat),
+        // given as a value where nothing hosts the evaluator's (C, WASI):
+        // a closure calling it (converter's `quantity`, C195).
+        if (opts.data && RT[n.target]) {
+          const t = stype(zonk(id));
+          if (t && isFn(t)) return runtimeValue(n.target, t);
+        }
         throw new Refused(`uses ${nm(n.target)} as a value (functions and data need a heap)`);
       }
       case "call": {
@@ -2933,6 +2940,24 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       index.set(key, funcs.push(g) - 1);
       closureCode.add(index.get(key)!);
       g.body = { k: "rt", fn: `host:${target}${t.result === "i32" ? ":bool" : ""}`, args: t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 })), host: { t: t.result, partial: !!t.partial } };
+      shapeOfNamed.set(key, shape);
+    }
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], src: { prim: target } };
+  }
+
+  // A runtime builtin as a value: a closure of nothing whose code calls
+  // it with its inputs, as a direct call does.
+  function runtimeValue(target: Id, t: FType): SExpr {
+    const key = `&rt:${target}|${t.key}`;
+    if (t.several) throw new Refused(`uses ${nm(target)} as a value that gives several answers (not lowered yet)`);
+    if (!index.has(key)) {
+      const shape = shapes.push({ t, caps: [] }) - 1;
+      const fn = RT[target];
+      const ins = t.params.map((_, j): SExpr => ({ k: "local", i: j + 1 }));
+      const g: SFunc = { def: target, name: `${nm(target)}.value`, params: [t, ...t.params], result: t.result, locals: [t, ...t.params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, ...(t.partial ? { partial: true } : {}) };
+      g.body = { k: "rt", fn, args: RT_LATE.has(fn) ? ins.map((a, j) => (t.params[j] === "f64" ? fin(g, a) : a)) : ins };
+      index.set(key, funcs.push(g) - 1);
+      closureCode.add(index.get(key)!);
       shapeOfNamed.set(key, shape);
     }
     return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], src: { prim: target } };
