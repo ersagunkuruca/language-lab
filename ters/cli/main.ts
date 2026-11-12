@@ -53,6 +53,7 @@ const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, 
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
 const { nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
+import { nativePageReport } from "./native-check.ts";
 const { soundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
 
 const USAGE = `ters: the command line for Ters, the language
@@ -608,6 +609,11 @@ switch (command) {
     // The page as C (C199c, NATIVE-APPS.md), mounted on Android's views.
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-android`;
+    // What the native page can't show (C205): refused where it would mean
+    // something else, listed where it is only left out.
+    const said = nativePageReport(p.code, main);
+    if (said.refused.length) fail(`${p.title}'s page has what a native page can't show: ${said.refused.join(", ")}`);
+    if (said.leftOut.length) process.stderr.write(`ters: left out of the native page (it shows the same without them, only plainer): ${said.leftOut.join("; ")}\n`);
     const { lowered, root } = nativeLowered(main, false, true);
     let c: string;
     try { c = emitC(lowered, { main: root, page: "ui" }).c; } catch (e) { fail((e as Error).message); }
