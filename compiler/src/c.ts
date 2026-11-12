@@ -444,7 +444,7 @@ const isFiber = (fn: string) => FIBER.test(fn);
 const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
 type SearchHow = "count" | "all" | "first";
 const folds = (job: string) => job === "add" || job === "max" || job === "min" || job === "with";
-const isPar = (fn: string) => fn.startsWith("par:range:") || fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
+const isPar = (fn: string) => fn.startsWith("par:range:") || fn.startsWith("par:chunks:") || fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
 const HOST_C: Partial<Record<Shape["k"], { lab: string; host: string }>> = {
@@ -788,6 +788,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // In-place maps over slots on the threads (C201, par-columns.ts): the
   // run function's index, and its array's view.
   const ranges = new Map<number, string>();
+  // The folds counting into a Map run in runs on the threads (C42h).
+  const chunked = new Set<number>();
   // `array of` a table's keys (C58j): [table, entries list, array] each.
   const keyArrays: [number, number, number][] = [];
   // Each map on threads, by its array types and function type (parC).
@@ -1090,6 +1092,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...kept.map((i) => `${header(i)};`),
     ...[...lent.keys()].map((i) => `${header(i, true)};`),
     ...(threads && ranges.size ? [RANGE_C, ...[...ranges].map(([gi, view]) => rangeC(gi, view, fuelled))] : []),
+    ...(threads && chunked.size ? chunkedC() : []),
     ...(threads && boths.size ? [dcC(fuelled), ...[...boths].map((gi) => bothC(gi, stops, fuelled))] : []),
     ...[...once].map((i) => (threads
       // Two threads may both make it: the first kept wins, and the other's
@@ -1784,6 +1787,13 @@ int main(int argc, char **argv) {
           }
           const sh = /^par:(count|all|first):search$/.exec(e.fn);
           if (sh) return checked(`lab_par_search_${countSite(typeOf(e.args[0], f.locals) as FType, sh[1] as SearchHow)}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+          const ch = /^par:chunks:(\d+)$/.exec(e.fn);
+          if (ch) {
+            const gi = Number(ch[1]), g = funcs[gi], ti = (g.result as TType).index;
+            chunked.add(gi);
+            arrayFns.add(`table.atb.t${ti}`).add(`table.put.t${ti}`).add(`array.length.a${(g.params[0] as AType).index}`);
+            return stated(`lab_par_chunks_${gi}(${args(e.args, pre, d, after).join(", ")})`, g.result, pre, d);
+          }
           if (isPar(e.fn)) {
             const job = (e.fn.startsWith("par:fold:") ? e.fn.slice(9) : e.fn.slice(4)) as ParJob, ta = typeOf(e.args[0], f.locals) as AType;
             const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" || folds(job) ? ta : e.host!.t as AType, job, job === "with" ? typeOf(e.args[3], f.locals) as FType : undefined);
@@ -3175,6 +3185,68 @@ static ${T} lab_par_search_in_${n}(lab_cell *f) {
   // thread takes the next RUN slots from the last down, and runs the loop
   // over them where they are. Only for an array with one holder, so that
   // each write is in place, of slots enough to be worth waking the pool.
+  // Two Maps counting the same things put together (C42h, fold-chunks.ts):
+  // each of b's entries added to a's, or put where a has none.
+  function mergeC(t: TType): string {
+    const i = t.index, T = `lab_Table_t${i}`, S = `lab_Store_t${i}`, kt = t.keyT;
+    const dupK = (x: string) => (counted(kt) ? dup(kt, x) : x);
+    return `static lab_cell *lab_merge_t${i}(lab_cell *a, lab_cell *b) {
+  lab__reroot_t${i}((${T} *)b);
+  ${S} *m = ((${T} *)b)->cur;
+  for (uint32_t j = 0; j < m->cap; j++) {
+    if (m->st[j] != 1) continue;
+    lab_int now = lab_table_atb_t${i}(a, ${dupK("m->ks[j]")}), v = lab_int_dup(m->vs[j]);
+    if (lab_st) lab_st = 0; else v = lab_int_add(now, v);
+    a = lab_table_put_t${i}(a, ${dupK("m->ks[j]")}, v);
+  }
+  lab_drop(b);
+  return a;
+}`;
+  }
+  // A fold counting into a Map (C42h): its array's items in runs from the
+  // last, as the fold meets them, each thread counting its runs by the
+  // fold's own loop (gi, from empty) and adding them into its Map; the
+  // threads' Maps then added together. Under some runs' worth, in turn.
+  function chunkedC(): string[] {
+    const ts = [...tables.values()].filter((t) => [...chunked].some((gi) => (funcs[gi].result as TType).index === t.index));
+    return [...ts.map(mergeC), ...[...chunked].map(chunksC)];
+  }
+  function chunksC(gi: number): string {
+    const g = funcs[gi], at = g.params[0] as AType, ti = (g.result as TType).index, nm = names.get(gi)!, V = aname.get(at.key)!.view, J = `lab_chunks_job_${gi}`;
+    return `#define LAB_CHUNK 16384
+typedef struct { lab_cell *xs; int64_t n, next; int slots; lab_cell *out[17]; } ${J};
+static void lab_chunks_work_${gi}(void *p) {
+  ${J} *j = p;
+  ${V} *v = (${V} *)j->xs;
+  int s = __atomic_fetch_add(&j->slots, 1, __ATOMIC_RELAXED);
+  lab_cell *acc = 0;
+  int64_t k;
+  while ((k = __atomic_fetch_add(&j->next, LAB_CHUNK, __ATOMIC_RELAXED)) < j->n) {
+    int64_t hi = j->n - k, lo = hi > LAB_CHUNK ? hi - LAB_CHUNK : 0;
+    lab_cell *r = ${nm}(lab__view_a${at.index}(lab_dup(v->b), v->s + (uint32_t)lo, (uint32_t)(hi - lo)));
+    acc = acc ? lab_merge_t${ti}(acc, r) : r;
+    if (lab_on_pool) __atomic_fetch_add(&lab_par_items, hi - lo, __ATOMIC_RELAXED);
+  }
+  j->out[s] = acc;
+}
+static lab_cell *lab_par_chunks_${gi}(lab_cell *xs) {
+  int64_t n = ((${V} *)xs)->n;
+  if (n < 16 * LAB_CHUNK || !lab_pool_ready()) return ${nm}(xs);
+  size_t mk = lab_mk_n;
+  lab_share_no = 0;
+  lab_share(xs);
+  lab_shared();
+  if (lab_share_no) { lab_unshare(mk); return ${nm}(xs); }
+  ${J} j = { xs, n, 0, 0, { 0 } };
+  lab_pool_run(lab_chunks_work_${gi}, &j);
+  lab_unshare(mk);
+  lab_cell *acc = 0;
+  for (int s = 0; s < j.slots; s++) if (j.out[s]) acc = acc ? lab_merge_t${ti}(acc, j.out[s]) : j.out[s];
+  lab_drop(xs);
+  return acc;
+}
+#undef LAB_CHUNK`;
+  }
   function rangeC(gi: number, view: string, fuelled: boolean): string {
     return `static void lab_range_work_${gi}(void *p) {
   lab_range_job *j = p;
