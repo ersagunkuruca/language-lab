@@ -56,3 +56,29 @@ test("inverse and conjugate of a named function: the evaluator's answers, as pla
   const line = r.value(Object.keys(names).find((d) => names[d] === "line" && code.nodes[d]?.kind === "def")!);
   assert.equal(ev("back of", line, 7), 2);
 });
+
+// conjugate((q) ↦ F(c, q), g), F with one answer back (examples/conjugate's
+// quarter turn about): a solve on F given c, for every target, where
+// before the interpreter ran `applied` with a function known only then.
+test("conjugate of a function written in place: a solve on the function it calls", async () => {
+  const { expandInverses } = await import("../src/inverses.ts");
+  const k = new Lang(LIBRARY.code);
+  const n = (v: number) => k.lit(v);
+  const shifted = k.def("shifted");
+  k.define(shifted, k.fn(["c", "x"], (c, x) => k.call(B.mul, n(3), k.call(B.sub, x, c))));
+  k.define(k.def("doubled about"), k.fn(["c", "x"], (c, x) =>
+    k.call(S.first, k.thunk(() => k.call(k.call(lib("conjugate"), k.fn(["q"], (q) => k.call(shifted, c, q)), k.fn(["y"], (y) => k.call(B.mul, n(2), y))), x)), k.thunk(() => x))));
+  const code = base(k.code), names = { ...baseNames(), ...k.names };
+  const info = infer(code, names);
+  assert.deepEqual(info.errors, []);
+  // The conjugate opened up, and the inverse inside it a solve on shifted.
+  assert.equal(expandInverses(code, names).expanded.filter((x) => !LIBRARY.code.nodes[x]).length, 2);
+  const defs = compiledDefs(code, info, names, ["doubled about"]) as Record<string, (...a: unknown[]) => unknown>;
+  const r = makeRunner(code, info, { print: () => {} });
+  const d = Object.keys(names).find((x) => names[x] === "doubled about" && code.nodes[x]?.kind === "def")!;
+  for (const [c, x] of [[2, 3], [-1, 0.5], [0, 7]]) {
+    const want = [...r.call(r.value(d), c, x)][0] as number;
+    assert.ok(close(defs["doubled about"](c, x) as number, want), `doubled about(${c}, ${x})`);
+    assert.ok(close(want, 2 * x - c), `doubled about(${c}, ${x}) = ${want}`);
+  }
+});
