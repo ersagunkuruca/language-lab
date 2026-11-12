@@ -349,7 +349,20 @@ static void u_listen(void *c, void *v, const char *e, size_t n, int h) {
     P.moments[num][ev] = @(h);
   }
 }
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides };
+// A box's shape (clip-path: polygon): n points in its box, which cut its
+// paint and what's inside it; n 0 is its own box again.
+static void u_outline(void *c, void *v, const double *xy, size_t n) {
+  UIView *a = V(v);
+  if (!a) return;
+  if (n < 3) { a.layer.mask = nil; return; }
+  UIBezierPath *p = [UIBezierPath bezierPath];
+  for (size_t i = 0; i < n; i++) { CGPoint q = CGPointMake(xy[2 * i], xy[2 * i + 1]); if (i) [p addLineToPoint:q]; else [p moveToPoint:q]; }
+  [p closePath];
+  CAShapeLayer *m = [CAShapeLayer layer];
+  m.path = p.CGPath;
+  a.layer.mask = m;
+}
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline };
 
 @implementation TPage
 - (void)viewDidLoad {
@@ -437,7 +450,9 @@ static void placed(UIView *v, NSMutableArray *out) {
 static void shown(NSString *when) {
   NSMutableArray *at = [NSMutableArray new];
   placed(P.page, at);
-  printf("---- %s\n%s\n%s\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String);
+  int shaped = 0;
+  for (UIView *v in P.views.allValues) if (v.layer.mask && !v.hidden) shaped++;
+  printf("---- %s\n%s\n%s\nshaped boxes (clip-path): %d\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String, shaped);
   fflush(stdout);
 }
 - (void)check:(NSArray<NSString *> *)taps {
