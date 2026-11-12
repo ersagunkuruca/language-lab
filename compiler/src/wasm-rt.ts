@@ -7631,6 +7631,7 @@ export const WASI_IMPORTS: Record<string, { params: ("i32" | "i64")[]; result: "
   args_get: { params: ["i32", "i32"], result: "i32" },
   proc_exit: { params: ["i32"], result: null },
   random_get: { params: ["i32", "i32"], result: "i32" },
+  clock_time_get: { params: ["i32", "i64", "i32"], result: "i32" },
 };
 // WASI's errors (wasi_snapshot_preview1 errno) and rights.
 const E = { ACCES: 2, ISDIR: 31, NOENT: 44, NOTDIR: 54, PERM: 63, NOTCAPABLE: 76 };
@@ -7827,6 +7828,20 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       i32.const 0
       i32.load
       f64.convert_i32_u` },
+  // The clock (I226): the realtime clock's nanoseconds at address 0, as
+  // whole milliseconds since 1970, as C's lab_world_now and Node's
+  // world give it.
+  "wasi.now": { params: [], result: "f64", locals: [], uses: ["wasi_clock_time_get"], body: `
+      i32.const 0
+      i64.const 1000000
+      i32.const 0
+      call $wasi_clock_time_get
+      drop
+      i32.const 0
+      i64.load
+      i64.const 1000000
+      i64.div_u
+      f64.convert_i64_u` },
   "wasi.print": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 1\nlocal.get $t\ncall $wasi.line" },
   "wasi.logLine": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },
   "wasi.printError": { params: [["t", "text"]], result: "void", locals: [], uses: ["wasi.line"], body: "i32.const 2\nlocal.get $t\ncall $wasi.line" },
