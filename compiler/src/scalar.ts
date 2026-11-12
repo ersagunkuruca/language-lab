@@ -65,8 +65,9 @@ import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, A
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
 import { planSolve } from "../../ters/src/lang/solve.ts";
-import { relationFor } from "../../ters/src/lang/equations.ts";
-import { writablePlan } from "./relation.ts";
+import { NUMERIC, relationFor } from "../../ters/src/lang/equations.ts";
+import { writablePlan, type Expr } from "./relation.ts";
+import { relation } from "../../invertible/src/relation.js";
 import { cleanBody, live, NotWritten, roundedKey, writtenExpr, writtenSteps, type Written } from "./solved.ts";
 import { tornRoots } from "./torn.ts";
 import { solveMode, determinism, analyzer, type Plan as ModePlanT } from "../../ters/src/lang/modes.ts";
@@ -2121,7 +2122,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (!opts.data) throw no("a shader");
     modeAn ??= analyzer(code, names);
     const v = modeAn.ofSolve(n);
-    if (!v || !v.ends || v.stuck.length || v.dynamic.length) throw no("its plan isn't fixed before it runs");
+    // Equations solved together are written as the solver's plan for them
+    // (modePlan's together); other goals ordered at run time aren't.
+    if (!v || !v.ends || v.stuck.length || v.dynamic.some((d) => !d.startsWith("equations solved together"))) throw no("its plan isn't fixed before it runs");
     const d = determinism(v.answers);
     // Several answers (backwards' magnitude): in a search, one of the
     // list of every answer, in the interpreter's order (C195).
@@ -2232,6 +2235,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     } catch (e) { funcs.pop(); index.delete(key); throw e; }
     return { fn: at, outs };
   }
+  // In a way's slots once equations solved together are written (no slot).
+  const TOGETHER = "\u0000together";
   // A plan's goals in order, then its choice of arms, then done; a way
   // that fails is no answer (the function is partial).
   function modePlan(an: ReturnType<typeof analyzer>, plan: ModePlanT, env0: Map<Id, number>, done: (env: Map<Id, number>) => SExpr, g: SFunc): SExpr {
@@ -2280,7 +2285,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const steps = (i: number, env: Map<Id, number>): SExpr => {
       if (i === plan.steps.length) return plan.branch ? arms(plan.branch, env) : done(env);
       const e = plan.steps[i], next = (env: Map<Id, number>) => steps(i + 1, env);
-      if (e.waits) throw new ModeUnsupported("a goal waits");
+      // A goal after equations solved together waits in relate.ts until the
+      // solver gives their answer; written out, it has it by then.
+      if (e.waits && !env.has(TOGETHER)) throw new ModeUnsupported("a goal waits");
       const get = (x: Id) => env.get(an.slot(x));
       switch (e.k) {
         case "given": return bind(env, e.node, forward(env, e.node), next);
@@ -2303,6 +2310,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (head?.kind !== "ref" || code.nodes[head.target]?.kind === "binder") throw new ModeUnsupported("a function known only when it runs");
           const t = code.nodes[head.target], args = n.args.map(get), res = get(n.id);
           if (args.every((x) => x !== undefined)) return bind(env, n.id, forward(env, n.id), next);
+          // Equations the interpreter solves together (relate.ts solveSome):
+          // the solver's plan for them, with what's known as its inputs.
+          if (e.together && t.kind === "builtin") return together(i, e.together, env);
           if (t.kind === "def") {
             if (!e.callee || e.callee.spec.length) throw new ModeUnsupported("a call in a mode not planned");
             // Every answer in the interpreter's order holds while nothing
@@ -2346,10 +2356,50 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             if (head.target === B.neg) return bind(env, n.args[0], { k: "op", op: "neg", args: [R] }, next);
             if (head.target === INT_OPS.neg) return bind(env, n.args[0], { k: "rt", fn: "int.neg", args: [R] }, next);
           }
+          // Another Float64 operation with one side unknown (x / 2 = s): as
+          // relate.ts, the solver's plan for that one equation.
+          if (t.kind === "builtin" && NUMERIC[head.target] && typeOf(n.id) === "f64") return together(i, 1, env);
           throw new ModeUnsupported("a call with no backwards reading here");
         }
         default: throw new ModeUnsupported(`a ${e.k} goal`);
       }
+    };
+    // Equations solved together (bands run backwards: a + b and a − b
+    // known), written as the plan relate.ts has the solver make for them,
+    // linear steps and checks; each Float64 answer finite, as there.
+    const together = (i: number, count: number, env: Map<Id, number>): SExpr => {
+      const names = new Map<Id, string>(), slots = new Map<string, Id>(), known: string[] = [], made = new Map<string, number>();
+      const term = (x: Id): Expr => {
+        const s = an.slot(x), lit = code.nodes[x];
+        if (env.get(s) === undefined && lit?.kind === "lit" && typeof lit.value === "number") return { k: "num", v: lit.value };
+        if (typeOf(x) !== "f64") throw new ModeUnsupported("equations solved together on something other than Float64s");
+        let v = names.get(s);
+        if (!v) { names.set(s, (v = `v${names.size}`)); slots.set(v, s); if (env.get(s) !== undefined) known.push(v); }
+        return { k: "var", name: v };
+      };
+      const eqs = plan.steps.slice(i, i + count).map((x) => {
+        const c = x.k === "call" ? (code.nodes[x.node] as Call) : undefined, h = c ? code.nodes[c.fn] : undefined;
+        const op = h?.kind === "ref" ? NUMERIC[h.target] : undefined;
+        if (!c || !op) throw new ModeUnsupported("equations solved together that aren't arithmetic");
+        return { lhs: term(c.id), rhs: { k: "call", f: op, args: c.args.map(term) } as Expr };
+      });
+      const written = writablePlan(relation({ name: "here", ports: [...slots.keys()], eqs: eqs as never[] }) as never, known);
+      if (!written) throw new ModeUnsupported("equations solved together by a plan not written yet");
+      const at = (v: string) => env.get(slots.get(v)!) ?? made.get(v) ?? made.set(v, g.locals.push("f64") - 1).get(v)!;
+      try {
+        // Each unknown rounded as the solver rounds its answers (C195a).
+        return writtenSteps(written, at, () => {
+          const e = count > 1 ? new Map(env).set(TOGETHER, -1) : new Map(env), lets: [number, number][] = [];
+          for (const [v, s] of slots) {
+            if (e.has(s)) continue;
+            if (!made.has(v)) throw new ModeUnsupported("equations solved together, leaving one free");
+            const r = g.locals.push("f64") - 1;
+            lets.push([r, made.get(v)!]);
+            e.set(s, r);
+          }
+          return lets.reduceRight<SExpr>((body, [r, x]) => ({ k: "let", i: r, value: { k: "call", fn: cleanFn(), args: [local(x)], tail: false }, body }), steps(i + count, e));
+        }, () => NONE, rt);
+      } catch (x) { if (x instanceof NotWritten) throw new ModeUnsupported(`equations solved together, with ${x.message}`); throw x; }
     };
     // A choice of arms: the value known, its arm; else each arm in turn,
     // the next where one gives none.
