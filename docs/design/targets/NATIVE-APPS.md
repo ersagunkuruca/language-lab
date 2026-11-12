@@ -165,8 +165,10 @@ What a page's parts become under route A:
   columns, absolute positions and display: contents. Texts are measured by
   the platform (Android's StaticLayout). After each event or frame the page
   is styled and laid out again, and the screen hears only what changed.
-  What isn't in the subset (hover, transitions, combinators) is left out,
-  not refused yet. Example: dice's chart, bars and fair marks land where
+  What isn't in the subset (hover, transitions, sibling combinators) is
+  left out, and `ters build-native-app` lists it (C205, ters/cli/native-
+  check.ts); an element a box doesn't mean (an image, a video, a menu, a
+  checkbox, a text in a picture) is refused at build time, naming it. Example: dice's chart, bars and fair marks land where
   Chromium puts them at 360 wide (compiler/test/c-page.test.ts, the
   headless screen `page: "ui-headless"`), and the JNI screen on the
   stand-in tells the same places (c-native-app.test.ts).

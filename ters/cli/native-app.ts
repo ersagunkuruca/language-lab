@@ -8,6 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { icon, rgb } from "./app.ts";
+import { hostCName, type Shape } from "../src/lang/hosts.ts";
 
 export const PACKAGE = "app.ters.page";
 
@@ -16,7 +17,8 @@ export const PACKAGE = "app.ters.page";
 export const nativeAppId = (title: string) => `app.ters.${title.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^(\d)/, "_$1") || "page"}`;
 
 // The project, as paths and contents. `c` is the page's C.
-export function nativeAppFolder(title: string, c: string): Record<string, string | Uint8Array> {
+// `java`: the program's hosts/android.java (C204), the app's Hosts class.
+export function nativeAppFolder(title: string, c: string, java?: string): Record<string, string | Uint8Array> {
   const hue = parseInt(createHash("sha256").update(title).digest("hex").slice(0, 4), 16) % 360;
   const dir = PACKAGE.replace(/\./g, "/");
   return {
@@ -57,6 +59,7 @@ target_link_libraries(page m)
 `,
     "app/src/main/cpp/page.c": `${c}\n${JNI_C}`,
     [`app/src/main/java/${dir}/MainActivity.java`]: ACTIVITY,
+    ...(java ? { [`app/src/main/java/${dir}/Hosts.java`]: java } : {}),
     "README.md": `# ${title}, as a native Android app
 
 Made by \`ters build-native-app\` (NATIVE-APPS.md, C199c): the program is
@@ -118,6 +121,8 @@ static void j_measure(void *c, const char *s, size_t n, double size, int bold, d
   *w = x[0]; *lines = (int)x[1];
 }
 static void j_page(void *c, double w, double h, uint32_t bg) { (void)c; TERS_J(12, w, h, (jint)bg); }
+// hosts/android.java's answers reach Java on the thread JNI gave (C204).
+static JNIEnv *ters_host_env(void) { return ters_j; }
 static void j_draw(void *c, void *v, const double *ops, size_t n) {
   (void)c;
   jdoubleArray a = (*ters_j)->NewDoubleArray(ters_j, (jsize)n);
@@ -232,8 +237,13 @@ public class MainActivity extends Activity {
   private double width;
   private int dark;
 
+  // The running app, for hosts/android.java's answers to reach Android's
+  // own APIs (a Context: the camera, storage, sensors; C204).
+  public static MainActivity current;
+
   @Override protected void onCreate(Bundle saved) {
     super.onCreate(saved);
+    current = this;
     density = getResources().getDisplayMetrics().density;
     scroll = new ScrollView(this);
     page = new FrameLayout(this);
@@ -597,3 +607,96 @@ public class MainActivity extends Activity {
   }
 }
 `;
+
+// A program's own effects answered in Java on Android (C204, FOREIGN.md):
+// hosts/android.java is the app's class Hosts, with a static method
+// host_<id> per operation, as hosts/c.c has a C function. What crosses is
+// Java's own: an Int a long, a Float64 a double, a Text a String, a Bool a
+// boolean, Unit void. MainActivity.current is the app, for Android's APIs.
+// An exception thrown is the host failing (lab_host_fail), so the
+// program's Abort, as a wrong answer is. Each operation hosts/android.java
+// has (and hosts/c.c doesn't) gets a C host_<id> calling it through JNI,
+// so a program reaches Java without writing JNI.
+export interface AndroidHost { op: string; name: string; ins: Shape[]; out: Shape }
+const JNI: Partial<Record<Shape["k"], { sig: string; c: string; j: string; call: string }>> = {
+  int: { sig: "J", c: "int64_t", j: "jlong", call: "Long" },
+  float: { sig: "D", c: "double", j: "jdouble", call: "Double" },
+  text: { sig: "Ljava/lang/String;", c: "const char *", j: "jstring", call: "Object" },
+  bool: { sig: "Z", c: "int", j: "jboolean", call: "Boolean" },
+  unit: { sig: "V", c: "void", j: "void", call: "Void" },
+};
+export const androidAnswers = (java: string, op: string) => new RegExp(`\\b${hostCName(op)}\\s*\\(`).test(java);
+export function androidHostsC(ops: AndroidHost[], java: string): string {
+  const mine = ops.filter((h) => androidAnswers(java, h.op));
+  if (!mine.length) return "";
+  const out = [`// hosts/android.java's answers (C204): each host_<id> calls Hosts.host_<id> through JNI.
+#include <jni.h>
+static JNIEnv *ters_host_env(void);
+static jstring ters_js(const char *s, size_t n);
+static jclass ters_hosts_class(JNIEnv *j) {
+  static jclass c;
+  if (!c) { jclass l = (*j)->FindClass(j, "${PACKAGE.replace(/\./g, "/")}/Hosts"); if (!l) return 0; c = (*j)->NewGlobalRef(j, l); (*j)->DeleteLocalRef(j, l); }
+  return c;
+}
+// An exception the host threw: its toString as the reason it failed.
+static int ters_host_threw(JNIEnv *j) {
+  if (!(*j)->ExceptionCheck(j)) return 0;
+  jthrowable e = (*j)->ExceptionOccurred(j);
+  (*j)->ExceptionClear(j);
+  static char why[512];
+  snprintf(why, sizeof why, "an exception");
+  jclass tc = (*j)->FindClass(j, "java/lang/Throwable");
+  jmethodID m = tc ? (*j)->GetMethodID(j, tc, "toString", "()Ljava/lang/String;") : 0;
+  jstring s = m && e ? (jstring)(*j)->CallObjectMethod(j, e, m) : 0;
+  if ((*j)->ExceptionCheck(j)) (*j)->ExceptionClear(j);
+  if (s) { const char *u = (*j)->GetStringUTFChars(j, s, 0); if (u) { snprintf(why, sizeof why, "%s", u); (*j)->ReleaseStringUTFChars(j, s, u); } }
+  lab_host_fail(why);
+  return 1;
+}
+// A String the host gave, as UTF-8, kept until the next one.
+static const char *ters_host_utf8(JNIEnv *j, jstring s) {
+  static char *last;
+  if (!s) return 0;
+  jsize n = (*j)->GetStringLength(j, s);
+  const jchar *u = (*j)->GetStringChars(j, s, 0);
+  free(last);
+  last = malloc((size_t)n * 3 + 1);
+  size_t k = 0;
+  for (jsize i = 0; i < n; i++) {
+    uint32_t c = u[i];
+    if (c >= 0xD800 && c < 0xDC00 && i + 1 < n && u[i + 1] >= 0xDC00 && u[i + 1] < 0xE000) c = 0x10000 + ((c - 0xD800) << 10) + (u[++i] - 0xDC00);
+    if (c < 0x80) last[k++] = (char)c;
+    else if (c < 0x800) { last[k++] = (char)(0xC0 | c >> 6); last[k++] = (char)(0x80 | (c & 63)); }
+    else if (c < 0x10000) { last[k++] = (char)(0xE0 | c >> 12); last[k++] = (char)(0x80 | (c >> 6 & 63)); last[k++] = (char)(0x80 | (c & 63)); }
+    else { last[k++] = (char)(0xF0 | c >> 18); last[k++] = (char)(0x80 | (c >> 12 & 63)); last[k++] = (char)(0x80 | (c >> 6 & 63)); last[k++] = (char)(0x80 | (c & 63)); }
+  }
+  last[k] = 0;
+  (*j)->ReleaseStringChars(j, s, u);
+  (*j)->DeleteLocalRef(j, s);
+  return last;
+}`];
+  for (const h of mine) {
+    const t = [...h.ins, h.out].map((x) => JNI[x.k]);
+    if (t.some((x) => !x) || h.ins.some((x) => x.k === "unit")) throw new Error(`hosts/android.java answers ${h.name}, whose values don't cross to Java yet (Int, Float64, Text, Bool and Unit do)`);
+    const r = JNI[h.out.k]!, name = hostCName(h.op);
+    const ps = h.ins.map((x, i) => `${JNI[x.k]!.c}${JNI[x.k]!.c.endsWith("*") ? "" : " "}a${i}`);
+    const pre = h.ins.flatMap((x, i) => (x.k === "text" ? [`  jstring s${i} = ters_js(a${i}, strlen(a${i}));`] : []));
+    const args = h.ins.map((x, i) => (x.k === "text" ? `s${i}` : x.k === "bool" ? `(jboolean)(a${i} != 0)` : `(${JNI[x.k]!.j})a${i}`));
+    const drop = h.ins.flatMap((x, i) => (x.k === "text" ? [`  (*j)->DeleteLocalRef(j, s${i});`] : []));
+    const zero = h.out.k === "unit" ? "return;" : h.out.k === "text" ? "return 0;" : "return 0;";
+    const sig = `(${h.ins.map((x) => JNI[x.k]!.sig).join("")})${r.sig}`;
+    const call = `(*j)->CallStatic${r.call}Method(j, c, m${args.map((a) => `, ${a}`).join("")})`;
+    out.push(`// ${h.name}
+${r.c}${r.c.endsWith("*") ? "" : " "}${name}(${ps.join(", ") || "void"}) {
+  JNIEnv *j = ters_host_env();
+  jclass c = j ? ters_hosts_class(j) : 0;
+  static jmethodID m;
+  if (c && !m) m = (*j)->GetStaticMethodID(j, c, "${name}", "${sig}");
+  if (!c || !m) { if (j && !ters_host_threw(j)) lab_host_fail("hosts/android.java has no static ${name}${sig.replace(/"/g, "")}"); ${zero} }
+${pre.join("\n")}${pre.length ? "\n" : ""}  ${h.out.k === "unit" ? "" : `${r.j} r = `}${h.out.k === "text" ? `(jstring)${call}` : call};
+${drop.join("\n")}${drop.length ? "\n" : ""}  if (ters_host_threw(j)) ${zero}
+  ${h.out.k === "unit" ? "return;" : h.out.k === "text" ? "return ters_host_utf8(j, r);" : h.out.k === "bool" ? "return r ? 1 : 0;" : "return r;"}
+}`);
+  }
+  return out.join("\n\n");
+}

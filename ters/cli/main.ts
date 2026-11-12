@@ -31,7 +31,7 @@ import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainD
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
 import { answeredEffects, answerSupports, cHostHas, jsHostHas } from "../src/lang/supports.ts";
-import { effectOfOperation, hostSkeleton, hostSkeletonC, ownOperations, type Hosts } from "../src/lang/hosts.ts";
+import { effectOfOperation, hostCName, hostSkeleton, hostSkeletonC, hostSkeletonJava, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } from "./logs.ts";
 // The compilers, and what imports them, read only for a command that
@@ -53,7 +53,8 @@ const { lowerScalar } = compiles ? await import("../../compiler/src/scalar.ts") 
 const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
-const { nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
+const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
+import { nativePageReport } from "./native-check.ts";
 const { soundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
 
 const USAGE = `ters: the command line for Ters, the language
@@ -68,8 +69,9 @@ usage:
   ters native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   ters wasi <program> [-o out.wasm]      compile to a WASI command: WebAssembly with GC (wasmtime, Node's WASI)
   ters check <program>                   type-check, and list the definitions and their types
-  ters hosts <program> [--c]             print a hosts/js.js answering the program's own effects, to start from;
-                                        with --c a hosts/c.c, for ters native (FOREIGN.md)
+  ters hosts <program> [--c|--android]   print a hosts/js.js answering the program's own effects, to start from;
+                                        with --c a hosts/c.c, for ters native (FOREIGN.md); with --android a
+                                        hosts/android.java, for ters build-native-app
   ters test <program> [--fresh]          run each definition that performs Check, check each accepted answer in examples.json
     [--compiled]                        and each representation's jobs against its type's through meaning;
                                         an unchanged test's result is kept by hash (.lab/checks.json), --fresh runs it again;
@@ -319,9 +321,12 @@ function entry(p: Program, name: string, web = false): Id {
   if (!web && valueMain(p.info, def)) return def;
   // The program's own effects, when its host file for this command is
   // there (FOREIGN.md): hosts/c.c for a native program, else hosts/js.js.
-  const hostsAt = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", command === "native" ? "c.c" : "js.js") : "";
-  const hosted = new Set(hostsAt && existsSync(hostsAt) ? ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? []) : []);
-  const problem = web ? pageProblem(p.info, def, p.names) : mainProblem(p.info, def, p.names, hosted);
+  // A native app's main may ask hosts/c.c or hosts/android.java as it
+  // builds its page (C204).
+  const files = command === "native" ? ["c.c"] : command === "build-native-app" ? ["c.c", "android.java"] : ["js.js"];
+  const hasHosts = existsSync(path) && statSync(path).isDirectory() && files.some((f) => existsSync(join(path, "hosts", f)));
+  const hosted = new Set(hasHosts ? ownOperations(p.code).flatMap((op) => effectOfOperation(p.code, op) ?? []) : []);
+  const problem = web ? pageProblem(p.info, def, p.names, command === "build-native-app" ? hosted : new Set()) : mainProblem(p.info, def, p.names, hosted);
   if (problem) fail(`${name} can't be ${web ? "a page" : "run from the command line"}: ${problem}`);
   return def;
 }
@@ -458,15 +463,17 @@ if (!command || command === "help" || command === "--help" || !path) {
 const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "js.js") : "";
 const hosts: Hosts | undefined = hostFile && existsSync(hostFile) ? (await import(pathToFileURL(resolve(hostFile)).href)).default : undefined;
 // Each `supports(f)` answered for this command's platform and folded
-// (supports.ts, L234): hosts/c.c for ters native, nothing beside the
-// program's own handlers for WebAssembly and the native app, which take
-// no host file yet, and hosts/js.js for the rest.
+// (supports.ts, L234): hosts/c.c for ters native, it or hosts/android.java
+// (its methods named as c.c's functions) for the native app, nothing
+// beside the program's own handlers for WebAssembly, which takes no host
+// file yet, and hosts/js.js for the rest.
 // Only for what runs or builds: a check sees both branches.
 function answeredHere(q: Program): Program {
   if (!["run", "compile", "native", "wasi", "build-web", "build-app", "build-native-app"].includes(command)) return q;
-  const cFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "c.c") : "";
-  const has = command === "native" ? cHostHas(cFile && existsSync(cFile) ? readFileSync(cFile, "utf8") : undefined)
-    : command === "wasi" || command === "build-native-app" ? () => false
+  const hostText = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : ""; };
+  const has = command === "native" ? cHostHas(hostText("c.c"))
+    : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText("android.java"))
+    : command === "wasi" ? () => false
     : jsHostHas(hosts);
   const code = answerSupports(q.code, q.info, answeredEffects(q.code, has));
   if (!code) return q;
@@ -625,10 +632,22 @@ switch (command) {
     // The page as C (C199c, NATIVE-APPS.md), mounted on Android's views.
     const o = rest.indexOf("-o");
     const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-android`;
+    // What the native page can't show (C205): refused where it would mean
+    // something else, listed where it is only left out.
+    const said = nativePageReport(p.code, main);
+    if (said.refused.length) fail(`${p.title}'s page has what a native page can't show: ${said.refused.join(", ")}`);
+    if (said.leftOut.length) process.stderr.write(`ters: left out of the native page (it shows the same without them, only plainer): ${said.leftOut.join("; ")}\n`);
+    // Its own effects' operations nothing handles (C204): from hosts/c.c as
+    // ters native has them, and from hosts/android.java, through JNI.
+    const own = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : undefined; };
+    const cHost = own("c.c"), java = own("android.java"), ops = hostOpsOf(p.code, p.names);
+    let fromJava = "";
+    try { fromJava = java ? androidHostsC(Object.values(ops).filter((h) => !cHost || !new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(cHost)), java) : ""; } catch (e) { fail((e as Error).message); }
+    const hosts = { ops, c: cHost || fromJava ? [cHost ?? "", fromJava].join("\n") : undefined };
     const { lowered, root } = nativeLowered(main, false, true);
     let c: string;
-    try { c = emitC(lowered, { main: root, page: "ui" }).c; } catch (e) { fail((e as Error).message); }
-    for (const [file, x] of Object.entries(nativeAppFolder(p.title, c))) {
+    try { c = emitC(lowered, { main: root, page: "ui", hosts }).c; } catch (e) { fail((e as Error).message); }
+    for (const [file, x] of Object.entries(nativeAppFolder(p.title, c, java))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }
@@ -773,7 +792,8 @@ switch (command) {
     break;
   }
   case "hosts": {
-    process.stdout.write(rest.includes("--c") ? hostSkeletonC(p.code, p.names, p.own) : hostSkeleton(p.code, p.names, p.own));
+    // --android: a hosts/android.java, for ters build-native-app (C204).
+    process.stdout.write(rest.includes("--c") ? hostSkeletonC(p.code, p.names, p.own) : rest.includes("--android") ? hostSkeletonJava(p.code, p.names, p.own, "app.ters.page") : hostSkeleton(p.code, p.names, p.own));
     break;
   }
   case "test": {

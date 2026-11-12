@@ -221,3 +221,25 @@ export function hostSkeletonC(code: Code, names: Names, own: Id[]): string {
   lines.push("");
   return lines.join("\n");
 }
+
+// `ters hosts --android`: a hosts/android.java to start from (C204), the
+// Android app's class Hosts in package pkg, one static method per
+// operation named by its id, as hosts/c.c has a C function. What crosses
+// is Java's own: an Int a long, a Float64 a double, a Text a String, a Bool
+// a boolean. An exception thrown is the program's Abort.
+const JAVA_TYPE: Partial<Record<Shape["k"], string>> = { int: "long", float: "double", text: "String", bool: "boolean", unit: "void" };
+export function hostSkeletonJava(code: Code, names: Names, own: Id[], pkg: string): string {
+  const lines = [`package ${pkg};`, "", "// Answers for this program's own effects in its Android app (FOREIGN.md),", "// one static method per operation, named by its id. MainActivity.current", "// is the app (a Context) for Android's own APIs; an exception thrown is", "// the program's Abort.", "public final class Hosts {"];
+  for (const d of own) {
+    const b = (code.nodes[d] as NodeOf<"def">)?.body, td = b ? code.nodes[b] : undefined;
+    if (td?.kind !== "typedef" || !td.effect) continue;
+    lines.push(`  // ${names[d] ?? d}`);
+    for (const op of td.variants) {
+      const h = hostOp(code, names, op), v = code.nodes[op] as NodeOf<"variant">;
+      const ins = h.ins.map((s, j) => `${JAVA_TYPE[s.k] ?? "/* doesn't cross to Java yet */ Object"} ${(names[v.fields[j]] ?? `x${j}`).replace(/[^A-Za-z0-9_]+/g, "_").replace(/^(\d)/, "_$1")}`);
+      lines.push(`  // ${h.name}`, `  public static ${JAVA_TYPE[h.out.k] ?? "/* doesn't cross to Java yet */ Object"} ${hostCName(op)}(${ins.join(", ")}) { throw new UnsupportedOperationException("not written yet"); }`);
+    }
+  }
+  lines.push("}", "");
+  return lines.join("\n");
+}
