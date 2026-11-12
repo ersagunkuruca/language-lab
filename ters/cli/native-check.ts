@@ -21,9 +21,9 @@ import { HTML_V } from "../src/lang/std.ts";
 const REFUSED: Record<string, string> = {
   img: "an image", picture: "an image", video: "a video", audio: "a sound player", canvas: "a canvas", iframe: "another page",
   object: "an embedded object", embed: "an embedded object", select: "a menu to pick from", option: "a menu's choice", datalist: "a list of suggestions",
-  // Inside an svg the picture draws g, a, path, circle, ellipse, rect, line, polyline and polygon.
-  image: "an image in a picture", use: "a shape used again in a picture", foreignObject: "a page inside a picture", text: "a text in a picture",
-  textPath: "a text in a picture", tspan: "a text in a picture",
+  // Inside an svg the picture draws g, a, path, circle, ellipse, rect, line, polyline, polygon and text.
+  image: "an image in a picture", use: "a shape used again in a picture", foreignObject: "a page inside a picture",
+  textPath: "a text along a path", tspan: "a part of a text in a picture",
 };
 // An input is a text field; these kinds of input are something else.
 const INPUT_REFUSED = new Set(["checkbox", "radio", "range", "color", "date", "datetime-local", "month", "week", "time", "file", "image"]);
