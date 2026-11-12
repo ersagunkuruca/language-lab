@@ -55,7 +55,7 @@ APP="${title.replace(/["$`\\]/g, "")}.app"
 rm -rf "$APP" build && mkdir -p "$APP" build
 xcrun -sdk "$SDK" clang -target "$TARGET" -c page.c -o build/page.o -O2 -ffp-contract=off -fwrapv -DLAB_FIBER_SJLJ -w
 xcrun -sdk "$SDK" clang -target "$TARGET" -c Screen.m -o build/screen.o -O2 -fobjc-arc
-xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o -o "$APP/page" -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
+xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -lm
 cp Info.plist "$APP/"
 codesign --force --sign - "$APP"
 echo "$APP"
