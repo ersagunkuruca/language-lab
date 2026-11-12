@@ -517,14 +517,24 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("font-size")) { double s = tl_len(v, e, c->up_size, &ok, 0); if (ok == 1) c->size = s; }
   else if (TL_IS("font-weight")) c->bold = TL_V("bold") || (v[0] >= '6' && v[0] <= '9');
   else if (TL_IS("font")) {
-    // font: [weight] size[/line] family: the size and line height.
+    // font: [style] [weight] size[/line] family: the weight, size and line
+    // height, the weight and line height normal when it doesn't give them.
+    // The size has a unit; a bare number before it is the weight (600).
     const char *p = v;
     if (TL_V("inherit")) { c->size = c->up_size; c->line = c->up_line; c->bold = c->up_bold; p = e; }
+    else c->bold = 0;
     while ((p = tl_ws(p, e)) < e) {
-      if (TL_V("bold") || (p[0] >= '6' && p[0] <= '9' && p + 3 <= e && p[1] == '0' && p[2] == '0')) c->bold = 1;
+      const char *w = p; while (w < e && *w != ' ') w++;
+      if ((w - p == 4 && !memcmp(p, "bold", 4)) || (w - p == 6 && !memcmp(p, "bolder", 6)) || (w - p == 3 && p[0] >= '6' && p[0] <= '9' && p[1] == '0' && p[2] == '0')) c->bold = 1;
       int o2 = 1; const char *a; double s = tl_len(p, e, c->up_size, &o2, &a);
-      if (o2 == 1 && a > p && (a == e || *a == ' ' || *a == '/')) { c->size = s; if (a < e && *a == '/') { char *z; double l = strtod(a + 1, &z); c->line = (z < e && (*z == 'p')) ? l / s : l; } break; }
-      while (p < e && *p != ' ') p++;
+      int unit = a > p && (a[-1] == 'x' || a[-1] == 'm' || a[-1] == '%' || (a - p == 1 && *p == '0'));
+      if (o2 && unit && (a == e || *a == ' ' || *a == '/')) {
+        c->size = o2 == 2 ? s / 100 * c->up_size : s;
+        c->line = 1.2;
+        if (a < e && *a == '/') { char *z; double l = strtod(a + 1, &z); c->line = z < e && *z == 'p' ? l / c->size : z < e && *z == '%' ? l / 100 : l; }
+        break;
+      }
+      p = w;
     }
   }
   else if (TL_IS("line-height")) { char *z; double l = strtod(v, &z); c->line = z < e && *z == 'p' ? l / c->size : l; }
