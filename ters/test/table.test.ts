@@ -95,6 +95,29 @@ test("a direct map keeps small Int keys in its array and agrees with a Map, past
   both((x) => [x.size, x.get(100000), x.get(-3), x.get("a"), x.get(299), x.has(7)]);
 });
 
+// C60: a counter's keys, each removed some puts later (swarm's motes),
+// slide up the array: it never turns into a Map, and agrees with one.
+test("a direct map's keys slide up as the low ones are removed (C60)", () => {
+  const d = new DirectMap(), m = new Map<unknown, unknown>();
+  const both = (f: (x: DirectMap | Map<unknown, unknown>) => unknown) => assert.deepEqual(f(d), f(m));
+  for (let k = 0; k < 20000; k++) {
+    d.set(k, k); m.set(k, k);
+    if (k >= 50) { d.delete(k - 50); m.delete(k - 50); }
+    if (k % 5 === 0 && k >= 10) { d.delete(k - 10); m.delete(k - 10); }
+    if (k % 997 === 0) { both((x) => [x.size, [...x.entries()].sort((a, b) => (a[0] as number) - (b[0] as number))]); both((x) => [x.get(k - 3), x.has(k - 60), x.get(k + 1)]); }
+  }
+  assert.equal(d.o, null, "still direct");
+  assert.ok(d.a.length < 1000, `array of ${d.a.length}`);
+  // Keys going down: room in front.
+  const e = new DirectMap(), n = new Map<unknown, unknown>();
+  for (let k = 5000; k > 0; k--) { e.set(k, k); n.set(k, k); if (k <= 4950) { e.delete(k + 50); n.delete(k + 50); } }
+  assert.equal(e.o, null);
+  assert.deepEqual([...e.entries()].sort(), [...n.entries()].sort());
+  // Copied, as a shared table is before a change.
+  const c = new DirectMap(e); c.set(3, "x");
+  assert.equal(e.get(3), 3);
+});
+
 // I215: a tuple key's Text is quoted as it is unless it holds a quote, a
 // backslash or a control character; keys that would spell alike if
 // quoted naively stay apart.
