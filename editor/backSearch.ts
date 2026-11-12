@@ -13,7 +13,8 @@ import { makeRunner, type Data } from "../ters/src/lang/run.ts";
 export interface Found { answers: { values: Record<string, string>; free: string[]; residual: string[] }[]; more: boolean; error?: string; cut?: boolean }
 export type BackAsk = { backwards: true; code: Code; names: Names; def: Id; values: Record<string, unknown> };
 
-const STEPS = 20000;
+// Countdown's solutions take about 5 times what they did before I200.
+const STEPS = 100000;
 const fmt = (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e6) / 1e6));
 
 // Searches until it has its answers, runs out of steps, or `stop` says so
@@ -32,8 +33,10 @@ export function searchBackwards(code: Code, def: Id, values: Record<string, unkn
     for (const a of relate(code, def, values, { spend: () => ++steps < STEPS && !(out.cut = stop()), names, info, shown })) {
       // Cut short, the search fails what it hadn't time to try, so an
       // answer it gives then may be wrong: Countdown's solutions read []
-      // until the full search found its 49 (I71).
-      if (out.cut) break;
+      // until the full search found its 49 (I71). Out of steps the same:
+      // once relate's settles spent steps too (I200), its 20000 ran out and
+      // the [] showed again (I219f).
+      if (out.cut || steps >= STEPS) break;
       const shown = Object.fromEntries(Object.entries(a.values).map(([k, v]) => [k, showTerm(v, names)]));
       const key = JSON.stringify(Object.values(shown).map((v) => (/^-?\d+(\.\d+)?(e[-+]?\d+)?$/.test(v) ? fmt(Number(v)) : v)));
       if (seen.has(key)) { if (++tries > 64) break; continue; }

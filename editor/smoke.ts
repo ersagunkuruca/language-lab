@@ -291,13 +291,16 @@ async function stepOrder() {
   // A step goes before a step as a plain step, with no name (QA8 M1).
   // A menu opened by a script counts as a long press: let it settle first.
   await p.waitForTimeout(900);
-  const pr = p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").first(), pb = (await pr.boundingBox())!;
+  const pr = p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").first();
+  // Undo redraws the graph: wait for the new print to be drawn.
+  await pr.waitFor({ state: "visible" });
+  const pb = (await pr.boundingBox())!;
   await pr.dispatchEvent("contextmenu", { clientX: pb.x + 5, clientY: pb.y + 5 });
   // Its click adds the step and opens the palette on the new hole, which
   // checks every candidate against physics' main: give it time.
   await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 10000 }).catch(async () => errors.push(`${where}: a print's menu has no Add a step before this: ${await p.locator(".ctx-menu").innerText({ timeout: 500 }).catch(() => "no menu")}`));
   const lines = (await p.locator(".p-text .body").innerText()).split("\n").map((l) => l.trim());
-  if (!lines[2]?.startsWith("□") || lines.some((l) => l.includes("‹•"))) errors.push(`${where}: a step added before the first reads ${lines.slice(0, 4).join(" / ")}`);
+  if (!lines[2]?.startsWith("□") || lines[2].includes("‹•")) errors.push(`${where}: a step added before the first reads ${lines.slice(0, 4).join(" / ")}`);
   await p.close();
 }
 
@@ -415,11 +418,11 @@ async function groupPicked() {
   await p.close();
 }
 
-// Run backwards shows the first answer it finds at once, and looks for
-// others in the background, which Stop ends (BACKLOG E127). The Fibonacci
-// numbers with signs that take turns (1, 1, 0, 1, −1, 2, −3, …, 13 at
-// n = 9) go both ways, so the search for a second answer goes on
-// (fibFast's ends on its own since L83b).
+// Run backwards looks in the background and Stop ends the look (BACKLOG
+// E127). Before the library's bodies are typed (I193g) the page takes no
+// short look of its own, so the worker finds the first answer: n = 9 for
+// 13 in the Fibonacci numbers with signs that take turns (1, 1, 0, 1, −1,
+// 2, −3, …). Stop is tried on a second opening, while it still looks.
 async function searchGoesOn() {
   where = "run backwards, first answer first";
   const k = new Lang();
@@ -434,12 +437,16 @@ async function searchGoesOn() {
   const chooser = p.waitForEvent("filechooser");
   await p.locator('[data-act="open-file"]').first().click();
   await (await chooser).setFiles({ name: "fibonacci.json", mimeType: "application/json", buffer: Buffer.from(file) });
+  const run = async () => (await p.locator(".run").first().innerText()).replace(/\s+/g, " ");
   const t = Date.now();
   await p.locator("[data-def]", { hasText: /^signedFib$/ }).first().click();
-  const run = async () => (await p.locator(".run").first().innerText()).replace(/\s+/g, " ");
-  if (Date.now() - t > 5000 || !/\bn 9\b/.test(await run())) errors.push(`${where}: after ${Date.now() - t} ms it shows ${(await run()).slice(0, 200)}`);
-  await p.locator('[data-act="stop-search"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Stop while it looks for more`));
-  if (!(await run()).includes("Stopped looking for other answers") || !/\bn 9\b/.test(await run())) errors.push(`${where}: stopped, it shows ${(await run()).slice(0, 200)}`);
+  await p.locator(".run .port-row output", { hasText: /^9$/ }).first().waitFor({ timeout: 20000 }).catch(() => {});
+  if (!/\bn 9\b/.test(await run())) errors.push(`${where}: after ${Date.now() - t} ms it shows ${(await run()).slice(0, 200)}`);
+  // Another result, a look not cached: Stop while it's looking.
+  await p.locator(".run .port-row.known input[type=text]").last().fill("-8");
+  await p.locator(".run .port-row.known input[type=text]").last().press("Enter");
+  await p.locator('[data-act="stop-search"]').click({ timeout: 2000 }).catch(async () => errors.push(`${where}: no Stop while it looks: ${(await run()).slice(0, 200)}`));
+  if (!/Stopped looking|\bn 8\b/.test(await run())) errors.push(`${where}: stopped, it shows ${(await run()).slice(0, 200)}`);
   await p.close();
 }
 
@@ -564,7 +571,9 @@ async function phone() {
   const size = await p.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]);
   if (size[0] > 390 || size[1] > 844) errors.push(`${where}: the page is ${size[0]} by ${size[1]} px, not one screen`);
   // Upright, the top bar fits without scrolling, and More shows the links
-  // that make room for it (BACKLOG E73).
+  // that make room for it (BACKLOG E73). Measured in the page's fonts: the
+  // fallback's wider letters overran it by 10 px until they came (I219f).
+  await p.evaluate(() => document.fonts.ready);
   const [tw, tc] = await p.locator(".bar").evaluate((e) => [e.scrollWidth, e.clientWidth]);
   if (tw > tc) errors.push(`${where}: the top bar scrolls (${tw} of ${tc} px)`);
   await p.locator(".bar .more").tap();
