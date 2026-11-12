@@ -245,15 +245,14 @@ test("Cells: continued fractions with Gosper's arithmetic, compiled, give the ev
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors, []);
   const fns = ["rational", "root", "e", "terms", "showTerms", "plus", "minus", "times", "over"] as const;
-  // The core IR lowers a definition at the types it's used at, and plus is
-  // exported at a type variable (C137's gaps): until it does, the
-  // evaluator's terms alone, and why.
-  assert.throws(() => compiledDefs(code, info, names, fns.map((f) => names[p.defs[f]])), /plus isn't compiled through the core IR: it takes or gives a value of any type/);
+  // The program's plus, not the library's of that name (I219).
+  const compiled = compiledDefs(code, info, names, fns.map((f) => names[p.defs[f]])) as Record<string, (...a: unknown[]) => unknown>;
   const r = makeRunner(code, info, { print: () => {}, names });
   const first = (it: Iterable<unknown>) => { for (const x of it) return x; throw new Error("no value"); };
   // Each function both ways: the evaluator's streams, the compiled values.
   const evaluated = Object.fromEntries(fns.map((f) => [f, (...a: unknown[]) => first(r.call(r.value(p.defs[f]), ...(a as Value[])))]));
-  for (const [way, f] of [["evaluator", evaluated]] as const) {
+  const byName = Object.fromEntries(fns.map((f) => [f, compiled[names[p.defs[f]]]]));
+  for (const [way, f] of [["evaluator", evaluated], ["compiled", byName]] as const) {
     const show = (x: unknown) => f.showTerms(f.terms(x, 10));
     const sqrt2 = f.root(2), e = f.e();
     assert.equal(show(sqrt2), "[1; 2, 2, 2, 2, 2, 2, 2, 2, 2]", way);

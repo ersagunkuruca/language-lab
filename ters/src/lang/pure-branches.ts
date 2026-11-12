@@ -142,7 +142,7 @@ export function parallelCounts(code: Code, info: Info): Map<Id, "count" | "all" 
     const kind = target === S.count ? "count" : target === S.all ? "all" : target === S.first ? "first" : undefined;
     if (!kind || n.args.length !== (kind === "first" ? 2 : 1) || l?.kind !== "lambda" || l.params.length) continue;
     const own = ownEffects(code, info, l.body);
-    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && (kind === "first" || own.has(ABORT))) && !budgets(code, l.body)) out.set(n.id, kind);
+    if (own && [...own].every((e) => e === CHOICE || ALONE.has(e)) && !(own.has(DIVERGE) && (kind === "first" || own.has(ABORT))) && !budgets(code, l.body) && !handles(code, info, l.body)) out.set(n.id, kind);
   }
   return out;
 }
@@ -157,6 +157,27 @@ function budgets(code: Code, body: Id): boolean {
       const n = code.nodes[id];
       if (n?.kind !== "ref") continue;
       if (n.target === S.fuel) return true;
+      const d = code.nodes[n.target];
+      if (d?.kind === "def" && d.body && !seen.has(d.id)) { seen.add(d.id); todo.push(d.body); }
+    }
+  }
+  return false;
+}
+
+// Whether a search handles an operation (Abort's, or its own), itself or
+// in what it calls: a handler around a choice ends the search's
+// alternatives there with its answer (an abort under Choice cuts the rest),
+// which a piece run alone can't know of (I219).
+function handles(code: Code, info: Info, body: Id): boolean {
+  const seen = new Set<Id>(), todo = [body];
+  while (todo.length) {
+    for (const id of subtree(code, todo.pop()!)) {
+      const n = code.nodes[id];
+      if (n?.kind === "arm") {
+        const owner = info.owner.get(n.variant), td = owner ? code.nodes[(code.nodes[owner] as NodeOf<"def">).body!] : undefined;
+        if (td?.kind === "typedef" && td.effect) return true;
+      }
+      if (n?.kind !== "ref") continue;
       const d = code.nodes[n.target];
       if (d?.kind === "def" && d.body && !seen.has(d.id)) { seen.add(d.id); todo.push(d.body); }
     }

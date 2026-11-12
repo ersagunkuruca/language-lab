@@ -811,7 +811,9 @@ function mainOf(ir: CoreIR, name: string): [number, MainSpec] {
 // code with the evaluator. Its values are the core IR's: data are its
 // classes (read by `tag` and `fields`, or turned plain with plainValue).
 export function compiledDefs(code: Code, info: Info, names: Record<Id, string>, exports: string[], rt: Runtime = { print: () => {} }): Record<string, (...xs: unknown[]) => unknown> {
-  const ids = exports.map((n) => code.defs.find((d) => names[d] === n) ?? (() => { throw new Error(`no definition ${n}`); })());
+  // The program's own over the library's of the same name (a program's
+  // `grow` or `plus`, I219), its definitions coming after the library's.
+  const ids = exports.map((n) => code.defs.findLast((d) => names[d] === n) ?? (() => { throw new Error(`no definition ${n}`); })());
   const ir = lowerCore(code, info, names, ids);
   for (const [i, d] of ids.entries()) { const why = ir.refused.get(d); if (why) throw new Error(`${exports[i]} isn't compiled through the core IR: it ${why}`); }
   const fns = loadCoreJs(ir, rt);

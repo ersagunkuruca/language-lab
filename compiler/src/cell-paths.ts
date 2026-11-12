@@ -140,6 +140,9 @@ export function trackReads(ir: CoreIR): number {
             for (const x of xs) need(x, false);
             return { srcs: [{ o, at: "" }], clos: [], held: [] };
           }
+          // A choice's items cut to a piece's (C43g, branches-rt.ts
+          // chooseSplit): some of the same items, read as the list is.
+          if (e.fn === "choose.split") return xs[0] ?? NONE;
           for (const x of xs) need(x, false);
           return NONE;
         }
@@ -162,7 +165,15 @@ export function trackReads(ir: CoreIR): number {
           }
           return held.length ? { srcs: [], clos: [], held } : NONE;
         }
-        case "if": { need(ev(e.cond), false); return join(ev(e.then), ev(e.else)); }
+        // A map, keep, fold or test shared out where it is worth it
+        // (map.worth, C42, C43) computes what its else does in turn, so
+        // the else says what is read, as columns.ts and zero-parts.ts take
+        // it (I219: the shared one's list and closure counted as used whole).
+        case "if": {
+          if (e.cond.k === "rt" && e.cond.fn === "map.worth") return ev(e.else);
+          need(ev(e.cond), false);
+          return join(ev(e.then), ev(e.else));
+        }
         case "let": { env[e.i] = ev(e.value); return ev(e.body); }
         case "call": return call(e.fn, e.args.map(ev));
         case "get": {
