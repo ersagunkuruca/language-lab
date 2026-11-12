@@ -2236,7 +2236,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return { fn: at, outs };
   }
   // In a way's slots once equations solved together are written (no slot).
-  const TOGETHER = "\u0000together";
+  const SOLVED_TOGETHER = "\u0000together";
   // A plan's goals in order, then its choice of arms, then done; a way
   // that fails is no answer (the function is partial).
   function modePlan(an: ReturnType<typeof analyzer>, plan: ModePlanT, env0: Map<Id, number>, done: (env: Map<Id, number>) => SExpr, g: SFunc): SExpr {
@@ -2287,7 +2287,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const e = plan.steps[i], next = (env: Map<Id, number>) => steps(i + 1, env);
       // A goal after equations solved together waits in relate.ts until the
       // solver gives their answer; written out, it has it by then.
-      if (e.waits && !env.has(TOGETHER)) throw new ModeUnsupported("a goal waits");
+      if (e.waits && !env.has(SOLVED_TOGETHER)) throw new ModeUnsupported("a goal waits");
       const get = (x: Id) => env.get(an.slot(x));
       switch (e.k) {
         case "given": return bind(env, e.node, forward(env, e.node), next);
@@ -2389,7 +2389,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       try {
         // Each unknown rounded as the solver rounds its answers (C195a).
         return writtenSteps(written, at, () => {
-          const e = count > 1 ? new Map(env).set(TOGETHER, -1) : new Map(env), lets: [number, number][] = [];
+          const e = count > 1 ? new Map(env).set(SOLVED_TOGETHER, -1) : new Map(env), lets: [number, number][] = [];
           for (const [v, s] of slots) {
             if (e.has(s)) continue;
             if (!made.has(v)) throw new ModeUnsupported("equations solved together, leaving one free");
