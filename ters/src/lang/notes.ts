@@ -258,6 +258,7 @@ export const NOTES: Comments = {
   "builtin.optional": "The first answer as some(answer), or none.",
   "builtin.valueOf": "The value in some(value); no answer for none. optional run backwards.",
   "builtin.hence": "a hence b is a and b, read as \"b follows from a\": the solver uses b to find answers but doesn't count it as a separate condition.",
+  "builtin.supports": "Whether everything the function would do is answered where the program runs: std's own effects, ones the program handles, and its own effects that this platform's host file answers. The function isn't run. Each target answers it when it builds, so the branch it rules out isn't compiled (FOREIGN.md, L234).",
   "builtin.exists": "Whether some value makes the function true: the solver looks for one. Used in relations, where a value has no name outside.",
   "builtin.fuel": "Runs something that might not finish, allowing it n steps; if it hasn't finished by then, there's no answer. That turns Diverge into Choice.",
 
