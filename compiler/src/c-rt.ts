@@ -1227,10 +1227,12 @@ export const WORLD_H = "#include <errno.h>\n#include <sys/stat.h>\n#include <dir
 export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // The C names the runtime defines besides `lab_` + a function's, which a
 // program's own names must not take.
-// Every `lab_` name the runtime's C spells (lab_cell, lab_closure, …) too.
-const DUMMY: ListNames = { cons: "lab_C", nil: "lab_N", type: 0, tag: 0, head: 0, record: "lab_R" };
-const spelled = (t: string) => [...t.matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]);
-export const RESERVED = [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...spelled(BASE), ...Object.values(FNS).flatMap((f) => spelled(typeof f.c === "string" ? f.c : f.c(DUMMY)))])];
+// Every `lab_` name the runtime's text defines or uses counts too (I214: a
+// definition named `cell` took `lab_cell`, the runtime's cell type).
+const LIST_SAMPLE: ListNames = { cons: "List_cons", nil: "List_nil", type: 0, tag: 0, head: 0 };
+const words = (text: string) => [...text.matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+export const RESERVED = [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...words(BASE), ...Object.values(FNS).flatMap((f) => words(typeof f.c === "string" ? f.c : f.c(LIST_SAMPLE)))])];
+
 // C's keywords and the names its headers declare, which a type's name
 // (printed bare) must not take.
 export const C_TAKEN = new Set(["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while", "bool", "true", "false", "main", "exit", "abort", "malloc", "calloc", "realloc", "free", "printf", "fprintf", "sprintf", "snprintf", "puts", "putchar", "getchar", "strlen", "strcmp", "strcpy", "memcpy", "memset", "memmove", "memcmp", "qsort", "errno", "stdin", "stdout", "stderr", "FILE", "DIR", "size_t", "ssize_t", "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t", "intptr_t", "uintptr_t", "pthread_t", "sin", "cos", "tan", "exp", "log", "pow", "sqrt", "floor", "ceil", "round", "trunc", "fabs", "fmod", "atan2", "INFINITY", "NAN", "NULL", "assert", "time", "clock", "rand", "stat", "opendir", "readdir", "closedir", "isnan", "isinf"]);

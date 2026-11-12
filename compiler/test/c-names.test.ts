@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { C_OWN, C_OWN_PREFIXES } from "../src/c.ts";
+import { C_RUNTIME as C_OWN, C_OWN_PREFIXES } from "../src/c.ts";
 import { RESERVED } from "../src/c-rt.ts";
 
 const here = import.meta.dirname, ters = join(here, "../../ters/cli/ters.ts");
