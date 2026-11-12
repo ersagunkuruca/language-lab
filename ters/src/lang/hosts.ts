@@ -21,10 +21,13 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { isInt, norm } from "./int.ts";
-import { ABORT_OP, BOOL, CHECK_OP, CONS, FALSE, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std.ts";
+import { ABORT_OP, BOOL, CHECK_OP, CONS, FALSE, HTML, HTML_V, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std.ts";
 import { INT, NUMBER, STRING } from "./types.ts";
 import type { Value as RunValue } from "./run.ts";
 
+// What a host's view carries (L235, Symbol.for so a bundle's copy of this
+// module and the page's agree).
+export const FOREIGN_VIEW: unique symbol = Symbol.for("ters.foreign view") as never;
 export type Hosts = Record<Id, (...args: unknown[]) => unknown>;
 type Value = unknown;
 interface Data { tag: Id; fields: Value[] }
@@ -84,7 +87,7 @@ export function declarePureHosts(byName: Record<string, PureHost>, defs: Id[], n
 class Border extends Error {}
 
 // A type expression's own reading, for the border: what a host may give.
-export type Shape = { k: "int" } | { k: "float" } | { k: "text" } | { k: "bool" } | { k: "unit" } | { k: "list"; of: Shape } | { k: "record"; variant: Id; fields: [string, Shape][] } | { k: "any" };
+export type Shape = { k: "view" } | { k: "int" } | { k: "float" } | { k: "text" } | { k: "bool" } | { k: "unit" } | { k: "list"; of: Shape } | { k: "record"; variant: Id; fields: [string, Shape][] } | { k: "any" };
 
 function shapeOf(code: Code, names: Names, tid: Id | undefined): Shape {
   const t = tid ? code.nodes[tid] : undefined;
@@ -94,6 +97,7 @@ function shapeOf(code: Code, names: Names, tid: Id | undefined): Shape {
   if (t.target === STRING) return { k: "text" };
   if (t.target === BOOL) return { k: "bool" };
   if (t.target === UNIT) return { k: "unit" };
+  if (t.target === HTML) return { k: "view" };
   if (t.target === LIST) return { k: "list", of: shapeOf(code, names, t.args[0]) };
   const b = (code.nodes[t.target] as NodeOf<"def">)?.body, td = b ? code.nodes[b] : undefined;
   if (td?.kind === "typedef" && !td.effect && td.variants.length === 1 && !td.params.length) {
@@ -103,7 +107,7 @@ function shapeOf(code: Code, names: Names, tid: Id | undefined): Shape {
   return { k: "any" };
 }
 
-const describe = (s: Shape): string => s.k === "list" ? `a list of ${describe(s.of)}` : s.k === "record" ? "a record" : ({ int: "a whole number", float: "a finite number", text: "a text", bool: "true or false", unit: "nothing", any: "a value" } as const)[s.k];
+const describe = (s: Shape): string => s.k === "view" ? "a view" : s.k === "list" ? `a list of ${describe(s.of)}` : s.k === "record" ? "a record" : ({ int: "a whole number", float: "a finite number", text: "a text", bool: "true or false", unit: "nothing", any: "a value" } as const)[s.k];
 
 function inward(s: Shape, x: unknown, where: string): Value {
   const wrong = () => { throw new Border(`${where} gave ${JSON.stringify(x) ?? String(x)}, not ${describe(s)}`); };
@@ -126,6 +130,13 @@ function inward(s: Shape, x: unknown, where: string): Value {
       if (typeof x !== "object" || x === null) return wrong();
       return { tag: s.variant, fields: s.fields.map(([n, f]) => inward(f, (x as Record<string, unknown>)[n], `${where}.${n}`)) };
     }
+    // A view of the host's own (L235): what the platform draws (a DOM
+    // element on the web), placed on the page as an element `ters-view`
+    // that carries it, so the program can hold it, put it among others and
+    // even look at it, and html.ts mounts the host's own in its place.
+    case "view":
+      if (typeof x !== "object" || x === null) return wrong();
+      return Object.assign({ tag: HTML_V.element, fields: ["ters-view", { tag: NIL, fields: [] }, { tag: NIL, fields: [] }] }, { [FOREIGN_VIEW]: x });
     case "any": throw new Border(`${where}: this type can't come from a host yet`);
   }
 }
@@ -173,7 +184,7 @@ export function ownOperations(code: Code): Id[] {
   });
 }
 
-const showShape = (s: Shape): string => s.k === "list" ? `Array<${showShape(s.of)}>` : s.k === "record" ? `{ ${s.fields.map(([n, f]) => `${JSON.stringify(n)}: ${showShape(f)}`).join(", ")} }` : ({ int: "number | bigint", float: "number", text: "string", bool: "boolean", unit: "undefined", any: "unknown" } as const)[s.k];
+const showShape = (s: Shape): string => s.k === "list" ? `Array<${showShape(s.of)}>` : s.k === "record" ? `{ ${s.fields.map(([n, f]) => `${JSON.stringify(n)}: ${showShape(f)}`).join(", ")} }` : ({ int: "number | bigint", float: "number", text: "string", bool: "boolean", unit: "undefined", any: "unknown", view: "Element" } as const)[s.k];
 
 // `ters hosts`: a hosts/js.js to start from, one entry per operation of
 // each effect the program declares, with its name and types in a comment.
