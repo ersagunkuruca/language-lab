@@ -35,7 +35,7 @@ const send = (method, params = {}) => new Promise((r) => { waiting.set(++id, r);
 const run = async (expr) => (await send("Runtime.evaluate", { expression: expr, returnByValue: true, awaitPromise: true })).result?.result?.value;
 await send("Runtime.enable");
 await sleep(2000);
-console.log("online:", await run("navigator.onLine"));
+console.log("online:", await run("navigator.onLine"), "| fetching a web page:", await run("fetch('https://example.com/', { cache: 'no-store' }).then((r) => 'answered ' + r.status, (e) => 'failed (' + e.message + ')')"));
 console.log("service worker:", await run("navigator.serviceWorker ? navigator.serviceWorker.getRegistrations().then((r) => r.length) : 'none'"));
 const says = async (name) => console.log(`---- ${name}\n` + (await run("document.body.innerText"))?.slice(0, 600));
 await says("started");
