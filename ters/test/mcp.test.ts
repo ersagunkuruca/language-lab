@@ -357,3 +357,26 @@ test("list patterns, `tuple(a, b) = e`, and steps on lines in a case are read as
   assert.match(first, /c#\w+ = h · 2/);
   assert.match(text("eval", { text: "doubled first([4])" }), /^= 9 :/);
 });
+
+// rota's main used `attempt` and a match on its Outcome (I217 M7).
+test("a handler is written as the view prints it: handle …, an operation's case, otherwise (I217 M7)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "checked", kind: "function", params: ["n"] });
+  text("replace", { at: "checked", find: "□", text: "if n > 0 then n else abort(\"not above 0\")" });
+  text("define", { name: "or zero", kind: "function", params: ["n"] });
+  const h = text("replace", { at: "or zero", find: "□", text: "handle checked(n)\n  abort(reason) → 0" });
+  assert.match(h, /handle checked\(n\)/);
+  assert.match(h, /abort\(reason#\w+\) → 0/);
+  assert.match(text("eval", { text: "or zero(5)" }), /^= 5 :/);
+  assert.match(text("eval", { text: "or zero(-2)" }), /^= 0 :/);
+  // On one line, with the value given to otherwise.
+  text("define", { name: "plus one", kind: "function", params: ["n"] });
+  text("replace", { at: "plus one", find: "□", text: "handle checked(n); abort(r) → 0; otherwise → (v) => v + 1" });
+  assert.match(text("eval", { text: "plus one(5)" }), /^= 6 :/);
+  assert.match(call("replace", { at: "plus one", find: "0", text: "handle n; ask(x) → 1" }).text, /no effect has an operation ask/);
+});

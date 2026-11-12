@@ -322,6 +322,7 @@ export class Session {
     const steps = this.stepsIn(code, names, hole, text, def);
     if (steps) return steps;
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def);
+    if (/^\s*handle\s/.test(text)) return this.handleIn(code, names, hole, text, def);
     const solve = this.solveIn(code, names, hole, text);
     if (!solve) return this.fillOne(code, names, hole, text, def, as);
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
@@ -396,6 +397,49 @@ export class Session {
     return this.fill(r.code, r.names, fn.body, after, def);
   }
 
+  // A handler as the view prints it (I217 M7), its cases an effect's
+  // operations, one a line or after `;`s:
+  //   handle check(n)
+  //     abort(reason) → 0
+  //     otherwise → (v) => v + 1
+  // The otherwise, when written, is what the value is given to when the
+  // body asks nothing.
+  private handleIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const { head, cases } = casesOf(text, "handle");
+    const all = baseNames(names);
+    const ops = new Map<string, NodeOf<"variant">>();
+    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && n.effect) for (const v of n.variants) { const op = code.nodes[v]; if (op?.kind === "variant" && all[v] && !ops.has(norm(all[v]))) ops.set(norm(all[v]), op); }
+    const nodes = { ...code.nodes }, out: Names = { ...names };
+    const add = (n: Record<string, unknown>): Id => { const id = freshId(); nodes[id] = { id, ...n } as never; return id; };
+    const fills: [Id, string][] = [];
+    const scrutinee = add({ kind: "hole" });
+    fills.push([scrutinee, head]);
+    const arms: Id[] = [];
+    let otherwise: Id | null = null;
+    for (const c of cases) {
+      const k = /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim());
+      if (!k) return { ok: false, reason: `a handler's case reads operation(fields) → value, not ${c.trim()}` };
+      const body = dedent(k[3]);
+      if (norm(k[1]) === "otherwise") { otherwise = add({ kind: "hole" }); fills.push([otherwise, body]); continue; }
+      const op = ops.get(norm(k[1]));
+      if (!op) return { ok: false, reason: `no effect has an operation ${norm(k[1])}` };
+      const fields = k[2]?.trim() ? k[2].split(",").map(norm) : [];
+      if (fields.length !== op.fields.length && !(op.later && fields.length === op.fields.length + 1)) return { ok: false, reason: `${norm(k[1])} has ${op.fields.length} field${op.fields.length === 1 ? "" : "s"}, not ${fields.length}` };
+      const binds = fields.map((f) => { const b = add({ kind: "binder" }); out[b] = f; return b; });
+      const at = add({ kind: "hole" });
+      fills.push([at, body]);
+      arms.push(add({ kind: "arm", variant: op.id, binds, results: binds.map(() => null), body: at }));
+    }
+    if (!arms.length) return { ok: false, reason: "a handler needs a case for an operation" };
+    nodes[hole] = { id: hole, kind: "match", scrutinee, arms, otherwise } as NodeOf<"match">;
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: { nodes, defs: code.defs }, names: out };
+    for (const [h, t] of fills) {
+      if (!cur.ok) return cur;
+      if (t && t !== "□" && t !== "?") cur = this.fill(cur.code, cur.names, h, t.replace(/[‹›]/g, ""), def);
+    }
+    return cur;
+  }
+
   // A match written as view prints it (I212), one case a line:
   //   match ids
   //     nil → m
@@ -406,23 +450,7 @@ export class Session {
   // turn, so a case's body may be a match too (on deeper lines). `->` reads
   // as →; a case left out, or written □, stays a hole.
   private matchIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
-    const lines = text.replace(/^\s*\n/, "").split("\n");
-    let head = lines[0].trim().replace(/^match\s+/, "");
-    let cases: string[];
-    if (lines.length === 1 || !lines.slice(1).some((l) => l.trim())) {
-      // One line: the scrutinee, then the cases after `;`s outside brackets.
-      const parts = topLevel(head, ";");
-      head = parts[0];
-      cases = parts.slice(1);
-    } else {
-      // Cases begin on the least indented of the lines after the first;
-      // deeper lines go on the case above.
-      const rest = lines.slice(1).filter((l) => l.trim());
-      const indent = (l: string) => l.length - l.trimStart().length;
-      const least = Math.min(...rest.map(indent));
-      cases = [];
-      for (const l of rest) if (indent(l) === least || !cases.length) cases.push(l.trim()); else cases[cases.length - 1] += "\n" + l;
-    }
+    const { head, cases } = casesOf(text, "match");
     const all = baseNames(names);
     const on = norm(head);
     const scope = T.scopeAt(code, def, hole);
@@ -939,6 +967,25 @@ function listMatch(on: string, k: number, alive: { names: string[]; body: string
   const field = named !== "_" && longer.every((c) => c.names[k] === named) ? named : `item ${k + 1}`;
   const next = longer.map((c) => ({ names: c.names, body: c.names[k] === field || c.names[k] === "_" ? c.body : `${c.names[k]} = ${field}\n${c.body}` }));
   return `match ${on}\n${nil}\n  cons(${field}, rest ${k + 1}) →\n${block(listMatch(`rest ${k + 1}`, k + 1, next, fallback))}`;
+}
+
+// A match's or handler's text: what follows the keyword, and its cases,
+// one a line (deeper lines go on the case above) or after `;`s.
+function casesOf(text: string, keyword: string): { head: string; cases: string[] } {
+  const lines = text.replace(/^\s*\n/, "").split("\n");
+  const first = lines[0].trim().replace(new RegExp(`^${keyword}\\s+`), "");
+  if (lines.length === 1 || !lines.slice(1).some((l) => l.trim())) {
+    // One line: the scrutinee, then the cases after `;`s outside brackets.
+    const parts = topLevel(first, ";");
+    return { head: parts[0], cases: parts.slice(1) };
+  }
+  // Cases begin on the least indented of the lines after the first.
+  const rest = lines.slice(1).filter((l) => l.trim());
+  const indent = (l: string) => l.length - l.trimStart().length;
+  const least = Math.min(...rest.map(indent));
+  const cases: string[] = [];
+  for (const l of rest) if (indent(l) === least || !cases.length) cases.push(l.trim()); else cases[cases.length - 1] += "\n" + l;
+  return { head: first, cases };
 }
 
 // A case's body as its own text: the part on the case's line, and the
