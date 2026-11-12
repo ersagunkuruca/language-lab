@@ -37,11 +37,18 @@ const top = resolve(import.meta.dirname, "../..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: top, encoding: "utf8" }).trim();
 const argv = process.argv.slice(2);
 const all = argv.includes("--all");
+// The nightly run in parallel jobs (I208): `--all --shard 2/4` runs the
+// second of four shares of the test files, balanced by how long each took
+// with every sweep in full (nightly-times.json), and no browser test;
+// `--all --browser-only` runs only the browser tests.
+const shardArg = argv.find((a) => a.startsWith("--shard="))?.slice(8) ?? (argv.includes("--shard") ? argv[argv.indexOf("--shard") + 1] : undefined);
+const shard = shardArg ? shardArg.split("/").map(Number) as [number, number] : null;
+const browserOnly = argv.includes("--browser-only");
 const listOnly = argv.includes("--list");
 const browser = all || argv.includes("--browser");
 const timing = argv.includes("--time");
 const full = all || timing || argv.includes("--full");
-const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--"));
+const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--") && a !== shardArg);
 
 const PACKAGES = ["ters", "compiler", "invertible"];
 // The editor has no tests or packages of its own, but its imports count.
@@ -109,7 +116,21 @@ const SLOW_CAP = 5;
 const slowPath = join(top, "ters/test/slow.json");
 const slow: Record<string, number> = existsSync(slowPath) ? (JSON.parse(readFileSync(slowPath, "utf8")) as { files: Record<string, number> }).files : {};
 const left = full ? [] : chosen.filter((t) => t in slow && !code.includes(t));
-const fast = chosen.filter((t) => !left.includes(t));
+let fast = chosen.filter((t) => !left.includes(t));
+if (browserOnly) fast = [];
+if (shard) {
+  // Longest first, each to the share with the least so far.
+  const timesPath = join(top, "ters/test/nightly-times.json");
+  const times: Record<string, number> = existsSync(timesPath) ? (JSON.parse(readFileSync(timesPath, "utf8")) as { files: Record<string, number> }).files : {};
+  const [i, n] = shard;
+  const load = Array<number>(n).fill(0), mine = new Set<string>();
+  for (const t of [...fast].sort((a, b) => (times[b] ?? 10) - (times[a] ?? 10) || a.localeCompare(b))) {
+    const k = load.indexOf(Math.min(...load));
+    load[k] += times[t] ?? 10;
+    if (k === i - 1) mine.add(t);
+  }
+  fast = fast.filter((t) => mine.has(t));
+}
 
 if (timing) {
   // Each file alone, as many at once as there are cores; the wall time of
@@ -148,15 +169,15 @@ for (const p of PACKAGES) {
   // of a 4-core container's).
   if (mine.length) runs.push({ what: `${p}: ${mine.length} of ${tests.filter((t) => t.startsWith(p + "/")).length} test files`, cwd: p, cmd: ["node", "--test", `--test-concurrency=${availableParallelism()}`, "--test-reporter=dot", ...mine] });
 }
-if (page && browser) {
+if (page && browser && !shard) {
   runs.push({ what: "build the pages", cwd: "ters", cmd: ["node", "../editor/build.ts"] });
   runs.push({ what: "the editor in a browser", cwd: "ters", cmd: ["node", "../editor/smoke.ts"] });
   runs.push({ what: "shaders in a browser", cwd: "ters", cmd: ["node", "../editor/shaders-smoke.ts"] });
 }
-if (gpu && browser) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
-if (sound && browser) runs.push({ what: "sound in a browser", cwd: "ters", cmd: ["node", "test/sound-browser.ts"] });
+if (gpu && browser && !shard) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
+if (sound && browser && !shard) runs.push({ what: "sound in a browser", cwd: "ters", cmd: ["node", "test/sound-browser.ts"] });
 
-console.log(all ? "everything, every sweep in full" : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}`);
+console.log(all ? `everything, every sweep in full${shard ? `: share ${shard[0]} of ${shard[1]}` : browserOnly ? ": the browser tests" : ""}` : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}`);
 for (const r of runs) console.log(`  ${r.what}`);
 if (!browser && (page || gpu || sound)) console.log("  (the browser tests it reaches run tonight, or now with --browser)");
 if (left.length) console.log(`  (${left.length} slow file${left.length === 1 ? "" : "s"} it reaches run after the merge, in Check main, or now with --full)`);

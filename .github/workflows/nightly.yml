@@ -4,6 +4,13 @@
 # the merge reaches and a slice of each sweep; this is where whatever they
 # skipped gets checked. Green moves the `good` tag to what it tested, so
 # running Pages by hand on `good` puts back the last fully checked site.
+#
+# In parallel jobs (I208, Ersagun's OK 2026-11-12): one job did it all and
+# hit its 30-minute limit every night from 10-31 (195 CPU-minutes of test
+# files, 49 minutes on the runner's 4 cores before the browser tests).
+# Four shares of the test files, balanced by how long each took
+# (ters/test/nightly-times.json, `affected.ts --time` with SWEEP=all), and
+# the browser tests in a job of their own.
 name: Nightly
 
 on:
@@ -15,9 +22,10 @@ permissions:
   contents: write
 
 jobs:
-  full:
+  changed:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    outputs:
+      run: ${{ steps.changed.outputs.run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,20 +34,51 @@ jobs:
         id: changed
         run: |
           if [ "$(git rev-parse -q --verify 'refs/tags/good^{commit}')" = "$(git rev-parse HEAD)" ]; then echo "run=no" >> "$GITHUB_OUTPUT"; else echo "run=yes" >> "$GITHUB_OUTPUT"; fi
-      - if: steps.changed.outputs.run == 'yes'
-        uses: actions/setup-node@v4
+
+  tests:
+    needs: changed
+    if: needs.changed.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: ters/package-lock.json
-      - if: steps.changed.outputs.run == 'yes'
-        run: npm ci
+      - run: npm ci
         working-directory: ters
-      - if: steps.changed.outputs.run == 'yes'
-        name: Everything
-        run: node ters/test/affected.ts --all
-      - if: steps.changed.outputs.run == 'yes'
-        name: Move the good tag
+      - name: Share ${{ matrix.shard }} of the test files
+        run: node ters/test/affected.ts --all --shard ${{ matrix.shard }}/4
+
+  browser:
+    needs: changed
+    if: needs.changed.outputs.run == 'yes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: The browser tests
+        run: node ters/test/affected.ts --all --browser-only
+
+  good:
+    needs: [tests, browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move the good tag
         run: |
           git tag -f good HEAD
           git push -f origin refs/tags/good
