@@ -15,7 +15,7 @@
 // replaces, through `meaning`.
 
 import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
-import type { Info } from "./infer.ts";
+import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { NUMBER } from "./types.ts";
 import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
@@ -458,6 +458,9 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   // The definition itself; a representation by the same type changes the
   // jobs (Float32 rounds each one).
   if (rep.type === rep.of && !Object.keys(rep.impl).length && !rep.literal) return code;
+  // What its matches give as pieces, before they are put in place
+  // (infer.ts notePieces).
+  notePieces(code);
   const t = rep.of;
   const variants = new Set(variantsOf(code, t));
   const nodes: Record<Id, Node> = { ...code.nodes };

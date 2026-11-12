@@ -15,7 +15,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
-import { subtree, type Id, isCall } from "../src/model.ts";
+import { dependencies, subtree, type Id, isCall } from "../src/model.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -785,6 +785,15 @@ test("a definition recurring through a stored list's match runs 50,000 deep comp
   assert.deepEqual(info2.errors.map((e) => e.message), []);
   const t = info2.subst.zonk(info2.typeOf.get(count)!);
   assert.ok(t.t === "fn" && !info2.subst.resolveRow(t.eff).effs.includes(DIVERGE), "count surely finishes");
+  // And in the program cut to what main reaches, as a compile checks it
+  // again: no `match by` is left there to say the rest is a piece (I207).
+  const reached = new Set<Id>([main, ...dependencies(c.code, main)]);
+  const defs = c.code.defs.filter((d) => reached.has(d));
+  const dropped = new Set(c.code.defs.filter((d) => !reached.has(d)).flatMap((d) => subtree(c.code, d)));
+  const cut = { nodes: Object.fromEntries(Object.entries(c.code.nodes).filter(([x]) => !dropped.has(x))), defs };
+  assert.ok(cut.defs.length < c.code.defs.length);
+  const info3 = infer(cut, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  assert.ok(!info3.divergent.has(count), "count surely finishes in the program cut");
   const out: string[] = [];
   compiledMain(c.code, info2, c.names, { print: (s: string) => out.push(s) } as never);
   assert.deepEqual(out.join("").trim(), "50000");
