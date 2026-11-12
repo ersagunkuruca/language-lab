@@ -8,6 +8,7 @@
 /shaders.html
 /apps/
 /prebuilt/
+/checks.json
 
 # Scratch scripts (REVIEW-2026-10-26.md §4): keep them out of commits.
 *.tmp.ts
