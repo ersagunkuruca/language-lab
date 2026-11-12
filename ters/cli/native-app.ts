@@ -526,6 +526,19 @@ public class MainActivity extends Activity {
             p = new Path();
             break;
           }
+          case 6: {
+            // A text (c-layout.ts tl_shapes): its anchor point, size, colour,
+            // anchor, weight and UTF-8 bytes.
+            int n = (int) o[i + 6];
+            byte[] b = new byte[n];
+            for (int k = 0; k < n; k++) b[k] = (byte) (int) o[i + 7 + k];
+            brush.reset(); brush.setAntiAlias(true); brush.setStyle(Paint.Style.FILL); brush.setColor((int) (long) o[i + 3]);
+            brush.setTextSize(f(o[i + 2])); brush.setFakeBoldText(o[i + 5] != 0);
+            brush.setTextAlign(o[i + 4] == 1 ? Paint.Align.CENTER : o[i + 4] == 2 ? Paint.Align.RIGHT : Paint.Align.LEFT);
+            c.drawText(new String(b, java.nio.charset.StandardCharsets.UTF_8), f(o[i]), f(o[i + 1]), brush);
+            i += 7 + n;
+            break;
+          }
           default: i = o.length;
         }
       }

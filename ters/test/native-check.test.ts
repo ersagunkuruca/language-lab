@@ -23,20 +23,23 @@ test("dice's page: nothing refused, its hover rules and transitions left out", (
   for (const x of ["the property display", "the property gap", "the property font-size"]) assert.ok(!r.leftOut.includes(x), x);
 });
 
-test("an image, a checkbox and a picture's text are refused; a text field isn't", () => {
+test("an image, a checkbox and a text along a path are refused; a text field and a picture's text aren't", () => {
   const k = new Lang();
   const el = (tag: string, attrs: string[][], ...kids: string[]) =>
     k.call(HTML_V.element, k.lit(tag), k.listOf(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.listOf(...kids));
   const main = k.def("main");
   k.define(main, k.fn([], () => el("div", [["style", "display: flex; box-shadow: 0 1px 2px #0003"]],
-    el("img", [["src", "a.png"]]), el("input", [["type", "checkbox"]]), el("input", [["type", "text"]]), el("svg", [], el("text", [])))));
+    el("img", [["src", "a.png"]]), el("input", [["type", "checkbox"]]), el("input", [["type", "text"]]), el("svg", [], el("text", []), el("textPath", [])))));
   const r = nativePageReport(base(k.code), main);
-  assert.deepEqual(r.refused, ["<img> (an image)", '<input type="checkbox"> (not a text field)', "<text> (a text in a picture)"]);
+  assert.deepEqual(r.refused, ["<img> (an image)", '<input type="checkbox"> (not a text field)', "<textPath> (a text along a path)"]);
   assert.deepEqual(r.leftOut, ["the property box-shadow"]);
 });
 
-test("ters build-native-app refuses spacetime's page, naming what it can't show", () => {
+// spacetime's pictures' texts are drawn (C199f); its sliders' solves
+// aren't in C yet (C195).
+test("ters build-native-app refuses spacetime for its solves, not for its pictures' texts", () => {
   const out = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-native-app", join(import.meta.dirname, "../examples/spacetime"), "-o", join(mkdtempSync(join(tmpdir(), "native-")), "app")], { encoding: "utf8" });
   assert.notEqual(out.status, 0);
-  assert.match(out.stderr, /<text> \(a text in a picture\)/);
+  assert.doesNotMatch(out.stderr, /<text>/);
+  assert.match(out.stderr, /relational interpreter/);
 });
