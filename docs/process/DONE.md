@@ -34,6 +34,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I219e | The browser smoke's "a main opens on its steps" waited forever for step numbers: since E235 a first visit opens on fall, not main, so the check now opens Numbers & physics' main itself (7 of 7 steps in the first view at 1280×720). | this PR |
 | I219d | The editor's Shader examples drew again: the shader check asked `process.env` for NO_VERIFY, and a page has no `process` ("Can't draw the picture: process is not defined", the Nightly browser job). | this PR |
 | I219c | palette.test with every sweep in full no longer runs out of memory: each check's trial of the library's substitution is held by a WeakRef (types.ts trial), which keeps its target until the running job ends, so its sweep's thousands of checks in one synchronous test kept every program checked, about 5 MB each, 2 GB at 300 (found by heap snapshot: Subst ← weak_refs_keep_during_job). The test now gives the job back after each filling, as the editor checks in tasks of its own: 11/11 in 7.3 min | this PR |
 | I219a | draws.test with every sweep in full passes again on break and pond: an implementation with a field left to its ways (break's pocket toucher, ball toucher) shows its other fields' values and says "a field is left to its ways, picked where it is used" as a hint, where Values stopped at "no implementation for builtin.byItsWays" (trace.ts walked the record and reached the ref); and a value deeper than the evaluator's stack (pond's start patches) says so as a hint, Run main running it in full | this PR |

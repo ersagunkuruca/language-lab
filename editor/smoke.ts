@@ -346,12 +346,14 @@ async function patternRows() {
 // A fold to a function, applied to its start, draws as one fold node with
 // a port for the start, as the text reads it (BACKLOG E62): queens' safe.
 // A main opens on its steps (BACKLOG I18): at 1280×720 the first view of
-// Numbers & physics' main shows the column they run down, numbered.
+// Numbers & physics' main shows the column they run down, numbered. (A
+// first visit opens on fall, E235, so the test opens main.)
 async function firstSteps() {
   where = "a main opens on its steps";
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   await p.locator(".p-graph svg.canvas > g.world text.stepn").first().waitFor({ state: "attached" });
   await p.waitForTimeout(300);
   const [seen, all] = await p.evaluate(() => {
