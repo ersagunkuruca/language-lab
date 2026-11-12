@@ -12,6 +12,9 @@
 // is swallowed. Definitions that might not finish aren't traced, and
 // neither is anything that calls one.
 
+import { leftToWays } from "./ways.ts";
+// What a trace says of an implementation with a field left to its ways.
+export const LEFT_TO_WAYS = "a field is left to its ways, picked where it is used";
 import type { Code, Id, NodeOf } from "../model.ts";
 import { isCall, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
@@ -70,6 +73,15 @@ function traceOn(written: Code, info: Info, def: Id, args: Value[], entered: Run
       case "call": {
         if (isUse(n)) { v = first(r.ev(id, env), id); break; }
         const head = code.nodes[n.fn];
+        // A field left to the interface's ways (WAYS.md) has no value of its
+        // own: a way is picked where the operation is used, so the
+        // implementation as a value can't be made; the other fields show
+        // theirs (I219: break's pocket toucher stopped at "no
+        // implementation for builtin.byItsWays").
+        if (n.args.some((a) => leftToWays(code, a))) {
+          for (const a of n.args) if (!leftToWays(code, a)) walk(a, env);
+          throw Object.assign(new Error(LEFT_TO_WAYS), { id });
+        }
         const vals = n.args.map((a) => walk(a, env));
         // A call the runner runs as something else (+ on records resolved to
         // its parts, f(p) spread: arith.ts) is run as it runs; what went

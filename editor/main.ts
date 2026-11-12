@@ -28,7 +28,7 @@ import { renderBlocks } from "../ters/src/lang/render.ts";
 import { needsHandling, OutOfSteps, type Data, type Value } from "../ters/src/lang/run.ts";
 import type { Profile, StopAt, Stuck } from "./runWorker.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
-import { trace, type Trace } from "../ters/src/lang/trace.ts";
+import { LEFT_TO_WAYS, trace, type Trace } from "../ters/src/lang/trace.ts";
 import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
@@ -1935,6 +1935,10 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   if (tr?.error) box.append(tr.error.message === "reached a hole"
     ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
     : !givenOf(ui.def) || LIMIT.test(tr.error.message) || /the graph waits|has no standard input/.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
+    // The evaluator's own depth, not the program's fault (I219: pond's
+    // start patches, seeded over every cell): Run main runs it compiled.
+    : tr.error.message === LEFT_TO_WAYS ? h("p", { class: "hint" }, `No values on the wires: ${LEFT_TO_WAYS}.`)
+    : /Maximum call stack|too much recursion/i.test(tr.error.message) ? h("p", { class: "hint" }, "No values on the wires: it goes deeper than the graph's evaluator does; Run main runs it in full.")
     : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }
