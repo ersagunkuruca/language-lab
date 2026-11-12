@@ -277,6 +277,18 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   100 KB more than `ters build-web`'s, which keeps only what it uses.
 - **What `main` may do**: return `Html`; take no arguments; use `Cells`,
   `Update`, `Console`, `Files` (run.ts `pageProblem` says why not).
+- **The platform's moments** (L236): `on("back", …)`, `on("pause", …)` and
+  `on("resume", …)` on any element, heard while it is on the page, with
+  one meaning on every platform and each shell mapping its own events
+  (html.ts `PLATFORM_EVENTS`). Back is the back button or gesture, kept by
+  the page: in a browser the page keeps a history entry of its own and a
+  popstate puts it back; on Android onBackPressed goes to the page when a
+  view on it listens, else Android's own back. Pause is the page no longer
+  seen (visibilitychange to hidden; onPause), resume seen again (visible;
+  onResume after a pause, not the app's start). The iOS shell (C199e)
+  maps its own the same way. They are events a page answers, not
+  operations it performs; asking for a permission is an operation (L236
+  step two).
 
 ## The order of the work, one PR each
 

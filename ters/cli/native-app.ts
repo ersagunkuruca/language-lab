@@ -352,7 +352,26 @@ public class MainActivity extends Activity {
 
   void clear(int id) { View v = views.get(id); if (v instanceof ViewGroup) ((ViewGroup) v).removeAllViews(); }
 
-  void gone(int id) { views.remove(id); inside.remove(id); painted.remove(id); sided.remove(id); }
+  void gone(int id) { views.remove(id); inside.remove(id); painted.remove(id); sided.remove(id); moments.remove(id); }
+
+  // The platform's moments (L236, html.ts PLATFORM_EVENTS), each heard by
+  // the views on the page that listen for it: the back button or gesture
+  // (kept by the page when one listens, else Android's own), the app left
+  // (onPause) and come back to (onResume after a pause; not its start, as
+  // a browser's page isn't shown again when it loads).
+  private final HashMap<Integer, HashMap<String, Integer>> moments = new HashMap<>();
+  private boolean paused;
+  private boolean moment(String name) {
+    boolean heard = false;
+    for (HashMap<String, Integer> m : new java.util.ArrayList<>(moments.values())) {
+      Integer h = m.get(name);
+      if (h != null) { fire(h, "", ""); heard = true; }
+    }
+    return heard;
+  }
+  @Override public void onBackPressed() { if (!moment("back")) super.onBackPressed(); }
+  @Override protected void onPause() { super.onPause(); paused = true; moment("pause"); }
+  @Override protected void onResume() { super.onResume(); if (paused) { paused = false; moment("resume"); } }
 
   void place(int id, double x, double y, double w, double h, int shown) {
     View v = views.get(id);
@@ -556,6 +575,12 @@ public class MainActivity extends Activity {
         if (!(v instanceof Picture)) pointers(v).put(event, handler);
         break;
       case "frame": frames(v, handler); break;
+      case "back": case "pause": case "resume": {
+        HashMap<String, Integer> m = moments.get(id);
+        if (m == null) moments.put(id, m = new HashMap<>());
+        m.put(event, handler);
+        break;
+      }
       default: break;
     }
   }

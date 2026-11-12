@@ -30,6 +30,7 @@ import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
+import { answeredEffects, answerSupports, cHostHas, jsHostHas } from "../src/lang/supports.ts";
 import { effectOfOperation, hostCName, hostSkeleton, hostSkeletonC, hostSkeletonJava, ownOperations, type Hosts } from "../src/lang/hosts.ts";
 import { evaluatorHash, readKept, resultKeys, writeKept } from "./checks.ts";
 import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } from "./logs.ts";
@@ -68,6 +69,9 @@ usage:
   ters native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   ters wasi <program> [-o out.wasm]      compile to a WASI command: WebAssembly with GC (wasmtime, Node's WASI)
   ters check <program>                   type-check, and list the definitions and their types
+  ters qasm <program> --main f [--bits n] [-o out.qasm]
+                                        f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
+                                        its Ints n bits wide (default 8), its scratch qubits uncomputed after
   ters hosts <program> [--c|--android]   print a hosts/js.js answering the program's own effects, to start from;
                                         with --c a hosts/c.c, for ters native (FOREIGN.md); with --android a
                                         hosts/android.java, for ters build-native-app
@@ -457,13 +461,31 @@ if (!command || command === "help" || command === "--help" || !path) {
   process.exit(command && command !== "help" && command !== "--help" ? 2 : 0);
 }
 
-const loaded = load(path);
-const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
-const p = main && defined < 0 ? represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app") : loaded;
 // The host's answers to the program's own effects (FOREIGN.md, L69a):
 // hosts/js.js beside the program, if it has one.
 const hostFile = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", "js.js") : "";
 const hosts: Hosts | undefined = hostFile && existsSync(hostFile) ? (await import(pathToFileURL(resolve(hostFile)).href)).default : undefined;
+// Each `supports(f)` answered for this command's platform and folded
+// (supports.ts, L234): hosts/c.c for ters native, it or hosts/android.java
+// (its methods named as c.c's functions) for the native app, nothing
+// beside the program's own handlers for WebAssembly, which takes no host
+// file yet, and hosts/js.js for the rest.
+// Only for what runs or builds: a check sees both branches.
+function answeredHere(q: Program): Program {
+  if (!["run", "compile", "native", "wasi", "build-web", "build-app", "build-native-app"].includes(command)) return q;
+  const hostText = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : ""; };
+  const has = command === "native" ? cHostHas(hostText("c.c"))
+    : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText("android.java"))
+    : command === "wasi" ? () => false
+    : jsHostHas(hosts);
+  const code = answerSupports(q.code, q.info, answeredEffects(q.code, has));
+  if (!code) return q;
+  const info = infer(code, q.names, undefined, q.options);
+  return { ...q, code, info, reps: representationsIn(code, info, q.names, q.own) };
+}
+const loaded = answeredHere(load(path));
+const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
+const p = main && defined < 0 ? represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app") : loaded;
 // A page or app bundles the same file into its script (L69a3).
 const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;
 // The program's page, for `ters build-web` and `ters build-app`, printed
@@ -655,6 +677,21 @@ switch (command) {
     writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
     if (played.silent.length) process.stderr.write(`ters: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);
     process.stderr.write(`ters: wrote ${to}, ${(wav.samples.length / wav.rate).toFixed(2)} s at ${wav.rate} Hz\n`);
+    break;
+  }
+  case "qasm": {
+    // The named function as a reversible circuit in OpenQASM 3 (C210,
+    // compiler/src/qasm.ts): its Ints `--bits` wide, uncomputed after.
+    const named = p.own.find((d) => p.names[d] === mainName) ?? fail(`${p.title} has no definition named ${mainName}`);
+    if (p.info.errors.length) fail(`${p.title} has errors; ters check lists them`);
+    const b = rest.indexOf("--bits"), bits = b >= 0 ? Number(rest[b + 1]) : 8;
+    if (!Number.isInteger(bits) || bits < 1 || bits > 64) fail("--bits needs a whole number from 1 to 64");
+    const { printQasm } = await import("../../compiler/src/qasm.ts");
+    const lambda = p.code.nodes[(p.code.nodes[named] as { body?: Id }).body ?? ""] as { params?: Id[] } | undefined;
+    let q: string;
+    try { q = printQasm(lowerScalar(p.code, p.info, p.names, [named], { shader: true }), named, bits, (lambda?.params ?? []).map((x) => p.names[x] ?? x)).text; } catch (e) { fail(`${mainName} has no circuit: ${(e as Error).message}`); }
+    const o = rest.indexOf("-o");
+    if (o >= 0) writeFileSync(rest[o + 1] ?? fail("-o needs a file"), q); else process.stdout.write(q);
     break;
   }
   case "check": {

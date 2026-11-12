@@ -189,3 +189,32 @@ test("a part inside a picture is an SVG group; elsewhere a lab-part", () => {
   assert.equal(mount(el("svg")).html(), "<svg><g><circle></circle></g></svg>");
   assert.equal(mount(el("div")).html(), '<div><lab-part style="display: contents"><circle></circle></lab-part></div>');
 });
+
+test("the platform's moments: back, pause and resume, heard while the element is on the page (L236)", () => {
+  type L = () => void;
+  const on: Record<string, L[]> = {}, onDoc: Record<string, L[]> = {};
+  const pushed: unknown[] = [];
+  const doc = { visibilityState: "visible", addEventListener: (t: string, f: L) => (onDoc[t] ??= []).push(f), removeEventListener: (t: string, f: L) => { onDoc[t] = onDoc[t].filter((x) => x !== f); } };
+  const fake = { addEventListener: (t: string, f: L) => (on[t] ??= []).push(f), removeEventListener: (t: string, f: L) => { on[t] = on[t].filter((x) => x !== f); }, history: { pushState: (d: unknown) => pushed.push(d) }, document: doc };
+  const g = globalThis as Record<string, unknown>;
+  const saved = Object.fromEntries(Object.keys(fake).map((k) => [k, g[k]]));
+  Object.assign(g, fake);
+  try {
+    const heard: string[] = [];
+    const then = (name: string) => () => { heard.push(name); return { tag: "std.unit.unit", fields: [] }; };
+    const page = { tag: HTML_V.element, fields: ["div", toList(["back", "pause", "resume"].map((n) => ({ tag: HTML_V.on, fields: [n, then(n) as never] }))), toList([])] } as Data;
+    const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { isConnected?: boolean };
+    assert.equal(pushed.length, 1, "a history entry of the page's own, so the first back stays on the page");
+    e.isConnected = true;
+    const fire = (m: Record<string, L[]>, t: string) => [...(m[t] ?? [])].forEach((f) => f());
+    fire(on, "popstate");
+    assert.equal(pushed.length, 2, "and again after each back");
+    doc.visibilityState = "hidden"; fire(onDoc, "visibilitychange");
+    doc.visibilityState = "visible"; fire(onDoc, "visibilitychange");
+    assert.deepEqual(heard, ["back", "pause", "resume"]);
+    e.isConnected = false;
+    fire(on, "popstate"); fire(onDoc, "visibilitychange");
+    assert.deepEqual(heard, ["back", "pause", "resume"], "gone from the page: heard no more");
+    assert.equal(on.popstate.length + onDoc.visibilitychange.length, 0);
+  } finally { Object.assign(g, saved); }
+});

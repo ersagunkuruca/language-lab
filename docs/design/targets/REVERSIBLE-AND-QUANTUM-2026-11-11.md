@@ -104,6 +104,22 @@ exponentiation). It can be checked with no quantum hardware: a reversible
 circuit on basis states is a permutation, so the evaluator and a tiny
 simulator must agree on every input of a few bits.
 
+**Built (C210, 2026-11-12).** `ters qasm <program> --main f --bits n`
+prints f as OpenQASM 3 (compiler/src/qasm.ts). It reads the scalar
+profile with Ints in a word: +, −, ×, bit and/or/xor, shifts by a known
+amount, a remainder by a known power of two, comparisons, if, let, and
+calls, which are inlined. Each Int is n qubits, unsigned, wrapping; a Bool
+is one. Each step writes into fresh ancillas (CNOTs for xor, a Toffoli for
+and), constants fold as the circuit is made, the result is copied into
+`out`, and every step runs again in reverse, so the ancillas end at 0 and
+the inputs as they came. Recursion and Float64 are refused with the
+reason. compiler/test/qasm.test.ts runs the printed text in a small
+simulator of basis states: a 4-bit adder agrees with the evaluator on all
+256 inputs, as does a function with a comparison, an if, a subtraction, a
+product and a call. Not done: sharing an ancilla once it is uncomputed
+(the circuits are as wide as they are long), and loops unrolled to a
+known bound.
+
 **Quantum part: a new layer of the language, not a target.** Ters has a
 close match: `Choice` is already "many answers at once". Give each answer
 a complex amplitude, and let equal answers add (or cancel) instead of
