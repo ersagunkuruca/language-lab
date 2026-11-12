@@ -306,3 +306,30 @@ test("a tuple type and a word after a type in parentheses are read as the view p
     /taken#\w+: Set \(Tuple2 Text Int\), who#\w+: Map \(Tuple2 Text Int\) Text, pairs#\w+: List \(Tuple3 Text Int Float64\)/);
   assert.match(text("add_field", { at: "Plan", name: "pick", type: "((Text, Int)) -> (Int, Int)" }), /pick#\w+: \(Tuple2 Text Int\) -> Tuple2 Int Int/);
 });
+
+test("list patterns, `tuple(a, b) = e`, and steps on lines in a case are read as written (I217 M2, M6)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  // M2: `[a, b] →` is cons(a, cons(b, nil)), the other lengths otherwise.
+  text("define", { name: "sum of two", kind: "function", params: ["xs"] });
+  const two = text("replace", { at: "sum of two", find: "□", text: "match xs\n  [a, b] → a + b\n  [] → 0\n  otherwise → 1" });
+  assert.match(two, /\[a#\w+, b#\w+\] → a \+ b/);
+  assert.doesNotMatch(two, /^\+.*□/m);
+  assert.match(text("eval", { text: "sum of two([3, 4])" }), /^= 7 :/);
+  assert.match(text("eval", { text: "sum of two([3, 4, 5])" }), /^= 1 :/);
+  assert.match(text("eval", { text: "sum of two([])" }), /^= 0 :/);
+  // M6: a tuple's parts named by a step.
+  text("define", { name: "parts", kind: "function", params: ["n"] });
+  const parts = text("replace", { at: "parts", find: "□", text: "tuple(a, b) = tuple(n, n * 2)\na + b" });
+  assert.match(parts, /tuple\(a#\w+, b#\w+\) = it\n/);
+  assert.match(text("eval", { text: "parts(5)" }), /^= 15 :/);
+  // Steps on lines of their own inside a case.
+  text("define", { name: "doubled first", kind: "function", params: ["xs"] });
+  const first = text("replace", { at: "doubled first", find: "□", text: "match xs\n  nil → 0\n  cons(h, t) →\n    c = h * 2\n    c + 1" });
+  assert.match(first, /c#\w+ = h · 2/);
+  assert.match(text("eval", { text: "doubled first([4])" }), /^= 9 :/);
+});
