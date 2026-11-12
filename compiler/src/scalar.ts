@@ -689,7 +689,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // check the program again (I203). The verifier vouches for them in one
   // walk (wc 11 ms, spacetime 260); where it finds a problem the program is
   // checked again, as before I203 (REVIEW-2026-11-11 §2, I207).
-  if (!process.env?.NO_VERIFY) info = vouched(code, info, names);
+  // (A page has no `process`: the editor's shaders couldn't draw, I219.)
+  if (typeof process === "undefined" || !process.env?.NO_VERIFY) info = vouched(code, info, names);
   // Then derivative(f) of a function written right there becomes the code
   // of its derivative (derive.ts), checked again, so the GPU gets exact
   // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
