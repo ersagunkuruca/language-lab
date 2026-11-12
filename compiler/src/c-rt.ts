@@ -1227,7 +1227,11 @@ export const WORLD_H = "#include <errno.h>\n#include <sys/stat.h>\n#include <dir
 export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // The C names the runtime defines besides `lab_` + a function's, which a
 // program's own names must not take.
-export const RESERVED = ["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_"))];
+// Every `lab_` name the runtime's text defines or uses counts too (I214: a
+// definition named `cell` took `lab_cell`, the runtime's cell type).
+const LIST_SAMPLE: ListNames = { cons: "List_cons", nil: "List_nil", type: 0, tag: 0, head: 0 };
+const words = (text: string) => [...text.matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]);
+export const RESERVED = [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...words(BASE), ...Object.values(FNS).flatMap((f) => words(typeof f.c === "string" ? f.c : f.c(LIST_SAMPLE)))])];
 
 // The C of the runtime functions `names` and what they call, in an order
 // that defines each before its use. `list(fn)`: the names of the list type
