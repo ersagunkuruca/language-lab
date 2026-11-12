@@ -1768,12 +1768,14 @@ export function mainProblem(info: Info, def: Id, names: Names = {}, hosted: Set<
 
 // Can `def` be a page's main (WEB.md, `ters build-web`)? It takes nothing
 // and returns the page, an Html. Null if it can, else why not.
-export function pageProblem(info: Info, def: Id, names: Names = {}): string | null {
+// `hosted`: effects a host answers while main builds the page (a native
+// app's hosts/c.c or hosts/android.java, C204).
+export function pageProblem(info: Info, def: Id, names: Names = {}, hosted: Set<Id> = new Set()): string | null {
   const t = info.typeOf.get(def);
   if (!t || t.t !== "fn" || t.params.length) return "a page's main takes nothing and returns the page (an Html)";
   const ret = info.subst.zonk(t.ret);
   if (ret.t !== "con" || ret.id !== HTML) return "a page's main returns the page (an Html)";
-  return leftover(t, names);
+  return leftover(t, names, hosted);
 }
 
 // A main that is a value, not a function (lockstep's text, T7e15): run

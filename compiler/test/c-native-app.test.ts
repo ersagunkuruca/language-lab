@@ -129,3 +129,67 @@ test("dice's native app, its C and JNI screen on a stand-in MainActivity, lays o
   assert.match(c.stdout.toString(), /Rolls: 100;/);
   assert.equal(r.stdout.toString("utf8"), c.stdout.toString());
 });
+
+// A native app's own effect answered in Java (C204): hosts/android.java's
+// Hosts.host_<id>, called from the page's C through JNI, its values
+// crossing as Java's own; an exception it throws is the program's Abort.
+test("a native app's own effect is answered by hosts/android.java through JNI (C204)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { hostCName } = await import("../../ters/src/lang/hosts.ts");
+  const { ABORT_OP, HTML_V, S } = await import("../../ters/src/lang/std.ts");
+  const { B } = await import("../../ters/src/prelude.ts");
+  const k = new Lang(LIBRARY.code);
+  const dev = k.effect("Device", [
+    ["name of", [["id", () => k.tref("type.int")]], () => k.tref("type.string")],
+    ["battery", [], () => k.tref("type.number")],
+    ["ready", [], () => k.tref("std.bool")],
+  ]);
+  const el = (tag: string, attrs: string[], kids: string[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const text = (f: () => string) => k.call(HTML_V.text, k.thunk(f));
+  // main asks the host as it builds the page (FOREIGN.md: a page's views
+  // and handlers perform only the page's own effects).
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("said", k.handle(
+    k.call(S.concat, k.call(dev.op["name of"], k.int(7)), k.call(S.concat, k.lit(" at "), k.call(S.concat, k.call(S.show, k.call(B.mul, k.call(dev.op.battery), k.lit(100))), k.if(k.call(dev.op.ready), k.lit(", ready"), k.lit(", not ready"))))),
+    [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.call(S.concat, k.lit("aborted: "), why) }]), (said) =>
+    el("div", [], [el("p", [], [text(() => said)])]))));
+  const dir = mkdtempSync(join(tmpdir(), "native-hosts-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  mkdirSync(join(dir, "hosts"));
+  const ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  // `ters hosts --android` gives the class to start from, each method by its id.
+  const skeleton = spawnSync(process.execPath, [ters, "hosts", dir, "--android"], { encoding: "utf8" });
+  assert.equal(skeleton.status, 0, skeleton.stderr);
+  for (const op of Object.values(dev.op)) assert.match(skeleton.stdout, new RegExp(`public static \\w+ ${hostCName(op)}\\(`));
+  const run = (java: string, c?: string) => {
+    writeFileSync(join(dir, "hosts", "android.java"), java);
+    if (c) writeFileSync(join(dir, "hosts", "c.c"), c);
+    const out = spawnSync(process.execPath, [ters, "build-native-app", dir, "-o", join(dir, "app")], { encoding: "utf8" });
+    assert.equal(out.status, 0, out.stderr);
+    assert.ok(existsSync(join(dir, "app/app/src/main/java", ...PACKAGE.split("."), "Hosts.java")));
+    const inc = join(jdk!, "include");
+    execFileSync("cc", ["-std=c11", "-O2", "-fPIC", "-shared", "-pthread", "-Wall", "-Werror", "-Wno-unknown-pragmas", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable", "-Wno-unknown-warning-option", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", `-I${inc}`, `-I${join(inc, "linux")}`, "-o", join(dir, "libpage.so"), join(dir, "app/app/src/main/cpp/page.c"), "-lm"]);
+    const src = join(dir, "java", ...PACKAGE.split("."));
+    mkdirSync(src, { recursive: true });
+    writeFileSync(join(src, "MainActivity.java"), STAND_IN);
+    writeFileSync(join(src, "Hosts.java"), java);
+    execFileSync("javac", ["-d", join(dir, "classes"), join(src, "MainActivity.java"), join(src, "Hosts.java")]);
+    const r = spawnSync("java", [`-Djava.library.path=${dir}`, "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  const [name, battery, ready] = [hostCName(dev.op["name of"]), hostCName(dev.op.battery), hostCName(dev.op.ready)];
+  const host = (nameBody: string) => `package ${PACKAGE};
+public final class Hosts {
+  public static String ${name}(long id) { ${nameBody} }
+  public static double ${battery}() { return 0.5; }
+  public static boolean ${ready}() { return true; }
+}
+`;
+  assert.match(run(host(`return "phone " + id + " ✨";`)), /"phone 7 ✨ at 50, ready"/);
+  assert.match(run(host(`throw new IllegalStateException("no such device");`)), /"aborted: the host's name of failed: java.lang.IllegalStateException: no such device"/);
+  // hosts/c.c answers what it has; hosts/android.java the rest.
+  assert.match(run(host(`return "phone";`).replace(/.*${battery}.*\n/, ""), `double ${battery}(void) { return 0.25; }`), /"phone at 25, ready"/);
+});

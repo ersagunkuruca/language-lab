@@ -121,6 +121,18 @@ Abort, "the host's ‹name› failed: ‹reason›", as it does for a wrong
 answer. Lists and records don't cross to C yet. An operation with no
 `host_<id>` in the file is a refusal to build that names it, and
 `ters hosts <program> --c` prints a file with each one, to start from.
+A native Android app (`ters build-native-app`, C204) takes hosts/c.c the
+same way, and also hosts/android.java: the app's class `Hosts` (package
+app.ters.page), a static method `host_<id>` per operation, where what
+crosses is Java's own (an Int a long, a Float64 a double, a Text a String,
+a Bool a boolean, Unit void). Each operation it answers, and hosts/c.c
+doesn't, gets a C `host_<id>` that calls it through JNI, so a program
+reaches Android's APIs without writing JNI; `MainActivity.current` is the
+app, a Context for them. An exception the method throws is the host
+failing, so the program's Abort with the exception as the reason. `ters
+hosts <program> --android` prints the class to start from. As on the web,
+the page's main may ask the host while it builds the page; its views and
+handlers perform only the page's own effects.
 In WebAssembly (L69b2) each such operation is an import from "world",
 `host:<effect>:<number>`, which `instantiate` answers from the
 Runtime's `hosts` (hosts/js.js) through hosts.ts's border, as the
