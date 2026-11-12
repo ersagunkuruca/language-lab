@@ -81,6 +81,7 @@ import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
+import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -621,6 +622,19 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
+// The info as carried when the verifier finds nothing wrong with it, else
+// the program checked again (kept only if that check has no more errors).
+export let lastVerdict: { checked: number; problems: number; rechecked: boolean } | null = null;
+export function vouched(code: Code, info: Info, names: Names): Info {
+  const v = verify(code, elaborate(code, info));
+  lastVerdict = { checked: v.checked, problems: v.problems.length, rechecked: false };
+  if (!v.problems.length) return info;
+  const again = infer(code, names, undefined, info.options);
+  if (again.errors.length > info.errors.length) return info;
+  lastVerdict.rechecked = true;
+  return again;
+}
+
 function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
@@ -670,6 +684,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // L43c), so staging multiplies only their masked parts.
   const st = stageProgram(code, info, names, roots);
   ({ code, names, info } = st);
+  // The passes so far carry the types of the nodes they made rather than
+  // check the program again (I203). The verifier vouches for them in one
+  // walk (wc 11 ms, spacetime 260); where it finds a problem the program is
+  // checked again, as before I203 (REVIEW-2026-11-11 §2, I207).
+  if (!process.env?.NO_VERIFY) info = vouched(code, info, names);
   // Then derivative(f) of a function written right there becomes the code
   // of its derivative (derive.ts), checked again, so the GPU gets exact
   // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
