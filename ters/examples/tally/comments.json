@@ -1,5 +1,5 @@
 {
-  "uc0lk2fjtck2kq05u9m3b78ref": "Counts the words of n made-up words (the first argument, 2,000,000 when there is none): how many different ones, all of them, and two words' counts.",
+  "uc0lk2fjtck2kq05u9m3b78ref": "Counts n made-up words (the first argument, 2,000,000 when there is none): how many different ones, all of them, and two words' counts; then the first half of them again, for the first three words in order. Read only by key, the first map is a hash table; read in order, the second is a tree.",
   "fvg0q0uji5uc1uhqggop26g4ua": "How many times each word comes. The fold only counts into the map, update at adding to what a word had, so on C the compiled program counts runs of the words on the threads, each into a map of its own, and then adds the maps together (C42h): the same map, as Int addition is exact and a map's entries are in its keys' order.",
   "mo8fsl9vdqk9iffgbjib896d79": "A made-up word for n: w and n squared's remainder by 1009, so some words come far more often than others, and about half of the 1009 never."
 }

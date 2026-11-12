@@ -18,8 +18,8 @@
 // commutative monoid (Bird and de Moor's homomorphisms of lists).
 //
 // Matched on the core IR after representations, where `update at` of a
-// hash table is the table's own job (map-tree.ts), and after arithmetic,
-// where + is Int's.
+// hash table or a tree is that representation's own job (map-tree.ts), and
+// after arithmetic, where + is Int's.
 
 import { isCall, subtree, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
@@ -38,8 +38,10 @@ export function countsInto(code: Code, info: Info, fold: NodeOf<"fold">): boolea
   const refs = (id: Id): Id[] => subtree(code, id).flatMap((x) => { const n = code.nodes[x]; return n?.kind === "ref" ? [n.target] : []; });
   // The empty map, as the table's own.
   const z = code.nodes[nil.body];
-  const emptyAt = PRELUDE_DEFS["empty table map"];
-  if (!(refTo(nil.body) === emptyAt || (z && isCall(z) && !z.args.length && refTo(z.fn) === emptyAt))) return false;
+  // A hash table's or a tree's (map-tree.ts), each with its own update at.
+  const emptyAt = [PRELUDE_DEFS["empty table map"], PRELUDE_DEFS["empty tree"]].find((e) => refTo(nil.body) === e || (z && isCall(z) && !z.args.length && refTo(z.fn) === e));
+  if (!emptyAt) return false;
+  const updateAt = emptyAt === PRELUDE_DEFS["empty tree"] ? PRELUDE_DEFS["tree update at"] : PRELUDE_DEFS["table update at"];
   // Steps first, (v) => b given e, each e without the rest or counts.
   let at = cons.body;
   for (;;) {
@@ -51,7 +53,7 @@ export function countsInto(code: Code, info: Info, fold: NodeOf<"fold">): boolea
     at = lam.body;
   }
   const call = code.nodes[at];
-  if (!call || !isCall(call) || refTo(call.fn) !== PRELUDE_DEFS["table update at"] || call.args.length !== 4) return false;
+  if (!call || !isCall(call) || refTo(call.fn) !== updateAt || call.args.length !== 4) return false;
   const [m, key, d, change] = call.args.map((a) => code.nodes[a]);
   if (refTo(m?.id) !== r || refs(key!.id).some((x) => x === r || x === rest)) return false;
   if (d?.kind !== "lit" || d.value !== 0) return false;

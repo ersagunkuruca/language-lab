@@ -2912,7 +2912,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A fold counting into a Map (C42h, fold-chunks.ts): on C's threads
       // in runs of an array's items, each run counted from empty by the
       // same loop as in turn, the runs' Maps then added together.
-      if (opts.threads && !underBudget && !free.length && isTable(result) && result.value === "int" && s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) && (foldsShared ??= parallelFolds(code, info)).has(n.id) && countsInto(code, info, n)) {
+      if (opts.threads && !underBudget && !free.length && ((isTable(result) && result.value === "int") || treeOfInts(result)) && s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) && (foldsShared ??= parallelFolds(code, info)).has(n.id) && countsInto(code, info, n)) {
         const at = [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])];
         const g: SFunc = { def: id, name: `${f.name}.fold.run`, params: [at], result: res, locals: [at], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
         const gi = funcs.push(g) - 1;
@@ -2920,7 +2920,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (ai) {
           const a: SExpr = { k: "local", i: 0 };
           g.body = { k: "call", fn: ai.fn, args: [a, { k: "rt", fn: `array.length.a${at.index}`, args: [a] }, ai.start], tail: true };
-          return { k: "rt", fn: `par:chunks:${gi}`, args: [s.args[0]], host: { t: res, partial: false } };
+          // A tree's (map-tree.ts) put together here: the hash table's by
+          // the C runtime (c.ts mergeC).
+          const join = isData(res) ? treeJoin(res, funcs[ai.fn].body) : null;
+          if (!isData(res) || join !== null) return { k: "rt", fn: `par:chunks:${gi}${join !== null ? `:${join}` : ""}`, args: [s.args[0]], host: { t: res, partial: false } };
         }
         funcs.pop();
       }
@@ -3079,6 +3082,37 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Or a record of Ints, each field the rest's field added to or compared
   // with an Int of the item's (C42d): the item's record, and a function
   // putting two together field by field, which the runtime uses (`with`).
+  // A Map of Int values stored as a tree (map-tree.ts): tip, or bin of
+  // size, key, value, left and right.
+  function treeOfInts(t: LType): t is DType {
+    if (!isData(t) || t.cases.length !== 2) return false;
+    const bin = t.cases.find((c) => c.fields.length === 5);
+    return !!bin && t.cases.some((c) => !c.fields.length) && bin.fields.map((x) => x.name).join() === "size,key,value,left,right" && bin.fields[2].t === "int" && bin.fields[3].t === t && bin.fields[4].t === t;
+  }
+  // Two counts in trees put together (C42h): each of b's entries, in
+  // order, put into a by the fold's own update at (found in its run's
+  // loop `step`), given (c) => c + the entry's count. A function of a and b.
+  function treeJoin(t: DType, step: SExpr): number | null {
+    const find = (e: SExpr): Extract<SExpr, { k: "call" }> | null => (e.k === "call" && e.args.length === 4 && e.args[0].k === "local" && e.args[0].i === 2 && e.args[3].k === "closure" ? e : kids(e).reduce<Extract<SExpr, { k: "call" }> | null>((x, k) => x ?? find(k), null));
+    const upd = find(step);
+    if (!upd) return null;
+    const ft = (upd.args[3] as Extract<SExpr, { k: "closure" }>).t;
+    if (ft.params.length !== 1 || ft.params[0] !== "int" || ft.result !== "int") return null;
+    const shape = shapes.push({ t: ft, caps: ["int"] }) - 1;
+    const add: SFunc = { def: funcs[upd.fn].def, name: "counts added.λ", params: [ft, "int"], result: "int", locals: [ft, "int", "int"], body: { k: "let", i: 2, value: { k: "cap", t: ft, shape, i: 0 }, body: { k: "rt", fn: "int.add", args: [{ k: "local", i: 1 }, { k: "local", i: 2 }] } }, spends: false, budgeted: false, inner: true };
+    const ai = funcs.push(add) - 1;
+    closureCode.add(ai);
+    const bin = t.cases.findIndex((c) => c.fields.length === 5);
+    const j: SFunc = { def: funcs[upd.fn].def, name: "counts added", params: [t, t], result: t, locals: [t, t, t, t, t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const ji = funcs.push(j) - 1;
+    const field = (i: number): SExpr => ({ k: "field", rec: { k: "local", i: 2 }, t, c: bin, i });
+    const left: SExpr = { k: "call", fn: ji, args: [{ k: "local", i: 0 }, field(3)], tail: false };
+    const put: SExpr = { k: "call", fn: upd.fn, args: [{ k: "local", i: 3 }, field(1), { k: "int", v: 0n }, { k: "closure", t: ft, fn: ai, shape, caps: [field(2)] }], tail: false };
+    j.body = { k: "case", scrut: { k: "local", i: 1 }, s: 2, t, result: t, arms: t.cases.map((_, ci): SExpr => (ci === bin
+      ? { k: "let", i: 3, value: left, body: { k: "let", i: 4, value: put, body: { k: "call", fn: ji, args: [{ k: "local", i: 4 }, field(4)], tail: true } } }
+      : { k: "local", i: 0 })) };
+    return ji;
+  }
   function itemFold(st: DType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, result: LType): { fn: SExpr; nil: SExpr; how: string; join?: SExpr; hows?: ("add" | "max" | "min")[]; arm: NodeOf<"arm">; free: Id[] } | null {
     const ci = st.cases.findIndex((c) => c.variant === CONS), ni = st.cases.findIndex((c) => c.variant === NIL);
     const cons = arms.find((a) => a.variant === CONS), nil = arms.find((a) => a.variant === NIL);
