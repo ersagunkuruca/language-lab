@@ -9,11 +9,13 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
-**Rounds so far (2026-11-05):** 1 calc, 2 Countdown and chapters, 3
+**Rounds so far (2026-11-12):** 1 calc, 2 Countdown and chapters, 3
 ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
 editor), 8 board (a page, written in the editor), 9 machine (an assembler
 and interpreter, on every target), 10 clinic (a simulation, written in
-the editor), 11 crew (workers as fibers). Each round's gaps are
+the editor), 11 crew (workers as fibers), 12 break (written through the
+MCP), 13 pond (stable references, free lists and threads), 14 rota (a
+search written with Choice). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
 C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
@@ -3095,3 +3097,191 @@ gain about matched (2.6x against its 1.8x). JS's workers are still left.
 threads 0.63 s (ideal 0.099); JS 20.9 to 5.4 s (ideal 0.47).
 I212 (M1, a match from text) and C215 (JS food map as an array) since
 done: JS 4.3 s.
+
+## Round 14: rota, a search written with Choice (2026-11-12)
+
+`compiler/gaps/rota` reads a plan (the days, each shift and how many
+people it needs, each person with the most shifts they work and the shifts
+they can work, days off, rest rules such as no early shift after a night),
+checks it line by line, and finds a rota by backtracking: every place of
+every shift of every day, each chosen with `one of`. The place filled
+next is the one the fewest people can take (Golomb and Baumert, 1965), a
+branch is given up as soon as a place has nobody left (forward checking,
+Haralick and Elliott, 1980) or the places left outnumber the shifts people
+may still work, and a shift's people are taken in order of name so each
+set is tried once. It prints the fairest rota (the first under the lowest
+cap on anyone's shifts that has one: `optional` per cap), counts every way
+to staff the first day (`count`), and finds who the rota can't do without
+(a search without each person). **89 definitions** (6 types, 83 functions
+and values).
+
+What is new for the rounds: **a search written with Choice** at a size
+where it matters. Round 2's Countdown searched with `one of`, but small;
+here every report is several thousand `one of`s deep, a `count` over
+hundreds of thousands of rotas at the bench's sizes, and 16 to 18 failed
+or found searches for "needed". It was written through the MCP like rounds
+12 and 13 (`gaps-round14/drive.ts` in the project's files): 89 `define`s,
+90 `replace`s, no DSL seed. Driving all 89 took about 3 minutes.
+
+Files:
+- `compiler/gaps/rota/`: the program, its README (credits) and a sample
+  `plan.txt`.
+- `compiler/gaps/rota.ideal.js`: the same search by hand, as a constraint
+  solver would write it: people and shifts by number, the rota in typed
+  arrays changed in place and undone on the way back (a trail), and the
+  program's Choice as a recursive search that calls back for each rota.
+- `compiler/gaps/rota.ts`: the evaluator, the core IR's module and the
+  ideal in one process, on the representations `ters run` chooses, with a
+  world whose files are in memory, and a generator of made-up plans.
+- `compiler/test/rota.test.ts`: the three print the same and exit the same
+  way on the sample, a rest rule, no rota, 18 failures and a usage error,
+  and the core IR's module and the ideal on a made-up fortnight.
+- `compiler/gaps/bench-rota.ts`: the table below.
+
+The evaluator, the core IR's module (`ters compile`), `ters wasi` and
+`ters native` (once B1 below is worked round by hand) print the same as
+the ideal on everything tried; nothing needed a fix to agree.
+
+### Results
+
+```
+plan      way          whole report   against the ideal
+7 x 9     evaluator       2838 ms        330x
+7 x 9     core              59 ms          6.8x
+7 x 9     ideal            8.6 ms
+14 x 12   core             428 ms         13.9x
+14 x 12   ideal             31 ms
+14 x 16   core             941 ms         17.1x
+14 x 16   ideal             55 ms
+21 x 18   core            2239 ms         15.9x
+21 x 18   ideal            141 ms
+```
+
+`node compiler/gaps/bench-rota.ts`: days x people, the median of 3 runs in
+one process after a warm-up (the evaluator's one run). From the command
+line on the 14 x 16 plan, starting node included, the same output each:
+
+```
+ideal JS                       0.12 to 0.16 s
+ters wasi (in Node)            0.39 to 0.43 s
+ters native, one thread        0.71 to 0.82 s
+ters native, 4 threads         1.23 to 1.35 s
+ters compile, bundled          0.78 to 1.07 s   (one thread 1.05 to 1.25 s)
+ters compile, runtime from the checkout   1.28 to 1.34 s
+```
+
+Without esbuild (`npm ci` in ters/), `ters compile`'s module imports the
+runtime's TypeScript from the checkout, and each worker thread strips its
+types again on start (180 ms each), so the workers bought nothing; bundled,
+they buy 1.1 to 1.3x.
+
+A profile of the bundled module on one thread at 14 x 16: `fill` 82% of
+the samples; `needed` (the search without each person) 53%, `first day
+count` 18%. **`tableRead` 39%, of which the tuple key's `spelling` 27%**;
+the collector 9%; `sort by`'s merge 3%.
+
+### The gaps, ranked
+
+**B1. `ters native` doesn't build: a definition named `cell` (bug, I214).**
+The C names a definition `lab_` and its name, and the runtime's own type
+is `lab_cell`, so `lab_cell *lab_cell(lab_cell *p0, lab_int p1)` is
+"'lab_cell' redeclared as different kind of symbol". Renaming the function
+by hand in the C builds it, and it prints the same. Any program with a
+definition called `cell`, `closure`, `reason`, … (the runtime's names)
+fails the same way. The fix: the C names definitions where no runtime name
+can be (a prefix of their own, or the runtime's names checked against).
+
+**R1. A tuple key is spelled as text at every read (perf, JS, I215).**
+rota's `Rota` keeps who is on a shift by `(day, shift)`, and which shift a
+person works by `(person, day)`: maps with tuple keys, hash tables on
+JavaScript (C63f). Every `value at` and `put` spells the key: `"(" +
+JSON.stringify(...) + "," + ... + ")"` through `map` and `join`, 27% of the
+samples, and the table read around it 12% more. *Measured* by spelling a
+two-part key with plain concatenation, and a text part with
+`JSON.stringify` only when it holds a quote, a backslash or a control
+character: 14 x 16, one thread, 0.89 to 1.05 s → 0.68 to 0.80 s (about
+1.25x), the same output. The fix proper is a key compiled for its type
+(an `(Int, Text)` key needs no spelling of the Int, nor quotes when the
+texts are plain), or a table of tables by the first part.
+
+**R2. Threads make the native search slower (perf, I216).** `needed` is a
+`keep` of the people by a test that only searches: shared out to 4
+threads it takes native from 0.71 to 0.82 s up to 1.23 to 1.35 s; the
+ideal would gain from it, since the 16 searches are half the run. On JS
+bundled it buys 1.1 to 1.3x. Not profiled yet; round 13's P5 found reads
+of a shared table counted atomically, and this search reads three shared
+tables (the plan's off set, and the rota's maps, copied per branch).
+
+**R3. Native slower than WebAssembly (perf, to measure, I216).** On one thread
+native takes 0.71 to 0.82 s and WASI 0.39 to 0.43 s, on the same C-like
+tables (C63h to C63k). Not profiled; recorded so the next look at R2 also
+looks here.
+
+**R4. The rest of JS's 17x after R1.** The rota is persistent maps (a
+branch's versions kept, std's `change`), where the ideal changes arrays
+and undoes them; each place's candidates are a `keep`, a `sort by` on
+tuples and a `map`; the search's `one of` runs through the branches
+runtime (`attempt`, `shared`). To profile again after R1.
+
+**R5. The evaluator (not the compiler's).** 330x at 7 x 9; L118c again.
+
+### What the MCP couldn't read
+
+The view prints each of these; `replace` didn't read them back, so the
+driver wrote the program round them (I217):
+
+- **M1. A tuple type**, `Set (Text, Int)`: written `Set (Tuple2 Text
+  Int)`. And after an argument in parentheses a one-word argument isn't
+  read: `Map (Tuple2 Text Int) Text` is "can't read the type at Text",
+  `Map (Tuple2 Text Int) (Text)` reads.
+- **M2. A list pattern**, `[name, need] →`: written as `length(rest) = 2`
+  and `item at`.
+- **M3. `otherwise →`** in a match: each of five matches on `Entry` names
+  all five cases.
+- **M4. A match on anything but a name**, and a name made on the line
+  before it (`ds = …` then `match ds`): two `replace`s, the second filling
+  the hole the first left, in seven definitions.
+- **M5. Lets on lines of their own in a case** (`c = …`, then `k = …`,
+  then the body): written on one line with `;`.
+- **M6. `tuple(a, b) = e`**: read as `.first` and `.second`.
+- **M7. `handle … abort(reason) → …`**: main uses `attempt` and a match on
+  its `Outcome` instead.
+
+And names that read as something else, silently or with a message far
+from the cause (I218):
+
+- **M8. `unit` is std's Choice `unit`**, `(a) -[Choice]-> a`, not the Unit
+  value, so `if … then unit else abort(…)` typed `check shift` as
+  returning a function; `unit()` is the value.
+- **M9. A case's field named like a library value**: `rest line(after,
+  before, line) → [tuple(after, before)]` read `after` and `before` as
+  Order's, and the error came at `problem of`: "needs List (Text, Text),
+  got List (Order, Order)".
+- **M10. Overloads picked before the type is known**: `length(x)` in
+  `widest` took List's (written `length(x ++ "")`), and `for each` in
+  `check off` took html's three-input one ("takes 3 inputs, given 2").
+- **M11. A field two of the program's types have** (`name`, `line` on
+  Shift and Person): the first type offered was Shift, which typed
+  `first person` on shifts, and `as` given one type name ("Person") was
+  refused for its "Person, a Problem, a Shift" form. The fields were
+  renamed (`shift name`, `person name`).
+- **M12. No `fold`** in text: `as set` and a recursion instead.
+
+### Language gaps
+
+- **RL1. A search's state is copied, not undone.** Each `one of` branch
+  makes a new `Rota` (three persistent maps); the ideal changes one and
+  undoes it when the branch ends. Choice already knows when a branch ends,
+  so a value only the search holds could be changed in place and undone
+  (a trail, as Prolog's WAM and constraint solvers keep), the stable
+  references goal applied to Choice. A design note first; no row until
+  R1 and R4 are measured again.
+- **RL2. "nobody works more than 1 shifts".** No plural helper; written
+  without one here, the sample never shows it. No row.
+
+### Proposed order
+
+1. B1 (I214), a build that fails on a common name.
+2. R1 (I215), the tuple key compiled for its type: 1.25x measured.
+3. R2 and R3 (I216), the native search on threads and against WASI.
+4. I217 and I218, the MCP reading back what it prints.
