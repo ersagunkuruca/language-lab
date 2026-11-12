@@ -56,7 +56,7 @@ import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKi
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
-type MType = LType | "i64" | "mag";
+type MType = LType | "i64" | "mag" | "raw";
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
@@ -310,6 +310,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const texty = rtNames.some((n) => { const f = rt(n); return [...f.params, ...f.locals, ["", f.result] as const].some(([, t]) => t === "text" || t === "list" || t === "option") || /\$bytes|\$text\./.test(f.body); }) || worldOps.length > 0 || funcs.some((f) => [...f.locals, f.result].includes("text") || mentionsText(f.body));
   // The host makes and reads texts through these.
   if (texty) ["text.new", "text.put", "text.put4", "text.size", "text.byte"].forEach(need);
+  // The host reads a Float64's text with Number.text: on a Text (I222),
+  // not on the array the runtime's own functions use.
+  if (rtNames.includes("number.js.raw")) need("number.js");
   const rts: RtFn[] = rtNames.map(rt);
   // Ryū's tables, for number.js: an i64 array type and a global holding them.
   const ryu = rtNames.includes("number.mulshift");
@@ -362,7 +365,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // a field with `ref` holds a (nullable) reference to that type.
   const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
-  const bytesIndex = 0, i64sIndex = structs.length;
+  // A Text (I222): its bytes' array, where in it the text starts, its
+  // size, its characters (-1 till counted), and the array's fill when it
+  // has room to grow (wasm-rt.ts text.concat).
+  if (texty) structs.push({ name: "text", fields: [{ name: "b", t: "i32", ref: 0 }, { name: "o", t: "i32" }, { name: "n", t: "i32" }, { name: "k", t: "i32" }, { name: "f", t: "i32", ref: 1 }], final: true, mutable: true });
+  const bytesIndex = 0, textIndex = 1, i64sIndex = structs.length;
   if (ryu) structs.push({ name: "i64s", fields: [], final: true, i64s: true });
   const bigIndex = structs.length;
   if (ints) structs.push({ name: "big", fields: [{ name: "v", t: "i64" }], final: true });
@@ -445,7 +452,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
@@ -462,20 +469,20 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (f?.table !== undefined && TBL[t] !== undefined) { const k = tblIndex.get(f.table)! + TBL[t]; return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       if (t === "key" || t === "value") {
         const m = t === "key" ? lowered.tables[f!.table!].keyT : lowered.tables[f!.table!].value;
-        return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
       }
       if (t === "array" || t === "item") {
         const m = t === "array" ? arrayOf(f) : arrayOf(f).item;
-        return { bytes: typeOf(m), text: m === "text" ? "(ref null $bytes)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
+        return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
       }
       if (t === "buf" || t === "items") { const k = arrIndex.get(arrayOf(f).key)! - (t === "buf" ? 1 : 2); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
-      return { bytes: typeOf(t as MType), text: t === "text" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
+      return { bytes: typeOf(t as MType), text: t === "text" ? "(ref null $text)" : t === "raw" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
     },
   });
   const resolve = resolver();
   const rtIndex = (n: string) => fnIndex(funcs.length + helpers.length + rts.findIndex((f) => f.name === n));
   const refIndex = (t: RType | DType | FType | AType | TType) => (isTable(t) ? tblIndex.get(t.index)! : isArray(t) ? arrIndex.get(t.key)! : isData(t) ? baseIndex.get(t.key)! : isFn(t) ? cloIndex.get(t.key)! : recIndex.get(t.key)!);
-  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t as keyof typeof VAL]]);
+  const typeOf = (t: MType): number[] => (t === "text" ? [0x63, ...s(textIndex)] : t === "raw" ? [0x63, ...s(bytesIndex)] : isRec(t) ? [0x63, ...s(refIndex(t))] : t === "int" ? [0x63, 0x6d] : t === "mag" ? [0x63, ...s(u32sIndex)] : [VAL[t as keyof typeof VAL]]);
   const keyOf = (t: MType) => (isRec(t) ? t.key : t);
   // A partial function (one answer or none) gives a status after its
   // answer: 0 for an answer, 1 for none.
@@ -628,17 +635,17 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // what the checker couldn't see end just runs (only `data` calls it there).
   const globalSec = vec([
     ...(fuel ? [[0x7c, 0x01, 0x44, ...f64(Infinity), 0x0b]] : []),
-    ...(aborts ? [[0x63, ...s(bytesIndex), 0x01, 0xd0, ...s(bytesIndex), 0x0b]] : []),
+    ...(aborts ? [[0x63, ...s(textIndex), 0x01, 0xd0, ...s(textIndex), 0x0b]] : []),
     ...(ryu ? [[0x64, ...s(i64sIndex), 0x00, ...POW5.flatMap((v) => [0x42, ...sBig(v)]), 0xfb, 0x08, ...u(i64sIndex), ...u(POW5.length), 0x0b]] : []),
     // The math functions' stack pointer, from the end of their page down.
     ...(math ? [[0x7f, 0x01, 0x41, ...s(65536), 0x0b]] : []),
     ...(escapes ? [[0x6d, 0x01, 0xd0, 0x6d, 0x0b]] : []),
     ...(flags ? [[0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
     ...(rand ? [0, 1, 2, 3].map(() => [0x7f, 0x01, 0x41, 0x00, 0x0b]) : []),
-    ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? bytesIndex : refIndex(t as RType)), 0x0b]; }),
+    ...[...kept.keys()].map((i) => { const t = funcs[i].result as MType; return [...typeOf(t), 0x01, 0xd0, ...s(t === "text" ? textIndex : refIndex(t as RType)), 0x0b]; }),
     ...(stack ? [[0x64, ...s(hstackIndex), 0x00, 0x41, ...s(FRAME * FRAMES), 0xfb, 0x07, ...u(hstackIndex), 0x0b], [0x7f, 0x01, 0x41, 0x00, 0x0b]] : []),
   ]);
-  const zero = (t: MType) => (t === "text" ? [0xd0, ...s(bytesIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
+  const zero = (t: MType) => (t === "text" ? [0xd0, ...s(textIndex)] : isRec(t) ? [0xd0, ...s(refIndex(t))] : t === "f64" ? [0x44, ...f64(0)] : t === "int" ? [0xd0, 0x6d] : t === "mag" ? [0xd0, ...s(u32sIndex)] : t === "i64" ? [0x42, 0x00] : [0x41, 0x00]);
   // fuel = fuel - 1; if fuel < 0, return zero (a partial function: and
   // no answer, which the nearest handler sees)
   const spend = (f: SFunc) => (f.spends ? [0x23, 0x00, 0x44, ...f64(1), 0xa1, 0x24, 0x00, 0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, ...zero(f.result), ...(f.partial ? [0x41, 0x01] : []), 0x0f, 0x0b] : []);
@@ -711,7 +718,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       // sign and its magnitude's 32-bit limbs, the lowest first.
       case "int": return int32 ? [0x41, ...sBig(e.v)] : small(e.v) ? [0x41, ...sBig(e.v), 0xfb, 0x1c] : inI64(e.v) ? [0x42, ...sBig(e.v), 0xfb, 0x00, ...u(bigIndex)]
         : [0x41, e.v < 0n ? 1 : 0, ...limbs(e.v).flatMap((l) => [0x41, ...sBig(BigInt(l))]), 0xfb, 0x08, ...u(u32sIndex), ...u(limbs(e.v).length), 0xfb, 0x00, ...u(hugeIndex)];
-      case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length)]; }
+      case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length), 0x41, 0x00, 0x41, ...s(b.length), 0x41, ...s([...e.v].length), 0xd0, ...s(textIndex), 0xfb, 0x00, ...u(textIndex)]; }
       case "rt": {
         if (e.fn === "i64.lit" && e.args[0].k === "int") return [0x42, ...sBig(e.args[0].v)];
         // A loop's i64 compares, masks and shifts as instructions, no call.
@@ -899,8 +906,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const local = (f: SFunc, i: number) => `$${i < f.params.length ? "p" : "l"}${i}`;
   const sname = (i: number) => `$${structs[i].name}`;
   const recName = (r: RType | DType | FType | AType | TType) => sname(refIndex(r));
-  const ty = (t: MType) => (t === "text" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t === "int32" ? "i32" : t);
-  const zeroText = (t: MType) => (t === "text" ? "ref.null $bytes" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t === "int32" ? "i32" : t}.const 0`);
+  const ty = (t: MType) => (t === "text" ? "(ref null $text)" : t === "raw" ? "(ref null $bytes)" : isRec(t) ? `(ref null ${recName(t)})` : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t === "int32" ? "i32" : t);
+  const zeroText = (t: MType) => (t === "text" ? "ref.null $text" : isRec(t) ? `ref.null ${recName(t)}` : t === "int" ? "ref.null eq" : t === "mag" ? "ref.null $u32s" : `${t === "int32" ? "i32" : t}.const 0`);
   // As code(): `ld` blocks open around e, a status for none goes to fl.
   function wat(e: SExpr, f: SFunc, d: string, ld: number, fl: number): string {
     const w = (x: SExpr) => wat(x, f, d, ld, fl);
@@ -912,7 +919,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "num": return `${d}f64.const ${e.v}`;
       case "int": return int32 ? `${d}i32.const ${e.v}` : small(e.v) ? `${d}i32.const ${e.v}\n${d}ref.i31` : inI64(e.v) ? `${d}i64.const ${e.v}\n${d}struct.new $big`
         : [`${d}i32.const ${e.v < 0n ? 1 : 0}`, ...limbs(e.v).map((l) => `${d}i32.const ${l}`), `${d}array.new_fixed $u32s ${limbs(e.v).length}`, `${d}struct.new $huge`].join("\n");
-      case "text": { const b = textBytes(e.v); return `${d}(array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) ;; ${JSON.stringify(e.v)}`; }
+      case "text": { const b = textBytes(e.v); return `${d}(struct.new $text (array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) (i32.const 0) (i32.const ${b.length}) (i32.const ${[...e.v].length}) (ref.null $text)) ;; ${JSON.stringify(e.v)}`; }
       case "rt": {
         if (e.fn === "i64.lit" && e.args[0].k === "int") return `${d}i64.const ${e.args[0].v}`;
         const fast = intFast(e, (i) => [`local.get ${local(f, i)}`, []], [`call $${e.fn}`, []]);
@@ -1028,11 +1035,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(structs.length ? ["  )"] : []),
     ...hosts.map((op) => `  (import "Math" "${HOST[op]!.name}" (func $Math.${op} (param${" f64".repeat(HOST[op]!.params)}) (result f64)))`),
     ...worldOps.filter(() => !wasi).map((x) => `  (import "world" "${x.op}" (func $world.${x.op}${x.args.length ? ` (param${x.args.map((_, j) => ` ${ty((x.ins?.[j] ?? "text") as MType)}`).join("")})` : ""}${isUnit(x.t) && !x.aborts ? "" : ` (result${isUnit(x.t) ? "" : ` ${ty(x.t)}`}${x.aborts ? " i32" : ""})`}))`),
-    ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $bytes))))`] : []),
+    ...(worldReason && !wasi ? [`  (import "world" "reason" (func $world.reason (result (ref null $text))))`] : []),
     ...wasiImports.map((n) => { const t = WASI_IMPORTS[n.slice(5)]; return `  (import "wasi_snapshot_preview1" "${n.slice(5)}" (func $${n} (param ${t.params.join(" ")})${t.result ? ` (result ${t.result})` : ""}))`; }),
     ...(wasi ? [`  (memory (export "memory") ${math ? 2 : 1})`] : []),
     ...(fuel ? ["  (global $fuel (mut f64) (f64.const inf))"] : []),
-    ...(aborts ? ["  (global $reason (mut (ref null $bytes)) (ref.null $bytes))"] : []),
+    ...(aborts ? ["  (global $reason (mut (ref null $text)) (ref.null $text))"] : []),
     ...(ryu ? [`  (global $pow5 (ref $i64s) (array.new_fixed $i64s ${POW5.length}${POW5.map((v) => ` (i64.const ${v})`).join("")}))`] : []),
     ...(math ? ["  (global $msp (mut i32) (i32.const 65536))", `  (data (i32.const ${MATH_AT + MATH_DATA_AT}) "${MATH_DATA.map((b) => `\\${b.toString(16).padStart(2, "0")}`).join("")}")`] : []),
     ...(escapes ? ["  (global $escape (mut eqref) (ref.null eq))"] : []),

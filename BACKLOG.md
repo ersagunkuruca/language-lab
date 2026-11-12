@@ -91,7 +91,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I222 | Text on WebAssembly and C is copied by each slice and counted by each length (text.slice, text.length, text.find walk from the start): reading back n numbers (examples/backwards' read numbers, its fuel raised) slices the rest of the text once per level, so it is O(n × length): 20,000 numbers take 10 s on WASM and 6.6 s on C where `ters run` takes half a second, and 100,000 run out of memory, each level's rest a copy kept by the search. JavaScript's strings share their buffer when sliced. A text as a buffer with a start and an end (a view), its positions counted from where it starts, would make a rest O(1). Example: 100,000 numbers read back on WASM and C as `ters run` reads them ([RESEARCH-L24-2026-11-12](docs/reports/RESEARCH-L24-2026-11-12.md) §3, I221) | I221 | P2 | M | |
 
 ### Speed of compiled code
 

@@ -116,7 +116,7 @@ Three profiles, by `lowerScalar`'s options:
 | `"i32"` | Bool | i32 | int32_t |
 | `"int"` | Int, any size | i31, `$big` or `$huge` | `lab_int` (small, or a cell) |
 | `"int32"` | Int on a GPU | i32 | (not used) |
-| `"text"` | Text, UTF-8 | `$bytes` array | a cell |
+| `"text"` | Text, UTF-8 | `$text`: a `$bytes` array, start, size, characters, fill (I222) | a cell: bytes, or a view on a base's |
 | `RType` | a record | struct | struct by value |
 | `DType` | a data type | a struct per case under one supertype | a cell per case |
 | `FType` | a function | a closure struct holding its code | a cell |

@@ -516,13 +516,48 @@ static inline lab_int lab_int_shiftDown(lab_int a, lab_int n) { return LAB_IS_SM
 }` },
   "text.concat": {
     uses: [],
-    c: `static lab_cell *lab_text_concat(lab_cell *a, lab_cell *b) {
+    // A long one goes in bytes with as much room again on the shorter
+    // side's end, kept by a fill: the base of the views on them, which
+    // knows where the used bytes start and end. A later a ++ b writes into
+    // that room instead of copying (claiming it with one atomic step, as
+    // two threads may hold a): b after a when a ends where the used bytes
+    // end, a before b when b starts where they start. No text sees the
+    // bytes outside them, so each keeps its bytes, and a text built a
+    // piece at a time copies each byte a few times, not once for every
+    // piece after it (I222).
+    c: `typedef struct { lab_cell h; uint32_t n, chars; uint8_t *p; lab_cell *base; uint32_t lo, hi; } lab__fill;
+#define LAB_FILL 0xFFFFFFFEu
+static lab__fill *lab__fill_of(lab_text *t) { return t->base && ((lab_text *)t->base)->chars == LAB_FILL ? (lab__fill *)t->base : 0; }
+static lab_cell *lab__view_on(lab__fill *f, uint32_t at, uint32_t n, uint32_t chars) {
+  lab_text *r = lab_new(sizeof(lab_text), LAB_TEXT_T, 0);
+  r->n = n; r->chars = chars; r->p = f->p + at; r->base = (lab_cell *)f;
+  return (lab_cell *)r;
+}
+static lab_cell *lab_text_concat(lab_cell *a, lab_cell *b) {
   if (!LAB_TN(a)) { lab_drop(a); return b; }
   if (!LAB_TN(b)) { lab_drop(b); return a; }
-  lab_cell *t = lab__text((size_t)LAB_TN(a) + LAB_TN(b));
-  memcpy(LAB_TB(t), LAB_TB(a), LAB_TN(a)); memcpy(LAB_TB(t) + LAB_TN(a), LAB_TB(b), LAB_TN(b));
-  uint32_t ka = ((lab_text *)a)->chars, kb = ((lab_text *)b)->chars;
-  if (ka != LAB_UNCOUNTED && kb != LAB_UNCOUNTED) ((lab_text *)t)->chars = ka + kb;
+  lab_text *x = (lab_text *)a, *y = (lab_text *)b;
+  uint32_t n = x->n + y->n, chars = x->chars != LAB_UNCOUNTED && y->chars != LAB_UNCOUNTED ? x->chars + y->chars : LAB_UNCOUNTED, at, e;
+  lab__fill *f;
+  lab_cell *t;
+  if (n < LAB_VIEW) {
+    t = lab__text(n);
+    memcpy(LAB_TB(t), x->p, x->n); memcpy(LAB_TB(t) + x->n, y->p, y->n);
+    ((lab_text *)t)->chars = chars;
+  } else if ((f = lab__fill_of(x)) && (e = at = (uint32_t)(x->p - f->p) + x->n) && y->n <= f->n - at && __atomic_compare_exchange_n(&f->hi, &e, at + y->n, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+    memcpy(f->p + at, y->p, y->n);
+    t = lab__view_on((lab__fill *)lab_dup((lab_cell *)f), (uint32_t)(x->p - f->p), n, chars);
+  } else if ((f = lab__fill_of(y)) && (e = at = (uint32_t)(y->p - f->p)) >= x->n && __atomic_compare_exchange_n(&f->lo, &e, at - x->n, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+    memcpy(f->p + at - x->n, x->p, x->n);
+    t = lab__view_on((lab__fill *)lab_dup((lab_cell *)f), at - x->n, n, chars);
+  } else {
+    size_t cap = 2 * (size_t)n;
+    f = lab_new(sizeof(lab__fill) + cap, LAB_TEXT_T, 0);
+    at = x->n < y->n ? (uint32_t)(cap - n) : 0;
+    f->n = (uint32_t)cap; f->chars = LAB_FILL; f->p = (uint8_t *)(f + 1); f->base = 0; f->lo = at; f->hi = at + n;
+    memcpy(f->p + at, x->p, x->n); memcpy(f->p + at + x->n, y->p, y->n);
+    t = lab__view_on(f, at, n, chars);
+  }
   lab_drop(a); lab_drop(b);
   return t;
 }` },
