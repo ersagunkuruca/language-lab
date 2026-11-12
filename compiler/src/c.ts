@@ -57,6 +57,10 @@ import { TICKET_V } from "../../ters/src/lang/std.ts";
 import { FDLIBM_C } from "./c-math.ts";
 import { LAYOUT_C, UI_HEADLESS_C } from "./c-layout.ts";
 import { BASE, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
+// The `lab_` names c.ts's own runtime text defines (the thread pool, the
+// shared counts, stops, fdlibm's maths), kept from a program's definitions
+// (I214). c-rt.ts's are found in its text (RESERVED).
+const C_RUNTIME = ["argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
 import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -227,18 +231,30 @@ const SHARE_C = `static int lab_share_no = 0;
 static _Thread_local lab_cell **lab_share_st = 0;
 static _Thread_local size_t lab_share_n = 0, lab_share_cap = 0;
 static _Thread_local int lab_share_forever = 0;
+static _Thread_local lab_cell **lab_mk = 0;
+static _Thread_local size_t lab_mk_n = 0, lab_mk_cap = 0;
 static void lab_share(lab_cell *c) {
   if (!c || !c->rc) return;
   if (lab_share_forever) c->rc = 0;
   else if (c->rc & LAB_SHARED) return;
-  else c->rc |= LAB_SHARED;
+  else {
+    c->rc |= LAB_SHARED;
+    if (lab_mk_n == lab_mk_cap) { lab_mk_cap = lab_mk_cap ? 2 * lab_mk_cap : 64; lab_mk = realloc(lab_mk, lab_mk_cap * sizeof *lab_mk); if (!lab_mk) lab_oom(); }
+    lab_mk[lab_mk_n++] = c;
+  }
   if (lab_share_n == lab_share_cap) { lab_share_cap = lab_share_cap ? 2 * lab_share_cap : 64; lab_share_st = realloc(lab_share_st, lab_share_cap * sizeof *lab_share_st); if (!lab_share_st) lab_oom(); }
   lab_share_st[lab_share_n++] = c;
 }
 static inline void lab_int_share(lab_int x) { if (!LAB_IS_SMALL(x)) lab_share((lab_cell *)LAB_BIG(x)); }
 static void lab_shares(lab_cell *c);
 static void lab_shared(void) { while (lab_share_n) lab_shares(lab_share_st[--lab_share_n]); }
-static void lab_forever(lab_cell *c) { lab_share_forever = 1; lab_share(c); lab_shared(); lab_share_forever = 0; }`;
+static void lab_forever(lab_cell *c) { lab_share_forever = 1; lab_share(c); lab_shared(); lab_share_forever = 0; }
+// The cells marked since \`from\` counted by this thread alone again, once
+// the threads are done with them (I216): a search or a map whose job is
+// over, still holding what it shared, so each is live. Else every later
+// count of them, by one thread too, is an atomic one: rota's \`needed\`
+// counted each person and table so for the rest of the run.
+static void lab_unshare(size_t from) { while (lab_mk_n > from) { lab_cell *c = lab_mk[--lab_mk_n]; c->rc &= ~LAB_SHARED; } }`;
 
 // The threads a map's items are shared out on (L101): started at the
 // first map worth it and kept, as many as the cores less one (or
@@ -592,7 +608,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // The Int-in-32-bits helpers the code calls (INT32_C).
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
-  const used = new Set<string>(["iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  // And the names this file's own runtime parts define (I214).
+  const used = new Set<string>([...C_RUNTIME, "iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...RESERVED, ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   const ident = (hint: string) => {
     const base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
     let n = base;
@@ -2706,8 +2723,11 @@ static lab_cell *lab_par_together_${n}(lab_cell *l) {
   }
   if (left < n${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
     lab_share_no = 0;
+    size_t mk = lab_mk_n;
     for (k = left; k < n; k++) lab_share(j.in[k]);
     lab_shared();
+    // Its items are given away as it goes: their marks are forgotten, not undone.
+    lab_mk_n = mk;
     if (!lab_share_no) { j.next = left; lab_pool_run(lab_together_work_${n}, &j); }
   }
   for (k = left; k < n; k++) {
@@ -2791,8 +2811,11 @@ static ${R} lab_both_${gi}(${params}) {
     }
   }
   lab_share_no = 0;
+  size_t mk = lab_mk_n;
   ${g.params.map((t, i) => (counted(t) ? share(t, `b${i}`) : "")).join(" ")}
   lab_shared();
+  // Its inputs are given away: their marks are forgotten, not undone.
+  lab_mk_n = mk;
   if (lab_share_no) return lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
   if (top) {
     ${g.params.map((t, i) => `${ty(t)} ka${i} = ${dup(t, `a${i}`)}; ${ty(t)} kb${i} = ${dup(t, `b${i}`)};`).join(" ")}
@@ -2953,7 +2976,17 @@ static int lab_par_crun_${n}(${J} *j, int64_t m, int *par, const struct timespec
 // their second had; then every item of each second choice after its first.
 // The answers are put together in order. Where one failed, the whole search
 // runs again here in turn, so an abort is the first in order's.
+// What the search shares is held till it is counted by one thread again.
+static ${T} lab_par_search_in_${n}(lab_cell *f);
 static ${T} lab_par_search_${n}(lab_cell *f) {
+  size_t mk = lab_mk_n;
+  lab_cell *h = lab_dup(f);
+  ${T} r = lab_par_search_in_${n}(f);
+  lab_unshare(mk);
+  lab_drop(h);
+  return r;
+}
+static ${T} lab_par_search_in_${n}(lab_cell *f) {
   int64_t was = lab__split, was2 = lab__split2, outer = lab__seen, outer2 = lab__seen2, n1, m0, k, i, m, b;
   int par = 0;
   struct timespec t0;
@@ -3085,7 +3118,17 @@ static int64_t lab_par_frun_${n}(${J} *j, int *par, const struct timespec *t0) {
   }
   return -1;
 }
+// What the search shares is held till it is counted by one thread again.
+static ${T} lab_par_search_in_${n}(lab_cell *f);
 static ${T} lab_par_search_${n}(lab_cell *f) {
+  size_t mk = lab_mk_n;
+  lab_cell *h = lab_dup(f);
+  ${T} r = lab_par_search_in_${n}(f);
+  lab_unshare(mk);
+  lab_drop(h);
+  return r;
+}
+static ${T} lab_par_search_in_${n}(lab_cell *f) {
   int64_t was = lab__split, was2 = lab__split2, outer = lab__seen, outer2 = lab__seen2, n1, m0, k, i, m, b, ka, kc;
   int par = 0;
   struct timespec t0;
@@ -3174,7 +3217,18 @@ static void lab_par_work_${n}(void *p) {
   }${stops ? `
   lab_stop_at = was;` : ""}
 }
+// What the map shares (its function, its items through xs) is held till
+// it is counted by one thread again (lab_unshare).
+static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_in_${n}(lab_cell *xs, lab_cell *f${fold ? `, ${ty(tf.result)} z` : ""}${tj ? ", lab_cell *jf" : ""});
 static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_${n}(lab_cell *xs, lab_cell *f${fold ? `, ${ty(tf.result)} z` : ""}${tj ? ", lab_cell *jf" : ""}) {
+  size_t mk = lab_mk_n;
+  lab_cell *hx = lab_dup(xs), *hf = lab_dup(f);
+  ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}r = lab_par_map_in_${n}(xs, f${fold ? ", z" : ""}${tj ? ", jf" : ""});
+  lab_unshare(mk);
+  lab_drop(hx); lab_drop(hf);
+  return r;
+}
+static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_in_${n}(lab_cell *xs, lab_cell *f${fold ? `, ${ty(tf.result)} z` : ""}${tj ? ", lab_cell *jf" : ""}) {
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;

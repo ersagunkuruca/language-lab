@@ -685,3 +685,16 @@ test("a record whose array fields a function only reads is lent to it (C58l: swa
   assert.match(evaluator, /motes after 20 ticks/);
   assert.equal(spawnSync(join(out, "swarm"), ["20", "10"]).stdout.toString(), evaluator);
 });
+
+// I214: a definition named like a name the C runtime has (rota's `cell`,
+// the runtime's lab_cell) gets a C name of its own, so the program builds
+// and prints what `ters run` prints.
+test("a definition named like a C runtime name builds natively (I214: rota's `cell`)", { skip }, () => {
+  const out = mkdtempSync(join(tmpdir(), "c-names-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../gaps/rota");
+  const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(out, "rota")]);
+  assert.equal(built.status, 0, built.stderr.toString());
+  assert.match(readFileSync(join(out, "rota.c"), "utf8"), /\blab_cell_\d+\(/);
+  const plan = join(at, "plan.txt"), run = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", at, plan]).stdout.toString();
+  assert.match(run, /fairest: nobody works more than \d+ shifts/);
+  assert.equal(spawnSync(join(out, "rota"), [plan]).stdout.toString(), run);
+});
