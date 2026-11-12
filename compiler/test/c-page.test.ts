@@ -338,9 +338,10 @@ test("pig in C plays a game, replays the very same one and a thousand quietly (C
   // a game's lines are inside it, not a page that grows and grows.
   const ui = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", "click:play"], { maxBuffer: 1 << 30 });
   assert.equal(ui.status, 0, ui.stderr.toString());
-  const [before, after] = ui.stdout.toString().split("\x1e\n"), log = (t: string) => t.match(/ div [\d.]+ [\d.]+ 296 ([\d.]+) bg FFFFFFFF radius 14 border 1 clip scroll ([\d.]+)/)!.slice(1).map(Number);
-  assert.deepEqual(log(before), [14, 14]);
-  const [high, inside] = log(after);
+  const [before, after] = ui.stdout.toString().split("\x1e\n"), log = (t: string) => t.match(/ div [\d.]+ [\d.]+ 296 ([\d.]+) bg FFFFFFFF radius 14 border 1 clip scroll ([\d.]+)/)?.slice(1).map(Number);
+  // Empty, the log isn't shown (.log:empty, as in Chromium).
+  assert.equal(log(before), undefined);
+  const [high, inside] = log(after)!;
   assert.equal(high, 340);
   assert.ok(inside > high, String(inside));
   // Each line of it has a border at its bottom only, 1 wide, as Chromium
@@ -351,4 +352,12 @@ test("pig in C plays a game, replays the very same one and a thousand quietly (C
   const ys = ruled.map((s) => s.trim().split(" ").map(Number)).map((w) => [w[2], w[4]]);
   for (let j = 0; j + 1 < ys.length; j++) { assert.equal((ys[j][1] - 13) % 21, 0, String(ys[j])); assert.equal(ys[j + 1][0] - ys[j][0], ys[j][1]); }
   assert.ok(ys.some(([, h]) => h === 34));
+  // The last line has none (.line:last-child), right under the last ruled.
+  const lastLine = after.split("\n").find((s, i, all) => all[i + 1]?.includes(" wins, "))!.trim().split(" ").map(Number);
+  assert.equal(lastLine[2], ys.at(-1)![0] + ys.at(-1)![1]);
+  assert.ok(!after.split("\n").find((s) => s.includes(" wins, "))!.includes("sides"));
+  // An empty tally isn't shown, nor its margins (#tally:empty): the
+  // credits are where Chromium puts them, 16 under the how box.
+  assert.match(before, /\n  p 32 (\d+(\.\d+)?) 296 156\n/);
+  assert.ok(!/\n  p 32 [\d.]+ 296 0\n/.test(before), "an empty p is laid out");
 });

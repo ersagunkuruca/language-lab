@@ -225,21 +225,33 @@ static double tl_len(const char *p, const char *e, double size, int *ok, const c
 
 // ---- The style sheet: rules of simple selectors.
 // A compound selector: a tag, an #id and .classes.
-typedef struct { char tag[24], id[40], cls[4][40]; int ncls; } tl_sel;
+typedef struct { char tag[24], id[40], cls[4][40]; int ncls, pseudo; } tl_sel;
 // A rule's selector: its last compound in tag, id and cls, and the ones
 // before it, nearest first, each with its combinator: ' ' (inside) or '>'
 // (just inside).
-typedef struct { char tag[24], id[40], cls[4][40]; int ncls, spec, order, nup; tl_sel up[3]; char comb[3]; const char *decl, *end; } tl_rule;
+typedef struct { char tag[24], id[40], cls[4][40]; int ncls, pseudo, spec, order, nup; tl_sel up[3]; char comb[3]; const char *decl, *end; } tl_rule;
 static tl_rule *tl_rules;
 static int tl_nrules;
+// The pseudo-classes this engine reads, as bits (pig's #tally:empty and
+// .line:last-child): what an element is among its parent's.
+enum { TL_EMPTY = 1, TL_FIRST = 2, TL_LAST = 4 };
 // One compound from a to b into s, its specificity added; 0 if it isn't
-// one this engine reads (a pseudo-class, an attribute).
-static int tl_compound(const char *a, const char *b, char *tag, char *id, char (*cls)[40], int *ncls, int *spec) {
+// one this engine reads (another pseudo-class, an attribute).
+static int tl_compound(const char *a, const char *b, char *tag, char *id, char (*cls)[40], int *ncls, int *pseudo, int *spec) {
   for (const char *x = a; x < b;) {
+    if (*x == ':') {
+      const char *y = x + 1; while (y < b && *y != '#' && *y != '.' && *y != ':' && *y != '[') y++;
+      size_t n = (size_t)(y - x);
+      if (n == 6 && !memcmp(x, ":empty", 6)) *pseudo |= TL_EMPTY;
+      else if (n == 12 && !memcmp(x, ":first-child", 12)) *pseudo |= TL_FIRST;
+      else if (n == 11 && !memcmp(x, ":last-child", 11)) *pseudo |= TL_LAST;
+      else return 0;
+      *spec += 10; x = y; continue;
+    }
     char kind = (*x == '#' || *x == '.') ? *x++ : 't';
     const char *y = x; while (y < b && *y != '#' && *y != '.' && *y != ':' && *y != '[') y++;
     size_t n = (size_t)(y - x);
-    if (y < b && (*y == ':' || *y == '[')) return 0;
+    if (y < b && *y == '[') return 0;
     if (kind == 't' && n < 24) { memcpy(tag, x, n); tag[n] = 0; *spec += *x == '*' ? 0 : 1; }
     else if (kind == '#' && n < 40) { memcpy(id, x, n); id[n] = 0; *spec += 100; }
     else if (kind == '.' && n < 40 && *ncls < 4) { memcpy(cls[*ncls], x, n); cls[(*ncls)++][n] = 0; *spec += 10; }
@@ -277,10 +289,10 @@ static void tl_add(const char *sel, const char *se, const char *d, const char *d
         x = y;
       }
       if (ok && nc) {
-        ok = tl_compound(ca[nc - 1], cb[nc - 1], r.tag, r.id, r.cls, &r.ncls, &r.spec);
+        ok = tl_compound(ca[nc - 1], cb[nc - 1], r.tag, r.id, r.cls, &r.ncls, &r.pseudo, &r.spec);
         for (int i = nc - 2; ok && i >= 0; i--) {
           tl_sel *u = &r.up[r.nup]; r.comb[r.nup++] = cc[i + 1];
-          ok = tl_compound(ca[i], cb[i], u->tag, u->id, u->cls, &u->ncls, &r.spec);
+          ok = tl_compound(ca[i], cb[i], u->tag, u->id, u->cls, &u->ncls, &u->pseudo, &r.spec);
         }
       } else ok = 0;
     }
@@ -343,11 +355,23 @@ static int tl_word(const char *list, const char *w) {
   }
   return 0;
 }
-static int tl_is(const char *tag, const char *id, char (*cls)[40], int ncls, tl_n *e) {
+static int tl_is(const char *tag, const char *id, char (*cls)[40], int ncls, int pseudo, tl_n *e) {
   if (!e || !e->tag) return 0;
   if (tag[0] && strcmp(tag, "*") && strcmp(tag, e->tag)) return 0;
   if (id[0] && (!e->id || strcmp(id, e->id))) return 0;
   for (int j = 0; j < ncls; j++) if (!tl_word(e->cls, cls[j])) return 0;
+  // :empty, no element and no text in it (an empty text is none, as
+  // Chromium has pig's #tally); :first-child and :last-child among the
+  // parent's elements.
+  if (pseudo & TL_EMPTY) {
+    if (e->s && *e->s) return 0;
+    for (int j = 0; j < e->nk; j++) if (e->kids[j]->tag || (e->kids[j]->s && *e->kids[j]->s)) return 0;
+  }
+  if (pseudo & (TL_FIRST | TL_LAST)) {
+    tl_n *up = e->parent; if (!up) return 0;
+    if (pseudo & TL_FIRST) { int j = 0; while (j < up->nk && !up->kids[j]->tag) j++; if (j == up->nk || up->kids[j] != e) return 0; }
+    if (pseudo & TL_LAST) { int j = up->nk - 1; while (j >= 0 && !up->kids[j]->tag) j--; if (j < 0 || up->kids[j] != e) return 0; }
+  }
   return 1;
 }
 // Whether the compounds before r's last, from the i-th, match e's
@@ -356,14 +380,14 @@ static int tl_above(tl_rule *r, int i, tl_n *up) {
   if (i == r->nup) return 1;
   tl_sel *s = &r->up[i];
   for (tl_n *a = up; a && a->tag; a = a->parent) {
-    if (tl_is(s->tag, s->id, s->cls, s->ncls, a) && tl_above(r, i + 1, a->parent)) return 1;
+    if (tl_is(s->tag, s->id, s->cls, s->ncls, s->pseudo, a) && tl_above(r, i + 1, a->parent)) return 1;
     if (r->comb[i] == '>') return 0;
   }
   return 0;
 }
 static int tl_matches(tl_rule *r, tl_n *e, int root) {
   if (!strcmp(r->tag, ":root")) return root;
-  return tl_is(r->tag, r->id, r->cls, r->ncls, e) && tl_above(r, 0, e->parent);
+  return tl_is(r->tag, r->id, r->cls, r->ncls, r->pseudo, e) && tl_above(r, 0, e->parent);
 }
 
 // ---- Custom properties: :root's, as the sheet sets them.
