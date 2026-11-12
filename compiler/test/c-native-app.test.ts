@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -33,6 +33,7 @@ public class MainActivity {
   native int nativeStart(double width, int dark);
   native void nativeResize(double width, int dark);
   native int nativeEvent(int handler, String value, String key, double x, double y, double seconds);
+  native int nativePermission(int yes);
   static class N { String tag, text; boolean shown; int bold, bg, colour; double x, y, w, h, size, radius, border; List<N> kids = new ArrayList<>(); List<String> ev = new ArrayList<>(); List<Integer> eh = new ArrayList<>(); }
   final HashMap<Integer, N> nodes = new HashMap<>();
   int next = 1;
@@ -68,6 +69,8 @@ public class MainActivity {
   void scroll(int id, double h) {}
   void sides(int id, double t, double r, double b, double l, int c) {}
   void outline(int id, double[] xy) {}
+  // The person's answer to a permission asked (L236b): -1, asked; answered by main's permission:yes or permission:no.
+  int ask(String what) { System.out.println("ask " + what); return -1; }
   static String g(double x) { if (x == 0) return "0"; return new BigDecimal(x).round(new MathContext(6)).stripTrailingZeros().toPlainString(); }
   static void print(StringBuilder b, N n, double dx, double dy, int depth) {
     if (!n.shown) return;
@@ -95,6 +98,7 @@ public class MainActivity {
     out.print(a.show(root));
     for (String s : args) {
       String[] p = s.split(":", 2);
+      if (p[0].equals("permission")) { a.nativePermission(p[1].equals("yes") ? 1 : 0); out.print(a.show(root)); continue; }
       N e = find(root, p[1]);
       List<Integer> hs = new ArrayList<>();
       for (int j = 0; j < e.ev.size(); j++) if (e.ev.get(j).equals(p[0])) hs.add(e.eh.get(j));
@@ -232,4 +236,44 @@ public final class Hosts {
   const r = spawnSync("java", [`-Djava.library.path=${dir}`, "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, new RegExp(`\\n  ters-view\u001f${method}\u001f3\u001fAnkara\u001f300 16 16 328 300\\n`));
+});
+
+// Asking for a permission in the native app (L236b): the page's C asks the
+// activity's ask() through JNI, from the page's own stack; -1 parks the
+// handler, and nativePermission, Android's answer, goes on with it. The
+// manifest names the permissions Android may give.
+test("a native app's handler asks the activity for a permission and waits for its answer (L236b)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { ASK_PERMISSION_OP, CELL_OPS, HTML_V } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const el = (tag: string, attrs: string[], kids: string[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const text = (f: () => string) => k.call(HTML_V.text, k.thunk(f));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("said", k.call(CELL_OPS.cell, k.lit("idle")), (said) =>
+    el("div", [], [
+      el("button", [k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.seq(k.call(CELL_OPS.write, said, k.lit("asking")),
+        k.call(CELL_OPS.write, said, k.if(k.call(ASK_PERMISSION_OP, k.lit("microphone")), k.lit("microphone: yes"), k.lit("microphone: no"))))))], [text(() => k.lit("go"))]),
+      el("p", [], [text(() => k.call(CELL_OPS.read, said))]),
+    ]))));
+  const dir = mkdtempSync(join(tmpdir(), "native-ask-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  const out = spawnSync(process.execPath, [ters, "build-native-app", dir, "-o", join(dir, "app")], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(readFileSync(join(dir, "app/app/src/main/AndroidManifest.xml"), "utf8"), /<uses-permission android:name="android.permission.RECORD_AUDIO" \/>/);
+  const inc = join(jdk!, "include");
+  execFileSync("cc", ["-std=c11", "-O2", "-U_FORTIFY_SOURCE", "-DLAB_FIBER_SJLJ", "-fPIC", "-shared", "-pthread", "-Wall", "-Werror", "-Wno-unknown-pragmas", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable", "-Wno-unknown-warning-option", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-format-overflow", `-I${inc}`, `-I${join(inc, "linux")}`, "-o", join(dir, "libpage.so"), join(dir, "app/app/src/main/cpp/page.c"), "-lm"]);
+  const src = join(dir, "java", ...PACKAGE.split("."));
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "MainActivity.java"), STAND_IN);
+  execFileSync("javac", ["-d", join(dir, "classes"), join(src, "MainActivity.java")]);
+  const r = spawnSync("java", [`-Djava.library.path=${dir}`, "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`, "click:go", "permission:yes"], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  const shown = r.stdout.split("\u001e\n");
+  assert.match(shown[0], /"idle"/);
+  assert.match(shown[1], /^ask microphone\n/);
+  assert.match(shown[1], /"asking"/);
+  assert.match(shown[2], /"microphone: yes"/);
 });

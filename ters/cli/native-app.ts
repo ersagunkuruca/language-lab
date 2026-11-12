@@ -18,9 +18,12 @@ export const nativeAppId = (title: string) => `app.ters.${title.toLowerCase().re
 
 // The project, as paths and contents. `c` is the page's C.
 // `java`: the program's hosts/android.java (C204), the app's Hosts class.
+const ASKABLE = ["CAMERA", "RECORD_AUDIO", "ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS"].map((p) => `  <uses-permission android:name="android.permission.${p}" />\n`).join("");
 export function nativeAppFolder(title: string, c: string, java?: string): Record<string, string | Uint8Array> {
   const hue = parseInt(createHash("sha256").update(title).digest("hex").slice(0, 4), 16) % 360;
   const dir = PACKAGE.replace(/\./g, "/");
+  // A page that asks for permissions (L236b) names those Android may give.
+  const asks = c.includes("lab_world_askPermission(");
   return {
     "settings.gradle": `pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositories { google(); mavenCentral() } }\nrootProject.name = ${JSON.stringify(title)}\ninclude ":app"\n`,
     "build.gradle": `plugins { id "com.android.application" version "8.7.3" apply false }\n`,
@@ -38,7 +41,7 @@ android {
 `,
     "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-  <application android:label="${xml(title)}" android:icon="@mipmap/ic_launcher">
+${asks ? ASKABLE : ""}  <application android:label="${xml(title)}" android:icon="@mipmap/ic_launcher">
     <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" android:configChanges="uiMode|orientation|screenSize|screenLayout|smallestScreenSize">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
@@ -81,7 +84,7 @@ export const JNI_C = String.raw`
 #include <jni.h>
 static JNIEnv *ters_j;
 static jobject ters_a;
-static jmethodID ters_jm[18];
+static jmethodID ters_jm[19];
 static jstring ters_js(const char *s, size_t n) {
   jchar *u = malloc(sizeof *u * (n + 1));
   size_t k = 0;
@@ -140,15 +143,16 @@ static void j_outline(void *c, void *v, const double *xy, size_t n) {
   TERS_J(17, ters_id(v), a);
   (*ters_j)->DeleteLocalRef(ters_j, a);
 }
-static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_outline };
+static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ters_js(what, n); jint r = (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[18], t); (*ters_j)->DeleteLocalRef(ters_j, t); return r; }
+static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append, j_clear, j_listen, j_gone, j_place, j_paint, j_font, j_measure, j_page, j_draw, j_clip, j_scroll, j_sides, j_outline, j_ask };
 // The page on a screen width dp wide, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
-  const char *ms[18][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" } };
-  for (int i = 0; i < 18; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+  const char *ms[19][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" }, { "ask", "(Ljava/lang/String;)I" } };
+  for (int i = 0; i < 19; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
   return ters_id(ters_ui_start(&ters_jui, width, dark));
 }
 // The screen's width or colour scheme changed.
@@ -172,6 +176,8 @@ static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
 // A finger on a picture (C199f), in dp from its top left: kind 0 down, 1
 // move, 2 up, 3 cancelled. Whether the page listened.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePointer(JNIEnv *env, jobject self, jint id, jint kind, jdouble x, jdouble y) { (void)self; ters_j = env; return ters_ui_pointer(ters_view_of(id), kind, x, y); }
+// The person's answer to the permission the page asked for (L236b).
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePermission(JNIEnv *env, jobject self, jint yes) { (void)self; ters_j = env; return ters_page_permission(yes); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeClock(JNIEnv *env, jobject self) { (void)env; (void)self; return ters_page_clock(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeFrame(JNIEnv *env, jobject self) { (void)self; ters_j = env; return ters_page_frame(); }
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, jobject self, jint h, jstring value, jstring key, jdouble x, jdouble y, jdouble seconds) {
@@ -233,6 +239,7 @@ public class MainActivity extends Activity {
   native int nativePointer(int picture, int kind, double x, double y);
   native int nativeClock();
   native int nativeFrame();
+  native int nativePermission(int yes);
 
   private final HashMap<Integer, View> views = new HashMap<>();
   private int next = 1;
@@ -409,6 +416,29 @@ public class MainActivity extends Activity {
   @Override public void onBackPressed() { if (!moment("back")) super.onBackPressed(); }
   @Override protected void onPause() { super.onPause(); paused = true; moment("pause"); }
   @Override protected void onResume() { super.onResume(); if (paused) { paused = false; moment("resume"); } }
+
+  // Asking the person for a permission (L236b): 1 when they have given
+  // it, 0 for one Android has no name for, or else Android's dialog asks
+  // them and -1 now; their answer goes to the handler that asked, which
+  // waits for it (nativePermission). Notifications need no asking before
+  // Android 13.
+  private static final int ASKED = 236;
+  int ask(String what) {
+    String p = what.equals("camera") ? "android.permission.CAMERA" : what.equals("microphone") ? "android.permission.RECORD_AUDIO" : what.equals("location") ? "android.permission.ACCESS_FINE_LOCATION" : what.equals("notifications") ? (Build.VERSION.SDK_INT >= 33 ? "android.permission.POST_NOTIFICATIONS" : null) : "";
+    if (p == null) return 1;
+    if (p.isEmpty()) return 0;
+    if (checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED) return 1;
+    Log.d("ters", "ask " + what);
+    requestPermissions(new String[] { p }, ASKED);
+    return -1;
+  }
+  @Override public void onRequestPermissionsResult(int code, String[] ps, int[] rs) {
+    if (code != ASKED) return;
+    boolean yes = rs.length > 0 && rs[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    Log.d("ters", "permission " + (yes ? "yes" : "no"));
+    nativePermission(yes ? 1 : 0);
+    tick();
+  }
 
   void place(int id, double x, double y, double w, double h, int shown) {
     View v = views.get(id);

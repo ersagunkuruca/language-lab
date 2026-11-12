@@ -1617,7 +1617,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // as the evaluator answers a `now` nothing handles.
         if ((opts.host || opts.handlers) && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
         // Asking for a permission (L236): the world's, as the evaluator asks.
-        if (opts.host && target === ASK_PERMISSION_OP) return { k: "world", op: "askPermission", aborts: false, args: args(), t: "i32" };
+        if ((opts.host || opts.handlers) && target === ASK_PERMISSION_OP) return { k: "world", op: "askPermission", aborts: false, args: args(), t: "i32" };
         // The person's locale and time zone (L214b2, L188), a file's bytes
         // (L189c), a fetched text, for JavaScript from the core IR: the
         // world's, as the evaluator answers them.
