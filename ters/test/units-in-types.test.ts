@@ -77,3 +77,20 @@ test("a number's unit is read from text, and a name in scope is still the name",
   assert.match(s.errors(), /^ok/);
   assert.throws(() => fill("misplaced", ["x"], "body(1.5 s)"), /the field's type says m, but this is s/);
 });
+
+// Known units only (Ersagun, 2026-11-13): a signature shows a unit where
+// one is written or follows from the body, and a number whose unit is
+// free stays plain Float64.
+test("a definition's signature shows its known units, and a unit-generic one shows none", () => {
+  const s = new Session(join(import.meta.dirname, "../examples/physics"));
+  assert.equal(s.typeOf(s.resolve("period")), "(Float64 m, Float64 m/s²) -[Choice]-> Float64 s");
+  assert.equal(s.typeOf(s.resolve("fall")), "(Float64 m, Float64 m/s, Float64 m/s², Float64 s) -> Bool");
+  assert.match(s.view("period"), /^\s*period#\w+ : \(Float64 m, Float64 m\/s²\) -\[Choice\]-> Float64 s$/m);
+  const p = program(["body(position: Float64 m)"]);
+  p.define("twice", "function", ["x"]);
+  p.replace(/□#(\w+)/.exec(p.view("twice"))![1], "x + x");
+  p.define("lifted", "function", ["b"]);
+  p.replace(/□#(\w+)/.exec(p.view("lifted"))![1], "b.position + 1.5 m");
+  assert.equal(p.typeOf(p.resolve("lifted")), "(Body) -> Float64 m");
+  assert.doesNotMatch(p.typeOf(p.resolve("twice")), /Float64 \S*m/);
+});

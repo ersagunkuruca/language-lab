@@ -1,4 +1,5 @@
 // The commands of ters (cli/ters.ts says what each does).
+import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import type { Plugin } from "esbuild";
 import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -807,7 +808,7 @@ switch (command) {
     for (const g of wrongGrades) console.log(`error  ${p.names[g.def] ?? g.def}: ${g.message}`);
     for (const d of p.own) {
       const t = p.info.typeOf.get(d);
-      console.log(`${p.names[d] ?? d} : ${t ? showType(t, p.names) : "(a type)"}`);
+      console.log(`${p.names[d] ?? d} : ${t ? showTypeWithUnits(p.code, d, t, p.names) : "(a type)"}`);
     }
     // Drafts the same as a library definition or another draft, by hash
     // (SHARING.md §7): said, never merged, and not an error.

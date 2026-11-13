@@ -515,3 +515,21 @@ function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts
   }
   return "units don't agree here";
 }
+
+// ---------------------------------------------------------------- signatures
+
+// The units a definition's signature shows (L252; Ersagun, 2026-11-13:
+// known units only): each input's and the result's unit where one is
+// written or follows from the body, and none where the number is plain or
+// its unit is free (a function generic over its unit shows plain Float64).
+// Null where the units don't agree, which the check reports.
+export function signatureUnits(code: Code, defId: Id): { params: (Unit | undefined)[]; result?: Unit } | null {
+  const def = code.nodes[defId];
+  if (def?.kind !== "def" || !def.body) return null;
+  const inf = infer(code, defId);
+  if (!inf.ok) return null;
+  const known = (term: Id) => { const u = inf.unit(term); return u && Object.keys(u).length ? u : undefined; };
+  const body = code.nodes[def.body];
+  if (body?.kind !== "lambda") return { params: [], result: known(def.body) };
+  return { params: body.params.map(known), result: body.results?.length ? undefined : known(body.body) };
+}
