@@ -112,6 +112,20 @@ const subtreeSame = (a: Code, b: Code, root: Id): boolean => {
   return true;
 };
 
+// The nodes of a version's own definitions.
+const ownNodes = (v: Version): Set<Id> => {
+  const out = new Set<Id>(), stack = [...v.own];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (out.has(id)) continue;
+    out.add(id);
+    const n = v.code.nodes[id];
+    if (!n) continue;
+    for (const x of Object.values(n)) for (const s of Array.isArray(x) ? x : [x]) if (typeof s === "string" && v.code.nodes[s] && !v.code.defs.includes(s)) stack.push(s);
+  }
+  return out;
+};
+
 // What changed from `before` to `after`.
 export function diffPrograms(before: Version, after: Version): ProgramDiff {
   // Both printed with the new names: a renamed thing reads the same.
@@ -127,9 +141,11 @@ export function diffPrograms(before: Version, after: Version): ProgramDiff {
     if (lines.some((l) => l.status !== "same") || !subtreeSame(before.code, after.code, d)) defs.push({ def: d, name: names[d] ?? d, status: "changed", lines });
   }
   for (const d of before.own) if (!has.has(d)) defs.push({ def: d, name: before.names[d] ?? d, status: "removed", lines: [] });
-  const renamed = Object.keys(after.names).filter((id) => id in before.names && before.names[id] !== after.names[id] && (after.code.nodes[id] || before.code.nodes[id])).map((id) => ({ id, from: before.names[id], to: after.names[id] }));
+  // Renames of the program's own nodes (a library's names are its own).
+  const mine = new Set([...ownNodes(before), ...ownNodes(after)]);
+  const renamed = Object.keys(after.names).filter((id) => mine.has(id) && id in before.names && before.names[id] !== after.names[id]).map((id) => ({ id, from: before.names[id], to: after.names[id] }));
   const comments = [...new Set([...Object.keys(before.comments), ...Object.keys(after.comments)])]
-    .filter((id) => before.comments[id] !== after.comments[id])
+    .filter((id) => mine.has(id) && before.comments[id] !== after.comments[id])
     .map((id) => ({ id, on: names[id] ?? id, ...(id in before.comments ? { from: before.comments[id] } : {}), ...(id in after.comments ? { to: after.comments[id] } : {}) }));
   return { defs, renamed, comments };
 }
@@ -142,6 +158,7 @@ export function diffText(d: ProgramDiff, context = 2): string {
   for (const def of d.defs) {
     if (def.status === "removed") { out.push(`- removed ${def.name}`); continue; }
     if (def.status === "added") { out.push(`+ added ${def.name}`, ...def.lines.map((l) => `+   ${l.text}`)); continue; }
+    if (def.lines.every((l) => l.status === "same")) { out.push(`~ changed ${def.name}: nothing its view shows (its nodes differ, as when a call moves to another version of a library definition)`); continue; }
     out.push(`~ changed ${def.name}`);
     const near = new Set<number>();
     def.lines.forEach((l, i) => { if (l.status !== "same") for (let k = i - context; k <= i + context; k++) near.add(k); });
@@ -153,7 +170,10 @@ export function diffText(d: ProgramDiff, context = 2): string {
       if (l.was !== undefined) out.push(`    was: ${l.was.trim()}`);
     });
   }
-  for (const r of d.renamed) out.push(`renamed \`${r.from}\` to \`${r.to}\``);
+  // The same rename of several things (each function's own parameter) once.
+  const renames = new Map<string, number>();
+  for (const r of d.renamed) { const k = `renamed \`${r.from}\` to \`${r.to}\``; renames.set(k, (renames.get(k) ?? 0) + 1); }
+  for (const [k, n] of renames) out.push(n > 1 ? `${k} (${n} places)` : k);
   for (const c of d.comments) out.push(c.from === undefined ? `comment on ${c.on}: + ${JSON.stringify(c.to)}` : c.to === undefined ? `comment on ${c.on}: removed` : `comment on ${c.on}: ${JSON.stringify(c.from)} → ${JSON.stringify(c.to)}`);
   return out.join("\n");
 }

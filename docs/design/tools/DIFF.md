@@ -1,7 +1,7 @@
 # Reading a change to a program: `ters diff` by node id
 
 *Status 2026-11-13: partly built. E255a (`diffPrograms`, `ters diff` on two
-programs) is done; E255b and E255c are rows.*
+programs) and E255b (`--from REV`) are done; E255c is a row.*
 
 A saved program is JSON keyed by node ids: `code.json`, `names.default.json`
 and `comments.json` in a folder, or one file the editor saves. A change to
