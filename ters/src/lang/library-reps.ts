@@ -59,6 +59,26 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // creating cons lists in the audio loop. That's just wrong").
 export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean }
 
+// The rows the chooser picks from for each type a program stores: its own
+// representations, and the library's rows for a type stored whole (std's
+// Nat, as written or as an Int: the numbers module's, L249), beside the
+// program's own for it, where the program names the type, a case of it or
+// a definition on it. A type with rows read through their meaning by type
+// (Map, Set, List) is chosen for by withLibraryRepresentations.
+export function storedRows(code: Code, own: Id[], reps: Representation[]): Representation[] {
+  const byType = new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of));
+  const whole = LIBRARY.reps.filter((r) => !byType.has(r.of));
+  if (!whole.length) return reps;
+  const named = new Set<Id>();
+  for (const d of own) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if (n?.kind === "ref" || n?.kind === "tref") named.add(n.target);
+    else if (n?.kind === "arm") named.add(n.variant);
+  }
+  const wanted = new Set(whole.filter((r) => named.has(r.of) || Object.keys(r.cost).some((j) => named.has(j))).map((r) => r.of));
+  return [...reps, ...whole.filter((r) => wanted.has(r.of))];
+}
+
 // A program's own definitions its check found end (no Diverge), for the
 // check of a rewrite of it (infer.ts Options `ends`, L250).
 export function endedAsWritten(info: Info, defs: Iterable<Id>): Id[] {

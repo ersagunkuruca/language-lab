@@ -1,5 +1,5 @@
 // A representation rewrites inside the program's own types too
-// (NUMBERS.md, L251): numbers stores Nat as an Int, and a record of its
+// (NUMBERS.md, L251): std stores Nat as an Int (L249), and a record of its
 // own with a Nat field (Tally's count) holds an Int then, made and read
 // by the definitions the chooser rewrites. 7 × 10¹² as Peano succs would
 // never finish, so an answer at all says the field was rewritten; the
@@ -20,8 +20,8 @@ cpSync(join(import.meta.dirname, "../examples/numbers"), dir, { recursive: true 
 const s = new Session(dir);
 s.define("Tally", "type", [], "tally(count: Nat, label: Text)");
 s.define("scaled", "function", ["t"]);
-s.replace(/□#(\w+)/.exec(s.view("scaled"))![1], 'tally(multiply(t.count, power(nat(10), nat(12))), t.label ++ " trillion")');
-s.replace("50f5", 'print(show(number(scaled(tally(nat(7), "seven")).count)) ++ ", " ++ scaled(tally(nat(7), "seven")).label)');
+s.replace(/□#(\w+)/.exec(s.view("scaled"))![1], 'tally(multiply(t.count, power(natural(10), natural(12))), t.label ++ " trillion")');
+s.replace("50f5", 'print(show(integer(scaled(tally(natural(7), "seven")).count)) ++ ", " ++ scaled(tally(natural(7), "seven")).label)');
 assert.equal(s.errors(), "ok");
 s.save();
 const node = (...args: string[]) => { const r = spawnSync(process.execPath, args, { encoding: "utf8" }); return { code: r.status, out: r.stdout, err: r.stderr }; };

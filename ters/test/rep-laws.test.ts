@@ -9,19 +9,21 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY, TREES } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { representationsIn } from "../src/lang/represent.ts";
+import { storedRows } from "../src/lang/library-reps.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 
 const numbers = () => {
   const p = loadProgram("examples/numbers");
   const info = infer(p.code, p.pres.names);
-  return { p, info, reps: representationsIn(p.code, info, p.pres.names) };
+  // Its own binary row, and std's unary and int (L249).
+  return { p, info, reps: storedRows(p.code, p.own.defs, representationsIn(p.code, info, p.pres.names, p.own.defs)) };
 };
 
 test("Numbers' binary and int Nats agree with Nat through their meaning", () => {
   const { p, info, reps } = numbers();
   const laws = representationLaws(p.code, info, p.pres.names, reps);
   assert.deepEqual(laws.filter((l) => l.failures.length), []);
-  assert.deepEqual(laws.filter((l) => l.rep === "int").map((l) => l.job), ["add", "zero", "succ", "multiply", "number", "match", "fold"]);
+  assert.deepEqual(laws.filter((l) => l.rep === "int").map((l) => l.job), ["zero", "succ", "add", "multiply", "integer", "natural", "match", "fold"]);
   assert.ok(laws.every((l) => l.cases > 0));
   assert.ok(laws.find((l) => l.rep === "binary" && l.job === "add")!.cases >= 20);
 });
