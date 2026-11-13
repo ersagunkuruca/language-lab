@@ -61,12 +61,63 @@ export function readSaved<T>(x: T): T {
   if (Array.isArray(x)) { for (const v of x) readSaved(v); return x; }
   if (!isObj(x)) return x;
   for (const [k, v] of Object.entries(x)) {
-    if (k === "nodes" && isObj(v)) { for (const n of Object.values(v)) if (isObj(n) && n.kind === "lit") readLit(n); }
-    else readSaved(v);
+    if (k !== "nodes" || !isObj(v)) { readSaved(v); continue; }
+    for (const [id, n] of Object.entries(v)) {
+      if (!isObj(n)) continue;
+      // One node per line keeps its id only as its key (I240).
+      if (n.id === undefined) v[id] = { id, ...n };
+      if (n.kind === "lit") readLit(v[id] as Record<string, unknown>);
+    }
   }
   return x;
 }
 
-// A saved file's text, read; and a value, written as one.
+// The one printer of saved programs (I240, SAVED-FORMAT.md): still plain
+// JSON, one spelling for each value, so an unchanged program saved again
+// is the same bytes, and a line is what an edit changes.
+// - A node is one line, keyed by its id and sorted by it, its id not
+//   written again inside: `kind` first, its other keys sorted.
+// - Every other table is one entry per line: the top of a file (a
+//   code.json's defs, a names file's names) and each table in a file
+//   that holds programs (a module's, an editor file's names, comments
+//   and pins), sorted by key. Arrays keep their order, and so do the
+//   keys of an object inside a line.
+// - What is inside a line is inline, with a space after ":" and ",".
+// - UTF-8 as it is, \n line ends, a final newline.
+export const printSaved = (x: unknown): string => block(savedForm(x)) + "\n";
+
+const sortedKeys = (o: Record<string, unknown>, first?: string) =>
+  Object.keys(o).filter((k) => o[k] !== undefined).sort((a, b) => (a === first ? -1 : b === first ? 1 : a < b ? -1 : a > b ? 1 : 0));
+// Inside a line, an object's keys keep their order: some say an order
+// (a representation's operations). A node's own keys are sorted (`sort`).
+const inline = (x: unknown, sort?: { first: string }): string => {
+  if (Array.isArray(x)) return `[${x.map((v) => inline(v === undefined ? null : v)).join(", ")}]`;
+  if (!isObj(x)) return JSON.stringify(x) ?? "null";
+  const keys = sort ? sortedKeys(x, sort.first) : Object.keys(x).filter((k) => x[k] !== undefined);
+  return `{${keys.map((k) => `${JSON.stringify(k)}: ${inline(x[k])}`).join(", ")}}`;
+};
+const holdsNodes = (x: unknown): boolean =>
+  Array.isArray(x) ? x.some(holdsNodes) : isObj(x) && (isObj(x.nodes) || Object.values(x).some((v) => typeof v === "object" && v !== null && holdsNodes(v)));
+const lines = (rows: string[], open: string, close: string) => (rows.length ? `${open}\n${rows.join(",\n")}\n${close}` : open + close);
+const node = (n: unknown): string => {
+  if (!isObj(n)) return inline(n);
+  const { id: _, ...rest } = n;
+  return inline(rest, { first: "kind" });
+};
+// A value that holds programs, or a file's top: one entry per line.
+function block(x: unknown): string {
+  if (Array.isArray(x)) return lines(x.map((v) => (holdsNodes(v) ? block(v) : inline(v))), "[", "]");
+  if (!isObj(x)) return inline(x);
+  const entry = (k: string): string => {
+    const v = x[k], key = JSON.stringify(k);
+    if (k === "nodes" && isObj(v)) return `${key}: ${lines(Object.keys(v).sort().map((id) => `${JSON.stringify(id)}: ${node(v[id])}`), "{", "}")}`;
+    if (holdsNodes(v)) return `${key}: ${block(v)}`;
+    if (Array.isArray(v)) return `${key}: ${lines(v.map((i) => inline(i)), "[", "]")}`;
+    if (isObj(v)) return `${key}: ${lines(sortedKeys(v).map((i) => `${JSON.stringify(i)}: ${inline(v[i])}`), "{", "}")}`;
+    return `${key}: ${inline(v)}`;
+  };
+  return `{${sortedKeys(x).map(entry).join(",\n")}}`;
+}
+
+// A saved file's text, read: either layout, either spelling of a number.
 export const parseSaved = <T = unknown>(text: string): T => readSaved(JSON.parse(text) as T);
-export const printSaved = (x: unknown, indent = 2): string => JSON.stringify(savedForm(x), null, indent) + "\n";

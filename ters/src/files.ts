@@ -25,7 +25,7 @@ import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { addToStore, MODULE_FORMAT, needs, pointsAt, upgradeNames, upgradeOwn, verify, type Module, type Moved } from "./lang/modules.ts";
 import { onTodaysIds } from "./lang/std.ts";
-import { savedForm } from "./saved.ts";
+import { printSaved } from "./saved.ts";
 import type { Pins } from "./lang/signatures.ts";
 import type { Saved } from "./lang/tests.ts";
 import type { Drafts } from "../../editor/drafts.ts";
@@ -73,7 +73,7 @@ export function toFile(p: Omit<ProgramFile, "format" | "version" | "needs">, bas
   const mods = fileModules(p);
   const code = own(p.code, mods.length ? merge(base, ...mods.map((m) => m.code)) : base);
   const file: ProgramFile = { format: FORMAT, version: 2, ...p, shape: SHAPE, code, needs: needs(code, { ...LIBRARY, modules: [...LIBRARY.modules, ...mods] }) };
-  return JSON.stringify(savedForm(file), null, 1);
+  return printSaved(file);
 }
 
 const isObj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);

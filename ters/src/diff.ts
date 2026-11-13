@@ -11,7 +11,7 @@
 // GumTree (Falleri et al., ASE 2014) matches tree nodes it has no ids for,
 // where here the ids are given.
 
-import type { Code, Id } from "./model.ts";
+import { sameValue, type Code, type Id } from "./model.ts";
 import type { Comments, Names, Presentation, Style } from "./presentation.ts";
 import type { Info } from "./lang/infer.ts";
 import { blocksOf, pieceText, type Blk, type Piece } from "./lang/render.ts";
@@ -102,7 +102,7 @@ const subtreeSame = (a: Code, b: Code, root: Id): boolean => {
     if (seen.has(id)) continue;
     seen.add(id);
     const x = a.nodes[id], y = b.nodes[id];
-    if (JSON.stringify(x) !== JSON.stringify(y)) return false;
+    if (!sameValue(x, y)) return false;
     if (!y) continue;
     for (const v of Object.values(y)) {
       if (typeof v === "string" && b.nodes[v] && !b.defs.includes(v)) stack.push(v);

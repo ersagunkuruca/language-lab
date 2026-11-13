@@ -1,7 +1,5 @@
-{
-  "mm3ub4om6v82mpebb2b4l42g3i": "Whether z, going z → z² + c from (zr, zi), leaves the circle of radius 2 within `limit` steps. Those that never do are the Mandelbrot set.",
-  "trmtv92umoi8cgops155ksdau0": "How many points of row y, from column x on, are inside: the point (x, y) of the grid is −2 + x · step, −1.25 + y · step.",
-  "ms2uouj7aokvnmam3cuqpksgfh": "How many points are inside on rows y, y + by, y + 2 · by and so on, before row `side`.",
-  "osg93hd8rdlirl2vghhvpsajc6": "The area of the Mandelbrot set, counted on a grid `side` points wide (the first argument, 120 when there is none) over the rectangle from −2 − 1.25i to 0.5 + 1.25i, 6.25 square units, with 300 steps a point. The grid is counted in eight bands at once with together, each every eighth row so they take about as long: each band only computes, so on Node the compiled program counts them on worker threads, and the answer is the same as counting them in turn.",
-  "program": "Counting the Mandelbrot set's area on a grid, eight bands at once (C41).\nPrior art: the Mandelbrot set (Benoit Mandelbrot, 1980); its area by counting grid points is the classical estimate (about 1.5066, Förstemann 2012 by pixel counting)."
-}
+{"mm3ub4om6v82mpebb2b4l42g3i": "Whether z, going z → z² + c from (zr, zi), leaves the circle of radius 2 within `limit` steps. Those that never do are the Mandelbrot set.",
+"ms2uouj7aokvnmam3cuqpksgfh": "How many points are inside on rows y, y + by, y + 2 · by and so on, before row `side`.",
+"osg93hd8rdlirl2vghhvpsajc6": "The area of the Mandelbrot set, counted on a grid `side` points wide (the first argument, 120 when there is none) over the rectangle from −2 − 1.25i to 0.5 + 1.25i, 6.25 square units, with 300 steps a point. The grid is counted in eight bands at once with together, each every eighth row so they take about as long: each band only computes, so on Node the compiled program counts them on worker threads, and the answer is the same as counting them in turn.",
+"program": "Counting the Mandelbrot set's area on a grid, eight bands at once (C41).\nPrior art: the Mandelbrot set (Benoit Mandelbrot, 1980); its area by counting grid points is the classical estimate (about 1.5066, Förstemann 2012 by pixel counting).",
+"trmtv92umoi8cgops155ksdau0": "How many points of row y, from column x on, are inside: the point (x, y) of the grid is −2 + x · step, −1.25 + y · step."}

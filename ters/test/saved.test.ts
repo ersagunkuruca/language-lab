@@ -127,3 +127,47 @@ test("ters merge and ters diff read either spelling, and merge writes digits", (
   assert.doesNotMatch(merged, /"value": \d/);
   assert.deepEqual(parseSaved(merged), ours);
 });
+
+// I240: one node per line.
+test("one node per line: an unchanged program saved again is the same bytes, and an edited literal changes one line", () => {
+  const dir = join(import.meta.dirname, "..", "examples", "dice");
+  const text = printSaved(parseSaved(readFileSync(join(dir, "code.json"), "utf8")));
+  assert.equal(printSaved(parseSaved(text)), text);
+  // Each node is one line keyed by its id, with no id inside it.
+  const own = parseSaved<{ nodes: Record<string, { id: string; kind: string; value?: unknown }>; defs: string[] }>(text);
+  assert.equal(text.split("\n").length, Object.keys(own.nodes).length + own.defs.length + 5);
+  assert.match(text, /^\{"defs": \[\n"/);
+  assert.doesNotMatch(text, /"id": /);
+  const [id, n] = Object.entries(own.nodes).find(([, n]) => n.kind === "lit" && typeof n.value === "number")!;
+  assert.equal(n.id, id);
+  // Read in whatever order, printed the same.
+  const shuffled = { nodes: Object.fromEntries(Object.entries(own.nodes).reverse().map(([k, v]) => [k, Object.fromEntries(Object.entries(v).reverse())])), defs: own.defs };
+  assert.equal(printSaved(shuffled), text);
+  const edited = printSaved({ ...own, nodes: { ...own.nodes, [id]: { ...n, value: 12345 } } });
+  const was = text.split("\n"), now = edited.split("\n");
+  assert.deepEqual(now.map((l, i) => (l === was[i] ? null : i)).filter((i) => i !== null).map((i) => now[i!]), [`"${id}": {"kind": "lit", "num": "12345"},`.replace(/,$/, now.find((l) => l.startsWith(`"${id}"`))!.endsWith(",") ? "," : "")]);
+  // A names file, one name per line, sorted; text as it is (no \u escapes).
+  assert.equal(printSaved({ b: "ü", a: "x" }), '{"a": "x",\n"b": "ü"}\n');
+  assert.equal(printSaved({}), "{}\n");
+});
+
+test("a module and the editor's file hold their tables one entry per line, and read back as they were", () => {
+  for (const m of LIBRARY.modules) {
+    const text = printSaved(m);
+    assert.equal(printSaved(parseSaved(text)), text, m.title);
+    const back = parseSaved<Module>(text);
+    assert.equal(verify(back, LIBRARY.code), null, m.title);
+    assert.ok(text.split("\n").length >= Object.keys(m.code.nodes).length, m.title);
+  }
+  // (Not std.fixed, which reads as its id today.)
+  const { fixed: _, ...today } = lits;
+  const file = toFile({ title: "Numbers", typed: true, code: { nodes: { ...LIBRARY.code.nodes, ...today }, defs: LIBRARY.code.defs }, names: { big: "big" }, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, signatures: {} }, LIBRARY.code);
+  assert.match(file, /\n"big": \{"kind": "lit", "num": "12345678901234567891", "of": "type.int"\},?\n/);
+  assert.match(file, /"names": \{\n"big": "big"\n\}/);
+  assert.equal(toFile(fromFileOk(file), LIBRARY.code), file);
+});
+const fromFileOk = (text: string) => {
+  const r = fromFile(text, () => LIBRARY.code);
+  if ("error" in r) throw new Error(r.error);
+  return { ...r.file, code: r.code };
+};

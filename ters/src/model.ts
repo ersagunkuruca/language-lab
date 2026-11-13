@@ -574,7 +574,15 @@ export function merge(...codes: Code[]): Code {
   return { nodes, defs: [...new Set(codes.flatMap((c) => c.defs))] };
 }
 
-const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b);
+// Whatever order its keys were read or built in (a saved node's are
+// sorted, SAVED-FORMAT.md).
+const sameNode = (a: Node, b: Node) => JSON.stringify(a) === JSON.stringify(b) || sameValue(a, b);
+export const sameValue = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined), kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  return ka.length === kb.length && ka.every((k) => sameValue((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+};
 
 // A program made from another by changing a few nodes (the palette's
 // filled programs, BACKLOG E133b), and those nodes: what is found by

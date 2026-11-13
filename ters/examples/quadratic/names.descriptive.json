@@ -1,11 +1,9 @@
-{
-  "0f886080": "discriminant",
-  "0ec3f332": "root",
-  "b14e4d79": "leading coefficient",
-  "1f090b97": "linear coefficient",
-  "93ea2591": "constant term",
-  "92f7051c": "leading coefficient",
-  "650835b4": "linear coefficient",
-  "49dc496d": "constant term",
-  "6c34cfa2": "denominator"
-}
+{"0ec3f332": "root",
+"0f886080": "discriminant",
+"1f090b97": "linear coefficient",
+"49dc496d": "constant term",
+"650835b4": "linear coefficient",
+"6c34cfa2": "denominator",
+"92f7051c": "leading coefficient",
+"93ea2591": "constant term",
+"b14e4d79": "leading coefficient"}

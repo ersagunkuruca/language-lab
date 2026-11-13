@@ -20,6 +20,7 @@ import { planSolve } from "../src/lang/solve.ts";
 import { directionFor } from "../src/lang/directions.ts";
 import { CELL_OPS, CONS, FIRST, INT_OPS, NIL, PAIR_V, S } from "../src/lang/std.ts";
 import { CHOICE, DIVERGE } from "../src/lang/types.ts";
+import { parseSaved } from "../src/saved.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
 const params = (code: Code, def: Id) => get(code, get(code, def, "def").body!, "lambda").params;
@@ -220,7 +221,7 @@ test("every relational solve in the examples has a mode that isn't stuck, and it
   const seen: string[] = [];
   for (const e of readdirSync(join(root, "examples")).filter((e) => existsSync(join(root, "examples", e, "code.json")))) {
     const p = load(e);
-    const own = JSON.parse(readFileSync(join(root, "examples", e, "code.json"), "utf8")) as Code;
+    const own = parseSaved<Code>(readFileSync(join(root, "examples", e, "code.json"), "utf8"));
     const a = analyzer(p.code, p.pres.names);
     for (const n of Object.values(own.nodes)) {
       // A solve a relation's direction answers is a call of it (POLAR.md,
