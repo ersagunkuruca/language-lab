@@ -46,3 +46,32 @@ test("lines matched by node id: a line moved reads as moved, not removed and add
   // Removed where it was.
   assert.deepEqual(diffRows(before, [after[1], after[3]]).map((l) => `${l.status} ${l.id}`), ["same a", "removed b", "removed c", "added d"]);
 });
+
+// Against a git revision (E255b): a program folder at --from and --to (or
+// the working tree), and every program folder that changed when no
+// program is named. In a repository of its own, so a shallow clone's
+// history doesn't matter.
+test("ters diff --from REV: a program against a revision, and every changed program folder", () => {
+  const dir = mkdtempSync(join(tmpdir(), "diff-git-"));
+  const git = (...a: string[]) => { const r = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", ...a], { cwd: dir, encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  git("init", "-q");
+  cpSync(join(import.meta.dirname, "../examples/dice"), join(dir, "dice"), { recursive: true });
+  cpSync(join(import.meta.dirname, "../examples/tumble"), join(dir, "tumble"), { recursive: true });
+  git("add", "."); git("commit", "-qm", "one");
+  const s = new Session(join(dir, "dice"));
+  s.rename("most", "largest");
+  s.save();
+  git("commit", "-qam", "two");
+  const s2 = new Session(join(dir, "dice"));
+  s2.replace(s2.view("largest", 99).split("\n").find((l) => l.includes("nil → 0"))!.trim().split(" ")[0], "1", "0");
+  s2.save();
+  const ters = (...a: string[]) => { const r = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "diff", ...a], { cwd: dir, encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  // Between two commits: only the rename.
+  assert.equal(ters("dice", "--from", "HEAD~1", "--to", "HEAD").trim(), "renamed `most` to `largest`");
+  // Against the working tree: only the literal.
+  assert.match(ters("dice", "--from", "HEAD"), /^~ changed largest\n[\s\S]*^~ +nil → 1$/m);
+  // No program named: the folders that changed, by name; tumble didn't.
+  const all = ters("--from", "HEAD~1");
+  assert.match(all, /^~ changed largest$/m);
+  assert.doesNotMatch(all, /tumble/);
+});

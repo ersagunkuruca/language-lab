@@ -22,6 +22,8 @@
 //   ters fetch <program> <url>            a module from any host into the program's modules, checked by hash (§4)
 //   ters diff <before> <after>            what changed, by definition, line by line by node id
 //                                        (two programs: diff.ts, DIFF.md), or a JSON file's ids (merge-files.ts)
+//   ters diff [<program>] --from REV [--to REV]
+//                                        a program, or every changed one, against git revisions
 //   ters merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
 //                                        written with theirs taken in (SHARING.md §6)
