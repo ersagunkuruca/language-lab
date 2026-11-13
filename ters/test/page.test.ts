@@ -317,8 +317,35 @@ test("a page stepped to the window's start reads nothing more from the log, and 
   steps.to(1);
   steps.resume();
   assert.match(root.find("status").textContent, /^Rolls: 1;/);
-  const back = compiled(log, page.kept!);
+  // Mounted from the runtime's own bundle, as the editor does
+  // (corePageRuntimeText): its cells.ts is another copy, which still reads
+  // the interpreted page's cells (I253).
+  const { corePageRuntime } = await import("../cli/web.ts");
+  const bundled = new Function(`${await corePageRuntime()}\nreturn $core;`)() as typeof core;
+  const back = bundled.mountCorePage(tables, worlds, defs, name, "dice", nodes, { doc: fakeDoc(), store: store(), frame: () => {}, log, window, handFrom: page.kept! });
   page.stop();
   assert.ok(back.handed > 0);
   assert.match((back.root as FakeEl).find("status").textContent, /^Rolls: 1;/);
+});
+
+// I252: inside a segment, a snapshot every 30 events, so a step back gives
+// at most 30 again (a page hearing frames has 600 in a segment).
+test("a page's window snapshots every 30 events inside a segment, and steps from them", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  let t = 0;
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log, window: { seconds: 10, keep: 3, clock: () => t } });
+  const root = page.root as FakeEl, w = page.window!;
+  const shown: string[] = [root.find("status").textContent];
+  for (let i = 0; i < 130; i++) { t += 10; root.find("roll").fire("click"); shown.push(root.find("status").textContent); }
+  // All within one segment: the run's start and four step snapshots.
+  assert.deepEqual(w.snapshots.map((s) => !!s.step), [false, true, true, true, true]);
+  const steps = page.steps!;
+  for (const n of [125, 61, 59, 130]) { steps.to(n); assert.equal(root.find("status").textContent, shown[n], `after ${n}`); }
+  // Past `keep` segments, a segment leaves with its step snapshots.
+  for (let i = 0; i < 4; i++) { t += 11000; steps.resume(); root.find("roll").fire("click"); }
+  assert.equal(w.snapshots.filter((s) => !s.step).length, 3);
+  assert.ok(w.snapshots.every((s) => s.at < log.length));
 });

@@ -64,6 +64,11 @@ segment starts with a snapshot of the page:
 - the random generator's state (four 32-bit words);
 - the time of the last frame.
 
+Inside a segment, a snapshot every 30 events as well (I252): a page that
+hears frames has 600 events in 10 seconds, and a step back gives again
+every event since the snapshot before it. These step snapshots leave with
+their segment.
+
 Once the log holds more than M segments (30 by default, about 5 minutes),
 the oldest segment and its snapshot are dropped. On bounce that is 18,000
 frames, about 144 KB, and 30 snapshots of its cells (kept by reference). Memory is then at most M
