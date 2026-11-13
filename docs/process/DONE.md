@@ -38,7 +38,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E259 | Every output a dot (CONFUSING item 3): a shared value's dot is drawn on the output of the node that gives it, named above it, instead of a separate dot a short wire away; a dot clicked onto a node's wire appears there and nothing else moves. The editor smoke's dot-on-a-wire check accepts a dot on the giving node's output | #2558 |
+| E259 | Every output a dot (CONFUSING item 3): tried in #2558 and reverted the same morning, decided against. Ersagun: the output dot gets too busy, especially when named, and the separate dot is a branching point you can move. Outputs and dots stay as they were; E109's dot-where-clicked stays | #2558, reverted in this PR |
 | E260 | One `for some` for a frame's unknowns (CONFUSING item 5): nested `for some((length) => for some((angle) => …))` drawn as one `for some` node and one `(length, angle) =>` frame, as nested lambdas already were; a view, the tree unchanged. `rotate` checked by screenshot | #2557 |
 | E258 | Cases that are values drawn as values (CONFUSING item 2): a case with no fields to name (an if's then and else, a case like `nil`) is drawn as its value wired into the case node's port, with no `() =>` frame; the port is a value port and its wire can take a dot. `queens` and `magnitude` checked by screenshot | #2555 |
 | E261 | A type's effect-row variable shown as `…` in the editor's blocks (CONFUSING item 7): `-[Choice, e]->` reads `-[Choice, …]->` when the type has one row variable, and the def's type has a hover naming whose effects `…` stands for ("… is whatever f and slope do when called"); new `rowDots` style flag, so the CLI and MCP keep `e`; test/row-dots.test.ts | #2554 |
