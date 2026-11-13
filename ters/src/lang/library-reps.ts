@@ -79,6 +79,12 @@ export function storedRows(code: Code, own: Id[], reps: Representation[]): Repre
   return [...reps, ...whole.filter((r) => wanted.has(r.of))];
 }
 
+// A program's own definitions its check found end (no Diverge), for the
+// check of a rewrite of it (infer.ts Options `ends`, L250).
+export function endedAsWritten(info: Info, defs: Iterable<Id>): Id[] {
+  return [...defs].filter((d) => info.typeOf.has(d) && !info.divergent.has(d));
+}
+
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
   for (;;) {
@@ -91,7 +97,9 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // check scans only what isn't the library's (model.ts onLayer).
     const layer = layerOf(code);
     if (layer && layer !== r.code) onLayer(r.code, layer);
-    const checked = infer(r.code, r.names, undefined, r.insiders.length ? { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : info.options);
+    // What ended as written ends rewritten (infer.ts Options `ends`, L250).
+    const ends = endedAsWritten(info, defs);
+    const checked = infer(r.code, r.names, undefined, { ...info.options, ...(r.insiders.length ? { insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : {}), ends });
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as

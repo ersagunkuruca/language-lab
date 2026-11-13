@@ -116,9 +116,11 @@ the inputs as they came. Recursion and Float64 are refused with the
 reason. compiler/test/qasm.test.ts runs the printed text in a small
 simulator of basis states: a 4-bit adder agrees with the evaluator on all
 256 inputs, as does a function with a comparison, an if, a subtraction, a
-product and a call. Not done: sharing an ancilla once it is uncomputed
-(the circuits are as wide as they are long), and loops unrolled to a
-known bound.
+product and a call. Since C219 an ancilla is shared once it is
+uncomputed: each call and arithmetic step copies its answer out and undoes
+itself at once, so its scratch qubits go to the steps after it (a sum of
+squares on 4 bits, 152 ancillas to 43, for about twice the gates). Not
+done: loops unrolled to a known bound.
 
 **Quantum part: a new layer of the language, not a target.** Ters has a
 close match: `Choice` is already "many answers at once". Give each answer

@@ -135,3 +135,13 @@ test("conjugate, run and compiled: each edit done in another space and brought b
   assert.deepEqual(node([lab, "run", conj]), { code: 0, err: "", out: want });
   assert.deepEqual(node([compiled]), { code: 0, err: "", out: want });
 });
+
+// Every command main.ts takes is in the usage `ters` alone prints (L246).
+test("ters alone lists every command it runs", () => {
+  const r = node([lab]);
+  assert.equal(r.code, 0, r.err);
+  const main = readFileSync(join(import.meta.dirname, "../cli/main.ts"), "utf8");
+  const commands = new Set([...main.matchAll(/command === "([a-z-]+)"|^ {2}case "([a-z-]+)":/gm)].map((m) => m[1] ?? m[2]).filter((c) => c !== "help" && !c.startsWith("-")));
+  for (const c of ["diff", "merge", "git-diff", "git-setup", "run", "test"]) assert.ok(commands.has(c), `the test finds ${c} in main.ts`);
+  for (const c of commands) assert.match(r.out, new RegExp(`^  ters ${c}\\b`, "m"), `ters alone doesn't list ${c}`);
+});

@@ -31,7 +31,7 @@ function program(build: (k: Lang) => void) {
     const v = [...r.call(r.value(def(name)), ...(xs as Value[]))][0] as unknown;
     return typeof v === "object" && v && "tag" in v ? ((v as { tag: string }).tag === TRUE ? 1n : 0n) : BigInt(v as number);
   };
-  const circuit = (name: string, bits: number) => printQasm(lowerScalar(code, info, names, [def(name)], { shader: true }), def(name), bits, ["a", "b"]);
+  const circuit = (name: string, bits: number, options: { reuse?: boolean } = {}) => printQasm(lowerScalar(code, info, names, [def(name)], { shader: true }), def(name), bits, ["a", "b"], options);
   return { evaluate, circuit };
 }
 
@@ -76,6 +76,37 @@ test("comparisons, if, subtraction, multiplication and calls make one circuit to
   });
   assert.equal(agrees(p, "f", 3).n, 64);
   agrees(p, "lt", 3, 1n);
+});
+
+// Each call and arithmetic step gives its scratch qubits back at 0 as soon
+// as its answer is copied out, and later steps take them (C219): a chain
+// of steps is as wide as what is alive at once, not as long as it is.
+test("ancillas are reused once a step is uncomputed: the same answers on fewer qubits (C219)", () => {
+  const p = program((k) => {
+    const sq = k.def("sq");
+    k.define(sq, k.fn(["x"], (x) => k.call(INT_OPS.mul, k.x(x), k.x(x))));
+    const poly = k.def("poly");
+    // a² + b² + a·b + (a − b)², in its low 4 bits (a circuit's Ints wrap).
+    k.define(poly, k.fn(["a", "b"], (a, b) => k.call(INT_OPS.bitAnd,
+      k.call(INT_OPS.add, k.call(INT_OPS.add, k.call(sq, k.x(a)), k.call(sq, k.x(b))), k.call(INT_OPS.add, k.call(INT_OPS.mul, k.x(a), k.x(b)), k.call(sq, k.call(INT_OPS.sub, k.x(a), k.x(b))))),
+      k.int(15))));
+    // A call whose steps give back scratch that its own copy mustn't take.
+    const h = k.def("h");
+    k.define(h, k.fn(["x", "y"], (x, y) => k.call(INT_OPS.add, k.call(INT_OPS.mul, k.x(x), k.x(y)), k.x(x))));
+    const twice = k.def("twice");
+    k.define(twice, k.fn(["a", "b"], (a, b) => k.call(INT_OPS.bitAnd, k.call(INT_OPS.add, k.call(h, k.x(a), k.x(b)), k.call(h, k.x(b), k.x(a))), k.int(15))));
+    const under = k.def("under");
+    k.define(under, k.fn(["a", "b"], (a, b) => k.call(INT_OPS.less, k.call(sq, k.call(INT_OPS.bitAnd, k.call(INT_OPS.add, k.x(a), k.x(b)), k.int(3))), k.call(INT_OPS.add, k.call(sq, k.call(INT_OPS.bitAnd, k.x(a), k.int(3))), k.int(1)))));
+  });
+  // poly 152 ancillas to 43 for 472 gates to 998; under 54 to 37 for 173
+  // to 375; twice 90 to 36 for 278 to 1096 (a call over two steps, each
+  // undone inside the undone call).
+  for (const [name, mask, fewer] of [["poly", 15n, 3], ["under", 1n, 1.4], ["twice", 15n, 1.4]] as const) {
+    const { q } = agrees(p, name, 4, mask);
+    const wide = p.circuit(name, 4, { reuse: false });
+    assert.ok(q.ancillas * fewer <= wide.ancillas, `${name}: ${q.ancillas} ancillas reused against ${wide.ancillas}`);
+    assert.ok(q.gates.length <= 4 * wide.gates.length, `${name}: ${q.gates.length} gates against ${wide.gates.length}`);
+  }
 });
 
 test("what has no circuit is refused with the reason: a Float64, recursion (C210)", () => {

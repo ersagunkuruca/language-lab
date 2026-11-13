@@ -15,7 +15,7 @@ special case, then what lets programs be written in the editor, then
 language, then more targets or speed (WORKFLOW.md "Priority").
 Rows once held back as later goals are open again (Ersagun 2026-11-09):
 a lane takes them when bugs and goal rows are in hand.
-Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256, C218, C219); new rows come from the recurring reviews, QA passes and bigger programs.
+Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256, C219), C220; new rows come from the recurring reviews, QA passes and bigger programs.
 Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to be as close to a C/C++ dev doing data oriented design and cache and memory aware as possible. And then if we need Pools and similar stuff to get a last 10 percent of performance that's OK, but the defaults should be our first target." So rows that change what every program gets (layout as columns, arrays written in place, records changed in place, work on every core) go before ones a program must ask for (a Pool type).
 **Size:** S hours · M one PR · L several PRs or a design note first.
 **Status:** ▶ running · ⏸ held · blank = waiting.
@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C218 (measure the split on WASI and C); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| C Compiler and targets | "Compiler lane" | C219 (qasm), C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
@@ -37,7 +37,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I219 | What the full run fails on, on main (2026-11-12; draws fixed in I219a, board, effects and finite in I219b, lang.test's palette sweep, map-tree.test's timing and C42h's names in c-names.test in I219 part, palette in I219c, the editor's shaders ("process is not defined") in I219d, the smoke's first-steps check (it waited for main, but a first visit opens on fall since E235) in I219e, the rest of the smoke (Countdown's solutions read [] once relate's settles spent steps) in I219f, fixed.test's CORDIC and core-js.test's pig in I219 part 2, each file run alone; the nightly hasn't passed since 10-28): on CI resolve-once.test (a kept library resolving typed `List Case several` where it is `List a`), passing here; likely the same cause as CORDIC (a kept resolving read over another library check), fixed by part 2, for the next Nightly to confirm. | I208 | 2026-11-12 |
-| I239 | (Design: docs/design/tools/WORLD-LOG-WINDOW.md, steps I239a to I239g and I255 all built, the page panel's Pause, step back and step on included; left: the example's check below.) A run's log of the world's answers within bounded memory (Ersagun 2026-11-13: "it's still a memory hole"). Each world effect says how it is recorded: random as one seed for the run (our generator, seeded once from the world), the clock once per frame as a difference from the last reading. The log is kept as a window: a snapshot of the page's state every N seconds, older entries dropped, replay and step-back going as far back as the window. Prior art: rr's checkpoints, Redux DevTools' maxAge. Design note first. Example: tumble running an hour in the editor with its log under a fixed size, and step-back working inside the window. Suggested lane: Language | thread "Decide the saved program format"; worldlog.ts | 2026-11-13 |
 | I241 | A trial repository holding one real Ters program, to try the format and `ters diff` in real git use: edits on two branches touching the same definitions, PRs read in GitHub's raw view and with `ters diff`, merges with and without the driver, findings in a dated report. Needs Ersagun to create the repository. After I240 | thread "Decide the saved program format" | 2026-11-13 |
 
 ## E: Editor
@@ -98,7 +97,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C218 | The chooser's split by groups of values on WebAssembly and C (C93 s5 kept it to JavaScript: on WebAssembly an array was copied on every replace, 26 s against 0.3). Arrays with one holder are replaced in place there since (owned-arrays.ts), so measure machine's split again on WASI and natively and turn it on where it pays | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md "Where this stands" | P3 | M | |
+| C220 | `ters native` runs machine 2× to 3× slower than its WebAssembly on the same representations (C218's bench: fib 24 190 ms natively against 68 in WASI, sort 1000 385 against 139, primes 20000 60 against 26). Profile the C build and close the gap, or say why it's the C compiler's | C218's measurement 2026-11-13 (compiler/gaps/bench-machine.ts) | P3 | M | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 
@@ -142,7 +141,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C219 | `ters qasm`: reuse an ancilla once it is uncomputed (circuits are as wide as they are long today), and unroll a loop to a known bound (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
+| C219 | `ters qasm`: unroll a loop to a known bound (ancillas reused since C219a) (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
 
 ## L: Language and library
 
@@ -159,8 +158,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L246 | `ters` with no command doesn't list `diff`, `merge` or `git-diff` (cli/ters.ts usage text), though cli/main.ts runs them and DIFF.md documents them. Example: `ters` alone lists `ters diff <before> <after> [--from REV] [--to REV]` and `ters merge`, and the CLI test checks every command main.ts takes is listed | docs refresh 2026-11-13 (thread "Update all project docs"); README | P2 | S | |
-| L250 | Check whether a representation's rewrite still loses a totality proof (NUMBERS.md "What's still rough"): `is even` is structural on Nat, but after the rewrite onto Int its recursion goes through `match Nat′`'s function argument and the checker gave it `Diverge`. Close if it no longer happens; else keep the original's effects through the rewrite. Example: examples/numbers' `is even` has no Diverge on its represented program | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P2 | S | |
 
 ### Ersagun's current asks
 
@@ -181,7 +178,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L251 | A test that representations rewrite inside a program's own types: a record with a Nat field runs on Int, evaluated and compiled, with the same answers (NUMBERS.md "What's still rough": rewritten, never tested) | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | S | |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 

@@ -948,20 +948,19 @@ In order. Each stage says when to start it.
 
 ## What's still rough
 
-- **The rewrite can lose a totality proof.** `is even` is structural on
-  Nat, but after the rewrite its recursion goes through `match Nat′`'s
-  function argument, and the checker gives it `Diverge`. The meaning is
-  total, and the laws make the rewrite correct, so the compiler should keep
-  the effects of the original. For now the rewritten program's type is
-  less precise than it should be.
+- ~~**The rewrite can lose a totality proof.**~~ Fixed (L250): `is even`
+  is structural on Nat, but after the rewrite onto Int its recursion goes
+  through `match Nat′`'s function argument, which the checker can't see
+  shrink. A rewrite changes no answer, so the check of the rewritten
+  program is told which definitions ended as written (infer.ts Options
+  `ends`), and they and their callers keep no `Diverge`.
 - ~~**The evaluator recurses on the JS stack.**~~ Fixed: the evaluator is
   now a machine with its continuation on the heap (LANGUAGE.md, "How it
   runs"), so `is even` of any size runs.
 - ~~**One representation per type, per program.**~~ The chooser splits a
-  type by groups of values since C93, on JavaScript.
+  type by groups of values since C93, on every target (C218 measured
+  machine's split on WebAssembly and C: about 2× to 5× faster than trees).
 - **Costs are declared.** Stage 7 makes them checked, then computed.
-- **Representation rewrites inside a user's own types** (a record with a
-  Nat field) rewrite the field's type, but nothing tests it yet.
 
 ## Files
 

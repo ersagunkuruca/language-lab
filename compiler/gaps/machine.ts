@@ -69,8 +69,8 @@ export function programs() {
 }
 
 // The program as a WASI command (compiler/wasi.ts), with the chooser's
-// representations, or why it can't be one.
-export async function wasmModule(): Promise<WebAssembly.Module | string> {
+// representations and what they are, or why it can't be one.
+export async function wasmModule(): Promise<{ module: WebAssembly.Module; chosen: string[] } | string> {
   const { p, own, main } = programs();
   try {
     const c = chosenFor(p, own, main, false);
@@ -78,11 +78,11 @@ export async function wasmModule(): Promise<WebAssembly.Module | string> {
     ownedArrays(lowered, c.code, c.info, c.names, main);
     if (!process.env.NO_OWN_RECORDS) { ownedRecords(lowered, c.code, c.info, c.names, main); intoAsSets(lowered); }
     const m = emitWasm(lowered, { wasi: true });
-    return await WebAssembly.compile(m.bytes);
+    return { module: await WebAssembly.compile(m.bytes), chosen: c.chosen };
   } catch (e) { return (e as Error).message; }
 }
 
-export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wasmProblem?: string }> {
+export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wasmChosen?: string[]; wasmProblem?: string }> {
   const { main, plain, chosen } = programs();
   const dir = mkdtempSync(join(tmpdir(), "machine-"));
   const wasm = await wasmModule();
@@ -91,6 +91,7 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wa
   const coreRun = coreMain(lowerCore(chosen.code, chosen.info, chosen.names, [main]), "main", rt);
   return {
     chosen: chosen.chosen,
+    wasmChosen: typeof wasm === "string" ? undefined : wasm.chosen,
     wasmProblem: typeof wasm === "string" ? wasm : undefined,
     evaluator: (args, files) => {
       const printed: string[] = [], err: string[] = [];
@@ -110,7 +111,7 @@ export async function ways(): Promise<Record<Name, Way> & { chosen: string[]; wa
       for (const [name, text] of Object.entries(files)) writeFileSync(join(run, name), text);
       const out = openSync(join(run, ".out"), "w"), errOut = openSync(join(run, ".err"), "w");
       const wasi = new WASI({ version: "preview1", args: ["machine", ...args], preopens: { ".": run }, stdout: out, stderr: errOut, returnOnExit: true });
-      const code = wasi.start(new WebAssembly.Instance(wasm, wasi.getImportObject() as WebAssembly.Imports));
+      const code = wasi.start(new WebAssembly.Instance(wasm.module, wasi.getImportObject() as WebAssembly.Imports));
       closeSync(out); closeSync(errOut);
       const text = (f: string) => readFileSync(join(run, f), "utf8").split("\n").filter((l, i, all) => l !== "" || i < all.length - 1);
       return { out: text(".out"), err: text(".err"), code };
