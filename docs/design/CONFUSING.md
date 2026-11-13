@@ -11,7 +11,7 @@ problem, and a proposal. [REVIEW-2026-10-26.md](../reports/reviews/REVIEW-2026-1
 the latest longer review, [BACKLOG.md](../../BACKLOG.md) the order of work,
 and [NOTES.md](../history/NOTES.md) the early design discussion behind them. Fixed items are at the end, so the list shows what moved.
 
-### 1. The graph still crosses itself
+### 1. ~~The graph still crosses itself~~ (decided 2026-11-13)
 
 **Today.** The node editor work (NODE-EDITOR.md) fixed most of what made the
 graph hard to read: values are chips that avoid nodes and each other, nodes
@@ -38,9 +38,14 @@ left shows in `rotate`:
 **Proposal.** Names drawn with a background so a wire can't cover them, and
 wires routed around nodes.
 
-**2026-11-13.** Still so. In `rotate` unfolded, wires cross the frame
-edges and each other, and the inner frame's `for some` node is drawn over
-the first `polar`'s `x` input. Row **E257**.
+**2026-11-13: decided, closed.** In `rotate` unfolded, the frames draw
+over their neighbours (the inner `for some` node lands inside the frame it
+takes, over the first `polar`'s `x` input) and wires cross the frame edges.
+That is the design: an unfolded frame opens where its box was, over its
+neighbours, and nothing else moves; *Tidy everything* spaces them out,
+and after it `rotate` reads cleanly (each `for some` right of its frame).
+Ersagun has decided this several times (2026-11-01, again 2026-11-13: "Draw
+over neighbors"). Row E257 closed with it.
 
 ### 2. Cases that are values are drawn as functions
 
@@ -95,7 +100,7 @@ a declared effect and `Abort`, built in the editor by clicks only.
 What's left is the three ways to say "no answer" (`Choice`, `Abort`,
 `Optional`); [tutorial 3.9](../learn/TUTORIAL.md#39-effects) gives the rule of thumb.
 
-### 7. The type syntax has a variable most people won't understand
+### 7. ~~The type syntax has a variable most people won't understand~~ (fixed 2026-11-13)
 
 **Today.** Types like `(List a, (a) -[e]-> b) -[e]-> List b` show `e`, a row
 variable meaning "whatever effects the function you pass has". `root near`'s
@@ -107,7 +112,14 @@ Float64`.
 
 **2026-11-13.** Still so: the blocks show `newton : ((Float64) -[Choice,
 Diverge, e]-> Float64, …) -[Choice, Diverge, e]-> Float64` and Markov's
-`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`. Row **E261**.
+`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`.
+
+**Fixed 2026-11-13 (E261).** The editor's blocks show a type's one row
+variable as `…`: `newton : ((Float64) -[Choice, Diverge, …]-> Float64, …)
+-[Choice, Diverge, …]-> Float64`, and hovering the type says "… is whatever
+f and slope do when called: the effects of the functions it's given". A type
+with two row variables keeps their names, since `…` would merge them. The
+CLI, the MCP and printed text keep `e`, where it is the exact type.
 
 ### 9. Small inconsistencies worth fixing
 

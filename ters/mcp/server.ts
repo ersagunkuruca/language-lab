@@ -77,7 +77,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "step",
-    description: "Add a step `name = value` before a part (or first in a definition's body).",
+    description: "Add a step `name = value` just before the step a part is in (at the hole after the last step: after it, so steps go top-down), or first in a definition's body.",
     inputSchema: obj({ at: str("id of the part it goes before, or a definition"), name: str("the new name (_ if unused)"), value: str("expression; empty leaves a hole") }, ["at", "name"]),
     call: (a) => program().step(String(a.at), String(a.name), String(a.value ?? "")),
   },

@@ -59,6 +59,9 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   // it was given (`first(() => chances())`, chances an input that
   // chooses), keeps its first: taking first ways in the copies leaves that
   // function's choices, which the check sees only as the input's open row.
+  // Only a binder is given from outside: a builtin that may fail (divide)
+  // or a field is part of what is copied, and keeping every first that
+  // used one left pond's searches whole (T15).
   const copies = new Map<Id, Id>();
   const reach = (root: Id): boolean => {
     let open = false;
@@ -69,7 +72,7 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
         const d = code.nodes[n.target];
         if (d?.kind === "def") {
           if (d.body && !copies.has(d.id) && chooses(typeOf(d.id))) { copies.set(d.id, freshId()); walk(d.body, new Set(subtree(code, d.body))); }
-        } else if (!own.has(n.target) && chooses(typeOf(id))) open = true;
+        } else if (code.nodes[n.target]?.kind === "binder" && !own.has(n.target) && chooses(typeOf(id))) open = true;
         return;
       }
       if (n.kind === "call" && barrier(n)) return;
