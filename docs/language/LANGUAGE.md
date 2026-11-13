@@ -2049,7 +2049,7 @@ back into the group being hashed is named by its position.
   "Random", "Time", "The web"), any HTTP request (`send request`), and
   `ters compile` bundles the runtime into one portable file, and
   environment variables (`environment variable(name)`, the Environment
-  effect, L253; `ters run --allow environment`). (Handlers for `Console`, `Files` and `Network` written in the
+  effect, L253, on every target; `ters run --allow environment`). (Handlers for `Console`, `Files` and `Network` written in the
   program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
   the type, and a record's field can be written `Float64 m/s` (L252);
