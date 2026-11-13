@@ -320,6 +320,30 @@ test("steps on lines, a match on a value, and otherwise are read as the view pri
   assert.doesNotMatch(two, /^\+.*□/m);
 });
 
+// An outsider's triples (I228): a function whose body is steps on the
+// lines after its `=>`. The steps bind, each one's name in the next, and
+// the time stays flat as steps are added (three took 55 s, then refused).
+test("a function's body on the lines after its => reads as steps there (I228)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "triples", kind: "value" });
+  const t0 = Date.now();
+  const triples = text("replace", { at: "triples", find: "□", text: "all(() =>\n  a = one of(range from(1, 21))\n  b = one of(range from(a + 1, 21))\n  c = one of(range from(b + 1, 21))\n  if a * a + b * b = c * c then [a, b, c] else fail())" });
+  assert.match(triples, /a#\w+ = ‹one of›\(‹range from›\(1, 21\)\)/);
+  assert.match(triples, /c#\w+ = ‹one of›\(‹range from›\(b \+ 1, 21\)\)/);
+  assert.match(triples, /: List \(List Int\)/);
+  assert.ok(Date.now() - t0 < 15000, `${Date.now() - t0} ms`);
+  // A function with inputs, its body on lines, inside a call that goes on after it.
+  text("define", { name: "sums", kind: "function", params: ["xs"] });
+  const sums = text("replace", { at: "sums", find: "□", text: "map(xs, (x) =>\n  y = x + 1\n  y * y)" });
+  assert.match(sums, /y#\w+ = x \+ 1/);
+  assert.doesNotMatch(sums, /^\+.*□/m);
+});
+
 // Round 14's rota wrote `Set (Tuple2 Text Int)` for the view's
 // `Set (Text, Int)`, and `(Text)` for a word after an argument in
 // parentheses (I217 M1).
