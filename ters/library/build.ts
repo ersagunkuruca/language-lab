@@ -5,24 +5,30 @@
 // prelude definition hashes the same as the published one, so it's replaced
 // by a reference to it (adopt). Running this again changes nothing.
 //   node library/build.ts
+//   node library/build.ts --check   writes nothing; fails if a module
+//                                   built now differs from the one kept
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { merge } from "../src/model.ts";
 import { prelude } from "../src/prelude.ts";
 import { std } from "../src/lang/std.ts";
-import { buildPrelude } from "../src/lang/prelude-source.ts";
-import { buildVectors } from "../src/lang/vectors-source.ts";
-import { buildHtml } from "../src/lang/html-source.ts";
-import { buildTreesModule } from "../src/lang/trees-source.ts";
-import { buildSteady } from "../src/lang/steady-source.ts";
-import { buildCases } from "../src/lang/cases-source.ts";
-import { buildNumbers } from "../src/lang/numbers-source.ts";
-import { addVersions, verify } from "../src/lang/modules.ts";
+import { addVersions } from "../src/lang/modules.ts";
+import { buildModules } from "./modules.ts";
 import { printSaved } from "../src/saved.ts";
 
 const here = import.meta.dirname;
-const save = (path: string, value: unknown) => writeFileSync(path, printSaved(value));
+// --check: build the modules, write nothing, and say which kept file a
+// rebuild would change (I244): a source changed without a rebuild (#2548's
+// first-arms.ts changed cases.json's ids). test/library-built.test.ts
+// asks the same.
+const check = process.argv.includes("--check");
+const differs: string[] = [];
+const save = (path: string, value: unknown) => {
+  const text = printSaved(value);
+  if (!check) writeFileSync(path, text);
+  else if (!existsSync(path) || readFileSync(path, "utf8") !== text) differs.push(basename(path));
+};
 
 // The published definitions before this build, by name: an example that
 // refers to one whose content changed is moved onto the new one below.
@@ -33,44 +39,20 @@ const before = (file: string): Record<string, string> => {
 };
 const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json"), ...before("steady.json"), ...before("cases.json"), ...before("numbers.json") };
 
-const m = buildPrelude();
-const wrong = verify(m, merge(prelude, std), true);
-if (wrong) throw new Error(`prelude: ${wrong}`);
-save(join(here, "prelude.json"), m);
-console.log(`prelude: ${m.code.defs.length} definitions, ${m.exports.length} offered, ${Object.keys(m.code.nodes).length} nodes`);
-const v = buildVectors();
-const vwrong = verify(v, merge(prelude, std), true);
-if (vwrong) throw new Error(`vectors: ${vwrong}`);
-save(join(here, "vectors.json"), v);
-console.log(`vectors: ${v.code.defs.length} definitions, ${v.exports.length} offered, ${Object.keys(v.code.nodes).length} nodes`);
-const h = buildHtml();
-const hwrong = verify(h, merge(prelude, std, m.code), true);
-if (hwrong) throw new Error(`html: ${hwrong}`);
-save(join(here, "html.json"), h);
-console.log(`html: ${h.code.defs.length} definitions, ${h.exports.length} offered, ${Object.keys(h.code.nodes).length} nodes`);
-
-const st = buildSteady();
-const stwrong = verify(st, merge(prelude, std), true);
-if (stwrong) throw new Error(`steady: ${stwrong}`);
-save(join(here, "steady.json"), st);
-console.log(`steady: ${st.code.defs.length} definitions, ${st.exports.length} offered, ${Object.keys(st.code.nodes).length} nodes`);
-const cs = buildCases();
-const cswrong = verify(cs, merge(prelude, std), true);
-if (cswrong) throw new Error(`cases: ${cswrong}`);
-save(join(here, "cases.json"), cs);
-console.log(`cases: ${cs.code.defs.length} definitions, ${cs.exports.length} offered, ${Object.keys(cs.code.nodes).length} nodes`);
-
-const nu = buildNumbers(m);
-const nuwrong = verify(nu, merge(prelude, std, m.code), true);
-if (nuwrong) throw new Error(`numbers: ${nuwrong}`);
-save(join(here, "numbers.json"), nu);
-console.log(`numbers: ${nu.code.defs.length} definitions, ${nu.exports.length} offered, ${Object.keys(nu.code.nodes).length} nodes`);
-
-const t = buildTreesModule(m);
-const twrong = verify(t, merge(prelude, std, m.code), true);
-if (twrong) throw new Error(`trees: ${twrong}`);
-save(join(here, "trees.json"), t);
-console.log(`trees: ${t.code.defs.length} definitions, ${t.representations!.length} representations, ${Object.keys(t.code.nodes).length} nodes`);
+const built = buildModules();
+const [m, v, h, st, cs, nu] = ["prelude", "vectors", "html", "steady", "cases", "numbers"].map((k) => built.find((b) => b.name === k)!.module);
+for (const b of built) {
+  save(join(here, `${b.name}.json`), b.module);
+  console.log(b.line);
+}
+if (check) {
+  if (differs.length) {
+    console.error(`library: a rebuild changes ${differs.join(", ")}: run node library/build.ts and commit what it writes`);
+    process.exit(1);
+  }
+  console.log("library: the kept modules are what the sources build");
+  process.exit(0);
+}
 
 // Definitions whose content changed: old id to new, by name.
 const newIds: Record<string, string> = {};
