@@ -63,7 +63,6 @@ New items land here until the next triage gives them a lane and a priority.
 | E258 | Cases that are values drawn as values (CONFUSING item 2): a zero-input frame (an if's then and else, a case with no fields) drawn as just its contents, with no `() =>` box, unless it's an action given to a handler like `first` or `all`. Example: `queens`'s nil, then and else with no frames | [CONFUSING.md](docs/design/CONFUSING.md) item 2, checked 2026-11-13 (E256) | P3 | M | |
 | E259 | Every output a dot (CONFUSING item 3): a node's output is the same dot a let has, so sharing a value is one more wire from it, not a gesture that makes a dot. Example: `queens` with its outputs as dots and nothing else changed | [CONFUSING.md](docs/design/CONFUSING.md) item 3, checked 2026-11-13 (E256) | P3 | M | |
 | E260 | One `for some` for a frame's unknowns (CONFUSING item 5): `rotate`'s `for some((length) => for some((angle) => …))` drawn as one frame with two unknowns, each a dot labelled some, instead of two nested frames and two nodes. A view: the tree is unchanged | [CONFUSING.md](docs/design/CONFUSING.md) item 5, checked 2026-11-13 (E256) | P3 | S | |
-| E261 | Effect row variables in words (CONFUSING item 7): a type shows `-[Choice, e]->` as `-[Choice, …]->` with "and the effects of f" on hover, so `newton`'s and Markov's `shown`'s types read without `e` | [CONFUSING.md](docs/design/CONFUSING.md) item 7, checked 2026-11-13 (E256) | P3 | S | |
 
 ### Speed of editing
 

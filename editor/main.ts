@@ -1056,7 +1056,8 @@ function textPanel(info: T.Info): string {
 
 // ---------------------------------------------------------------- typed programs
 
-const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style) } });
+// The blocks show a type's one effect-row variable as … (E261).
+const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style), rowDots: true } });
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
 // The same names object while the program, the definition and the names
 // are, so what is kept by the names (shown types, E200b) is kept.

@@ -100,7 +100,7 @@ a declared effect and `Abort`, built in the editor by clicks only.
 What's left is the three ways to say "no answer" (`Choice`, `Abort`,
 `Optional`); [tutorial 3.9](../learn/TUTORIAL.md#39-effects) gives the rule of thumb.
 
-### 7. The type syntax has a variable most people won't understand
+### 7. ~~The type syntax has a variable most people won't understand~~ (fixed 2026-11-13)
 
 **Today.** Types like `(List a, (a) -[e]-> b) -[e]-> List b` show `e`, a row
 variable meaning "whatever effects the function you pass has". `root near`'s
@@ -112,7 +112,14 @@ Float64`.
 
 **2026-11-13.** Still so: the blocks show `newton : ((Float64) -[Choice,
 Diverge, e]-> Float64, …) -[Choice, Diverge, e]-> Float64` and Markov's
-`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`. Row **E261**.
+`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`.
+
+**Fixed 2026-11-13 (E261).** The editor's blocks show a type's one row
+variable as `…`: `newton : ((Float64) -[Choice, Diverge, …]-> Float64, …)
+-[Choice, Diverge, …]-> Float64`, and hovering the type says "… is whatever
+f and slope do when called: the effects of the functions it's given". A type
+with two row variables keeps their names, since `…` would merge them. The
+CLI, the MCP and printed text keep `e`, where it is the exact type.
 
 ### 9. Small inconsistencies worth fixing
 
