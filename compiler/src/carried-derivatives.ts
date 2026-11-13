@@ -27,8 +27,9 @@ export interface Carried {
   code: Code;
   names: Names;
   info: Info;
-  // A lambda of the program → the lambda of its derivative.
-  derivativeOf: Map<Id, Id>;
+  // A lambda of the program → the lambda of its derivative, and the
+  // inputs of its definition standing for what the lambda captures.
+  derivativeOf: Map<Id, { lambda: Id; stand: Map<Id, Id> }>;
 }
 
 // A function type with its effects left out: a lambda that can't fail is
@@ -95,15 +96,14 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
   // that carried too, at the order asked: it is left without, and if its
   // closure is made where `derivative` may be asked of it, scalar.ts
   // lowers the evaluator's derive instead.
-  // Only one that captures nothing yet: a derivative over captures needs
-  // its definition to take them (a follow-up step of I245).
-  const captures = (lam: Id): boolean => {
+  // The binders a lambda captures: read inside, bound outside.
+  const captures = (lam: Id): Id[] => {
     const inside = new Set(subtree(code, lam));
-    return [...inside].some((x) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "binder" && !inside.has(n.target); });
+    return [...new Set([...inside].flatMap((x) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "binder" && !inside.has(n.target) ? [n.target] : []; }))];
   };
   const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
   const d = deriver(out, names, true), made: Names = {};
-  const derivativeOf = new Map<Id, Id>();
+  const derivativeOf: Carried["derivativeOf"] = new Map();
   // The lambdas the program reaches from its roots.
   const reached = new Set<Id>(), defs = new Set<Id>(), todo = [...roots];
   while (todo.length) {
@@ -120,18 +120,34 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
     const n = code.nodes[id] as NodeOf<"lambda">, p = parent.get(id);
     if (n.params.length !== 1 || !sigs.has(sig(type(id)))) continue;
     if (p && isCall(code.nodes[p]) && (code.nodes[p] as Call).fn === id) continue;
-    if (captures(id)) continue;
     const before = new Set(Object.keys(out.nodes));
     try {
       const dl = d.lambda(id, 0);
-      if (Object.keys(out.nodes).some((x) => !before.has(x) && derivativeCall(out, x))) continue;
-      // A definition of its own, so the checker types it.
+      const fresh = Object.keys(out.nodes).filter((x) => !before.has(x));
+      if (fresh.some((x) => derivativeCall(out, x))) continue;
+      // A definition of its own, so the checker types it: over what the
+      // lambda captures, as inputs of its own standing for them, when it
+      // captures something (`(c₁, …) => (x) => …`).
+      const caps = captures(id), stand = new Map(caps.map((b) => [b, freshId()]));
+      for (const [b, c] of stand) { out.nodes[c] = { id: c, kind: "binder" } as Node; if (names[b]) made[c] = names[b]; }
+      for (const x of fresh) {
+        const n = out.nodes[x];
+        if (n.kind === "ref" && stand.has(n.target)) out.nodes[x] = { ...n, target: stand.get(n.target)! };
+      }
+      // (A node of the lambda's own the derivative shares would still
+      // read the captured binder itself: then it is left without.)
+      if (subtree(out, dl).some((x) => { const n = out.nodes[x]; return n.kind === "ref" && stand.has(n.target); })) continue;
+      let body = dl;
+      if (caps.length) {
+        body = freshId();
+        out.nodes[body] = { id: body, kind: "lambda", params: caps.map((b) => stand.get(b)!), body: dl } as Node;
+      }
       const def = freshId();
-      out.nodes[def] = { id: def, kind: "def", body: dl } as Node;
+      out.nodes[def] = { id: def, kind: "def", body } as Node;
       out.defs.push(def);
       const of = parent.get(id), named = of && code.nodes[of]?.kind === "def" ? names[of] : undefined;
       if (named) made[def] = `${named}′`;
-      derivativeOf.set(id, dl);
+      derivativeOf.set(id, { lambda: dl, stand });
     } catch { /* left without one too */ }
   }
   out.defs.push(...d.defs);
@@ -139,5 +155,13 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
   const all = { ...names, ...d.names, ...made };
   const checked = infer(out, all);
   if (checked.errors.length > info.errors.length) return null;
+  // What a captured value stands for must be known there: a type the
+  // definition leaves open (generic) is left without (scalar.ts lowers
+  // the evaluator's derive where one is asked of it).
+  const open = (t: Type): boolean => t.t === "var" || (t.t === "con" ? t.args.some(open) : t.params.some(open) || open(t.ret));
+  for (const [id, c] of derivativeOf) {
+    if ([...c.stand.values()].some((b) => open(checked.subst.zonk(checked.typeOf.get(b) ?? { t: "var", v: -1 })))) derivativeOf.delete(id);
+  }
+  if (!derivativeOf.size) return null;
   return { code: out, names: all, info: checked, derivativeOf };
 }

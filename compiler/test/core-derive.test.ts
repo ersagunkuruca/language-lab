@@ -47,8 +47,7 @@ test("derivative and gradient of a function value, and a second derivative, as t
 // A first derivative of a function chosen at run time (I245): the
 // function carries it, made ahead, so the printed program has no
 // evaluator and no nodes, and newton's slope, handed on to newton again,
-// is still only applied. A lambda that captures something isn't carried
-// yet: there the evaluator's derivative stays.
+// is still only applied.
 test("a function chosen at run time carries its derivative (I245)", () => {
   const k = new Lang();
   const cube = k.def("cube"), wave = k.def("wave"), pick = k.def("pick"), newton = k.def("newton"), root = k.def("root"), at = k.def("at");
@@ -72,16 +71,37 @@ test("a function chosen at run time carries its derivative (I245)", () => {
   for (const [n, x] of [[0, 2], [1, 2], [0, -1.5], [1, 0.5]]) assert.equal(f(n, x), ev(n, x), `at ${n}, ${x}`);
 });
 
-test("a lambda that captures, chosen at run time: the evaluator's derivative still (I245)", () => {
+test("a lambda that captures, chosen at run time, carries its derivative over its captures (I245)", () => {
   const k = new Lang();
   const scaled = k.def("scaled"), at = k.def("at");
-  k.define(scaled, k.fn(["a"], (a) => k.fn(["y"], (y) => k.call(B.mul, a, k.call(B.mul, y, y)))));
+  k.define(scaled, k.fn(["a"], (a) => k.fn(["y"], (y) => k.call(B.mul, a, k.call(B.mul, y, k.call(B.sin, y))))));
   k.define(at, k.fn(["a", "x"], (a, x) => k.call(k.call(S.derivative, k.call(scaled, a)), x)));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(code, info, { print: () => {}, names });
   const core = lowerCore(code, info, names, [at]);
+  const js = emitCoreJs(core).js;
+  assert.doesNotMatch(js, /R\.rt\("derive:/);
+  assert.doesNotMatch(js, /"lambda":/);
+  const f = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === at && !g.inner)];
+  for (const [a, x] of [[2, 3], [-1, 0.5], [0.25, -2]]) { let want; for (const v of r.call(r.value(at), a, x)) { want = v; break; } assert.equal(f(a, x), want, `at ${a}, ${x}`); }
+});
+
+// A lambda whose derivative asks for another's (of the function it
+// captured) would need that carried at its order too: the evaluator's
+// derivative stays, with the closures saying what they are.
+test("a derivative that asks for another: the evaluator's derivative still (I245)", () => {
+  const k = new Lang();
+  const cube = k.def("cube"), twice = k.def("twice"), at = k.def("at");
+  k.define(cube, k.fn(["x"], (x) => k.call(B.mul, x, k.call(B.mul, x, x))));
+  k.define(twice, k.fn(["h"], (h) => k.fn(["y"], (y) => k.call(B.mul, k.lit(2), k.call(h, y)))));
+  k.define(at, k.fn(["x"], (x) => k.call(k.call(S.derivative, k.call(twice, cube)), x)));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const core = lowerCore(code, info, names, [at]);
+  assert.deepEqual([...core.refused.entries()], []);
   assert.match(emitCoreJs(core).js, /R\.rt\("derive:/);
   const f = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === at && !g.inner)];
-  for (const [a, x] of [[2, 3], [-1, 0.5]]) { let want; for (const v of r.call(r.value(at), a, x)) { want = v; break; } assert.equal(f(a, x), want); }
+  for (const x of [2, 0.5, -1]) { let want; for (const v of r.call(r.value(at), x)) { want = v; break; } assert.equal(f(x), want, `at ${x}`); }
 });
