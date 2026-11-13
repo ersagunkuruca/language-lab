@@ -139,8 +139,39 @@ The palette sorts what fits into groups:
 - **calls**: functions, each with a hole for every input
 - **constructors** and **literals**
 
-You can also type a value, like `3`, `"hi"` or `[1, 2]`, or a short sum,
-like `x + 1`.
+You can also type a value, like `3`, `"hi"` or `[1, 2]`, or a whole
+expression, like `if x < 0 then −x else x`. What you can type is in
+**Text you can type**, below. Press Enter to put it in.
+
+### Text you can type
+
+The palette's search box, **Replace with…** and the MCP's `replace` read
+the same text: what the Blocks view prints, plus the keyboard's way of
+writing a few signs. Anything the Blocks view shows can be typed back.
+
+| to write | type | the view shows |
+|---|---|---|
+| numbers | `3`, `-2`, `1.5`, `1.0` (a point makes a Float64), `1/2` where a Rational goes | the same |
+| text | `"hi"`, with `\"` for a quote inside | `"hi"` |
+| lists | `[1, 2, 3]`, `[]` or `nil` | the same; an empty list as `nil` |
+| a case | `some(3)`, `nil`, `true`, `circle(2)`, `cons(x, rest)` | `[x, …rest]` for a list |
+| arithmetic | `+`, `-`, `*`, `/`, `^`, `√x` or `sqrt(x)` | `+ − · / ^ √` |
+| comparing | `=` (one sign: equality), `!=` or `≠`, `<`, `<=`, `>`, `>=` | `= ≠ < ≤ > ≥`; `≠` as `not (a = b)` |
+| logic | `and`, `or`, `not (…)` | the same |
+| joining texts | `"a" ++ b` | the same |
+| a choice | `if c then a else b` | the same |
+| a call | `length(xs)`, `mod(x, 2)` | the same |
+| a name with spaces | `‹two dice›()`, `‹item at›(xs, 0, 1)` | the same, with ‹ › |
+| a field | `p.x`, `z.re` | the same |
+| a function | `(x) => x + 1`, `(a, b) => a + b`, `() => one of(xs)` | given to `all`, `first`, `count` without `() =>`: `all(one of(xs))` |
+| a fallback | `first(f(x), else 0)` | the same; `first(…, () => 0)` reads too |
+| steps | one per line, `a = x + 1` then `a · 2`; or on one line with `;` | one per line |
+| a hole to fill later | `□` | `□` |
+
+Some things other languages write aren't Ters, and the palette says what
+to write instead: `==` (write `=`), `&&` (`and`), `||` (`or`), `!x` (`not
+x`). A `match` or `fold` isn't read from text: the palette's **case
+analysis** rows make one.
 
 **Undo**, in the top bar, takes back any edit, one step at a time.
 

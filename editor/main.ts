@@ -2290,6 +2290,15 @@ function draw() {
   // only changes the selection leaves the text where it was.
   const scroll = SCROLLERS.map((q) => [...document.querySelectorAll(q)].map((g) => [g.scrollLeft, g.scrollTop]));
   const focused = document.activeElement?.id;
+  // What's typed in a field and not yet put in (a new definition's name,
+  // a comment), kept across a redraw that builds the field again from the
+  // same value: a redraw that came on its own soon after the page loaded
+  // emptied the New form's fields (I219: the Nightly's editKeepsPlaces).
+  // A field built from another value now (what was typed was put in, or
+  // something else changed it) isn't touched. The palette's search keeps
+  // its own text (ui.query).
+  const typed = [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#app input[id][type=text], #app textarea[id]")]
+    .filter((e) => e.value !== e.defaultValue).map((e) => [e.id, e.value, e.defaultValue] as const);
   // A button that had the keyboard keeps it across the redraw, or hands it
   // to the one standing in for it: Run becomes Stop and back (E231c).
   const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
@@ -2327,6 +2336,10 @@ function draw() {
   const onPage = !errorsIn(info) && !holesIn(info) && !!pageMain(ownDefs(), info, pres().names);
   const status = h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note);
   const restore = () => {
+    for (const [id, value, was] of typed) {
+      const e = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (e && "defaultValue" in e && e.defaultValue === was && e.value === was) e.value = value;
+    }
     SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
     if (focused) document.getElementById(focused)?.focus();
     else if (act) {

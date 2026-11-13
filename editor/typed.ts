@@ -798,8 +798,8 @@ type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { l
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
 // + − × typed over Ints are Int's. Each also reads the way a keyboard
-// types it: <= for ≤, * for ·. (^ groups to the right, which this split
-// doesn't, so it isn't read yet.)
+// types it: <= for ≤, * for ·. (^ groups to the right: it is read on its
+// own, POWER below.)
 const KEYS: Record<string, string> = { "-": "−", "*": "·", "×": "·", "÷": "/", "<=": "≤", ">=": "≥" };
 const glyphs = (fixity: string) => {
   const by = new Map<string, { prec: number; ids: Id[] }>();
@@ -828,6 +828,9 @@ const OPS: [string, Id[]][][] = [...new Set([...INFIX.values()].map((g) => g.pre
   return [...level, ...keyed].sort((a, b) => b[0].length - a[0].length);
 });
 const NEGATE = glyphs("prefix").get("−")?.ids ?? [ARITH.neg];
+// a ^ b, as power prints (I232): it groups to the right, so it is split at
+// its first ^ (2 ^ 3 ^ 2 is 2 ^ 9), after a leading − (−x ^ 2 is −(x ^ 2)).
+const POWER = (Object.entries(blocksStyle.notation) as [Id, Notation][]).filter(([id, n]) => n.fixity === "infix" && n.glyph === "^" && !LIBRARY.hidden.has(id)).map(([id]) => id);
 // The other prefix glyphs but words, read as they print: √x and √(x + 1)
 // (E249).
 const PREFIX = [...glyphs("prefix")].filter(([g]) => g !== "−");
@@ -967,6 +970,24 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const alts = NEGATE.filter((id) => code.nodes[id]);
     if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
   }
+  {
+    let depth = 0, quoted = false;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (c === '"' && t[i - 1] !== "\\") quoted = !quoted;
+      if (quoted) continue;
+      if ("([".includes(c)) depth++;
+      else if (")]".includes(c)) depth--;
+      if (c !== "^" || depth !== 0) continue;
+      const left = t.slice(0, i).trim(), right = t.slice(i + 1).trim();
+      if (!left || !right) break;
+      const a = typedOut(left, code, names, scope), b = typedOut(right, code, names, scope);
+      const alts = POWER.filter((id) => code.nodes[id]);
+      if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
+      inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
+      break;
+    }
+  }
   for (const [glyph, g] of PREFIX) {
     if (!t.startsWith(glyph) || t.length === glyph.length) continue;
     const a = typedOut(t.slice(glyph.length), code, names, scope);
@@ -1072,10 +1093,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
 // scope first, then any definition or builtin, at most three, each at most
 // a third of the name's letters away (Levenshtein's distance, 1966, with
 // Damerau's swaps).
+// Only names nearer than the word is long: a one-letter `a` has no near
+// name, not "did you mean p, i?" (I229).
 function closest(word: string, among: Iterable<string>, scope: Map<string, Id>): string {
   const far = Math.max(1, Math.floor(word.length / 3));
   const pool = new Set(among);
-  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far);
+  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far && d < word.length);
   scored.sort((a, b) => a[1] - b[1] || +scope.has(b[0]) - +scope.has(a[0]));
   const near = scored.slice(0, 3).map(([n]) => n);
   return near.length ? `; did you mean ${near.join(", ")}?` : "";
