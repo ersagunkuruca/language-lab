@@ -644,7 +644,7 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // (library-reps.ts) may call the constructors they stand for.
   ({ code, info, names } = withInverses(code, info, names));
   const f = fusedProgram(code, info, names);
-  let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true });
+  let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
   // A linear function of a linear function, one matrix (linear-calls.ts, L44).
   if (!envSet("NO_LINEAR")) linearCalls(ir);
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
