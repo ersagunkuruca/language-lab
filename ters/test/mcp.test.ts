@@ -367,6 +367,29 @@ test("a step at the hole after the steps goes after them (I229)", async () => {
   assert.match(v, /: List \(List Int\)/);
 });
 
+// MCP.md's first program (I233): main, a name with spaces, a test and
+// its count, eval of a definition's name.
+test("MCP.md's first program runs as written (I233)", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "first");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  text("define", { name: "main", kind: "function" });
+  text("replace", { at: "main", find: "□", text: 'print("hello")' });
+  assert.match(text("run"), /^hello\nexit 0/);
+  text("define", { name: "word count", kind: "function", params: ["text"] });
+  text("replace", { at: "word count", find: "□", text: 'length(keep(split(text, " "), (w) => w ≠ ""))' });
+  text("define", { name: "counts", kind: "function" });
+  text("replace", { at: "counts", find: "□", text: 'expect(‹word count›("a b") = 2, "two words")' });
+  assert.equal(text("test"), "✓ counts (1 case)");
+  text("define", { name: "pairs", kind: "value" });
+  text("replace", { at: "pairs", find: "□", text: "all(() =>\n  a = one of(range from(1, 4))\n  b = one of(range from(a + 1, 4))\n  if a < b then [a, b] else fail())" });
+  assert.equal(text("eval", { text: "pairs" }), "= [[1, 2], [1, 3], [2, 3]] : List (List Int)");
+});
+
 // Round 14's rota wrote `Set (Tuple2 Text Int)` for the view's
 // `Set (Text, Int)`, and `(Text)` for a word after an argument in
 // parentheses (I217 M1).
