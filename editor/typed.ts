@@ -28,6 +28,7 @@ import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
+import { storedRows } from "../ters/src/lang/library-reps.ts";
 import { leftToWays, pickWays, waysIn } from "../ters/src/lang/ways.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
@@ -2685,11 +2686,12 @@ export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, n
 
 // How a data type is stored when main runs (REPRESENTATIONS.md step 3,
 // E159): the compiler's choice among the representations the program
-// writes for it, the cheapest for the jobs main uses, as `ters check`
+// writes for it and the library's for a type stored whole (std's Nat,
+// library-reps.ts storedRows), the cheapest for the jobs main uses, as `ters check`
 // says it. Shown, never chosen here. Null without a choice to show.
 export function storedAs(code: Code, info: Info, names: Names, own: Id[], type: Id, main: Id | null): { rep: string; jobs: string[] } | null {
   if (!main || info.errors.length) return null;
-  const reps = representationsIn(code, info, names, own).filter((r) => r.of === type);
+  const reps = storedRows(code, own, representationsIn(code, info, names, own)).filter((r) => r.of === type);
   if (reps.length < 2) return null;
   const c = choose(code, main, reps);
   return { rep: c.rep.name, jobs: c.jobs };
@@ -2701,7 +2703,7 @@ export function storedAll(code: Code, info: Info, names: Names, own: Id[], main:
   const out = new Map<Id, { rep: string; jobs: string[] }>();
   if (!main || info.errors.length) return out;
   const byType = new Map<Id, ReturnType<typeof representationsIn>>();
-  for (const r of representationsIn(code, info, names, own)) byType.set(r.of, [...(byType.get(r.of) ?? []), r]);
+  for (const r of storedRows(code, own, representationsIn(code, info, names, own))) byType.set(r.of, [...(byType.get(r.of) ?? []), r]);
   for (const [type, reps] of byType) if (reps.length >= 2) { const c = choose(code, main, reps); out.set(type, { rep: c.rep.name, jobs: c.jobs }); }
   return out;
 }

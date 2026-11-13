@@ -27,6 +27,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
+import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
@@ -814,8 +815,9 @@ switch (command) {
     // How main stores each type the program writes representations for:
     // the compiler's choice, never the program's (REPRESENTATIONS.md).
     const start = p.own.find((d) => p.names[d] === mainName);
-    if (start && !p.info.errors.length) for (const of of new Set(p.reps.map((r) => r.of))) {
-      const c = choose(p.code, start, p.reps.filter((r) => r.of === of));
+    const rows = storedRows(p.code, p.own, p.reps);
+    if (start && !p.info.errors.length) for (const of of new Set(rows.map((r) => r.of))) {
+      const c = choose(p.code, start, rows.filter((r) => r.of === of));
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;

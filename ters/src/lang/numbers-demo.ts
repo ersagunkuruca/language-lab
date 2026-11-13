@@ -10,6 +10,8 @@ import { relate, showTerm } from "./relate.ts";
 import { choose, represent, representationsIn } from "./represent.ts";
 import { renderBlocks } from "./render.ts";
 import { runMain } from "./run.ts";
+import { storedRows } from "./library-reps.ts";
+import { LIBRARY } from "./library.ts";
 
 const section = (title: string) => console.log(`\n${"=".repeat(72)}\n${title}\n${"=".repeat(72)}`);
 const indent = (s: string) => s.replace(/^/gm, "    ");
@@ -17,19 +19,22 @@ const dir = join(root, "examples/numbers");
 const p = loadProgram(dir);
 const names = p.pres.names;
 const info = infer(p.code, names);
-// Written in the program (REPRESENTATIONS.md, L108).
-const reps = representationsIn(p.code, info, names, p.own.defs);
-const show = (d: string, i = info, code = p.code) => console.log(indent(renderBlocks(code, p.pres, i, p.named(d))) + "\n");
+// binary is written in the program (REPRESENTATIONS.md, L108); unary and
+// int are std's, with Nat (L249).
+const reps = storedRows(p.code, p.own.defs, representationsIn(p.code, info, names, p.own.defs));
+// The program's definition by this name, or else std's (Nat, add, natural).
+const named = (d: string) => { try { return p.named(d); } catch { return Object.keys(LIBRARY.names).find((k) => LIBRARY.names[k] === d && LIBRARY.code.nodes[k]?.kind === "def" && k.startsWith("@"))!; } };
+const show = (d: string, i = info, code = p.code) => console.log(indent(renderBlocks(code, p.pres, i, named(d))) + "\n");
 const timed = (label: string, f: () => void) => { const t = performance.now(); f(); console.log(`    (${label}: ${(performance.now() - t).toFixed(1)} ms)`); };
 const out = (s: string) => console.log("    > " + s);
 
-section("1. The program: Peano naturals, written the mathematical way");
+section("1. The program: Peano naturals, std's Nat, written the mathematical way");
 for (const d of ["Nat", "add", "multiply", "factorial", "is even"]) show(d);
 
 section("2. A representation: binary, with what it means");
 for (const d of ["Binary", "meaning", "add′", "match Nat′", "fold Nat′"]) show(d);
 
-section("2b. Another representation: an Int, with a fold that is a counted loop");
+section("2b. std's own representation: an Int, with a fold that is a counted loop");
 for (const d of ["natural", "match Nat (Int)", "fold Nat (Int)"]) show(d);
 
 section("3. Choosing: the costs of the jobs main uses");
@@ -43,16 +48,19 @@ console.log(`\n    chosen: ${c.rep.name}`);
 section("4. Running the same program both ways");
 console.log("  small, in unary (the definition):");
 timed("unary", () => runMain(p.code, info, p.named("small"), { print: out }));
-const bin = represent(p.code, [p.named("main"), p.named("small")], reps.find((r) => r.name === "binary")!);
+// The rows' own definitions left out, as cli/represented.ts does.
+const leftOut = (code: typeof p.code) => ({ ...code, defs: code.defs.filter((d) => !reps.some((r) => r.def === d)) });
+const bin = leftOut(represent(p.code, [p.named("main"), p.named("small")], reps.find((r) => r.name === "binary")!));
 const bi = infer(bin, names);
 console.log("\n  small, in binary:");
 timed("binary", () => runMain(bin, bi, p.named("small"), { print: out }));
 console.log("\n  main, in binary (unary would need 6.4 quadrillion succ nodes for 18!):");
 timed("binary", () => runMain(bin, bi, p.named("main"), { print: out }));
 console.log(`\n  main, as the chooser picked (${c.rep.name}):`);
-const ch = represent(p.code, [p.named("main"), p.named("small")], c.rep);
+const ch = leftOut(represent(p.code, [p.named("main"), p.named("small")], c.rep));
 const ci = infer(ch, names);
 timed(c.rep.name, () => runMain(ch, ci, p.named("main"), { print: out }));
+timed(c.rep.name + ", run again (the first run includes the evaluator setting up)", () => runMain(ch, ci, p.named("main"), { print: () => {} }));
 console.log("\n  factorial, after the change of representation to binary (the same nodes, new types):");
 show("factorial", bi, bin);
 
