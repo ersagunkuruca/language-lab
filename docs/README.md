@@ -31,7 +31,7 @@ updated; their findings are rows in the backlog.
 | [README.md](../README.md) | The repository: folders, the goal, planning, credits | current |
 | [LEARN.md](learn/LEARN.md) | The front page that picks a level ([learn.html](https://ersagunkuruca.github.io/language-lab/learn.html)) | current |
 | [GUIDE.md](learn/GUIDE.md) | A hands-on tour of the editor, doing real edits on the dice program ([guide.html](https://ersagunkuruca.github.io/language-lab/guide.html)) | current |
-| [TUTORIAL.md](learn/TUTORIAL.md) | The whole language, from a five-year-old's view to effects ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current, except a few editor details (its opening note lists them) |
+| [TUTORIAL.md](learn/TUTORIAL.md) | The whole language, from a five-year-old's view to effects ([tutorial.html](https://ersagunkuruca.github.io/language-lab/tutorial.html)) | current |
 | [RUNNING.md](learn/RUNNING.md) | What happens when you press Run, and every other way a program runs | current |
 | [ters/README.md](../ters/README.md) | The prototype: the program is the tree; layout of `ters/`, commands | current |
 

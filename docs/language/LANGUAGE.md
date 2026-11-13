@@ -165,8 +165,8 @@ a page's view writing a cell, is a type error, not a surprise at run time.
   is given the rest of the program as an ordinary function, to resume once
   (now, or later) or drop. That's how waiting is written: a generator, a
   page waiting for a reply, two tasks taking turns. It runs in the
-  evaluator; compiled JavaScript doesn't run it yet. ("Effects you define",
-  ANSWERED-LATER.md.)
+  evaluator and in compiled JavaScript (C40, since 2026-11-04). ("Effects
+  you define", ANSWERED-LATER.md.)
 - **LIBRARY.md**: every definition the library offers, with a plain note.
 
 ## Short answers
@@ -1404,11 +1404,15 @@ mechanism covers:
 or a folder of side tables like `examples/wc`:
 
 ```
-node cli/ters.ts run examples/wc notes.txt todo.txt     # the evaluator
+node cli/ters.ts run examples/wc notes.txt todo.txt     # compiled (--evaluator: the evaluator)
 node cli/ters.ts compile examples/wc -o wc.mjs          # a JavaScript module
 node wc.mjs -l notes.txt                               # same output, same exit code
 node cli/ters.ts check examples/wc                      # errors, and each definition's type
 ```
+
+`node cli/ters.ts` with no command lists the rest: native and WASI
+programs, pages and phone apps, tests, `diff` and `git-setup`, `mcp`, and
+publishing modules (RUNNING.md has the examples).
 
 `examples/wc` is the proof: a word count written in the language, after
 Unix `wc` (Version 1 AT&T Unix, 1971; the options and layout follow GNU
@@ -1872,7 +1876,9 @@ definitions it uses and where they were found ("map from prelude"), and
 `signatures`, its own pins. `needs` is not an import list: the refs are
 the imports, and opening a file only uses `needs` to say what's missing
 ("it uses length from prelude, which isn't in any module loaded here").
-Version 1 files open unchanged.
+Version 1 files open unchanged. Like an example's folder, the file is
+written as canonical JSON, one node per line, with each number literal as
+its digits (`src/saved.ts`, SAVED-FORMAT.md).
 
 The compiler compiles a program together with the modules it uses, into
 one file. Identity is by hash, so a definition that two modules share is
@@ -2028,17 +2034,18 @@ back into the group being hashed is named by its position.
 
 - **Numbers.** Built: Int of any size, Float64, fractions, complex and
   dual numbers, exact algebraic numbers, Fixed, Clifford tables and
-  rotors, one `+ − · <` for all of them through interfaces, and ways
-  picked by cost. Left: matrices on the GPU, grade inference, tensors and
-  lazy exact reals; the plan is [NUMBERS.md](../design/numbers/NUMBERS.md) and BACKLOG.md
-  lane L.
+  rotors, grades as types, matrices of any size, tensors, exact reals
+  (`Real`), one `+ − · <` for all of them through interfaces, ways picked
+  by cost, and embeddings between them. Left: costs worked out rather than
+  declared; the plan is [NUMBERS.md](../design/numbers/NUMBERS.md),
+  "Where this stands".
 - **The editor.** `fillings()`, `fillHole()` and `addVariant()` are the API
   for a palette, a "match on…" gesture and an "add a case" gesture. The
   editor thread owns `editor/` and has the node shapes.
 - **More of the world.** Time, randomness and HTTP GET are done (see
-  "Random", "Time", "The web"), and `ters compile` bundles the runtime into
-  one portable file. Still missing: environment variables and HTTP beyond
-  GET. (Handlers for `Console`, `Files` and `Network` written in the
+  "Random", "Time", "The web"), any HTTP request (`send request`), and
+  `ters compile` bundles the runtime into one portable file. Still
+  missing: environment variables. (Handlers for `Console`, `Files` and `Network` written in the
   program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Float64 m/s`) and

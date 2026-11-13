@@ -118,7 +118,10 @@ forward shows the rounding: `polar(0, 2, 2, π/2)` is false, since
 
 3.1. **Int** is a whole number of any size. No Int operation overflows.
 `quotient` rounds down and `remainder` has the divisor's sign; both have
-no answer (§5) when the divisor is 0.
+no answer (§5) when the divisor is 0. Where the checker shows the divisor
+isn't 0 (a literal such as `remainder(n, 3)`, or the `else` of
+`if d = 0`), the call has no Choice in its type, as Float64's `/` (I234,
+L125b).
 
 3.2. **Float64** is the finite IEEE 754 binary64 numbers with **one
 zero**. −0, the infinities and NaN are not values. Each operation gives
