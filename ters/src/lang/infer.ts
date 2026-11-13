@@ -2290,7 +2290,7 @@ function kids(n: Node): Id[] {
 }
 
 // Tarjan's algorithm. Returns groups with dependencies before dependents.
-function sccs(ids: Id[], deps: (id: Id) => Id[]): Id[][] {
+export function sccs(ids: Id[], deps: (id: Id) => Id[]): Id[][] {
   const index = new Map<Id, number>(), low = new Map<Id, number>(), on = new Set<Id>();
   const stack: Id[] = [], out: Id[][] = [];
   const set = new Set(ids);
@@ -2508,7 +2508,7 @@ function appliesTo(code: Code, c: Id): Applies {
 
 // `lambdaOf`: the function each member is, a definition's body by default
 // (a recursive let's binder names its lambda).
-function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }, isInt?: (param: Id) => boolean): boolean {
+export function terminates(code: Code, group: Id[], lambdaOf = (d: Id) => { const body = (code.nodes[d] as NodeOf<"def">).body; return body ? code.nodes[body] : null; }, isInt?: (param: Id) => boolean): boolean {
   // By pieces first; then by spines, which follows a list through a
   // function's result (spine.ts, I84).
   return byPieces(code, group, lambdaOf, isInt) || spineTerminates(code, group, lambdaOf);
