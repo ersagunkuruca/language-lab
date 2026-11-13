@@ -769,6 +769,16 @@ async function pagePreview() {
   if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: after another program and back the page says ${await status()}`);
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after another program and back: the page says ${await status()}`);
+  // Paused, a step back, and on again: the compiled page (the site's
+  // prebuilt one) takes over from the step with its rolls (I253).
+  await p.locator(".page-steps button", { hasText: /^Pause$/ }).click();
+  await p.locator(".page-steps button", { hasText: "Back" }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: Pause offered no step back`));
+  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: a step back from 103 rolls shows ${await status()}`);
+  await p.locator(".page-steps button", { hasText: "Go on from here" }).click({ timeout: 2000 }).catch(() => {});
+  await p.waitForTimeout(200);
+  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: going on from 102 rolls shows ${await status()}`);
+  await f.locator("#roll").click();
+  if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after going on: the page says ${await status()}`);
   // What's typed in a page's field is said too (BACKLOG E76).
   await p.locator('[data-set="program"]', { hasText: "Page: unit converter" }).click();
   const field = f.locator("input").first();
