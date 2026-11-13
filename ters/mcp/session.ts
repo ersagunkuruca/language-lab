@@ -31,6 +31,7 @@ import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
 import { onTodaysIds, S, SIGS, TRUE } from "../src/lang/std.ts";
+import { printSaved } from "../src/saved.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
@@ -103,7 +104,7 @@ export class Session {
       writeFileSync(this.path, toFile({ ...this.file, code: this.code, names: this.names, comments: this.comments, signatures: this.pins }, LIBRARY.code));
       return;
     }
-    const json = (x: unknown) => JSON.stringify(x, null, 2) + "\n";
+    const json = (x: unknown) => printSaved(x);
     writeFileSync(join(this.path, "code.json"), json(mine));
     writeFileSync(join(this.path, "names.default.json"), json(this.names));
     if (Object.keys(this.comments).length || existsSync(join(this.path, "comments.json"))) writeFileSync(join(this.path, "comments.json"), json(this.comments));
