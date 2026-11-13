@@ -91,6 +91,8 @@ test("the table's add, sub and neg are directions of one sum", async () => {
   assert.deepEqual(Object.keys(BALANCE_DIRECTIONS), ['add', 'sub', 'neg']);
   assert.deepEqual([FN.add.eval(5, 2), FN.sub.eval(5, 2), FN.neg.eval(5)], [7, 3, -5]);
   assert.deepEqual([FN.add.eval.length, FN.sub.eval.length, FN.neg.eval.length], [2, 2, 1]);
+  // Negate is IEEE negation: −0 from 0, where 0 − 0 is +0.
+  assert.ok(Object.is(FN.neg.eval(0), -0) && Object.is(FN.sub.eval(0, 0), 0));
   const inv = (op) => FN[op].inv.map((f) => show(f(v('y'), [v('a'), v('b')])[0].expr));
   assert.deepEqual([inv('add'), inv('sub'), inv('neg')], [['y − b', 'y − a'], ['y + b', 'a − y'], ['−y']]);
   const d = (op) => FN[op].d.map((f) => f([v('a'), v('b')]).v);

@@ -73,8 +73,10 @@ function direction({ out, ins, fixed }) {
   const ports = (args, y) => ({ ...Object.fromEntries(Object.entries(fixed).map(([p, x]) => [p, num(x)])), ...Object.fromEntries(ins.map((p, i) => [p, args[i]])), [out]: y });
   return {
     // Its arity is its inputs' count (prelude.ts reads eval.length).
+    // With a total held at 0, the direction is −x itself, IEEE negation:
+    // 0 − 0 is +0 where negate gives −0.
     eval: ins.length === 1
-      ? (x) => SOLVE[out].eval({ ...fixed, [ins[0]]: x })
+      ? (out === 'b' && fixed.total === 0 ? (x) => -x : (x) => SOLVE[out].eval({ ...fixed, [ins[0]]: x }))
       : (x, y) => SOLVE[out].eval({ ...fixed, [ins[0]]: x, [ins[1]]: y }),
     // Input i, given the result y and the other inputs: the balance solved for its port.
     inv: ins.map((p, i) => (y, args) => [branch(minus(SOLVE[p].expr(ports(args.map((x, j) => (j === i ? undefined : x)), y))))]),
