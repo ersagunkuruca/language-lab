@@ -1,10 +1,11 @@
 // What a built-in is, so nothing in a graph is a black box. A built-in like
-// + is a relation: one equation between its ports, which the solver can run
+// + is a relation: one equation between its ports (+, − and negate the
+// same sum, a + b = total, each read for another port), which the solver can run
 // in any direction it determines. Selecting a node that uses one shows the
 // equation and each direction it can run.
 
-import { analyze, defineRelation, directions, showEq } from "../invertible/src/index.js";
-import { call, v } from "../invertible/src/expr.js";
+import { analyze, directions, showEq } from "../invertible/src/index.js";
+import { builtinRelation } from "../ters/src/lang/equations.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import { isCall, isUse, useTarget } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
@@ -38,7 +39,8 @@ export function definitionOf(code: Code, fn: Id): Definition | null {
       // Name the ports the way the graph shows them.
       const f = impl[op as keyof typeof impl];
       const args = f.length === 1 ? ["x"] : ["a", "b"].slice(0, f.length);
-      rel = (defineRelation as unknown as (s: object) => Rel)({ name: op, ports: [...args, "result"], eqs: [{ lhs: v("result"), rhs: call(op, ...args.map((a) => v(a))) }] });
+      // +, − and negate show the one sum they are directions of (L244).
+      rel = builtinRelation(op, [...args, "result"]) as unknown as Rel;
     } else return null;
     const ways = (directions as unknown as (r: Rel) => string[][])(rel).map((given) => {
       const a = (analyze as unknown as (r: Rel, k: string[]) => { steps: { kind: string; text: string; raw: { branches?: unknown[] } }[] })(rel, given);

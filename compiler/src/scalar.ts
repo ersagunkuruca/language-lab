@@ -755,7 +755,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // its derivative, made ahead here (carried-derivatives.ts, I245).
   const carried = opts.host && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
   if (carried) ({ code, names, info } = carried);
-  const derivativeOf = carried?.derivativeOf ?? new Map<Id, Id>();
+  const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives
   // made (which carry none: no derivative of one is asked, carried-
   // derivatives.ts made sure).
@@ -3747,13 +3747,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // type t, its captures `free` in shapes[shape]), the closure of its
   // derivative's lambda over the same captures. Its code is made as any
   // lambda's, and carries no derivative of its own.
-  function maker(dl: Id, t: FType, shape: number, free: Id[], caps: LType[], name: string): number | undefined {
-    const dt = stype(zonk(dl));
+  function maker(of: { lambda: Id; stand: Map<Id, Id> }, t: FType, shape: number, free: Id[], caps: LType[], name: string): number | undefined {
+    const dl = of.lambda, dt = stype(zonk(dl));
     if (!dt || !isFn(dt)) return undefined;
     const m: SFunc = { def: dl, name: `${name}.derivative`, params: [t], result: dt, locals: [t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const mi = funcs.push(m) - 1;
     const env = new Map<Id, number>();
-    const lets = free.map((b, j) => { const i = m.locals.push(caps[j]) - 1; env.set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
+    // What the lambda captured, read off the closure, is what the
+    // derivative's own inputs standing for it are.
+    const lets = free.map((b, j) => { const i = m.locals.push(caps[j]) - 1; env.set(of.stand.get(b) ?? b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
     const c = lambda(code.nodes[dl] as NodeOf<"lambda">, dt, env, m);
     if (c.k === "closure") derivedCode.add(c.fn);
     m.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), c);
