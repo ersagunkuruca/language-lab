@@ -1249,6 +1249,23 @@ static double lab_world_zoneOffset(lab_cell *zone, double at) {
   free(z);
   return r;
 }` },
+  // An environment variable (L253): getenv's value, NFC, or none.
+  "world.environmentVariable": {
+    uses: ["world.fail", "world.nfc", "world.log"],
+    c: (o) => `static lab_cell *lab_world_environmentVariable(lab_cell *name) {
+  int L = lab__log_begin("environmentVariable");
+  if (L) lab__log_text(name);
+  char *n = lab__cstr(name);
+  const char *v = getenv(n);
+  free(n);
+  lab_drop(name);
+  if (!v) { if (L) { lab__log_answer(); lab__log_raw("null"); lab__log_close(); } return &${o.nil}; }
+  ${o.cons} *r = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag});
+  r->f${o.head} = lab__nfc(lab__text_of(v, strlen(v)));
+  if (L) { lab__log_answer(); lab__log_text(r->f${o.head}); lab__log_close(); }
+  return (lab_cell *)r;
+}`,
+  },
   "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { int L = lab__log_begin("fileExists"); if (L) lab__log_text(path); char *p = lab__cstr(path); int r = lab__kind(p) != 0; free(p); if (L) { lab__log_answer(); lab__log_raw(r ? "true" : "false"); lab__log_close(); } lab_drop(path); return r; }` },
   // A folder's names, sorted as JavaScript sorts texts: by UTF-16 units,
   // so a character past U+FFFF comes before U+E000 to U+FFFF.

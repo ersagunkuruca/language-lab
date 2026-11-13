@@ -911,7 +911,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e) || (!!opts.cells && !opts.host && (e === VIEW_ROW || e === HANDLER_ROW || e === SOUND_ROW));
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || e === ENVIRONMENT || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -1699,7 +1699,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if ((opts.host || opts.handlers) && target === ASK_PERMISSION_OP) return { k: "world", op: "askPermission", aborts: false, args: args(), t: "i32" };
         // An environment variable (L253): the world's, as the evaluator
         // answers it, an Optional Text.
-        if (opts.host && target === ENV_OP) {
+        if ((opts.host || opts.handlers) && target === ENV_OP) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", op: "environmentVariable", aborts: false, args: args(), t };

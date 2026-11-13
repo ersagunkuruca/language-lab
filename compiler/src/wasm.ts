@@ -1151,6 +1151,8 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     writeFile: (p: unknown, t: unknown) => unit(() => w("writeFile")(text(p), text(t))),
     appendFile: (p: unknown, t: unknown) => unit(() => w("appendFile")(text(p), text(t))),
     fileExists: (p: unknown) => (w("fileExists")(text(p)) ? 1 : 0),
+    // An environment variable (L253), as run.ts answers it.
+    environmentVariable: (n: unknown) => { const v = rt.world?.environmentVariable?.(text(n)) ?? null, ex = exports(); return v === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(v.normalize("NFC"))); },
     // A zone's offset (L188): the host's Intl, NaN for a zone it doesn't know.
     zoneOffset: (z: unknown, s: number) => zoneOffset(text(z), s)[0] ?? NaN,
     listFolder: (p: unknown) => tried(() => textList(exports(), w("listFolder")(text(p)))),
