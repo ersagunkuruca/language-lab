@@ -84,7 +84,7 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 | `run(entry?, args?, input?)` | run main (or an action, a value, a page); output and exit code |
 | `test()` | definitions that perform Check, and accepted answers |
 | `eval(text)` | the value of an expression, with its type |
-| `replace(at, text, find?, case?)` | a part becomes an expression written as `view` prints it; `□` makes a hole; `case` picks one case of a match |
+| `replace(at, text, find?, case?)` | a part becomes an expression written as `view` prints it, or as the keyboard writes it (GUIDE.md, "Text you can type": `=` for equality, `*` for `·`, `‹two words›` for a name with spaces, steps on lines); `□` makes a hole; `case` picks one case of a match |
 | `step(at, name, value)` | a step `name = value` just before the step a part is in: at a hole after `a = …`, after `a`, so steps are added top-down, each naming the ones before; at a definition, first in its body |
 | `split(at, on, find?)` | a part becomes a match on a variable, one case per variant |
 | `rename(at, name)`, `comment(at, text)` | side tables only; uses follow the id |

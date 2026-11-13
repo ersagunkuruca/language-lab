@@ -798,8 +798,8 @@ type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { l
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
 // + − × typed over Ints are Int's. Each also reads the way a keyboard
-// types it: <= for ≤, * for ·. (^ groups to the right, which this split
-// doesn't, so it isn't read yet.)
+// types it: <= for ≤, * for ·. (^ groups to the right: it is read on its
+// own, POWER below.)
 const KEYS: Record<string, string> = { "-": "−", "*": "·", "×": "·", "÷": "/", "<=": "≤", ">=": "≥" };
 const glyphs = (fixity: string) => {
   const by = new Map<string, { prec: number; ids: Id[] }>();
@@ -828,6 +828,9 @@ const OPS: [string, Id[]][][] = [...new Set([...INFIX.values()].map((g) => g.pre
   return [...level, ...keyed].sort((a, b) => b[0].length - a[0].length);
 });
 const NEGATE = glyphs("prefix").get("−")?.ids ?? [ARITH.neg];
+// a ^ b, as power prints (I232): it groups to the right, so it is split at
+// its first ^ (2 ^ 3 ^ 2 is 2 ^ 9), after a leading − (−x ^ 2 is −(x ^ 2)).
+const POWER = (Object.entries(blocksStyle.notation) as [Id, Notation][]).filter(([id, n]) => n.fixity === "infix" && n.glyph === "^" && !LIBRARY.hidden.has(id)).map(([id]) => id);
 // The other prefix glyphs but words, read as they print: √x and √(x + 1)
 // (E249).
 const PREFIX = [...glyphs("prefix")].filter(([g]) => g !== "−");
@@ -966,6 +969,24 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     const a = typedOut(neg[1], code, names, scope);
     const alts = NEGATE.filter((id) => code.nodes[id]);
     if (!("error" in a) && alts.length) return { op: alts[0], args: [a], alts };
+  }
+  {
+    let depth = 0, quoted = false;
+    for (let i = 0; i < t.length; i++) {
+      const c = t[i];
+      if (c === '"' && t[i - 1] !== "\\") quoted = !quoted;
+      if (quoted) continue;
+      if ("([".includes(c)) depth++;
+      else if (")]".includes(c)) depth--;
+      if (c !== "^" || depth !== 0) continue;
+      const left = t.slice(0, i).trim(), right = t.slice(i + 1).trim();
+      if (!left || !right) break;
+      const a = typedOut(left, code, names, scope), b = typedOut(right, code, names, scope);
+      const alts = POWER.filter((id) => code.nodes[id]);
+      if (!("error" in a) && !("error" in b) && alts.length) return { op: alts[0], args: [a, b], alts };
+      inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
+      break;
+    }
   }
   for (const [glyph, g] of PREFIX) {
     if (!t.startsWith(glyph) || t.length === glyph.length) continue;

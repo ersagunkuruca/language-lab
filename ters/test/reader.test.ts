@@ -674,3 +674,18 @@ test("typed text that doesn't read names the token and what Ters writes", () => 
   // Inside a string, == is text.
   assert.doesNotMatch(why(`show("a == b")`), /isn't Ters/);
 });
+
+// What the view prints reads back (I232): a ^ b, as power prints, groups to
+// the right, and a leading − takes the whole power.
+test("typed text reads a ^ b as power prints it", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, escape = p.named("escape");
+  const re = subtree(code, escape).map((x) => code.nodes[x]).find((n): n is Call => isCall(n) && code.nodes[n.fn]?.kind === "ref" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "re")!;
+  const open = replace(code, re.id, () => ({ kind: "hole" }));
+  const info = infer(open, names);
+  const shown = (t: string) => { const r = fillValue(open, names, info, re.id, t, escape); assert.ok(r.ok, r.ok ? "" : r.reason); return r.ok ? renderLet(r.code, { ...p.pres, names: r.names }, escape) : ""; };
+  assert.match(shown("z.re ^ 2"), /(?:z\.re|re\(z\)) \^ 2/);
+  assert.match(shown("(z.re + 1.0) ^ 2 + z.im"), /\((?:z\.re|re\(z\)) \+ 1(\.0)?\) \^ 2 \+ (?:z\.im|im\(z\))/);
+  assert.match(shown("-z.re ^ 2"), /−\((?:z\.re|re\(z\)) \^ 2\)|−(?:z\.re|re\(z\)) \^ 2/);
+  assert.match(shown("2.0 ^ 3.0 ^ 2.0"), /2(\.0)? \^ 3(\.0)? \^ 2(\.0)?/);
+});
