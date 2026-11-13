@@ -47,7 +47,7 @@ and after it `rotate` reads cleanly (each `for some` right of its frame).
 Ersagun has decided this several times (2026-11-01, again 2026-11-13: "Draw
 over neighbors"). Row E257 closed with it.
 
-### 2. Cases that are values are drawn as functions
+### 2. ~~Cases that are values are drawn as functions~~ (fixed 2026-11-13)
 
 **Today.** The `then` and `else` of an `if`, and every case with no fields
 (`nil`), are drawn inside `() =>` frames, because internally they run only
@@ -59,8 +59,13 @@ wire.
 unless it's a real action passed to a handler like `first` or `all`.
 
 **2026-11-13.** Still so: in `queens`, `nil`, the `then` (`cons(column,
-board)`) and the `else` (`fail()`) each sit in a `() =>` frame. Row
-**E258**.
+board)`) and the `else` (`fail()`) each sit in a `() =>` frame.
+
+**Fixed 2026-11-13 (E258).** A case with nothing to name is drawn as its
+value wired straight into its port: `queens`'s `nil`, `cons(column, board)`
+and `fail()` go into the fold's and the if's ports with no frames, and
+`magnitude`'s `else` is one wire from `x`. A case with fields, and an action
+given to a handler like `first` or `all`, keep their frames.
 
 ### 3. "Output" and "dot" are almost the same thing
 
