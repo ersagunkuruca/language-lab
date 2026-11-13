@@ -125,7 +125,8 @@ usage:
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore the program's representations and run the definitions as written
-  --allow <list>   ters run answers only these: network, files, fetch=host (the network for one host);
+  --allow <list>   ters run answers only these: network, files, environment (its variables),
+                   fetch=host (the network for one host);
                    without it a run reaches everything
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
