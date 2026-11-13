@@ -69,12 +69,18 @@ export class NotDifferentiable extends Error {}
 // a · (1/y) as a / y.
 // A record of Float64s has a derivative part by part: `rec` holds each
 // part's, and a `build` whose `variant` is set builds a whole record.
-type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E; variant?: Id; record?: true } | { k: "none" }
+// `tan` marks a tangent that isn't a Float64's slope (lenient mode, L245):
+// "data", the same data as the value with each Float64 its slope; "fn",
+// a function's, the slope of its result as what it captures moves; "any",
+// a tangent whose kind the code doesn't say (a case's field, a result).
+type Tan = "data" | "fn" | "any";
+type E = { k: "num"; v: number } | { k: "build"; build: () => Id; neg?: E; recip?: E; variant?: Id; record?: true; tan?: Tan } | { k: "none" }
   | { k: "rec"; variant: Id; parts: E[] };
 const numE = (v: number): E => ({ k: "num", v });
 const NONE: E = { k: "none" };
 const isNum = (e: E, v?: number) => e.k === "num" && (v === undefined || e.v === v);
 const variantOf = (e: E): Id | null => (e.k === "rec" ? e.variant : e.k === "build" ? e.variant ?? null : null);
+const tanOf = (e: E | undefined): Tan | undefined => (e?.k === "build" ? e.tan : undefined);
 
 interface Ctx {
   // binder → how to refer to it in the new code
@@ -406,19 +412,24 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
           if (head.target === S.floor || head.target === S.mod) return cant(`${names[head.target] ?? head.target} jumps, so it has no slope where it does`);
           if (head.target === S.mapParts || head.target === S.zipParts || head.target === S.total) return partsD(n, head.target, ctx);
           if (t.kind === "variant") {
-            if (!record(head.target)) return cant("data with several cases has no derivative");
+            if (!record(head.target)) return lenient ? dataD(n, ctx) : cant("data with several cases has no derivative");
             const parts = n.args.map((a) => D(a, ctx));
             return parts.every((p) => isNum(p, 0)) ? numE(0) : { k: "rec", variant: head.target, parts };
           }
+          // A written list of what moves: the list of their tangents.
+          if (head.target === S.listOf && lenient) return dataD(n, ctx);
           if (t.kind === "field") return partOf(D(n.args[0], ctx), head.target);
           if (t.kind === "def" && t.body && nodes[t.body].kind === "lambda") return defD(n, head.target, ctx);
-          if (t.kind === "binder") return unknownD(n, ctx);
+          // A function given a tangent (a lambda that captures what moves, L245)
+          // is applied to it; one with a Float64's slope is a number's.
+          if (t.kind === "binder") return lenient && tanOf(ctx.d.get(head.target)) ? appliedD(n, ctx) : unknownD(n, ctx);
           return cant(`the derivative goes through ${names[head.target] ?? head.target}, which isn't arithmetic`);
         }
         return unknownD(n, ctx);
       }
       case "match": return matchD(n, ctx);
       case "fold": return foldD(n, ctx);
+      case "lambda": return lenient ? lambdaD(n, ctx) : cant("can't differentiate through a lambda");
       default: return cant(`can't differentiate through a ${n.kind}`);
     }
   }
@@ -495,6 +506,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   function defD(n: Call, def: Id, ctx: Ctx): E {
     const args = n.args;
     const ds = args.map((a) => D(a, ctx));
+    if (ds.some(tanOf)) return jvpCall(n, def, ds, ctx);
     if (ds.some(variantOf) || shapeOf(n.id, ctx)) {
       if (inlining.has(def)) return cant(`${nm(def)} calls itself with a record, which isn't differentiated yet`);
       inlining.add(def);
@@ -529,7 +541,13 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     if (n.args.length !== 1) return cant("only functions of one number can be differentiated at run time");
     if (depends(n.fn, new Set(ctx.d.keys()))) return cant("the function being called depends on the variable itself");
     const du = D(n.args[0], ctx);
-    if (variantOf(du)) return cant("only functions of one number can be differentiated at run time");
+    // A function of a record (a model of its parameters, chosen when it
+    // runs, round 15): its gradient there, part by part times the
+    // record's tangent, summed.
+    if (variantOf(du)) {
+      if (!lenient) return cant("only functions of one number can be differentiated at run time");
+      return { k: "build", build: () => callN(ref(S.total), callN(ref(S.zipParts), ref(BUILTIN.mul), callN(callN(ref(S.gradient), copy(n.fn, ctx)), copy(n.args[0], ctx)), place(du))) };
+    }
     const at: E = { k: "build", build: () => callN(callN(ref(S.derivative), copy(n.fn, ctx)), copy(n.args[0], ctx)) };
     return op("mul", at, du);
   }
@@ -541,6 +559,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
     let ds: E = numE(0);
     if (depends(n.scrutinee, new Set(ctx.d.keys())) && arms.some((a) => a.binds.length)) {
       ds = D(n.scrutinee, ctx);
+      if (lenient && !variantOf(ds) && !isNum(ds, 0)) return movingMatchD(n, ctx, ds);
       if (arms.length !== 1 || n.otherwise || !(isNum(ds, 0) || variantOf(ds))) return cant("this case analysis takes apart data built from the variable");
     }
     const each = arms.map((arm) => {
@@ -553,10 +572,19 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
       }
       return { arm, binds, body: D(arm.body, { sub, d, shape }) };
     });
-    const other = n.otherwise ? D(n.otherwise, ctx) : null;
+    let other = n.otherwise ? D(n.otherwise, ctx) : null;
+    // Cases whose tangents are data (a list's): one that doesn't move
+    // gives its value's zero, not 0.
+    if (lenient && kindOf([...each.map((a) => a.body), ...(other ? [other] : [])])) {
+      const bodies = alike([...each.map((a) => a.body), ...(other ? [other] : [])], [...arms.map((a) => a.body), ...(n.otherwise ? [n.otherwise] : [])], ctx);
+      if (bodies.some((b) => b.k === "none")) return NONE;
+      each.forEach((a, i) => (a.body = bodies[i]));
+      if (other) other = bodies.at(-1)!;
+    }
+    const tan = lenient ? kindOf([...each.map((a) => a.body), ...(other ? [other] : [])]) : undefined;
     const variant = [...each.map((a) => a.body), ...(other ? [other] : [])].map(variantOf).find(Boolean) ?? null;
     return {
-      k: "build", variant: variant ?? undefined, build: () => add({
+      k: "build", variant: variant ?? undefined, ...(tan ? { tan } : {}), build: () => add({
         kind: "match", scrutinee: copy(n.scrutinee, ctx),
         arms: each.map(({ arm, binds, body }) => {
           for (const x of binds) x.nb = binder(nm(x.b));
@@ -571,7 +599,11 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
   // coefficients, say), whose cases compute numbers that do. Each folded
   // value becomes a pair (value, derivative).
   function foldD(n: NodeOf<"fold">, ctx: Ctx): E {
-    if (depends(n.scrutinee, new Set(ctx.d.keys()))) return cant("this fold takes apart data built from the variable");
+    if (depends(n.scrutinee, new Set(ctx.d.keys()))) {
+      const ds = lenient ? D(n.scrutinee, ctx) : NONE;
+      if (lenient && !variantOf(ds) && ds.k !== "none") return movingFoldD(n, ctx, ds);
+      return cant("this fold takes apart data built from the variable");
+    }
     // Folded values of nested data (a rose tree's List R) would need pairs
     // inside the container; not yet.
     if (n.arms.some((a) => {
@@ -609,6 +641,198 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
           return add({ kind: "arm", variant: arm.variant, binds, results, body });
         });
         return callN(ref(SECOND), add({ kind: "fold", scrutinee: copy(n.scrutinee, ctx), arms }));
+      },
+    };
+  }
+
+
+  // ---- Forward mode through data and functions (lenient only, L245) ----
+  // The evaluator's derivative(f) where f maps a function over a list and
+  // sums it (round 15's least squares): a list built from the variable has
+  // a tangent, the same list with each Float64 its slope, and a function
+  // that captures the variable has one too, the slope of its result as
+  // the variable moves. A definition given such a tangent is
+  // differentiated as its forward-mode derivative (JVP: Jacobian-vector
+  // product), a definition of its inputs and their tangents giving its
+  // result's tangent, generated once per set of inputs that move and able
+  // to call itself (map calls map). Only where `derivative` may fail: a
+  // tangent is taken apart with a match whose other cases fail, which they
+  // never do, since it has the value's shape.
+
+  // The tangent of a value that doesn't move, where data is expected: the
+  // same constructors with 0 for each number, as far as the code says.
+  function zeroLike(id: Id, ctx: Ctx): E {
+    const n = nodes[id];
+    if (n.kind === "lit") return typeof n.value === "number" ? numE(0) : { k: "build", tan: "data", build: () => copy(id, ctx) };
+    if (isCall(n) && !isUse(n) && nodes[n.fn]?.kind === "ref" && (nodes[(nodes[n.fn] as NodeOf<"ref">).target]?.kind === "variant" || (nodes[n.fn] as NodeOf<"ref">).target === S.listOf)) {
+      const parts = n.args.map((a) => zeroLike(a, ctx));
+      if (parts.some((p) => p.k === "none")) return NONE;
+      return { k: "build", tan: "data", build: () => callN(copy(n.fn, ctx), ...parts.map(place)) };
+    }
+    if (n.kind === "ref" && nodes[n.target]?.kind === "variant") return { k: "build", tan: "data", build: () => copy(id, ctx) };
+    return cant("data that doesn't move here has no tangent this can write");
+  }
+  // The tangents of several ways to one value (a match's cases): where one
+  // is data, a case that doesn't move gives its value's zero, not 0.
+  function alike(es: E[], bodies: Id[], ctx: Ctx): E[] {
+    if (!es.some((e) => tanOf(e) === "data" || tanOf(e) === "any")) return es;
+    return es.map((e, i) => (isNum(e, 0) ? zeroLike(bodies[i], ctx) : e));
+  }
+  const kindOf = (es: E[]): Tan | undefined => (es.some((e) => tanOf(e) === "data") ? "data" : es.some((e) => tanOf(e)) ? "any" : undefined);
+
+  // A constructor built from what moves: the same constructor of its
+  // fields' tangents.
+  function dataD(n: Call, ctx: Ctx): E {
+    const raw = n.args.map((a) => D(a, ctx));
+    const parts = raw.map((e, i) => (isNum(e, 0) && !numeric(n.args[i]) ? zeroLike(n.args[i], ctx) : e));
+    if (parts.some((p) => p.k === "none")) return NONE;
+    return { k: "build", tan: "data", build: () => callN(copy(n.fn, ctx), ...parts.map(place)) };
+  }
+  // Is `id` a number, as far as its code shows (a literal, arithmetic)?
+  function numeric(id: Id): boolean {
+    const n = nodes[id];
+    if (n.kind === "lit") return typeof n.value === "number";
+    return isCall(n) && nodes[n.fn]?.kind === "ref" && !!OPS[(nodes[n.fn] as NodeOf<"ref">).target];
+  }
+
+  // A function that captures what moves: its tangent is the function of
+  // the same inputs giving the slope of its result.
+  function lambdaD(n: NodeOf<"lambda">, ctx: Ctx): E {
+    const sub = new Map(ctx.sub), d = new Map(ctx.d);
+    const slot = { params: [] as Id[] };
+    n.params.forEach((p, i) => { sub.set(p, () => ref(slot.params[i])); d.delete(p); });
+    const body = D(n.body, { sub, d, shape: ctx.shape });
+    if (body.k === "none") return NONE;
+    return {
+      k: "build", tan: "fn", build: () => {
+        slot.params = n.params.map((p) => binder(nm(p)));
+        return add({ kind: "lambda", params: slot.params, body: place(body) });
+      },
+    };
+  }
+
+  // A call of a function whose tangent is known (a binder given one): its
+  // tangent at the same inputs, and, where an input moves too, the slope
+  // along it read when it runs (derivative(f)(u) · u′, as for any function).
+  function appliedD(n: Call, ctx: Ctx): E {
+    const f = ctx.d.get((nodes[n.fn] as NodeOf<"ref">).target)!;
+    if (f.k === "none") return NONE;
+    let out: E = { k: "build", tan: "any", build: () => callN(place(f), ...n.args.map((a) => copy(a, ctx))) };
+    const moves = n.args.filter((a) => depends(a, new Set(ctx.d.keys())));
+    if (moves.length) {
+      if (n.args.length !== 1) return cant("only functions of one number can be differentiated at run time");
+      const du = D(n.args[0], ctx);
+      if (tanOf(du) || variantOf(du)) return cant("only functions of one number can be differentiated at run time");
+      const at: E = { k: "build", build: () => callN(callN(ref(S.derivative), copy(n.fn, ctx)), copy(n.args[0], ctx)) };
+      out = op("add", out, op("mul", at, du));
+    }
+    return out;
+  }
+
+  // A definition given tangents that aren't slopes: its JVP, a definition
+  // of its inputs and the moving ones' tangents, giving its result's.
+  const jvps = new Map<string, Id>();
+  function jvpCall(n: Call, def: Id, ds: E[], ctx: Ctx): E {
+    const moving = ds.map((e) => !isNum(e, 0));
+    if (ds.some((e) => e.k === "none")) return NONE;
+    if (ds.some((e) => e.k === "rec")) return cant("a record beside a list's tangent isn't differentiated yet");
+    const j = jvp(def, moving);
+    if (!j) return NONE;
+    const kind = ds.some((e) => tanOf(e)) ? "any" : undefined;
+    return { k: "build", tan: kind, build: () => callN(ref(j), ...n.args.map((a) => copy(a, ctx)), ...ds.filter((_, i) => moving[i]).map(place)) };
+  }
+  function jvp(def: Id, moving: boolean[]): Id | null {
+    const key = `${def}/${moving.map(Number).join("")}`;
+    if (jvps.has(key)) return jvps.get(key)!;
+    const lam = nodes[(nodes[def] as NodeOf<"def">).body ?? ""];
+    if (lam?.kind !== "lambda" || lam.params.length !== moving.length) return null;
+    const id = add({ kind: "def", body: null });
+    outNames[id] = `${nm(def)} tangent`;
+    jvps.set(key, id);
+    defs.push(id);
+    const sub = new Map<Id, () => Id>(), d = new Map<Id, E>();
+    const params = lam.params.map((p) => { const np = binder(nm(p)); sub.set(p, () => ref(np)); return np; });
+    const tangents = lam.params.flatMap((p, i) => {
+      if (!moving[i]) return [];
+      const tp = binder(`${nm(p)}′`);
+      d.set(p, { k: "build", tan: "any", build: () => ref(tp) });
+      return [tp];
+    });
+    const body = D(lam.body, { sub, d, shape: new Map() });
+    nodes[id] = { id, kind: "def", body: add({ kind: "lambda", params: [...params, ...tangents], body: place(body) }) };
+    return id;
+  }
+
+  // A match on data that moves: the tangent is taken apart beside the
+  // value, case by case, so each field has its own.
+  function movingMatchD(n: NodeOf<"match">, ctx: Ctx, ds: E): E {
+    const arms = n.arms.map((a) => nodes[a] as NodeOf<"arm">);
+    const t = { b: "" };
+    const each = arms.map((arm) => {
+      const sub = new Map(ctx.sub), d = new Map(ctx.d);
+      const binds = arm.binds.map((b) => ({ b, nb: "", tb: "" }));
+      for (const x of binds) {
+        sub.set(x.b, () => ref(x.nb));
+        d.set(x.b, { k: "build", tan: "any", build: () => ref(x.tb) });
+      }
+      return { arm, binds, body: D(arm.body, { sub, d, shape: ctx.shape }) };
+    });
+    const other = n.otherwise ? D(n.otherwise, ctx) : null;
+    const bodies = alike([...each.map((a) => a.body), ...(other ? [other] : [])], [...arms.map((a) => a.body), ...(n.otherwise ? [n.otherwise] : [])], ctx);
+    if (bodies.some((b) => b.k === "none")) return NONE;
+    return {
+      k: "build", tan: kindOf(bodies), build: () => {
+        t.b = binder("tangent");
+        const match = add({
+          kind: "match", scrutinee: copy(n.scrutinee, ctx),
+          arms: each.map(({ arm, binds }, i) => {
+            for (const x of binds) { x.nb = binder(nm(x.b)); x.tb = binder(`${nm(x.b)}′`); }
+            const inner = add({ kind: "match", scrutinee: ref(t.b), arms: [add({ kind: "arm", variant: arm.variant, binds: binds.map((x) => x.tb), results: arm.binds.map(() => null), body: place(bodies[i]) })], otherwise: callN(ref(S.fail)) });
+            return add({ kind: "arm", variant: arm.variant, binds: binds.map((x) => x.nb), results: arm.results.map(() => null), body: inner });
+          }),
+          otherwise: other ? place(bodies.at(-1)!) : null,
+        });
+        return callN(add({ kind: "lambda", params: [t.b], body: match }), place(ds));
+      },
+    };
+  }
+
+  // A fold over data that moves: each case gives a function of its part's
+  // tangent, which takes the tangent apart beside the value and gives the
+  // pair (value, tangent), its folded parts' pairs from their functions.
+  function movingFoldD(n: NodeOf<"fold">, ctx: Ctx, ds: E): E {
+    const made = n.arms.map((a) => {
+      const arm = nodes[a] as NodeOf<"arm">;
+      const slot = { binds: [] as Id[], results: [] as (Id | null)[], tbinds: [] as Id[] };
+      const sub = new Map(ctx.sub), d = new Map(ctx.d);
+      arm.binds.forEach((b, j) => {
+        sub.set(b, () => ref(slot.binds[j]));
+        d.set(b, { k: "build", tan: "any", build: () => ref(slot.tbinds[j]) });
+      });
+      // A folded part's result is the first of its function at its tangent.
+      arm.results.forEach((r, j) => {
+        if (r === null) return;
+        const at = () => callN(ref(slot.results[j]!), ref(slot.tbinds[j]));
+        sub.set(r, () => callN(ref(FIRST), at()));
+        d.set(r, { k: "build", tan: "any", build: () => callN(ref(SECOND), at()) });
+      });
+      const inner = { sub, d, shape: ctx.shape };
+      return { arm, slot, inner, slope: D(arm.body, inner) };
+    });
+    const slopes = alike(made.map((m) => m.slope), made.map((m) => m.arm.body), ctx);
+    if (slopes.some((e) => e.k === "none")) return NONE;
+    return {
+      k: "build", tan: kindOf(slopes), build: () => {
+        const arms = made.map(({ arm, slot, inner }, i) => {
+          slot.binds = arm.binds.map((b) => binder(nm(b)));
+          slot.tbinds = arm.binds.map((b) => binder(`${nm(b)}′`));
+          slot.results = arm.results.map((r) => (r === null ? null : binder(`${nm(r)} at`)));
+          const tv = binder("tangent");
+          const pair = callN(ref(PAIR_V), copy(arm.body, inner), place(slopes[i]));
+          const inner2 = add({ kind: "match", scrutinee: ref(tv), arms: [add({ kind: "arm", variant: arm.variant, binds: slot.tbinds, results: arm.binds.map(() => null), body: pair })], otherwise: callN(ref(S.fail)) });
+          return add({ kind: "arm", variant: arm.variant, binds: slot.binds, results: slot.results, body: add({ kind: "lambda", params: [tv], body: inner2 }) });
+        });
+        return callN(ref(SECOND), callN(add({ kind: "fold", scrutinee: copy(n.scrutinee, ctx), arms }), place(ds)));
       },
     };
   }

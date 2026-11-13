@@ -188,7 +188,7 @@ test("calculus through ters wasi and ters native prints what ters run prints (I2
 // of a map is fused (it gave the first item's slope, 1, once), and where
 // one can't be made the evaluator's derive is given the library nodes it
 // writes into a derivative (a pair's second, which nothing else reached).
-test("a derivative through sum(map(xs, …)) of a captured list: the slope, compiled (I245, round 15)", () => {
+test("a derivative through sum(map(xs, …)) of a captured list: the slope, compiled and by ters run (I245, L245, round 15)", () => {
   const k = new Lang(LIBRARY.code);
   const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
   const f = k.def("f"), at = k.def("at");
@@ -200,6 +200,9 @@ test("a derivative through sum(map(xs, …)) of a captured list: the slope, comp
   assert.deepEqual([...core.refused.entries()], []);
   const g = loadPrinted(printed(core), { print: () => {} }, printed(core).code)[core.funcs.findIndex((h) => h.def === at && !h.inner)];
   for (const q of [1, -2, 0.5]) assert.equal(g(q), 3, `at ${q}`);
+  // And `ters run` gives the same (L245: forward mode through the list).
+  const r = makeRunner(code, info, { print: () => {} });
+  for (const q of [1, -2, 0.5]) assert.deepEqual([...r.call(r.value(at), q)], [3], `ters run at ${q}`);
 });
 
 // gradient(f) of a function of a record chosen at run time (I247, round
