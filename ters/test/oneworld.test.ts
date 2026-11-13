@@ -166,7 +166,13 @@ test("units: a recursive call isn't unfolded again, so checking stays fast when 
   if (!r.ok) return;
   const hole = r.select!;
   const code: Code = { ...r.code, nodes: { ...r.code.nodes, mainref: { id: "mainref", kind: "ref", target: main }, [hole]: { id: hole, kind: "call", fn: "mainref", args: [] } } };
+  // Timed against the same defs without the recursive call, so a slow
+  // runner slows both: unfolding the group again would be many times over.
+  const b0 = Date.now();
+  for (const d of r.code.defs) units(r.code, d);
+  const without = Date.now() - b0;
   const t0 = Date.now();
   for (const d of code.defs) units(code, d);
-  assert.ok(Date.now() - t0 < 2000, `units took ${Date.now() - t0} ms`);
+  const took = Date.now() - t0;
+  assert.ok(took < 2 * without + 500, `units took ${took} ms, ${without} ms without the recursive call`);
 });
