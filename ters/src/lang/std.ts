@@ -1811,6 +1811,13 @@ export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings
 // hang on them).
 export const PERMISSIONS = typedef("std.permissions", "Permissions", [], [["ask permission", [["what", () => fixedTref("std.permissions.ask permission.what.type", STRING)]], () => fixedTref("std.permissions.ask permission.returns", BOOL)]], true);
 export const ASK_PERMISSION_OP = "std.permissions.ask permission";
+// The process's environment variables (L253): `environment variable(name)`
+// is its value, or none where it isn't set. An effect of its own, so a
+// function that reads one says so, a test answers it with a match, and
+// `ters run --allow` can leave it out. A page has none: a browser's world
+// answers none. Its types by fixed ids, as Permissions'.
+export const ENVIRONMENT = typedef("std.environment", "Environment", [], [["environment variable", [["name", () => fixedTref("std.environment.environment variable.name.type", STRING)]], () => fixedTref("std.environment.environment variable.returns", OPTIONAL, fixedTref("std.environment.environment variable.returns.a", STRING))]], true);
+export const ENV_OP = "std.environment.environment variable";
 // LU factors is the numbers module's (L207d).
 tn += 10;
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
@@ -1864,7 +1871,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
 }
 export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer. A chain of one

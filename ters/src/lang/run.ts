@@ -36,7 +36,7 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ASK_PERMISSION_OP, PERMISSIONS } from "./std.ts";
+import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std.ts";
 import { SIGS, ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
 import { intLit } from "./int.ts";
 import { answeredEffects, jsHostHas, supported } from "./supports.ts";
@@ -372,6 +372,10 @@ export interface Runtime {
 
 // What the world effects do. A failure throws, with a message that becomes
 // the reason the program's Abort is given.
+// An environment variable's answer as Optional Text (L253), NFC as all
+// text that comes in.
+export const environmentValue = (v: string | null): Value => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v.normalize("NFC")] });
+
 export interface World {
   error(line: string): void;
   // Log's handler when the program has none.
@@ -412,6 +416,9 @@ export interface World {
   // Permissions' (L236, std.ts): whether the person gave this one. A world
   // without it answers yes, as a command line has no such dialog.
   askPermission?(what: string): boolean;
+  // Environment's (L253): a variable's value, null where it isn't set. A
+  // world without it has none set.
+  environmentVariable?(name: string): string | null;
   // Time's and Wait's: milliseconds since 1970, and pausing.
   now(): number;
   wait(ms: number): void;
@@ -1248,6 +1255,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === MY_LOCALE_OP) return this.ret({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
       if (op === MY_ZONE_OP) return this.ret((rt.world?.timeZone ?? hostZone)());
       if (op === ASK_PERMISSION_OP) return this.ret(bool((rt.world?.askPermission ?? (() => true))(args[0] as string)));
+      if (op === ENV_OP) return this.ret(environmentValue(rt.world?.environmentVariable?.(args[0] as string) ?? null));
       // A file the prelude's `with open file` keeps open (L213c): by its
       // number, which only the library holds. What goes wrong is an answer
       // (none, false), so the prelude says why where it was opened.
@@ -1754,7 +1762,7 @@ function typeError(code: Code, info: Info, def: Id, names: Names): string | null
   }
   return null;
 }
-export const RUNTIME_HANDLES: readonly Id[] = discharge("a program's main", [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT, AWAIT, SETTINGS, PERMISSIONS, KEPT_FILES],
+export const RUNTIME_HANDLES: readonly Id[] = discharge("a program's main", [...WORLD, CELLS, DIVERGE, NETWORK, LOG, ABORT, RANDOM, TIME, WAIT, AWAIT, SETTINGS, PERMISSIONS, ENVIRONMENT, KEPT_FILES],
   "the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason");
 // The effects of a function's type that something in the program has to
 // handle before it can run: an unhandled Choice, effects you declared.
