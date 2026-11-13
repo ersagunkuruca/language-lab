@@ -964,6 +964,15 @@ export function handOver(a: Kept, b: Kept, to: Pick<Cells, "write" | "batch">): 
   to.batch(() => { for (const [c, v] of moves) to.write(c, v); });
   return moves.length;
 }
+// A cell's value carried to the same cell of the same page in the other
+// engine (I239f: a compiled page's snapshot taken up by the interpreted
+// page), from what both were made with: unchanged, the other's own first
+// value; changed to plain data, that data, when both were made with the
+// same plain data. Null when it can't be carried.
+export function carried(fromFirst: unknown, toFirst: Value, now: unknown): { value: Value } | null {
+  if (now === fromFirst || plainSame(now, fromFirst)) return { value: toFirst };
+  return plainSame(fromFirst, toFirst) && plainSame(now, now) ? { value: now as Value } : null;
+}
 // The same plain data: numbers (NaN the same as NaN), strings, whole
 // numbers, and data with the same tag and the same fields. Never true
 // with a function in it.

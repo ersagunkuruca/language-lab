@@ -241,3 +241,46 @@ test("stepping over clicks that draw from the world's randomness shows each roll
     assert.equal(shown(), after[n], `after ${n}`);
   }
 });
+
+// I239f: the compiled page keeps its log as a window too, with its cells
+// by place; paused, the interpreted page is built at its last event from
+// those snapshots and steps back and on from there, then goes on.
+test("the interpreted page steps through the compiled page's window, and goes on from a step", async () => {
+  const { lowerCore, corePageScript } = await import("../../compiler/src/core-js.ts");
+  const core = await import("../../compiler/src/core-page-runtime.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const ir = lowerCore(p.code, info, p.pres.names, p.own.defs);
+  let given: unknown[] | null = null;
+  new Function("$core", corePageScript(ir, p.pres.names[main], "$core", ""))({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
+  const [tables, worlds, defs, name, , nodes] = given! as never[];
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  let t = 0;
+  const window = { seconds: 10, keep: 3, clock: () => t };
+  // Interpreted first, one Roll on it, then the compiled page takes over
+  // with what was done on it, as the editor's preview does.
+  const shownIn = (root: FakeEl) => [root.find("status").textContent, root.find("said").textContent].join(" | ");
+  const first = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log, window, keepCells: true });
+  (first.root as FakeEl).find("roll").fire("click");
+  const m = core.mountCorePage(tables, worlds, defs, name, "dice", nodes, { doc: fakeDoc(), store: store(), frame: () => {}, log, window, handFrom: first.kept! });
+  first.stop();
+  const after = [shownIn(m.root as FakeEl)];
+  assert.equal(after[0], shownIn(first.root as FakeEl));
+  // Plain Rolls draw from the world's randomness; a hundred more with seed 7.
+  for (let i = 0; i < 8; i++) { t += 4000; (m.root as FakeEl).find(i % 3 === 2 ? "hundred" : "roll").fire("click"); after.push(shownIn(m.root as FakeEl)); }
+  assert.ok(m.window!.snapshots.length > 1);
+  m.stop();
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log, window, stepFrom: { firsts: m.kept.map((k) => k.first), snapshots: m.window!.snapshots } });
+  const root = page.root as FakeEl, steps = page.steps!;
+  // The interpreted page's Roll came before: the steps start after it.
+  assert.equal(steps.from(), 1);
+  assert.equal(steps.at, 9);
+  assert.equal(shownIn(root), after[8]);
+  for (const n of [5, 0, 7, 2, 8, 1]) { steps.to(n + 1); assert.equal(shownIn(root), after[n], `after ${n}`); }
+  assert.throws(() => steps.to(0), /can go back to event 1/);
+  steps.to(4);
+  steps.resume();
+  root.find("roll").fire("click");
+  assert.match(root.find("status").textContent, /^Rolls: 104;/);
+});

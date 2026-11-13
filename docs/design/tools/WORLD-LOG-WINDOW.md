@@ -1,6 +1,6 @@
 # A run's world log in bounded memory
 
-*Status 2026-11-13: design, for row I239; I239a (§1), I239b (§2), I239c's engine (§3, page.ts `steps`) and I239d's cap (§4) built; I239f, the compiled page's snapshots, next. Ersagun: "it's still a memory
+*Status 2026-11-13: design, for row I239; I239a (§1), I239b (§2), I239c's engine (§3, page.ts `steps`) and I239d's cap (§4) and I239f (§5, the compiled page's snapshots) built; the page panel's buttons are the Editor lane's. Ersagun: "it's still a memory
 hole" (thread "Decide the saved program format", 2026-11-13).*
 
 A run is kept by keeping what the world answered it (worldlog.ts, L186):
@@ -96,6 +96,23 @@ answers passed 8 MB; replay and step-back need a shorter run". This keeps
 memory bounded honestly, rather than by dropping answers a replay would
 need.
 
+### 5. The compiled page in the editor
+
+The editor's preview swaps the compiled page in for the interpreted one
+within seconds, handing over what was done on it (cells.ts handOver). So
+the compiled page keeps its log as a window too, by the same rules, each
+snapshot its cells' values in the order they were made (the order
+handOver uses) and the generator's state. Its first snapshot is taken
+after the handover, where its part of the log starts.
+
+Pause stops the compiled page and builds the interpreted page from those
+snapshots (page.ts showPage `stepFrom`). It takes up each snapshot whose
+cells it can carry to its own cells at the same places: plain data, or a
+cell unchanged since it was made. One holding a function made since is
+left out, and a step goes from the snapshot before it. The page is shown
+at the log's last event, steps back and on from there, and goes on
+interpreted.
+
 ## Steps
 
 1. **I239a, compact recording.**
@@ -117,3 +134,5 @@ need.
      was.
 4. **I239d, main runs' cap and the compiled page's `?ters-log`** use the
    same window rules.
+5. **I239f, the compiled page's snapshots** (§5): Pause and step in the
+   editor after the compiled page takes over.

@@ -11,7 +11,7 @@ import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { browserWorld, type Store } from "./browser.ts";
-import { Cells, nodeOf } from "./cells.ts";
+import { carried, Cells, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
 import { equal, pageProblem, runMain, type Value, type World } from "./run.ts";
@@ -21,7 +21,7 @@ import { HTML_V } from "./std.ts";
 import { LIBRARY } from "./library.ts";
 import { withLibraryRepresentations } from "./library-reps.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
-import { eventsIn, heardInto, isEvent, logged, LogWindow, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
+import { eventsIn, heardInto, isEvent, logged, LogWindow, replaying, WentAnotherWay, type LogEntry, type PlacedSnapshot, type Snapshot } from "./worldlog.ts";
 // A page as a snapshot keeps it (I239b).
 export interface PageSnapshot { cells: [Value, Value][]; random: number[] }
 
@@ -77,6 +77,12 @@ export interface PageOptions {
   window?: { seconds: number; keep: number; clock?: () => number };
   // A handler that stopped (html.ts Mount).
   stopped?: (e: unknown) => void;
+  // The compiled page's window to step through (I239f): `log` is its log
+  // and `window` the rules it was kept by; `firsts`, the values its cells
+  // were made with, in order; `snapshots`, its window's. The page is
+  // built stepped, at the log's last event, from the nearest snapshot
+  // whose cells it can take (cells.ts carried).
+  stepFrom?: { firsts: unknown[]; snapshots: Snapshot<PlacedSnapshot>[] };
 }
 
 export interface Preview {
@@ -88,6 +94,9 @@ export interface Preview {
   // through it (I239c).
   window?: LogWindow<PageSnapshot>;
   steps?: Steps;
+  // A compiled page's (I239f): what an interpreted page built to step
+  // through its log takes (PageOptions `stepFrom`).
+  stepFrom?: () => NonNullable<PageOptions["stepFrom"]>;
   // Stops the clock and any sound: nothing on this page runs on frames,
   // and nothing plays, any more.
   stop(): void;
@@ -108,7 +117,9 @@ export function showPage(o: PageOptions): Preview {
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser) : browser;
   // While the page is stepped through its log (I239c), the world answers
   // from the log and nothing new is logged: `asking` is which world.
-  let stepping = false, asking: World = answered;
+  // A page built to step through a compiled page's log starts stepped:
+  // main's reads answered live, nothing heard or logged.
+  let stepping = !!o.stepFrom, asking: World = o.stepFrom ? browser : answered;
   const switched = Object.fromEntries(Object.keys(answered).map((op) => [op, (...a: unknown[]) => (asking as unknown as Record<string, (...a: unknown[]) => unknown>)[op](...a)])) as unknown as World;
   // The seed too: a step from the run's start draws again from the
   // seed the log has, and a live page from the browser's own draw.
@@ -127,7 +138,12 @@ export function showPage(o: PageOptions): Preview {
   made = kept ?? [];
   cells.kept = null;
   if (o.replay) replayEvents(root, o.replay);
+  // The run's start as a snapshot too: the cells' first values and the
+  // generator as main left it, since a step replays from the first event.
+  if (window && !o.stepFrom) window.snapshots[0].state = window.take();
+  if (window && o.stepFrom) window.snapshots = takenUp(o.stepFrom, made);
   const steps = window && logging ? stepper(window, root, cells, made, logging.random, browser, (s, w) => { stepping = s; asking = w ?? answered; }) : undefined;
+  if (steps && o.stepFrom) steps.to(steps.events());
   return { root, cells, kept: o.keepCells ? kept : undefined, window, steps, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
 
@@ -139,17 +155,45 @@ export function showPage(o: PageOptions): Preview {
 // nothing live and logs nothing. `resume()` goes on from there: what the
 // log had after it is dropped, as a debugger's run from a breakpoint
 // leaves the old future.
-export interface Steps { events(): number; at: number | null; to(n: number): void; resume(): void }
+// `from()` is the first event a step can reach: 0, or past it when the
+// snapshots before were dropped or can't be taken up (I239f).
+export interface Steps { events(): number; from(): number; at: number | null; to(n: number): void; resume(): void }
+
+// A compiled page's snapshots as the interpreted page's (I239f): each
+// cell's value carried to the cell made at the same place (cells.ts
+// carried). One holding what can't be carried (a function changed since)
+// is left out; a step goes from the one before. Throws when the two pages
+// made different cells, or none can be taken up.
+function takenUp(from: { firsts: unknown[]; snapshots: Snapshot<PlacedSnapshot>[] }, made: NonNullable<Cells["kept"]>): Snapshot<PageSnapshot>[] {
+  if (from.firsts.length !== made.length) throw new Error(`the compiled page made ${from.firsts.length} cells and the interpreted page ${made.length}, so it can't be stepped`);
+  const out: Snapshot<PageSnapshot>[] = [];
+  for (const s of from.snapshots) {
+    if (!s.state) { out.push({ at: s.at, state: null }); continue; }
+    const cells: [Value, Value][] = [];
+    let ok = true;
+    s.state.cells.forEach((v, i) => {
+      if (v === undefined || !ok) return;
+      const c = carried(from.firsts[i], made[i].first, v);
+      if (c) cells.push([made[i].cell, c.value]); else ok = false;
+    });
+    if (ok) out.push({ at: s.at, state: { cells, random: s.state.random } });
+  }
+  if (!out.length) throw new Error("the compiled page's snapshots hold functions made since the page started, so the interpreted page can't take them up");
+  return out;
+}
+// The events before log entry `at`: where a snapshot there starts.
+const before = (evs: { at: number }[], at: number): number => { const i = evs.findIndex((e) => e.at >= at); return i < 0 ? evs.length : i; };
 function stepper(w: LogWindow<PageSnapshot>, root: Node_, cells: Cells, made: NonNullable<Cells["kept"]>, random: { state(): number[]; set(s: number[]): void }, browser: World, set: (stepping: boolean, world?: World) => void): Steps {
   const log = w.log;
   const s: Steps = {
     at: null,
     events: () => [...eventsIn(log)].length,
+    from: () => { const evs = [...eventsIn(log)]; return before(evs, w.snapshots[0].at); },
     to(n) {
       const evs = [...eventsIn(log)];
       if (n < 0 || n > evs.length) throw new RangeError(`the log has ${evs.length} events`);
-      const before = (at: number) => evs.findIndex((e) => e.at >= at) < 0 ? evs.length : evs.findIndex((e) => e.at >= at);
-      const snap = [...w.snapshots].reverse().find((x) => before(x.at) <= n) ?? w.snapshots[0];
+      const snap = [...w.snapshots].reverse().find((x) => before(evs, x.at) <= n);
+      if (!snap) throw new RangeError(`a step can go back to event ${s.from()}, not ${n}: the window keeps nothing earlier to start from`);
       // The cells put back. What the page's views read of the world
       // meanwhile (now(), off the clock's cell, put back too) the page
       // answers itself: the log has only what its handlers asked.
@@ -159,7 +203,7 @@ function stepper(w: LogWindow<PageSnapshot>, root: Node_, cells: Cells, made: No
       random.set(snap.state ? snap.state.random : []);
       // From the segment's first event: what main asked before it is
       // in the cells already.
-      const first = before(snap.at);
+      const first = before(evs, snap.at);
       // A handler's failure is taken back on the page (cells.ts attempt),
       // so the replay's own is kept here and said after.
       let wrong: unknown = null;

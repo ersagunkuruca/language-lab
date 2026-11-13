@@ -56,7 +56,7 @@ export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean
   const out = { ...world } as Record<string, unknown>;
   // The seeded generator, for a snapshot to keep where it is (I239b).
   // Set to no state, the next draw asks for the seed again.
-  const random = { state: () => gen?.state?.() ?? [], set: (s: number[]) => { if (!s.length) gen = null; else gen?.set?.(s); } };
+  const random = { state: () => gen?.state?.() ?? [], set: (s: number[]) => { if (!s.length) gen = null; else { gen ??= seededGenerator(0); gen.set!(s); } } };
   const b = o.budget ?? (o.cap !== undefined ? budget(o.cap) : undefined);
   const push = (e: LogEntry) => { if (!o.quiet?.() && fits(log, b, e)) log.push(e); };
   let gen: Generator | null = null;
@@ -191,6 +191,10 @@ export const readLog = (text: string): LogEntry[] =>
 // (rr's checkpoints; Redux DevTools' maxAge). The run's start is the
 // first snapshot, with nothing to restore: what main makes.
 export interface Snapshot<S = unknown> { at: number; state: S | null }
+// A compiled page's snapshot (I239f): each cell's value in the order the
+// cells were made (undefined for one gone), for the interpreted page's
+// cells at the same places.
+export interface PlacedSnapshot { cells: unknown[]; random: number[] }
 export class LogWindow<S = unknown> {
   snapshots: Snapshot<S>[] = [{ at: 0, state: null }];
   // Entries dropped from the front since the run started.
