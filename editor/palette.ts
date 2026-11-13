@@ -59,7 +59,15 @@ export function palette(host: PaletteHost) {
     const nm = (id: Id) => names[id] ?? id;
     switch (f.kind) {
       case "ref": return lazily(nm(f.target), () => typeName(info, f.type, names), node(f.target)?.kind === "binder" ? "in scope" : node(f.target)?.kind === "variant" ? "constructors" : info.subst.resolve(f.type).t === "fn" ? "functions, not called" : "definitions");
-      case "call": return lazily(`${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`, () => typeName(info, f.type, names), "calls");
+      case "call": {
+        // An input nothing has typed yet, offered called with 1, 2 or 3
+        // inputs: say so, or the rows read as three library functions
+        // (I235: celsius(□), celsius(□, □), celsius(□, □, □)).
+        const open = node(f.target)?.kind === "binder" && info.subst.resolve(info.typeOf.get(f.target) ?? f.type).t === "var";
+        const label = `${nm(f.target)}(${Array.from({ length: f.arity }, () => "□").join(", ")})`;
+        if (open) return [label, `${nm(f.target)} called with ${f.arity === 1 ? "one input" : `${f.arity} inputs`}: nothing says yet what ${nm(f.target)} is, and this makes it a function`, "calls"];
+        return lazily(label, () => typeName(info, f.type, names), "calls");
+      }
       case "lit": return [f.of === "number" ? "a number" : f.of === "int" ? "an integer" : "a text", f.of === "number" ? "Float64" : f.of === "int" ? "Int" : "Text", "literals"];
       case "lambda": return [`(${Array.from({ length: f.arity }, () => "□").join(", ")}) => □`, "a function you write here", "new function"];
       case "use": {

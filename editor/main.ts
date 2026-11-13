@@ -668,6 +668,8 @@ function undeleteProgram() {
   render();
 }
 
+// The program Save file last asked a title for.
+let askedTitle: Program | null = null;
 function renameProgram(title: string) {
   if (!title.trim() || !doc.program.startsWith(MINE)) return;
   doc = { ...doc, title: title.trim() };
@@ -2251,6 +2253,10 @@ document.addEventListener("pointerdown", (e) => {
 // Whatever selects something (a click, a menu's edit, a new program's
 // hole) shows it: the side column leaves the Guide for the Selected tab.
 let shownSelected: Id | null = null;
+// Opened again (a reload), the open definition's first hole is selected,
+// as when a program is opened, so its palette is on screen (I235). The
+// Guide shown on a first visit stays.
+if (!EMBED && !ui.selected) shownSelected = ui.selected = firstHole();
 function render() {
   if (ui.selected && ui.selected !== shownSelected && ui.panel === "guide") ui.panel = "node";
   shownSelected = ui.selected;
@@ -2481,7 +2487,21 @@ document.addEventListener("click", (e) => {
     if (a === "paste") return pasteIntoSelected();
     if (a === "open-file") return openFile();
     if (a === "stop-search") return stopSearch();
-    if (a === "save-file") return saveFile();
+    if (a === "save-file") {
+      // A program still called Untitled n is asked for a title first, once:
+      // its title names the file (I235: untitled-1.json, without asking).
+      if (/^Untitled \d+$/.test(titleOf(doc)) && doc.program.startsWith(MINE) && askedTitle !== doc.program) {
+        askedTitle = doc.program;
+        ui.panel = "program";
+        if (onePane()) ui.pane = "side";
+        ui.note = `Give the program a title first: it names the file. Save file again keeps it as ${slug(titleOf(doc))}.json.`;
+        render();
+        const t = document.getElementById("f-title") as HTMLInputElement | null;
+        t?.focus(); t?.select();
+        return;
+      }
+      return saveFile();
+    }
     if (a === "embed-link") return void copyEmbedLink();
     if (a === "delete-program") return deleteProgram();
     if (a === "upgrade-modules") return upgradeModules();
