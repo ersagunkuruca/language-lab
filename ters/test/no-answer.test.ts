@@ -11,7 +11,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { HTML_MODULE, LIBRARY } from "../src/lang/library.ts";
 import { equal, makeRunner, runMain, type Value } from "../src/lang/run.ts";
-import { CELL_OPS as C, HTML_V, S } from "../src/lang/std.ts";
+import { CELL_OPS as C, HTML_V, INT_OPS, S } from "../src/lang/std.ts";
 import { showType, NUMBER } from "../src/lang/types.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, mountHtml } from "../src/lang/html.ts";
@@ -47,6 +47,26 @@ test("x / y, sqrt and log may have no answer, unless the inputs are shown fine",
   assert.deepEqual(answers("inverse", 0), []);
   assert.deepEqual(answers("root", -1), []);
   assert.deepEqual(answers("safe inverse", 0), [0]);
+});
+
+// FizzBuzz's remainder(n, 3) has no Choice: 3 isn't 0 (I234).
+test("Int's quotient, remainder and power by a divisor or exponent shown fine have no Choice (I234)", () => {
+  const p = program((k) => [
+    ["by three", k.fn(["n"], (n) => k.call(INT_OPS.remainder, n, k.int(3)))],
+    ["by any", k.fn(["n", "d"], (n, d) => k.call(INT_OPS.remainder, n, d))],
+    ["halved", k.fn(["n"], (n) => k.call(INT_OPS.quotient, n, k.int(2)))],
+    ["safe", k.fn(["n", "d"], (n, d) => k.if(k.call(S.equal, d, k.int(0)), k.int(0), k.call(INT_OPS.quotient, n, d)))],
+    ["squared", k.fn(["n"], (n) => k.call(INT_OPS.power, n, k.int(2)))],
+    ["by zero", k.fn(["n"], (n) => k.call(INT_OPS.remainder, n, k.int(0)))],
+  ]);
+  assert.equal(p.type("by three"), "(Int) -> Int");
+  assert.equal(p.type("by any"), "(Int, Int) -[Choice]-> Int");
+  assert.equal(p.type("halved"), "(Int) -> Int");
+  assert.equal(p.type("safe"), "(Int, Int) -> Int");
+  assert.equal(p.type("squared"), "(Int) -> Int");
+  assert.equal(p.type("by zero"), "(Int) -[Choice]-> Int");
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  assert.deepEqual([...(r.call(r.value(p.d["by three"]), 10) as Iterable<Value>)], [1]);
 });
 
 test("a page's view with no answer shows nothing there, and its answer when it has one again", () => {

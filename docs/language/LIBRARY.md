@@ -42,9 +42,9 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **range** : `(Float64) -> List Float64`. The Float64s 0, 1, … up to n − 1, as a list.
 - **show decimals** : `(Float64, Int) -> Text`. x as text with `places` digits after the point, rounded half away from 0 and keeping trailing zeros: show decimals(2.5, 3) is "2.500", show decimals(-0.0004, 3) is "0.000". For when show's up to nine places would jump about.
 - **near** : `(Float64, Float64) -> Bool`. Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.
-- **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0.
-- **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0.
-- **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative.
+- **quotient** : `(Int, Int) -[Choice]-> Int`. a ÷ b rounded down to a whole number. No answer (Choice) when b is 0; none where b is known not to be, as in quotient(n, 2).
+- **remainder** : `(Int, Int) -[Choice]-> Int`. What's left of a after quotient(a, b) times b; it has b's sign. No answer when b is 0, so Choice, except where b is known not to be: remainder(n, 3) has none.
+- **power** : `(Int, Int) -[Choice]-> Int`. a to the power b for Ints. No answer when b is negative, so Choice, except where b is known not to be: power(n, 2) has none.
 - **lowest terms** : `(Int, Int) -> (Int, Int)`. Both divided by their greatest common divisor, the second made positive: how a fraction is kept.
 - **read whole number** : `(Text) -[Choice]-> Int`. The Int a text spells, like "42". No answer when it isn't one.
 - **as float64** : `(Int) -> Float64`. The Int as a Float64.
