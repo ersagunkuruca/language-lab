@@ -344,6 +344,29 @@ test("a function's body on the lines after its => reads as steps there (I228)", 
   assert.doesNotMatch(sums, /^\+.*□/m);
 });
 
+// An outsider's steps (I229): each step at the hole after the last goes
+// after it, so a sequence is built top-down and each step names the ones
+// before; inside all(() => □) it goes inside, where Choice is handled.
+test("a step at the hole after the steps goes after them (I229)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "pairs", kind: "value" });
+  text("replace", { at: "pairs", find: "□", text: "all(() => □)" });
+  const hole = /□#(\w+)/.exec(text("view", { at: "pairs" }))![1];
+  text("step", { at: hole, name: "a", value: "one of(range from(1, 5))" });
+  text("step", { at: hole, name: "b", value: "one of(range from(a + 1, 5))" });
+  const first = /^(\w+) +a#/m.exec(text("view", { at: "pairs" }))![1];
+  text("step", { at: first, name: "n", value: "4" });
+  text("replace", { at: hole, text: "[a, b, n]" });
+  const v = text("view", { at: "pairs" });
+  assert.match(v, /n#\w+ = 4\n.*a#\w+ = ‹one of›\(‹range from›\(1, 5\)\)\n.*b#\w+ = ‹one of›\(‹range from›\(a \+ 1, 5\)\)\n.*\[a, b, n\]/);
+  assert.match(v, /: List \(List Int\)/);
+});
+
 // Round 14's rota wrote `Set (Tuple2 Text Int)` for the view's
 // `Set (Text, Int)`, and `(Text)` for a word after an argument in
 // parentheses (I217 M1).
