@@ -5,7 +5,7 @@ import { dependencies, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
-import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
+import { storedRows, withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 
@@ -41,8 +41,9 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
-  for (const of of new Set(p.reps.map((r) => r.of))) {
-    const rep = choose(code, main, p.reps.filter((r) => r.of === of)).rep;
+  const rows = storedRows(p.code, p.own, p.reps);
+  for (const of of new Set(rows.map((r) => r.of))) {
+    const rep = choose(code, main, rows.filter((r) => r.of === of)).rep;
     if (rep.type === rep.of) continue;
     const problem = jobProblem(p.info, rep, p.names);
     if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
@@ -50,7 +51,10 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
   if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held ? p : p0;
-  code = { ...code, defs: code.defs.filter((d) => !reps.has(d)) };
+  // So does a library row's (std's Nat as an Int): written on the type's
+  // own definitions, which a rewrite onto another row changes.
+  const rowDefs = new Set(rows.flatMap((r) => (r.def ? [r.def] : [])));
+  code = { ...code, defs: code.defs.filter((d) => !rowDefs.has(d)) };
   // The library's representations may call the constructors they stand for.
   const options = p.options as Parameters<typeof infer>[3];
   // Where only the library's rows were chosen, withLibraryRepresentations

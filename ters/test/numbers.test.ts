@@ -10,19 +10,27 @@ import { relate } from "../src/lang/relate.ts";
 import { choose, jobProblem, represent, representationsIn, type Representation } from "../src/lang/represent.ts";
 import { equal, makeRunner, runMain, type Data, type Value } from "../src/lang/run.ts";
 import { showType } from "../src/lang/types.ts";
+import { LIBRARY, NAT_TYPE, NAT_V } from "../src/lang/library.ts";
+import { storedRows } from "../src/lang/library-reps.ts";
 
 const dir = join(root, "examples/numbers");
 const p = loadProgram(dir);
 const names = p.pres.names;
 const info = infer(p.code, names);
-// Written in the program (REPRESENTATIONS.md, L108).
-const reps = representationsIn(p.code, info, names, p.own.defs);
-const [unary, binary, int] = reps;
-const variant = (n: string) => Object.keys(names).find((k) => names[k] === n && p.code.nodes[k]?.kind === "variant")!;
-const [ZERO, SUCC, EMPTY, EVEN, ODD] = ["zero", "succ", "empty", "even", "odd"].map(variant);
+// Nat is std's (L249): its rows, unary and int, are the numbers module's,
+// and binary is written in the program (REPRESENTATIONS.md, L108).
+const own = representationsIn(p.code, info, names, p.own.defs);
+const reps = storedRows(p.code, p.own.defs, own);
+const [binary, unary, int] = reps;
+const variant = (n: string) => Object.keys(names).find((k) => names[k] === n && p.code.nodes[k]?.kind === "variant" && !LIBRARY.code.nodes[k])!;
+const [EMPTY, EVEN, ODD] = ["empty", "even", "odd"].map(variant);
+const [ZERO, SUCC] = [NAT_V.zero, NAT_V.succ];
+// A definition of the program's, or else of the library's (natural, add).
+const named = (n: string) => { try { return p.named(n); } catch { return Object.keys(LIBRARY.names).find((k) => LIBRARY.names[k] === n && LIBRARY.code.nodes[k]?.kind === "def" && k.startsWith("@"))!; } };
 
+const rowsLeftOut = (c: typeof p.code) => ({ ...c, defs: c.defs.filter((d) => !reps.some((x) => x.def === d)) });
 const r = makeRunner(p.code, info, { print: () => {} });
-const call = (def: string, ...args: Value[]) => { for (const v of r.call(r.value(p.named(def)), ...args)) return v; throw new Error("no result"); };
+const call = (def: string, ...args: Value[]) => { for (const v of r.call(r.value(named(def)), ...args)) return v; throw new Error("no result"); };
 const peano = (n: number): Data => (n === 0 ? { tag: ZERO, fields: [] } : { tag: SUCC, fields: [peano(n - 1)] });
 const bits = (n: number): Data => (n === 0 ? { tag: EMPTY, fields: [] } : { tag: n % 2 ? ODD : EVEN, fields: [bits(Math.floor(n / 2))] });
 const canonical = (b: Value): boolean => { const d = b as Data; return d.tag === EMPTY || (!(d.tag === EVEN && (d.fields[0] as Data).tag === EMPTY) && canonical(d.fields[0])); };
@@ -41,7 +49,7 @@ test("every implementation agrees with the definition it replaces, through meani
   for (let a = 0; a <= 9; a++) {
     means(bits(a), peano(a));
     means(call("succ′", bits(a)), peano(a + 1));
-    assert.equal(call("number′", bits(a)), call("number", peano(a)));
+    assert.equal(call("integer′", bits(a)), call("integer", peano(a)));
     for (let b = 0; b <= 9; b++) {
       for (const [spec, impl] of [["add", "add′"], ["multiply", "multiply′"]]) {
         const got = call(impl, bits(a), bits(b));
@@ -54,7 +62,7 @@ test("every implementation agrees with the definition it replaces, through meani
 
 test("match and fold on Nat, done on Binary, see the same cases as on Nat", () => {
   // fold n (zero → [], succ(m) with r → cons(m, r)) lists the predecessors.
-  const nums = (n: Value) => call("number′", n);
+  const nums = (n: Value) => Number(call("integer′", n));
   for (let n = 0; n <= 12; n++) {
     const seen: number[] = [];
     const out = call("fold Nat′", bits(n), () => [0], (m: Value, acc: Value) => (seen.push(nums(m) as number), [(acc as number) + 1]));
@@ -69,26 +77,30 @@ test("match and fold on Nat, done on Binary, see the same cases as on Nat", () =
 // L108a): each one's jobs, read back, say which definition does what, at
 // what cost; and a job whose definition has the wrong type is refused.
 test("the program writes its representations, and a job of the wrong type is refused", () => {
-  assert.deepEqual(reps.map((r) => [r.name, names[r.type] ?? r.type, r.meaning && names[r.meaning]]), [["unary", "Nat", null], ["binary", "Binary", "meaning"], ["int", "Int", "natural"]]);
+  assert.deepEqual(reps.map((r) => [r.name, names[r.type] ?? r.type, r.meaning && names[r.meaning]]), [["binary", "Binary", "meaning"], ["unary", "Nat", null], ["int", "Int", "natural"]]);
+  assert.deepEqual(own, [binary]);
+  assert.equal(binary.of, NAT_TYPE);
   assert.equal(names[binary.impl[SUCC]], "succ′");
   assert.equal(names[int.impl.match], "match Nat (Int)");
-  assert.deepEqual([binary.cost[p.named("multiply")], unary.cost.fold, binary.cost.space], ["log² n", "n", "log n"]);
+  assert.deepEqual([binary.cost[named("multiply")], unary.cost.fold, binary.cost.space], ["log² n", "n", "log n"]);
   const succJob = Object.values(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as { target?: Id }).target === JOBS.job
     && (p.code.nodes[n.args[1]] as { target?: Id }).target === binary.impl[SUCC]) as Call;
-  const wrong = { ...p.code, nodes: { ...p.code.nodes, [succJob.args[1]]: { id: succJob.args[1], kind: "ref" as const, target: p.named("number′") } } };
+  const wrong = { ...p.code, nodes: { ...p.code.nodes, [succJob.args[1]]: { id: succJob.args[1], kind: "ref" as const, target: p.named("integer′") } } };
   const errors = infer(wrong, names).errors.map((e) => e.message);
-  assert.deepEqual(errors, ["this does (Nat) -> Nat's job at Binary, so its type is (Binary) -> Binary, not (Binary) -> Float64"]);
+  assert.deepEqual(errors, ["this does (Nat) -> Nat's job at Binary, so its type is (Binary) -> Binary, not (Binary) -> Int"]);
 });
 
 test("the chooser picks Int for main, and represent onto binary gives the same answers", () => {
   const c = choose(p.code, p.named("main"), reps);
   assert.equal(c.rep.name, "int");
-  assert.ok(c.jobs.includes("fold") && c.jobs.includes(p.named("multiply")));
+  assert.ok(c.jobs.includes("fold") && c.jobs.includes(named("multiply")));
   assert.equal(represent(p.code, [p.named("main")], unary), p.code);
 
   // Each job does only what it replaces (test/containers.test.ts has one that doesn't).
   for (const r of reps) assert.equal(jobProblem(info, r, names), null, r.name);
-  const bin = represent(p.code, [p.named("main"), p.named("small")], binary);
+  // The rows' own definitions left out, as cli/represented.ts does: the
+  // library's int row is written on natural, which the rewrite changes.
+  const bin = rowsLeftOut(represent(p.code, [p.named("main"), p.named("small")], binary));
   const bi = infer(bin, names);
   assert.deepEqual(bi.errors, []);
   assert.equal(showType(bi.typeOf.get(p.named("factorial"))!, names), "(Binary) -> Binary");
@@ -100,12 +112,13 @@ test("the chooser picks Int for main, and represent onto binary gives the same a
 // stored"): the program still says zero and succ; fold Nat (Int) folds over
 // range(n), so compiled it is a counted loop.
 test("Nat as an Int: every job agrees with Nat through natural, and folds see the same cases", () => {
-  for (const d of ["natural", "match Nat (Int)", "fold Nat (Int)"]) assert.ok(!info.divergent.has(p.named(d)), d);
+  for (const d of ["natural", "match Nat (Int)", "fold Nat (Int)"]) assert.ok(!info.divergent.has(named(d)), d);
   const means = (i: Value, n: Value) => assert.ok(equal(call("natural", i), n));
   for (let a = 0; a <= 9; a++) {
     means(a, peano(a));
     means(call("succ (Int)", a), peano(a + 1));
-    assert.equal(call("number (Int)", a), call("number", peano(a)));
+    assert.equal(call("integer (Int)", a), call("integer", peano(a)));
+    means(call("natural (Int)", a - 5), call("natural", a - 5));
     for (let b = 0; b <= 9; b++) {
       means(a + b, call("add", peano(a), peano(b)));
       means(a * b, call("multiply", peano(a), peano(b)));
@@ -115,7 +128,7 @@ test("Nat as an Int: every job agrees with Nat through natural, and folds see th
     assert.deepEqual(seen, Array.from({ length: a }, (_, i) => i));
     assert.equal(call("match Nat (Int)", a, () => ["zero"], (m: Value) => [m]), a === 0 ? "zero" : a - 1);
   }
-  const ints = represent(p.code, [p.named("main"), p.named("small")], int);
+  const ints = rowsLeftOut(represent(p.code, [p.named("main"), p.named("small")], int));
   const ii = infer(ints, names);
   assert.deepEqual(ii.errors, []);
   assert.equal(showType(ii.typeOf.get(p.named("factorial"))!, names), "(Int) -> Int");
@@ -178,7 +191,7 @@ test("a builtin type can be represented too: Float64 with every job rounded, as 
 // The editor shows the same choice next to the type (E159), never asks for one.
 test("the editor's stored-as line is the chooser's: Nat is stored as int for main", async () => {
   const { storedAs } = await import("../../editor/typed.ts");
-  const nat = reps[0].of;
+  const nat = NAT_TYPE;
   assert.equal(storedAs(p.code, info, names, p.own.defs, nat, p.named("main"))?.rep, "int");
   assert.equal(storedAs(p.code, info, names, p.own.defs, nat, null), null);
 });
@@ -187,7 +200,7 @@ test("the editor's stored-as line is the chooser's: Nat is stored as int for mai
 test("storedAll gives each type's choice, the same as storedAs", async () => {
   const { storedAll, storedAs } = await import("../../editor/typed.ts");
   const all = storedAll(p.code, info, names, p.own.defs, p.named("main"));
-  const nat = reps[0].of;
+  const nat = NAT_TYPE;
   assert.equal(all.get(nat)?.rep, storedAs(p.code, info, names, p.own.defs, nat, p.named("main"))?.rep);
   assert.equal(storedAll(p.code, info, names, p.own.defs, null).size, 0);
 });

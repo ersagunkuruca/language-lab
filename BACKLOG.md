@@ -27,7 +27,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | C218 (measure the split on WASI and C); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
-| L Language and library | "Language lane B" | L249, L251, L253 (P3, from the 2026-11-13 docs refresh) |
+| L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
 
 ## Inbox
@@ -173,7 +173,7 @@ all of these.
 |---|---|---|---|---|---|
 | L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its folds and the sizes of its values, checked against measurements (rep-costs.test.ts measures today's declared ones). L24 found the declared costs right on the examples, so this waits for a program where a declared cost is wrong | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md, RESEARCH-L24-2026-11-12 | P3 | L | waits for an example |
 | L248 | Ropes as one more representation of List (NUMBERS.md stage 3): `append` and `split` in log n, chosen by cost like `array of List`. Waits for a program that splits and joins long lists | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | M | waits for an example |
-| L249 | Int as data and Nat in std (NUMBERS.md stage 1): `match` and `fold` on an Int as a view (zero / succ), and `Nat` in std represented as Int, so Peano code from examples/numbers runs on std's Nat | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | M | |
+| L249b | Int's own definition as data (NUMBERS.md stage 1, the rest of L249): Lean's `from(Nat) \| ‹minus one minus›(Nat)`, one spelling per integer, so a `match` on an Int splits it by sign into std's Nat, stored as the Int itself; and Nat literals (`3` at Nat). Nat in std is done (L249). Waits for a program that matches on an Int's sign or writes a Nat literal | L249 (Language lane B, 2026-11-13); NUMBERS.md | P3 | S | waits for an example |
 | L252 | Units written in a type (`Float64 m/s`) and functions generic over a unit; units are inferred and checked today, not written (LANGUAGE.md "What's next") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md, NUMBERS.md "Units" | P3 | L | |
 | L256 | A value packed with its implementation (INTERFACES.md step 6): a list of things of different types sharing an interface, paid for only where used. Waits for a program that needs it | docs refresh 2026-11-13 (thread "Update all project docs"); INTERFACES.md | P3 | M | waits for an example |
 
