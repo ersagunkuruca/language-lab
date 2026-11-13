@@ -19,9 +19,10 @@ import { buildSteady } from "../src/lang/steady-source.ts";
 import { buildCases } from "../src/lang/cases-source.ts";
 import { buildNumbers } from "../src/lang/numbers-source.ts";
 import { addVersions, verify } from "../src/lang/modules.ts";
+import { printSaved } from "../src/saved.ts";
 
 const here = import.meta.dirname;
-const save = (path: string, value: unknown) => writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+const save = (path: string, value: unknown) => writeFileSync(path, printSaved(value));
 
 // The published definitions before this build, by name: an example that
 // refers to one whose content changed is moved onto the new one below.

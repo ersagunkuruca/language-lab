@@ -16,6 +16,7 @@ const entries = keepInMemory(build);
 const T = await import("./typed.ts");
 const { merge } = await import("../ters/src/model.ts");
 const { LIBRARY } = await import("../ters/src/lang/library.ts");
+const { parseSaved } = await import("../ters/src/saved.ts");
 const { seedArithmetic } = await import("../ters/src/lang/arith.ts");
 const { sameAs } = await import("../ters/src/lang/modules.ts");
 
@@ -23,7 +24,7 @@ const { sameAs } = await import("../ters/src/lang/modules.ts");
 // with the editor's options, then the library's resolving its warm-up
 // makes (seeds.ts warmCalls).
 const dir = new URL("../ters/examples/markov/", import.meta.url);
-const read = (f: string) => JSON.parse(readFileSync(new URL(f, dir), "utf8"));
+const read = (f: string) => parseSaved<any>(readFileSync(new URL(f, dir), "utf8"));
 const code = merge(LIBRARY.code, read("code.json"));
 const names = { ...LIBRARY.names, ...read("names.default.json") };
 T.setProgramPins({});

@@ -6,6 +6,7 @@
 import type { Code } from "../ters/src/model.ts";
 import type { Drafts } from "./drafts.ts";
 import { hashDef } from "../ters/src/hash.ts";
+import { savedForm } from "../ters/src/saved.ts";
 import { h } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
 
@@ -31,7 +32,7 @@ export interface FilesHost {
 export function filesPanels(host: FilesHost) {
   const { doc, ui, undo, prog, draftsOf } = host;
   const files = () => [
-    { name: "code.json", get: (d: Doc) => JSON.stringify(userCode(prog(d))) },
+    { name: "code.json", get: (d: Doc) => JSON.stringify(savedForm(userCode(prog(d)))) },
     { name: "drafts.json", get: (d: Doc) => JSON.stringify(draftsOf(d)) },
     { name: "names.short.json", get: (d: Doc) => JSON.stringify(d.names.short) },
     { name: "names.descriptive.json", get: (d: Doc) => JSON.stringify(d.names.descriptive) },
