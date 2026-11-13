@@ -11,6 +11,8 @@ import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { S } from "../../ters/src/lang/std.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { NUMBER } from "../../ters/src/lang/types.ts";
+import type { Id } from "../../ters/src/model.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { emitCoreJs, loadCoreJs, loadPrinted, lowerCore, printed } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -198,4 +200,46 @@ test("a derivative through sum(map(xs, …)) of a captured list: the slope, comp
   assert.deepEqual([...core.refused.entries()], []);
   const g = loadPrinted(printed(core), { print: () => {} }, printed(core).code)[core.funcs.findIndex((h) => h.def === at && !h.inner)];
   for (const q of [1, -2, 0.5]) assert.equal(g(q), 3, `at ${q}`);
+});
+
+// gradient(f) of a function of a record chosen at run time (I247, round
+// 15's fit): carried as a derivative is, on JavaScript with no nodes, and
+// on WebAssembly and C.
+function gradientProgram() {
+  const k = new Lang();
+  const AB = k.type("AB", [], [["ab", [["a", () => k.tref(NUMBER)], ["b", () => k.tref(NUMBER)]]]]);
+  const v = AB.v.ab, part = (p: Id, i: number) => k.call(AB.f[i ? "ab.b" : "ab.a"], p);
+  const model = k.def("model"), at = k.def("at");
+  // model(m, x): a·e^(b·x) or a + b·x, as a function of (a, b).
+  k.define(model, k.fn(["m", "x"], (m, x) => k.if(k.call(S.less, m, k.lit(1)),
+    k.fn(["p"], (p) => k.call(B.mul, part(p, 0), k.call(B.exp, k.call(B.mul, part(p, 1), x)))),
+    k.fn(["p"], (p) => k.call(B.add, part(p, 0), k.call(B.mul, part(p, 1), x))))));
+  // at(m, x, a, b): the gradient's two parts, a + 10·b.
+  k.define(at, k.fn(["m", "x", "a", "b"], (m, x, a, b) => k.let("g", k.call(k.call(S.gradient, k.call(model, m, x)), k.call(v, a, b)), (g) =>
+    k.call(B.add, part(g, 0), k.call(B.mul, k.lit(10), part(g, 1))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const ev = (xs: number[]) => { for (const y of r.call(r.value(at), ...xs)) return y as number; };
+  return { code, names, info, at, ev };
+}
+const gradientInputs = [[0, 2, 1.5, 0.3], [1, 2, 1.5, 0.3], [0, -1, 2, -0.5], [1, 0.5, 0, 0]];
+
+test("a function of a record chosen at run time carries its gradient (I247)", async () => {
+  const p = gradientProgram();
+  const core = lowerCore(p.code, p.info, p.names, [p.at]);
+  assert.deepEqual([...core.refused.entries()], []);
+  const js = emitCoreJs(core).js;
+  assert.doesNotMatch(js, /R\.rt\("derive:/);
+  assert.doesNotMatch(js, /"lambda":/);
+  const f = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === p.at && !g.inner)];
+  for (const xs of gradientInputs) assert.equal(f(...xs), p.ev(xs), `JS at ${xs}`);
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.at], { data: true });
+  const fi = lowered.funcs.findIndex((g) => g.def === p.at && !g.inner), fn = lowered.funcs[fi];
+  const w = await instantiate(emitWasm(lowered));
+  const got = (xs: number[]) => { const y = w[fn.name](...xs) as unknown; return fn.partial ? (y as [number, number])[1] === 0 ? (y as [number, number])[0] : undefined : y; };
+  for (const xs of gradientInputs) assert.equal(got(xs), p.ev(xs), `WebAssembly at ${xs}`);
+  if (skip) return;
+  const run = build(lowered), out = run(gradientInputs.map((xs): [number, number[]] => [fi, xs]));
+  gradientInputs.forEach((xs, j) => assert.equal(out[j].value, p.ev(xs), `C at ${xs}`));
 });

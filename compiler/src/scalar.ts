@@ -1810,8 +1810,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // the closure (it carries its lambda, closure.src); what it gives
         // is the evaluator's function, called for its one answer.
         // One the function carries (I245), on every target: its maker,
-        // given the closure (in a local, as a printer reads it twice).
-        if (carried && target === S.derivative && n.args.length === 1) {
+        // given the closure (in a local, as a printer reads it twice). A
+        // gradient the same way (I247): a function of a record is asked
+        // only for its gradient, a function of a Float64 its derivative.
+        if (carried && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
           const ft = stype(zonk(n.args[0]));
           if (ft && isFn(ft)) {
             derivedKeys.add(plainKey(ft));

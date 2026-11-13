@@ -206,10 +206,14 @@ WebAssembly and C refused). Instead, the function carries its derivative:
   (`(c₁, …) => (x) => …`), so the checker types it; the maker reads the
   captures off the closure into those inputs. Where one's type is left
   open (generic), it is left without.
+- **Gradients.** `gradient(f)` of a function of a record (its one case)
+  is carried the same way (I247): the function type is asked only for
+  its gradient, made ahead by derive.ts's gradient (a forward pass per
+  part), and `gradient(f)` is the same `derived` call.
 - **Not yet.** A derivative that asks for another (of a function the
-  lambda captured), and `gradient`: no example needs them, so on
-  JavaScript the evaluator's derive stays for them and WebAssembly and C
-  refuse them; a new row when an example does.
+  lambda captured): no example needs it, so on JavaScript the evaluator's
+  derive stays for it and WebAssembly and C refuse it; a new row when an
+  example does.
 
 So no target looks inside a function at run time, and the evaluator's
 `derivative` stays the reference the tests compare with.
