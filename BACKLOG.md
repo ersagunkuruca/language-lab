@@ -191,7 +191,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L254 | Lazy fold results, so the effects in a fold could run top-down (LANGUAGE.md "What's next"). Research first: what it would mean for Choice and for the compiled loops | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | L | |
 | L255 | Cells holding a value that arrives later, as Solid's resources (a fetch's text as a cell with a loading state). Check first how much L59's page fetch already covers (LANGUAGE.md "Cells, further") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | M | |
 
 ### Relations and totality (BACKWARDS.md, MODES.md)
