@@ -10,6 +10,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { makeRunner } from "../../ters/src/lang/run.ts";
 import { S } from "../../ters/src/lang/std.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { emitCoreJs, loadCoreJs, loadPrinted, lowerCore, printed } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -178,4 +179,23 @@ test("calculus through ters wasi and ters native prints what ters run prints (I2
   const built = spawnSync(process.execPath, [lab, "native", calculus, "-o", join(dir, "p")], { encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);
   assert.equal(spawnSync(join(dir, "p"), [], { encoding: "utf8" }).stdout, want.stdout, "ters native");
+});
+
+// A lambda capturing a list, its slope a sum over a map of it (round 15):
+// the carried derivative is made from the code as staged, before a fold
+// of a map is fused (it gave the first item's slope, 1, once), and where
+// one can't be made the evaluator's derive is given the library nodes it
+// writes into a derivative (a pair's second, which nothing else reached).
+test("a derivative through sum(map(xs, …)) of a captured list: the slope, compiled (I245, round 15)", () => {
+  const k = new Lang(LIBRARY.code);
+  const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
+  const f = k.def("f"), at = k.def("at");
+  k.define(f, k.fn(["xs"], (xs) => k.fn(["q"], (q) => k.call(lib("sum"), k.call(lib("map"), xs, k.fn(["x"], (x) => k.call(B.mul, q, x)))))));
+  k.define(at, k.fn(["q"], (q) => k.call(k.call(S.derivative, k.call(f, k.listOf(k.lit(1), k.lit(2)))), q)));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const core = lowerCore(code, info, names, [at]);
+  assert.deepEqual([...core.refused.entries()], []);
+  const g = loadPrinted(printed(core), { print: () => {} }, printed(core).code)[core.funcs.findIndex((h) => h.def === at && !h.inner)];
+  for (const q of [1, -2, 0.5]) assert.equal(g(q), 3, `at ${q}`);
 });
