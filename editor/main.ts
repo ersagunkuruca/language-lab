@@ -10,6 +10,7 @@
 import { outlineProgram } from "../ters/src/lang/cells-programs.ts";
 import manifest from "./examples.json" with { type: "json" };
 import FILES from "examples:files";
+import { pullRequest, tablesAt } from "./github.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
@@ -218,19 +219,24 @@ const typedDoc = (program: Program, code: Code, names: Names, comments: Comments
 // One from its folders (examples/unpack.ts writes one), merged in order,
 // or one built in code.
 const BUILT: Record<Program, () => Doc> = { outline: () => outlineDoc() };
+const manifestOf = (program: Program) => manifest.programs.find((p) => p.program === program && p.editor !== false) ?? manifest.programs[0];
 const initialFor = (program: Program): Doc => {
-  const m = manifest.programs.find((p) => p.program === program && p.editor !== false) ?? manifest.programs[0];
+  const m = manifestOf(program);
   if (m.built) return BUILT[m.program]();
+  return docOfTables(m, (m.folders ?? []).map((f) => FILES(f)));
+};
+// A program from its folders' tables, as the build or a git revision has them.
+function docOfTables(m: ReturnType<typeof manifestOf>, tables: ReturnType<typeof FILES>[]): Doc {
   // With today's ids, as ters run reads a folder (load.ts): sheet still says
   // std's Pair, which is Tuple2 now (L139), and pointed at nothing (E212).
-  const fs = (m.folders ?? []).map((f) => onTodaysIds(FILES(f)));
+  const fs = tables.map((t) => onTodaysIds(t));
   const all = <K extends keyof (typeof fs)[number]>(k: K) => fs.some((f) => f[k]) ? Object.assign({}, ...fs.map((f) => f[k])) : undefined;
   const d = typedDoc(m.program, fs.map((f) => f.code as Code).reduce((a, b) => merge(a, b)), all("names") ?? {}, all("comments") ?? {}, { layout: all("layout"), examples: all("examples") });
   // Its pins too (signatures.json, L173c), or what they give isn't known
   // (I171: machine's fields mapped).
   const signatures = all("signatures") as Pins | undefined;
   return { ...d, names: { short: d.names.short, descriptive: all("descriptive") ?? {} }, hints: all("hints") ?? {}, ...(signatures ? { signatures } : {}) };
-};
+}
 
 // The nested to-do outline is built in src/lang/cells-programs.ts, where
 // reactive.html runs it too (BACKLOG L100, I35).
@@ -909,6 +915,14 @@ const changes = changesPanels({
   infoOf: (d) => { if (d === doc) return typesOf(); try { return T.infer(d.code, namesOf(d)); } catch { return null; } },
   ownDefs: (d) => ownDefs(d), keep: (d) => kept(d), restore: (d) => onToday(d),
   shipped: (d) => (isExample(d.program) ? initialFor(d.program) : null),
+  // An example as a git revision has it, read from GitHub (E263).
+  atRevision: async (d, rev) => {
+    const m = manifestOf(d.program);
+    if (!isExample(d.program) || m.built || !m.folders?.length) throw new Error(`${titleOf(d)} isn't one of the repository's examples, so git has no version of it`);
+    return docOfTables(m, (await Promise.all(m.folders.map((f) => tablesAt(rev, f)))) as ReturnType<typeof FILES>[]);
+  },
+  pullRequest: (n) => pullRequest(n),
+  render: () => render(),
   key: `${STORE}-reviewed`,
 });
 changes.opened(doc);
