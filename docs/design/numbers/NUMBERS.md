@@ -27,40 +27,52 @@ node --test test/numbers.test.ts    # the laws, the rewrite, encoding by running
 cd ../compiler && npm test          # includes the rewritten program, compiled
 ```
 
-## Where this stands (2026-10-30)
+## Where this stands (2026-11-13)
 
 **The goal.** You write the meaning (`cons`/`nil`, `zero`/`succ`, a map
 as sorted entries), and every target runs it on whatever storage fits how
-the program uses each value: arrays, ropes, machine integers, trees. The
-choice belongs to one representation layer, shared by the evaluator, every
-compiler target and the editor, which shows the choice. The compiler
-always chooses; a program never names a representation (Ersagun,
-2026-10-30, #682). One type can have several representations in one program, chosen per
-value, with the cost of converting between them counted.
+the program uses each value: arrays, machine integers, trees, hash
+tables. The choice belongs to one representation layer, shared by the
+evaluator, every compiler target and the editor, which shows the choice.
+The compiler always chooses; a program never names a representation
+(Ersagun, 2026-10-30, #682). One type can have several representations in
+one program, chosen per value, with the cost of converting between them
+counted.
 
 **Built:**
 - The layer itself: representations written in the language as ordinary
   definitions (`representation int of Nat = representation(…)`,
   REPRESENTATIONS.md, #679 to #681), the rewrite (`represent`), the chooser
   by declared costs (`choose`), and `ters check` saying what it chose
-  (#682). Laws are checked by running the meaning beside the
-  representation. Peano `Nat` runs as
-  `Int`; `Map` and `Set` become balanced trees when their jobs' costs say
-  so (DATA-STRUCTURES.md), on every target.
-- Per value, for folds: a fold over `characters(t)` walks the text, a fold
-  over `range(n)` is a counter, other lists stay cons cells ("Folds run the
-  way their value is stored", below).
+  (#682); a data type's panel in the editor says it too (E159). Each job's
+  laws are checked by `ters test` against the type's own through
+  `meaning` (L108d). Peano `Nat` runs as `Int`.
+- The library's choices, on every target (library-reps.ts): `Map` and
+  `Set` as balanced trees when their jobs' costs say so
+  (DATA-STRUCTURES.md), and a `Map` as a hash table changed in place where
+  nobody else holds it (C63, IN-PLACE.md). A `List` is stored as an array
+  (`array of List`, on Ersagun's two-ended buffer) when the program reads it
+  by position or asks its length (C30d, C30e; the wavetable example).
+- Per value: the chooser splits a type's values into groups that flow into
+  one another and may give two groups different representations, converting
+  where a value crosses (C93, REPRESENTATION-PER-VALUE-2026-11-05.md;
+  machine's registers are arrays while its assembler's lists stay cons
+  lists). Only on JavaScript for now: on WebAssembly an array is copied on
+  every replace, so the split lost there. An array or a record that has
+  one holder is changed in place (C93 s4, s5).
+- Folds run the way their value is stored: a fold over `characters(t)`
+  walks the text, a fold over `range(n)` is a counter, a fold over an array
+  is a loop ("Folds run the way their value is stored", below).
+- The number systems below: Int, Float64, Rational, Complex, Dual, Fixed,
+  Algebraic and Real, the machine words, Clifford algebras, matrices of any
+  size and tensors, all through one `+` (now the interfaces `Arithmetic`
+  and `Ordered`, INTERFACES.md), with embeddings between them inserted by
+  the checker (EMBEDDINGS.md).
 
 **Not yet:**
-- **Lists as arrays are a compiled-JavaScript trick, outside the layer.**
-  A list that is only walked stays a JS array in compiled JavaScript
-  (docs/reports/GAPS.md G21, P4a), decided in `compiler/src/compile.ts`. There
-  is no `array` representation, so WebAssembly and C keep cons cells, and
-  the editor can't show it. Moving it into the layer is BACKLOG C30 and
-  stage 3 of the roadmap below.
-- User types get one representation per type for the whole program, and
-  costs are declared by hand. Choice per value flow, with conversion costs,
-  and costs worked out from folds are stage 7.
+- Costs are declared by hand on each representation's jobs. Working them
+  out from folds and checking them against measurements is stage 7.
+- No rope representation of lists; a list is cons cells or an array.
 
 ## Short answers
 
@@ -100,8 +112,10 @@ value, with the cost of converting between them counted.
   general would need eight.
 - **How does `+` work on all of these?** One generic `+` (decided
   2026-10-24, below): its type says "any number type", and it is resolved
-  to the type's own operation before the program runs. A closed set of
-  structures, not open type classes.
+  to the type's own operation before the program runs. Since 2026-10-27 the
+  structures are interfaces (`Arithmetic`, `Ordered`, `Trig`, …) that any
+  type, a program's own included, implements (INTERFACES.md). `+`, `−` and
+  negate are the directions of one sum, `a + b = total` (L244).
 - **Infinite continued fractions?** Done, through an effect: a data type
   with a cell in a field, `term(whole: Int, rest: Cell CF)`, where the rest
   is a `formula`, computed when first read and then remembered (LANGUAGE.md,
@@ -113,7 +127,9 @@ value, with the cost of converting between them counted.
 - **Derivatives?** Dual numbers (`Cl(0, 0, 1)`, ε² = 0) are a
   representation of `Float64` that carries a slope. Running a function on
   them is forward-mode automatic differentiation: a second implementation
-  of `derivative`, to test `derive.ts` against.
+  of `derivative`, to test `derive.ts` against (L40g: `slope by duals`
+  agrees with `derivative`). Compiled code carries a function's
+  derivative, made ahead by derive.ts, on every target (I245, I247).
 
 ## The proof of concept
 
@@ -796,6 +812,11 @@ v` (a scalar times a vector) is `scale`, a different definition drawn as
 `·`, and matrix times vector will be the same. The palette offers the one
 that fits; the program stores its id.
 
+*Since 2026-10-27 (INTERFACES.md, L40h) the structures below are
+interfaces, `Arithmetic` and `Ordered` among them, and a type, a program's
+own included, gets the one `+` by implementing them; the paragraph below is
+the decision as first made.*
+
 **What it isn't.** It is a type class, said plainly, but a closed one:
 the language fixes the structures (additive, module, ring, field,
 ordered; LANGUAGE-REVIEW-2026-10-24.md has the table) and each number type
@@ -907,13 +928,13 @@ In order. Each stage says when to start it.
 | stage | what | start when |
 |---|---|---|
 | 0 | representations (side tables then, language definitions since L108, REPRESENTATIONS.md); `represent` (code → code) and `choose` (declared costs); laws as tests; Peano Nat with binary | done |
-| 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | **partly done**: `Int` is a builtin type with JS number / BigInt values, literals, operations, compiler templates, and overflow is in the error table as impossible (LANGUAGE.md). Still to do: Int's definition as data (match and fold on it as a view), Nat, Rational |
+| 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | **partly done**: `Int` is a builtin type with JS number / BigInt values, literals, operations, compiler templates, and overflow is in the error table as impossible (LANGUAGE.md); Rational as lowest-terms pairs (L39, now in the numbers module, L207f4). Still to do: Int's definition as data (match and fold on it as a view), and Nat in std |
 | 2 | **One `+`.** ~~Several defs displayed as `+`, operation records as arguments~~ Decided 2026-10-24: one generic `+ − · −x <` over a closed set of structures, resolved by type before anything runs (above, "One `+` for every number system") | **done** (L38), now the interfaces `Arithmetic` and `Ordered` (INTERFACES.md, L40h) |
-| 3 | **Lists as arrays and ropes.** `length`, `index`, `append`, `split` as jobs; array and rope representations, written in the language; the editor showing which one the compiler chose (no picker: the compiler always chooses) | a program in the editor is slow because of list length or indexing |
-| 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | **partly done**: complex (L40), dual (L40g), `clifford table` (L42a), rotors and quaternions (L43a); open: PGA, grade inference (L42, L43) |
-| 5 | **Infinite data.** ~~Function-typed fields as lazy data~~ `Cell` fields as lazy, remembered data (done, the Cells effect); ~~guarded corecursion in the checker~~ (done, L16); ~~continued fractions with Gosper's arithmetic~~ (done as a program: `+ − × ÷` of two CFs, √n, e, rationals); exact reals as a representation of `Real`, with `Diverge` comparisons | **partly done**, and exact algebraic numbers are built (EXACT-REALS.md, L88); the rest when anyone wants an exact real as a number type, or a stream |
-| 6 | **Tensors.** Contraction + map, the representations above, shape inference on the units machinery | a numeric example needs a matrix bigger than 3 × 3 |
-| 7 | **Costs worked out, laws proved.** Cost inference from folds and representation sizes, checked by fitted benchmarks; laws for folds proved by fusion; choice per value flow, with conversion costs | the declared costs turn out wrong, or a program needs two representations of one type |
+| 3 | **Lists as arrays and ropes.** `length`, `index`, `append`, `split` as jobs; array and rope representations, written in the language; the editor showing which one the compiler chose (no picker: the compiler always chooses) | **mostly done**: `array of List`, written in the language, chosen from use on every target (C30, C30d, C30e), and shown in the editor's type panel (E159); ropes not built |
+| 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | **done**: complex (L40), dual (L40g), `clifford table` (L42a), rotors and quaternions (L43a), PGA motors (L42), grades as types (L43, GRADES.md) |
+| 5 | **Infinite data.** ~~Function-typed fields as lazy data~~ `Cell` fields as lazy, remembered data (done, the Cells effect); ~~guarded corecursion in the checker~~ (done, L16); ~~continued fractions with Gosper's arithmetic~~ (done as a program: `+ − × ÷` of two CFs, √n, e, rationals); exact reals as a representation of `Real`, with `Diverge` comparisons | **done**: exact algebraic numbers and `Real`, whose `<` may not finish (EXACT-REALS.md, L88) |
+| 6 | **Tensors.** Contraction + map, the representations above, shape inference on the units machinery | **done**: `Matrix a` of any size (L44d to L44g, MATRICES.md), `Tensor a` with `contracted` (L51, TENSORS-2026-11-03.md) |
+| 7 | **Costs worked out, laws proved.** Cost inference from folds and representation sizes, checked by fitted benchmarks; laws for folds proved by fusion; choice per value flow, with conversion costs | choice per value flow is **done** (C93, on JavaScript); the rest when the declared costs turn out wrong |
 | 8 | **Dual numbers as a second `derivative`**, to test `derive.ts` against | **done** (L40g: `slope by duals` agrees with `derivative`) |
 
 ## What's still rough
@@ -927,7 +948,8 @@ In order. Each stage says when to start it.
 - ~~**The evaluator recurses on the JS stack.**~~ Fixed: the evaluator is
   now a machine with its continuation on the heap (LANGUAGE.md, "How it
   runs"), so `is even` of any size runs.
-- **One representation per type, per program**, as said above.
+- ~~**One representation per type, per program.**~~ The chooser splits a
+  type by groups of values since C93, on JavaScript.
 - **Costs are declared.** Stage 7 makes them checked, then computed.
 - **Representation rewrites inside a user's own types** (a record with a
   Nat field) rewrite the field's type, but nothing tests it yet.

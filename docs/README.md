@@ -66,20 +66,22 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 
 | doc | what it is | status |
 |---|---|---|
-| [NUMBERS.md](design/numbers/NUMBERS.md) | Many number systems and plain definitions (`zero`/`succ`) that compile fast; "Where this stands" says what's built | partly built (L38, L41 to L44, L51) |
+| [NUMBERS.md](design/numbers/NUMBERS.md) | Many number systems and plain definitions (`zero`/`succ`) that compile fast; "Where this stands" says what's built | partly built: the layer, arrays, per-value choice and the number systems built; costs still declared (stage 7) |
 | [WHAT-NUMBER-MEANS.md](design/numbers/WHAT-NUMBER-MEANS.md) | `Float64`, not JavaScript's `Number`; Number as the family a literal belongs to | built (L85, L86) |
 | [ALGEBRA-TABLES.md](design/numbers/ALGEBRA-TABLES.md) | A type's arithmetic as a multiplication table (complex, dual, Clifford) | built (L40d); led to INTERFACES.md |
-| [GRADES.md](design/numbers/GRADES.md) | Which parts of a multivector can be nonzero: a blade mask per value, inferred from the table; the compiler stores only those parts | proposal (L43b to L43e), one question for Ersagun |
+| [GRADES.md](design/numbers/GRADES.md) | Which parts of a multivector can be nonzero: a blade mask per value, inferred from the table; the compiler stores only those parts | built (L43, L203) |
 | [INTERFACES.md](design/numbers/INTERFACES.md) | A type's operations as interfaces with implementations | built (L40e to L40h) |
-| [WAYS.md](design/numbers/WAYS.md) | Several ways to compute one operation, the compiler picking by cost | partly built (L96) |
-| [RESULTS.md](design/numbers/RESULTS.md) | A definition with several named results, `length, angle = polar(x, y)` | partly built: language done, editor I65, compiler C55 |
-| [POLAR.md](design/numbers/POLAR.md) | `polar` as the relation behind trigonometry | partly built (L97) |
-| [MATRICES.md](design/numbers/MATRICES.md) | Linear maps, geometry and matrices: functions stored as matrices, Clifford rotors, a linear-algebra library | partly built (L44) |
-| [TENSORS-2026-11-03.md](design/numbers/TENSORS-2026-11-03.md) | Tensors (L51): a shape and items row-major, one `contracted`, Arithmetic item by item, shapes checked at run time | design; steps a to d open |
-| [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2), lazy reals later | partly built (L88) |
-| [FLOAT-VALUES-2026-11-01.md](design/numbers/FLOAT-VALUES-2026-11-01.md) | Which IEEE values `Float64` keeps: finite with one zero, ±∞ as `Extended a`, NaN as stored "no answer" (Rust-style niches) | decided 2026-11-01, to build (L125) |
-| [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | partly built (L89) |
-| [MATHEMATICS-AS-LIBRARIES-2026-11-03.md](design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | Should Clifford, Complex and the rest be in the core? No: libraries, with the core naming none of them; audit, measurement, embeddings as the core mechanism for generalization; rows L202 to L209, E237 | discussion, rows open |
+| [WAYS.md](design/numbers/WAYS.md) | Several ways to compute one operation, the compiler picking by cost | built (L96) |
+| [RESULTS.md](design/numbers/RESULTS.md) | A definition with several named results, `length, angle = polar(x, y)` | built (L95, I65, C55) |
+| [POLAR.md](design/numbers/POLAR.md) | `polar` as the relation behind trigonometry | built (L97) |
+| [MATRICES.md](design/numbers/MATRICES.md) | Linear maps, geometry and matrices: functions stored as matrices, Clifford rotors, a linear-algebra library | built (L44) |
+| [TENSORS-2026-11-03.md](design/numbers/TENSORS-2026-11-03.md) | Tensors (L51): a shape and items row-major, one `contracted`, Arithmetic item by item, shapes checked at run time | built (L51a to L51d) |
+| [EXACT-REALS.md](design/numbers/EXACT-REALS.md) | Exact algebraic numbers (√2·√2 is 2) and `Real`, narrowed on demand | built (L88) |
+| [FLOAT-VALUES-2026-11-01.md](design/numbers/FLOAT-VALUES-2026-11-01.md) | Which IEEE values `Float64` keeps: finite with one zero, ±∞ as `Extended a`, NaN as stored "no answer" (Rust-style niches) | built (L125) |
+| [FIXED-POINT.md](design/numbers/FIXED-POINT.md) | `Fixed`, the same bits on every machine, for games | built (L89) |
+| [MACHINE-WORDS-2026-11-03.md](design/numbers/MACHINE-WORDS-2026-11-03.md) | Word8 to Word64 as the machine's own unsigned words on WebAssembly, C and JavaScript, from known bits | built (C150) |
+| [MATHEMATICS-AS-LIBRARIES-2026-11-03.md](design/numbers/MATHEMATICS-AS-LIBRARIES-2026-11-03.md) | Should Clifford, Complex and the rest be in the core? No: libraries, with the core naming none of them; audit, measurement, embeddings as the core mechanism for generalization; rows L202 to L209, E237 | discussion; its rows are built |
+| [EMBEDDINGS.md](design/numbers/EMBEDDINGS.md) | Generalization as a feature: an embedding (Int into Rational, Float64 into Complex) keeps the operations, and the checker inserts the canonical one where a smaller type is given for a larger | built (L208, L209) |
 
 ### Representations, data and cells
 

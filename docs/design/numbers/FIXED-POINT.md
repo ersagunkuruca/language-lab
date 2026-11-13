@@ -4,6 +4,8 @@ Ersagun, 2026-10-26: floats "cause precision problems with large worlds and
 they work inconsistently across different machines making multiplayer a
 harder problem" (BACKLOG L89).
 
+**Status (2026-11-13).** Done: L89 closed (2026-11-04), every step built.
+
 **Status (2026-10-30).** Steps 1, 2 and 4 are built: `Fixed` with its
 arithmetic, exact `show`, CORDIC trig, and examples/lockstep, which is in
 the editor's example menu. Fixed runs on WASM and C through Int since

@@ -1,5 +1,13 @@
 # Which parts of a multivector can be nonzero (design note, 2026-10-31)
 
+**Status (2026-11-13).** Done: L43 closed. Masks are types (L43e1 to
+L43e3: `Vector of T`, `Bivector of T`, `Rotor of T`, …, and a wrong grade
+is refused), compiled JavaScript stores only each value's masked parts
+(L43f1, L43f2, compiler/src/zero-parts.ts) and a picture's WGSL holds a
+multivector in a smaller struct (L43f3). Masks come from any library's
+algebra, not only the prelude's (L203a to L203d). The status below is how
+it stood on 2026-10-31.
+
 **Status (2026-10-31).** BACKLOG L43 ("grade inference"), from
 CLIFFORD-DEMOS-2026-10-31 B3. L43b is built: `src/lang/grades.ts`
 (`bladeMask`, `describeMask`), for algebras a definition writes down,

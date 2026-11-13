@@ -1,5 +1,9 @@
 # Which IEEE float values the language keeps (design note, 2026-11-01)
 
+**Status (2026-11-13): done.** L125 closed (2026-11-04) with every step
+built, compiled checks on JavaScript, WebAssembly and C (L125c1 to c3)
+included.
+
 **Status (2026-11-01): decided; L125a, L125b, L125d and L125f built.** Ersagun chose both
 recommendations (10:28 and 10:29): `Float64` is the finite floats with one
 zero, ±∞ move to `Extended a`, and `x / 0` has no answer (`Choice`). Rows
