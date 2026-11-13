@@ -732,6 +732,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const rounded = new Set<Id>();
   const calls = new Set(st.rounded);
   if (calls.size) for (const d of code.defs) if (subtree(code, d).some((id) => calls.has(id))) rounded.add(d);
+  // A function chosen at run time that `derivative` is asked of carries
+  // its derivative, made ahead here (carried-derivatives.ts, I245): from
+  // the code as staged, as the evaluator would derive it, before the
+  // passes below rewrite folds (a fused fold's accumulator isn't a fold's
+  // result derive.ts can follow); they then work on the derivatives too.
+  const carried = !opts.shader && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
+  if (carried) ({ code, names, info } = carried);
   // A list named first and then walked is put where it's walked, so the
   // fold over `characters` sees it (inline-lets.ts, C49).
   const lets = inlineLists(code, info);
@@ -753,10 +760,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     code = sharedItems.code;
     info = infer(code, names);
   }
-  // A function chosen at run time that `derivative` is asked of carries
-  // its derivative, made ahead here (carried-derivatives.ts, I245).
-  const carried = !opts.shader && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
-  if (carried) ({ code, names, info } = carried);
   const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives
   // made (which carry none: no derivative of one is asked, carried-
