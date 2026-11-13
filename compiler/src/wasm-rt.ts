@@ -8405,6 +8405,8 @@ export const WASI_IMPORTS: Record<string, { params: ("i32" | "i64")[]; result: "
   path_filestat_get: { params: ["i32", "i32", "i32", "i32", "i32"], result: "i32" },
   args_sizes_get: { params: ["i32", "i32"], result: "i32" },
   args_get: { params: ["i32", "i32"], result: "i32" },
+  environ_sizes_get: { params: ["i32", "i32"], result: "i32" },
+  environ_get: { params: ["i32", "i32"], result: "i32" },
   proc_exit: { params: ["i32"], result: null },
   random_get: { params: ["i32", "i32"], result: "i32" },
   clock_time_get: { params: ["i32", "i64", "i32"], result: "i32" },
@@ -9176,6 +9178,99 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       end
       local.get $l
       i32.const 0`,
+  },
+  // An environment variable (L253): the value after "name=" among the
+  // ones the host gives, or none.
+  "wasi.environmentVariable": {
+    params: [["name", "text"]], result: "option", locals: [["count", "i32"], ["i", "i32"], ["p", "i32"], ["n", "i32"], ["j", "i32"], ["ok", "i32"], ["len", "i32"]], uses: ["wasi.room", "wasi.take", "wasi_environ_sizes_get", "wasi_environ_get", "TextOption.none", "TextOption.some"],
+    body: `
+      i32.const 0
+      i32.const 4
+      call $wasi_environ_sizes_get
+      drop
+      i32.const 0
+      i32.load
+      local.tee $count
+      i32.const 4
+      i32.mul
+      i32.const 4
+      i32.load
+      i32.add
+      call $wasi.room
+      i32.const @buf
+      i32.const @buf
+      local.get $count
+      i32.const 4
+      i32.mul
+      i32.add
+      call $wasi_environ_get
+      drop
+      local.get $name
+      array.len
+      local.set $n
+      ${loopTo("local.get $i\nlocal.get $count\ni32.ge_u", `
+      local.get $i
+      i32.const 4
+      i32.mul
+      i32.const @buf
+      i32.add
+      i32.load
+      local.set $p
+      i32.const 1
+      local.set $ok
+      i32.const 0
+      local.set $j
+      ${loopTo("local.get $j\nlocal.get $n\ni32.ge_u\nlocal.get $ok\ni32.eqz\ni32.or", `
+      local.get $p
+      local.get $j
+      i32.add
+      i32.load8_u
+      local.get $name
+      local.get $j
+      array.get_u $bytes
+      i32.ne
+      if void
+        i32.const 0
+        local.set $ok
+      end
+      local.get $j
+      i32.const 1
+      i32.add
+      local.set $j`)}
+      local.get $ok
+      if void
+        local.get $p
+        local.get $n
+        i32.add
+        i32.load8_u
+        i32.const 61
+        i32.eq
+        if void
+          local.get $p
+          local.get $n
+          i32.add
+          i32.const 1
+          i32.add
+          local.set $p
+          i32.const 0
+          local.set $len
+          ${loopTo("local.get $p\nlocal.get $len\ni32.add\ni32.load8_u\ni32.eqz", `
+          local.get $len
+          i32.const 1
+          i32.add
+          local.set $len`)}
+          local.get $p
+          local.get $len
+          call $wasi.take
+          call $TextOption.some
+          return
+        end
+      end
+      local.get $i
+      i32.const 1
+      i32.add
+      local.set $i`)}
+      call $TextOption.none`,
   },
   // The program's arguments after its own name, as a List Text.
   "wasi.args": {
