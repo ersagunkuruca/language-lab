@@ -190,9 +190,10 @@ export const readLog = (text: string): LogEntry[] =>
 // next, is dropped. A replay or a step back starts from a snapshot
 // (rr's checkpoints; Redux DevTools' maxAge). The run's start is the
 // first snapshot, with nothing to restore: what main makes.
-// Inside a segment, a snapshot every `events` events as well (I252, 30
-// by default), a `step` one: a step back then gives at most that many
-// events again, where a page that hears frames has 600 in 10 seconds.
+// Inside a segment, a snapshot every `events` events as well (I252; 10
+// by default since I255), a `step` one: a step back then gives at most
+// that many events again, where a page that hears frames has 600 in 10
+// seconds (bounce interpreted: about 70 ms a frame, so 0.7 s at most).
 // Step snapshots leave with their segment and aren't counted in `keep`.
 export interface Snapshot<S = unknown> { at: number; state: S | null; step?: true }
 // A compiled page's snapshot (I239f): each cell's value in the order the
@@ -218,7 +219,7 @@ export class LogWindow<S = unknown> {
   mayTake(): void {
     const t = this.now();
     if (t - this.last < this.o.seconds * 1000) {
-      if (++this.heard < (this.o.events ?? 30)) return;
+      if (++this.heard < (this.o.events ?? 10)) return;
       this.heard = 0;
       this.snapshots.push({ at: this.log.length, state: this.take(), step: true });
       return;

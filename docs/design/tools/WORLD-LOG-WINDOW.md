@@ -64,10 +64,18 @@ segment starts with a snapshot of the page:
 - the random generator's state (four 32-bit words);
 - the time of the last frame.
 
-Inside a segment, a snapshot every 30 events as well (I252): a page that
-hears frames has 600 events in 10 seconds, and a step back gives again
-every event since the snapshot before it. These step snapshots leave with
-their segment.
+Inside a segment, a snapshot every 10 events as well (I252, I255): a page
+that hears frames has 600 events in 10 seconds, and a step back gives again
+every event since the snapshot before it. Bounce interpreted takes about
+70 ms a frame, so a step costs at most 0.7 s. These step snapshots leave
+with their segment.
+
+The interpreted page that steps through a compiled page's window runs the
+program as the compiled page runs it, its lists and Maps chosen
+(coreMain.ts checkedForRun). Bounce's compiled page holds lists of points
+as trees; an interpreted page running the code as written holds them as
+cons lists, can carry none of the compiled snapshots' cells, and so
+replayed from the run's start on every step (I255: 22 s a step).
 
 Once the log holds more than M segments (30 by default, about 5 minutes),
 the oldest segment and its snapshot are dropped. On bounce that is 18,000
