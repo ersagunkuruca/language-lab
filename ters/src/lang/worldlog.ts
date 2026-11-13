@@ -37,13 +37,28 @@ const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes",
 // runs as long as it is open, and logging each draw would grow with it.
 // A main's run keeps each draw, to step by.
 // `quiet`: while it says so, nothing is logged (a page stepped through
-// the log it has, I239c).
-export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean; quiet?: () => boolean } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
+// the log it has, I239c). `cap`: about how many bytes a main's run may log
+// (I239d, WORLD-LOG-WINDOW.md §4); past it the log says it stopped
+// (`logFull`) and keeps nothing more, so a run that never ends holds
+// bounded memory, and its replay says why it can't go on.
+// A compiled page's events and answers share one (`budget`).
+export const MAIN_LOG_CAP = 8 * 1024 * 1024;
+export interface Budget { cap: number; used: number }
+export const budget = (cap = MAIN_LOG_CAP): Budget => ({ cap, used: 0 });
+// Whether `e` still fits; the first that doesn't ends the log.
+const fits = (log: LogEntry[], b: Budget | undefined, e: LogEntry): boolean => {
+  if (log[log.length - 1]?.op === "logFull") return false;
+  if (!b || (b.used += sizeOf(e)) <= b.cap) return true;
+  log.push({ op: "logFull", args: [b.cap] });
+  return false;
+};
+export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean; quiet?: () => boolean; cap?: number; budget?: Budget } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
   const out = { ...world } as Record<string, unknown>;
   // The seeded generator, for a snapshot to keep where it is (I239b).
   // Set to no state, the next draw asks for the seed again.
   const random = { state: () => gen?.state?.() ?? [], set: (s: number[]) => { if (!s.length) gen = null; else gen?.set?.(s); } };
-  const push = (e: LogEntry) => { if (!o.quiet?.()) log.push(e); };
+  const b = o.budget ?? (o.cap !== undefined ? budget(o.cap) : undefined);
+  const push = (e: LogEntry) => { if (!o.quiet?.() && fits(log, b, e)) log.push(e); };
   let gen: Generator | null = null;
   for (const [op, f] of Object.entries(world)) {
     if (typeof f !== "function") continue;
@@ -77,6 +92,13 @@ export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean
 }
 
 
+const megabytes = (n: number): string => (n >= 1048576 ? `${Math.round(n / 1048576)} MB` : `${Math.round(n / 1024)} KB`);
+// About what an entry holds, in bytes: its strings and bytes, 8 a number,
+// and 48 for the entry itself.
+const sizeOf = (e: LogEntry): number => 48 + weigh(e.args) + weigh(e.answer);
+const weigh = (x: unknown): number =>
+  typeof x === "string" ? x.length * 2 : x instanceof Uint8Array ? x.length : Array.isArray(x) ? x.reduce((n: number, v) => n + weigh(v), 8) : x && typeof x === "object" ? Object.values(x).reduce((n: number, v) => n + weigh(v), 16) : 8;
+
 // Two arguments or answers alike: what JSON keeps of them, bytes as bytes.
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a, plain) === JSON.stringify(b, plain);
 const plain = (_: string, v: unknown) => (v instanceof Uint8Array ? [...v] : v);
@@ -99,6 +121,7 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
     const e = log[at];
     const said = (x: { op: string; args: unknown[] }) => `${x.op}(${x.args.map((a) => JSON.stringify(a, plain)).join(", ")})`;
     if (!e) throw new WentAnotherWay(`the replay went another way after ${at} entries: the run asked ${said({ op, args })}, and the log had ended`);
+    if (e.op === "logFull") throw new WentAnotherWay(`the replay can't go on after ${at} entries: the run's answers passed ${megabytes(e.args[0] as number)} there, and its log stopped (a shorter run replays whole)`);
     if (e.op !== op || !same(e.args, args)) throw new WentAnotherWay(`the replay went another way at entry ${at + 1}: the log has ${said(e)}, the run asked ${said({ op, args })}`);
     at++;
     if (!WRITES.has(op)) given++;
@@ -133,12 +156,12 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
 // A frame heard right after one the same element heard adds its seconds
 // to that entry (I239a): an animation's frames are most of a page's log.
 // With a window, each event is first a moment it may take a snapshot at.
-export const heardInto = (log: LogEntry[], window?: LogWindow) => (name: string, at: [string, string, number, number, number], path: number[]): void => {
+export const heardInto = (log: LogEntry[], window?: LogWindow, b?: Budget) => (name: string, at: [string, string, number, number, number], path: number[]): void => {
   window?.mayTake();
-  if (name !== "frame") { log.push({ op: "event", args: [name, ...at, path] }); return; }
+  if (name !== "frame") { const e = { op: "event", args: [name, ...at, path] }; if (fits(log, b, e)) log.push(e); return; }
   const [value, key, x, y, seconds] = at, last = log[log.length - 1];
-  if (last?.op === "frames" && last.seconds && log.length > (window?.lastAt ?? 0) && same(last.args, [path, value, key, x, y])) last.seconds.push(seconds);
-  else log.push({ op: "frames", args: [path, value, key, x, y], seconds: [seconds] });
+  if (last?.op === "frames" && last.seconds && log.length > (window?.lastAt ?? 0) && same(last.args, [path, value, key, x, y])) { if (!b || (b.used += 8) <= b.cap) last.seconds.push(seconds); else log.push({ op: "logFull", args: [b.cap] }); }
+  else { const e = { op: "frames", args: [path, value, key, x, y], seconds: [seconds] }; if (fits(log, b, e)) log.push(e); }
 };
 // A page's events in order, each frame of a run of frames on its own.
 export function* eventsIn(log: LogEntry[]): Generator_<{ at: number; name: string; given: [string, string, number, number, number]; path: number[] }> {

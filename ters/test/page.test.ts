@@ -222,3 +222,22 @@ test("a page steps back and on through its log's window, and goes on from a step
   steps.to(n);
   assert.equal(shown(), last);
 });
+
+// A step from the run's start draws from the seed the log has: dice's
+// plain Roll asks the world's randomness, not a seed of its own.
+test("stepping over clicks that draw from the world's randomness shows each roll", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  let t = 0;
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log: [], window: { seconds: 10, keep: 3, clock: () => t } });
+  const root = page.root as FakeEl, steps = page.steps!;
+  const shown = () => [root.find("status").textContent, root.find("said").textContent].join(" | ");
+  const after: string[] = [shown()];
+  for (let i = 0; i < 4; i++) { t += 1000; root.find("roll").fire("click"); after.push(shown()); }
+  assert.match(after[4], /^Rolls: 4/);
+  for (const n of [4, 2, 0, 1, 3]) {
+    steps.to(n);
+    assert.equal(shown(), after[n], `after ${n}`);
+  }
+});

@@ -110,6 +110,9 @@ export function showPage(o: PageOptions): Preview {
   // from the log and nothing new is logged: `asking` is which world.
   let stepping = false, asking: World = answered;
   const switched = Object.fromEntries(Object.keys(answered).map((op) => [op, (...a: unknown[]) => (asking as unknown as Record<string, (...a: unknown[]) => unknown>)[op](...a)])) as unknown as World;
+  // The seed too: a step from the run's start draws again from the
+  // seed the log has, and a live page from the browser's own draw.
+  switched.randomSeed = () => (asking.randomSeed ? asking.randomSeed() : Math.floor(asking.random() * 4294967296));
   const logging = o.log ? logged(o.window ? switched : answered, o.log, { seeded: true, quiet: () => stepping }) : null;
   const world = recordingWorld(logging ? logging.world : answered);
   // A snapshot: the value of each cell main and the first drawing made,
@@ -154,9 +157,17 @@ function stepper(w: LogWindow<PageSnapshot>, root: Node_, cells: Cells, made: No
       const back = snap.state ? snap.state.cells : made.map((k) => [k.cell, k.first] as [Value, Value]);
       cells.batch(() => { for (const [c, v] of back) if (!cellGone(c)) cells.write(c, v); });
       random.set(snap.state ? snap.state.random : []);
-      set(true, replaying(log.slice(snap.at).filter((e) => !isEvent(e)), browser));
-      for (const e of evs.slice(before(snap.at), n)) {
+      // From the segment's first event: what main asked before it is
+      // in the cells already.
+      const first = before(snap.at);
+      // A handler's failure is taken back on the page (cells.ts attempt),
+      // so the replay's own is kept here and said after.
+      let wrong: unknown = null;
+      const from = replaying(log.slice(evs[first]?.at ?? log.length).filter((e) => !isEvent(e)), browser) as unknown as Record<string, (...a: unknown[]) => unknown>;
+      set(true, Object.fromEntries(Object.entries(from).map(([op, f]) => [op, typeof f !== "function" ? f : (...a: unknown[]) => { try { return f(...a); } catch (e) { wrong ??= e; throw e; } }])) as unknown as World);
+      for (const e of evs.slice(first, n)) {
         if (!replayEvent(root, e.name, e.path, e.given)) throw new WentAnotherWay(`stepping went another way at entry ${e.at + 1}: the page has no ${e.name} handler where the log's event was given`);
+        if (wrong) throw wrong;
       }
       s.at = n;
     },
