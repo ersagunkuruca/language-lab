@@ -79,7 +79,7 @@ one shape and one gesture.
 
 **2026-11-13.** Still so. Row **E259**.
 
-### 5. `for some` is two nodes for two wires
+### 5. ~~`for some` is two nodes for two wires~~ (fixed 2026-11-13)
 
 **Today.** `rotate`'s two internal wires, `length` and `angle`, now share one
 frame, but each still has its own `for some` node, one feeding the other.
@@ -90,7 +90,12 @@ existential as a dot inside the frame with no wire coming in, labelled
 "some".
 
 **2026-11-13.** Still so: `rotate` is `for some((length) => for some((angle)
-=> …))`, two frames and two nodes. Row **E260**.
+=> …))`, two frames and two nodes.
+
+**Fixed 2026-11-13 (E260).** A `for some` whose function's body is another
+`for some` is drawn as one: `rotate` is one `for some` node and one
+`(length, angle) =>` frame, the unknowns side by side on its left edge. The
+tree is unchanged: this is how the graph draws it.
 
 ### 6. ~~Effects: nine of them, and the editor shows three~~ (done)
 
