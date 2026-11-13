@@ -67,7 +67,7 @@ and `fail()` go into the fold's and the if's ports with no frames, and
 `magnitude`'s `else` is one wire from `x`. A case with fields, and an action
 given to a handler like `first` or `all`, keep their frames.
 
-### 3. "Output" and "dot" are almost the same thing
+### 3. ~~"Output" and "dot" are almost the same thing~~ (fixed 2026-11-13)
 
 **Today.** A node's output is a filled circle on its right. Dragging it to a
 second input creates a dot on its wire. Inputs of functions are dots, the
@@ -77,7 +77,14 @@ solved ports of a `solve` node are dots, but a node's output isn't.
 wire; there's nothing to create when you use it a second time. That removes
 one shape and one gesture.
 
-**2026-11-13.** Still so. Row **E259**.
+**2026-11-13.** Still so.
+
+**Fixed 2026-11-13 (E259).** A shared value's dot is the output of the node
+that gives it: the output itself turns into the dot, with the value's name
+above it, and dragging from it to another input is one more wire. A dot
+clicked onto a wire out of a node appears on that node's output, and nothing
+else moves (E109). A dot on a wire from a frame's parameter, and a let node
+(`name =`), are drawn as before.
 
 ### 5. ~~`for some` is two nodes for two wires~~ (fixed 2026-11-13)
 

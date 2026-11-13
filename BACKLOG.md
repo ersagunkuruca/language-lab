@@ -60,7 +60,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E259 | Every output a dot (CONFUSING item 3): a node's output is the same dot a let has, so sharing a value is one more wire from it, not a gesture that makes a dot. Example: `queens` with its outputs as dots and nothing else changed | [CONFUSING.md](docs/design/CONFUSING.md) item 3, checked 2026-11-13 (E256) | P3 | M | |
 
 ### Speed of editing
 
