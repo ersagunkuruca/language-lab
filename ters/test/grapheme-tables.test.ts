@@ -19,11 +19,19 @@ const hostBreaks = (cps: number[]): number[] => {
   return at;
 };
 
-test("the grapheme tables are for the host's Unicode version", () => {
-  assert.equal(saved.unicode, process.versions.unicode, "Node's Unicode moved on: run `node library/graphemes.ts`");
+// Unicode versions in order ("16.0" < "17.0").
+const version = (v: string) => v.split(".").map(Number).reduce((a, x) => a * 1000 + x, 0);
+const sameHost = saved.unicode === process.versions.unicode;
+
+// The tables are read off the newest Node the project runs on (CI's Node
+// 22 had Unicode 17 on 2026-11-13, T15), so a host behind it, as a
+// container on an older Node 22, has no say on the characters it doesn't
+// know yet: there only the version is checked.
+test("the grapheme tables are no older than the host's Unicode version", () => {
+  assert.ok(version(saved.unicode) >= version(process.versions.unicode), `Node's Unicode moved on (${saved.unicode} → ${process.versions.unicode}): run \`node library/graphemes.ts\``);
 });
 
-test("the tables' rules break text where the host does", () => {
+test("the tables' rules break text where the host does", { skip: sameHost ? false : `the host's Unicode is ${process.versions.unicode}, the tables' ${saved.unicode}` }, () => {
   // A letter of each kind the tables hold, and a plain one.
   const letters = [0x61, ...saved.kinds.map((_, k) => runs.find((r) => saved.runs.find(([f]) => f === r.from)![2] === k)!.from)];
   const wrong: string[] = [];
