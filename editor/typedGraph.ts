@@ -944,6 +944,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const kids: (Sub | null)[] = [arg(n.scrutinee)];
     from?.args.forEach((a, i) => { labels.push(name(starts[i])); inputs.push(a); kids.push(arg(a)); });
     const values = inputs.length;
+    // A case with nothing to name is a value, not a function: what it gives
+    // is drawn wired straight into its port, with no () => frame round it
+    // (CONFUSING.md item 2): an if's then and else, a case like nil.
+    const plain = new Set<number>();
+    const addCase = (at: Id, binders: Id[], body: Id, title: string) => {
+      if (binders.length) { inputs.push(at); kids.push(region(at, title, binders, body, "arm")); return; }
+      plain.add(inputs.length); inputs.push(body); kids.push(arg(body));
+    };
     // A case that only takes one of its fields apart further draws as one
     // row per inner case, the way the text reads it: one port and one frame
     // per row, its names all on that frame's left (PATTERNS.md).
@@ -955,22 +963,20 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     for (const r of rows ?? []) {
       const pat = patternText(r.pat, name, name);
       labels.push(pat.length > APART ? `${pat.slice(0, APART - 1)}…` : pat);
-      inputs.push(r.at);
-      kids.push(region(r.at, paramsTitle(r.binds.map(name)), r.binds, r.body, "arm"));
+      addCase(r.at, r.binds, r.body, paramsTitle(r.binds.map(name)));
     }
     for (const arm of rows ? [] : armNodes) {
       const results = arm.results.filter((r): r is Id => r !== null);
       const lam = from?.lams.get(arm.id);
       const params = [...arm.binds, ...results, ...(lam?.params ?? [])];
       labels.push(isIf ? (arm.variant === TRUE ? "then" : "else") : apart ? "then" : valueOf(arm) ?? name(arm.variant));
-      inputs.push(arm.id);
       // An operation answered later binds the rest after its inputs, read as
       // the text reads it: (item) with rest (ANSWERED-LATER.md).
       const op = handles ? node(arm.variant) : null;
       const later = op?.kind === "variant" && op.later && arm.binds.length === op.fields.length + 1;
-      kids.push(region(arm.id, later ? paramsTitle(arm.binds.slice(0, -1).map(name), name(arm.binds.at(-1)!)) : paramsTitle(params.map(name)), params, lam ? lam.body : arm.body, "arm"));
+      addCase(arm.id, params, lam ? lam.body : arm.body, later ? paramsTitle(arm.binds.slice(0, -1).map(name), name(arm.binds.at(-1)!)) : paramsTitle(params.map(name)));
     }
-    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
+    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); plain.add(inputs.length); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
     const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30);
     const bh = 30 + inputs.length * 20;
@@ -979,13 +985,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn case${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, title));
       labels.forEach((l, i) => {
-        const value = i < values;
-        g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: value ? "inp" : "inp fn", ...(value || (n.kind === "match" && n.otherwise === inputs[i]) ? { "data-slot": inputs[i] } : {}) }), value ? (i ? `${l} starts as this` : typeOf(n.scrutinee)) : `the function for ${l}`));
+        const value = i < values, given = plain.has(i);
+        g.append(titled(s("circle", { cx: 0, cy: portY(i), r: 5, class: value || given ? "inp" : "inp fn", ...(value || given ? { "data-slot": inputs[i] } : {}) }), value ? (i ? `${l} starts as this` : typeOf(n.scrutinee)) : given ? `what it gives for ${l}: ${typeOf(inputs[i])}` : `the function for ${l}`));
         g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l));
       });
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp" }), typeOf(id)));
     }, { value: id, out: { x: bw, y: bh / 2 }, name: title });
-    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY, (i) => (i < values ? "" : "fn"));
+    const { sub, bx, by } = withArgs(inputs, kids, bw, bh, id, portY, (i) => (i < values || plain.has(i) ? "" : "fn"));
     // Only the value's wire can take a dot: a case's function isn't a value.
     for (const wr of wires) if (wr.to && "item" in wr.to && wr.to.item === id && wr.cls === "fn") wr.edge = undefined;
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
