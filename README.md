@@ -29,19 +29,40 @@ Web apps written in Ters, built onto the site:
 [Tumble](https://ersagunkuruca.github.io/language-lab/apps/tumble.html) (a match-three puzzle),
 [the guitar pedal](https://ersagunkuruca.github.io/language-lab/apps/pedal.html) (live sound),
 [Bounce](https://ersagunkuruca.github.io/language-lab/apps/bounce.html) (balls bouncing, in 2D and 3D),
-[Constructions](https://ersagunkuruca.github.io/language-lab/apps/constructions.html) (ruler-and-compass geometry),
+[Constructions](https://ersagunkuruca.github.io/language-lab/apps/constructions.html) (geometry of points and lines),
+[Compass](https://ersagunkuruca.github.io/language-lab/apps/compass.html) (ruler and compass, with circles),
 [Spacetime](https://ersagunkuruca.github.io/language-lab/apps/spacetime.html) (special relativity you can drag)
 and the nested to-do list in [reactive.html](https://ersagunkuruca.github.io/language-lab/reactive.html).
-Bounce, Constructions and Spacetime do their geometry in Clifford algebras,
-one algebra for rotations, reflections and motions.
+Bounce, Constructions, Compass and Spacetime do their geometry in Clifford
+algebras, one algebra for rotations, reflections and motions. The same
+pages build as phone apps: a web app (`ters build-app`), or a native
+Android or iPhone app drawn with the phone's own views, with no web view
+(`ters build-native-app`, [NATIVE-APPS.md](docs/design/targets/NATIVE-APPS.md)).
 
 ## The `ters` command
 
 `ters` is Ters's command line, `ters/cli/ters.ts`. After `npm ci` in `ters/`,
-run it as `npm run ters -- <command>` there (or `node cli/ters.ts <command>`):
-`ters run` runs a saved program, `ters compile` turns it into a JavaScript
-module, `ters check` lists its errors and each definition's type, and
-`ters test` runs its tests. `ters` with no command lists the rest.
+run it as `npm run ters -- <command>` there (or `node cli/ters.ts <command>`).
+`ters` with no command lists every command. The main ones:
+
+- `ters run` runs a saved program's `main`, compiled, or with the
+  evaluator where it doesn't compile; `ters check` lists its errors and each
+  definition's type; `ters test` runs its tests.
+- `ters compile` turns it into a JavaScript module, `ters native` into a
+  native program through C, and `ters wasi` into a WebAssembly command.
+  `ters build-web` builds a page as one HTML file, and `ters build-app` and
+  `ters build-native-app` build it as a phone app.
+- `ters diff` says what changed between two versions of a program,
+  definition by definition and node by node, and `ters git-setup` makes
+  this clone's `git diff` and merges use it on program files
+  ([DIFF.md](docs/design/tools/DIFF.md)).
+- `ters mcp` is an MCP server, so a language model can view, edit, run and
+  test a program ([MCP.md](docs/design/tools/MCP.md)).
+- `ters publish`, `ters fetch` and `ters upgrade` share definitions as
+  versioned modules ([SHARING.md](docs/design/sharing/SHARING.md)).
+
+[RUNNING.md](docs/learn/RUNNING.md) says how each way of running a program
+works.
 
 ## Building
 
@@ -62,7 +83,10 @@ Each goal says whether it's built, partly built, or a rule we hold to.
 - **Names and comments live apart from the program.** The code refers to
   everything by an id. Names, comments and notation are kept in separate
   files beside the program, so a rename never breaks anything, and how code reads (operators, infix or
-  prefix, nesting) is a view you choose. *Built; more views to come.*
+  prefix, nesting) is a view you choose. A program is saved as JSON, one
+  node per line, so a change reads well in git, and `ters diff` shows it
+  by definition ([SAVED-FORMAT.md](docs/design/tools/SAVED-FORMAT.md)).
+  *Built; more views to come.*
 - **Definitions run both ways.** The same definition computes forwards or
   solves backwards for its inputs, as with a relation
   ([BACKWARDS.md](docs/language/BACKWARDS.md)). *Built: arithmetic is
@@ -73,8 +97,10 @@ Each goal says whether it's built, partly built, or a rule we hold to.
   (lists as `cons`/`nil`, numbers as `zero`/`succ`) and compile to fast code.
   How a value is stored in memory (its representation: a list as an array,
   a `succ`/`zero` number as a machine integer) is chosen by the compiler,
-  never by the program. *Partly built: numbers as machine integers and maps
-  as balanced trees on every target; the rest is in
+  never by the program. *Partly built, on every target: numbers as machine
+  integers, maps as balanced trees or hash tables, sets as balanced trees, and lists as
+  arrays where the program reads them by position, chosen from how the
+  program uses them. The rest is in
   [NUMBERS.md](docs/design/numbers/NUMBERS.md), "Where this stands".*
 - **One uniform system.** A program is made of a few kinds of nodes
   (calls, functions, references, data types). No feature gets a kind of
