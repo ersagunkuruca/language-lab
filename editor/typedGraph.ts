@@ -890,6 +890,21 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         wires.push({ from: v.out, to: { item: b, dx: 0, dy: bh / 2 }, cls: "", flow: true });
         sources.set(b, { item: b, dx: bw, dy: bh / 2 });
         right = Math.max(right, x + bw);
+      } else if (!silent && "item" in v.out && items.get(v.out.item)?.solid) {
+        // Every output is a dot (CONFUSING.md item 3): a shared value's dot
+        // is the output of the node that gives it, so sharing it again is
+        // one more wire from there. Nothing is drawn between the two.
+        const o = v.out, k = items.get(o.item)!, drawn = k.draw, lw = tw(name(b), 6.8);
+        const t = `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
+        k.draw = (g) => {
+          drawn(g);
+          g.append(titled(s("circle", { cx: o.dx, cy: o.dy, r: 6, class: `reroute${sel(b)}`, "data-src": b, "data-id": b }), t));
+          g.append(s("text", { x: o.dx, y: o.dy - 10, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
+        };
+        k.value = b;
+        k.label = { x: o.dx - lw / 2, y: o.dy - 22, w: lw, h: 14 };
+        sources.set(b, o);
+        right = Math.max(right, vx + v.w + lw / 2);
       } else {
         const r = silent ? (sequence ? 8 : 4) : 6;
         const t = silent ? (sequence ? `Step ${i + 1} of ${steps.length + 1}, done for its effect; then step ${i + 2}. Right-click the step to do it earlier or later` : "a step done for its effect; nothing reads it") : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
