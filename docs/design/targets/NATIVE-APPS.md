@@ -5,6 +5,14 @@ Stretch goal is native compilation on each platform instead of webview
 stuff."). Written 2026-11-10 by Language lane B. The last section is the
 plan, as rows C199a to C199e.
 
+**Status (2026-11-13).** Built: C199 closed. The page examples build
+as native Android apps (C199f: tumble, pig,
+bounce, compass, constructions, agent, dice, mandelbrot-page), checked
+against the web page on a headless host and on an Android emulator, and
+Ersagun ran dice, pig and tumble on his phone; the iPhone shell is
+C199e (a real device needs his Apple signing). A page's sound plays too
+(C217). The paragraph below is how it stood during the work.
+
 **Status.** Route A chosen (Ersagun, 2026-11-10). C199a to C199d are
 done: cells in C and WebAssembly, a page's Html mounted from C on a view
 host, dice as an Android APK with no webview, and its layout and style in

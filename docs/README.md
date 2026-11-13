@@ -130,17 +130,21 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [COMPILER.md](design/targets/COMPILER.md) | The compiler's design: effect types decide the code's shape | current |
-| [CORE-IR.md](design/targets/CORE-IR.md) | The core IR every compiled target but compiled JavaScript prints, and its contract (C137) | current |
+| [CORE-IR.md](design/targets/CORE-IR.md) | The core IR every compiled target prints from, JavaScript included since compile.ts went (C137), and its contract | current |
 | [README.md](../compiler/README.md) | Using the compiler: commands, files, tests | current |
-| [GAPS.md](reports/GAPS.md) | Bigger-program rounds: compiled output against ideal hand-written code, gap by gap | current (rounds 1 to 5) |
+| [GAPS.md](reports/GAPS.md) | Bigger-program rounds: compiled output against ideal hand-written code, gap by gap | current (rounds 1 to 15) |
 | [WASM.md](design/targets/WASM.md) | WebAssembly, with WASI | built (W1 to W4) |
 | [NATIVE.md](design/targets/NATIVE.md) | Native code through C | built (N1 to N5) |
-| [NATIVE-APPS.md](design/targets/NATIVE-APPS.md) | Native phone apps: C program, native shell, view host | design (C199) |
+| [NATIVE-APPS.md](design/targets/NATIVE-APPS.md) | Native phone apps: C program, native shell, view host; Android and iPhone with their own views, no web view | built (C199a to C199f) |
 | [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `ters build-web` | built |
-| [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | proposal (L69a to L69d), one question for Ersagun |
-| [WHERE-IT-RUNS.md](design/targets/WHERE-IT-RUNS.md) | Where code runs chosen by cost (workers, the GPU): Bend 2 read, a worker's round trip measured, one-holder arrays transferred, only a caller that can wait | design (C61), steps a to e |
+| [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | built (L69) |
+| [WHERE-IT-RUNS.md](design/targets/WHERE-IT-RUNS.md) | Where code runs chosen by cost (workers, the GPU): Bend 2 read, a worker's round trip measured, one-holder arrays transferred, only a caller that can wait | built (C61, closed 2026-11-11) |
 | [AUDIO.md](design/targets/AUDIO.md) | Sound as a function on blocks of samples; the guitar pedal | built (A1 to A5) |
-| [REVERSIBLE-AND-QUANTUM-2026-11-11.md](design/targets/REVERSIBLE-AND-QUANTUM-2026-11-11.md) | Why quantum steps must be invertible (Landauer, Bennett), what in Ters is already reversible (det both ways), and a someday quantum target (C210); no power win on today's chips | design |
+| [SEVERAL-ANSWER-FUNCTIONS-2026-11-03.md](design/targets/SEVERAL-ANSWER-FUNCTIONS-2026-11-03.md) | A closure that may give several answers, on the core IR: a type pays for the continuation only once such a closure reaches it | built (C137c22) |
+| [PROGRAM-EFFECTS-2026-11-03.md](design/targets/PROGRAM-EFFECTS-2026-11-03.md) | A program's own effects and handlers on the core IR (pig, tumble), so every example lowers | built (C137c23, C137c24) |
+| [PAGE-WAITS-2026-11-03.md](design/targets/PAGE-WAITS-2026-11-03.md) | A page handler that waits (a timer, a fetch): the rest of its run kept and landed later | built (C40i, step 4 on the core IR) |
+| [DEBUG-AND-SPEED-2026-11-04.md](design/targets/DEBUG-AND-SPEED-2026-11-04.md) | Debug and fast as one compile: names and where a value came from kept beside compiled code, a profile only when asked | partly built (E232a to E232d) |
+| [REVERSIBLE-AND-QUANTUM-2026-11-11.md](design/targets/REVERSIBLE-AND-QUANTUM-2026-11-11.md) | Why quantum steps must be invertible (Landauer, Bennett), what in Ters is already reversible (det both ways), and a someday quantum target (C210); no power win on today's chips | design; the reversible classical part built (C210, `ters qasm`) |
 
 ### Editor
 

@@ -4,6 +4,16 @@ This is the decision, not a survey. A working compiler for everything the
 typed core has today lives in `compiler/` (top level), with tests that
 compare it against the evaluator.
 
+**Status (2026-11-13).** Built, and grown past what this note first
+planned in two ways. There is an IR after all: the core IR
+(CORE-IR.md), which every target prints from, JavaScript included, since
+compile.ts, the first JavaScript generator this note describes, was
+deleted on 2026-11-05 (C137). And JavaScript is one target among equals:
+WebAssembly (WASM.md), native code through C with threads (NATIVE.md),
+WGSL, pages, phone apps and sound all run whole programs. Where the text
+below names compile.ts or runtime.js, the same job is now done on the
+core IR (core-js.ts, core-rt.ts). The decisions themselves stand.
+
 ```sh
 cd compiler
 npm run build   # compiles the five typed examples to compiler/out/*.js
@@ -794,20 +804,20 @@ have.
 ## Files
 
 ```
-compiler/src/compile.ts    the code generator: conventions, specialization, loops for Choice (to be retired for a printer of the core IR, C137)
-compiler/src/relation.ts   a solve plan, written out as code
-compiler/src/runtime.js    what generated code links against (handlers, fuel, solver and relate.ts fallbacks, derivative)
-compiler/src/scalar.ts     the core IR (CORE-IR.md): check, refuse with a reason, lower to it
-compiler/src/wasm.ts       the core IR as a WebAssembly module (binary and text), tail calls as return_call
-compiler/src/c.ts          the core IR as C (NATIVE.md)
-compiler/src/wgsl.ts       the core IR's scalar profile as a WGSL shader
-compiler/src/core-js.ts    the core IR as JavaScript (C137c), to replace compile.ts; run by the fuzz test
-compiler/src/core-page.ts  a page from it (`ters build-web --core`): the evaluator's cells and mount, the browser's world
-compiler/src/fixtures.ts   small programs for the tests and the benchmark
-compiler/src/program.ts    load, check and compile an example
-compiler/build.ts          writes compiler/out/*.js
-compiler/bench.ts          evaluator vs compiled
-compiler/test/             compiled vs evaluated, on every example
-docs/reports/GAPS.md           a bigger program's compiled output vs a hand-written ideal, gaps ranked
-compiler/gaps/             that program's ideal JS and the benchmark behind GAPS.md
+compiler/src/scalar.ts       the core IR (CORE-IR.md): check, refuse with a reason, lower to it
+compiler/src/core-js.ts      the core IR as JavaScript; core-rt.ts is what it links against
+compiler/src/core-page.ts    a page from it (`ters build-web`, the editor's preview), core-sound.ts its sound
+compiler/src/wasm.ts         the core IR as a WebAssembly module (binary and text), tail calls as return_call
+compiler/src/c.ts            the core IR as C (NATIVE.md), c-rt.ts its runtime
+compiler/src/wgsl.ts         the core IR's scalar profile as a WGSL shader
+compiler/src/qasm.ts         a function as a reversible circuit (REVERSIBLE-AND-QUANTUM-2026-11-11.md)
+compiler/src/relation.ts     a solve plan, written out as code; modes.ts the relational directions
+compiler/src/*.ts            the passes (RUNNING.md lists them)
+compiler/src/fixtures.ts     small programs for the tests and the benchmark
+compiler/src/program.ts      load, check and compile an example
+compiler/build.ts            writes compiler/out/*.js
+compiler/bench.ts            evaluator vs compiled
+compiler/test/               compiled vs evaluated, on every example and target
+docs/reports/GAPS.md         the bigger programs' compiled output vs a hand-written ideal, gaps ranked
+compiler/gaps/               those programs' ideal code and the benchmarks behind GAPS.md
 ```

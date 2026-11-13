@@ -1,5 +1,12 @@
 # The core IR (C137b)
 
+**Status (2026-11-13).** Every target prints from it: C137 closed on
+2026-11-05 when compile.ts, runtime.js and the old page and worklet
+runtimes were deleted, so JavaScript, pages and sound (core-js.ts,
+core-page.ts, core-sound.ts) come from here as WebAssembly, C and WGSL do.
+The steps below are how it got there; "compile.ts is the other lowering"
+was true until then.
+
 `CoreIR` (compiler/src/scalar.ts, called `Lowered` until 2026-11-03) is the
 form every compiled target except compiled JavaScript is printed from:
 WebAssembly (wasm.ts), C (c.ts), WGSL (wgsl.ts) and JavaScript for the
@@ -69,7 +76,8 @@ model, so each feature has been written twice in the compiler
   converter and spacetime run and their pages agree (16 examples, 6
   pages). conjugate and pedal now stop at a function choosing among
   several answers.
-- (d) compile.ts retired piece by piece.
+- (d) compile.ts retired piece by piece. Done 2026-11-05 (C137): the
+  file is gone.
 
 ## What it holds
 

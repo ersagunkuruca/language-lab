@@ -1,5 +1,10 @@
 # Where code runs, chosen by cost (C61)
 
+**Status (2026-11-13).** C61 closed (2026-11-11): workers for a page
+handler's maps, keeps, folds and searches, WebGPU for its Int maps and
+keeps, and threads on C (DONE.md, C61, C41 to C43). The status below
+lists the steps as they landed.
+
 Status: design note, C61's first step (2026-11-06). Built since: a
 together's pure branches on worker threads on Node (C41, 2026-11-09,
 compiler/src/branches-rt.ts, examples/area), and a `map` of a function
