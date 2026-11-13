@@ -28,6 +28,8 @@
   --accent-soft: oklch(92.5% 0.03 252);
   --hot: oklch(60% 0.14 62);           /* holes, refusals, what just changed */
   --hot-soft: oklch(94.5% 0.045 78);
+  --new: oklch(52% 0.13 150);           /* added, in Changes */
+  --new-soft: oklch(93% 0.05 150);
   --dot: oklch(52% 0.17 300);          /* dots: parameters and lets */
   /* Node kinds share one tone; the old per-kind colours now mean nothing extra. */
   --op-bg: var(--tone); --op-ln: var(--muted);
@@ -46,6 +48,7 @@
     --tone: oklch(30% 0.01 250); --tone-2: oklch(35% 0.012 250); --lit: oklch(25.5% 0.008 250);
     --fg: oklch(93% 0.005 250); --muted: oklch(74% 0.008 250); --faint: oklch(58% 0.01 250); --line: oklch(27% 0.009 250);
     --accent: oklch(76% 0.11 250); --accent-soft: oklch(30% 0.05 252); --hot: oklch(80% 0.13 72); --hot-soft: oklch(30% 0.05 70);
+    --new: oklch(78% 0.13 150); --new-soft: oklch(30% 0.05 150);
     --dot: oklch(74% 0.14 300); --wire: oklch(60% 0.012 250);
     --float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 10px 28px oklch(0% 0 0 / 0.5);
     color-scheme: dark;
@@ -56,6 +59,7 @@
   --tone: oklch(30% 0.01 250); --tone-2: oklch(35% 0.012 250); --lit: oklch(25.5% 0.008 250);
   --fg: oklch(93% 0.005 250); --muted: oklch(74% 0.008 250); --faint: oklch(58% 0.01 250); --line: oklch(27% 0.009 250);
   --accent: oklch(76% 0.11 250); --accent-soft: oklch(30% 0.05 252); --hot: oklch(80% 0.13 72); --hot-soft: oklch(30% 0.05 70);
+    --new: oklch(78% 0.13 150); --new-soft: oklch(30% 0.05 150);
   --dot: oklch(74% 0.14 300); --wire: oklch(60% 0.012 250);
   --float: 0 1px 2px oklch(0% 0 0 / 0.5), 0 10px 28px oklch(0% 0 0 / 0.5);
   color-scheme: dark;
@@ -321,6 +325,26 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 .meaning .chip { grid-column: 1 / -1; font-size: 12px; color: var(--accent); }
 .meaning.moved { background: var(--hot-soft); }
 .meaning.moved .chip { color: var(--hot); font-weight: 600; }
+.changes { display: flex; flex-direction: column; gap: 6px; }
+.changes .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.chg-def { display: flex; gap: 8px; align-items: baseline; text-align: left; padding: 6px 10px; border-radius: 10px; border: 0; background: var(--canvas); color: var(--fg); font: inherit; cursor: pointer; }
+.chg-def.on { outline: 2px solid var(--accent); }
+.chg-def .chip { font-size: 12px; font-weight: 600; }
+.chg-def.added .chip { color: var(--new); }
+.chg-def.changed .chip { color: var(--hot); }
+.chg-def.removed { cursor: default; text-decoration: line-through; color: var(--muted); }
+.chg-lines { margin: 0 0 4px; padding: 6px 8px; font: 12px/1.45 var(--font-code); overflow-x: auto; background: var(--canvas); border-radius: 8px; }
+.chg-line.added { background: var(--new-soft); }
+.chg-line.changed, .chg-line.moved { background: var(--hot-soft); }
+.chg-line.removed { color: var(--muted); text-decoration: line-through; }
+.chg-was, .chg-gap { color: var(--muted); }
+.chg-note { margin: 0; font-size: 13px; }
+.typed .x.chg-added, .typed .blk.chg-added { background: var(--new-soft); box-shadow: inset 3px 0 0 var(--new); }
+.typed .x.chg-changed, .typed .blk.chg-changed { background: var(--hot-soft); box-shadow: inset 3px 0 0 var(--hot); }
+.tgraph .chg-added { stroke: var(--new); stroke-width: 2.5; }
+.tgraph .chg-changed { stroke: var(--hot); stroke-width: 2.5; }
+.tgraph .cn.chg-added, .tgraph .pill.chg-added { fill: var(--new-soft); }
+.tgraph .cn.chg-changed, .tgraph .pill.chg-changed { fill: var(--hot-soft); }
 .file { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; padding: 4px 8px; border-radius: 8px; font-size: 12px; }
 .file code { color: var(--muted); }
 .fname { font-family: var(--font-code); overflow: hidden; text-overflow: ellipsis; }
