@@ -184,7 +184,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L244 | `+` as one sum (CONFUSING item 9): `add`, `subtract` and `negate` are three built-ins, each with its own equation, where one relation `a + b = total` read in its directions would do (as `polar` is one relation); the names stay as the directions' names | [CONFUSING.md](docs/design/CONFUSING.md) item 9, checked 2026-11-13 (E256) | P3 | M | |
 
 ### Grammars, modules and sharing
 

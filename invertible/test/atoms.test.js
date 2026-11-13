@@ -82,3 +82,17 @@ test('fall: distance = speed·t + ½·g·t² solved for t, including the degener
   assert.equal(all.length, 1);
   assert.ok(all[0].free.includes('time'));
 });
+
+// The arithmetic table's +, − and negate are that balance's directions
+// (expr.js BALANCE_DIRECTIONS, L244): what each evaluates, how it is undone
+// in each input, and its derivatives are read off the one sum.
+test("the table's add, sub and neg are directions of one sum", async () => {
+  const { FN, BALANCE_DIRECTIONS, show, v } = await import('../src/expr.js');
+  assert.deepEqual(Object.keys(BALANCE_DIRECTIONS), ['add', 'sub', 'neg']);
+  assert.deepEqual([FN.add.eval(5, 2), FN.sub.eval(5, 2), FN.neg.eval(5)], [7, 3, -5]);
+  assert.deepEqual([FN.add.eval.length, FN.sub.eval.length, FN.neg.eval.length], [2, 2, 1]);
+  const inv = (op) => FN[op].inv.map((f) => show(f(v('y'), [v('a'), v('b')])[0].expr));
+  assert.deepEqual([inv('add'), inv('sub'), inv('neg')], [['y − b', 'y − a'], ['y + b', 'a − y'], ['−y']]);
+  const d = (op) => FN[op].d.map((f) => f([v('a'), v('b')]).v);
+  assert.deepEqual([d('add'), d('sub'), d('neg')], [[1, 1], [1, -1], [-1]]);
+});
