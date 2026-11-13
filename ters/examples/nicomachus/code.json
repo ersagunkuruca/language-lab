@@ -52,7 +52,7 @@
     "mb50lsvmbsnf2kqoin7s8b9pca": {
       "id": "mb50lsvmbsnf2kqoin7s8b9pca",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "ida891035sheheviehv9l13p8u": {
       "id": "ida891035sheheviehv9l13p8u",
@@ -222,7 +222,7 @@
     "1h6b0q66u10ffm92meorsda5kg": {
       "id": "1h6b0q66u10ffm92meorsda5kg",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "2dl1cjlgm6khtc6hikgqs78vsl": {
       "id": "2dl1cjlgm6khtc6hikgqs78vsl",
@@ -255,7 +255,7 @@
     "rbqnhj8p84eh4fces8a6o7hg6o": {
       "id": "rbqnhj8p84eh4fces8a6o7hg6o",
       "kind": "lit",
-      "value": 0.5
+      "num": "0.5"
     },
     "0fvr62opub2uttd8tvca06tmcd": {
       "id": "0fvr62opub2uttd8tvca06tmcd",
@@ -335,7 +335,7 @@
     "8a3flprkgqnnbtug6an8e5t4ek": {
       "id": "8a3flprkgqnnbtug6an8e5t4ek",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "6jd0eg4ebdsc6rfapg70ubb0sl": {
@@ -385,7 +385,7 @@
     "ggf5prp5qcog2vog6naavfgjqj": {
       "id": "ggf5prp5qcog2vog6naavfgjqj",
       "kind": "lit",
-      "value": 4000,
+      "num": "4000",
       "of": "type.int"
     },
     "b1edruvq76jh06trtdpcjtfkce": {
@@ -568,7 +568,7 @@
     "6arluch3rir8q7cjte8qe56048": {
       "id": "6arluch3rir8q7cjte8qe56048",
       "kind": "lit",
-      "value": 1000000000000
+      "num": "1000000000000"
     },
     "5foot2t3uub77mr6semfum7i8i": {
       "id": "5foot2t3uub77mr6semfum7i8i",

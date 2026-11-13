@@ -1,5 +1,5 @@
 // What sign a Float64 can have where it is used (FLOAT-VALUES-2026-11-01.md,
-// BACKLOG L125b). `x / y` has no answer when y is 0, `sqrt x` when x is
+// BACKLOG L125b). `x / y` (and Int's quotient and remainder) has no answer when y is 0, `sqrt x` when x is
 // negative, `log x` when x isn't positive: those are `Choice` in their
 // types, and this drops the Choice at a call whose input is known to be
 // fine. Nothing is written for it (no annotations, no hints): the facts
@@ -36,6 +36,12 @@ const NONZERO = NEG | POS, NONNEG = ZERO | POS;
 export const PARTIAL: Record<Id, (s: (i: number) => Signs, lit: (i: number) => number | null) => boolean> = {
   [B.div]: (s) => !(s(1) & ZERO),
   [S.mod]: (s) => !(s(1) & ZERO),
+  // Int's quotient and remainder by a divisor known not to be 0, and its
+  // power to an exponent known not negative: remainder(n, 3) has no Choice,
+  // so FizzBuzz needs no first (I234).
+  [INT_OPS.quotient]: (s) => !(s(1) & ZERO),
+  [INT_OPS.remainder]: (s) => !(s(1) & ZERO),
+  [INT_OPS.power]: (s) => !(s(1) & NEG),
   [B.sqrt]: (s) => !(s(0) & NEG),
   [B.log]: (s) => s(0) === POS || !(s(0) & ~POS),
   // 0 to a negative power, or a negative one to a fractional power.

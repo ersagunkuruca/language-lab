@@ -894,8 +894,18 @@ function namesOf(d: Doc): Names {
   namesKept.set(d, { layer: ui.layer, names });
   return names;
 }
+// A diff names an unnamed dot as the blocks do, •1, not as the printer
+// would (x₂): each definition's handles, as when it is open (I243).
+const handlesKept = new WeakMap<Names, { code: Code; names: Names }>();
+function diffNames(d: Doc): Names {
+  const names = namesOf(d), hit = handlesKept.get(names);
+  if (hit?.code === d.code) return hit.names;
+  const all = Object.assign({}, ...ownDefs(d).map((def) => T.dotHandles(d.code, def, names)), names) as Names;
+  handlesKept.set(names, { code: d.code, names: all });
+  return all;
+}
 const changes = changesPanels({
-  doc: () => doc, ui, namesOf, style: () => BLOCKS_STYLE,
+  doc: () => doc, ui, namesOf: diffNames, style: () => BLOCKS_STYLE,
   infoOf: (d) => { if (d === doc) return typesOf(); try { return T.infer(d.code, namesOf(d)); } catch { return null; } },
   ownDefs: (d) => ownDefs(d), keep: (d) => kept(d), restore: (d) => onToday(d),
   shipped: (d) => (isExample(d.program) ? initialFor(d.program) : null),
