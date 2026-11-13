@@ -15,7 +15,7 @@ special case, then what lets programs be written in the editor, then
 language, then more targets or speed (WORKFLOW.md "Priority").
 Rows once held back as later goals are open again (Ersagun 2026-11-09):
 a lane takes them when bugs and goal rows are in hand.
-Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading (P1 rows C58, C60, C61, C43; C42, C57, C59 and C200 closed 2026-11-12 as waiting for an example, DONE.md); mobile rows are down to P3.
+Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's and P7, P8; new rows come from the recurring reviews, QA passes and bigger programs.
 Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to be as close to a C/C++ dev doing data oriented design and cache and memory aware as possible. And then if we need Pools and similar stuff to get a last 10 percent of performance that's OK, but the defaults should be our first target." So rows that change what every program gets (layout as columns, arrays written in place, records changed in place, work on every core) go before ones a program must ask for (a Pool type).
 **Size:** S hours · M one PR · L several PRs or a design note first.
 **Status:** ▶ running · ⏸ held · blank = waiting.
@@ -24,11 +24,11 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | C58 (free lists; a Pool type asked of Ersagun); mobile rows wait. Then Language or Compiler rows agreed with those lanes |
-| C Compiler and targets | "Compiler lane" | C187 is blocked on V8; C195 is done (#2515) |
-| L Language and library | "Language lane" | the next goal row (stable references, free lists, multithreading) agreed with the lane that holds it; I203's editor half is with the Editor lane (L182 is with the Editor lane) |
-| L Language and library | "Language lane B" | the next goal row agreed with its lane (C43's first on C waits for an example); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
-| T Testing | "Replace the slow browser smoke test" | T15 (P0: Check main finishes), then I64, then the smoke's replacement |
+| E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
+| C Compiler and targets | "Compiler lane" | no open row of its own; the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| L Language and library | "Language lane" | no open row of its own; the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane B" | no open row of its own (L107 and L24 closed) |
+| T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
 
 ## Inbox
 
@@ -37,7 +37,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I219 | What the full run fails on, on main (2026-11-12; draws fixed in I219a, board, effects and finite in I219b, lang.test's palette sweep, map-tree.test's timing and C42h's names in c-names.test in I219 part, palette in I219c, the editor's shaders ("process is not defined") in I219d, the smoke's first-steps check (it waited for main, but a first visit opens on fall since E235) in I219e, the rest of the smoke (Countdown's solutions read [] once relate's settles spent steps) in I219f, fixed.test's CORDIC and core-js.test's pig in I219 part 2, each file run alone; the nightly hasn't passed since 10-28): on CI resolve-once.test (a kept library resolving typed `List Case several` where it is `List a`), passing here; likely the same cause as CORDIC (a kept resolving read over another library check), fixed by part 2, for the next Nightly to confirm. | I208 | 2026-11-12 |
-| I239 | (Design: docs/design/tools/WORLD-LOG-WINDOW.md, steps I239a to I239f; all built but the buttons: the page panel's Pause, step back and step on over `steps`, and over `page.now.stepFrom` once the compiled page has taken over (Editor lane).) A run's log of the world's answers within bounded memory (Ersagun 2026-11-13: "it's still a memory hole"). Each world effect says how it is recorded: random as one seed for the run (our generator, seeded once from the world), the clock once per frame as a difference from the last reading. The log is kept as a window: a snapshot of the page's state every N seconds, older entries dropped, replay and step-back going as far back as the window. Prior art: rr's checkpoints, Redux DevTools' maxAge. Design note first. Example: tumble running an hour in the editor with its log under a fixed size, and step-back working inside the window. Suggested lane: Language | thread "Decide the saved program format"; worldlog.ts | 2026-11-13 |
+| I239 | (Design: docs/design/tools/WORLD-LOG-WINDOW.md, steps I239a to I239g and I255 all built, the page panel's Pause, step back and step on included; left: the example's check below.) A run's log of the world's answers within bounded memory (Ersagun 2026-11-13: "it's still a memory hole"). Each world effect says how it is recorded: random as one seed for the run (our generator, seeded once from the world), the clock once per frame as a difference from the last reading. The log is kept as a window: a snapshot of the page's state every N seconds, older entries dropped, replay and step-back going as far back as the window. Prior art: rr's checkpoints, Redux DevTools' maxAge. Design note first. Example: tumble running an hour in the editor with its log under a fixed size, and step-back working inside the window. Suggested lane: Language | thread "Decide the saved program format"; worldlog.ts | 2026-11-13 |
 | I241 | A trial repository holding one real Ters program, to try the format and `ters diff` in real git use: edits on two branches touching the same definitions, PRs read in GitHub's raw view and with `ters diff`, merges with and without the driver, findings in a dated report. Needs Ersagun to create the repository. After I240 | thread "Decide the saved program format" | 2026-11-13 |
 
 ## E: Editor
