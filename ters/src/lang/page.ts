@@ -20,7 +20,7 @@ import { HTML_V } from "./std.ts";
 import { LIBRARY } from "./library.ts";
 import { withLibraryRepresentations } from "./library-reps.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
-import { heardInto, logged, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
+import { eventsIn, heardInto, isEvent, logged, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -95,8 +95,8 @@ export function showPage(o: PageOptions): Preview {
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells) cells.kept = [];
   const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission });
-  const answered = o.replay ? replaying(o.replay.filter((e) => e.op !== "event"), browser) : browser;
-  const world = recordingWorld(o.log ? logged(answered, o.log).world : answered);
+  const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser) : browser;
+  const world = recordingWorld(o.log ? logged(answered, o.log, { seeded: true }).world : answered);
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
@@ -110,11 +110,9 @@ export function showPage(o: PageOptions): Preview {
 // The logged events given again, in order (C172g). One whose element
 // isn't there any more stops the replay, saying which.
 export function replayEvents(root: Node_, log: LogEntry[]): void {
-  log.forEach((e, i) => {
-    if (e.op !== "event") return;
-    const [name, value, key, x, y, seconds, path] = e.args as [string, string, string, number, number, number, number[]];
-    if (!replayEvent(root, name, path ?? [], [value, key, x, y, seconds])) throw new WentAnotherWay(`the replay went another way at entry ${i + 1}: the page has no ${name} handler where the log's event was given`);
-  });
+  for (const e of eventsIn(log)) {
+    if (!replayEvent(root, e.name, e.path, e.given)) throw new WentAnotherWay(`the replay went another way at entry ${e.at + 1}: the page has no ${e.name} handler where the log's event was given`);
+  }
 }
 
 // A page as one HTML file around its scripts: what `ters build-web` writes,

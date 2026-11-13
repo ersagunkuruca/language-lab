@@ -153,7 +153,7 @@ body.resizing { user-select: none; }
   .brand { display: none; }
   .bar { padding-left: 6px; }
   .bar .controls { gap: 4px; }
-  .bar .seg button, .bar .btn { padding-inline: 7px; }
+  .bar .seg button, .bar .btn { padding-inline: 5px; }
   .bar .back { white-space: nowrap; max-width: 30vw; overflow: hidden; text-overflow: ellipsis; }
   .more { display: inline-flex; }
   .links { display: none; }
@@ -327,6 +327,8 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 .meaning.moved .chip { color: var(--hot); font-weight: 600; }
 .changes { display: flex; flex-direction: column; gap: 6px; }
 .changes .row { display: flex; gap: 6px; flex-wrap: wrap; }
+.chg-rev { flex: 1 1 12em; min-width: 0; font: inherit; padding: 4px 8px; color: var(--fg); background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+.chg-error { color: var(--hot); }
 .chg-def { display: flex; gap: 8px; align-items: baseline; text-align: left; padding: 6px 10px; border-radius: 10px; border: 0; background: var(--canvas); color: var(--fg); font: inherit; cursor: pointer; }
 .chg-def.on { outline: 2px solid var(--accent); }
 .chg-def .chip { font-size: 12px; font-weight: 600; }
