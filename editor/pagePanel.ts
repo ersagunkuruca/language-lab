@@ -206,7 +206,9 @@ export function pagePanels(host: PageHost) {
     page.log = [];
     try {
       page.now = showPage({
-        log: page.log,
+        // The last five minutes or so, from snapshots ten seconds apart
+        // (I239b, WORLD-LOG-WINDOW.md): a page open for an hour keeps no more.
+        log: page.log, window: { seconds: 10, keep: 30 },
         code: prog(), info, names: pres().names, main, program: titleOf(doc()),
         doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
         frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
@@ -363,7 +365,8 @@ export function pagePanels(host: PageHost) {
     a.download = `${slug(titleOf(doc()))}-run.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    ui.note = `Saved this run's log: ${events} event${events === 1 ? "" : "s"} the page's handlers were given and ${answers} answer${answers === 1 ? "" : "s"} of the world, in order.`;
+    const left = page.now?.window?.dropped ? " Its earlier part had left the log, which keeps the last five minutes: a replay of this file starts from the page as main draws it, so it may go another way." : "";
+    ui.note = `Saved this run's log: ${events} event${events === 1 ? "" : "s"} the page's handlers were given and ${answers} answer${answers === 1 ? "" : "s"} of the world, in order.${left}`;
     render();
   }
   return { page, pageSection, pictureSection, savePage, saveLog };

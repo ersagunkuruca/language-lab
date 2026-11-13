@@ -11,16 +11,19 @@ import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { browserWorld, type Store } from "./browser.ts";
-import { Cells } from "./cells.ts";
+import { Cells, nodeOf } from "./cells.ts";
+const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
-import { equal, pageProblem, runMain } from "./run.ts";
+import { equal, pageProblem, runMain, type Value } from "./run.ts";
 import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
 import { LIBRARY } from "./library.ts";
 import { withLibraryRepresentations } from "./library-reps.ts";
 import { recordingWorld, soundPlayer } from "./audio-page.ts";
-import { eventsIn, heardInto, isEvent, logged, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
+import { eventsIn, heardInto, isEvent, logged, LogWindow, replaying, WentAnotherWay, type LogEntry } from "./worldlog.ts";
+// A page as a snapshot keeps it (I239b).
+export interface PageSnapshot { cells: [Value, Value][]; random: number[] }
 
 // The definition a page starts from: the one named `main` that returns an
 // Html and takes nothing. Null when the program has none, so it isn't a page.
@@ -69,6 +72,9 @@ export interface PageOptions {
   replay?: LogEntry[];
   // Keep the cells the page starts with, for handOver (cells.ts).
   keepCells?: boolean;
+  // The log kept as a window (I239b, WORLD-LOG-WINDOW.md): a snapshot
+  // every `seconds`, the last `keep` kept. `clock` is a test's.
+  window?: { seconds: number; keep: number; clock?: () => number };
   // A handler that stopped (html.ts Mount).
   stopped?: (e: unknown) => void;
 }
@@ -78,6 +84,8 @@ export interface Preview {
   cells: Cells;
   // The cells it started with, when asked (keepCells).
   kept?: Cells["kept"];
+  // Its log's window and snapshots, when asked (window).
+  window?: LogWindow<PageSnapshot>;
   // Stops the clock and any sound: nothing on this page runs on frames,
   // and nothing plays, any more.
   stop(): void;
@@ -93,18 +101,24 @@ export function showPage(o: PageOptions): Preview {
   let stopped = false;
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
-  if (o.keepCells) cells.kept = [];
+  if (o.keepCells || (o.log && o.window)) cells.kept = [];
   const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission });
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser) : browser;
-  const world = recordingWorld(o.log ? logged(answered, o.log, { seeded: true }).world : answered);
+  const logging = o.log ? logged(answered, o.log, { seeded: true }) : null;
+  const world = recordingWorld(logging ? logging.world : answered);
+  // A snapshot: the value of each cell main and the first drawing made,
+  // and where the generator is. What later cells hold follows from them.
+  let made: NonNullable<Cells["kept"]> = [];
+  const window = o.log && o.window && logging ? new LogWindow<PageSnapshot>(o.log, () => ({ cells: made.filter((k) => !cellGone(k.cell)).map((k) => [k.cell, cells.peek(k.cell)]), random: logging.random.state() }), o.window) : undefined;
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && heardInto(o.log) });
+  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && heardInto(o.log, window) });
   const kept = cells.kept;
+  made = kept ?? [];
   cells.kept = null;
   if (o.replay) replayEvents(root, o.replay);
-  return { root, cells, kept, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
+  return { root, cells, kept: o.keepCells ? kept : undefined, window, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
 
 // The logged events given again, in order (C172g). One whose element

@@ -36,20 +36,22 @@ const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes",
 // seeded once from the world, and only the seed is logged (I239a): a page
 // runs as long as it is open, and logging each draw would grow with it.
 // A main's run keeps each draw, to step by.
-export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean } = {}): { world: World; log: LogEntry[] } {
+export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
   const out = { ...world } as Record<string, unknown>;
+  // The seeded generator, for a snapshot to keep where it is (I239b).
+  const random = { state: () => gen?.state?.() ?? [], set: (s: number[]) => gen?.set?.(s) };
+  let gen: Generator | null = null;
   for (const [op, f] of Object.entries(world)) {
     if (typeof f !== "function") continue;
     const call = f as (...a: unknown[]) => unknown;
     if (op === "random" && o.seeded) {
-      let gen: Generator | null = null;
       out[op] = () => {
         if (!gen) {
           const seed = world.randomSeed ? world.randomSeed() : Math.floor(world.random() * 4294967296);
           log.push({ op: "randomSeed", args: [], answer: seed });
           gen = seededGenerator(seed);
         }
-        return gen.next();
+        return gen!.next();
       };
       continue;
     }
@@ -67,7 +69,7 @@ export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean
       try { const answer = call(...args); log.push({ op, args, answer }); return answer; } catch (e) { log.push({ op, args, threw: (e as Error).message }); throw e; }
     };
   }
-  return { world: out as unknown as World, log };
+  return { world: out as unknown as World, log, random };
 }
 
 
@@ -126,10 +128,12 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
 // handler is given, and where its element is (C172g, html.ts pathOf).
 // A frame heard right after one the same element heard adds its seconds
 // to that entry (I239a): an animation's frames are most of a page's log.
-export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number], path: number[]): void => {
+// With a window, each event is first a moment it may take a snapshot at.
+export const heardInto = (log: LogEntry[], window?: LogWindow) => (name: string, at: [string, string, number, number, number], path: number[]): void => {
+  window?.mayTake();
   if (name !== "frame") { log.push({ op: "event", args: [name, ...at, path] }); return; }
   const [value, key, x, y, seconds] = at, last = log[log.length - 1];
-  if (last?.op === "frames" && last.seconds && same(last.args, [path, value, key, x, y])) last.seconds.push(seconds);
+  if (last?.op === "frames" && last.seconds && log.length > (window?.lastAt ?? 0) && same(last.args, [path, value, key, x, y])) last.seconds.push(seconds);
   else log.push({ op: "frames", args: [path, value, key, x, y], seconds: [seconds] });
 };
 // A page's events in order, each frame of a run of frames on its own.
@@ -151,3 +155,40 @@ export const isEvent = (e: LogEntry): boolean => e.op === "event" || e.op === "f
 export const logText = (log: LogEntry[]): string => JSON.stringify(log, (_, v) => (v instanceof Uint8Array ? { bytes: [...v] } : v));
 export const readLog = (text: string): LogEntry[] =>
   JSON.parse(text, (_, v) => (v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 1 && Array.isArray(v.bytes) ? Uint8Array.from(v.bytes) : v)) as LogEntry[];
+
+// A page's log in bounded memory (I239b, WORLD-LOG-WINDOW.md §2): every
+// `seconds`, at the next event, a snapshot of the page (what `take`
+// gives: its cells' values, the generator's state); past `keep`
+// snapshots, the oldest segment, its snapshot and the entries up to the
+// next, is dropped. A replay or a step back starts from a snapshot
+// (rr's checkpoints; Redux DevTools' maxAge). The run's start is the
+// first snapshot, with nothing to restore: what main makes.
+export interface Snapshot<S = unknown> { at: number; state: S | null }
+export class LogWindow<S = unknown> {
+  snapshots: Snapshot<S>[] = [{ at: 0, state: null }];
+  // Entries dropped from the front since the run started.
+  dropped = 0;
+  private last: number;
+  readonly log: LogEntry[];
+  readonly take: () => S;
+  readonly o: { seconds: number; keep: number; clock?: () => number };
+  constructor(log: LogEntry[], take: () => S, o: { seconds: number; keep: number; clock?: () => number }) {
+    this.log = log; this.take = take; this.o = o;
+    this.last = this.now();
+  }
+  private now(): number { return (this.o.clock ?? Date.now)(); }
+  get lastAt(): number { return this.snapshots[this.snapshots.length - 1].at; }
+  // Between two events: the page is as its handlers left it.
+  mayTake(): void {
+    const t = this.now();
+    if (t - this.last < this.o.seconds * 1000) return;
+    this.last = t;
+    this.snapshots.push({ at: this.log.length, state: this.take() });
+    if (this.snapshots.length <= this.o.keep) return;
+    this.snapshots.shift();
+    const cut = this.snapshots[0].at;
+    this.log.splice(0, cut);
+    this.dropped += cut;
+    for (const s of this.snapshots) s.at -= cut;
+  }
+}
