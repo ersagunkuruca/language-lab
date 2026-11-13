@@ -213,6 +213,9 @@ function stepper(w: LogWindow<PageSnapshot>, root: Node_, cells: Cells, made: No
         if (!replayEvent(root, e.name, e.path, e.given)) throw new WentAnotherWay(`stepping went another way at entry ${e.at + 1}: the page has no ${e.name} handler where the log's event was given`);
         if (wrong) throw wrong;
       }
+      // Shown: what the views read from now on (the clock's frames) the
+      // page answers live, as while the cells were put back.
+      set(true, browser);
       s.at = n;
     },
     resume() {
