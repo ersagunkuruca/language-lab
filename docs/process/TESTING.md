@@ -145,6 +145,12 @@ someone sees the red check. For a ters with one user who wants to see the
 change, that beats a correct site 20 minutes late, and today's failure
 shows the other risk is real too: one red check freezes every change.
 
+Check main runs the files a merge reaches in six parallel jobs, shared out
+by how long each took, as the Nightly does (T15, 2026-11-13). In one job, a
+merge that reached most files ran past the 20-minute timeout. The run is
+then cancelled, so it never finishes, so the next one diffs from the same
+old commit and reaches even more: 94 of its last 100 runs were cancelled.
+
 A nightly full run (T5) moves a `good` tag; running the Pages workflow by
 hand on `good` puts the last fully checked site back if ever needed.
 
