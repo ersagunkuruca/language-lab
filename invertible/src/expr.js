@@ -46,17 +46,45 @@ const branch = (expr, { params = [], guards = [], free = [] } = {}) => ({ expr, 
 // undo itself in each argument (`inv[i](y, args, fresh)` returns the branches
 // for args[i] given the result y and the other arguments), and its partial
 // derivatives. Nothing else in the solver knows about specific functions.
+// +, − and negate are one relation, the balance a + b = total (atoms.js),
+// each a direction of it: + finds total from a and b, − finds a from total
+// and b, negate finds b from a with total 0 (CONFUSING item 9, L244). Their
+// evaluation, inverses and derivatives below are read off that one
+// relation, not written three times: an inverse in an input is the
+// direction that finds that port from the others, and a derivative is the
+// balance's coefficients (each addend +1, the total −1), −c_in / c_out.
+const BALANCE = { a: 1, b: 1, total: -1 };
+// How each port is found from the others: the balance solved for it.
+const SOLVE = {
+  total: { eval: ({ a, b }) => a + b, expr: ({ a, b }) => add(a, b) },
+  a: { eval: ({ b, total }) => total - b, expr: ({ b, total }) => sub(total, b) },
+  b: { eval: ({ a, total }) => total - a, expr: ({ a, total }) => sub(total, a) },
+};
+// A direction: the port it finds, the ports its inputs are, in order, and
+// the ports it holds fixed.
+export const BALANCE_DIRECTIONS = {
+  add: { out: 'total', ins: ['a', 'b'], fixed: {} },
+  sub: { out: 'a', ins: ['total', 'b'], fixed: {} },
+  neg: { out: 'b', ins: ['a'], fixed: { total: 0 } },
+};
+// 0 − x is −x, as negate's own direction gives it.
+const minus = (e) => (e.k === 'call' && e.f === 'sub' && isNum(e.args[0], 0) ? neg(e.args[1]) : e);
+function direction({ out, ins, fixed }) {
+  const ports = (args, y) => ({ ...Object.fromEntries(Object.entries(fixed).map(([p, x]) => [p, num(x)])), ...Object.fromEntries(ins.map((p, i) => [p, args[i]])), [out]: y });
+  return {
+    // Its arity is its inputs' count (prelude.ts reads eval.length).
+    eval: ins.length === 1
+      ? (x) => SOLVE[out].eval({ ...fixed, [ins[0]]: x })
+      : (x, y) => SOLVE[out].eval({ ...fixed, [ins[0]]: x, [ins[1]]: y }),
+    // Input i, given the result y and the other inputs: the balance solved for its port.
+    inv: ins.map((p, i) => (y, args) => [branch(minus(SOLVE[p].expr(ports(args.map((x, j) => (j === i ? undefined : x)), y))))]),
+    d: ins.map((p) => () => num(-BALANCE[p] / BALANCE[out])),
+  };
+}
+
 export const FN = {
-  add: {
-    eval: (a, b) => a + b, infix: '+', prec: 1,
-    inv: [(y, [, b]) => [branch(sub(y, b))], (y, [a]) => [branch(sub(y, a))]],
-    d: [() => num(1), () => num(1)],
-  },
-  sub: {
-    eval: (a, b) => a - b, infix: '−', prec: 1,
-    inv: [(y, [, b]) => [branch(add(y, b))], (y, [a]) => [branch(sub(a, y))]],
-    d: [() => num(1), () => num(-1)],
-  },
+  add: { ...direction(BALANCE_DIRECTIONS.add), infix: '+', prec: 1 },
+  sub: { ...direction(BALANCE_DIRECTIONS.sub), infix: '−', prec: 1 },
   mul: {
     eval: (a, b) => a * b, infix: '·', prec: 2,
     inv: [(y, [, b]) => [branch(div(y, b), { free: [[b, y]] })], (y, [a]) => [branch(div(y, a), { free: [[a, y]] })]],
@@ -67,11 +95,7 @@ export const FN = {
     inv: [(y, [, b]) => [branch(mul(y, b))], (y, [a]) => [branch(div(a, y), { free: [[a, y]] })]],
     d: [([, b]) => div(num(1), b), ([a, b]) => neg(div(a, pow(b, num(2))))],
   },
-  neg: {
-    eval: (a) => -a, prefix: '−', prec: 3,
-    inv: [(y) => [branch(neg(y))]],
-    d: [() => num(-1)],
-  },
+  neg: { ...direction(BALANCE_DIRECTIONS.neg), prefix: '−', prec: 3 },
   pow: {
     eval: (a, b) => a ** b, infix: '^', prec: 4,
     inv: [

@@ -23,7 +23,7 @@
 // Calls to other definitions are inlined, so their insides are solved too.
 
 import { defineRelation } from "../../../invertible/src/index.js";
-import { call, num, v } from "../../../invertible/src/expr.js";
+import { BALANCE_DIRECTIONS, call, num, v } from "../../../invertible/src/expr.js";
 import type { Code, Id, NodeOf, Call } from "../model.ts";
 import { isCall, isUse, portNames } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -206,8 +206,25 @@ export function relationFor(code: Code, fn: Id): DefRelation {
   if (t?.kind === "def") return defRelation(code, fn);
   const op = NUMERIC[fn];
   if (!op) throw new NotEquations(`${t?.kind === "builtin" ? t.op : fn} doesn't read as equations`);
-  const args = Array.from({ length: arityOf(op) }, (_, i) => String(i));
-  return { rel: define({ name: op, ports: [...args, "out"], eqs: [{ lhs: v("out"), rhs: call(op, ...args.map((a) => v(a))) }] }), predicate: false };
+  return { rel: builtinRelation(op), predicate: false };
+}
+
+// A numeric builtin as the relation it is, its ports its inputs ("0",
+// "1") and "out". +, − and negate are each a direction of one balance,
+// a + b = total (expr.js BALANCE_DIRECTIONS, L244): − is that sum with a
+// unknown, so its relation reads `out + 1 = 0` (the result and b add up
+// to a), and negate's `0 + out = 0`. The rest are `out = op(…)`.
+// `labels` names its ports otherwise, the inputs then the result, as the
+// editor's panel does (a, b, result).
+export function builtinRelation(op: string, labels?: string[]): Relation {
+  const args = labels?.slice(0, -1) ?? Array.from({ length: arityOf(op) }, (_, i) => String(i));
+  const outName = labels?.at(-1) ?? "out";
+  const way = (BALANCE_DIRECTIONS as Record<string, { out: string; ins: string[]; fixed: Record<string, number> } | undefined>)[op];
+  if (way) {
+    const port = (p: string): Expr => (p === way.out ? v(outName) : p in way.fixed ? num(way.fixed[p]) : v(args[way.ins.indexOf(p)]));
+    return define({ name: op, ports: [...args, outName], eqs: [{ lhs: call("add", port("a"), port("b")), rhs: port("total") }] });
+  }
+  return define({ name: op, ports: [...args, outName], eqs: [{ lhs: v(outName), rhs: call(op, ...args.map((a) => v(a))) }] });
 }
 
 export const isPredicate = (code: Code, fn: Id) => { try { return relationFor(code, fn).predicate; } catch { return false; } };

@@ -142,9 +142,6 @@ CLI, the MCP and printed text keep `e`, where it is the exact type.
 
 ### 9. Small inconsistencies worth fixing
 
-- `+` is still three built-ins in tree code (`add`, `subtract`, `negate`), each
-  with its own equation, where one sum `a + b = total` read in different
-  directions would do. Row **L244**.
 - `Int` and `Float64` share every operation's name. The types tell them apart
   and the palette only offers the right one, but a reader of the blocks can't
   see which `+` it is. Kept: one name per operation is what the generic
@@ -181,6 +178,14 @@ So the list above isn't read as "everything is wrong":
   between operations, and guarded corecursion (L16) drops `Diverge` from a
   producer whose every call into itself is inside a constructor's field.
   Cells' own handler stays the runtime's, where reactivity is.
+- ~~**`+` is three built-ins.**~~ (Part of item 9, L244.) `add`, `subtract`
+  and `negate` are each a direction of one sum, `a + b = total`: + finds
+  the total, − finds a from the total and b, negate finds b with a total of
+  0. Their evaluation, inverses and derivatives are read off that one
+  relation (invertible's expr.js), the solver runs each as that sum, and
+  selecting one shows `a + b = result`, `result + b = a` or `x + result = 0`
+  with its directions. The names stay as the directions' names, and the
+  compiled code still calls each direction directly.
 - ~~**Small inconsistencies.**~~ (Parts of item 9.) The palette names every
   filling (`match □ · Type`, `handle Ask in □`), with no empty names. `equal`
   on numbers is exact (L197), with `near(a, b)` for "the same up to
@@ -213,8 +218,7 @@ So the list above isn't read as "everything is wrong":
 - ~~**Builtins are black boxes, and arithmetic exists three times.**~~ There's
   one table of arithmetic (evaluate, invert, differentiate); selecting a
   built-in shows its equation and directions; the data-type algebra demo was
-  replaced by calculus on real functions. (What's left is item 9's three
-  `+`s.)
+  replaced by calculus on real functions. (The three `+`s were one sum later, L244.)
 - ~~**Relations only cover arithmetic.**~~ Every node runs backwards
   (BACKWARDS.md), and pattern matching *is* a constructor run backwards.
 - ~~**Units only exist in networks.**~~ Units are part of `Float64`'s type in
