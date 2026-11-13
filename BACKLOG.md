@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | C187 is blocked on V8; C195 is done (#2515) |
 | L Language and library | "Language lane" | the next goal row (stable references, free lists, multithreading) agreed with the lane that holds it; I203's editor half is with the Editor lane (L182 is with the Editor lane) |
 | L Language and library | "Language lane B" | the next goal row agreed with its lane (C43's first on C waits for an example); round 12's I187 is with the Editor lane. Skip L107 (waits on Ersagun) and L24 (research). Take a row from another list only after telling that lane. |
-| T Testing | "Replace the slow browser smoke test" | I64, then the smoke's replacement |
+| T Testing | "Replace the slow browser smoke test" | T15 (P0: Check main finishes), then I64, then the smoke's replacement |
 
 ## Inbox
 
@@ -54,6 +54,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E256 | CONFUSING.md checked against today's editor: its header says each open problem is a row, but items 1 to 5 and 7 to 10 are open with none. Each one moves to "Fixed" (item 10's guarded corecursion is L16, for one), becomes a row, or stays with the reason it's kept | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §5 | P2 | S | |
 
 ### Speed of editing
 
@@ -64,6 +65,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E255 | Reviewing a change to a program: a diff of two versions by node id (added, removed, changed definitions, with names from the side tables), shown in the editor and printed by `ters diff`, so a change can be read in review. A design note first. Raised by both ASPECTS runs (#37) and BLIND-SPOTS §13 | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.7 | P3 | L | |
 
 ### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
 
@@ -150,6 +152,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L243 | `agent` back in the engines' agreement test: compiler/test/core-js.test.ts skips it, because the evaluator (the reference) takes minutes on its A* search. Run it at a smaller size, as I202 did for swarm-pool, or make the evaluator fast enough through L118c's direct run | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.6 | P3 | S | |
 
 ### Bugs and gaps found by programs
 
@@ -180,6 +183,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L242 | The verifier checks termination: verify.ts skips it (`skip("termination")`), so "never Diverge" is the checker's word alone (REVIEW-2026-11-11 §6), and `grow`, `settled` and the worker passes lean on it. Check counting.ts's measure in verify, or list termination in CHECKED-ONCE as what's still trusted | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.5 | P2 | M | |
 
 ### Grammars, modules and sharing
 
@@ -226,6 +230,7 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| T15 | Check main finishes: 0 of its last 100 runs passed (94 cancelled at the 20-minute timeout; newest finished one a failure on 11-11), so its base never moves and every run tests too much (I110's fix waits on a finished run). Split it into shards under the timeout, as I208 did for the Nightly, or test only what its own merge changed; then see it pass. With I219, until the Nightly passes and `good` moves off 10-28 | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.1 | P0 | M | |
 
 ## Coordinator and process
 
@@ -233,5 +238,6 @@ Not lane work; the coordinator does these or asks Ersagun.
 
 | id | item | source | pri | status |
 |---|---|---|---|---|
-| P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805), tests reached by a one-line text.ts edit (145/150 + 44/44) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
+| P9 | A second outsider pass, unprimed, that has to *write* a small program from the learn page and docs alone, in the editor, and says where it got stuck (OUTSIDER-READ-2026-11-03's method plus writing). Nobody has read the docs cold since 11-03 | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.3 | P2 | |
+| P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805 on 11-03; 3,421 on 11-13), tests reached by a one-line text.ts edit (145/150 + 44/44 on 11-03; 139/219 + 91/125 on 11-13) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
 | P8 | Add a LICENSE (and say what examples and programs written in Ters carry) once Ersagun picks one | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §3 | P3 | postponed (Ersagun 2026-11-10: until people want to use Ters) |

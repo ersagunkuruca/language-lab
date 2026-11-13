@@ -35,10 +35,9 @@ are listed in §12 and never invented here.
 target. A target that can't keep a rule refuses the definition, with a
 reason, before it runs (§10). It never gives another answer.
 
-**Pending.** The Language lane is merging `call` and `solve` into one
-node kind (L130). §7 is written at the level that survives the merge.
-Where the merged node's shape still matters (L179), it is marked
-*pending*.
+**Calls and uses.** `call` and `solve` are one node kind (L130d), and a
+use gives its produced ports as a tuple (L179, built as L211). §7 was
+written to survive that merge and needed no change of meaning.
 
 ## 1. Programs
 
@@ -302,7 +301,7 @@ so the same seed gives the same numbers on every engine.
 effect, including `Abort`, `Log`, `Random`, `Time` and `State`, is
 declared in the library like a program's own.
 
-## 7. Running backwards (*pending L130*)
+## 7. Running backwards
 
 7.1. Every definition is a relation between its inputs and its result,
 and can be run in more than one **direction**: some ports given, the
@@ -485,13 +484,13 @@ hasn't been chosen. None is answered here. Rows are in BACKLOG.md.
 | S4 | **Fuel counts depend on the checker.** Decided (L199, 2026-11-03): kept, and written down: what counts is the checker's, and a checker change that stops counting a definition is a change of meaning (§5.6). | written; evaluator and the core IR count the same way | L199 |
 | S5 | **When a stopped search had effects.** Decided (L198): an engine runs the paths in the evaluator's order, so handled effects on a search's paths happen as the evaluator's do (§7.4). | written; the fuzz test checks it | L198 |
 | S6 | **Shaders.** Decided 2026-11-03 (Ersagun): a declared approximation with its own meaning, written in §10.3 | written | C141 |
-| S7 | **Text.** Decided (L185, TEXT-2026-11-03.md): code-point equality with NFC where text enters from the world; case mapping by a locale argument (the user's locale a world effect); graphemes beside characters; collation a separate order; the Unicode version is std's. | decided, NFC not built yet | L214 |
-| S8 | **The merged use's shape** (tuple or body). | pending | L179 |
+| S7 | **Text.** Decided (L185, TEXT-2026-11-03.md): code-point equality with NFC where text enters from the world; case mapping by a locale argument (the user's locale a world effect); graphemes beside characters; collation a separate order; the Unicode version is std's. | decided and built: NFC at the border (L214a), the rest on every target (L214) | L214 |
+| S8 | **The merged use's shape** (tuple or body). Decided (L179, 2026-11-03): a use gives its produced ports as a tuple, like any function with several results (PORTS-2026-11-01.md §3). | done (L211) | L179 |
 | S9 | **Strict positivity.** | kept | L107 |
 | S10 | **Evaluation order inside a use.** Decided (L198): given ports first, in port order, then the solve (§7.2b). | the evaluator (L198); compiled code: C147 | L198 |
 | S11 | **`compare` on Float64** was documented in LIBRARY.md as putting NaN after every other Float64, but NaN isn't a value (§3.2). Fixed at its source, the note in ters/src/lang/notes.ts (L200). | fixed | L200 |
 | S12 | **Library functions' bits.** Decided 2026-11-03 (Ersagun): the platform's own, within a few ulp (§3.2); exact agreement across machines comes from a type that asks for it | C calls libm (C144); WASI carries fdlibm, having no maths of its own; the agreement tests build C with fdlibm to compare to the bit, and c.test.ts checks libm within 4 ulp | C144 |
-| S13 | **The hash misses meaning** (L178): an effect and a data type of one shape, a literal arm's value. §1.3 is the rule L178 implements. | bug | L178 |
+| S13 | **The hash misses meaning** (L178): an effect and a data type of one shape, a literal arm's value. §1.3 is the rule L178 implements. | fixed: the hash covers what a definition means (L178a, L178b) | L178 |
 | S14 | **A direction's law** (§7.6). Decided (L201, 2026-11-03): a direction gives only answers of the relation and chooses among them; its first is the canonical one in its direction, not the search's first, which differs for unpolar at (−2, 0.5). | written; checked on unpolar by directions.test.ts | L201 |
 
 ## How this page is kept
