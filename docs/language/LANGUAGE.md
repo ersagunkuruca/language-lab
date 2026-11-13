@@ -1648,7 +1648,10 @@ Declare a unit on a parameter, or write a number with one (`9.81 m/s²`), and
 the rest is inferred: `period` is in seconds, `drift` and `drop` in metres.
 A plain number is dimensionless, so a plain `29.62` where a length is needed
 is a type error. Radians are gone as a base unit: an angle is a plain number,
-as in SI.
+as in SI. A record's field can say its unit in its type, `speed: Float64 m/s`
+(L252): what a case is made with, what reading the field gives and what a
+match takes out of it are in that unit. The view prints units on fields and
+on numbers (`9.81 m/s²`).
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
@@ -2049,8 +2052,10 @@ back into the group being hashed is named by its position.
   effect, L253, on every target; `ters run --allow environment`). (Handlers for `Console`, `Files` and `Network` written in the
   program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
-  the type now; what's missing is writing them in a type (`Float64 m/s`) and
-  a function generic over its unit.
+  the type, and a record's field can be written `Float64 m/s` (L252);
+  what's missing is a unit in a definition's signature and a function
+  generic over its unit (`(Float64 u) -> Float64 u²`), and reading a
+  number's unit from text.
 - **Laziness for fold results**, so effects in folds could run top-down.
   (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
 - **Cells, further.** Async cells (HTTP results) as Solid's resources.
