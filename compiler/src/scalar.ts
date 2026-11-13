@@ -732,6 +732,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const rounded = new Set<Id>();
   const calls = new Set(st.rounded);
   if (calls.size) for (const d of code.defs) if (subtree(code, d).some((id) => calls.has(id))) rounded.add(d);
+  // A function chosen at run time that `derivative` is asked of carries
+  // its derivative, made ahead here (carried-derivatives.ts, I245): from
+  // the code as staged, as the evaluator would derive it, before the
+  // passes below rewrite folds (a fused fold's accumulator isn't a fold's
+  // result derive.ts can follow); they then work on the derivatives too.
+  const carried = !opts.shader && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
+  if (carried) ({ code, names, info } = carried);
   // A list named first and then walked is put where it's walked, so the
   // fold over `characters` sees it (inline-lets.ts, C49).
   const lets = inlineLists(code, info);
@@ -753,10 +760,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     code = sharedItems.code;
     info = infer(code, names);
   }
-  // A function chosen at run time that `derivative` is asked of carries
-  // its derivative, made ahead here (carried-derivatives.ts, I245).
-  const carried = !opts.shader && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
-  if (carried) ({ code, names, info } = carried);
   const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives
   // made (which carry none: no derivative of one is asked, carried-
@@ -1807,8 +1810,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // the closure (it carries its lambda, closure.src); what it gives
         // is the evaluator's function, called for its one answer.
         // One the function carries (I245), on every target: its maker,
-        // given the closure (in a local, as a printer reads it twice).
-        if (carried && target === S.derivative && n.args.length === 1) {
+        // given the closure (in a local, as a printer reads it twice). A
+        // gradient the same way (I247): a function of a record is asked
+        // only for its gradient, a function of a Float64 its derivative.
+        if (carried && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
           const ft = stype(zonk(n.args[0]));
           if (ft && isFn(ft)) {
             derivedKeys.add(plainKey(ft));

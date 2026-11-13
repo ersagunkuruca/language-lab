@@ -29,7 +29,7 @@ import { ownedPushes } from "./owned-pushes.ts";
 import { ownedRecords } from "./owned-records.ts";
 import { ownedTables } from "./owned-tables.ts";
 import { envSet, zeroParts } from "./zero-parts.ts";
-import { ARRAY_OPS, FALSE, STD_IMPL, STD_MANY, TRUE } from "../../ters/src/lang/std.ts";
+import { ARITH, ARRAY_OPS, FALSE, FIRST, PAIR_V, S, SECOND, STD_IMPL, STD_MANY, TRUE } from "../../ters/src/lang/std.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -1081,7 +1081,13 @@ export function solverCode(ir: CoreIR, js: string): Code {
   for (const d of ir.info.implementations?.values() ?? []) add(d);
   // A derivative's rules name the builtins they differentiate by id
   // (builtin.pow), not through a node, so it gets them all.
-  if (/R\.rt\("derive:/.test(js)) for (const id of Object.keys(nodes)) if (id.startsWith("builtin.")) add(id);
+  // And the library's it writes into a derivative (pairs of a value and
+  // its slope, +, the parts of a record): not reached from the program's
+  // own nodes when only a derivative uses them.
+  if (/R\.rt\("derive:/.test(js)) {
+    for (const id of Object.keys(nodes)) if (id.startsWith("builtin.")) add(id);
+    for (const id of [FIRST, SECOND, PAIR_V, ...Object.values(ARITH), S.mapParts, S.zipParts, S.fail, S.total, S.abs, S.floor, S.float32, S.mod]) add(id);
+  }
   for (let before = -1; before !== seen.size; ) {
     before = seen.size;
     while (todo.length) walk(nodes[todo.pop()!]);

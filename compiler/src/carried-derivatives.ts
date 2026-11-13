@@ -8,6 +8,8 @@
 // captures; scalar.ts gives its closure a maker of that derivative's
 // closure, and `derivative(f)` calls f's maker.
 //
+// gradient(f) of a function of a record is carried the same way (I247).
+//
 // Only the first derivative is made. That is enough when no derivative's
 // result can reach `derivative` again: each one is applied, or handed to
 // a function whose input is only ever applied (newton's slope). Where one
@@ -19,7 +21,7 @@ import { children, freshId, isCall, subtree, type Call } from "../../ters/src/mo
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
-import { deriver } from "../../ters/src/lang/derive.ts";
+import { deriver, recordVariant } from "../../ters/src/lang/derive.ts";
 import { S } from "../../ters/src/lang/std.ts";
 import type { Type } from "../../ters/src/lang/types.ts";
 
@@ -42,21 +44,32 @@ function sig(t: Type): string {
   return `fn(${t.params.map(sig).join(",")})>${sig(t.ret)}`;
 }
 
-const derivativeCall = (code: Code, id: Id): boolean => {
+// A run-time `derivative(f)`, or `gradient(f)` of a function of a record
+// (I247): which one.
+const askedOf = (code: Code, id: Id): typeof S.derivative | typeof S.gradient | null => {
   const n = code.nodes[id];
-  return isCall(n) && n.args.length === 1 && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === S.derivative;
+  if (!isCall(n) || n.args.length !== 1 || code.nodes[n.fn]?.kind !== "ref") return null;
+  const t = (code.nodes[n.fn] as NodeOf<"ref">).target;
+  return t === S.derivative || t === S.gradient ? t : null;
 };
+const derivativeCall = (code: Code, id: Id): boolean => askedOf(code, id) !== null;
 
 export function carriedDerivatives(code: Code, info: Info, names: Names, roots: Id[]): Carried | null {
   const ids = Object.keys(code.nodes);
   const calls = ids.filter((id) => derivativeCall(code, id));
   if (!calls.length) return null;
   const type = (id: Id) => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
-  const sigs = new Set<string>();
+  // Each function type asked of, and what it is asked: a derivative, or
+  // a gradient along the parts of its input's record (its one case).
+  const sigs = new Map<string, { gradient: Id | null }>();
   for (const c of calls) {
     const t = type((code.nodes[c] as Call).args[0]);
     if (t.t !== "fn" || t.params.length !== 1) return null;
-    sigs.add(sig(t));
+    const p = t.params[0], variant = askedOf(code, c) === S.gradient ? (p.t === "con" ? recordVariant(code, p.id) : null) : null;
+    if (askedOf(code, c) === S.gradient && !variant) return null;
+    const was = sigs.get(sig(t));
+    if (was && was.gradient !== variant) return null;
+    sigs.set(sig(t), { gradient: variant });
   }
   // Each node's parent, and the slot it is in.
   const parent = new Map<Id, Id>();
@@ -120,11 +133,12 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
   }
   for (const id of reached) {
     const n = code.nodes[id] as NodeOf<"lambda">, p = parent.get(id);
-    if (n.params.length !== 1 || !sigs.has(sig(type(id)))) continue;
+    const asked = sigs.get(sig(type(id)));
+    if (n.params.length !== 1 || !asked) continue;
     if (p && isCall(code.nodes[p]) && (code.nodes[p] as Call).fn === id) continue;
     const before = new Set(Object.keys(out.nodes));
     try {
-      const dl = d.lambda(id, 0);
+      const dl = asked.gradient ? d.gradient(id, asked.gradient) : d.lambda(id, 0);
       const fresh = Object.keys(out.nodes).filter((x) => !before.has(x));
       if (fresh.some((x) => derivativeCall(out, x))) continue;
       // A definition of its own, so the checker types it: over what the
