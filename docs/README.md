@@ -100,7 +100,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [KEYED-COLLECTIONS.md](design/data/KEYED-COLLECTIONS.md) | Collections that give out their own keys (free lists, a `Pool`) | built: std's `Pool` (C58c) and the default Map of Int keys brought toward hand-written C; closed until a program needs more (C58) |
 | [COLUMNS.md](design/data/COLUMNS.md) | An array of records stored as an array per field, as data-oriented C does | built on JavaScript, WebAssembly and C (C60); closed until a program needs more |
 | [FLAT-LAYOUT.md](design/data/FLAT-LAYOUT.md) | Data built once and read, laid out flat (FlatBuffers) | design; no example gained 10%, closed until a program needs it (C59) |
-| [CELL-READERS-2026-11-03.md](design/data/CELL-READERS-2026-11-03.md) | Waking only the readers a write concerns: tracked views measured and not merged (C86b), then reads tracked by the compiler | partly built (C162a, C162b) |
+| [CELL-READERS-2026-11-03.md](design/data/CELL-READERS-2026-11-03.md) | Waking only the readers a write concerns: tracked views measured and not merged (C86b), then reads tracked by the compiler | built (C162a to C162c) |
 
 ### Relations, patterns and effects
 
