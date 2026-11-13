@@ -52,9 +52,30 @@ const inputs: Record<string, () => [string[], Record<string, string>]> = {
 };
 
 // agent's page works its coupled search out (A* over place and velocity,
-// L123), which takes the evaluator 9 minutes: core-js-agent.test.ts checks
-// it in the nightly (I195).
-const skip = new Set(["agent"]);
+// L123) for each of its two trips, minutes in the evaluator: the search
+// keeps the cells it reached in a map and its states in a queue, both
+// lists there, so each step costs more as they grow (140 states looked
+// at: 1 s; 810: 11 s; a whole trip: about 3 minutes). Here each trip's
+// goal is nearer, (3, 3) and (7, 2), the program otherwise as it is
+// (L243); core-js-agent.test.ts checks it as it is in the nightly (I195).
+function nearer(p: ReturnType<typeof load>): ReturnType<typeof load> {
+  const goal = p.own.defs.find((d) => p.pres.names[d] === "goal of")!;
+  const lits: Id[] = [], seen = new Set<Id>();
+  const walk = (id: Id) => {
+    const n = p.code.nodes[id] as unknown as Record<string, unknown> | undefined;
+    if (!n || seen.has(id)) return;
+    seen.add(id);
+    if (n.kind === "lit" && typeof n.value === "number" && !n.of) lits.push(id);
+    for (const v of Object.values(n)) for (const w of Array.isArray(v) ? v : [v]) if (typeof w === "string" && w !== id && p.code.nodes[w]) walk(w);
+  };
+  walk((p.code.nodes[goal] as { body: Id }).body);
+  assert.deepEqual(lits.map((id) => (p.code.nodes[id] as { value: number }).value), [8, 9, 2, 8], "agent's goal of: (8, 9) and (2, 8)");
+  const nodes = { ...p.code.nodes };
+  [3, 3, 7, 2].forEach((v, i) => (nodes[lits[i]] = { ...nodes[lits[i]], value: v } as never));
+  const code = { ...p.code, nodes };
+  return { ...p, code, info: infer(code, p.pres.names, undefined, p.options) };
+}
+const sized = (name: string): ReturnType<typeof load> => (name === "agent" ? nearer(load(name)) : load(name));
 // numbers counts in Peano Nat as defined: the evaluator runs out of memory
 // and the printer's recursion out of stack. It is checked as `ters run`
 // stores it (cli/represented.ts: Nat as an Int), in both, which is what
@@ -110,8 +131,8 @@ const spawn = (args: string[], cwd?: string): Promise<[string, string, number]> 
 
 test("the examples whose main lowers to the core IR say the same in JavaScript printed from it as in the evaluator (C137c4)", () => {
   const ran: string[] = [], refused: string[] = [];
-  for (const name of sweep(readdirSync(examples, { withFileTypes: true }).filter((d) => d.isDirectory() && !skip.has(d.name)).map((d) => d.name).sort())) {
-    const p0 = load(name);
+  for (const name of sweep(readdirSync(examples, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort())) {
+    const p0 = sized(name);
     const main = p0.code.defs.find((d) => p0.pres.names[d] === "main" && p0.own.defs.includes(d));
     if (!main) continue;
     const p = stored(name, p0, main);
@@ -172,8 +193,8 @@ test("ters compile --core writes a module that runs main as ters run does", asyn
 // lists them): each run in its own cells.
 test("the pages whose main lowers show the same HTML, before and after their handlers run, as in the evaluator (C137c8)", () => {
   const ran: string[] = [];
-  for (const name of sweep(["bounce", "compass", "constructions", "converter", "dice", "pig", "spacetime", "tumble"])) {
-    const p = load(name);
+  for (const name of sweep(["agent", "bounce", "compass", "constructions", "converter", "dice", "pig", "spacetime", "tumble"])) {
+    const p = sized(name);
     const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d))!;
     const l = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
     assert.ok(!l.refused.has(main), `${name}: ${l.refused.get(main)}`);

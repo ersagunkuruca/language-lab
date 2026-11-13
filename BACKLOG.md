@@ -152,7 +152,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L243 | `agent` back in the engines' agreement test: compiler/test/core-js.test.ts skips it, because the evaluator (the reference) takes minutes on its A* search. Run it at a smaller size, as I202 did for swarm-pool, or make the evaluator fast enough through L118c's direct run | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.6 | P3 | S | |
 
 ### Bugs and gaps found by programs
 
