@@ -160,8 +160,8 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [NODE-EDITOR.md](design/editor/NODE-EDITOR.md) | The graph view: node editors' usual complaints and what we do about each | current |
-| [FEATURE-GESTURES.md](design/editor/FEATURE-GESTURES.md) | Which language features the editor should make (private cases, ways and directions yes; `unique` no) (E199) | partly built |
-| [SHARED-NODES.md](design/editor/SHARED-NODES.md) | Offers in a palette written into one copy of the program instead of a copy each (E133) | step a built |
+| [FEATURE-GESTURES.md](design/editor/FEATURE-GESTURES.md) | Which language features the editor should make (private cases, ways and directions yes; `unique` no) (E199) | built (E209, E210, E210b) |
+| [SHARED-NODES.md](design/editor/SHARED-NODES.md) | Offers in a palette written into one copy of the program instead of a copy each (E133) | built (E133a, E133b) |
 
 ## How we work
 
@@ -194,7 +194,7 @@ Kept as written; the newer document is named in each.
 | Using Ters as an LLM, through its MCP server | [MCP-TRIAL-2026-11-01](reports/MCP-TRIAL-2026-11-01.md) |
 | Why the unit tests are slow | [TEST-SPEED-2026-11-03](reports/TEST-SPEED-2026-11-03.md) (rows L216, L217, T12 to T14) |
 | The evaluator's speed | [EVALUATOR-SPEED-2026-10-31](reports/EVALUATOR-SPEED-2026-10-31.md) (L118) |
-| Editor QA passes | [10-22](reports/qa/QA-2026-10-22.md), [10-23](reports/qa/QA-2026-10-23.md), [10-23b](reports/qa/QA-2026-10-23b.md), [10-24](reports/qa/QA-2026-10-24.md), [10-24b](reports/qa/QA-2026-10-24b.md), [10-26](reports/qa/QA-2026-10-26.md), [10-27](reports/qa/QA-2026-10-27.md), [10-28](reports/qa/QA-2026-10-28.md), [10-29](reports/qa/QA-2026-10-29.md), [10-29b](reports/qa/QA-2026-10-29b.md), [10-30](reports/qa/QA-2026-10-30.md), [10-31](reports/qa/QA-2026-10-31.md), [11-01](reports/qa/QA-2026-11-01.md), [11-01b](reports/qa/QA-2026-11-01b.md), [11-02](reports/qa/QA-2026-11-02.md), [11-02b](reports/qa/QA-2026-11-02b.md) |
+| Editor QA passes | [10-22](reports/qa/QA-2026-10-22.md), [10-23](reports/qa/QA-2026-10-23.md), [10-23b](reports/qa/QA-2026-10-23b.md), [10-24](reports/qa/QA-2026-10-24.md), [10-24b](reports/qa/QA-2026-10-24b.md), [10-26](reports/qa/QA-2026-10-26.md), [10-27](reports/qa/QA-2026-10-27.md), [10-28](reports/qa/QA-2026-10-28.md), [10-29](reports/qa/QA-2026-10-29.md), [10-29b](reports/qa/QA-2026-10-29b.md), [10-30](reports/qa/QA-2026-10-30.md), [10-31](reports/qa/QA-2026-10-31.md), [11-01](reports/qa/QA-2026-11-01.md), [11-01b](reports/qa/QA-2026-11-01b.md), [11-02](reports/qa/QA-2026-11-02.md), [11-02b](reports/qa/QA-2026-11-02b.md), [11-03](reports/qa/QA-2026-11-03.md), [11-04](reports/qa/QA-2026-11-04.md), [11-05](reports/qa/QA-2026-11-05.md), [11-05b](reports/qa/QA-2026-11-05b.md), [11-09](reports/qa/QA-2026-11-09.md), [11-10](reports/qa/QA-2026-11-10.md), [11-11](reports/qa/QA-2026-11-11.md), [11-12](reports/qa/QA-2026-11-12.md), [11-13](reports/qa/QA-2026-11-13.md), [11-13b](reports/qa/QA-2026-11-13b.md) |
 
 A new dated report goes in its folder and in this table, in its own PR. A QA pass keeps its screenshots in `reports/qa/screenshots/<date>/`.
 
