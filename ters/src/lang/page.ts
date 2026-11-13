@@ -14,7 +14,7 @@ import { browserWorld, type Store } from "./browser.ts";
 import { Cells, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
-import { equal, pageProblem, runMain, type Value } from "./run.ts";
+import { equal, pageProblem, runMain, type Value, type World } from "./run.ts";
 import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
@@ -84,8 +84,10 @@ export interface Preview {
   cells: Cells;
   // The cells it started with, when asked (keepCells).
   kept?: Cells["kept"];
-  // Its log's window and snapshots, when asked (window).
+  // Its log's window and snapshots, when asked (window), and stepping
+  // through it (I239c).
   window?: LogWindow<PageSnapshot>;
+  steps?: Steps;
   // Stops the clock and any sound: nothing on this page runs on frames,
   // and nothing plays, any more.
   stop(): void;
@@ -104,7 +106,11 @@ export function showPage(o: PageOptions): Preview {
   if (o.keepCells || (o.log && o.window)) cells.kept = [];
   const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission });
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser) : browser;
-  const logging = o.log ? logged(answered, o.log, { seeded: true }) : null;
+  // While the page is stepped through its log (I239c), the world answers
+  // from the log and nothing new is logged: `asking` is which world.
+  let stepping = false, asking: World = answered;
+  const switched = Object.fromEntries(Object.keys(answered).map((op) => [op, (...a: unknown[]) => (asking as unknown as Record<string, (...a: unknown[]) => unknown>)[op](...a)])) as unknown as World;
+  const logging = o.log ? logged(o.window ? switched : answered, o.log, { seeded: true, quiet: () => stepping }) : null;
   const world = recordingWorld(logging ? logging.world : answered);
   // A snapshot: the value of each cell main and the first drawing made,
   // and where the generator is. What later cells hold follows from them.
@@ -113,12 +119,62 @@ export function showPage(o: PageOptions): Preview {
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
   const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
   const value = sound ? sound.page : run();
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && heardInto(o.log, window) });
+  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && ((h) => (...a: Parameters<typeof h>) => { if (!stepping) h(...a); })(heardInto(o.log, window)), live: () => !stepping });
   const kept = cells.kept;
   made = kept ?? [];
   cells.kept = null;
   if (o.replay) replayEvents(root, o.replay);
-  return { root, cells, kept: o.keepCells ? kept : undefined, window, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
+  const steps = window && logging ? stepper(window, root, cells, made, logging.random, browser, (s, w) => { stepping = s; asking = w ?? answered; }) : undefined;
+  return { root, cells, kept: o.keepCells ? kept : undefined, window, steps, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
+}
+
+// Stepping a page through the window of its log (I239c,
+// WORLD-LOG-WINDOW.md §3): `to(n)` shows the page as it was after the
+// window's first n events, from the snapshot nearest before (the run's
+// start restores the cells' first values), the events after it given
+// again with the world answering from the log. Meanwhile the page hears
+// nothing live and logs nothing. `resume()` goes on from there: what the
+// log had after it is dropped, as a debugger's run from a breakpoint
+// leaves the old future.
+export interface Steps { events(): number; at: number | null; to(n: number): void; resume(): void }
+function stepper(w: LogWindow<PageSnapshot>, root: Node_, cells: Cells, made: NonNullable<Cells["kept"]>, random: { state(): number[]; set(s: number[]): void }, browser: World, set: (stepping: boolean, world?: World) => void): Steps {
+  const log = w.log;
+  const s: Steps = {
+    at: null,
+    events: () => [...eventsIn(log)].length,
+    to(n) {
+      const evs = [...eventsIn(log)];
+      if (n < 0 || n > evs.length) throw new RangeError(`the log has ${evs.length} events`);
+      const before = (at: number) => evs.findIndex((e) => e.at >= at) < 0 ? evs.length : evs.findIndex((e) => e.at >= at);
+      const snap = [...w.snapshots].reverse().find((x) => before(x.at) <= n) ?? w.snapshots[0];
+      // The cells put back. What the page's views read of the world
+      // meanwhile (now(), off the clock's cell, put back too) the page
+      // answers itself: the log has only what its handlers asked.
+      set(true, browser);
+      const back = snap.state ? snap.state.cells : made.map((k) => [k.cell, k.first] as [Value, Value]);
+      cells.batch(() => { for (const [c, v] of back) if (!cellGone(c)) cells.write(c, v); });
+      random.set(snap.state ? snap.state.random : []);
+      set(true, replaying(log.slice(snap.at).filter((e) => !isEvent(e)), browser));
+      for (const e of evs.slice(before(snap.at), n)) {
+        if (!replayEvent(root, e.name, e.path, e.given)) throw new WentAnotherWay(`stepping went another way at entry ${e.at + 1}: the page has no ${e.name} handler where the log's event was given`);
+      }
+      s.at = n;
+    },
+    resume() {
+      if (s.at === null) return;
+      const evs = [...eventsIn(log)], next = evs[s.at];
+      if (next) {
+        // A run of frames stepped into keeps the frames before.
+        const e = log[next.at], k = evs.slice(0, s.at).filter((x) => x.at === next.at).length;
+        if (e.op === "frames" && k > 0) { e.seconds!.length = k; log.length = next.at + 1; }
+        else log.length = next.at;
+        w.snapshots = w.snapshots.filter((x) => x.at === 0 || x.at < log.length);
+      }
+      s.at = null;
+      set(false);
+    },
+  };
+  return s;
 }
 
 // The logged events given again, in order (C172g). One whose element

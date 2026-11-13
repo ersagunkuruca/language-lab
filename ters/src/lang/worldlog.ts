@@ -36,10 +36,14 @@ const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes",
 // seeded once from the world, and only the seed is logged (I239a): a page
 // runs as long as it is open, and logging each draw would grow with it.
 // A main's run keeps each draw, to step by.
-export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
+// `quiet`: while it says so, nothing is logged (a page stepped through
+// the log it has, I239c).
+export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean; quiet?: () => boolean } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
   const out = { ...world } as Record<string, unknown>;
   // The seeded generator, for a snapshot to keep where it is (I239b).
-  const random = { state: () => gen?.state?.() ?? [], set: (s: number[]) => gen?.set?.(s) };
+  // Set to no state, the next draw asks for the seed again.
+  const random = { state: () => gen?.state?.() ?? [], set: (s: number[]) => { if (!s.length) gen = null; else gen?.set?.(s); } };
+  const push = (e: LogEntry) => { if (!o.quiet?.()) log.push(e); };
   let gen: Generator | null = null;
   for (const [op, f] of Object.entries(world)) {
     if (typeof f !== "function") continue;
@@ -48,25 +52,25 @@ export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean
       out[op] = () => {
         if (!gen) {
           const seed = world.randomSeed ? world.randomSeed() : Math.floor(world.random() * 4294967296);
-          log.push({ op: "randomSeed", args: [], answer: seed });
+          push({ op: "randomSeed", args: [], answer: seed });
           gen = seededGenerator(seed);
         }
         return gen!.next();
       };
       continue;
     }
-    if (WRITES.has(op)) { out[op] = (...args: unknown[]) => { log.push({ op, args, write: true }); return call(...args); }; continue; }
+    if (WRITES.has(op)) { out[op] = (...args: unknown[]) => { push({ op, args, write: true }); return call(...args); }; continue; }
     // A background fetch answers later: its arrival is the answer, logged
     // when the program finds it, not the asking.
     if (op === "startFetch") {
       out[op] = (url: string) => {
         const poll = call(url) as () => { text: string } | { error: string } | null;
-        return () => { const r = poll(); if (r) log.push({ op: "fetchArrived", args: [url], answer: r }); return r; };
+        return () => { const r = poll(); if (r) push({ op: "fetchArrived", args: [url], answer: r }); return r; };
       };
       continue;
     }
     out[op] = (...args: unknown[]) => {
-      try { const answer = call(...args); log.push({ op, args, answer }); return answer; } catch (e) { log.push({ op, args, threw: (e as Error).message }); throw e; }
+      try { const answer = call(...args); push({ op, args, answer }); return answer; } catch (e) { push({ op, args, threw: (e as Error).message }); throw e; }
     };
   }
   return { world: out as unknown as World, log, random };

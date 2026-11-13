@@ -183,3 +183,42 @@ test("a page's log keeps a window of segments, each from a snapshot", () => {
     assert.ok(s.state && s.state.cells.length > 0);
   }
 });
+
+// I239c (WORLD-LOG-WINDOW.md §3): step back and on through the window,
+// from the nearest snapshot; go on from there.
+test("a page steps back and on through its log's window, and goes on from a step", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  let t = 0;
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log, window: { seconds: 10, keep: 3, clock: () => t } });
+  const root = page.root as FakeEl, steps = page.steps!;
+  const shown = () => [root.find("status").textContent, root.find("said").textContent].join(" | ");
+  const after: string[] = [shown()];
+  for (let i = 0; i < 6; i++) { t += 4000; root.find("hundred").fire("click"); after.push(shown()); }
+  assert.equal(steps.events(), 6);
+  // From the run's start (no snapshot yet) and from a snapshot.
+  for (const n of [0, 2, 5, 3, 6, 1]) {
+    steps.to(n);
+    assert.equal(shown(), after[n], `after ${n}`);
+  }
+  // While stepped, a click isn't given, and nothing is logged.
+  const length = log.length;
+  root.find("hundred").fire("click");
+  assert.equal(shown(), after[1]);
+  assert.equal(log.length, length);
+  // Going on from the second step drops the old future.
+  steps.resume();
+  assert.equal(steps.events(), 1);
+  root.find("hundred").fire("click");
+  assert.equal(steps.events(), 2);
+  assert.match(root.find("status").textContent, /^Rolls: 200;/);
+  // The window trims as before, and steps from what it keeps.
+  for (let i = 0; i < 30; i++) { t += 4000; root.find("hundred").fire("click"); }
+  const n = steps.events();
+  const last = shown();
+  steps.to(n - 4);
+  steps.to(n);
+  assert.equal(shown(), last);
+});
