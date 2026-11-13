@@ -8,7 +8,13 @@
 // SplitMix ("Fast splittable pseudorandom number generators", OOPSLA 2014),
 // as Vigna's page recommends for filling the state from one number.
 
-export interface Generator { next(): number }
+export interface Generator {
+  next(): number;
+  // Where it is (its four words), and back to there: a page's snapshot
+  // keeps it (I239b, WORLD-LOG-WINDOW.md).
+  state?(): number[];
+  set?(s: number[]): void;
+}
 
 export function seededGenerator(seed: number): Generator {
   // SplitMix32 turns the seed into four well-mixed words.
@@ -32,7 +38,7 @@ export function seededGenerator(seed: number): Generator {
   };
   // A Float64 in [0, 1) with all 53 bits of a double: 27 bits from one word
   // and 26 from the next.
-  return { next: () => ((word() >>> 5) * 67108864 + (word() >>> 6)) / 9007199254740992 };
+  return { next: () => ((word() >>> 5) * 67108864 + (word() >>> 6)) / 9007199254740992, state: () => [a, b, c, d], set: (s) => { [a, b, c, d] = s; } };
 }
 
 // What the world answers `random()` with when nothing in the program
