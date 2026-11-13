@@ -9,6 +9,7 @@
 // id of each block that starts on that line. Ids are shown as the shortest
 // prefix (4 or more characters) no other node of the program shares.
 
+import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
@@ -151,7 +152,8 @@ export class Session {
 
   typeOf(id: Id): string {
     const t = this.info.typeOf.get(id);
-    return t ? showType(t, this.allNames) : "(a type)";
+    // With the units its signature shows (L252, known units only).
+    return t ? showTypeWithUnits(this.code, id, t, this.allNames) : "(a type)";
   }
 
   // ---------------------------------------------------------------- reading

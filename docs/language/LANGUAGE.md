@@ -1653,7 +1653,11 @@ as in SI. A record's field can say its unit in its type, `speed: Float64 m/s`
 match takes out of it are in that unit. The view prints units on fields and
 on numbers (`9.81 m/s²`), and text reads them back: a number then a word
 that reads as a unit and names nothing in scope is that number with that
-unit, never an Int (with a variable `m` in scope, `2 m` doesn't read).
+unit, never an Int (with a variable `m` in scope, `2 m` doesn't read). A
+definition's type shows the units it knows, written or worked out from its
+body: `period : (Float64 m, Float64 m/s²) -[Choice]-> Float64 s`. A number
+whose unit is free stays plain `Float64` there, so a function generic over
+its unit reads as it did.
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
@@ -2054,9 +2058,10 @@ back into the group being hashed is named by its position.
   effect, L253, on every target; `ters run --allow environment`). (Handlers for `Console`, `Files` and `Network` written in the
   program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
-  the type, and a record's field can be written `Float64 m/s` (L252);
-  what's missing is a unit in a definition's signature and a function
-  generic over its unit (`(Float64 u) -> Float64 u²`).
+  the type, a record's field can be written `Float64 m/s` and a signature
+  shows its known units (L252); what's missing is writing a unit in a
+  pinned signature, with unit variables for a function generic over its
+  unit (`(Float64 u) -> Float64 u²`).
 - **Laziness for fold results**, so effects in folds could run top-down.
   (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
 - **Cells, further.** Async cells (HTTP results) as Solid's resources.
