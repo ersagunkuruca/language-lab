@@ -1,6 +1,6 @@
 # The saved program format: literals as digits, one node per line
 
-*Status 2026-11-13: design, for rows I237 (number literals saved as their
+*Status 2026-11-13: I237 built (#2556, #2564), I240 built; the design of rows I237 (number literals saved as their
 digits) and I240 (canonical JSON, one node per line). Ersagun picked
 canonical JSON over an own text format and over today's layout (thread
 "Decide the saved program format", 2026-11-13).*
@@ -100,7 +100,9 @@ printer writes it. Below is a folder's `code.json`:
   id per line, so moving a definition moves one line. Nodes are sorted by
   id, so where a node sits never depends on edit history.
 - **Inside a node.** `kind` first, then the other keys sorted. Arrays and
-  nested objects stay inline. No spaces other than after `:` and `,`.
+  nested objects stay inline, in their own order (some objects say an
+  order, as a representation's operations do). No spaces other than
+  after `:` and `,`.
 - **The other tables.** names, comments, signatures, examples and layout
   are one entry per line, sorted by key. The single file the editor saves
   holds the same tables in the same spelling, one after another.

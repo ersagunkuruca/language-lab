@@ -1,7 +1,5 @@
-{
-  "35prk0g1vvr84mkvtaauvnb2vb": "One day of weather as chances of sunny, cloudy and rainy: tomorrow's chances from today's. A sunny day stays sunny four times in five; a rainy one stays rainy half the time.",
-  "802o7mqiun8c8bihuo9q8mkgar": "Where someone is, in two rooms joined by a door they rarely use (4 times in 1000 from the left, 6 from the right). Each step closes only 1% of the gap to where they settle, so getting there takes thousands of steps.",
-  "junm4e1en0hg49mnmvamueovq8": "A chain that always changes state: the chances only swap, so they never settle unless they start even.",
-  "ns50os6emhlj2gg69r45tujd8q": "The chances to six places, or \"no answer\" when settled finds none (its Choice fails).",
-  "p9c8lsi6mlkmpga94soafpt17r": "Where three Markov chains settle (L239's settled, FIXPOINT.md): the chances of each state in the long run, a step at a time from a first state until a step changes them by under 1e-9. Weather mixes quickly, and settled reads how quickly from its first steps. The two rooms mix slowly, and settled by is told the rate (0.995, a bound on how much a step shrinks the gap), which caps the steps at several thousand before they run. The swap never settles: its steps don't shrink, so there is no answer rather than a run forever."
-}
+{"35prk0g1vvr84mkvtaauvnb2vb": "One day of weather as chances of sunny, cloudy and rainy: tomorrow's chances from today's. A sunny day stays sunny four times in five; a rainy one stays rainy half the time.",
+"802o7mqiun8c8bihuo9q8mkgar": "Where someone is, in two rooms joined by a door they rarely use (4 times in 1000 from the left, 6 from the right). Each step closes only 1% of the gap to where they settle, so getting there takes thousands of steps.",
+"junm4e1en0hg49mnmvamueovq8": "A chain that always changes state: the chances only swap, so they never settle unless they start even.",
+"ns50os6emhlj2gg69r45tujd8q": "The chances to six places, or \"no answer\" when settled finds none (its Choice fails).",
+"p9c8lsi6mlkmpga94soafpt17r": "Where three Markov chains settle (L239's settled, FIXPOINT.md): the chances of each state in the long run, a step at a time from a first state until a step changes them by under 1e-9. Weather mixes quickly, and settled reads how quickly from its first steps. The two rooms mix slowly, and settled by is told the rate (0.995, a bound on how much a step shrinks the gap), which caps the steps at several thousand before they run. The swap never settles: its steps don't shrink, so there is no answer rather than a run forever."}

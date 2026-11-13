@@ -17,13 +17,15 @@
 // (Asenov et al., "Precise version control of trees with line-based version
 // control systems", FASE 2017; GumTree and Spork for code trees).
 
+import { sameValue } from "./model.ts";
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 type Obj = { [k: string]: Json };
 
 export interface Conflict { path: string[]; base: Json | undefined; ours: Json | undefined; theirs: Json | undefined }
 
 const isObj = (x: Json | undefined): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
-const same = (a: Json | undefined, b: Json | undefined) => JSON.stringify(a) === JSON.stringify(b);
+// Whatever order the keys were saved in (a node's are sorted since I240).
+const same = (a: Json | undefined, b: Json | undefined) => JSON.stringify(a) === JSON.stringify(b) || sameValue(a, b);
 // A list of distinct texts: `defs`, a module's `exports`. Merged as a set
 // that keeps an order; any other list is one value.
 const isIdList = (x: Json | undefined): x is string[] => Array.isArray(x) && x.every((s) => typeof s === "string") && new Set(x).size === x.length;

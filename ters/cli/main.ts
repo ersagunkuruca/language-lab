@@ -889,7 +889,7 @@ switch (command) {
     const ownNames = existsSync(namesFile) ? JSON.parse(readFileSync(namesFile, "utf8")) as Names : {};
     const take = !up || rest.includes("--take-names");
     const nn = upgradeNames(r.moved, modules, ownNames, take);
-    if (JSON.stringify(nn.names) !== JSON.stringify(ownNames)) writeFileSync(namesFile, JSON.stringify(nn.names, null, 2) + "\n");
+    if (JSON.stringify(nn.names) !== JSON.stringify(ownNames)) writeFileSync(namesFile, printSaved(nn.names));
     if (up && nn.renamed.length) console.log(`names  the author renamed ${nn.renamed.map((x) => `${x.from} → ${x.to}`).join(", ")}: ${take ? "taken" : "your names kept (--take-names takes theirs)"}`);
     for (const m of r.moved) {
       const l = modules.map((x) => x.lineages ?? {}).find((ls) => lineageOf(ls, m.to));
