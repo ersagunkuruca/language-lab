@@ -54,7 +54,11 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E256 | CONFUSING.md checked against today's editor: its header says each open problem is a row, but items 1 to 5 and 7 to 10 are open with none. Each one moves to "Fixed" (item 10's guarded corecursion is L16, for one), becomes a row, or stays with the reason it's kept | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §5 | P2 | S | |
+| E257 | The graph's crossings (CONFUSING item 1): names drawn with a background so a wire can't cover them, and wires routed around nodes instead of under them. Seen 2026-11-13 in `rotate` unfolded: wires cross the frame edges and each other, and the inner frame's `for some` node is drawn over the first `polar`'s `x` input | [CONFUSING.md](docs/design/CONFUSING.md) item 1, checked 2026-11-13 (E256) | P3 | M | |
+| E258 | Cases that are values drawn as values (CONFUSING item 2): a zero-input frame (an if's then and else, a case with no fields) drawn as just its contents, with no `() =>` box, unless it's an action given to a handler like `first` or `all`. Example: `queens`'s nil, then and else with no frames | [CONFUSING.md](docs/design/CONFUSING.md) item 2, checked 2026-11-13 (E256) | P3 | M | |
+| E259 | Every output a dot (CONFUSING item 3): a node's output is the same dot a let has, so sharing a value is one more wire from it, not a gesture that makes a dot. Example: `queens` with its outputs as dots and nothing else changed | [CONFUSING.md](docs/design/CONFUSING.md) item 3, checked 2026-11-13 (E256) | P3 | M | |
+| E260 | One `for some` for a frame's unknowns (CONFUSING item 5): `rotate`'s `for some((length) => for some((angle) => …))` drawn as one frame with two unknowns, each a dot labelled some, instead of two nested frames and two nodes. A view: the tree is unchanged | [CONFUSING.md](docs/design/CONFUSING.md) item 5, checked 2026-11-13 (E256) | P3 | S | |
+| E261 | Effect row variables in words (CONFUSING item 7): a type shows `-[Choice, e]->` as `-[Choice, …]->` with "and the effects of f" on hover, so `newton`'s and Markov's `shown`'s types read without `e` | [CONFUSING.md](docs/design/CONFUSING.md) item 7, checked 2026-11-13 (E256) | P3 | S | |
 
 ### Speed of editing
 
@@ -183,6 +187,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L244 | `+` as one sum (CONFUSING item 9): `add`, `subtract` and `negate` are three built-ins, each with its own equation, where one relation `a + b = total` read in its directions would do (as `polar` is one relation); the names stay as the directions' names | [CONFUSING.md](docs/design/CONFUSING.md) item 9, checked 2026-11-13 (E256) | P3 | M | |
 | L242 | The verifier checks termination: verify.ts skips it (`skip("termination")`), so "never Diverge" is the checker's word alone (REVIEW-2026-11-11 §6), and `grow`, `settled` and the worker passes lean on it. Check counting.ts's measure in verify, or list termination in CHECKED-ONCE as what's still trusted | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.5 | P2 | M | |
 
 ### Grammars, modules and sharing
