@@ -19,7 +19,7 @@ import { LIBRARY } from "../ters/src/lang/library.ts";
 import { checkedForRun } from "./coreMain.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
-import type { LogEntry } from "../ters/src/lang/worldlog.ts";
+import { eventsIn, isEvent, type LogEntry } from "../ters/src/lang/worldlog.ts";
 
 export interface PageHost {
   doc(): Doc;
@@ -356,7 +356,7 @@ export function pagePanels(host: PageHost) {
   // The run's log, saved (C172e): what the page was given and what the
   // world answered it, for a replay to give it again.
   function saveLog() {
-    const events = page.log.filter((x) => x.op === "event").length, answers = page.log.filter((x) => x.op !== "event" && !x.write).length;
+    const events = [...eventsIn(page.log)].length, answers = page.log.filter((x) => !isEvent(x) && !x.write).length;
     const url = URL.createObjectURL(new Blob([JSON.stringify(page.log, (_, v) => (v instanceof Uint8Array ? [...v] : v), 1)], { type: "application/json" }));
     const a = document.createElement("a");
     a.href = url;

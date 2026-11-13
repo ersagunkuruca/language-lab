@@ -1,6 +1,6 @@
 # A run's world log in bounded memory
 
-*Status 2026-11-13: design, for row I239. Ersagun: "it's still a memory
+*Status 2026-11-13: design, for row I239; I239a (§1) built. Ersagun: "it's still a memory
 hole" (thread "Decide the saved program format", 2026-11-13).*
 
 A run is kept by keeping what the world answered it (worldlog.ts, L186):
@@ -34,7 +34,9 @@ needs to be given again:
   own generator (random.ts `seededGenerator`), seeded once from the world.
   The seed is logged once as `randomSeed`, never the draws. Compiled
   native and WebAssembly runs already do this (C136, C172c);
-  `replaying` already reads it.
+  `replaying` already reads it. (Built for a page's log, the evaluator's
+  and the compiled one's. A main's run still logs each draw, since the Run
+  panel steps by answer and the run ends; §4 bounds it.)
 - **The clock: once per frame, as the difference from the last reading.**
   A frame event already carries the seconds since the frame before. The
   seconds of a run of consecutive frames heard by the same element are

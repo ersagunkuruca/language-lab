@@ -12,6 +12,7 @@
 // (CREDITS.md).
 import type { World } from "./run.ts";
 import { seededGenerator, type Generator } from "./random.ts";
+type Generator_<T> = globalThis.Generator<T, void, unknown>;
 
 export type LogEntry = {
   op: string;
@@ -20,6 +21,10 @@ export type LogEntry = {
   answer?: unknown;
   threw?: string;
   write?: true;
+  // A run of frames one element heard in a row (I239a,
+  // WORLD-LOG-WINDOW.md): `{op: "frames", args: [path, value, key, x, y]}`
+  // with each frame's seconds since the one before, 8 bytes a frame.
+  seconds?: number[];
 };
 
 // What the program tells the world rather than asks it. Everything else a
@@ -27,12 +32,27 @@ export type LogEntry = {
 const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes", "wait"]);
 
 // `log`: where to keep it, when the caller keeps events there too (a
-// page's run, C172e).
-export function logged(world: World, log: LogEntry[] = []): { world: World; log: LogEntry[] } {
+// page's run, C172e). `seeded`: Random's draws come from our generator,
+// seeded once from the world, and only the seed is logged (I239a): a page
+// runs as long as it is open, and logging each draw would grow with it.
+// A main's run keeps each draw, to step by.
+export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean } = {}): { world: World; log: LogEntry[] } {
   const out = { ...world } as Record<string, unknown>;
   for (const [op, f] of Object.entries(world)) {
     if (typeof f !== "function") continue;
     const call = f as (...a: unknown[]) => unknown;
+    if (op === "random" && o.seeded) {
+      let gen: Generator | null = null;
+      out[op] = () => {
+        if (!gen) {
+          const seed = world.randomSeed ? world.randomSeed() : Math.floor(world.random() * 4294967296);
+          log.push({ op: "randomSeed", args: [], answer: seed });
+          gen = seededGenerator(seed);
+        }
+        return gen.next();
+      };
+      continue;
+    }
     if (WRITES.has(op)) { out[op] = (...args: unknown[]) => { log.push({ op, args, write: true }); return call(...args); }; continue; }
     // A background fetch answers later: its arrival is the answer, logged
     // when the program finds it, not the asking.
@@ -95,13 +115,36 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
     };
     else out[op] = (...args: unknown[]) => { const e = next(op, args); if (e.threw !== undefined) throw new Error(e.threw); return e.answer; };
   }
+  // The seed a seeded log kept (I239a), asked again by `logged` when a
+  // replay is itself logged, so its draws are the run's.
+  out.randomSeed = () => next("randomSeed", []).answer as number;
   return out as unknown as World;
 }
 
 // A handler's event, kept in a page run's log (C172e) where it comes
 // among the world's answers (html.ts Mount `heard`): its name, what the
 // handler is given, and where its element is (C172g, html.ts pathOf).
-export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number], path: number[]): void => { log.push({ op: "event", args: [name, ...at, path] }); };
+// A frame heard right after one the same element heard adds its seconds
+// to that entry (I239a): an animation's frames are most of a page's log.
+export const heardInto = (log: LogEntry[]) => (name: string, at: [string, string, number, number, number], path: number[]): void => {
+  if (name !== "frame") { log.push({ op: "event", args: [name, ...at, path] }); return; }
+  const [value, key, x, y, seconds] = at, last = log[log.length - 1];
+  if (last?.op === "frames" && last.seconds && same(last.args, [path, value, key, x, y])) last.seconds.push(seconds);
+  else log.push({ op: "frames", args: [path, value, key, x, y], seconds: [seconds] });
+};
+// A page's events in order, each frame of a run of frames on its own.
+export function* eventsIn(log: LogEntry[]): Generator_<{ at: number; name: string; given: [string, string, number, number, number]; path: number[] }> {
+  for (const [i, e] of log.entries()) {
+    if (e.op === "event") {
+      const [name, value, key, x, y, seconds, path] = e.args as [string, string, string, number, number, number, number[]];
+      yield { at: i, name, given: [value, key, x, y, seconds], path: path ?? [] };
+    } else if (e.op === "frames") {
+      const [path, value, key, x, y] = e.args as [number[], string, string, number, number];
+      for (const s of e.seconds ?? []) yield { at: i, name: "frame", given: [value, key, x, y, s], path };
+    }
+  }
+}
+export const isEvent = (e: LogEntry): boolean => e.op === "event" || e.op === "frames";
 
 // A log as text and back (C172a): what a compiled run writes for the
 // evaluator to replay. JSON, with bytes (read bytes) kept as bytes.

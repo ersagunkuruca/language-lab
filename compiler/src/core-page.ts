@@ -38,7 +38,7 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const log = typeof location !== "undefined" && /[?&]ters-log(?:[=&]|$)/.test(location.search) ? ((globalThis as { tersLog?: LogEntry[] }).tersLog = []) : undefined;
   if (log) console.info("ters: this run's log is in tersLog; copy(JSON.stringify(tersLog)) copies it");
   const browser = browserWorld(pageStorage(), program, console, { cells, frame: (f) => requestAnimationFrame(f) });
-  const world = recordingWorld(log ? logged(browser, log).world : browser);
+  const world = recordingWorld(log ? logged(browser, log, { seeded: true }).world : browser);
   // A handler run that's taken back prints nothing (cells.ts attempt).
   const rt = { print: (line: string) => cells.later(() => console.log(line)), world, cells, hosts: hosts?.answers };
   const fns = defs(coreRuntime(tables, worlds, rt, code, undefined, hosts?.ops));
@@ -58,7 +58,7 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const cells = new Cells(equal);
   // The run's log (C172e), as page.ts showPage keeps it.
   const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
-  const world = o.log ? logged(browser, o.log).world : browser;
+  const world = o.log ? logged(browser, o.log, { seeded: true }).world : browser;
   const rt = { print: (line: string) => cells.later(() => console.log(line)), world, cells };
   const fns = defs(coreRuntime(tables, worlds, rt, code));
   cells.kept = [];
