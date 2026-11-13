@@ -167,6 +167,41 @@ Locals are numbered. Every expression has one value of a known type.
 - **Gone after lowering:** `choose` and `search` are made into code once it
   is known whether a search has several answers. No printer sees them.
 
+## A derivative of a function chosen at run time (I245)
+
+`derivative(f)` where `f` is written in place is expanded before lowering
+(derive.ts expandDerivatives): its slope is ordinary code. Where `f` is a
+value chosen at run time (calculus's `root near(f, x)`, f one of a list
+of functions), the evaluator reads f's lambda when the call runs, so a
+printer would have to ship the nodes and the evaluator (JavaScript did,
+WebAssembly and C refused). Instead, the function carries its derivative:
+
+- **Which functions.** The types of the arguments of the run-time
+  `derivative` calls are the *derived types* (effects left out). Every
+  lambda of a derived type the roots reach and that is made as a value
+  (not a let's) gets its derivative made ahead by derive.ts (lenient, as
+  the evaluator's: `fail` where a slope can't be read), as a definition of
+  its own, and the program is checked again (carried-derivatives.ts).
+- **The maker.** A closure of such a lambda, or of a definition given as
+  a value, names `d`: a function that takes the closure and gives its
+  derivative's closure, reading the closure's captures for it. The
+  derivative reads only what the lambda reads (a captured value is a
+  constant there, its slope 0).
+- **The call.** `derivative(f)` is `{ k: "rt", fn: "derived", args: [f] }`:
+  f's `d`, given f. JavaScript keeps `d` as a property of the function.
+- **Only the first order.** Each `derivative` call's result must be only
+  applied: called where it is made, or handed to a parameter that is only
+  ever applied (newton's slope, handed on to newton again). Otherwise, or
+  where a derivative made here would ask for another, or a closure of a
+  derived type has no `d`, the lowering keeps the evaluator's derive,
+  which ships the nodes it reaches.
+- **Not yet.** A lambda that captures something (its derivative's
+  definition must take the captures), `gradient`, and WebAssembly and C
+  (a `d` field on a derived type's closure): later steps of I245.
+
+So no target looks inside a function at run time, and the evaluator's
+`derivative` stays the reference the tests compare with.
+
 ## The contract
 
 What a printer may rely on:

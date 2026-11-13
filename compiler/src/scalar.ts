@@ -82,6 +82,7 @@ import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
+import { carriedDerivatives } from "./carried-derivatives.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
@@ -436,7 +437,9 @@ export type SExpr =
   | { k: "tag"; rec: SExpr; t: DType }
   // A function as a value: `fn` takes the closure, then t's inputs, and
   // reads what it captured (in shapes[shape]) with cap.
-  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[]; src?: ClosureSrc }
+  // `d` (I245): a function taking the closure and giving its derivative's
+  // closure, for `derivative` of a function chosen at run time.
+  | { k: "closure"; t: FType; fn: number; shape: number; caps: SExpr[]; src?: ClosureSrc; d?: number }
   | { k: "cap"; t: FType; shape: number; i: number }
   // Calling a closure: it goes into local tmp, then its code is called
   // with it and the inputs.
@@ -558,6 +561,7 @@ class Refused extends Error {}
 // starts again with that type's closures taking the rest (C137c22). Only
 // types that need it are transformed, as in Koka's and Effekt's selective
 // CPS; the rest is Mercury's success continuation, as for definitions.
+class Uncarried extends Error {}
 class NeedsSeveral extends Error { key: string; constructor(key: string) { super(`closures of ${key} give several answers`); this.key = key; } }
 // A solve's answers, a List of opaque values (each one answer's binds),
 // for JavaScript from the core IR (C137c11).
@@ -615,17 +619,22 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
   const several = new Set<string>();
+  // A derivative of a function chosen at run time is carried by the
+  // function (I245) unless a closure it may be asked of turns out to have
+  // none: then lowered again with the evaluator's derive.
+  const carry = { derive: true };
   for (;;) {
-    try { return lowerOnce(code, info, names, roots, opts, several); } catch (e) {
+    try { return lowerOnce(code, info, names, roots, opts, several, carry); } catch (e) {
+      if (e instanceof Uncarried && carry.derive) { carry.derive = false; continue; }
       if (!(e instanceof NeedsSeveral) || several.has(e.key)) throw e;
       several.add(e.key);
     }
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
-  try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
+  try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
 // The info as carried when the verifier finds nothing wrong with it, else
 // the program checked again (kept only if that check has no more errors).
@@ -640,7 +649,7 @@ export function vouched(code: Code, info: Info, names: Names): Info {
   return again;
 }
 
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -742,6 +751,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     code = sharedItems.code;
     info = infer(code, names);
   }
+  // A function chosen at run time that `derivative` is asked of carries
+  // its derivative, made ahead here (carried-derivatives.ts, I245).
+  const carried = opts.host && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
+  if (carried) ({ code, names, info } = carried);
+  const derivativeOf = carried?.derivativeOf ?? new Map<Id, Id>();
+  // The closure types it is asked of, and the code of the derivatives
+  // made (which carry none: no derivative of one is asked, carried-
+  // derivatives.ts made sure).
+  const derivedKeys = new Set<string>(), derivedCode = new Set<number>();
+  const plainKey = (t: FType) => t.key.replace(/[!*]+$/, "");
   // Each step above changes no answer, so what ended as given still ends.
   info = endsAsBefore(asGiven, info);
   // A generic definition (the vectors module's plus, for any record of
@@ -1769,6 +1788,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (opts.host && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
           const t = stype(zonk(id));
           if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
+          // One the function carries (I245): its maker, called.
+          const ft = stype(zonk(n.args[0]));
+          if (carried && target === S.derivative && ft && isFn(ft)) {
+            derivedKeys.add(plainKey(ft));
+            return { k: "rt", fn: "derived", args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
+          }
           return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
         }
         const why = TARGETS[target]?.scalar;
@@ -3715,7 +3740,24 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const lets = free.map((b, j) => { const i = g.locals.push(caps[j]) - 1; inner = new Map(inner).set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
     g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(n.body, inner, g, true));
     const src: ClosureSrc | undefined = opts.host && !caps.some((c) => typeof c === "object" && boolInside(c)) ? { lambda: n.id, binders: free, bools: caps.flatMap((c, j) => (c === "i32" ? [j] : [])) } : undefined;
-    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })), ...(src ? { src } : {}) };
+    const d = derivativeOf.has(n.id) ? maker(derivativeOf.get(n.id)!, t, shape, free, caps, f.name) : undefined;
+    return { k: "closure", t, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })), ...(src ? { src } : {}), ...(d !== undefined ? { d } : {}) };
+  }
+  // The maker of a closure's derivative (I245): given the closure (of
+  // type t, its captures `free` in shapes[shape]), the closure of its
+  // derivative's lambda over the same captures. Its code is made as any
+  // lambda's, and carries no derivative of its own.
+  function maker(dl: Id, t: FType, shape: number, free: Id[], caps: LType[], name: string): number | undefined {
+    const dt = stype(zonk(dl));
+    if (!dt || !isFn(dt)) return undefined;
+    const m: SFunc = { def: dl, name: `${name}.derivative`, params: [t], result: dt, locals: [t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const mi = funcs.push(m) - 1;
+    const env = new Map<Id, number>();
+    const lets = free.map((b, j) => { const i = m.locals.push(caps[j]) - 1; env.set(b, i); return { i, value: { k: "cap", t, shape, i: j } as SExpr }; });
+    const c = lambda(code.nodes[dl] as NodeOf<"lambda">, dt, env, m);
+    if (c.k === "closure") derivedCode.add(c.fn);
+    m.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), c);
+    return mi;
   }
   // A handler of a program's own effect whose cases answer in place
   // (tailOps): the code it handles, and each case, as closures given to
@@ -3878,12 +3920,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A several type's rest, last, isn't the definition's (C137c22).
       g.body = { k: "call", fn: func(def, types), args: t.params.slice(0, t.several ? -1 : undefined).map((_, j): SExpr => ({ k: "local", i: j + 1 })), tail: true };
       shapeOfNamed.set(key, shape);
+      const body = (code.nodes[def] as NodeOf<"def">).body;
+      const d = body && derivativeOf.has(body) ? maker(derivativeOf.get(body)!, t, shape, [], [], nm(def)) : undefined;
+      if (d !== undefined) makerOfNamed.set(key, d);
     }
     const body = (code.nodes[def] as NodeOf<"def">).body;
     const src: ClosureSrc | undefined = opts.host && body && code.nodes[body]?.kind === "lambda" ? { lambda: body, binders: [], bools: [] } : undefined;
-    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], ...(src ? { src } : {}) };
+    const d = makerOfNamed.get(key);
+    return { k: "closure", t, fn: index.get(key)!, shape: shapeOfNamed.get(key)!, caps: [], ...(src ? { src } : {}), ...(d !== undefined ? { d } : {}) };
   }
-  const shapeOfNamed = new Map<string, number>();
+  const shapeOfNamed = new Map<string, number>(), makerOfNamed = new Map<string, number>();
   // A fold's own function (fn) as a value, its inputs those of t (C61 e).
   function foldValue(fn: number, t: FType): SExpr {
     const key = `&fold${fn}|${t.key}`;
@@ -5520,6 +5566,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   finishStreams();
   funcs.forEach((g, j) => { g.body = tidied(g, j).body; });
+  // Every closure `derivative` may be asked of carries its derivative, or
+  // the evaluator's derive is lowered instead (I245).
+  if (derivedKeys.size) {
+    const uncarried = (e: SExpr): boolean => (e.k === "closure" && e.d === undefined && !derivedCode.has(e.fn) && derivedKeys.has(plainKey(e.t))) || kids(e).some(uncarried);
+    if (funcs.some((g) => uncarried(g.body))) throw new Uncarried();
+  }
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
   const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}) };

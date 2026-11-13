@@ -85,15 +85,16 @@ test("solves with no printed plan are written out as on WebAssembly and C: no no
   }
 });
 
-// A derivative and `for some` too (C167d): what they look inside is the
-// printed closure's lambda, so they read only what it reaches, and a
-// derivative's rules the builtins by id. calculus given only those nodes,
-// as its module is, prints what the evaluator does.
-test("a derivative is given only the nodes it reaches, and calculus says the same (C167d)", () => {
+// A derivative of a function chosen at run time is carried by the
+// function (I245, after C167d gave the evaluator's derivative only the
+// nodes it reaches): calculus's samples each carry theirs, so its module
+// ships no nodes and no evaluator, and prints what the evaluator does.
+test("calculus's derivatives are carried by its functions: no node table (I245)", () => {
   const p = load("calculus"), main = p.named("main");
   const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
-  const shown = printed(ir), n = Object.keys(shown.code!.nodes).length;
-  assert.ok(n > 0 && n < Object.keys(ir.code.nodes).length / 2, `${n} nodes`);
+  assert.equal(usesSolver(ir), false);
+  const shown = printed(ir);
+  assert.equal(Object.keys(shown.code?.nodes ?? {}).length, 0);
   const want: string[] = [], got: string[] = [];
   runProgram(p.code, p.info, main, [], { print: (s) => want.push(s), names: p.pres.names });
   const fi = ir.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
