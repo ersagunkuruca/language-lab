@@ -1,7 +1,8 @@
 # Reading a change to a program: `ters diff` by node id
 
-*Status 2026-11-13: partly built. E255a (`diffPrograms`, `ters diff` on two
-programs) and E255b (`--from REV`) are done; E255c is a row.*
+*Status 2026-11-13: built. E255a (`diffPrograms`, `ters diff` on two
+programs), E255b (`--from REV`) and E255c (the editor's Changes tab) are
+done; E255d (a PR comment workflow) is Ersagun's call.*
 
 A saved program is JSON keyed by node ids: `code.json`, `names.default.json`
 and `comments.json` in a folder, or one file the editor saves. A change to

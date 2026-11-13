@@ -78,7 +78,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E255c | The editor's Changes view: the program against the version it was opened as or the last one marked Reviewed, changed definitions listed, blocks and graph nodes marked added or changed. Example: a literal edited and a definition added in dice, both listed and marked | [DIFF.md](docs/design/tools/DIFF.md); STANDING-2026-11-13 §6.7 | P3 | M | after E255a |
 
 ### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
 
