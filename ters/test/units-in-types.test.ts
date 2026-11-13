@@ -60,3 +60,20 @@ test("a value made with a field takes its unit, and the unit is part of the type
   plain.nodes[tref.id] = { ...tref, unit: undefined } as typeof tref;
   assert.notEqual(hashDef(code, T.def), hashDef(plain, T.def));
 });
+
+// The text reader (editor/typed.ts): a number then a word that reads as a
+// unit and names nothing in scope is a number with that unit, a Float64.
+test("a number's unit is read from text, and a name in scope is still the name", () => {
+  const s = program(["body(position: Float64 m)"]);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  fill("fallen", ["x"], "x + 9.81 m/s² · 2 s · 3 s");
+  assert.match(s.view("fallen"), /= x \+ 9\.81 m\/s² · 2 s · 3 s$/m);
+  assert.equal(s.errors(), "ok");
+  assert.throws(() => fill("mixed", ["x"], "3 m + 2 s"), /units don't agree here: m can't meet s/);
+  // m is a parameter here, so `2 m` is no length: it doesn't read.
+  assert.throws(() => fill("shadowed", ["m"], "2 m"), /isn't read/);
+  // A unit literal where a field asks for one.
+  fill("placed", ["x"], "body(1.5 m)");
+  assert.match(s.errors(), /^ok/);
+  assert.throws(() => fill("misplaced", ["x"], "body(1.5 s)"), /the field's type says m, but this is s/);
+});

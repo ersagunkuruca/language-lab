@@ -1267,8 +1267,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // A plain number literal is some Number, whichever its use needs
         // (WHAT-NUMBER-MEANS.md; Haskell's fromInteger and fromRational):
         // arith.ts writes it at that type, and Float64 when nothing says.
-        // One with a fraction part isn't an Int.
-        if (!n.of && typeof n.value === "number") {
+        // One with a fraction part isn't an Int. One with a unit is a
+        // Float64 (9.81 m/s², 2 s), where units are checked (L252).
+        if (!n.of && typeof n.value === "number" && n.unit && Object.keys(n.unit).length) t = { t: "con", id: NUMBER, args: [] };
+        else if (!n.of && typeof n.value === "number") {
           const v = s.fresh(false, false, "arith") as { t: "var"; v: number };
           if (!Number.isInteger(n.value)) s.fractional.add(v.v);
           else s.whole.add(v.v);
