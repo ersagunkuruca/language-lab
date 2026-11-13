@@ -178,7 +178,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L251 | A test that representations rewrite inside a program's own types: a record with a Nat field runs on Int, evaluated and compiled, with the same answers (NUMBERS.md "What's still rough": rewritten, never tested) | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | S | |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 
