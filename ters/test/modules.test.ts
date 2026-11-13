@@ -15,6 +15,7 @@ import { CORE, HTML_MODULE, LIBRARY, PRELUDE } from "../src/lang/library.ts";
 import { base, baseNames, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { addToStore, addVersions, adopt, previousVersion, lineageOf, orderFreeHash, publishVersion, replacing, upgradeNames, upgradeOwn, publish, sameAs, sameLines, sameUpToOrder, upgrade, verify, type Module } from "../src/lang/modules.ts";
 import { buildPrelude } from "../src/lang/prelude-source.ts";
+import { printSaved } from "../src/saved.ts";
 import { library as listHelpers } from "../src/lang/programs.ts";
 import { atLeastAsGeneral, pinsOf } from "../src/lang/signatures.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
@@ -53,7 +54,8 @@ test("a recursive group hashes the same whichever member is asked first, or writ
 
 test("the prelude is what it says it is, and publishing it again gives the same bytes", () => {
   assert.equal(verify(PRELUDE, CORE, true), null);
-  assert.equal(JSON.stringify(buildPrelude()), JSON.stringify(PRELUDE));
+  // As the saved form prints them (I240: canonical, one node per line).
+  assert.equal(printSaved(buildPrelude()), printSaved(PRELUDE));
   for (const d of PRELUDE.code.defs) assert.equal(d, `@${hashDef(LIBRARY.code, d)}`);
 });
 

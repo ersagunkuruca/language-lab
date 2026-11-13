@@ -214,7 +214,8 @@ test("sharing through the MCP: publish, fetch, upgrade and downgrade, as ters do
     mkdirSync(join(root, "user"));
     writeFileSync(join(root, "user", "code.json"), '{"nodes":{},"defs":[]}');
     text("open", { path: join(root, "user") });
-    assert.match(text("fetch", { from: join(root, "break.module.json") }), /^fetched break: 3 definitions checked by hash, Vec at version 1, shifted at version 1, apart at version 1, its log signed by its author/);
+    // In the module's order of definitions (I240: not its file's keys).
+    assert.match(text("fetch", { from: join(root, "break.module.json") }), /^fetched break: 3 definitions checked by hash, Vec at version 1, apart at version 1, shifted at version 1, its log signed by its author/);
     assert.equal(text("upgrade"), "nothing to upgrade");
     assert.equal(call("downgrade", { name: "apart" }).text, "user uses nothing named apart that its store has versions of");
   } finally { process.env.HOME = home; }

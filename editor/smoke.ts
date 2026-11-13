@@ -104,17 +104,23 @@ async function visit(saved: string | null, only?: string) {
         const svg = p.locator(".p-graph svg.canvas");
         const bb = await svg.boundingBox();
         if (bb) {
-          // Each time from the menu once it shows: a click on a menu not
-          // drawn yet was skipped, and the status still said the first Tidy.
+          // Each time from the menu once it shows, opened on the canvas
+          // itself where nothing is drawn: the corner can be under the zoom
+          // buttons or a node, whose menus have no Tidy.
           const tidy = async () => {
-            await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
-            await p.locator('.ctx-item[data-menu="tidy-all"]').first().waitFor({ timeout: 5000 }).catch(() => {});
-            await click('.ctx-item[data-menu="tidy-all"]');
+            const [x, y] = await svg.evaluate((s) => {
+              const r = s.getBoundingClientRect();
+              for (let y = r.bottom - 8; y > r.top; y -= 12) for (let x = r.left + 8; x < r.right; x += 12) if (document.elementFromPoint(x, y) === s) return [x, y];
+              return [r.left + 8, r.bottom - 8];
+            });
+            await p.mouse.click(x, y, { button: "right" });
+            const item = p.locator('.ctx-item[data-menu="tidy-all"]').first();
+            if (!(await item.waitFor({ timeout: 5000 }).then(() => true, () => false))) { errors.push(`${where}: the graph's menu has no Tidy everything`); await p.keyboard.press("Escape"); return false; }
+            await item.click();
+            return true;
           };
-          await tidy();
           // Tidy everything is one layout: doing it again moves nothing (BACKLOG E106).
-          await tidy();
-          if (!/^Already tidy/.test(await p.locator(".status").innerText())) errors.push(`${where}: tidying twice moved nodes: ${await p.locator(".status").innerText()}`);
+          if (await tidy() && await tidy() && !/^Already tidy/.test(await p.locator(".status").innerText())) errors.push(`${where}: tidying twice moved nodes: ${await p.locator(".status").innerText()}`);
           // The map, when part of the graph is out of the window.
           if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) {
             // Drawn with the graph's own colours: a frame there was once black.

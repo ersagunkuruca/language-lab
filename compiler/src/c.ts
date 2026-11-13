@@ -60,7 +60,7 @@ import { BASE, C_TAKEN, cName, POSIX, RESERVED, RT_C, runtimeC, WORLD_H, type Li
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (RESERVED).
-export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
@@ -616,6 +616,8 @@ int main(int argc, char **argv) {
 // style and layout over a ters_ui (C199d), and "ui-headless" a ui that
 // prints where each box went.
 export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string; math?: "platform" | "fdlibm"; hosts?: { ops: HostOps; c?: string }; page?: "api" | "headless" | "ui" | "ui-headless" } = {}): CProgram {
+  // The function types whose closures carry a derivative's maker (I245).
+  const derived = lowered.derived ?? new Map<string, FType>();
   const LIBRARY = opts.math === "fdlibm" ? FDLIBM : PLATFORM;
   const { shapes } = lowered;
   // A value that can't be had (a search's k given no answer) is the
@@ -675,10 +677,10 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   funcs.forEach((f, i) => {
     const t = [...f.locals, f.result].map(why).find(Boolean);
     if (t) return refused.set(i, t);
-    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn) && !I64_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
+    const k = walk(f.body).find((e) => !PRINTED.has(e.k) || (e.k === "rt" && e.fn !== "derived" && (isPerform(e.fn) ? !!hostWhy(e.fn) : !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn) && !RT_C.has(e.fn) && !ARRAY_FN.test(e.fn) && !TABLE_FN.test(e.fn) && !I64_FN.test(e.fn))) || (e.k === "world" && !RT_C.has(`world.${e.op}`)));
     if (k) refused.set(i, k.k === "rt" ? hostWhy(k.fn) ?? `${k.fn} isn't in C's runtime` : k.k === "world" ? `the world's ${k.op} isn't in C's runtime` : `${k.k} isn't printed as C`);
   });
-  const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" || x.k === "closure" ? [x.fn] : []));
+  const callees = (e: SExpr) => walk(e).flatMap((x) => (x.k === "call" ? [x.fn] : x.k === "closure" ? [x.fn, ...(x.d !== undefined ? [x.d] : [])] : []));
   for (let changed = true; changed;) {
     changed = false;
     funcs.forEach((f, i) => {
@@ -737,7 +739,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       // A runtime function that makes or takes a list of texts (split,
       // join all): its list type, though no function here names it.
       if (e.k === "rt" && isPar(e.fn)) collect(e.host!.t);
-      if (e.k === "rt" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn)) {
+      if (e.k === "rt" && e.fn !== "derived" && !a && !tb && !isPerform(e.fn) && !isStack(e.fn) && !isFiber(e.fn) && !isPar(e.fn) && !isSplit(e.fn)) {
         const r = runtime(e.fn);
         if (r.result === "list" || r.params.some(([, t]) => t === "list")) { const d = lowered.data.find((x) => x.key === (r.list ?? LIST_TEXT)); if (d) collect(d); }
       }
@@ -901,7 +903,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // drops them after. A loop's inputs are set again each round, so a
   // function that loops keeps its own, unless every round passes it on as
   // it is (C207r: queens' columns, read by `safe`'s loop).
-  const viaClosure = new Set(kept.flatMap((i) => walk(funcs[i].body).flatMap((e) => (e.k === "closure" ? [e.fn] : []))));
+  // (A derivative's maker too, called as a closure's code is, I245.)
+  const viaClosure = new Set(kept.flatMap((i) => walk(funcs[i].body).flatMap((e) => (e.k === "closure" ? [e.fn, ...(e.d !== undefined ? [e.d] : [])] : []))));
   const lent = new Map<number, Set<number>>();
   for (const i of kept) {
     const f = funcs[i];
@@ -1003,7 +1006,10 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       `typedef struct { lab_cell h; lab_Store_t${t.index} *cur; lab_cell *next; ${K} key; ${ty(t.value)} old; uint8_t had; } lab_Table_t${t.index}; // a version: the newest holds the slots (cur), an older one the change from the next (key had old or was absent)`);
   }
   for (const [k, t] of fns) types.push(`typedef ${ty(t.result)} (*${fname.get(k)})(${["lab_cell *", ...t.params.map(ty)].join(", ")});`);
-  for (const s of shaped) types.push(`typedef struct { lab_cell h; void (*code)(void); ${shapes[s].caps.map((x, j) => `${ty(x)} c${j};`).join(" ")} } ${shapeName.get(s)};`);
+  // A closure of a type `derivative` is asked of holds its derivative's
+  // maker after its code (I245), as lab_dclosure reads it.
+  if (derived.size) types.push("typedef struct { lab_cell h; void (*code)(void); void (*d)(void); } lab_dclosure;");
+  for (const s of shaped) types.push(`typedef struct { lab_cell h; void (*code)(void); ${derived.has(shapes[s].t.key) ? "void (*d)(void); " : ""}${shapes[s].caps.map((x, j) => `${ty(x)} c${j};`).join(" ")} } ${shapeName.get(s)};`);
   // Dup and drop for records that hold counts, and each cell type's
   // fields given up when its cell goes.
   const counts: string[] = [];
@@ -2057,6 +2063,14 @@ int main(int argc, char **argv) {
         case "int": return lowered.int32 ? `((int32_t)${e.v})` : intLit(e.v);
         case "text": return textLit(e.v);
         case "rt": {
+          // derivative(f) carried by f (I245): f's maker, given f (which
+          // it owns, as a closure's code does).
+          if (e.fn === "derived") {
+            const [x] = args(e.args, pre, d, after);
+            const ft = typeOf(e.args[0], f.locals), t = temp(ft);
+            pre.push(`${d}${t} = ${x};`);
+            return stated(`((lab_cell *(*)(lab_cell *))((lab_dclosure *)${t})->d)(${t})`, e.host!.t, pre, d);
+          }
           const st = STACK.exec(e.fn);
           if (st) {
             rts.add("handlers");
@@ -2344,7 +2358,7 @@ int main(int argc, char **argv) {
           const s = shapes[e.shape], n = shapeName.get(e.shape)!;
           const xs = args(e.caps, pre, d, after);
           const v = temp(s.t);
-          pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(`shape ${e.shape}`)}, 0);`, `${d}((${n} *)${v})->code = (void (*)(void))${names.get(e.fn)};`, ...xs.map((x, k) => `${d}((${n} *)${v})->c${k} = ${x};`));
+          pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(`shape ${e.shape}`)}, 0);`, `${d}((${n} *)${v})->code = (void (*)(void))${names.get(e.fn)};`, ...(derived.has(s.t.key) ? [`${d}((${n} *)${v})->d = ${e.d !== undefined ? `(void (*)(void))${names.get(e.d)}` : "0"};`] : []), ...xs.map((x, k) => `${d}((${n} *)${v})->c${k} = ${x};`));
           return v;
         }
         case "cap": return borrow({ k: "local", i: 0 }, shapes[e.shape].caps[e.i], (r) => `((${shapeName.get(e.shape)} *)${r})->c${e.i}`, pre, d, after);
@@ -2656,7 +2670,7 @@ int main(int argc, char **argv) {
       case "if": case "budget": case "attempt": case "handle": case "released": return e.t;
       case "int": return lowered.int32 ? "int32" : "int";
       case "text": return "text";
-      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) || isPar(e.fn) || isSplit(e.fn) ? e.host!.t : rtType(e.fn);
+      case "rt": return isPerform(e.fn) || isStack(e.fn) || isFiber(e.fn) || isPar(e.fn) || isSplit(e.fn) || e.fn === "derived" ? e.host!.t : rtType(e.fn);
       case "world": return e.t;
       case "case": return e.result;
       case "closure": return shapes[e.shape].t;
@@ -3984,7 +3998,7 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
       const res = f.result, overflowed = res === "f64" ? ["r"] : isRecord(res) ? res.fields.flatMap((x, j) => (x.t === "f64" ? [`r.f${j}`] : [])) : [];
       const check = overflowed.length ? `if (${overflowed.map((v) => `${v} - ${v} != 0`).join(" || ")}) lab_stop(${STOPS.length - 1}); ` : "";
       const show = f.partial
-        ? `if (lab_st == 1) { printf(" ?"); lab_st = 0; } else if (lab_st) { printf(" !"); if (lab_st == 2) { ${pr("text", "lab_reason")} } lab_drop(lab_reason); lab_reason = 0; lab_st = 0; } else { ${check}${pr(f.result, "r")} ${after} }`
+        ? `if (lab_st == 1) { printf(" ?"); lab_st = 0; } else if (lab_st) { printf(" !"); ${ints ? `if (lab_st == 2) { ${pr("text", "lab_reason")} } ` : ""} lab_drop(lab_reason); lab_reason = 0; lab_st = 0; } else { ${check}${pr(f.result, "r")} ${after} }`
         : `${check}${pr(f.result, "r")} ${after}`;
       return `    case ${i}: { ${ins.join(" ")} ${ty(f.result)} r = ${names.get(i)}(${f.params.map((_, j) => `a${j}`).join(", ")}); ${show} break; }`;
     }).filter(Boolean);
@@ -4123,7 +4137,7 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
         if (!["make", "call", "new", "rt", "op", "get", "local", "num", "int", "text", "bool"].includes(n.k)) { pure = false; return; }
         if (n.k === "call" && n.args.some((a) => a.k === "local" && a.i === x) && n.args.every((a) => a.k === "local" || !kids(a).length)) { first.push(n); return; }
         for (const k of kids(n)) order(k);
-        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || isPar(n.fn) || isSplit(n.fn) || (!COL_FN.test(n.fn) && runtime(n.fn).partial)))) pure = false;
+        if (n.k === "call" || n.k === "apply" || n.k === "world" || n.k === "fail" || (n.k === "rt" && n.fn !== "derived" && (isPerform(n.fn) || isStack(n.fn) || isFiber(n.fn) || isPar(n.fn) || isSplit(n.fn) || (!COL_FN.test(n.fn) && runtime(n.fn).partial)))) pure = false;
       };
       order(t);
       const ls: { i: number; value: SExpr }[] = [];

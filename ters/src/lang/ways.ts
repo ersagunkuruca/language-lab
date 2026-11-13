@@ -36,6 +36,12 @@ export function waysIn(code: Code, ops: Map<Id, Id> = interfaceOps(code)): Ways 
     look(n.body);
     ways.set(n.way, [...(ways.get(n.way) ?? []), { def: n.id, uses, cost: n.cost ?? 1 }]);
   }
+  // In the order they are written, so ways that cost the same are taken
+  // as written, not as the nodes happen to be stored (a saved file keeps
+  // its nodes in id order, I240).
+  const at = new Map(code.defs.map((d, i) => [d, i]));
+  const order = (d: Id) => at.get(d) ?? Infinity;
+  for (const ws of ways.values()) ws.sort((a, b) => order(a.def) - order(b.def) || (a.def < b.def ? -1 : a.def > b.def ? 1 : 0));
   return ways;
 }
 
