@@ -74,7 +74,7 @@ usage:
   ters check <program>                   type-check, and list the definitions and their types
   ters qasm <program> --main f [--bits n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
-                                        its Ints n bits wide (default 8), its scratch qubits uncomputed after
+                                        its Ints n bits wide (default 8), scratch qubits uncomputed and reused
   ters hosts <program> [--c|--android]   print a hosts/js.js answering the program's own effects, to start from;
                                         with --c a hosts/c.c, for ters native (FOREIGN.md); with --android a
                                         hosts/android.java, for ters build-native-app
@@ -98,8 +98,20 @@ usage:
                                         version into the same log, and ters upgrade warns and won't move to it (§4)
   ters fetch <program> <url or path>     a module from any host into the program's modules folder, every definition
                                         checked by its hash, and its log beside it by its author's key (§4)
+  ters diff <before> <after>             what changed between two versions of a program, by definition and line,
+                                        following each node by its id (DIFF.md); given two saved files, a code.json
+                                        or a side table, what changed in it by id
+  ters diff [program] --from REV [--to REV]
+                                        the same against a git revision (to the working tree, or to REV); with no
+                                        program, every program folder that changed between them
+  ters merge <base> <ours> <theirs> [path]
+                                        merge two versions of a program file id by id, into ours; exits 1 with the
+                                        conflicts, ours kept (git's merge driver, merge.ters.driver)
   ters git-setup                         this clone's git shows program files with ters diff (git diff, git show
                                         --ext-diff, git log -p --ext-diff) and merges them id by id (DIFF.md)
+  ters git-diff <path> <old> <old-hex> <old-mode> <new> <new-hex> <new-mode>
+                                        git's external diff driver for a program file (diff.ters.command, set by
+                                        git-setup): ters diff of the two versions, the files beside them included
   ters downgrade <program> <name>        move what the program calls name back to the version before, from its
                                         store (store.json, every version it has used, kept by upgrade and
                                         downgrade, so it runs when a module's file is gone; §4b)

@@ -55,9 +55,13 @@ test("machine: as WebAssembly (WASI), the same (C92)", () => {
 });
 
 // The WebAssembly takes the chooser's representations too, as `ters native`
-// does: Map and Set as its own hash tables (C63j), lists as trees. primes
-// 5000 took 5.3 s with cons lists, about 60 ms as trees (C93).
-test("machine: its WebAssembly stores lists as trees, and agrees at a bigger size (C93)", () => {
+// does: Map and Set as its own hash tables (C63j), and the step loop's
+// lists as arrays beside lists as written, as compiled JavaScript does.
+// primes 5000 took 5.3 s with cons lists, about 60 ms as trees (C93), and
+// arrays there are replaced in place since owned-arrays.ts, so the split
+// pays here too: primes 20000 68 ms as trees, 26 ms split (C218).
+test("machine: its WebAssembly splits lists as compiled JavaScript does, and agrees at a bigger size (C93, C218)", () => {
+  assert.deepEqual(w.wasmChosen, w.chosen);
   const t = performance.now();
   all(["p.asm"], { "p.asm": sized("primes", 5000) }, ["wasm"]);
   assert.ok(performance.now() - t < 3000, "primes 5000 in WebAssembly in under 3 s");
