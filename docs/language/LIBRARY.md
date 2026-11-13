@@ -732,7 +732,7 @@ uppercase and lowercase are each host's own (its Unicode version, its locale dat
 - **table uppercase** : `(Text, Locale) -> Text` (cases module). The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 - **table lowercase** : `(Text, Locale) -> Text` (cases module). The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 - **table graphemes** : `(Text) -> List Text` (cases module). The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.
-- **table collated** : `(Text, Text, Locale) -[Choice, Diverge]-> Order` (cases module). Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).
+- **table collated** : `(Text, Text, Locale) -[Diverge]-> Order` (cases module). Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).
 
 ## Points, colours and slopes
 

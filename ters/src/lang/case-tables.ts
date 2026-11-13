@@ -17,8 +17,15 @@
 //    kept dot, Greek capitals without their accents). The rules that look at the letters around (final sigma,
 //    Lithuanian's dot before an accent) are the library's code, in
 //    e2, not a table.
-// Built in about half a second, once per process: a block of 1,024 code
-// points that maps as it is is passed over whole.
+// Read off the host in about half a second (a block of 1,024 code points
+// that maps as it is is passed over whole), and kept in
+// library/case-tables.json with the host's Unicode version, as the
+// grapheme tables are: the library is built over the kept tables, so it
+// builds the same on every machine whatever its Node's Unicode (I244).
+// `node library/case-tables.ts` reads them again when Node's Unicode moves
+// on (test/case-tables.test.ts says so).
+
+import kept from "../../library/case-tables.json" with { type: "json" };
 
 export interface Run { from: number; count: number; step: number; delta: number }
 export interface CaseTable { runs: Run[]; several: [number, number[]][] }
@@ -45,8 +52,11 @@ export interface CaseTables {
 // accents (el).
 export const TAILORED = ["tr", "az", "lt", "el"];
 
-let built: CaseTables | undefined;
-export const caseTables = (): CaseTables => (built ??= build());
+// The kept tables: what the library is built over.
+export interface SavedCaseTables extends CaseTables { unicode: string }
+export const caseTables = (): SavedCaseTables => kept as unknown as SavedCaseTables;
+// The host's own, read now: what library/case-tables.ts keeps.
+export const hostCaseTables = (): SavedCaseTables => ({ unicode: process.versions.unicode ?? "", ...build() });
 
 const cps = (s: string) => [...s].map((x) => x.codePointAt(0)!);
 
