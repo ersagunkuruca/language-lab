@@ -506,7 +506,10 @@ if (command === "fetch") {
   writeFileSync(join(path, "modules", file), printSaved(m));
   if (log.length) writeFileSync(join(path, "modules", logFile(file)), JSON.stringify(log, null, 2) + "\n");
   const ls = m.lineages ?? {};
-  console.log(`fetched ${m.title}: ${m.code.defs.length} definitions checked by hash${Object.keys(ls).length ? `, ${Object.values(ls).map((vs) => `${m.names[vs.at(-1)!] ?? vs.at(-1)} at version ${vs.length}`).join(", ")}` : ""}${log.length ? `, its log signed by its author${Object.keys(r.broken).length ? ` (${Object.keys(r.broken).length} marked broken)` : ""}` : ", no log"}; ters upgrade moves the program onto it`);
+  // In the module's order of definitions, not its file's order of keys
+  // (a saved file sorts them, I240).
+  const at = new Map(m.code.defs.map((d, i) => [d, i])), pos = (vs: string[]) => at.get(vs.at(-1)!) ?? Infinity;
+  console.log(`fetched ${m.title}: ${m.code.defs.length} definitions checked by hash${Object.keys(ls).length ? `, ${Object.values(ls).sort((a, b) => pos(a) - pos(b)).map((vs) => `${m.names[vs.at(-1)!] ?? vs.at(-1)} at version ${vs.length}`).join(", ")}` : ""}${log.length ? `, its log signed by its author${Object.keys(r.broken).length ? ` (${Object.keys(r.broken).length} marked broken)` : ""}` : ", no log"}; ters upgrade moves the program onto it`);
   process.exit(0);
 }
 // A version marked broken in a module's log (SHARING.md §4, L114a).
