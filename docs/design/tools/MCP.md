@@ -22,6 +22,36 @@ For Claude Code: `claude mcp add ters -- node /path/to/ters/cli/ters.ts mcp`.
 - **Same view as the editor.** `view` prints the blocks text (the walk the
   editor's Blocks pane draws, `render.ts blocksOf`) with ids put back in.
 
+## A first program
+
+    define(name: "main", kind: "function")          # no params: main takes nothing
+    replace(at: "main", find: "□", text: "print(\"hello\")")
+    run()                                           # hello
+
+- **main** is a function with no inputs (or one, `List Text`, for the
+  command line's arguments). `run()` runs it; `run(entry)` runs another
+  action of no inputs.
+- **Names with spaces** are written between `‹` and `›` where they're used:
+  `‹word count›(text)`, `‹range from›(1, 21)`. `define` and `rename` take
+  the name plain, `word count`; `at` takes either.
+- **Text** is the expression the view prints: `=` is equality, `≠` reads as
+  `not (a = b)`, `if c then a else b`, `(x) => x + 1` a function. A body of
+  steps goes on the lines after a `=>`, one `name = value` a line and the
+  result last:
+
+        all(() =>
+          a = one of(range from(1, 21))
+          b = one of(range from(a + 1, 21))
+          if a < b then [a, b] else fail())
+
+- **step** adds the same steps one at a time: `step` at the hole after the
+  last step puts the new one after it, so each can name the ones before.
+- **A test** is a definition that performs Check: a function with no
+  inputs whose body is `expect(‹word count›("a b") = 2, "two words")`. `test()` answers `✓ name (1 case)`:
+  a case is one run, of each accepted answer and of each set of inputs it
+  was tried with (a test with inputs is tried with several).
+- **eval** of a definition's name gives its value: `eval("triples")`.
+
 ## The view
 
     n26s  cascade#n26s : (Board) -[Animate, Diverge]-> Board

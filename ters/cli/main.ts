@@ -917,7 +917,7 @@ switch (command) {
     }
     for (const r of results) {
       if (r.error) console.log(`✗ ${r.name}: ${r.error}`);
-      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} cases${"kept" in r ? ", unchanged since it last ran" : ""})`);
+      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} case${r.cases === 1 ? "" : "s"}${"kept" in r ? ", unchanged since it last ran" : ""})`);
       for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }

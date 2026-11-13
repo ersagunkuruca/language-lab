@@ -947,7 +947,14 @@ export class Session {
     if (!made.ok) throw new Error(made.reason);
     const def = made.code.defs.at(-1)!;
     const hole = (made.code.nodes[(made.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">).body;
-    const r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
+    let r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
+    // A definition's name alone is its value (I233): the palette lists
+    // names already, but eval has no list to pick from.
+    if (!r.ok && r.reason === "a name alone is listed already") {
+      const target = this.resolve(text);
+      if (this.code.nodes[target]?.kind !== "def") throw new Error(`${text.trim()} isn't a definition`);
+      r = { ok: true, code: { ...made.code, nodes: { ...made.code.nodes, [hole]: { id: hole, kind: "ref", target } as NodeOf<"ref"> } }, names: made.names, note: "" };
+    }
     if (!r.ok) throw new Error(r.reason);
     const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
     const own = new Set(subtree(r.code, def));
@@ -1014,7 +1021,7 @@ export class Session {
     const results = withSteps(STEPS, () => runTests(this.code, this.info, this.allNames, this.own, saved, { world: this.world(out, "") }));
     if (!results.length) return "no tests (a test is a definition that performs Check, or an accepted answer)";
     return results.flatMap((r) => r.error ? [`✗ ${r.name}: ${r.error}`]
-      : !r.failures.length ? [`✓ ${r.name} (${r.cases})`]
+      : !r.failures.length ? [`✓ ${r.name} (${r.cases} case${r.cases === 1 ? "" : "s"})`]
       : r.failures.slice(0, 3).map((f) => `✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`)).join("\n");
   }
 }
