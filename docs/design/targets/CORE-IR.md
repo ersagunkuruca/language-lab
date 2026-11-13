@@ -195,9 +195,14 @@ WebAssembly and C refused). Instead, the function carries its derivative:
   where a derivative made here would ask for another, or a closure of a
   derived type has no `d`, the lowering keeps the evaluator's derive,
   which ships the nodes it reaches.
-- **Not yet.** A lambda that captures something (its derivative's
-  definition must take the captures), `gradient`, and WebAssembly and C
-  (a `d` field on a derived type's closure): later steps of I245.
+- **Captures.** A lambda that captures something has its derivative's
+  definition take them, as inputs of its own standing for them
+  (`(c₁, …) => (x) => …`), so the checker types it; the maker reads the
+  captures off the closure into those inputs. Where one's type is left
+  open (generic), it is left without.
+- **Not yet.** A derivative that asks for another (of a function the
+  lambda captured), `gradient`, and WebAssembly and C (a `d` field on a
+  derived type's closure): later steps of I245.
 
 So no target looks inside a function at run time, and the evaluator's
 `derivative` stays the reference the tests compare with.
