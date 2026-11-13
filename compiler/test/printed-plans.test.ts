@@ -65,13 +65,24 @@ test("a mode plan calling an array's builtins is printed too (C196)", () => {
 });
 
 // Where the evaluator's solver still runs, it gets only the nodes it reads
-// (C167c): converter's one solve reads a couple of hundred of its nodes.
-test("a solve the evaluator runs is given only the nodes it reaches (C167c)", () => {
-  const p = load("converter"), main = p.named("main");
-  const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
-  const c = solverCode(ir, emitCoreJs(ir).js);
-  const n = Object.keys(c.nodes).length;
-  assert.ok(n > 0 && n < Object.keys(ir.code.nodes).length / 4, `${n} nodes`);
+// (C167c; spacetime's below, C167e). Where core-js.ts prints no plan for a
+// solve, it is written out as WebAssembly and C write it (I238): converter,
+// backwards, conjugate and physics (its for some) ship no nodes at all, and
+// print what the evaluator prints.
+test("solves with no printed plan are written out as on WebAssembly and C: no node table (I238)", () => {
+  for (const name of ["converter", "backwards", "conjugate", "physics"]) {
+    const p = load(name), main = p.named("main");
+    const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+    assert.equal(usesSolver(ir), false, name);
+    if (name === "converter") continue;
+    const shown = printed(ir), want: string[] = [], got: string[] = [];
+    assert.equal(shown.code, undefined, name);
+    runProgram(p.code, p.info, main, [], { print: (s) => want.push(s), names: p.pres.names });
+    const fi = ir.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
+    const fs = loadPrinted(shown, { print: (s) => got.push(s) });
+    fs[fi](...(ir.funcs[fi].params.length ? [null] : []));
+    assert.deepEqual(got, want, name);
+  }
 });
 
 // A derivative and `for some` too (C167d): what they look inside is the
