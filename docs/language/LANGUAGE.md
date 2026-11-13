@@ -1345,7 +1345,7 @@ builtin's type takes away exactly what its row says.
 | a match on an effect's operations | any effect declared with operations (Abort, Log, Random, your own) | a case for each operation says what it does: the handler |
 | a page's event handler | Cells, Update, Console, Files, Abort, Diverge, Time, Wait, Await, Network, Random, Log, Settings, Permissions | the page runtime runs a handler when its event comes, under a step budget, and logs an Abort; a log line goes to the browser's console; a wait lands what the handler did so far, and the rest runs when it's answered |
 | a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice, Settings | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
-| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await, Settings, Permissions, Kept files | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
+| a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await, Settings, Permissions, Environment, Kept files | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
 | a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
 | a sound's maker | Cells, Diverge | the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells |
@@ -2044,8 +2044,9 @@ back into the group being hashed is named by its position.
   editor thread owns `editor/` and has the node shapes.
 - **More of the world.** Time, randomness and HTTP GET are done (see
   "Random", "Time", "The web"), any HTTP request (`send request`), and
-  `ters compile` bundles the runtime into one portable file. Still
-  missing: environment variables. (Handlers for `Console`, `Files` and `Network` written in the
+  `ters compile` bundles the runtime into one portable file, and
+  environment variables (`environment variable(name)`, the Environment
+  effect, L253; `ters run --allow environment`). (Handlers for `Console`, `Files` and `Network` written in the
   program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
   the type now; what's missing is writing them in a type (`Float64 m/s`) and

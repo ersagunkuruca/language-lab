@@ -184,7 +184,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L253 | Environment variables as a world operation (`environment variable(name)` in Files' or a new effect's place, refusable by `--allow`), on every target (LANGUAGE.md "What's next") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | S | |
+| L253 | Environment variables as a world operation (`environment variable(name)` in Files' or a new effect's place, refusable by `--allow`), on every target (LANGUAGE.md "What's next"). Built: the Environment effect, the evaluator, Node's world, `--allow environment` and the core IR's JavaScript (L253a). Left: C (getenv) and WebAssembly (WASI environ_get), each refusing the program now | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | S | |
 | L254 | Lazy fold results, so the effects in a fold could run top-down (LANGUAGE.md "What's next"). Research first: what it would mean for Choice and for the compiled loops | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | L | |
 | L255 | Cells holding a value that arrives later, as Solid's resources (a fetch's text as a cell with a loading state). Check first how much L59's page fetch already covers (LANGUAGE.md "Cells, further") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | M | |
 

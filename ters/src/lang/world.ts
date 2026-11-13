@@ -125,6 +125,7 @@ export function nodeWorld(): World {
     writeFile: (path, text) => { try { writeFileSync(path, text); } catch (e) { plain(e, path); } },
     appendFile: (path, text) => { try { appendFileSync(path, text); } catch (e) { plain(e, path); } },
     fileExists: (path) => existsSync(path),
+    environmentVariable: (name) => process.env[name] ?? null,
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
     readBytes: (path) => { try { return new Uint8Array(readFileSync(path)); } catch (e) { return plain(e, path); } },
     writeBytes: (path, bytes) => { try { writeFileSync(path, bytes); } catch (e) { plain(e, path); } },
@@ -202,15 +203,17 @@ fetch(url).then(async (r) => {
 `;
 
 // A world that answers only what it's allowed (E229b, `ters run --allow`):
-// "network", "files", or "fetch=host" (the network, for that host only).
+// "network", "files", "environment" (its variables, L253), or "fetch=host"
+// (the network, for that host only).
 // What isn't allowed fails with the reason, as an Abort the program can
 // handle where the answer can fail, and as an error where it can't.
 export function allowedOnly(world: World, allow: string[]): World {
-  const network = allow.includes("network"), files = allow.includes("files");
+  const network = allow.includes("network"), files = allow.includes("files"), environment = allow.includes("environment");
   const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
   const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: ters run was given --allow ${allow.join(",") || "nothing"}`); };
   const out: World = { ...world };
   if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes", "openFile"] as const) out[k] = refuse("Files") as never;
+  if (!environment) out.environmentVariable = refuse("Environment") as never;
   if (!network) {
     const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };
     out.fetchText = (url) => (ok(url) ? world.fetchText(url) : refuse(`Network (${url})`)());
