@@ -63,7 +63,7 @@ import { bool, close, DEF_VALUE, fromList, makeRunner, resolvedAlready, resolved
 import { NUMERIC, relationFor } from "./equations.ts";
 import { analyzer, type Choice, type Exec, type Fn, type Mode, type Plan } from "./modes.ts";
 import { seededGenerator } from "./random.ts";
-import { needsResolving, preludeDef } from "./arith.ts";
+import { needsResolving, preludeDef, resolveArithmetic } from "./arith.ts";
 import { fractionCase } from "./prelude-ids.ts";
 import { infer } from "./infer.ts";
 import { ALGEBRAIC_OPS, ALGEBRAIC_V, ARRAY_OPS, PAIR_V, ofAlg, toAlg } from "./std.ts";
@@ -1520,6 +1520,12 @@ export function interpreter(given: Code, opts: Options = {}) {
   // multiply is also given to the equation solver, its unknowns whole, so
   // x · x + x = 12 finds 3 and −4 as at Float64 (L90). The operation's own
   // wait still checks each answer exactly.
+  // An Int operation given a number that isn't whole (a Float64 at a
+  // port of Int's) says so, in Ters's words (I227).
+  function wholes(id: Id, xs: unknown[]): void {
+    const x = xs.find((v) => typeof v === "number" && !Number.isInteger(v));
+    if (x !== undefined) throw new NotInvertible(`${stdNames[id] ?? id} is Int's here, and ${x} isn't a whole number: give whole numbers, or make it Float64 (write 1.0 for 1 where the function is defined)`);
+  }
   function intEquation(id: Id, args: Term[], out: Term, g: Goal): Goal {
     const op = id === INT_OPS.add ? "add" : id === INT_OPS.sub ? "sub" : id === INT_OPS.mul ? "mul" : "neg";
     return (s) => {
@@ -1658,6 +1664,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       return intEquation(id, args, out, wait({
         k: "later", text: stdNames[id] ?? id, on: sides, ready: (s) => unknown(s) <= 1, then: (s) => {
           const xs = sides.map((t) => walk(t, s));
+          wholes(id, xs);
           const i = xs.findIndex((x) => x instanceof LVar);
           const at = i < 0 ? sides.length - 1 : i;
           return eq(sides[at], solve[at](xs as Int[]))(s);
@@ -1675,6 +1682,7 @@ export function interpreter(given: Code, opts: Options = {}) {
       return intEquation(id, args, out, wait({
         k: "later", text: stdNames[id] ?? id, on: sides, ready: (s) => unknown(s) <= 1 || (same(s) && !(walk(out, s) instanceof LVar)), then: (s) => {
           const [x, y, o] = sides.map((t) => walk(t, s));
+          wholes(id, [x, y, o]);
           if (x instanceof LVar && x === y) return disj(...squareRoots(o as Int).map((r) => eq(x, r)))(s);
           if (!(o instanceof LVar) && (x instanceof LVar || y instanceof LVar)) {
             const [unknownSide, k] = x instanceof LVar ? [x, y as Int] : [y as LVar, x as Int];
@@ -2018,7 +2026,44 @@ function budgeted(opts: Options): Options {
 // The ports of a function are its params (binder ids) and "out". Lazy: take
 // as many answers as you need. May not end if there is no answer and the
 // search space is infinite; pass `spend` to bound it.
+// A function generic over a number type runs at its default type (Int
+// when a whole literal gave it, arith.ts): `total price(net, rate) = net ·
+// (1 + rate)` is Int's. Given a number that isn't whole (rate 0.2) at a
+// port of that type, it runs as a caller at Float64 would have it: its
+// copy at Float64, whose ports are the function's own in order (I227).
+// Null when it runs as it is.
+function atGivenNumbers(code: Code, fn: Id, known: Record<string, unknown>, opts: Options): { code: Code; info: ReturnType<typeof infer>; fn: Id; ports: Map<string, string> } | null {
+  const lam = (f: Id) => { const d = code.nodes[f]; const b = d?.kind === "def" && d.body ? code.nodes[d.body] : null; return b?.kind === "lambda" ? b : null; };
+  const own = lam(fn);
+  const fraction = (v: unknown) => typeof v === "number" && !Number.isInteger(v);
+  if (!own || !Object.values(known).some(fraction)) return null;
+  const info = opts.info ?? infer(code);
+  const sc = info.schemes.get(fn), t = sc && info.subst.resolve(sc.type);
+  if (!sc?.arith?.length || t?.t !== "fn") return null;
+  const float = new Set<number>();
+  const at = (ty: Type | undefined, v: unknown) => { const r = ty && info.subst.resolve(ty); if (r?.t === "var" && sc.arith!.includes(r.v) && fraction(v)) float.add(r.v); };
+  own.params.forEach((p, i) => at(t.params[i], known[p]));
+  at(t.ret, known.out);
+  if (!float.size) return null;
+  const r = resolveArithmetic(code, info, opts.names ?? {}, undefined, { def: fn, float: [...float] });
+  if (!r.wanted || r.wanted === fn) return null;
+  const copy = r.code.nodes[r.code.nodes[r.wanted]?.kind === "def" ? (r.code.nodes[r.wanted] as NodeOf<"def">).body ?? "" : ""];
+  if (copy?.kind !== "lambda") return null;
+  resolvedAlready(r.code, r.info);
+  return { code: r.code, info: r.info, fn: r.wanted, ports: new Map(own.params.map((p, i) => [p, copy.params[i]])) };
+}
+
 export function* relate(code: Code, fn: Id, known: Record<string, unknown>, opts: Options = {}): Generator<Answer> {
+  const copy = atGivenNumbers(code, fn, known, opts);
+  if (copy) {
+    const back = new Map([...copy.ports].map(([a, b]) => [b, a]));
+    const names = opts.names ? { ...opts.names, ...Object.fromEntries([...copy.ports].map(([a, b]) => [b, opts.names![a] ?? a])) } : undefined;
+    const given = Object.fromEntries(Object.entries(known).map(([k, v]) => [copy.ports.get(k) ?? k, v]));
+    for (const a of relate(copy.code, copy.fn, given, { ...opts, info: copy.info, ...(names ? { names } : {}) })) {
+      yield { ...a, values: Object.fromEntries(Object.entries(a.values).map(([k, v]) => [back.get(k) ?? k, v])), free: a.free.map((k) => back.get(k) ?? k) };
+    }
+    return;
+  }
   opts = budgeted(opts);
   const it = interpreter(code, opts);
   // A definition given by its name (values.ts) is its function.

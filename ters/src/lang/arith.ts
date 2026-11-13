@@ -110,9 +110,13 @@ function textParts(text: string): [bigint, bigint] | null {
 // costOf: what each builtin costs on the target being compiled for, which
 // can change which way gives a field (WAYS.md "Costs"); target-neutral
 // when not given.
-export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL): { code: Code; info: Info; names: Names } {
-  const r = scanningOnLayer(code, () => resolving(code, info, names, costOf, seedFor(code, info, names, costOf)));
-  return r as { code: Code; info: Info; names: Names };
+// `want`: a copy of a definition with some of its scheme's number-type
+// variables at Float64 (relate.ts, I227: a generic function run backwards
+// from a Float64 its default, Int, can't hold), given as `wanted` (the
+// definition itself when that is its default).
+export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL, want?: { def: Id; float: number[] }): { code: Code; info: Info; names: Names; wanted?: Id } {
+  const r = scanningOnLayer(code, () => resolving(code, info, names, costOf, want ? null : seedFor(code, info, names, costOf), false, want));
+  return r as { code: Code; info: Info; names: Names; wanted?: Id };
 }
 
 // The library's own resolving (L217b): its definitions at their own types,
@@ -177,7 +181,7 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
 // warm-up does it in a task of its own: I189e).
 export function seedArithmetic(code: Code, info: Info, names: Names = {}): void { seedFor(code, info, names, NEUTRAL); }
 type Snapshot = Omit<Seed, "layer">;
-function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, seed: Seed | null, snapshot = false): { code: Code; info: Info; names: Names } | (Snapshot & { layer: true }) {
+function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, seed: Seed | null, snapshot = false, want?: { def: Id; float: number[] }): { code: Code; info: Info; names: Names; wanted?: Id } | (Snapshot & { layer: true }) {
   const given = { code, info };
   // A relation's own directions first (directions.ts), so the evaluator and
   // the compiler run a solve the way the checker typed it.
@@ -657,6 +661,8 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     if (sc?.needs?.some(([v, iface]) => !implementationOf(info, iface, otherwise(v)))) { unresolved.add(d); continue; }
     resolve(n.body, new Map((sc ? constrained(sc) : []).map((v) => [v, otherwise(v)])));
   }
+  const wantedSc = want ? schemes.get(want.def) : undefined;
+  const wanted = want && wantedSc ? instance(want.def, new Map(want.float.map((v) => [v, num])), wantedSc) : undefined;
   while (todo.length) { const { root, env } = todo.pop()!; resolve(root, env); }
   if (snapshot) {
     const added = (m: Names) => Object.fromEntries(Object.entries(m).filter(([id]) => !(id in names)));
@@ -695,7 +701,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // substitution doesn't know a library body's variable) left the three
   // disagreeing, which verify.ts refused (REVIEW-2026-11-11 §2, I207).
   typedAsBodies({ nodes, defs }, typeOf, schemes, unresolved);
-  return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames };
+  return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames, ...(wanted ? { wanted } : {}) };
 }
 
 // Each expression the checker lifted through a canonical embedding (L208c,

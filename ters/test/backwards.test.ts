@@ -610,3 +610,35 @@ test("a solve whose given is fixed as an Int later in the definition runs in who
   assert.deepEqual(printed, [want]);
   }
 });
+
+// I227: a function generic over a number type is Int's when a whole
+// literal is all that types it (arith.ts), so run backwards from a rate of
+// 0.2 its Int multiply divided 300 by 1.2 as a BigInt, and the host's
+// error came out. Given a number that isn't whole, it runs as its copy at
+// Float64, as a caller at Float64 would; given whole numbers, as Int's.
+test("a function generic over a number type runs backwards at Float64 when given a number that isn't whole (I227)", () => {
+  const { k, code, info, named } = program((k) => {
+    const f = k.def("total price");
+    k.define(f, k.fn(["net", "rate"], (net, rate) => k.call(ARITH.mul, net, k.call(ARITH.add, k.lit(1), rate))));
+  });
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const f = named("total price");
+  assert.match(showType(info.subst.zonk(info.typeOf.get(f)!), k.names), /^\(a, a\) -> a/);
+  const [net, rate] = params(code, f);
+  const answers = [...relate(code, f, { [rate]: 0.2, out: 300 })];
+  assert.deepEqual(answers.map((a) => a.values[net]), [250]);
+  // Whole numbers: Int's, and the net that's whole.
+  assert.deepEqual([...relate(code, f, { [rate]: 1, out: 300 })].map((a) => a.values[net]), [150]);
+  assert.deepEqual([...relate(code, f, { [rate]: 1, out: 301 })].map((a) => a.values[net]), []);
+});
+
+// An Int's operation given a number that isn't whole refuses in Ters's
+// words, naming the operation, instead of the host's BigInt error.
+test("an Int operation run backwards from a number that isn't whole says so (I227)", () => {
+  const { code, named } = program((k) => {
+    const f = k.def("scaled");
+    k.define(f, k.fn(["x"], (x) => k.call(INT_OPS.mul, x, k.int(3))));
+  });
+  const f = named("scaled");
+  assert.throws(() => [...relate(code, f, { out: 7.5 })], (e) => e instanceof NotInvertible && /isn't a whole number/.test(e.message));
+});
