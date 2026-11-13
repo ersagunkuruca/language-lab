@@ -8,6 +8,11 @@ predicate when networks and functions were made one kind of definition
 Pair, which is nesting where we want adjacency. This note is how a
 definition gets several results without a new kind of anything.
 
+**Status (2026-11-13).** Done: the editor half (I65a, I65: results as
+output ports, the Results buttons, the palette offering a use in the
+declared direction) and the compiled half (C55a to C55c)
+are built too.
+
 **Status (2026-10-30).** The language side is built (L95a, L95b), and
 physics' `polar` and `rotate` use it again (L95d). In the editor the graph
 draws results as output ports (I65a, #677); writing them with the palette

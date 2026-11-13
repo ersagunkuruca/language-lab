@@ -7,6 +7,9 @@ implement polar or sin and cos and get the rest. RESULTS.md (L95) gave a
 definition several named results, and WAYS.md (L96) lets an interface field
 come from its ways, picked by cost. This note puts the two together.
 
+**Status (2026-11-13).** Done: L97 closed (2026-11-04), every step
+built (L97a to L97e, and C55a for compiled code).
+
 **Status (2026-10-30).** Steps 1 to 3 are built (L97a to L97c4): Trig's
 `polar`, `unpolar`, `asin` and `acos`, and polar asked for length and
 angle answered by unpolar. L97d (Fixed's polar by CORDIC, sin and cos

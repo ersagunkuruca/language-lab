@@ -1,5 +1,12 @@
 # Exact reals: √2 as the number where x² = 2 (design note, 2026-10-27)
 
+**Status (2026-11-13).** Done: L88 closed. Steps 1 to 3 (`Algebraic`)
+and step 4, `Real`, are built: `real pi`, `real exp`, `real log`,
+`real sin` and `real cos` narrow on demand (src/lang/real.ts, L88e1 to
+L88e5), and `<` at Real is the same `<` as anywhere, carrying `Diverge`
+since two equal Reals never come apart. The paragraph below is how it
+stood before step 4.
+
 BACKLOG L88. **Steps 1 to 3 are built** (`src/lang/poly.ts`,
 `src/lang/factor.ts`, `src/lang/algebraic.ts`, `test/algebraic.test.ts`):
 `square root(2) · square root(2)` is 2, evaluated and compiled to

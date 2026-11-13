@@ -1,5 +1,11 @@
 # Embeddings: generalization as a feature (design note for BACKLOG L208, 2026-11-03)
 
+**Status (2026-11-13).** Built: L208 closed in steps a to e and g (std's
+`Embedding a b` with its laws checked, the checker inserting the canonical
+one, the diamond rule, literals, searches), and its step f, a value kept as
+the small type in compiled code, went to L209, closed too (zero-parts.ts).
+"Nothing built yet" below is how it stood when written.
+
 Ersagun (2026-11-03 09:38): Clifford algebras generalize complex numbers
 the way integers generalize naturals, and unless generalization is a
 language feature a small mathematical core gives only part of its
