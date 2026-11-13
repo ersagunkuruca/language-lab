@@ -333,10 +333,8 @@ export function pagePanels(host: PageHost) {
     page.now?.steps?.resume();
     page.status.textContent = "";
     drawSteps();
-    // It goes on interpreted: the compiled page, handed these cells, starts
-    // from its first ones (told to the Language lane); Restart runs it
-    // compiled again.
-    if (compiledPages.get(prog())) page.status.textContent = "Interpreted since it was paused, so it can be slower here; Restart runs it compiled again.";
+    // The compiled page takes over again, handed the cells as they are now.
+    if (page.started && page.for === prog()) compilePage(page.started.main);
   }
   // How far back the window reaches, in its snapshots' seconds.
   function reach(): string {
