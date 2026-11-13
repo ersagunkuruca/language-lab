@@ -779,6 +779,10 @@ async function pagePreview() {
   if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: going on from 102 rolls shows ${await status()}`);
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after going on: the page says ${await status()}`);
+  // A helper giving an Html is drawn in Run, not printed (I256).
+  await p.locator("[data-def]", { hasText: /^bars$/ }).first().click();
+  if (!(await p.locator(".run output").allInnerTexts()).includes("an Html, drawn below") || !(await p.locator("iframe.html-part").count())) errors.push(`${where}: bars's Html isn't drawn in Run`);
+  await p.locator("[data-def]", { hasText: /^main$/ }).click();
   // What's typed in a page's field is said too (BACKLOG E76).
   await p.locator('[data-set="program"]', { hasText: "Page: unit converter" }).click();
   const field = f.locator("input").first();
