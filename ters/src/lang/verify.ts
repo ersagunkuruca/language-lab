@@ -8,21 +8,27 @@
 // built-in's, matched at each use.
 //
 // It checks values' types (a function's inputs and result, a call's, a
-// use's instance of what it names, each case of a match or a fold) and a
-// function's row against the calls in it. Not yet: why a recursion ends
-// (Diverge left out is the checker's word: counting.ts, infer.ts), a Choice
-// its inputs answer, effects inside a handler, interfaces and number kinds;
+// use's instance of what it names, each case of a match or a fold), a
+// function's row against the calls in it, and that a recursion whose type
+// leaves out Diverge ends (L242): each recursive group of the definitions,
+// and each recursive let, is measured again on the code as it stands
+// (infer.ts terminates: its inputs' pieces, counting.ts's counted Ints,
+// spines), so a pass that made or changed a recursion and carried its
+// type without Diverge is caught. That measure's own soundness is still
+// shared with the checker (CHECKED-ONCE-2026-11-11.md, where it stands). Not yet: a Choice its inputs answer, a
+// Diverge the modes drop (`inverse` of a function that ends), effects
+// inside a handler, interfaces and number kinds;
 // `unchecked` counts the nodes a rule doesn't cover, so a check can say
-// how much of a program it vouches for. No compile runs it yet: the
-// passes' carried types (I203) are verified in their tests only
-// (REVIEW-2026-11-11 §2, I207).
+// how much of a program it vouches for. A compile runs it on the types
+// its passes carried (I203), and checks the program again where it finds
+// a problem (scalar.ts vouched, I207).
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { children, subtree } from "../model.ts";
-import type { Info } from "./infer.ts";
+import { children, isUse, subtree, useTarget } from "../model.ts";
+import { sccs, terminates, type Info } from "./infer.ts";
 import { LIST, RELEASE_V, S, SIGS } from "./std.ts";
 import { laterOps } from "./later-ops.ts";
-import { CHOICE, DIVERGE } from "./types.ts";
+import { CHOICE, DIVERGE, INT } from "./types.ts";
 import { Subst, type Type } from "./types.ts";
 
 export interface Elaboration {
@@ -154,7 +160,9 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
               // A Choice its inputs answer (signs.ts): whether they do is a
               // later step's to check, as are the ones not recorded.
               if (ef === CHOICE) { skip("a Choice its inputs answer"); continue; }
-              if (ef === DIVERGE) { skip("termination"); continue; }
+              // A Diverge the modes drop where `inverse` is given a
+              // function that ends (infer.ts, L29): theirs to say.
+              if (ef === DIVERGE) { skip("a Diverge the modes drop"); continue; }
               bad(c.id, "what a call does is in the row of the function it is in");
             }
           }
@@ -266,6 +274,42 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
         break;
       }
     }
+  }
+  // Termination (L242): a recursion whose type leaves out Diverge ends.
+  // An Int input (counting.ts counts one towards a bound) is one whose
+  // type here is Int.
+  const isInt = (param: Id) => { const t = ty(param); return t?.t === "con" && t.id === INT; };
+  const diverges = (t: Type | undefined) => t?.t === "fn" && t.eff.effs.includes(DIVERGE);
+  const own = new Set(defs.filter((d) => code.nodes[d]?.kind === "def" && code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]?.kind !== "typedef"));
+  const deps = (d: Id): Id[] => {
+    const out = new Set<Id>(), body = (code.nodes[d] as NodeOf<"def">).body;
+    for (const id of body ? subtree(code, body) : []) {
+      const n = code.nodes[id];
+      if (n?.kind === "ref" && own.has(n.target)) out.add(n.target);
+      if (n && isUse(n) && own.has(useTarget(code.nodes, n))) out.add(useTarget(code.nodes, n));
+    }
+    return [...out];
+  };
+  for (const group of sccs([...own], deps)) {
+    if (group.length === 1 && !deps(group[0]).includes(group[0])) continue;
+    if (group.every((d) => diverges(ty(d)))) continue;
+    if (group.some((d) => !ty(d))) { skip("a recursion with no type"); continue; }
+    if (!terminates(code, group, undefined, isInt)) for (const d of group) if (!diverges(ty(d))) bad(d, "a recursion whose type leaves out Diverge ends");
+  }
+  // A recursive let (infer.ts letValue): `(f ↦ …)(a)`, a function `a` that
+  // calls itself by f.
+  for (const d of own) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if (n?.kind !== "call" || !n.args) continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "lambda") continue;
+    n.args.forEach((a, i) => {
+      const lam = code.nodes[a], p = f.params[i];
+      if (lam?.kind !== "lambda" || !p || !subtree(code, a).some((x) => { const r = code.nodes[x]; return r?.kind === "ref" && r.target === p; })) return;
+      const t = ty(a);
+      if (!t) { skip("a recursion with no type"); return; }
+      if (!diverges(t) && !terminates(code, [p], () => lam, isInt)) bad(a, "a recursion whose type leaves out Diverge ends");
+    });
   }
   return { problems, checked, unchecked };
 }

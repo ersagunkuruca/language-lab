@@ -199,7 +199,6 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L244 | `+` as one sum (CONFUSING item 9): `add`, `subtract` and `negate` are three built-ins, each with its own equation, where one relation `a + b = total` read in its directions would do (as `polar` is one relation); the names stay as the directions' names | [CONFUSING.md](docs/design/CONFUSING.md) item 9, checked 2026-11-13 (E256) | P3 | M | |
-| L242 | The verifier checks termination: verify.ts skips it (`skip("termination")`), so "never Diverge" is the checker's word alone (REVIEW-2026-11-11 §6), and `grow`, `settled` and the worker passes lean on it. Check counting.ts's measure in verify, or list termination in CHECKED-ONCE as what's still trusted | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.5 | P2 | M | |
 
 ### Grammars, modules and sharing
 
