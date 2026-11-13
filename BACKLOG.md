@@ -15,7 +15,7 @@ special case, then what lets programs be written in the editor, then
 language, then more targets or speed (WORKFLOW.md "Priority").
 Rows once held back as later goals are open again (Ersagun 2026-11-09):
 a lane takes them when bugs and goal rows are in hand.
-Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256, C219), C220; new rows come from the recurring reviews, QA passes and bigger programs.
+Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256), C220; new rows come from the recurring reviews, QA passes and bigger programs.
 Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to be as close to a C/C++ dev doing data oriented design and cache and memory aware as possible. And then if we need Pools and similar stuff to get a last 10 percent of performance that's OK, but the defaults should be our first target." So rows that change what every program gets (layout as columns, arrays written in place, records changed in place, work on every core) go before ones a program must ask for (a Pool type).
 **Size:** S hours · M one PR · L several PRs or a design note first.
 **Status:** ▶ running · ⏸ held · blank = waiting.
@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C219 (qasm), C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| C Compiler and targets | "Compiler lane" | C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L249, L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
@@ -142,7 +142,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C219 | `ters qasm`: unroll a loop to a known bound (ancillas reused since C219a) (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
 
 ## L: Language and library
 

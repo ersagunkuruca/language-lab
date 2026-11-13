@@ -72,9 +72,10 @@ usage:
   ters native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   ters wasi <program> [-o out.wasm]      compile to a WASI command: WebAssembly with GC (wasmtime, Node's WASI)
   ters check <program>                   type-check, and list the definitions and their types
-  ters qasm <program> --main f [--bits n] [-o out.qasm]
+  ters qasm <program> --main f [--bits n] [--unroll n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
-                                        its Ints n bits wide (default 8), scratch qubits uncomputed and reused
+                                        its Ints n bits wide (default 8), scratch qubits uncomputed and reused;
+                                        a loop on an input unrolled n deep, a qubit "deeper" set past that
   ters hosts <program> [--c|--android]   print a hosts/js.js answering the program's own effects, to start from;
                                         with --c a hosts/c.c, for ters native (FOREIGN.md); with --android a
                                         hosts/android.java, for ters build-native-app
@@ -790,10 +791,12 @@ switch (command) {
     if (p.info.errors.length) fail(`${p.title} has errors; ters check lists them`);
     const b = rest.indexOf("--bits"), bits = b >= 0 ? Number(rest[b + 1]) : 8;
     if (!Number.isInteger(bits) || bits < 1 || bits > 64) fail("--bits needs a whole number from 1 to 64");
+    const u = rest.indexOf("--unroll"), unroll = u >= 0 ? Number(rest[u + 1]) : undefined;
+    if (unroll !== undefined && (!Number.isInteger(unroll) || unroll < 0)) fail("--unroll needs a whole number, 0 or more");
     const { printQasm } = await import("../../compiler/src/qasm.ts");
     const lambda = p.code.nodes[(p.code.nodes[named] as { body?: Id }).body ?? ""] as { params?: Id[] } | undefined;
     let q: string;
-    try { q = printQasm(lowerScalar(p.code, p.info, p.names, [named], { shader: true }), named, bits, (lambda?.params ?? []).map((x) => p.names[x] ?? x)).text; } catch (e) { fail(`${mainName} has no circuit: ${(e as Error).message}`); }
+    try { q = printQasm(lowerScalar(p.code, p.info, p.names, [named], { shader: true }), named, bits, (lambda?.params ?? []).map((x) => p.names[x] ?? x), { unroll }).text; } catch (e) { fail(`${mainName} has no circuit: ${(e as Error).message}`); }
     const o = rest.indexOf("-o");
     if (o >= 0) writeFileSync(rest[o + 1] ?? fail("-o needs a file"), q); else process.stdout.write(q);
     break;
