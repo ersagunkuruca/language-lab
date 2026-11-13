@@ -16,7 +16,7 @@ and interpreter, on every target), 10 clinic (a simulation, written in
 the editor), 11 crew (workers as fibers), 12 break (written through the
 MCP), 13 pond (stable references, free lists and threads), 14 rota (a
 search written with Choice), 15 fit (gradients of functions chosen at
-run time). Each round's gaps are
+run time), 16 trek (a hiking track with units). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
 C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
@@ -3439,3 +3439,189 @@ measured.
 2. I248 to I250, the MCP text reader. M1 is a plain bug.
 3. R1, measured before anything is built.
 
+
+## Round 16: trek, a hiking track with units (2026-11-13)
+
+`compiler/gaps/trek` sums up a hiking track from a GPS. Each line of the
+file is a fix: seconds, latitude, longitude, height. It smooths the
+heights, makes a leg between each two fixes (haversine distance), and
+prints:
+- the distance, ascent and descent (counted past a 3 m threshold);
+- the time moving and stopped, and the pace;
+- the highest and lowest points;
+- Naismith's and Tobler's time estimates, and the work of the climb;
+- the biggest climb and the steepest leg, and a profile of forty bars;
+- the fastest and slowest kilometres, and each stop of a minute or more;
+- each kilometre, the time at each speed, and the distance at each grade.
+
+Its numbers carry **units**: fields are written `Float64 m` and
+`Float64 s`, and constants `6371000.0 m`, `9.81 m/s²`, `75.0 kg`. It was
+chosen to need the rows waiting for an example: units in lists (L252d),
+a match on an Int's sign (L249b), ropes (L248) and packed interface
+values (L256). **96 definitions** (9 types, 87 functions and values),
+against rota's 89.
+
+It was written through the MCP, like rounds 12 to 15
+(`gaps-round16/drive.ts` in the project's files): 96 `define`s, 139
+`replace`s, and 12 `as` answers.
+
+Files:
+- `compiler/gaps/trek/`: the program, its README (credits) and a sample
+  `track.txt` (400 made-up fixes of a hike over hills).
+- `compiler/gaps/trek.ideal.js`: the same by hand. The fixes go in
+  arrays, each pass is one loop, and the sums add in the order std's
+  `sum` does (from the last item).
+- `compiler/gaps/trek.ts`: the evaluator, the core IR's module and the
+  ideal, in one process, with a generator of made-up hikes.
+- `compiler/test/trek.test.ts`: the three print the same and exit the
+  same way on the sample, bad tracks and usage, and 4000 made-up fixes.
+  `ters wasi` and `ters native` print what `ters run` prints on the
+  sample.
+- `compiler/gaps/bench-trek.ts`: the table below.
+
+The evaluator, the core IR's module and the ideal print the same at
+400, 4000 and 40000 fixes. The only difference found was in the ideal,
+which summed from the first item: std's `sum` adds from the last, and
+the ascent's 3 m threshold turned that last bit into 3 m. `ters native` and `ters
+wasi` print the same up to 4000.
+
+### Results
+
+```
+fixes   way          the report   against the ideal
+400     evaluator       800 ms       365x
+400     core            7.4 ms       3.4x
+400     ideal           2.2 ms
+400     native           17 ms       7.8x   (a process, start-up included)
+400     wasi             52 ms        24x   (a process in Node)
+4000    evaluator     21190 ms      3639x
+4000    core            274 ms        47x
+4000    ideal           5.8 ms
+4000    native         1052 ms       181x   (a process)
+4000    wasi            152 ms        26x   (a process in Node)
+40000   core          52781 ms       713x
+40000   ideal            74 ms
+40000   native        94045 ms      1271x   (a process)
+40000   wasi              -                 (stack overflow, from 10000 fixes)
+```
+
+The command was `BUILT=1 node compiler/gaps/bench-trek.ts 400 4000`, the
+median of 3 runs after a warm-up (the evaluator once), and `RUNS=1` for
+40000. The ideal grows linearly; the core IR's module, `ters native` and
+the evaluator grow as the square (R1).
+
+### The gaps, ranked
+
+**U1. Units vanish through constants, lists and `first`, so most of
+trek's mistakes in units would go unseen (Language lane B).** The types'
+fields carry units (L252a), and `2.0 m + 1.0 s` is refused. But of the
+96 signatures only 7 show a unit (`clock : (Float64 s) -> Text`,
+`naismith time : (Totals) -> Float64 s`, …); 26 show a plain `Float64`
+where a unit is known. Each of these is accepted:
+- `1.0 m + limit` where `limit = 3.0 s`. A value definition isn't
+  unit-checked, and its unit isn't used where it's named: `earth radius`,
+  `gravity`, `walker mass` and `threshold` type as `a`. So
+  `ground distance : (Point, Point) -> Float64`, and
+  `climbing work : (Totals) -> Float64` where it is J.
+- `sum([1.0 m, 2.0 m]) + 1.0 s`, and a sum of a map. A list has no
+  unit (L252d), so `heights of : (List Point) -> List Float64`,
+  `time moving : (List Leg) -> Float64`, and `by grade` is a
+  `Map Int Float64`. The `Track` field written `List (Float64 m)` loses
+  its unit.
+- `first(2.0 m / 1.0 s, else 0.0 m/s) + 1.0 s` and
+  `2.0 m · exp(0.5) + 1.0 s`. A builtin with no unit rule gives a free
+  unit: `first`, `exp`, `asin`. `exp` and `asin` should take and give a
+  number without units; `first` should give its arguments' unit.
+
+So L252d is needed, with two more beside it: constants' units, and the
+unit rules of `first` and the transcendental functions.
+
+**B1. A name ending in `or` or `and` before an operator isn't read (MCP
+text, bug).** `b.anchor + x` is refused: "after .anchor, “+ x” isn't
+read: no operator starts it". `typedOut` in editor/typed.ts skips an
+operator whose left side ends with any operator's symbol
+(`left.endsWith(sym)`) and doesn't check word boundaries for `or` and
+`and`. `colour + x` and `band + x` fail the same way. trek renamed the
+field `mark`.
+
+**B2. A call of an unknown name takes 8.5 s to refuse, and each `++`
+before it multiplies it (MCP text, bug).** In a 50-definition program,
+`nosuch(e)` takes 8.5 s, `"a" ++ nosuch(e)` 17 s, and `"a" ++ "b" ++
+nosuch(e)` 51 s. A profile puts 90% in `isOperation` (editor/typed.ts),
+which scans every node for each field name that `closest` weighs, so
+it's O(n²). The operator split then tries each operand at each operator.
+The driver seemed to hang at `bucket line`, which named `metres` before
+it was defined.
+
+**R1. `drop` on a list stored as an array walks item by item, so
+smoothing is quadratic (perf, core JS 47x at 4000 and 713x at 40000).**
+`window(hs, i, k)` is `take(drop(hs, i − k), 2k + 1)`. std's `drop` is a
+fold, and the array has no job for it, so each window walks i items
+(f20 in the core module). At a quarter of a big buffer, `restOf` copies
+what's left (the leak guard of I106c), so a walk from the start copies
+too. The ideal indexes the array. If `drop` were a job on an array (a
+view, O(1)), as `item at` is, the module would be linear.
+
+**R2. `ters native` is 4 to 7x slower than WASI on the same program
+(perf, C220).** At 4000 fixes, native takes 1052 ms and WASI 152 ms.
+This is C220's machine result again on a second program, with the same
+quadratic walk.
+
+**R3. WASI runs out of stack from 10000 fixes (compiler).** `points
+from`, `legs of`, `with heights` and std's `sum` recurse once per item.
+Node's stack takes 4000 but not 10000. The core module counts its depth
+and goes on from where it was; `ters native` has a bigger stack. With
+C187 waiting for stack switching, WASI needs another way to grow (or a
+deeper stack where the host allows one).
+
+**L1. A division guarded by a comparison is still a Choice (language).**
+`if d > 0.0 m then x / d` and `l.took > 0.0 s and l.length / l.took`
+both have no answer at d = 0 as far as the checker knows: only a literal
+divisor is known not to be 0. The Choice reaches `print` and is refused
+("summary does Console while a Choice is open"). So trek has 9
+`first(…, else 0)` that a reader can't see the point of: 7 guarded
+divisions, `sqrt` and `asin` of numbers that are always in range. Also
+`quotient(c · (n − 1), columns − 1)` had to be written with the literal
+39. Hand-written code just divides. Two ways out:
+- the checker reads the guard (d > 0 makes d non-zero in the then);
+- or a Float64 division that always answers, as IEEE's does (∞ or NaN).
+
+This is a semantics call for Ersagun.
+
+**R4. `ters run` takes 11 s on the 400-fix sample, 0.8 s of it running
+(perf).** A profile:
+- 5.9 s re-checking units on the represented program
+  (`unitProblems` inside `infer`, after the rewrite);
+- 5.1 s lowering (`lowerScalar`; `firstArms` alone 2 s).
+
+A rewrite of representations changes no units, so the second unit
+check could be skipped. `ters check` takes 1.5 s.
+
+**M1. Smaller things the MCP's text made harder.**
+- A `match` as a step with more steps after it isn't read ("a case
+  reads Case(fields) → value, not □"); trek made a helper.
+- `0.0 m` where a parameter is named `m` is refused with "isn't read as
+  a whole: an operator or a word in it isn't Ters's". The rule is right
+  (a unit word naming something in scope is that name, L252b), but the
+  message should say so.
+- `first(largest of(hs), else 0.0 m)`: `largest of` gives an Optional
+  and `first` takes a Choice. The message, "first needs Optional a here,
+  and a number isn't one", reads backwards.
+- `not in order(ps)` reads as a call of `not in order`; the message
+  suggests `in order` but not `not (in order(ps))`.
+- Each `replace` takes about 1.5 s once the program has 50 definitions.
+
+**Rows waiting for an example.** trek needs L252d (U1). It doesn't need
+the others:
+- L249b: `direction` splits a grade by sign with `if g > 0 … else if
+  g < 0`, which reads well. A `match` on the sign would be no clearer.
+- L248: nothing splits or joins long lists.
+- L256: no list of different types sharing an interface.
+
+### Next
+
+1. B1 and B2, plain bugs in the MCP's text reader (editor/typed.ts).
+2. U1: L252d, constants' units, and builtins' unit rules (Language lane B).
+3. R1: `drop` (and `take`) as array jobs, then R3, the WASI stack.
+4. L1, once Ersagun says which way.
+5. R4, then R2 with C220.

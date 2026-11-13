@@ -61,7 +61,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { fieldShapes } from "../../ters/src/lang/nested.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
@@ -100,8 +100,9 @@ import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAI
 // core IR (C137c8); an operation of one that isn't lowered is refused
 // where it is called.
 const PAGE_EFFECTS = new Set<Id>([...PAGE_VIEW, ...PAGE_HANDLER, ...AUDIO_BLOCK, VIEW_ROW, HANDLER_ROW, SOUND_ROW,
-  // And a permission (L236), which main may ask and the world answers.
-  PERMISSIONS]);
+  // And a permission (L236), which main may ask and the world answers, and
+  // an environment variable (L253).
+  PERMISSIONS, ENVIRONMENT]);
 // The cells operations C has (C199a): the rest are refused there.
 const CELL_C = new Set<Id>([CELL_OPS.cell, CELL_OPS.formula, CELL_OPS.read, CELL_OPS.write]);
 const HOST_CELLS = new Set(Object.values(CELL_OPS).filter((id) => id !== CELL_OPS.path));
@@ -910,7 +911,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // not finish (running out of a budget), or abort; and the world's effects.
   const partialEff = (e: Id) => e === CHOICE || e === DIVERGE || escaping(e) || (!!opts.cells && !opts.host && (e === VIEW_ROW || e === HANDLER_ROW || e === SOUND_ROW));
   // Random under a `seeded` (C106), or drawn from the world (C136).
-  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
+  const allowedEff = (e: Id) => partialEff(e) || e === CONSOLE || e === FILES || (!!opts.data && e === RANDOM) || (!!opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) || (!!opts.releases && e === LOG_EFFECT) || (!!opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) || (!!opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || e === ENVIRONMENT || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || laterEffs.has(e)))));
   // Some root draws a number nobody seeds (C136): the world seeds
   // Random's generator then, at the first draw.
   const worldRandom = !!opts.data && roots.some((r) => {
@@ -1696,6 +1697,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if ((opts.host || opts.handlers) && target === NOW_OP) return { k: "world", op: "now", aborts: false, args: [], t: "f64" };
         // Asking for a permission (L236): the world's, as the evaluator asks.
         if ((opts.host || opts.handlers) && target === ASK_PERMISSION_OP) return { k: "world", op: "askPermission", aborts: false, args: args(), t: "i32" };
+        // An environment variable (L253): the world's, as the evaluator
+        // answers it, an Optional Text.
+        if ((opts.host || opts.handlers) && target === ENV_OP) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: "environmentVariable", aborts: false, args: args(), t };
+        }
         // The person's locale and time zone (L214b2, L188), a file's bytes
         // (L189c), a fetched text, for JavaScript from the core IR: the
         // world's, as the evaluator answers them.

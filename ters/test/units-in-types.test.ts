@@ -1,0 +1,96 @@
+// Units written in a type (L252): a record's field says `Float64 m/s`,
+// and what is made with it, read from it and taken out of it by a match
+// has that unit, checked as any other unit (units.ts). The MCP's view
+// prints it and its type reader reads it back; literals print theirs.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { Session } from "../mcp/session.ts";
+import { Lang } from "../src/lang/dsl.ts";
+import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { infer } from "../src/lang/infer.ts";
+import { hashDef } from "../src/hash.ts";
+import { ARITH } from "../src/lang/std.ts";
+import { NUMBER } from "../src/lang/types.ts";
+import { formatUnit, parseUnit } from "../src/units.ts";
+
+test("a unit reads back as formatUnit writes it", () => {
+  for (const s of ["m", "m/s", "m/s²", "N", "1/s", "m²·kg"]) assert.equal(formatUnit(parseUnit(s)!), s);
+  assert.deepEqual(parseUnit("kg·m/s^2"), parseUnit("N"));
+  for (const s of ["Float64", "metre", "m/s/s", ""]) assert.equal(parseUnit(s), null, s);
+});
+
+function program(text: string[]) {
+  const dir = mkdtempSync(join(tmpdir(), "units-in-types-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(dir, "names.default.json"), "{}");
+  const s = new Session(dir);
+  s.define("Body", "type", [], text[0]);
+  return s;
+}
+
+test("a field's unit is written, printed and checked where the field is read or taken out", () => {
+  const s = program(["body(position: Float64 m, speed: Float64 m/s, time: Float64 s)"]);
+  assert.match(s.view("Body"), /body\(position#\w+: Float64 m, speed#\w+: Float64 m\/s, time#\w+: Float64 s\)/);
+  const fill = (name: string, text: string) => { s.define(name, "function", ["b"]); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  // speed · time is a length, so it adds to a position.
+  fill("ahead", "b.position + b.speed · b.time");
+  assert.equal(s.errors(), "ok");
+  assert.throws(() => fill("wrong", "b.position + b.speed"), /units don't agree here: position\(…\) is m, speed\(…\) is m\/s/);
+  assert.throws(() => fill("wrong2", "match b\n  body(p, v, t) → p + v"), /units don't agree here: p is m, v is m\/s/);
+});
+
+test("a value made with a field takes its unit, and the unit is part of the type's hash", () => {
+  const k = new Lang();
+  const T = k.type("Run", [], [["run", [["distance", () => { const t = k.tref(NUMBER); (k.code.nodes[t] as { unit?: object }).unit = { m: 1 }; return t; }]]]]);
+  const lit = (value: number, unit: Record<string, number>) => { const l = k.lit(value); (k.code.nodes[l] as { unit?: object }).unit = unit; return l; };
+  const made = k.def("made");
+  k.define(made, k.fn(["x"], () => k.call(T.v.run, lit(5, { s: 1 }))));
+  const fine = k.def("fine");
+  k.define(fine, k.fn(["x"], () => k.call(ARITH.add, k.call(T.f["run.distance"], k.call(T.v.run, lit(5, { m: 1 }))), lit(2, { m: 1 }))));
+  const code = base(k.code), names = baseNames(k.names);
+  const errors = infer(code, names, undefined, checkOptions).errors;
+  // Only the 5 s given as a distance is refused.
+  assert.deepEqual(errors.map((e) => [e.id, e.message]), [[(code.nodes[(code.nodes[(code.nodes[made] as { body: string }).body] as { body: string }).body] as { args: string[] }).args[0], "the field's type says m, but this is s"]]);
+  const plain = { ...code, nodes: { ...code.nodes } };
+  const tref = (code.nodes[(code.nodes[T.f["run.distance"]] as { type: string }).type]);
+  plain.nodes[tref.id] = { ...tref, unit: undefined } as typeof tref;
+  assert.notEqual(hashDef(code, T.def), hashDef(plain, T.def));
+});
+
+// The text reader (editor/typed.ts): a number then a word that reads as a
+// unit and names nothing in scope is a number with that unit, a Float64.
+test("a number's unit is read from text, and a name in scope is still the name", () => {
+  const s = program(["body(position: Float64 m)"]);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  fill("fallen", ["x"], "x + 9.81 m/s² · 2 s · 3 s");
+  assert.match(s.view("fallen"), /= x \+ 9\.81 m\/s² · 2 s · 3 s$/m);
+  assert.equal(s.errors(), "ok");
+  assert.throws(() => fill("mixed", ["x"], "3 m + 2 s"), /units don't agree here: m can't meet s/);
+  // m is a parameter here, so `2 m` is no length: it doesn't read.
+  assert.throws(() => fill("shadowed", ["m"], "2 m"), /isn't read/);
+  // A unit literal where a field asks for one.
+  fill("placed", ["x"], "body(1.5 m)");
+  assert.match(s.errors(), /^ok/);
+  assert.throws(() => fill("misplaced", ["x"], "body(1.5 s)"), /the field's type says m, but this is s/);
+});
+
+// Known units only (Ersagun, 2026-11-13): a signature shows a unit where
+// one is written or follows from the body, and a number whose unit is
+// free stays plain Float64.
+test("a definition's signature shows its known units, and a unit-generic one shows none", () => {
+  const s = new Session(join(import.meta.dirname, "../examples/physics"));
+  assert.equal(s.typeOf(s.resolve("period")), "(Float64 m, Float64 m/s²) -[Choice]-> Float64 s");
+  assert.equal(s.typeOf(s.resolve("fall")), "(Float64 m, Float64 m/s, Float64 m/s², Float64 s) -> Bool");
+  assert.match(s.view("period"), /^\s*period#\w+ : \(Float64 m, Float64 m\/s²\) -\[Choice\]-> Float64 s$/m);
+  const p = program(["body(position: Float64 m)"]);
+  p.define("twice", "function", ["x"]);
+  p.replace(/□#(\w+)/.exec(p.view("twice"))![1], "x + x");
+  p.define("lifted", "function", ["b"]);
+  p.replace(/□#(\w+)/.exec(p.view("lifted"))![1], "b.position + 1.5 m");
+  assert.equal(p.typeOf(p.resolve("lifted")), "(Body) -> Float64 m");
+  assert.doesNotMatch(p.typeOf(p.resolve("twice")), /Float64 \S*m/);
+});

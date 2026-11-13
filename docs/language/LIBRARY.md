@@ -179,6 +179,16 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 - **negate** : `(Real) -> Real`. −a for a Real: what the generic − is at Real.
 - **real fraction** : `(Int, Int) -> Real`. top/bottom as a Real: what a literal at Real becomes. Not offered: as real is.
 
+## Natural numbers
+
+Nat is the natural numbers as data: zero, or succ(n), one more than n. A program matches and folds on a Nat as on any data, so a definition says what it computes the mathematical way, and the compiler stores each Nat as an Int: zero is 0, succ adds one, a match tests for 0, a fold is a loop, and add and multiply are Int's + and ·. natural and integer go between Nat and Int. A program can write a representation of its own for Nat (REPRESENTATIONS.md), and the compiler weighs it beside these.
+
+- **Nat** (type) (numbers module). A natural number, 0, 1, 2 and on: zero, or succ(n), one more than a natural number n. A program matches and folds on it as written; the compiler stores it as an Int, where succ adds one and a fold is a loop, unless a program's own representation is cheaper for what it does.
+- **natural** : `(Int) -> Nat` (numbers module). The Int i as a natural number: succ applied i times to zero, and zero for an i below 0.
+- **integer** : `(Nat) -> Int` (numbers module). The natural number n as an Int: how many succs it has.
+- **add** : `(Nat, Nat) -> Nat` (numbers module). a + b for natural numbers: succ applied to b once for each succ of a. Stored as Ints, it is Int's +.
+- **multiply** : `(Nat, Nat) -> Nat` (numbers module). a × b for natural numbers: b added once for each succ of a. Stored as Ints, it is Int's ·.
+
 ## True and false, sameness and order
 
 - **Bool** (type). true or false. `if c then a else b` is a match on a Bool.
@@ -615,6 +625,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **Wait** (type). An effect: wait(milliseconds) pauses the program. On the command line only: a page can't wait.
 - **Settings** (type). An effect: my locale() is the language of the person running the program, as a Locale, for uppercase, lowercase and collated, and my time zone() their time zone's IANA name ("Europe/Istanbul"), for zone offset and instant text in zone. A match with a case for each answers them (a test picks them); with nothing around it, the computer's settings answer.
 - **Permissions** (type). An effect: ask permission(what) asks the person for a permission, "camera", "microphone", "location" or "notifications", and answers whether it was given; one the platform doesn't know is no. A page's handler waits for the answer, as for a fetch. A match with a case answers it (a test decides); with nothing around it the platform asks, and a command line, which has no such dialog, answers yes.
+- **Environment** (type). An effect: environment variable(name) is the value of the process's environment variable by that name, or none where it isn't set. A match with a case answers it (a test decides); with nothing around it the world answers, and ters run --allow leaves it out unless the list names environment. A page has none.
 - **Release** (type). The marker of a handler's release case: release → body runs once when the match ends, by any exit (finished, a case that does not resume, a failure), after the handlers inside it. Its body gives Unit and may only log.
 - **Log** (type). An effect: log(line) is debugging output. It can run anywhere, even inside a search; when nothing handles it the line goes to standard error (in a page, the browser's console).
 - **Check** (type). An effect for tests: expect(holds, what) says what should hold. A definition that performs it is a test, and ters test runs it on its saved inputs and on small values, reporting every expect that failed with the inputs it failed on.

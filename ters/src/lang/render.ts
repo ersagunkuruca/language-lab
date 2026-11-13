@@ -26,6 +26,8 @@ import { implementationOps, isOperation } from "./records.ts";
 import { partPort } from "./results.ts";
 import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE, tupleVariant } from "./std.ts";
 import { NUMBER, showIn } from "./types.ts";
+import { formatUnit } from "../units.ts";
+import { withUnits } from "./unit-types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
@@ -148,6 +150,12 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   };
   const leave = (ids: Id[]) => ids.forEach(() => inScope.pop());
   const typeAt = (id: Id) => { const t = info?.typeOf.get(id); return t ? showIn(t, names, info!.subst, pres.style.rowDots) : null; };
+  // A definition's own type, with the units its signature shows (L252).
+  const defTypeAt = (id: Id) => {
+    const t = info?.typeOf.get(id);
+    const w = t && withUnits(code, id, info!.subst.zonk(t), names);
+    return w ? showIn(w.type, w.names, info!.subst, pres.style.rowDots) : typeAt(id);
+  };
   // A name, with its type beside it in the pane.
   const bind = (id: Id): Part => { const t = typeAt(id); return part("bnd", [nameOf(id), ...(t ? [{ cls: "ty", pane: true as const, kids: [`: ${t}`] }] : [])], id); };
   const con = (id: Id) => part("con", [base(id)]);
@@ -217,7 +225,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       case "lit": {
         // A number written as text (1/2 at Rational) is a number.
         // A whole Float64 keeps its point, 1500.0, so it reads back as one (E192).
-        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [n.of === NUMBER && Number.isInteger(n.value) ? `${n.value}.0` : String(n.value)], id));
+        // A number with a unit says it: 9.81 m/s² (L252).
+        const unit = n.unit && Object.keys(n.unit).length ? ` ${formatUnit(n.unit)}` : "";
+        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [(n.of === NUMBER && Number.isInteger(n.value) ? `${n.value}.0` : String(n.value)) + unit], id));
         if (pane) { const l = litLabel(n.value); return atom(part("lit", [l.short], id, l.full)); }
         return atom(part("lit", [JSON.stringify(n.value)], id));
       }
@@ -610,7 +620,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   const bare = (p: Id) => typeAt(p)!.split(" where ")[0];
   const t = shape && effs && shape.params.every((p) => typeAt(p))
     ? `(${shape.params.filter((p) => !defResults!.includes(p)).map(bare).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${defResults!.map((r) => `${nameOf(r)}: ${bare(r)}`).join(", ")}${where}`
-    : typeAt(defId);
+    : defTypeAt(defId);
   // A … in it says, on hover, whose effects it stands for (E261): the
   // functions the definition is given.
   const fnsGiven = t?.includes("…") && body?.kind === "lambda" ? body.params.filter((p) => { const n = node(p); const ty = info?.typeOf.get(p); return n && ty && info!.subst.resolve(ty).t === "fn"; }).map(nameOf) : [];
@@ -651,6 +661,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     const n = node(id);
     if (n.kind === "tfun") return `(${n.params.map(typeText).join(", ")}) ${n.effects?.length ? `-[${n.effects.map(nameOf).join(", ")}]->` : "->"} ${typeText(n.result)}`;
     const r = n as NodeOf<"tref">;
-    return [nameOf(r.target), ...r.args.map((a) => { const s = typeText(a); return s.includes(" ") ? `(${s})` : s; })].join(" ");
+    // A unit written in the type follows it (`Float64 m/s`, L252).
+    return [nameOf(r.target), ...r.args.map((a) => { const s = typeText(a); return s.includes(" ") ? `(${s})` : s; }), ...(r.unit && Object.keys(r.unit).length ? [formatUnit(r.unit)] : [])].join(" ");
   }
 }

@@ -1,5 +1,5 @@
 // A type written as the MCP's view prints it, read back into type nodes
-// (I183): `Float64`, `List Ball`, `(a, Ball, Float64) -> Float64`,
+// (I183): `Float64`, `Float64 m/s` (a unit, L252), `List Ball`, `(a, Ball, Float64) -> Float64`,
 // `(a) -[Choice]-> Float64`, `Set (Text, Int)` (a tuple's parts in
 // parentheses with no arrow after them). A name is a builtin type, a data type or
 // effect the program or the library defines, or one of `params` (the
@@ -9,6 +9,8 @@
 import type { Code, Id, NodeData } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { tupleType } from "../src/lang/std.ts";
+import { NUMBER } from "../src/lang/types.ts";
+import { parseUnit } from "../src/units.ts";
 
 export type Build = (add: (n: NodeData) => Id) => Id;
 
@@ -72,6 +74,10 @@ export function readType(text: string, known: Map<string, Id>, params: Map<strin
     while (n > 0 && !lookup(words.slice(0, n).join(" "))) n--;
     if (!n) throw new Error(`no type named ${words.join(" ")}`);
     const head = lookup(words.slice(0, n).join(" "))!;
+    // A unit after Float64 (`Float64 m/s`, L252): a word that names no type
+    // and reads as a unit.
+    const unit = head === NUMBER && words.length === n + 1 ? parseUnit(words[n]) : null;
+    if (unit) return (add) => add({ kind: "tref", target: head, args: [], unit });
     const args: Build[] = words.slice(n).map((w) => { const id = lookup(w); if (!id) throw new Error(`no type named ${w}`); return (add) => add({ kind: "tref", target: id, args: [] }); });
     for (;;) {
       if (peek()?.t === "(") { i++; args.push(grouped()); continue; }

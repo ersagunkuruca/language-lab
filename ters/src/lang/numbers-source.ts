@@ -15,8 +15,11 @@ import { merge, type Id, type NodeOf } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ALGEBRAIC_OPS, REAL_OPS, ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std } from "./std.ts";
+import { ALGEBRAIC_OPS, REAL_OPS, ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, tupleType, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std, stdNames, COST, JOBS, REPRESENTATION_V } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
+import { infer } from "./infer.ts";
+import { representationsIn } from "./represent.ts";
+import { layer, type Names } from "../presentation.ts";
 
 // On the prelude, whose laws give Trig's fields Dual leaves to their ways.
 export function buildNumbers(pre: Module): Module {
@@ -642,9 +645,57 @@ export function buildNumbers(pre: Module): Module {
     trigX,
   ];
 
-  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX];
+  // Nat (L249, NUMBERS.md stage 1): the natural numbers as data, zero or
+  // one more than a natural number, so a program says zero and succ and
+  // matches and folds on them. How one is stored is the chooser's: its
+  // rows, below, are the definition itself (unary) and an Int, where zero
+  // is 0, succ adds one, a match tests for 0 and a fold is a loop over
+  // range(n) (examples/numbers ran it first, as its own type).
+  const NT = k.type("Nat", [], [["zero", []], ["succ", [["pred", (self) => k.tref(self)]]]], "natural numbers");
+  const [zeroN, succN] = [NT.v.zero, NT.v.succ];
+  const natFn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const natural = natFn("natural", ["i"], (i) => k.fold(k.call(INT_OPS.range, i), [
+    { variant: NIL, names: [], body: () => k.x(zeroN) },
+    { variant: CONS, names: ["j", "rest"], results: [null, "r"], body: (_, [, r]) => k.call(succN, r!) },
+  ]));
+  const integer = natFn("integer", ["n"], (n) => k.fold(n, [
+    { variant: zeroN, names: [], body: () => k.int(0) },
+    { variant: succN, names: ["m"], results: ["r"], body: (_, [r]) => k.call(INT_OPS.add, r!, k.int(1)) },
+  ]));
+  const addN = natFn("add", ["a", "b"], (a, b) => k.fold(a, [
+    { variant: zeroN, names: [], body: () => b },
+    { variant: succN, names: ["m"], results: ["m + b"], body: (_, [r]) => k.call(succN, r!) },
+  ]));
+  const mulN = natFn("multiply", ["a", "b"], (a, b) => k.fold(a, [
+    { variant: zeroN, names: [], body: () => k.x(zeroN) },
+    { variant: succN, names: ["m"], results: ["m × b"], body: (_, [r]) => k.call(addN, b, r!) },
+  ]));
+  const one = (n: Id) => k.call(INT_OPS.sub, n, k.int(1));
+  const zeroI = k.def("zero (Int)");
+  k.define(zeroI, k.int(0));
+  const succI = natFn("succ (Int)", ["n"], (n) => k.call(INT_OPS.add, n, k.int(1)));
+  const matchI = natFn("match Nat (Int)", ["n", "if zero", "if succ"], (n, z, s) => k.if(k.call(S.equal, n, k.int(0)), k.call(z), k.call(s, one(n))));
+  const foldI = natFn("fold Nat (Int)", ["n", "if zero", "if succ"], (n, z, s) => k.fold(k.call(INT_OPS.range, n), [
+    { variant: NIL, names: [], body: () => k.call(z) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "r"], body: ([i], [, r]) => k.call(s, k.call(INT_OPS.sub, one(n), i), r!) },
+  ]));
+  const naturalI = natFn("natural (Int)", ["i"], (i) => k.if(k.call(INT_OPS.less, i, k.int(0)), k.int(0), i));
+  const integerI = natFn("integer (Int)", ["n"], (n) => n);
+  // The two rows, written as representations (REPRESENTATIONS.md, L108b),
+  // as the trees' are: read back below into the module's rows.
+  const cost = (c: string) => k.x(`${COST}.${c}`);
+  const natRow = (name: string, meaning: Id | null, space: string, jobs: Id[]) => { const d = k.def(name); k.define(d, k.call(REPRESENTATION_V, meaning ? k.x(meaning) : k.fn(["value"], (v) => v), cost(space), k.list(...jobs))); return d; };
+  const written = (j: Id, c: string) => k.call(JOBS.asWritten, k.x(j), cost(c));
+  const by = (j: Id, d: Id, c: string) => k.call(JOBS.job, k.x(j), k.x(d), cost(c));
+  const unaryRow = natRow("unary", null, "linear", [written(zeroN, "constant"), written(succN, "constant"), k.call(JOBS.matchAsWritten, cost("constant")), k.call(JOBS.foldAsWritten, cost("linear")),
+    written(addN, "linear"), written(mulN, "quadratic"), written(integer, "linear"), written(natural, "linear")]);
+  const intRow = natRow("int", natural, "logarithmic", [by(zeroN, zeroI, "constant"), by(succN, succI, "constant"), k.call(JOBS.matchBy, k.x(matchI), cost("constant")), k.call(JOBS.foldBy, k.x(foldI), cost("linear")),
+    by(addN, INT_OPS.add, "logarithmic"), by(mulN, INT_OPS.mul, "polylogarithmic"), by(integer, integerI, "constant"), by(natural, naturalI, "constant")]);
+  const natReps = [unaryRow, intRow];
+
+  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX, NT.def, natural, integer, addN, mulN];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral];
+  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral];
   const comments: Record<Id, string> = {
     [RT.def]: "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
     [embedIR]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
@@ -732,11 +783,28 @@ export function buildNumbers(pre: Module): Module {
     [showX]: "A Fixed as text: the shortest decimal that reads back to the same steps, so 0.1 shows as 0.1 and every step shows differently. Not offered: the one show shows every number; kept so programs saved before still open.",
     [divX]: "a ÷ b for Fixed, rounded down to a step; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
     [sqrtX]: "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
+    [NT.def]: "A natural number, 0, 1, 2 and on: zero, or succ(n), one more than a natural number n. A program matches and folds on it as written; the compiler stores it as an Int, where succ adds one and a fold is a loop, unless a program's own representation is cheaper for what it does.",
+    [natural]: "The Int i as a natural number: succ applied i times to zero, and zero for an i below 0.",
+    [integer]: "The natural number n as an Int: how many succs it has.",
+    [addN]: "a + b for natural numbers: succ applied to b once for each succ of a. Stored as Ints, it is Int's +.",
+    [mulN]: "a × b for natural numbers: b added once for each succ of a. Stored as Ints, it is Int's ·.",
+    [zeroI]: "zero, for Nat stored as an Int: 0. A helper of that representation. Not offered.",
+    [succI]: "succ, for Nat stored as an Int: one more. A helper of that representation. Not offered.",
+    [matchI]: "A match on Nat, done on an Int: 0 is zero, and anything else is succ of one less. A helper of that representation. Not offered.",
+    [foldI]: "A fold on Nat, done on an Int: a loop over range(n), giving each step's predecessor and what was folded below it. A helper of that representation. Not offered.",
+    [naturalI]: "natural, for Nat stored as an Int: i, or 0 below 0. A helper of that representation. Not offered.",
+    [integerI]: "integer, for Nat stored as an Int: the Int itself. A helper of that representation. Not offered.",
+    [unaryRow]: "Nat stored as written, zero and succ cells: a number n takes n of them. One of the ways the compiler may store Nat.",
+    [intRow]: "Nat stored as an Int: its meaning is natural, and each job is Int's own. One of the ways the compiler may store Nat, and the one it picks unless a program's own is cheaper.",
     [trigX]: "How Fixed does Trig: CORDIC and series, all in Ints, so the same bits on every machine. Found by its type, so not offered: sin is.",
   };
   const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers, ...laws], merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the numbers module can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("numbers", p.code, p.names, offered.map(at), { ...pre.pins, ...p.pins }, notes, [...impls, ...helpers, ...laws].map(at));
+  const m = makeModule("numbers", p.code, p.names, offered.map(at), { ...pre.pins, ...p.pins }, notes, [...impls, ...helpers, ...laws].map(at));
+  // Nat's rows, read off their published definitions as a program's own
+  // are (represent.ts representationsIn), so LIBRARY.reps has them.
+  const published = merge(prelude, std, pre.code, p.code);
+  return { ...m, representations: representationsIn(published, infer(published, layer<Names>(stdNames, pre.names, p.names)), p.names, natReps.map(at)) };
 }

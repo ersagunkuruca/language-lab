@@ -24,10 +24,12 @@ import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
 import { ARITH, ARITHMETIC, ASSOCIATIVE, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING, schemeArith, shownIn, showType, type Type } from "../ters/src/lang/types.ts";
+import { parseUnit, type Unit } from "../ters/src/units.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
 import { DEF_VALUE, type Value } from "../ters/src/lang/run.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
+import { storedRows } from "../ters/src/lang/library-reps.ts";
 import { leftToWays, pickWays, waysIn } from "../ters/src/lang/ways.ts";
 import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
@@ -876,7 +878,7 @@ function readings(t: Typed): Typed[] {
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple. A relation, (s, d) → a, b = condition, has
 // its results among its inputs and the condition as its body (L225e).
-type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id> } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] };
+type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id> } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -931,6 +933,14 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   if (named) {
     const v = LIBRARY.code.nodes[named]?.kind === "def" ? parseValue(t, code, names) : undefined;
     if (!v || "error" in v || namesDef(v.value)) return { ref: named };
+  }
+  // A number with its unit, 9.81 m/s², as the view prints it (L252): the
+  // word after it reads as a unit and names nothing in scope, so 2 m with
+  // a variable m in scope is not a length.
+  const united = /^(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s+([^\s()[\],"+\-−·×÷=<>]+)$/i.exec(t);
+  if (united && !scope.has(united[2])) {
+    const u = parseUnit(united[2]);
+    if (u && Object.keys(u).length) return { value: Number(united[1]), float: true, unit: u };
   }
   // A name bound here is the binder, not a case of the same name read as
   // part of a value: `[after, before]` in a case whose fields are after
@@ -1382,6 +1392,8 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   };
   const nn: Names = { ...names };
   const tree = (t: Typed, place?: Id): Id => {
+    // A number with a unit is a Float64, as the units' saved literals are (L252).
+    if ("value" in t && t.unit) { const id = place ?? freshId(); nodes[id] = { id, kind: "lit", value: t.value as number, unit: t.unit }; return id; }
     if ("value" in t && t.float) { const id = place ?? freshId(); nodes[id] = { id, kind: "lit", value: t.value as number, of: NUMBER }; return id; }
     if ("value" in t) return build(t.value, place);
     if ("params" in t) {
@@ -2685,11 +2697,12 @@ export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, n
 
 // How a data type is stored when main runs (REPRESENTATIONS.md step 3,
 // E159): the compiler's choice among the representations the program
-// writes for it, the cheapest for the jobs main uses, as `ters check`
+// writes for it and the library's for a type stored whole (std's Nat,
+// library-reps.ts storedRows), the cheapest for the jobs main uses, as `ters check`
 // says it. Shown, never chosen here. Null without a choice to show.
 export function storedAs(code: Code, info: Info, names: Names, own: Id[], type: Id, main: Id | null): { rep: string; jobs: string[] } | null {
   if (!main || info.errors.length) return null;
-  const reps = representationsIn(code, info, names, own).filter((r) => r.of === type);
+  const reps = storedRows(code, own, representationsIn(code, info, names, own)).filter((r) => r.of === type);
   if (reps.length < 2) return null;
   const c = choose(code, main, reps);
   return { rep: c.rep.name, jobs: c.jobs };
@@ -2701,7 +2714,7 @@ export function storedAll(code: Code, info: Info, names: Names, own: Id[], main:
   const out = new Map<Id, { rep: string; jobs: string[] }>();
   if (!main || info.errors.length) return out;
   const byType = new Map<Id, ReturnType<typeof representationsIn>>();
-  for (const r of representationsIn(code, info, names, own)) byType.set(r.of, [...(byType.get(r.of) ?? []), r]);
+  for (const r of storedRows(code, own, representationsIn(code, info, names, own))) byType.set(r.of, [...(byType.get(r.of) ?? []), r]);
   for (const [type, reps] of byType) if (reps.length >= 2) { const c = choose(code, main, reps); out.set(type, { rep: c.rep.name, jobs: c.jobs }); }
   return out;
 }
