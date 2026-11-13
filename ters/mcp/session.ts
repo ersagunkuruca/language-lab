@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, freshId, portNames, portsOf, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
+import { collect, freshId, parentOf, portNames, portsOf, subtree, swapIn, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -31,6 +31,7 @@ import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
 import { onTodaysIds, S, SIGS, TRUE } from "../src/lang/std.ts";
+import { printSaved } from "../src/saved.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
@@ -103,7 +104,7 @@ export class Session {
       writeFileSync(this.path, toFile({ ...this.file, code: this.code, names: this.names, comments: this.comments, signatures: this.pins }, LIBRARY.code));
       return;
     }
-    const json = (x: unknown) => JSON.stringify(x, null, 2) + "\n";
+    const json = (x: unknown) => printSaved(x);
     writeFileSync(join(this.path, "code.json"), json(mine));
     writeFileSync(join(this.path, "names.default.json"), json(this.names));
     if (Object.keys(this.comments).length || existsSync(join(this.path, "comments.json"))) writeFileSync(join(this.path, "comments.json"), json(this.comments));
@@ -328,6 +329,8 @@ export class Session {
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def);
     if (/^\s*handle\s/.test(text)) return this.handleIn(code, names, hole, text, def);
     if (/^\s*fold\s/.test(text)) return this.foldIn(code, names, hole, text, def);
+    const block = this.blockIn(code, names, hole, text, def, as);
+    if (block) return block;
     const solve = this.solveIn(code, names, hole, text);
     if (!solve) return this.fillOne(code, names, hole, text, def, as);
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
@@ -369,6 +372,46 @@ export class Session {
       ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
     if (!near) return r;
     return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
+  }
+
+  // A function whose body is on the lines after its `=>`, deeper than
+  // the line it starts on (I228), as the view prints one:
+  //   all(() =>
+  //     a = one of(range from(1, 21))
+  //     b = one of(range from(a + 1, 21))
+  //     [a, b])
+  // The text around it is read with the body a hole, then the body into
+  // that hole as text of its own (steps, a match, ...), so its steps bind
+  // and the reader never sees them. A closing bracket at the body's end
+  // that the body doesn't open is the text around it's. Null when no line
+  // ends in `=>` with deeper lines after it.
+  private blockIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } | null {
+    const lines = text.replace(/^\s*\n/, "").split("\n");
+    const indent = (l: string) => l.length - l.trimStart().length;
+    const at = lines.findIndex((l, i) => /=>\s*$/.test(l) && lines.slice(i + 1).find((m) => m.trim()) !== undefined && indent(lines.slice(i + 1).find((m) => m.trim())!) > indent(l));
+    if (at < 0) return null;
+    let end = at + 1;
+    while (end < lines.length && (!lines[end].trim() || indent(lines[end]) > indent(lines[at]))) end++;
+    let body = lines.slice(at + 1, end).join("\n").replace(/\s+$/, "");
+    // The brackets the body closes without opening, from its end.
+    let depth = 0, inText = false;
+    for (let i = 0; i < body.length; i++) {
+      const c = body[i];
+      if (c === '"') inText = !inText;
+      else if (!inText && "([{".includes(c)) depth++;
+      else if (!inText && ")]}".includes(c)) depth--;
+    }
+    let closers = "";
+    while (depth < 0 && /[)\]}]\s*$/.test(body)) { body = body.replace(/\s*$/, ""); closers = body.slice(-1) + closers; body = body.slice(0, -1); depth++; }
+    const around = [...lines.slice(0, at), `${lines[at].replace(/\s*$/, "")} □${closers}`, ...lines.slice(end)].join("\n");
+    const before = new Set(Object.keys(code.nodes));
+    const r = this.fill(code, names, hole, around, def, as);
+    if (!r.ok) return r;
+    // The new hole that is a function's body: where the body goes.
+    const inside = subtree(r.code, hole).filter((x) => !before.has(x) || x === hole);
+    const bodies = inside.filter((x) => { const n = r.code.nodes[x]; return n?.kind === "lambda" && r.code.nodes[n.body]?.kind === "hole" && !before.has(n.body); }).map((x) => (r.code.nodes[x] as NodeOf<"lambda">).body);
+    if (bodies.length !== 1) return { ok: false, reason: `${lines[at].trim()} doesn't read as a function whose body is on the lines after it` };
+    return this.fill(r.code, r.names, bodies[0], dedent(body), def);
   }
 
   // Steps on lines of their own, as the view prints a let (I217 M5):
@@ -705,14 +748,18 @@ export class Session {
     return off ? "ok" : `ok: ${this.name(def)} : ${this.typeOf(def)}`;
   }
 
-  // A let before `before` (or at the top of the body): `name = value`.
+  // A let `name = value` just before the step `at` is in (or at the top of
+  // the body): before a let, before that let; at a hole after the steps,
+  // after them, so a sequence is built top-down, each step naming the ones
+  // before it (I229). Inside a function given as a value, all(() => □),
+  // the step goes inside it, where its effects are handled.
   step(at: string, name: string, value: string): string {
     const before = this.resolve(at);
     const def = this.defOf(before);
     if (!def) throw new Error(`#${this.id(before)} isn't in a definition`);
     return this.apply(def, () => {
       const info = editorInfo(this.code, this.names);
-      const r = T.addStep(this.code, this.names, info, def, before === def ? undefined : before);
+      const r = before === def ? T.addStep(this.code, this.names, info, def) : this.stepBefore(info, def, before);
       if (!r.ok || !r.dot) return r.ok ? { ok: false, reason: "no step added" } : r;
       const names = { ...r.names, [r.dot]: name.trim() || "_" };
       const let_ = Object.values(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
@@ -720,6 +767,25 @@ export class Session {
       if (!value.trim()) return { ok: true, code: r.code, names };
       return this.fill(r.code, names, hole, value, def);
     });
+  }
+
+  // The let goes around the innermost body holding `part`: a function's,
+  // a let's (the steps after it), a case's, the definition's.
+  private stepBefore(info: Info, def: Id, part: Id): ReturnType<typeof T.addStep> {
+    const code = this.code;
+    if (!subtree(code, def).includes(part)) return { ok: false, reason: "a step goes before a value of this definition" };
+    let at = part;
+    for (let up = parentOf(code, at); up && up.parent !== def && up.slot !== "body" && up.slot !== "otherwise"; up = parentOf(code, at)) at = up.parent;
+    const n = code.nodes[at];
+    if (!n || n.kind === "def" || n.kind === "typedef" || n.kind === "arm") return { ok: false, reason: "a step goes before a value of this definition" };
+    const dot = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
+    const next = swapIn(code, at, let_);
+    next.nodes[dot] = { id: dot, kind: "binder" };
+    next.nodes[hole] = { id: hole, kind: "hole" };
+    next.nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: at };
+    next.nodes[let_] = { id: let_, kind: "call", fn: lam, args: [hole] };
+    const r = T.guardTyped(info, next, this.names, hole, "Added a step.");
+    return r.ok ? { ...r, dot } : r;
   }
 
   // Replace a part by a match on a variable, one case per variant, each a copy.
@@ -882,7 +948,14 @@ export class Session {
     if (!made.ok) throw new Error(made.reason);
     const def = made.code.defs.at(-1)!;
     const hole = (made.code.nodes[(made.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"lambda">).body;
-    const r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
+    let r = T.fillValue(made.code, made.names, editorInfo(made.code, made.names), hole, text, def);
+    // A definition's name alone is its value (I233): the palette lists
+    // names already, but eval has no list to pick from.
+    if (!r.ok && r.reason === "a name alone is listed already") {
+      const target = this.resolve(text);
+      if (this.code.nodes[target]?.kind !== "def") throw new Error(`${text.trim()} isn't a definition`);
+      r = { ok: true, code: { ...made.code, nodes: { ...made.code.nodes, [hole]: { id: hole, kind: "ref", target } as NodeOf<"ref"> } }, names: made.names, note: "" };
+    }
     if (!r.ok) throw new Error(r.reason);
     const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
     const own = new Set(subtree(r.code, def));
@@ -949,7 +1022,7 @@ export class Session {
     const results = withSteps(STEPS, () => runTests(this.code, this.info, this.allNames, this.own, saved, { world: this.world(out, "") }));
     if (!results.length) return "no tests (a test is a definition that performs Check, or an accepted answer)";
     return results.flatMap((r) => r.error ? [`✗ ${r.name}: ${r.error}`]
-      : !r.failures.length ? [`✓ ${r.name} (${r.cases})`]
+      : !r.failures.length ? [`✓ ${r.name} (${r.cases} case${r.cases === 1 ? "" : "s"})`]
       : r.failures.slice(0, 3).map((f) => `✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`)).join("\n");
   }
 }

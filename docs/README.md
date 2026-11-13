@@ -58,6 +58,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
 | [CHECK-BY-GROUP-2026-11-03.md](design/tools/CHECK-BY-GROUP-2026-11-03.md) | Checking per definition group, cached by its hash and its dependencies' schemes, so an edit rechecks only what it changed | design (L183; steps L215) |
 | [DIFF.md](design/tools/DIFF.md) | Reading a change to a program: `ters diff` by node id, in the CLI, from git and in the editor | built (E255a to E255c; E255d declined) |
+| [SAVED-FORMAT.md](design/tools/SAVED-FORMAT.md) | The saved program format: number literals as their digits, canonical JSON with one node per line | design (I237, I240) |
 | [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`ters mcp`) | built: read tools, edits, eval |
 
 ### Numbers

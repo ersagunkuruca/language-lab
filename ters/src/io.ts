@@ -14,13 +14,14 @@ import { merge } from "./model.ts";
 import { layer, type Names, type Presentation, type Style } from "./presentation.ts";
 import { prelude, preludeNames } from "./prelude.ts";
 import { std, stdNames } from "./lang/std.ts";
+import { parseSaved, printSaved } from "./saved.ts";
 
 const read = <T>(path: string, fallback?: T): T => {
   if (!existsSync(path)) {
     if (fallback !== undefined) return fallback;
     throw new Error(`missing ${path}`);
   }
-  return JSON.parse(readFileSync(path, "utf8"));
+  return parseSaved(readFileSync(path, "utf8"));
 };
 
 export const root = new URL("..", import.meta.url).pathname;
@@ -42,5 +43,5 @@ export function loadPresentation(dir: string, opts: { names: string[]; style: st
 }
 
 export function save(path: string, value: unknown) {
-  writeFileSync(path, JSON.stringify(value, null, 2) + "\n");
+  writeFileSync(path, printSaved(value));
 }

@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import { merge, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
+import { parseSaved, printSaved } from "../src/saved.ts";
 import { cacheChecks, infer, type Info, type Options } from "../src/lang/infer.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { groupStore } from "../src/lang/library-store.ts";
@@ -393,7 +394,7 @@ if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await n
 // Program files compared and merged id by id (merge-files.ts, L113).
 if (command === "diff" || command === "merge") {
   const { describe, diffLines, merge3 } = await import("../src/merge-files.ts");
-  const json = (f: string | undefined) => { if (!f || !existsSync(f)) return undefined; try { return JSON.parse(readFileSync(f, "utf8")); } catch { fail(`${f} isn't JSON`); } };
+  const json = (f: string | undefined) => { if (!f || !existsSync(f)) return undefined; try { return parseSaved(readFileSync(f, "utf8")); } catch { fail(`${f} isn't JSON`); } };
   if (command === "diff") {
     // A program against a git revision (E255b, DIFF.md): `--from REV`, and
     // `--to REV` (else the working tree). With no program, every program
@@ -463,7 +464,7 @@ if (command === "diff" || command === "merge") {
   const o = json(ours), t = json(theirs);
   const { merged, conflicts } = merge3(json(path), o, t);
   // git reads the result from ours' file.
-  writeFileSync(ours, JSON.stringify(merged, null, 2) + "\n");
+  writeFileSync(ours, printSaved(merged));
   if (!conflicts.length) process.exit(0);
   // Names for the message: a code.json's are beside it.
   const beside = shown ? join(dirname(shown), "names.default.json") : "";
@@ -484,7 +485,7 @@ if (command === "fetch") {
   };
   const text = (await get(url)) ?? fail(`nothing at ${url}`);
   let m: Module;
-  try { m = JSON.parse(text); } catch { fail(`${url} isn't a module`); }
+  try { m = parseSaved(text); } catch { fail(`${url} isn't a module`); }
   const wrong = verify(m, LIBRARY.code);
   if (wrong) fail(`${url} isn't what it says: ${wrong}`);
   const logText = await get(url.replace(/\.json$/, "") + ".log.json");
@@ -494,7 +495,7 @@ if (command === "fetch") {
   if (r.problem) fail(`${url}'s log is refused: ${r.problem}`);
   const file = basename(url.replace(/[?#].*$/, ""));
   mkdirSync(join(path, "modules"), { recursive: true });
-  writeFileSync(join(path, "modules", file), JSON.stringify(m, null, 2) + "\n");
+  writeFileSync(join(path, "modules", file), printSaved(m));
   if (log.length) writeFileSync(join(path, "modules", logFile(file)), JSON.stringify(log, null, 2) + "\n");
   const ls = m.lineages ?? {};
   console.log(`fetched ${m.title}: ${m.code.defs.length} definitions checked by hash${Object.keys(ls).length ? `, ${Object.values(ls).map((vs) => `${m.names[vs.at(-1)!] ?? vs.at(-1)} at version ${vs.length}`).join(", ")}` : ""}${log.length ? `, its log signed by its author${Object.keys(r.broken).length ? ` (${Object.keys(r.broken).length} marked broken)` : ""}` : ", no log"}; ters upgrade moves the program onto it`);
@@ -505,7 +506,7 @@ if (command === "broken") {
   const [name, n, ...why] = rest.filter((a, i, xs) => a !== "--key" && xs[i - 1] !== "--key");
   const ki = rest.indexOf("--key");
   if (!path || !name || !n || !why.length) fail("broken needs a module file, a name, a version number and a reason");
-  const m = JSON.parse(readFileSync(path, "utf8")) as Module;
+  const m = parseSaved<Module>(readFileSync(path, "utf8"));
   const lineages = m.lineages ?? {};
   const l = Object.keys(lineages).find((x) => lineages[x].some((v) => m.names[v] === name)) ?? fail(`${path} has no lineage named ${name}`);
   const v = lineages[l][Number(n) - 1] ?? fail(`${name} has ${lineages[l].length} version${lineages[l].length === 1 ? "" : "s"}`);
@@ -806,12 +807,12 @@ switch (command) {
     if (!wanted.length) fail("publish needs the names of the definitions to publish");
     if (p.info.errors.length) fail(`${p.title} has errors; ters check says which`);
     const defs = wanted.map((n) => p.own.find((d) => p.names[d] === n) ?? fail(`${p.title} has no definition named ${n}`));
-    const prev = existsSync(out) ? (JSON.parse(readFileSync(out, "utf8")) as Module) : null;
+    const prev = existsSync(out) ? parseSaved<Module>(readFileSync(out, "utf8")) : null;
     const r = publishVersion(prev, prev?.title ?? p.title, p.code, p.names, defs, LIBRARY.code, LIBRARY.pins);
     if (!r.ok) fail(r.reason);
     const wrong = verify(r.module, LIBRARY.code);
     if (wrong) fail(`the module isn't what it says: ${wrong}`);
-    writeFileSync(out, JSON.stringify(r.module, null, 2) + "\n");
+    writeFileSync(out, printSaved(r.module));
     const lineages = r.module.lineages ?? {};
     // Each new version said current in the module's log, signed (L114a).
     if (r.added.length) {
@@ -839,7 +840,7 @@ switch (command) {
     if (!statSync(path).isDirectory()) fail(`${command} takes a program folder, whose modules folder holds what it uses`);
     const store0 = programStore(path);
     const modules = [...programModules(path), ...(store0 ? [store0] : [])];
-    const own = JSON.parse(readFileSync(join(path, "code.json"), "utf8")) as Code;
+    const own = parseSaved<Code>(readFileSync(join(path, "code.json"), "utf8"));
     let r: ReturnType<typeof upgradeOwn>;
     // What the modules' authors say in their logs (L114a): a used version
     // marked broken is said, and isn't moved to.
@@ -867,12 +868,12 @@ switch (command) {
     const saved = existsSync(file) ? savedFrom(JSON.parse(readFileSync(file, "utf8"))) : {};
     const failed = runTests(code, info, p.names, own.defs, saved, { world: nodeWorld(), hosts }).filter((t) => t.error || t.failures.length);
     if (failed.length) fail(`after the ${command}, ${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} (ters test says how); nothing written`);
-    writeFileSync(join(path, "code.json"), JSON.stringify(r.own, null, 2) + "\n");
+    writeFileSync(join(path, "code.json"), printSaved(r.own));
     // Both versions into the store (SHARING.md §4b, L115).
     const stored = addToStore(addToStore(store0, own, modules), r.own, modules);
     // The authors' keys pinned the first time the program took a lineage.
     const authors = { ...logs.authors, ...(store0?.authors ?? {}) };
-    writeFileSync(join(path, "store.json"), JSON.stringify(Object.keys(authors).length ? { ...stored, authors } : stored, null, 2) + "\n");
+    writeFileSync(join(path, "store.json"), printSaved(Object.keys(authors).length ? { ...stored, authors } : stored));
     // The program's names stay its own (L112): the author's renames are
     // said once, and taken only with --take-names; going back takes the
     // names that version had.
@@ -917,7 +918,7 @@ switch (command) {
     }
     for (const r of results) {
       if (r.error) console.log(`✗ ${r.name}: ${r.error}`);
-      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} cases${"kept" in r ? ", unchanged since it last ran" : ""})`);
+      else if (!r.failures.length) console.log(`✓ ${r.name} (${r.cases} case${r.cases === 1 ? "" : "s"}${"kept" in r ? ", unchanged since it last ran" : ""})`);
       for (const f of r.failures.slice(0, 3)) console.log(`✗ ${r.name}(${f.inputs.join(", ")}): ${f.what.join("; ")}`);
       if (r.failures.length > 3) console.log(`  … and ${r.failures.length - 3} more`);
     }

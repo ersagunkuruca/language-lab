@@ -668,6 +668,8 @@ function undeleteProgram() {
   render();
 }
 
+// The program Save file last asked a title for.
+let askedTitle: Program | null = null;
 function renameProgram(title: string) {
   if (!title.trim() || !doc.program.startsWith(MINE)) return;
   doc = { ...doc, title: title.trim() };
@@ -1054,7 +1056,8 @@ function textPanel(info: T.Info): string {
 
 // ---------------------------------------------------------------- typed programs
 
-const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style) } });
+// The blocks show a type's one effect-row variable as … (E261).
+const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style), rowDots: true } });
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
 // The same names object while the program, the definition and the names
 // are, so what is kept by the names (shown types, E200b) is kept.
@@ -2251,6 +2254,10 @@ document.addEventListener("pointerdown", (e) => {
 // Whatever selects something (a click, a menu's edit, a new program's
 // hole) shows it: the side column leaves the Guide for the Selected tab.
 let shownSelected: Id | null = null;
+// Opened again (a reload), the open definition's first hole is selected,
+// as when a program is opened, so its palette is on screen (I235). The
+// Guide shown on a first visit stays.
+if (!EMBED && !ui.selected) shownSelected = ui.selected = firstHole();
 function render() {
   if (ui.selected && ui.selected !== shownSelected && ui.panel === "guide") ui.panel = "node";
   shownSelected = ui.selected;
@@ -2284,6 +2291,15 @@ function draw() {
   // only changes the selection leaves the text where it was.
   const scroll = SCROLLERS.map((q) => [...document.querySelectorAll(q)].map((g) => [g.scrollLeft, g.scrollTop]));
   const focused = document.activeElement?.id;
+  // What's typed in a field and not yet put in (a new definition's name,
+  // a comment), kept across a redraw that builds the field again from the
+  // same value: a redraw that came on its own soon after the page loaded
+  // emptied the New form's fields (I219: the Nightly's editKeepsPlaces).
+  // A field built from another value now (what was typed was put in, or
+  // something else changed it) isn't touched. The palette's search keeps
+  // its own text (ui.query).
+  const typed = [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#app input[id][type=text], #app textarea[id]")]
+    .filter((e) => e.value !== e.defaultValue).map((e) => [e.id, e.value, e.defaultValue] as const);
   // A button that had the keyboard keeps it across the redraw, or hands it
   // to the one standing in for it: Run becomes Stop and back (E231c).
   const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
@@ -2321,6 +2337,10 @@ function draw() {
   const onPage = !errorsIn(info) && !holesIn(info) && !!pageMain(ownDefs(), info, pres().names);
   const status = h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note);
   const restore = () => {
+    for (const [id, value, was] of typed) {
+      const e = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (e && "defaultValue" in e && e.defaultValue === was && e.value === was) e.value = value;
+    }
     SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
     if (focused) document.getElementById(focused)?.focus();
     else if (act) {
@@ -2481,7 +2501,21 @@ document.addEventListener("click", (e) => {
     if (a === "paste") return pasteIntoSelected();
     if (a === "open-file") return openFile();
     if (a === "stop-search") return stopSearch();
-    if (a === "save-file") return saveFile();
+    if (a === "save-file") {
+      // A program still called Untitled n is asked for a title first, once:
+      // its title names the file (I235: untitled-1.json, without asking).
+      if (/^Untitled \d+$/.test(titleOf(doc)) && doc.program.startsWith(MINE) && askedTitle !== doc.program) {
+        askedTitle = doc.program;
+        ui.panel = "program";
+        if (onePane()) ui.pane = "side";
+        ui.note = `Give the program a title first: it names the file. Save file again keeps it as ${slug(titleOf(doc))}.json.`;
+        render();
+        const t = document.getElementById("f-title") as HTMLInputElement | null;
+        t?.focus(); t?.select();
+        return;
+      }
+      return saveFile();
+    }
     if (a === "embed-link") return void copyEmbedLink();
     if (a === "delete-program") return deleteProgram();
     if (a === "upgrade-modules") return upgradeModules();

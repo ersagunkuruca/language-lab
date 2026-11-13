@@ -11,6 +11,7 @@ import type { Options } from "./infer.ts";
 import type { Pins } from "./signatures.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "./library.ts";
 import { onTodaysIds } from "./std.ts";
+import { parseSaved } from "../saved.ts";
 import { verify, type Module } from "./modules.ts";
 // The library's check kept on disk between processes (I193).
 import "./library-store.ts";
@@ -44,7 +45,7 @@ export function programModules(dir: string): Module[] {
   return readdirSync(at).filter((f) => f.endsWith(".json") && !f.endsWith(".log.json")).sort().map((f) => readModule(join(at, f), `modules/${f}`));
 }
 const readModule = (path: string, shown: string): Module => {
-  const m = JSON.parse(readFileSync(path, "utf8")) as Module;
+  const m = parseSaved<Module>(readFileSync(path, "utf8"));
   const wrong = verify(m, LIBRARY.code);
   if (wrong) throw new Error(`${shown}: ${wrong}`);
   return m;

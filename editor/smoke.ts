@@ -452,6 +452,7 @@ async function searchGoesOn() {
 
 // A click on a wire puts a dot where you clicked, and nothing else moves
 // (BACKLOG E109), though the dot's let changes how main would be laid out.
+// On a wire out of a node, the dot is that node's output (E259).
 async function dotOnWire() {
   where = "a dot put on a wire";
   const p = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
@@ -470,7 +471,9 @@ async function dotOnWire() {
     await p.mouse.click(at.x, at.y);
     if (!/^Put a dot/.test(await p.locator(".status").innerText())) continue;
     const dot = (await dots()).find((d) => !had.has(d.id));
-    if (!dot || Math.hypot(dot.x - at.x, dot.y - at.y) > 8) errors.push(`${where}: wire ${i}: the dot is ${dot ? Math.round(Math.hypot(dot.x - at.x, dot.y - at.y)) : "?"}px from the click`);
+    // A dot on a node's output is on that node's right edge.
+    const onOutput = dot && await p.locator(`.p-graph [data-src="${dot.id}"]`).evaluate((e) => { const box = e.parentElement?.querySelector("rect"); return !!box && Math.abs(box.getBoundingClientRect().right - e.getBoundingClientRect().x - e.getBoundingClientRect().width / 2) < 4; });
+    if (!dot || (!onOutput && Math.hypot(dot.x - at.x, dot.y - at.y) > 8)) errors.push(`${where}: wire ${i}: the dot is ${dot ? Math.round(Math.hypot(dot.x - at.x, dot.y - at.y)) : "?"}px from the click`);
     const now = await places();
     const moved = Object.keys(before).filter((k) => k && now[k] && now[k] !== before[k]);
     if (moved.length) errors.push(`${where}: wire ${i}: ${moved.length} other nodes moved`);
