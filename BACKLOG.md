@@ -15,7 +15,7 @@ special case, then what lets programs be written in the editor, then
 language, then more targets or speed (WORKFLOW.md "Priority").
 Rows once held back as later goals are open again (Ersagun 2026-11-09):
 a lane takes them when bugs and goal rows are in hand.
-Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's and P7, P8; new rows come from the recurring reviews, QA passes and bigger programs.
+Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256, C218, C219); new rows come from the recurring reviews, QA passes and bigger programs.
 Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to be as close to a C/C++ dev doing data oriented design and cache and memory aware as possible. And then if we need Pools and similar stuff to get a last 10 percent of performance that's OK, but the defaults should be our first target." So rows that change what every program gets (layout as columns, arrays written in place, records changed in place, work on every core) go before ones a program must ask for (a Pool type).
 **Size:** S hours · M one PR · L several PRs or a design note first.
 **Status:** ▶ running · ⏸ held · blank = waiting.
@@ -25,9 +25,9 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | no open row of its own; the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
-| L Language and library | "Language lane" | no open row of its own; the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
-| L Language and library | "Language lane B" | no open row of its own (L107 and L24 closed) |
+| C Compiler and targets | "Compiler lane" | C218 (measure the split on WASI and C); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane B" | L249, L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
 
 ## Inbox
@@ -98,6 +98,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C218 | The chooser's split by groups of values on WebAssembly and C (C93 s5 kept it to JavaScript: on WebAssembly an array was copied on every replace, 26 s against 0.3). Arrays with one holder are replaced in place there since (owned-arrays.ts), so measure machine's split again on WASI and natively and turn it on where it pays | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md "Where this stands" | P3 | M | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 
@@ -141,6 +142,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C219 | `ters qasm`: reuse an ancilla once it is uncomputed (circuits are as wide as they are long today), and unroll a loop to a known bound (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
 
 ## L: Language and library
 
@@ -157,6 +159,8 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L246 | `ters` with no command doesn't list `diff`, `merge` or `git-diff` (cli/ters.ts usage text), though cli/main.ts runs them and DIFF.md documents them. Example: `ters` alone lists `ters diff <before> <after> [--from REV] [--to REV]` and `ters merge`, and the CLI test checks every command main.ts takes is listed | docs refresh 2026-11-13 (thread "Update all project docs"); README | P2 | S | |
+| L250 | Check whether a representation's rewrite still loses a totality proof (NUMBERS.md "What's still rough"): `is even` is structural on Nat, but after the rewrite onto Int its recursion goes through `match Nat′`'s function argument and the checker gave it `Diverge`. Close if it no longer happens; else keep the original's effects through the rewrite. Example: examples/numbers' `is even` has no Diverge on its represented program | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P2 | S | |
 
 ### Ersagun's current asks
 
@@ -167,16 +171,25 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its folds and the sizes of its values, checked against measurements (rep-costs.test.ts measures today's declared ones). L24 found the declared costs right on the examples, so this waits for a program where a declared cost is wrong | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md, RESEARCH-L24-2026-11-12 | P3 | L | waits for an example |
+| L248 | Ropes as one more representation of List (NUMBERS.md stage 3): `append` and `split` in log n, chosen by cost like `array of List`. Waits for a program that splits and joins long lists | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | M | waits for an example |
+| L249 | Int as data and Nat in std (NUMBERS.md stage 1): `match` and `fold` on an Int as a view (zero / succ), and `Nat` in std represented as Int, so Peano code from examples/numbers runs on std's Nat | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | M | |
+| L252 | Units written in a type (`Float64 m/s`) and functions generic over a unit; units are inferred and checked today, not written (LANGUAGE.md "What's next") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md, NUMBERS.md "Units" | P3 | L | |
+| L256 | A value packed with its implementation (INTERFACES.md step 6): a list of things of different types sharing an interface, paid for only where used. Waits for a program that needs it | docs refresh 2026-11-13 (thread "Update all project docs"); INTERFACES.md | P3 | M | waits for an example |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L251 | A test that representations rewrite inside a program's own types: a record with a Nat field runs on Int, evaluated and compiled, with the same answers (NUMBERS.md "What's still rough": rewritten, never tested) | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | S | |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L253 | Environment variables as a world operation (`environment variable(name)` in Files' or a new effect's place, refusable by `--allow`), on every target (LANGUAGE.md "What's next") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | S | |
+| L254 | Lazy fold results, so the effects in a fold could run top-down (LANGUAGE.md "What's next"). Research first: what it would mean for Choice and for the compiled loops | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | L | |
+| L255 | Cells holding a value that arrives later, as Solid's resources (a fetch's text as a cell with a loading state). Check first how much L59's page fetch already covers (LANGUAGE.md "Cells, further") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | M | |
 
 ### Relations and totality (BACKWARDS.md, MODES.md)
 
