@@ -26,7 +26,8 @@ const refused = (text: string): string => {
 test("a 2-input for each refused for another reason leads with that reason, not the 3-input version's count", () => {
   const why = refused("‹for each›([1, 2, 3], (n) => print(n))");
   assert.match(why, /for each gives this numbers, and it takes Text; or for each takes 3 inputs, given 2$/);
-  assert.match(refused("‹for each›([1, 2, 3], (n) => print(show(remainder(n, 3))))"), /: main does Console while a Choice is open[^;]*; or for each takes 3 inputs, given 2$/);
+  // A divisor that may be 0 (I234: by 3 it has no Choice).
+  assert.match(refused("‹for each›([1, 2, 3], (n) => print(show(remainder(3, n))))"), /: main does Console while a Choice is open[^;]*; or for each takes 3 inputs, given 2$/);
   // What fits still does.
   assert.equal(refused("‹for each›([1, 2, 3], (n) => print(show(n)))"), "");
 });
