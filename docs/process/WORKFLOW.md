@@ -152,18 +152,14 @@ of text; they were these cells logging every finished row).
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
-- Before pushing, type-check and run the test files that test what you
-  changed, by name (`node --test test/….test.ts`): the file of the module
-  or feature you edited, and the ones `npm run affected -- --list` names
-  that exercise the changed behaviour. Leave the rest of the list to
-  Check main after the merge and the nightly run (Ersagun 2026-11-05: in
-  the 10-hour run a whole `npm run affected` took 5 to 8 minutes a PR in
-  two lanes and the full suite 12 to 20 in the third, for changes a
-  single file covered). A change to a module everything reaches (infer.ts,
-  types.ts, model.ts, run.ts, std.ts) or one you think is risky runs the
-  fast set of everything it reaches:
-  `npm run affected` in ters (unit tests in all three packages; `-- --list`
-  says which). It leaves out the files measured at 5 s or more
+- Before merging, type-check and run what affected.ts lists for the
+  files you changed: `node ters/test/affected.ts origin/main` (unit
+  tests in all three packages; `--list` says which), not a set picked by
+  hand (I251, REVIEW-2026-11-13 §1: L244 ran its own choice of two files,
+  affected.ts mapped its change to arith.test too, and main was red
+  through about eight merges, hiding a second red). While working, run
+  the file of what you edited by name (`node --test test/….test.ts`); the
+  list is for the merge. It leaves out the files measured at 5 s or more
   (`ters/test/slow.json`), unless your change edits that test file, and
   says how many it left (Ersagun 2026-11-03, T13: "Only fast set"). They
   run after the merge in Check main and in the nightly run; `-- --full`
@@ -179,7 +175,8 @@ of text; they were these cells logging every finished row).
   beside the deploy, from the last commit it passed, without the browser tests, and reports without
   stopping it. After merging, look
   at Check main for your commit: if it is red, whoever broke main fixes it
-  next. `npm run affected -- --all` runs everything with every sweep in
+  next. The coordinator watches Check main too and tells the lane whose
+  merge first turned it red (I251). `npm run affected -- --all` runs everything with every sweep in
   full, as the Nightly workflow does at 03:00 UTC; the coordinator checks
   its result at the daily triage, and a red nightly is a P0.
 - Merge when green; the editor rules (click through the live page, run every
