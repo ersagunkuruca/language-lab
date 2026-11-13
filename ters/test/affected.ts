@@ -41,6 +41,8 @@ const all = argv.includes("--all");
 // second of four shares of the test files, balanced by how long each took
 // with every sweep in full (nightly-times.json), and no browser test;
 // `--all --browser-only` runs only the browser tests.
+// Check main (T15) shares out the files a merge reaches the same way:
+// `<base> HEAD --full --shard 2/6`.
 const shardArg = argv.find((a) => a.startsWith("--shard="))?.slice(8) ?? (argv.includes("--shard") ? argv[argv.indexOf("--shard") + 1] : undefined);
 const shard = shardArg ? shardArg.split("/").map(Number) as [number, number] : null;
 const browserOnly = argv.includes("--browser-only");
@@ -177,7 +179,7 @@ if (page && browser && !shard) {
 if (gpu && browser && !shard) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
 if (sound && browser && !shard) runs.push({ what: "sound in a browser", cwd: "ters", cmd: ["node", "test/sound-browser.ts"] });
 
-console.log(all ? `everything, every sweep in full${shard ? `: share ${shard[0]} of ${shard[1]}` : browserOnly ? ": the browser tests" : ""}` : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}`);
+console.log(all ? `everything, every sweep in full${shard ? `: share ${shard[0]} of ${shard[1]}` : browserOnly ? ": the browser tests" : ""}` : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}${shard ? `: share ${shard[0]} of ${shard[1]}` : ""}`);
 for (const r of runs) console.log(`  ${r.what}`);
 if (!browser && (page || gpu || sound)) console.log("  (the browser tests it reaches run tonight, or now with --browser)");
 if (left.length) console.log(`  (${left.length} slow file${left.length === 1 ? "" : "s"} it reaches run after the merge, in Check main, or now with --full)`);

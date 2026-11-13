@@ -37,6 +37,19 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I219 | What the full run fails on, on main (2026-11-12; draws fixed in I219a, board, effects and finite in I219b, lang.test's palette sweep, map-tree.test's timing and C42h's names in c-names.test in I219 part, palette in I219c, the editor's shaders ("process is not defined") in I219d, the smoke's first-steps check (it waited for main, but a first visit opens on fall since E235) in I219e, the rest of the smoke (Countdown's solutions read [] once relate's settles spent steps) in I219f, fixed.test's CORDIC and core-js.test's pig in I219 part 2, each file run alone; the nightly hasn't passed since 10-28): on CI resolve-once.test (a kept library resolving typed `List Case several` where it is `List a`), passing here; likely the same cause as CORDIC (a kept resolving read over another library check), fixed by part 2, for the next Nightly to confirm. | I208 | 2026-11-12 |
+| I227 | Running a Number-generic function backwards throws the host's "The number 1.2 cannot be converted to a BigInt because it is not an integer" (`total price(net, rate) = net * (1 + rate)`, inferred `(a, a) -> a where a is a Number`; rate 0.2, result 300). Forwards works; writing `1.0` makes it Float64 and the backwards run answers 250. Bug: the backwards run should answer (or refuse in Ters's words, naming the type), and BACKWARDS.md say how a generic number type is solved. Suggested lane: Language | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §3.1 | 2026-11-13 |
+| I228 | MCP `replace` with steps on lines inside a lambda (`all(() =>` then `a = one of(…)` on its own line): the steps don't bind ("nothing is named a here; did you mean p, i?") and the call takes 2 s with one step, 55 s with three (an outsider's call was killed after 120 s). Bug: steps inside a lambda read as at the top of a body (I217), in time that stays flat. Suggested lane: Language (ters/mcp/session.ts) | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.3 | 2026-11-13 |
+| I229 | MCP `step(at, …)` puts the step before the whole chain the part is in, not before the part, so a sequence can only be built bottom-up and a step can't use the one before it; its "did you mean p, i?" names things not in the program. The step goes before the part named (or a `after` form), and suggestions come from what's in scope | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.2 | 2026-11-13 |
+| I230 | Overloaded names in refusals: a 2-input `for each` call failing for another reason leads with "for each takes 3 inputs, given 2" (the page's Cell version), in the editor before the real reason and in MCP alone. The version whose input count fits leads the message, and MCP `defs` gives each version an id so it can be named | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.4 | 2026-11-13 |
+| I231 | Reader errors name what they couldn't read: `if x == 1 then 2 else 3` in MCP `replace` answers just "a binder". Say which token, and for `==` that equality is `=`. Check the palette's reader gives the same | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.1 | 2026-11-13 |
+| I232 | A page on the text you can type, shared by the palette and MCP `replace` (GUIDE §3 says only "a value" or "a short sum"): `=` for equality, `if … then … else`, `(x) => …`, `‹multi word›` names, `*` for `·`, steps on lines, records and fields. And the view reads back as it prints: `first(…, else x)` and `all(one of(…))` (typed as `() => …`) are accepted as written | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.1 | 2026-11-13 |
+| I233 | MCP.md for a first program: making `main` (a function with no inputs), `‹›` around names with spaces, what `test`'s "(1)" counts (the CLI says "(1 cases)"), and `eval` of a bare name (now "a name alone is listed already") giving its value | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.1, §2.6 | 2026-11-13 |
+| I234 | FizzBuzz needs `first`: `remainder(n, 3)` has Choice (no answer for 0) even when the divisor is a non-zero literal, so the commonest first program must handle a Choice it can't take. A divisor known not to be 0 gives no Choice, or the guide's first loop says why it does. Suggested lane: Language | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.5 | 2026-11-13 |
+| I235 | Editor papercuts from writing a first program: an input whose type is still `a` is offered as `celsius(□)`, `celsius(□, □)`, `celsius(□, □, □)`; a new program stays "Untitled 1" and Save file names it `untitled-1.json` without asking; a backwards run shows only "Looking for an answer… Stop" (−40 for `celsius · 9 / 5 + 32` took about 10 s, though arithmetic is solved directly: check why); after a reload no hole is selected | [OUTSIDER-WRITE-2026-11-13](docs/reports/reviews/OUTSIDER-WRITE-2026-11-13.md) §2.6 | 2026-11-13 |
+| I236 | A big whole number typed inside an expression, or where its type isn't known yet, becomes the wrong Int: `[12345678901234567891, 2]` keeps 12345678901234567168. The palette reads it as a Float64 (editor/typed.ts `fillValue`, its `exact` only for a number typed alone; `setLit` reads an untyped literal with `Number`), and arith.ts `numberLiteral` makes an Int of that Float64. Example: that list, saved and loaded, shows its digits as typed. Suggested lane: Editor | thread "Decide the saved program format" | 2026-11-13 |
+| I237 | Number literals saved as their digits, exactly as written: `"0.1"`, `"1/3"`, `"12345678901234567891"`, never a JSON number, with `of` naming the type when it's known; what the digits mean (Int, Float64, Rational, …) is decided when the program is read. Every example rewritten once, the old form still read. Example: a 20-digit decimal at Rational and at Float64 round-trips through save, load, MCP and the merge driver. After I236. Suggested lane: Language | thread "Decide the saved program format" | 2026-11-13 |
+| I238 | Relational solves on the JavaScript target without the program's nodes: backwards, conjugate, converter (`solveOne`/`solveAll`) and physics (`exists`) still carry part of the tree and the evaluator's solver in `ters compile` and `ters build-web`, though each compiles without them to WebAssembly and C (C195's plans). calculus's derivative of a function chosen at run time stays the one program that looks inside a function, and says so. Example: those four compile to JS with no node table and answer as before. Suggested lane: Compiler | thread "Decide the saved program format" (checked by compiling every main, 2026-11-13) | 2026-11-13 |
+| I239 | A run's log of the world's answers within bounded memory (Ersagun 2026-11-13: "it's still a memory hole"). Each world effect says how it is recorded: random as one seed for the run (our generator, seeded once from the world), the clock once per frame as a difference from the last reading. The log is kept as a window: a snapshot of the page's state every N seconds, older entries dropped, replay and step-back going as far back as the window. Prior art: rr's checkpoints, Redux DevTools' maxAge. Design note first. Example: tumble running an hour in the editor with its log under a fixed size, and step-back working inside the window. Suggested lane: Language | thread "Decide the saved program format"; worldlog.ts | 2026-11-13 |
 
 ## E: Editor
 
@@ -54,7 +67,11 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E256 | CONFUSING.md checked against today's editor: its header says each open problem is a row, but items 1 to 5 and 7 to 10 are open with none. Each one moves to "Fixed" (item 10's guarded corecursion is L16, for one), becomes a row, or stays with the reason it's kept | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §5 | P2 | S | |
+| E257 | The graph's crossings (CONFUSING item 1): names drawn with a background so a wire can't cover them, and wires routed around nodes instead of under them. Seen 2026-11-13 in `rotate` unfolded: wires cross the frame edges and each other, and the inner frame's `for some` node is drawn over the first `polar`'s `x` input | [CONFUSING.md](docs/design/CONFUSING.md) item 1, checked 2026-11-13 (E256) | P3 | M | |
+| E258 | Cases that are values drawn as values (CONFUSING item 2): a zero-input frame (an if's then and else, a case with no fields) drawn as just its contents, with no `() =>` box, unless it's an action given to a handler like `first` or `all`. Example: `queens`'s nil, then and else with no frames | [CONFUSING.md](docs/design/CONFUSING.md) item 2, checked 2026-11-13 (E256) | P3 | M | |
+| E259 | Every output a dot (CONFUSING item 3): a node's output is the same dot a let has, so sharing a value is one more wire from it, not a gesture that makes a dot. Example: `queens` with its outputs as dots and nothing else changed | [CONFUSING.md](docs/design/CONFUSING.md) item 3, checked 2026-11-13 (E256) | P3 | M | |
+| E260 | One `for some` for a frame's unknowns (CONFUSING item 5): `rotate`'s `for some((length) => for some((angle) => …))` drawn as one frame with two unknowns, each a dot labelled some, instead of two nested frames and two nodes. A view: the tree is unchanged | [CONFUSING.md](docs/design/CONFUSING.md) item 5, checked 2026-11-13 (E256) | P3 | S | |
+| E261 | Effect row variables in words (CONFUSING item 7): a type shows `-[Choice, e]->` as `-[Choice, …]->` with "and the effects of f" on hover, so `newton`'s and Markov's `shown`'s types read without `e` | [CONFUSING.md](docs/design/CONFUSING.md) item 7, checked 2026-11-13 (E256) | P3 | S | |
 
 ### Speed of editing
 
@@ -65,7 +82,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E255 | Reviewing a change to a program: a diff of two versions by node id (added, removed, changed definitions, with names from the side tables), shown in the editor and printed by `ters diff`, so a change can be read in review. A design note first. Raised by both ASPECTS runs (#37) and BLIND-SPOTS §13 | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.7 | P3 | L | |
 
 ### What a good language needs ([ASPECTS-2026-11-03](docs/reports/reviews/ASPECTS-2026-11-03.md))
 
@@ -152,7 +168,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L243 | `agent` back in the engines' agreement test: compiler/test/core-js.test.ts skips it, because the evaluator (the reference) takes minutes on its A* search. Run it at a smaller size, as I202 did for swarm-pool, or make the evaluator fast enough through L118c's direct run | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.6 | P3 | S | |
 
 ### Bugs and gaps found by programs
 
@@ -183,6 +198,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L244 | `+` as one sum (CONFUSING item 9): `add`, `subtract` and `negate` are three built-ins, each with its own equation, where one relation `a + b = total` read in its directions would do (as `polar` is one relation); the names stay as the directions' names | [CONFUSING.md](docs/design/CONFUSING.md) item 9, checked 2026-11-13 (E256) | P3 | M | |
 
 ### Grammars, modules and sharing
 
@@ -237,6 +253,5 @@ Not lane work; the coordinator does these or asks Ersagun.
 
 | id | item | source | pri | status |
 |---|---|---|---|---|
-| P9 | A second outsider pass, unprimed, that has to *write* a small program from the learn page and docs alone, in the editor, and says where it got stuck (OUTSIDER-READ-2026-11-03's method plus writing). Nobody has read the docs cold since 11-03 | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.3 | P2 | |
 | P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805 on 11-03; 3,421 on 11-13), tests reached by a one-line text.ts edit (145/150 + 44/44 on 11-03; 139/219 + 91/125 on 11-13) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
 | P8 | Add a LICENSE (and say what examples and programs written in Ters carry) once Ersagun picks one | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §3 | P3 | postponed (Ersagun 2026-11-10: until people want to use Ters) |

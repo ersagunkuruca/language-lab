@@ -31,9 +31,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Since the last run that finished its tests, green or red (a red
+  # one's failures are main's to fix by the next pull request, and the
+  # nightly run tests everything again). Not since the last green one:
+  # with none for a while, every run tested everything, ran into the
+  # timeout (shown as cancelled), and so never went green either
+  # (I110: 38 of 40 runs cancelled). With none at all, the last merge.
+  base:
+    runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.base.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: What changed
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          base=$(gh run list -R "$GITHUB_REPOSITORY" -w check-main.yml -b main -L 100 --json headSha,conclusion -q '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].headSha // ""' || true)
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then echo "base=$base" >> "$GITHUB_OUTPUT"; else echo "base=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"; fi
+
+  # Every file the change reaches, the slow ones too: before the merge
+  # only the fast set ran (T13, ters/test/slow.json). The big sweeps check
+  # one eighth of their cases, a different eighth each run (test/helpers.ts
+  # sweep, TESTING.md T3).
+  # In six parallel shares of the test files, balanced by how long each
+  # took (ters/test/nightly-times.json), as the Nightly is (I208): in one
+  # job, a change that reached most files ran past the 20-minute timeout,
+  # and 94 of 100 runs to 11-13 were cancelled so (T15). Each run is
+  # green only when all six are.
   check:
+    needs: base
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,24 +81,7 @@ jobs:
           cache-dependency-path: ters/package-lock.json
       - run: npm ci
         working-directory: ters
-      # Since the last run that finished its tests, green or red (a red
-      # one's failures are main's to fix by the next pull request, and the
-      # nightly run tests everything again). Not since the last green one:
-      # with none for a while, every run tested everything, ran into the
-      # timeout (shown as cancelled), and so never went green either
-      # (I110: 38 of 40 runs cancelled). With none at all, the last merge.
-      - name: What changed
-        id: base
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          base=$(gh run list -R "$GITHUB_REPOSITORY" -w check-main.yml -b main -L 100 --json headSha,conclusion -q '[.[] | select(.conclusion == "success" or .conclusion == "failure")][0].headSha // ""' || true)
-          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then echo "base=$base" >> "$GITHUB_OUTPUT"; else echo "base=HEAD^" >> "$GITHUB_OUTPUT"; fi
-      # Every file the change reaches, the slow ones too: before the merge
-      # only the fast set ran (T13, ters/test/slow.json).
-      # The big sweeps check one eighth of their cases, a different eighth
-      # each run (test/helpers.ts sweep, TESTING.md T3).
-      - name: The tests the change reaches
+      - name: Share ${{ matrix.shard }} of the tests the change reaches
         env:
           SWEEP_AT: ${{ github.run_number }}
-        run: node ters/test/affected.ts ${{ steps.base.outputs.base }} HEAD --full
+        run: node ters/test/affected.ts ${{ needs.base.outputs.base }} HEAD --full --shard ${{ matrix.shard }}/6
