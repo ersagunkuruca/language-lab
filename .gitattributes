@@ -3,3 +3,10 @@
 #   git config merge.ters.driver "node ters/cli/ters.ts merge %O %A %B %P"
 ters/examples/**/*.json merge=ters
 ters/library/*.json merge=ters
+
+# `git diff` on program files shows `ters diff` once a clone runs
+# `node ters/cli/ters.ts git-setup` (DIFF.md "In git"); --no-ext-diff shows the JSON.
+ters/examples/**/code.json diff=ters
+ters/examples/**/names.default.json diff=ters
+ters/examples/**/comments.json diff=ters
+ters/examples/**/signatures.json diff=ters

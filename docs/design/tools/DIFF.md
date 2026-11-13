@@ -71,12 +71,42 @@ it, and the editor draws it.
 - Inside a pull request: `ters diff --from origin/main` lists every program
   folder that changed between the two, so a reviewer runs one command.
 
-git's own `diff` can't do this alone: a textconv driver sees one file, and
-a definition's text needs the names beside it. So `ters diff --from` is the
-way in from git. A GitHub comment with the diff, posted by a workflow on a
-PR that touches `ters/examples` or `ters/library`, would let a reviewer read
-a change without running anything. It would cost CI minutes, and Ersagun
-declined it (2026-11-13: not needed).
+A GitHub comment with the diff, posted by a workflow on a PR that touches
+`ters/examples` or `ters/library`, would let a reviewer read a change
+without running anything. It would cost CI minutes, and Ersagun declined it
+(2026-11-13: not needed).
+
+## In git
+
+After `node ters/cli/ters.ts git-setup` once in a clone, git's own commands
+print `ters diff` for program files (E262):
+
+| command | shows |
+|---|---|
+| `git diff`, `git diff --staged`, `git diff main` | the definitions that changed, line by line by node id |
+| `git show --ext-diff REV`, `git log -p --ext-diff` | the same for past commits (show and log need `--ext-diff`) |
+| `git diff --no-ext-diff` | the JSON itself |
+
+`.gitattributes` marks the four program files under `ters/examples` with
+`diff=ters`, and `git-setup` sets this clone's `diff.ters.command` (and the
+merge driver, `merge.ters.driver`, SHARING.md §6) to this checkout's
+`ters.ts`. Other files diff as before.
+
+git calls an external diff driver once per changed file with its two
+versions, never with the files beside it, and a definition's text needs
+them (its names, comments, signatures). So `ters git-diff` (cli/git-diff.ts)
+puts each version's folder back together. A side that is the working tree
+takes its folder from there. Otherwise it finds the pair of revisions that
+hold the two blobs: the index against the working tree, HEAD against the
+index, a branch against the working tree, or a commit against its parent.
+When no pair is found it looks for each blob alone. A file beside it that
+one version lacks is taken from the other, as an unchanged file would be.
+
+A changed comments.json or names file whose code.json also changed reads
+"(shown with …/code.json)", since that diff already shows it. Two code.json
+files that hold the same value read "no changes to the program (only its
+layout or formatting)". When a version can't be read, the driver says so
+and prints git's plain diff.
 
 ## In the editor
 
@@ -100,6 +130,7 @@ need git.
 | E255a | `diffPrograms` (ters/src/diff.ts): definitions by id, the view's lines by node id with both versions printed with the new names, renames, comments, types; `ters diff` on two folders or files prints it (L113's summary stays for a bare code.json pair) | `ters diff` on dice and a copy with one literal changed, one definition added and one renamed prints exactly those three, with the literal's line as `~` |
 | E255b | `--from REV` / `--to REV` through `git show`, and a PR's changed program folders with `--from` alone | `ters diff ters/examples/pig --from` a commit before #2240 prints the change #2240 made to pig's handler |
 | E255c | The editor's Changes view against the opened version or the last Reviewed one, with marks in blocks and graph | Edit a literal and add a definition in dice: Changes lists both, the literal's block amber, the new definition green |
+| E262 | git's diff driver (`ters git-diff`) and `ters git-setup`: `git diff`, `--staged`, `git show --ext-diff` print `ters diff`, with each version's names, comments and signatures | Renaming `expression` in algebra's names prints `renamed \`expression\` to \`term\`` under `git diff` and `git diff --staged`; `git show --ext-diff` of #2422 prints markov's added definitions |
 | E255d | Declined 2026-11-13 (Ersagun: not needed). Was: a workflow that comments `ters diff` on PRs touching program folders | A PR changing an example gets the comment |
 
 ## Prior art

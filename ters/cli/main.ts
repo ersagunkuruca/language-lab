@@ -39,7 +39,7 @@ import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } f
 // The compilers, and what imports them, read only for a command that
 // compiles: `ters check` and the module commands start without them
 // (I193: Node reading the compiler's sources was a third of a check).
-const compiles = !["check", "hosts", "publish", "broken", "fetch", "diff", "merge"].includes(process.argv[2] ?? "");
+const compiles = !["check", "hosts", "publish", "broken", "fetch", "diff", "merge", "git-diff", "git-setup"].includes(process.argv[2] ?? "");
 const { pageDocument } = compiles ? await import("../src/lang/page.ts") : ({} as typeof import("../src/lang/page.ts"));
 const { CFLAGS, emitC } = compiles ? await import("../../compiler/src/c.ts") : ({} as typeof import("../../compiler/src/c.ts"));
 const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({} as typeof import("../../compiler/src/wasm.ts"));
@@ -98,6 +98,8 @@ usage:
                                         version into the same log, and ters upgrade warns and won't move to it (§4)
   ters fetch <program> <url or path>     a module from any host into the program's modules folder, every definition
                                         checked by its hash, and its log beside it by its author's key (§4)
+  ters git-setup                         this clone's git shows program files with ters diff (git diff, git show
+                                        --ext-diff, git log -p --ext-diff) and merges them id by id (DIFF.md)
   ters downgrade <program> <name>        move what the program calls name back to the version before, from its
                                         store (store.json, every version it has used, kept by upgrade and
                                         downgrade, so it runs when a module's file is gone; §4b)
@@ -391,6 +393,12 @@ const world = () => (replay ? replayed(replay) : allow ? allowedOnly(nodeWorld()
 const [command, path, ...rest] = argv;
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
 if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }
+// git's diff driver for program files, and the setup that names it (git-diff.ts, DIFF.md "In git").
+if (command === "git-diff" || command === "git-setup") {
+  const { gitDiff, gitSetup } = await import("./git-diff.ts");
+  process.stdout.write(command === "git-diff" ? await gitDiff([path, ...rest].filter((x): x is string => x !== undefined)) : gitSetup() + "\n");
+  process.exit(0);
+}
 // Program files compared and merged id by id (merge-files.ts, L113).
 if (command === "diff" || command === "merge") {
   const { describe, diffLines, merge3 } = await import("../src/merge-files.ts");
