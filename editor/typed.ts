@@ -276,6 +276,37 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
   return guardTyped(info, e.code, e.names, next ?? hole, `Filled with ${label}.${defId && f.kind !== "lit" && !next ? " No holes left in this definition." : ""}`);
 }
 
+// What text that didn't read says (I231): an operator from another
+// language named with Ters's own, a bracket left open, else the token the
+// reader stopped at. The reader's own words ("a binder", "unexpected text
+// at 3") named neither the token nor what to write instead.
+const FOREIGN: [RegExp, string][] = [
+  [/===?/, "equality is one =, as in if x = 1 then …"],
+  [/&&/, "write and"],
+  [/\|\|/, "write or"],
+  [/(?<![\p{L}\p{N}_')\]])!(?!=)/u, "write not, as in not (x < 1)"],
+];
+export function readError(text: string, error: string, code: Code, names: Names): string {
+  const bare = text.replace(/"(?:[^"\\]|\\.)*"/g, (m) => " ".repeat(m.length));
+  for (const [re, say] of FOREIGN) { const m = re.exec(bare); if (m) return `${m[0]} isn't Ters: ${say}`; }
+  const open: string[] = [], pair: Record<string, string> = { ")": "(", "]": "[", "}": "{", "›": "‹" };
+  for (const c of bare) {
+    if ("([{‹".includes(c)) open.push(c);
+    else if (c in pair) { if (open.pop() !== pair[c]) return `a ${c} with no ${pair[c]} before it`; }
+  }
+  if (open.length) return `a ${open.at(-1)} isn't closed`;
+  // The reader's position is in the whole text only when the whole text
+  // gave that error.
+  const at = / at (\d+)$/.exec(error);
+  if (at) {
+    const whole = parseValue(text, code, names);
+    const tok = "error" in whole && whole.error === error ? /^\s*(\S+)/.exec(text.slice(Number(at[1]) - 1))?.[1] : undefined;
+    if (tok) return `${error.replace(/ at \d+$/, "")}: “${tok}” isn't read`;
+  }
+  if (error === "a binder") return `“${text.trim()}” isn't read as a whole: an operator or a word in it isn't Ters's (equality is =; and, or, not; the Guide's “Text you can type” lists what reads)`;
+  return error;
+}
+
 // Fill a hole with a value written out, the way values print: 3, "text",
 // [3, 1, 2], circle(2). It becomes the code that builds it (literals and
 // constructor calls), type-checked like any other filling. Arithmetic on
@@ -288,7 +319,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   for (const d of code.defs) if (all[d]) scope.set(all[d], d);
   for (const b of defId ? scopeAt(code, defId, hole) : []) if (all[b]) scope.set(all[b], b);
   const r = typedOut(text, code, all, scope);
-  if ("error" in r) return { ok: false, reason: r.error };
+  if ("error" in r) return { ok: false, reason: readError(text, r.error, code, all) };
   // A name alone is already in the palette's list.
   if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
   // A whole number where an Int goes is an Int: 0 in slice's position. And
@@ -1001,7 +1032,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     // An operator expression whose last operand is a call reaches here
     // whole (a + nosuch(b)): the operand's own error says more (E174).
     if (!alts.length && inner) return inner;
-    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
+    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.keys(names).filter((id) => { const k = code.nodes[id]?.kind; return k === "def" || k === "builtin" || k === "variant" || isOperation(code, id); }).map((id) => names[id])], scope)}` };
     return args.find((a) => "error" in a) as { error: string };
   }
   if (dot > 0) {
