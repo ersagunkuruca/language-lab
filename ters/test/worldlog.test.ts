@@ -88,3 +88,18 @@ test("an element's frames in a row are one entry of seconds; other events break 
   assert.deepEqual(events[599], { at: 0, name: "frame", given: ["", "", 0, 0, 599 / 60], path: [0, 1] });
   assert.deepEqual(events[600], { at: 1, name: "click", given: ["", "", 3, 4, 0], path: [2] });
 });
+
+// I239d (WORLD-LOG-WINDOW.md §4): a main's run logs up to a cap, then
+// says it stopped; its replay says why it can't go on there.
+test("a main's log stops at its cap, and a replay of it says so where it stopped", () => {
+  const a = logged(fake(), [], { cap: 2000 });
+  for (let i = 0; i < 100; i++) a.world.now();
+  const full = a.log.findIndex((e) => e.op === "logFull");
+  assert.ok(full > 10 && full < 100, `${full}`);
+  assert.equal(a.log.length, full + 1);
+  // The run itself went on: the world still answered it.
+  assert.equal(a.world.now(), 1000);
+  const b = replaying(a.log, fake());
+  for (let i = 0; i < full; i++) b.now();
+  assert.throws(() => b.now(), /can't go on after \d+ entries: the run's answers passed 2 KB there/);
+});

@@ -53,6 +53,9 @@ export interface Mount {
   // `path`: where its element is under the page's root (pathOf), so a
   // replay finds it again (C172g).
   heard?: (name: string, at: [string, string, number, number, number], path: number[]) => void;
+  // False while the page is stepped through its log (I239c): what the
+  // person and the browser do (a click, a frame) isn't given to it then.
+  live?: () => boolean;
 }
 
 // Where each drawn node is: its parent and its place among the parent's
@@ -241,6 +244,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
           const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number }) => {
+            if (m.live && !m.live()) return;
             const target = (ev.target ?? e) as El & { type?: string };
             // What was typed enters in NFC (L214a, border.ts).
             const value = target.type === "checkbox" ? String(!!target.checked) : nfc(String(target.value ?? ""));

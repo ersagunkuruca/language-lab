@@ -1,6 +1,6 @@
 # A run's world log in bounded memory
 
-*Status 2026-11-13: design, for row I239; I239a (§1) and I239b (§2) built. Ersagun: "it's still a memory
+*Status 2026-11-13: design, for row I239; I239a (§1), I239b (§2), I239c's engine (§3, page.ts `steps`) and I239d's cap (§4) built; I239f, the compiled page's snapshots, next. Ersagun: "it's still a memory
 hole" (thread "Decide the saved program format", 2026-11-13).*
 
 A run is kept by keeping what the world answered it (worldlog.ts, L186):
