@@ -1093,10 +1093,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
 // scope first, then any definition or builtin, at most three, each at most
 // a third of the name's letters away (Levenshtein's distance, 1966, with
 // Damerau's swaps).
+// Only names nearer than the word is long: a one-letter `a` has no near
+// name, not "did you mean p, i?" (I229).
 function closest(word: string, among: Iterable<string>, scope: Map<string, Id>): string {
   const far = Math.max(1, Math.floor(word.length / 3));
   const pool = new Set(among);
-  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far);
+  const scored = [...pool].filter((n) => n && n !== word && Math.abs(n.length - word.length) <= far).map((n) => [n, distance(word, n)] as const).filter(([, d]) => d <= far && d < word.length);
   scored.sort((a, b) => a[1] - b[1] || +scope.has(b[0]) - +scope.has(a[0]));
   const near = scored.slice(0, 3).map(([n]) => n);
   return near.length ? `; did you mean ${near.join(", ")}?` : "";

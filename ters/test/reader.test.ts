@@ -689,3 +689,14 @@ test("typed text reads a ^ b as power prints it", () => {
   assert.match(shown("-z.re ^ 2"), /−\((?:z\.re|re\(z\)) \^ 2\)|−(?:z\.re|re\(z\)) \^ 2/);
   assert.match(shown("2.0 ^ 3.0 ^ 2.0"), /2(\.0)? \^ 3(\.0)? \^ 2(\.0)?/);
 });
+
+// A one-letter name that isn't there gets no suggestions of other one-letter
+// names (I229: "nothing is named a here; did you mean p, i?").
+test("a short unknown name isn't offered unrelated short names", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, escape = p.named("escape");
+  const re = subtree(code, escape).map((x) => code.nodes[x]).find((n): n is Call => isCall(n) && code.nodes[n.fn]?.kind === "ref" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "re")!;
+  const open = replace(code, re.id, () => ({ kind: "hole" }));
+  const r = fillValue(open, names, infer(open, names), re.id, "q", escape);
+  assert.equal(r.ok ? "" : r.reason, "nothing is named q here");
+});
