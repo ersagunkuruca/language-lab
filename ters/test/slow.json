@@ -3,6 +3,7 @@
  "measured": "2026-11-03",
  "files": {
   "ters/test/lang.test.ts": 664.2,
+  "ters/test/page-hour.test.ts": 20,
   "ters/test/dots.test.ts": 497.4,
   "ters/test/palette.test.ts": 330.1,
   "ters/test/editing.test.ts": 80,
