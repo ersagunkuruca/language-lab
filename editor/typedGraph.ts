@@ -1750,10 +1750,14 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
   root.addEventListener("contextmenu", (e) => {
     if (!hooks.menu) return;
     e.preventDefault();
+    // A finger still down: the browser's own long press, which can come
+    // before ours when the page is busy, and doesn't always say it's a
+    // touch (a contextmenu that is a MouseEvent has no pointerType).
+    const touching = waiting;
     letGo();
     if (e.isTrusted && Date.now() - held < 1000) return;
     // Ours (a long press) or the browser's from a touch: a tap will follow.
-    if (!e.isTrusted || (e as PointerEvent).pointerType === "touch") menuAt = Date.now();
+    if (!e.isTrusted || touching || (e as PointerEvent).pointerType === "touch") menuAt = Date.now();
     const el = e.target as Element;
     const hole = el.closest(".pill.hole, circle.inp.empty")?.getAttribute("data-slot");
     // A let node is its value's name: the same menu as a dot's.

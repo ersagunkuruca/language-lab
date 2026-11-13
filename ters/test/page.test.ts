@@ -319,5 +319,6 @@ test("a page stepped to the window's start reads nothing more from the log, and 
   assert.match(root.find("status").textContent, /^Rolls: 1;/);
   const back = compiled(log, page.kept!);
   page.stop();
+  assert.ok(back.handed > 0);
   assert.match((back.root as FakeEl).find("status").textContent, /^Rolls: 1;/);
 });

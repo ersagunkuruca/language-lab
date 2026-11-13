@@ -683,6 +683,8 @@ async function phone() {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   if (!(await scale() > z0)) errors.push(`${where}: a pinch didn't zoom in (${z0} to ${await scale()})`);
   await hold(bb.x + bb.width - 20, bb.y + 20);
+  // On a busy machine the press's timer can fire after the finger lifts.
+  await p.locator(".ctx-menu").first().waitFor({ timeout: 2000 }).catch(() => {});
   if ((await p.locator(".ctx-menu").count()) !== 1) errors.push(`${where}: a long press opened ${await p.locator(".ctx-menu").count()} menus`);
   await p.keyboard.press("Escape");
   // Pick two nodes by touch: both stay picked.
