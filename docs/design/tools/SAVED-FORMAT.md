@@ -100,7 +100,9 @@ printer writes it. Below is a folder's `code.json`:
   id per line, so moving a definition moves one line. Nodes are sorted by
   id, so where a node sits never depends on edit history.
 - **Inside a node.** `kind` first, then the other keys sorted. Arrays and
-  nested objects stay inline. No spaces other than after `:` and `,`.
+  nested objects stay inline, in their own order (some objects say an
+  order, as a representation's operations do). No spaces other than
+  after `:` and `,`.
 - **The other tables.** names, comments, signatures, examples and layout
   are one entry per line, sorted by key. The single file the editor saves
   holds the same tables in the same spelling, one after another.

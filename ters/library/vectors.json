@@ -244,17 +244,17 @@
 "@vshgss85bifvhke0t02estkjid:9": "y"
 },
 "pins": {
-"@0l0fl1nj40vcvh8bp2u5sb51cr": {"arith": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@398l7be8o1ao8vljcpllcum7qf": {"numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}], "ret": {"args": [], "id": "type.number", "t": "con"}, "t": "fn"}, "vars": [0]},
-"@8krpouj1med1u8g6r19150u502": {"arith": [0], "numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"args": [], "id": "type.number", "t": "con"}, "t": "fn"}, "vars": [0]},
-"@bdqjtggr1grfn66h946dhjh0ft": {"arith": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@bsh2hsvcrpov7nqglt3ehur72p": {"numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"args": [], "id": "type.number", "t": "con"}, "t": "fn"}, "vars": [0]},
-"@dfqk15d2jbh7gn0g057ofmf4tn": {"arith": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@gpr2icg8543tmnss26ricahd08": {"numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"args": [], "id": "type.number", "t": "con"}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@k9fr8o3154secpp3c3hegd2okf": {"numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": ["effect.choice"], "tail": 1}, "params": [{"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@m391m4mr8rc457pi2icf8foqik": {"numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"args": [], "id": "type.number", "t": "con"}, {"args": [], "id": "type.number", "t": "con"}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@t00b0t42fe9h0rreh10m9k0s9p": {"arith": [0], "numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]},
-"@vshgss85bifvhke0t02estkjid": {"numbers": [0], "plain": [0], "rows": [1], "type": {"eff": {"effs": [], "tail": 1}, "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}, {"args": [], "id": "type.number", "t": "con"}], "ret": {"t": "var", "v": 0}, "t": "fn"}, "vars": [0]}
+"@0l0fl1nj40vcvh8bp2u5sb51cr": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "arith": [0]},
+"@398l7be8o1ao8vljcpllcum7qf": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0]},
+"@8krpouj1med1u8g6r19150u502": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0], "arith": [0]},
+"@bdqjtggr1grfn66h946dhjh0ft": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "arith": [0]},
+"@bsh2hsvcrpov7nqglt3ehur72p": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0]},
+"@dfqk15d2jbh7gn0g057ofmf4tn": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "arith": [0]},
+"@gpr2icg8543tmnss26ricahd08": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0]},
+"@k9fr8o3154secpp3c3hegd2okf": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": ["effect.choice"], "tail": 1}}, "plain": [0], "numbers": [0]},
+"@m391m4mr8rc457pi2icf8foqik": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0]},
+"@t00b0t42fe9h0rreh10m9k0s9p": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0], "arith": [0]},
+"@vshgss85bifvhke0t02estkjid": {"vars": [0], "rows": [1], "type": {"t": "fn", "params": [{"t": "var", "v": 0}, {"t": "var", "v": 0}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}}, "plain": [0], "numbers": [0]}
 },
 "std": {
 "std.bool": "i9j62f4s0b1kd43c3ko5obqfg3"

@@ -80,17 +80,21 @@ export function readSaved<T>(x: T): T {
 // - Every other table is one entry per line: the top of a file (a
 //   code.json's defs, a names file's names) and each table in a file
 //   that holds programs (a module's, an editor file's names, comments
-//   and pins). Objects' keys are sorted, arrays keep their order.
+//   and pins), sorted by key. Arrays keep their order, and so do the
+//   keys of an object inside a line.
 // - What is inside a line is inline, with a space after ":" and ",".
 // - UTF-8 as it is, \n line ends, a final newline.
 export const printSaved = (x: unknown): string => block(savedForm(x)) + "\n";
 
 const sortedKeys = (o: Record<string, unknown>, first?: string) =>
   Object.keys(o).filter((k) => o[k] !== undefined).sort((a, b) => (a === first ? -1 : b === first ? 1 : a < b ? -1 : a > b ? 1 : 0));
-const inline = (x: unknown, first?: string): string => {
+// Inside a line, an object's keys keep their order: some say an order
+// (a representation's operations). A node's own keys are sorted (`sort`).
+const inline = (x: unknown, sort?: { first: string }): string => {
   if (Array.isArray(x)) return `[${x.map((v) => inline(v === undefined ? null : v)).join(", ")}]`;
   if (!isObj(x)) return JSON.stringify(x) ?? "null";
-  return `{${sortedKeys(x, first).map((k) => `${JSON.stringify(k)}: ${inline(x[k])}`).join(", ")}}`;
+  const keys = sort ? sortedKeys(x, sort.first) : Object.keys(x).filter((k) => x[k] !== undefined);
+  return `{${keys.map((k) => `${JSON.stringify(k)}: ${inline(x[k])}`).join(", ")}}`;
 };
 const holdsNodes = (x: unknown): boolean =>
   Array.isArray(x) ? x.some(holdsNodes) : isObj(x) && (isObj(x.nodes) || Object.values(x).some((v) => typeof v === "object" && v !== null && holdsNodes(v)));
@@ -98,7 +102,7 @@ const lines = (rows: string[], open: string, close: string) => (rows.length ? `$
 const node = (n: unknown): string => {
   if (!isObj(n)) return inline(n);
   const { id: _, ...rest } = n;
-  return inline(rest, "kind");
+  return inline(rest, { first: "kind" });
 };
 // A value that holds programs, or a file's top: one entry per line.
 function block(x: unknown): string {
