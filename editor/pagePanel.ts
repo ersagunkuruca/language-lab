@@ -87,6 +87,8 @@ export function pagePanels(host: PageHost) {
     status: h("p", { class: "hint", role: "status" }),
     // Where the page's elements are made (adopted into the frame's document).
     maker: document.implementation.createHTMLDocument("page"),
+    // What the page was started with, to build the interpreted page again.
+    started: null as { info: T.Info; main: Id } | null,
     for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,
     // This run's log (C172e): the world's answers and the events its
     // handlers were given, in order, from the interpreted page and then
@@ -97,7 +99,9 @@ export function pagePanels(host: PageHost) {
     hushBtn: h("button", { class: "btn", type: "button", "data-act": "page-hush", title: "Stop every sound this page is playing" }, "Stop sound") as HTMLButtonElement,
   };
   const sized = new WeakSet<Document>();
-  const pageBox = h("div", { class: "page-box" }, page.frame, page.status,
+  // Stepping through the page's log (I239e, WORLD-LOG-WINDOW.md §3).
+  const stepsBox = h("div", { class: "page-steps" });
+  const pageBox = h("div", { class: "page-box" }, page.frame, page.status, stepsBox,
     h("div", { class: "acts" },
       page.hushBtn,
       h("button", { class: "btn", type: "button", "data-act": "page-restart", title: "Run main again from the start: every cell back to its first value" }, "Restart"),
@@ -140,6 +144,7 @@ export function pagePanels(host: PageHost) {
     // buttons keep their handlers.
     if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
     page.hushBtn.hidden = !page.now?.hush;
+    drawSteps();
     // Put back in the frame once the frame is in the page again.
     queueMicrotask(() => {
       const d = page.frame.contentDocument;
@@ -199,6 +204,19 @@ export function pagePanels(host: PageHost) {
     page.for = null;
   }
 
+  // The interpreted page, with its log kept as a window: the last five
+  // minutes or so, from snapshots ten seconds apart (I239b,
+  // WORLD-LOG-WINDOW.md), so a page open for an hour keeps no more. With
+  // `stepFrom`, built from the compiled page's snapshots and stepped at
+  // the log's last event (I239f).
+  function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>): Preview {
+    return showPage({
+      log: page.log, window: LOG_WINDOW, stepFrom,
+      code: prog(), info, names: pres().names, main, program: titleOf(doc()),
+      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
+      frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
+    });
+  }
   function startPage(info: T.Info, main: Id) {
     page.now?.stop();
     page.now = null;
@@ -207,15 +225,9 @@ export function pagePanels(host: PageHost) {
     page.program = doc().program;
     page.status.textContent = "";
     page.log = [];
+    page.started = { info, main };
     try {
-      page.now = showPage({
-        // The last five minutes or so, from snapshots ten seconds apart
-        // (I239b, WORLD-LOG-WINDOW.md): a page open for an hour keeps no more.
-        log: page.log, window: LOG_WINDOW,
-        code: prog(), info, names: pres().names, main, program: titleOf(doc()),
-        doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
-        frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
-      });
+      page.now = interpreted(info, main);
       page.root = page.now.root as unknown as globalThis.Node;
     } catch (e) {
       sayStopped("The page stopped", e);
@@ -277,6 +289,93 @@ export function pagePanels(host: PageHost) {
     });
   }
   let asks = 0;
+
+  // Pause, step back and on, and go on from here: the interpreted page
+  // shown as it was after the window's first n events (page.ts Steps,
+  // I239c), from the snapshot nearest before. The window keeps about
+  // five minutes; the compiled page keeps no snapshots yet, so while it
+  // shows there's nothing to step by.
+  let stepTimer = 0;
+  function stepTo(n: number) {
+    const steps = page.now?.steps;
+    if (!steps) return;
+    const was = steps.at;
+    try { steps.to(Math.max(steps.from(), Math.min(n, steps.events()))); }
+    catch (e) {
+      // The replay went another way: back to the step it was at, or, from
+      // a page going on, on again from its end, nothing dropped.
+      sayStopped("Stepping stopped", e);
+      try { if (was !== null) steps.to(was); else throw e; }
+      catch { steps.at = steps.events(); steps.resume(); page.status.append(" The page goes on; Restart runs it afresh if it doesn't show what it did."); }
+    }
+    drawSteps();
+  }
+  // The compiled page keeps snapshots but doesn't step: the interpreted
+  // page is built from them, stepped at the log's last event, in its place.
+  function pauseCompiled() {
+    const from = page.now?.stepFrom?.(), started = page.started;
+    if (!from || !started) return;
+    const old = page.root;
+    page.now!.stop();
+    try { page.now = interpreted(started.info, started.main, from); }
+    catch (e) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); return; }
+    page.root = page.now.root as unknown as globalThis.Node;
+    if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
+    page.status.textContent = "";
+    drawSteps();
+  }
+  // Whichever page shows when it's pressed.
+  function pause() {
+    const steps = page.now?.steps;
+    if (steps) stepTo(steps.events()); else pauseCompiled();
+  }
+  function goOn() {
+    page.now?.steps?.resume();
+    page.status.textContent = "";
+    drawSteps();
+    // It goes on interpreted: the compiled page, handed these cells, starts
+    // from its first ones (told to the Language lane); Restart runs it
+    // compiled again.
+    if (compiledPages.get(prog())) page.status.textContent = "Interpreted since it was paused, so it can be slower here; Restart runs it compiled again.";
+  }
+  // How far back the window reaches, in its snapshots' seconds.
+  function reach(): string {
+    const kept = page.now?.window?.snapshots.length ?? page.now?.stepFrom?.().snapshots.length ?? 1;
+    const s = Math.max(1, kept) * LOG_WINDOW.seconds, most = LOG_WINDOW.keep * LOG_WINDOW.seconds;
+    const say = (t: number) => (t >= 60 ? `${Math.round(t / 6) / 10} min` : `${t} s`);
+    return s >= most ? `back about ${say(most)}, as far as the window keeps` : `back at most ${say(s)}`;
+  }
+  function drawSteps() {
+    const steps = page.now?.steps;
+    if (!page.root) { stepsBox.replaceChildren(); return; }
+    const btn = (label: string, title: string, run: () => void, off?: string) => {
+      const b = h("button", { class: "btn", type: "button", title: off ? `Can't: ${off}` : title, "aria-disabled": off ? "true" : undefined }, label);
+      if (!off) b.addEventListener("click", run);
+      return b;
+    };
+    if (!steps || steps.at === null) {
+      const can = steps || page.now?.stepFrom;
+      if (!can) { stepsBox.replaceChildren(btn("Pause", "", () => {}, "this page keeps no window of its log to step through")); return; }
+      stepsBox.replaceChildren(
+        btn("Pause", `Stop the page here, then step back and on through what it was given: ${reach()}`, pause),
+        h("span", { class: "hint" }, `Steps ${reach()}.`));
+      return;
+    }
+    const n = steps.events(), at = steps.at, from = steps.from();
+    const log = page.now!.window!.log, evs = [...eventsIn(log)];
+    const last = at > from ? evs[at - 1] : null;
+    const slider = h("input", { type: "range", min: String(from), max: String(n), step: "1", value: String(at), "aria-label": "How many of the window's events the page has been given" }) as HTMLInputElement;
+    slider.addEventListener("input", () => {
+      cancelAnimationFrame(stepTimer);
+      stepTimer = requestAnimationFrame(() => stepTo(Number(slider.value)));
+    });
+    stepsBox.replaceChildren(
+      btn("◀ Back", "The page one event earlier", () => stepTo(at - 1), at > from ? undefined : "this is as far back as the window reaches"),
+      slider,
+      btn("On ▶", "The page one event later", () => stepTo(at + 1), at < n ? undefined : "this is the last event the page was given"),
+      btn("Go on from here", "The page runs again from this moment; what it was given after it is dropped", goOn),
+      h("span", { class: "hint" }, `Paused after ${at - from} of ${n - from} events${last ? ` (the last: ${last.name})` : ", as far back as the window reaches"}. The page hears nothing till it goes on.`));
+  }
   function compileHere(code: Code, main: Id) {
     const w = (compiling = newWorker());
     const done = (m: CompileSays) => {
@@ -300,6 +399,9 @@ export function pagePanels(host: PageHost) {
   // caught, and what it was given mounted here (core-page.ts mountCorePage).
   type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; stop(): void };
   function swapCompiled(code: Code, made: CompiledPage) {
+    // Not while the page is stepped through: it takes over when the page
+    // goes on (goOn).
+    if (page.now?.steps?.at != null) return;
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
@@ -325,6 +427,7 @@ export function pagePanels(host: PageHost) {
     page.root = m.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
     page.status.textContent = "";
+    drawSteps();
   }
 
   // The page compiled, saved or opened in a tab: printed from the core IR
