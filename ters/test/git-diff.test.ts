@@ -26,5 +26,5 @@ test("a rename in names.default.json reads as a rename in git diff, --staged and
   assert.ok(git("diff", "--staged").includes(renamed));
   git("commit", "-qm", "rename");
   assert.ok(git("show", "--ext-diff", "--format=", "HEAD").includes(renamed));
-  assert.ok(git("diff", "--no-ext-diff", "HEAD~1").includes('-"5c9e1bb0": "expression",'));
+  assert.ok(git("diff", "--no-ext-diff", "HEAD~1").includes('-"4c6a8fcf": "expression",'));
 });
