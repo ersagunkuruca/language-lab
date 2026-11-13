@@ -12,7 +12,7 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { collect, freshId, portNames, portsOf, subtree, isCall, type Call, type NodeData } from "../src/model.ts";
+import { collect, freshId, parentOf, portNames, portsOf, subtree, swapIn, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -747,14 +747,18 @@ export class Session {
     return off ? "ok" : `ok: ${this.name(def)} : ${this.typeOf(def)}`;
   }
 
-  // A let before `before` (or at the top of the body): `name = value`.
+  // A let `name = value` just before the step `at` is in (or at the top of
+  // the body): before a let, before that let; at a hole after the steps,
+  // after them, so a sequence is built top-down, each step naming the ones
+  // before it (I229). Inside a function given as a value, all(() => □),
+  // the step goes inside it, where its effects are handled.
   step(at: string, name: string, value: string): string {
     const before = this.resolve(at);
     const def = this.defOf(before);
     if (!def) throw new Error(`#${this.id(before)} isn't in a definition`);
     return this.apply(def, () => {
       const info = editorInfo(this.code, this.names);
-      const r = T.addStep(this.code, this.names, info, def, before === def ? undefined : before);
+      const r = before === def ? T.addStep(this.code, this.names, info, def) : this.stepBefore(info, def, before);
       if (!r.ok || !r.dot) return r.ok ? { ok: false, reason: "no step added" } : r;
       const names = { ...r.names, [r.dot]: name.trim() || "_" };
       const let_ = Object.values(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
@@ -762,6 +766,25 @@ export class Session {
       if (!value.trim()) return { ok: true, code: r.code, names };
       return this.fill(r.code, names, hole, value, def);
     });
+  }
+
+  // The let goes around the innermost body holding `part`: a function's,
+  // a let's (the steps after it), a case's, the definition's.
+  private stepBefore(info: Info, def: Id, part: Id): ReturnType<typeof T.addStep> {
+    const code = this.code;
+    if (!subtree(code, def).includes(part)) return { ok: false, reason: "a step goes before a value of this definition" };
+    let at = part;
+    for (let up = parentOf(code, at); up && up.parent !== def && up.slot !== "body" && up.slot !== "otherwise"; up = parentOf(code, at)) at = up.parent;
+    const n = code.nodes[at];
+    if (!n || n.kind === "def" || n.kind === "typedef" || n.kind === "arm") return { ok: false, reason: "a step goes before a value of this definition" };
+    const dot = freshId(), hole = freshId(), lam = freshId(), let_ = freshId();
+    const next = swapIn(code, at, let_);
+    next.nodes[dot] = { id: dot, kind: "binder" };
+    next.nodes[hole] = { id: hole, kind: "hole" };
+    next.nodes[lam] = { id: lam, kind: "lambda", params: [dot], body: at };
+    next.nodes[let_] = { id: let_, kind: "call", fn: lam, args: [hole] };
+    const r = T.guardTyped(info, next, this.names, hole, "Added a step.");
+    return r.ok ? { ...r, dot } : r;
   }
 
   // Replace a part by a match on a variable, one case per variant, each a copy.
