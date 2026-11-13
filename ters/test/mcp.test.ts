@@ -475,3 +475,36 @@ test("a fold is written as the view prints it, each folded value named after wit
   assert.match(text("eval", { text: "count([4, 4, 4, 4])" }), /^= 4 :/);
   assert.match(call("replace", { at: "count", find: "0", text: "fold xs; nil → 0" }).text, /a fold writes every case/);
 });
+
+// Round 15's text-reader gaps (GAPS.md, I248 to I250): three shows joined
+// by ++ (each show of every type, more ways to read it than were tried),
+// `as` for a field read inside a match's case, and a call of a call's
+// result as the Guide writes it.
+test("three shows in a line, `as` inside a match, derivative(f)(x) (I248, I249, I250)", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "fit");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  text("define", { name: "Params", kind: "type", first: "params(a: Float64, b: Float64)" });
+  text("define", { name: "Point", kind: "type", first: "point(x: Float64, y: Float64)" });
+  text("define", { name: "Event", kind: "type", first: "event(y: Float64, at: Int)" });
+  // I248
+  text("define", { name: "shown", kind: "function", params: ["p"] });
+  text("replace", { at: "shown", find: "□", text: '"a = " ++ show(p.a) ++ ", b = " ++ show(p.b) ++ ", sum " ++ show(p.a + p.b)' });
+  assert.equal(text("eval", { text: "shown(params(1.5, 2))" }), '= "a = 1.5, b = 2, sum 3.5" : Text');
+  assert.equal(text("eval", { text: "show(1.5) ++ show(2.5) ++ show(3.5)" }), '= "1.52.53.5" : Text');
+  // I249: refused without `as`, read with it.
+  text("define", { name: "largest y", kind: "function", params: ["pts"] });
+  const body = "match pts\n  nil → 0\n  cons(pt, more) → larger(pt.y, largest y(more))";
+  assert.throws(() => text("replace", { at: "largest y", find: "□", text: body }), /Give `as`/);
+  text("replace", { at: "largest y", find: "□", text: body, as: "Point" });
+  assert.equal(text("eval", { text: "largest y([point(1, 2), point(2, 5), point(3, 4)])" }), "= 5 : Float64");
+  // I250
+  assert.equal(text("eval", { text: "first(derivative((x) => x * x)(3), else 0)" }), "= 6 : Float64");
+  text("define", { name: "slope at", kind: "function", params: ["f", "x"] });
+  text("replace", { at: "slope at", find: "□", text: "first(derivative(f)(x), else 0)" });
+  assert.equal(text("eval", { text: "slope at((x) => x * x * x, 2)" }), "= 12 : Float64");
+});

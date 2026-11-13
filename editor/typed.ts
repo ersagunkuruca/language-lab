@@ -326,14 +326,15 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   // where a Rational goes, a whole number or one over another is a
   // fraction: 1/2 is one half, not 0.5.
   const whole = (v: Value): boolean => typeof v === "number" ? Number.isInteger(v) : typeof v === "object" && v !== null && "tag" in v && v.fields.some(whole);
-  const wholes = (t: Typed): boolean => "value" in t ? !t.float && whole(t.value) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "let" in t ? wholes(t.be) || wholes(t.rest) : "body" in t && wholes(t.body);
+  const wholes = (t: Typed): boolean => "value" in t ? !t.float && whole(t.value) : "apply" in t ? [t.apply, ...t.args].some(wholes) : "args" in t ? t.args.some(wholes) : "cond" in t ? [t.cond, t.then, t.else].some(wholes) : "let" in t ? wholes(t.be) || wholes(t.rest) : "body" in t && wholes(t.body);
   // A name several things share (show, length) is each of them in turn,
   // and the first that type-checks there is the one meant. A meaning that
   // would settle the type of a value nothing has settled yet comes after
   // those that leave it open (E175): show(n) of an n not known yet is show
   // for any value, not Float64's, so n can still be an Int later.
   let first: TEdit | undefined;
-  const all_ = readings(leaveOpen(info, narrow(code, info, fieldsByProbe(code, names, info, hole, r, defId))));
+  const meant = leaveOpen(info, narrow(code, info, fieldsByProbe(code, names, info, hole, r, defId)));
+  const all_ = readings(meant);
   // A field several types have (title on a Card and on a Quick), read on a
   // value nothing has settled, is each type's in turn: when more than one
   // fits, each is offered, and nothing is chosen silently (E186).
@@ -388,6 +389,15 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
     first ??= plain;
     why.push(plain.reason);
   }
+  // More ways to read it than were tried one by one (I248: three shows
+  // joined by ++, each show of every type): the first that fits, in the
+  // same order, found a name at a time, each choice checked with the
+  // names not chosen yet left as holes, so a choice that can't fit is
+  // dropped with everything after it.
+  if (readingCount(meant) > all_.length) {
+    const found = firstFitting(meant, (t) => written(code, names, info, hole, text, t, wholes(t), defId).ok || (wholes(t) && written(code, names, info, hole, text, t, false, defId).ok));
+    if (found) return fitOf(found);
+  }
   return refusal(first! as TEdit & { ok: false }, why, overloaded(r, all));
 }
 
@@ -425,6 +435,7 @@ function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed,
     const y = f(x);
     if (y) return y;
     if ("op" in x) return { ...x, args: x.args.map((a) => map(a, f)) };
+    if ("apply" in x) return { apply: map(x.apply, f), args: x.args.map((a) => map(a, f)) };
     if ("params" in x) return { ...x, body: map(x.body, f) };
     if ("cond" in x) return { cond: map(x.cond, f), then: map(x.then, f), else: map(x.else, f) };
     if ("let" in x) return { ...x, be: map(x.be, f), rest: map(x.rest, f) };
@@ -503,6 +514,7 @@ function overloaded(t: Typed, names: Names): string[] {
   const out = new Set<string>();
   const go = (x: Typed): void => {
     if ("op" in x) { if (x.alts && x.alts.length > 1) out.add(names[x.op] ?? x.op); x.args.forEach(go); }
+    else if ("apply" in x) [x.apply, ...x.args].forEach(go);
     else if ("params" in x) go(x.body);
     else if ("cond" in x) [x.cond, x.then, x.else].forEach(go);
     else if ("let" in x) { go(x.be); go(x.rest); }
@@ -606,6 +618,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     if ("params" in t) return look(t.body);
     if ("cond" in t) return [t.cond, t.then, t.else].forEach(look);
     if ("let" in t) return [t.be, t.rest].forEach(look);
+    if ("apply" in t) return [t.apply, ...t.args].forEach(look);
     if (!("op" in t)) return;
     const alts = t.alts ?? [t.op];
     t.args.forEach((a, i) => {
@@ -625,6 +638,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     if ("ref" in t) { const h = head(info.typeOf.get(t.ref)); const g = bound.get(t.ref) ?? given.get(t.ref); return { t, heads: h ? new Set([h]) : g?.size ? g : null }; }
     if ("let" in t) { const be = go(t.be); if (be.heads) bound.set(t.let.id, be.heads); const rest = go(t.rest); return { t: { ...t, be: be.t, rest: rest.t }, heads: rest.heads }; }
     if ("params" in t) return { t: { ...t, body: go(t.body).t }, heads: null };
+    if ("apply" in t) return { t: { apply: go(t.apply).t, args: t.args.map((a) => go(a).t) }, heads: null };
     if ("cond" in t) {
       const [c, a, b] = [t.cond, t.then, t.else].map(go);
       return { t: { cond: c.t, then: a.t, else: b.t }, heads: a.heads && b.heads ? new Set([...a.heads, ...b.heads]) : null };
@@ -695,6 +709,7 @@ function leaveOpen(info: Info, t: Typed): Typed {
   if ("params" in t) return { ...t, body: leaveOpen(info, t.body) };
   if ("cond" in t) return { cond: leaveOpen(info, t.cond), then: leaveOpen(info, t.then), else: leaveOpen(info, t.else) };
   if ("let" in t) return { ...t, be: leaveOpen(info, t.be), rest: leaveOpen(info, t.rest) };
+  if ("apply" in t) return { apply: leaveOpen(info, t.apply), args: t.args.map((a) => leaveOpen(info, a)) };
   if (!("op" in t)) return t;
   const args = t.args.map((a) => leaveOpen(info, a));
   if (!t.alts || t.alts.length < 2) return { ...t, args };
@@ -707,7 +722,11 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // not the one std happens to declare first. Where a generic one is
   // among them (+ for every number type), the order is left as it was.
   const generic = t.alts.some((op) => op.startsWith("builtin.arith."));
-  const alts = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op), f: +(!generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."))) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.f - b.f || a.k - b.k).map((x) => x.op);
+  // (The Int one takes its twin's place, so Float64's stays before
+  // another type's: show(1.5) is Float64's show, not Algebraic's, I248.)
+  const twinned = (op: Id) => !generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."));
+  const ranked = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.k - b.k).map((x) => x.op);
+  const alts = ranked.flatMap((op) => twinned(op) ? [op.replace(/^builtin\./, "builtin.int."), op] : op.startsWith("builtin.int.") && t.alts!.includes(op.replace(/^builtin\.int\./, "builtin.")) && twinned(op.replace(/^builtin\.int\./, "builtin.")) ? [] : [op]);
   // When every meaning settles an open input, each at a type of its own
   // (length of a List or of a Text, I218 M10), which is meant is a guess:
   // each type is named, and a reading that fits at more than one is
@@ -735,6 +754,7 @@ function guessedAt(t: Typed): string | null {
     if ("params" in x) return go(x.body);
     if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
     if ("let" in x) return [x.be, x.rest].forEach(go);
+    if ("apply" in x) return [x.apply, ...x.args].forEach(go);
     if (!("op" in x)) return;
     x.args.forEach(go);
     const ty = x.guess?.[x.op];
@@ -742,6 +762,63 @@ function guessedAt(t: Typed): string | null {
   };
   go(t);
   return out.length ? out.join(", ") : null;
+}
+
+// How many ways there are to read what's typed (readings gives the first
+// 16), counted up to a million.
+function readingCount(t: Typed): number {
+  const times = (xs: Typed[]) => xs.reduce((n, x) => Math.min(1e6, n * readingCount(x)), 1);
+  if ("params" in t) return readingCount(t.body);
+  if ("cond" in t) return times([t.cond, t.then, t.else]);
+  if ("let" in t) return times([t.be, t.rest]);
+  if ("apply" in t) return times([t.apply, ...t.args]);
+  if (!("op" in t)) return 1;
+  return Math.min(1e6, (t.alts?.length ?? 1) * times(t.args));
+}
+
+// The first reading, in readings' order, that `fits`: each name of several
+// meanings is chosen in turn, outside in and left to right, and a choice
+// is kept only if what's typed fits with it and the names not chosen yet
+// left as holes (a hole fits anywhere, so a choice refused then is refused
+// whatever comes after it). At most 120 checks: null past them.
+function firstFitting(top: Typed, fits: (t: Typed) => boolean): Typed | null {
+  const order: Typed[] = [];
+  const collect = (x: Typed): void => {
+    if ("op" in x && x.alts && x.alts.length > 1) order.push(x);
+    if ("op" in x || "apply" in x) { if ("apply" in x) collect(x.apply); x.args.forEach(collect); }
+    else if ("params" in x) collect(x.body);
+    else if ("cond" in x) [x.cond, x.then, x.else].forEach(collect);
+    else if ("let" in x) { collect(x.be); collect(x.rest); }
+  };
+  collect(top);
+  const chosen = new Map<Typed, Id>();
+  const build = (x: Typed): Typed => {
+    if ("op" in x) {
+      if (x.alts && x.alts.length > 1 && !chosen.has(x)) return { hole: true };
+      return { op: chosen.get(x) ?? x.op, args: x.args.map(build), ...(x.guess ? { guess: x.guess } : {}) };
+    }
+    if ("apply" in x) return { apply: build(x.apply), args: x.args.map(build) };
+    if ("params" in x) return { ...x, body: build(x.body) };
+    if ("cond" in x) return { cond: build(x.cond), then: build(x.then), else: build(x.else) };
+    if ("let" in x) return { ...x, be: build(x.be), rest: build(x.rest) };
+    return x;
+  };
+  let budget = 120;
+  const go = (i: number): Typed | null => {
+    if (i === order.length) return fits(build(top)) ? build(top) : null;
+    const x = order[i] as { op: Id; alts: Id[] };
+    for (const op of x.alts) {
+      if (--budget < 0) return null;
+      chosen.set(order[i], op);
+      // The last choice is checked whole, below.
+      if (i + 1 < order.length && !fits(build(top))) continue;
+      const found = go(i + 1);
+      if (found) return found;
+    }
+    chosen.delete(order[i]);
+    return null;
+  };
+  return go(0);
 }
 
 // Each way to read what's typed, one id per called name: at most 16.
@@ -757,6 +834,7 @@ function fieldOwners(code: Code, info: Info, names: Names) {
       if ("params" in x) return go(x.body);
       if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
       if ("let" in x) return [x.be, x.rest].forEach(go);
+      if ("apply" in x) return [x.apply, ...x.args].forEach(go);
       if (!("op" in x)) return;
       x.args.forEach(go);
       const v = ownerOf.get(x.op);
@@ -775,6 +853,11 @@ function readings(t: Typed): Typed[] {
     return out.map(([cond, then, els]) => ({ cond, then, else: els }));
   }
   if ("let" in t) return readings(t.be).flatMap((be) => readings(t.rest).map((rest) => ({ ...t, be, rest }))).slice(0, 16);
+  if ("apply" in t) {
+    let out: Typed[][] = [[]];
+    for (const a of [t.apply, ...t.args]) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
+    return out.map(([apply, ...args]) => ({ apply, args }));
+  }
   if (!("op" in t)) return [t];
   let out: Typed[][] = [[]];
   for (const a of t.args) out = out.flatMap((done) => readings(a).map((x) => [...done, x])).slice(0, 16);
@@ -793,7 +876,7 @@ function readings(t: Typed): Typed[] {
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple. A relation, (s, d) → a, b = condition, has
 // its results among its inputs and the condition as its body (L225e).
-type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id> } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed };
+type Typed = { value: Value; float?: true } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id> } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -864,7 +947,12 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // A value with such a number inside, [1.0, 2.0], is read part by part,
   // so each keeps its point (E195).
   const pointed = !("error" in r) && typeof r.value !== "number" && /(^|[^\w.])-?\d+\.0*(?![\d.])|(^|[^\w.])-?\d+e[+-]?\d+/i.test(t.replace(/"(?:[^"\\]|\\.)*"/g, '""'));
-  if (!("error" in r) && !namesDef(r.value) && !pointed) return { value: r.value };
+  // The library's case named as a definition of the program's own is that
+  // definition's call: shown(p) of a program's own `shown` isn't std's
+  // Shown case (I248). (A case of the program's own stays the case.)
+  const own = (id: Id) => !fromLibrary(id) && !/^(std|builtin)\./.test(id);
+  const shadowed = (v: unknown): boolean => !!v && typeof v === "object" && "tag" in v && ((!own((v as { tag: Id }).tag) && ((id) => !!id && code.nodes[id]?.kind === "def" && own(id))(scope.get(names[(v as { tag: Id }).tag] ?? ""))) as boolean || ((v as { fields?: unknown[] }).fields ?? []).some(shadowed));
+  if (!("error" in r) && !namesDef(r.value) && !pointed && !shadowed(r.value)) return { value: r.value };
   // What the text prints, read back (E178): a □ left to fill later, a
   // step name = value; rest, and a list of anything.
   if (t === "□") return { hole: true };
@@ -1010,6 +1098,20 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     }
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
+  // A call of what a call gives, derivative(f)(x) as the Guide writes it
+  // (I250): the last brackets' inputs given to what comes before them,
+  // when that ends in brackets of its own.
+  const opening = t.endsWith(")") ? openingOf(t, t.length - 1) : -1;
+  if (opening > 0 && t.slice(0, opening).trimEnd().endsWith(")")) {
+    const given = topLevel(t.slice(opening + 1, -1));
+    const head = typedOut(t.slice(0, opening), code, names, scope);
+    if (given && !("error" in head)) {
+      const args = given.map((x) => typedOut(x, code, names, scope));
+      const bad = args.find((x) => "error" in x);
+      if (bad) return bad;
+      return { apply: head, args: args as Typed[] };
+    }
+  }
   // A field read as the blocks print it, board.columns: the field's
   // projection called on what's before the dot (BACKLOG I113). The last dot
   // outside brackets and text, so a.b.c is (a.b).c.
@@ -1168,6 +1270,20 @@ function closing(text: string, from: number): number {
   return -1;
 }
 
+// Where the bracket that closes at `to` opens, outside text: -1 when none.
+function openingOf(text: string, to: number): number {
+  const open: number[] = [];
+  let quoted = false;
+  for (let i = 0; i <= to; i++) {
+    const c = text[i];
+    if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
+    if (quoted) continue;
+    if ("([".includes(c)) open.push(i);
+    else if (")]".includes(c)) { const at = open.pop(); if (at === undefined) return -1; if (i === to) return at; }
+  }
+  return -1;
+}
+
 // Where the last dot outside brackets and text is, before a name (not a
 // digit: 1.5 is a number): -1 when there's none.
 function lastDot(text: string): number {
@@ -1292,6 +1408,8 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
       nodes[id] = { id, kind: "match", scrutinee: tree(t.cond), arms: [arm(TRUE, t.then), arm(FALSE, t.else)], otherwise: null };
       return id;
     }
+    // A call of a call's result, derivative(f)(x) (I250).
+    if ("apply" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "call", fn: tree(t.apply), args: t.args.map((a) => tree(a)) }; return id; }
     const [p, q] = t.args.map(isWhole);
     if (fit && t.op === B.div && t.args.length === 2 && p !== null && q !== null) {
       const id = place ?? freshId();

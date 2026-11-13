@@ -3387,21 +3387,35 @@ disagree there. fit's sums are written as folds over the data for this
 reason. Language lane B is building forward mode through data in
 derive.ts.
 
+*Fixed* (L245, #2595): derive.ts goes forward through lists and
+lambdas on `ters run`; a loss written `sum(map(pts, …))` has its gradient.
+
 **M1. The third `show` in one line reads as show at Int (MCP text, bug,
 I248).** `show(1.5) ++ show(2.5) ++ show(3.5)` is refused: "show needs an
 Int here, and a number with a fraction part can't be one". Two shows
 read; a third doesn't. fit shows each Float64 in a let of its own.
+
+*Fixed* (I248): the reader tried at most 16 combinations of the names
+with several meanings (each `show` has four), so the right one wasn't
+among them; when none of the 16 fits it now chooses a name at a time, each choice checked
+with the names not chosen yet as holes. Also `show(1.5)` reads as
+Float64's show again (it gave "3/2", Algebraic's).
 
 **M2. `as` doesn't settle a field in a match case (MCP text, I249).**
 In `largest y`, `larger(pt.y, largest y(more))` in a `cons(pt, more)`
 case asks for `as` ("Point" or "Event"), and given `as` "Point" it asks
 again. fit takes the ys out with a `map` first.
 
+*Fixed* (I249): `as` reached only text of one line; it now reaches each
+case of a match, fold or handle, and the steps around them.
+
 **M3. A call of a call doesn't read (MCP text, I250).**
 `derivative(f)(x)`, the way the Guide writes it, is "isn't read as a
 whole"; inside `first(…, else …)` it is "no case named derivative at 11".
 fit names the derivative in a let first (`g = gradient(…); g(p)`). This
 is how calculus is written too, which hid the gap.
+
+*Fixed* (I250): a call of what a call gives reads, `derivative(f)(x)`.
 
 **R1. The evaluator, 1262x at 20 points and 10735x at 500 (perf).**
 A profile shows the machine's own steps (`going`, `step`, `apply`,

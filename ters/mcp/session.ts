@@ -324,11 +324,11 @@ export class Session {
   // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
   // the ports given by name and the one left out the value.
   private fill(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
-    const steps = this.stepsIn(code, names, hole, text, def);
+    const steps = this.stepsIn(code, names, hole, text, def, as);
     if (steps) return steps;
-    if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def);
-    if (/^\s*handle\s/.test(text)) return this.handleIn(code, names, hole, text, def);
-    if (/^\s*fold\s/.test(text)) return this.foldIn(code, names, hole, text, def);
+    if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def, as);
+    if (/^\s*handle\s/.test(text)) return this.handleIn(code, names, hole, text, def, as);
+    if (/^\s*fold\s/.test(text)) return this.foldIn(code, names, hole, text, def, as);
     const block = this.blockIn(code, names, hole, text, def, as);
     if (block) return block;
     const solve = this.solveIn(code, names, hole, text);
@@ -336,7 +336,7 @@ export class Session {
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: solve.code, names };
     for (const [h, t] of solve.fills) {
       if (!cur.ok) return cur;
-      cur = this.fillOne(cur.code, cur.names, h, t, def);
+      cur = this.fillOne(cur.code, cur.names, h, t, def, as);
     }
     return cur;
   }
@@ -411,7 +411,7 @@ export class Session {
     const inside = subtree(r.code, hole).filter((x) => !before.has(x) || x === hole);
     const bodies = inside.filter((x) => { const n = r.code.nodes[x]; return n?.kind === "lambda" && r.code.nodes[n.body]?.kind === "hole" && !before.has(n.body); }).map((x) => (r.code.nodes[x] as NodeOf<"lambda">).body);
     if (bodies.length !== 1) return { ok: false, reason: `${lines[at].trim()} doesn't read as a function whose body is on the lines after it` };
-    return this.fill(r.code, r.names, bodies[0], dedent(body), def);
+    return this.fill(r.code, r.names, bodies[0], dedent(body), def, as);
   }
 
   // Steps on lines of their own, as the view prints a let (I217 M5):
@@ -422,7 +422,7 @@ export class Session {
   // so the last may be a match on lines (`ds = …` then `match ds`, M4).
   // Null when the text isn't steps: one line, or a first line that isn't
   // `name = value` with more at its indent.
-  private stepsIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } | null {
+  private stepsIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } | null {
     const lines = text.replace(/^\s*\n/, "").split("\n").filter((l) => l.trim());
     if (lines.length < 2) return null;
     const indent = (l: string) => l.length - l.trimStart().length;
@@ -433,16 +433,16 @@ export class Session {
     // `tuple(a, b) = e` (M6): a match on e with its one case, the lines
     // after it that case's value.
     const parts = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*\(([^()]*)\)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
-    if (parts) return this.fill(code, names, hole, `match ${[parts[3], ...lines.slice(1, next).map((l) => l.trim())].join(" ")}\n  ${parts[1]}(${parts[2]}) →\n${after.split("\n").map((l) => "    " + l).join("\n")}`, def);
+    if (parts) return this.fill(code, names, hole, `match ${[parts[3], ...lines.slice(1, next).map((l) => l.trim())].join(" ")}\n  ${parts[1]}(${parts[2]}) →\n${after.split("\n").map((l) => "    " + l).join("\n")}`, def, as);
     const step = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
     if (!step) return null;
     // The step's value may go on over deeper lines.
     const value = [step[2], ...lines.slice(1, next).map((l) => l.trim())].join(" ");
-    const r = this.fillOne(code, names, hole, `${step[1]} = ${value}; □`, def);
+    const r = this.fillOne(code, names, hole, `${step[1]} = ${value}; □`, def, as);
     if (!r.ok) return r;
     const call = r.code.nodes[hole], fn = isCall(call) ? r.code.nodes[call.fn] : undefined;
     if (fn?.kind !== "lambda" || r.code.nodes[fn.body]?.kind !== "hole") return { ok: false, reason: `${step[1]} = ${value} doesn't read as a step` };
-    return this.fill(r.code, r.names, fn.body, after, def);
+    return this.fill(r.code, r.names, fn.body, after, def, as);
   }
 
   // A fold as the view prints it (I218 M12), a case a line or after `;`s,
@@ -452,7 +452,7 @@ export class Session {
   //     cons(head, tail) with total → head + total
   // Every case of the type is written (a fold has no otherwise); a
   // recursive field with no name after `with` isn't folded there.
-  private foldIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+  private foldIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const { head, cases } = casesOf(text, "fold");
     const all = baseNames(names);
     const read = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:with\s+([^→]+?))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
@@ -492,7 +492,7 @@ export class Session {
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: { nodes, defs: code.defs }, names: out };
     for (const [h, t] of fills) {
       if (!cur.ok) return cur;
-      if (t && t !== "□" && t !== "?") cur = this.fill(cur.code, cur.names, h, t.replace(/[‹›]/g, ""), def);
+      if (t && t !== "□" && t !== "?") cur = this.fill(cur.code, cur.names, h, t.replace(/[‹›]/g, ""), def, as);
     }
     return cur;
   }
@@ -504,7 +504,7 @@ export class Session {
   //     otherwise → (v) => v + 1
   // The otherwise, when written, is what the value is given to when the
   // body asks nothing.
-  private handleIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+  private handleIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const { head, cases } = casesOf(text, "handle");
     const all = baseNames(names);
     const ops = new Map<string, NodeOf<"variant">>();
@@ -535,7 +535,7 @@ export class Session {
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: { nodes, defs: code.defs }, names: out };
     for (const [h, t] of fills) {
       if (!cur.ok) return cur;
-      if (t && t !== "□" && t !== "?") cur = this.fill(cur.code, cur.names, h, t.replace(/[‹›]/g, ""), def);
+      if (t && t !== "□" && t !== "?") cur = this.fill(cur.code, cur.names, h, t.replace(/[‹›]/g, ""), def, as);
     }
     return cur;
   }
@@ -549,7 +549,7 @@ export class Session {
   // each case's fields named as written and its body read as text in
   // turn, so a case's body may be a match too (on deeper lines). `->` reads
   // as →; a case left out, or written □, stays a hole.
-  private matchIn(code: Code, names: Names, hole: Id, text: string, def: Id): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+  private matchIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const { head, cases } = casesOf(text, "match");
     const all = baseNames(names);
     const on = norm(head);
@@ -562,7 +562,7 @@ export class Session {
       const taken = new Set(scope.map((b) => all[b]));
       let name = "it";
       for (let i = 2; taken.has(name); i++) name = `it ${i}`;
-      return this.fill(code, names, hole, `${name} = ${head}\nmatch ${name}\n${cases.map((c) => "  " + c.replace(/\n/g, "\n  ")).join("\n")}`, def);
+      return this.fill(code, names, hole, `${name} = ${head}\nmatch ${name}\n${cases.map((c) => "  " + c.replace(/\n/g, "\n  ")).join("\n")}`, def, as);
     }
     // List patterns (M2): `[a, b] → …`, `[] → …`, with `otherwise →` for
     // the lengths not written, read as the matches on nil and cons they
@@ -574,7 +574,7 @@ export class Session {
       if (bad) return { ok: false, reason: `with list patterns, the other cases are otherwise, not ${bad.trim()}` };
       const fallback = other ? dedent(other.trim().replace(/^otherwise\s*(?:→|->)/, "")) || "□" : "□";
       const written = lists.filter(Boolean).map((k) => ({ names: k![1].trim() ? k![1].split(",").map((x) => x.trim()) : [], body: dedent(k![2]) || "□" }));
-      return this.fill(code, names, hole, listMatch(head, 0, written, fallback), def);
+      return this.fill(code, names, hole, listMatch(head, 0, written, fallback), def, as);
     }
     const parsed = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
     const bad = parsed.findIndex((k) => !k);
@@ -591,8 +591,8 @@ export class Session {
       const b = (code.nodes[d] as NodeOf<"def"> | undefined)?.body, td = b ? code.nodes[b] : undefined;
       return td?.kind === "typedef" && written.every((w) => td.variants.some((v) => norm(all[v] ?? "") === w));
     });
-    const as = types.length === 1 ? types[0] : types.find((d) => !LIBRARY.code.nodes[d]);
-    const split = T.splitOn(code, names, editorInfo(code, names), hole, binder, as);
+    const of = types.length === 1 ? types[0] : types.find((d) => !LIBRARY.code.nodes[d]);
+    const split = T.splitOn(code, names, editorInfo(code, names), hole, binder, of);
     if (!split.ok) return !types.length ? { ok: false, reason: `no data type has the cases ${written.join(", ")}` } : split;
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: split.code, names: { ...split.names } };
     const m = split.code.nodes[hole] as NodeOf<"match">;
@@ -609,12 +609,12 @@ export class Session {
       if (!cur.ok) return cur;
       fields.forEach((f, i) => { (cur as { names: Names }).names[arm.binds[i]] = f; });
       const body = dedent(k[3]);
-      if (body && body !== "□" && body !== "?") cur = this.fill(cur.code, cur.names, arm.body, body.replace(/[‹›]/g, ""), def);
+      if (body && body !== "□" && body !== "?") cur = this.fill(cur.code, cur.names, arm.body, body.replace(/[‹›]/g, ""), def, as);
     }
     const rest = otherwise[0] && dedent(otherwise[0][3]);
     if (rest && rest !== "□" && rest !== "?") for (const arm of arms) if (!seen.has(arm.id)) {
       if (!cur.ok) return cur;
-      cur = this.fill(cur.code, cur.names, arm.body, rest.replace(/[‹›]/g, ""), def);
+      cur = this.fill(cur.code, cur.names, arm.body, rest.replace(/[‹›]/g, ""), def, as);
     }
     return cur;
   }
