@@ -20,7 +20,10 @@
 //   ters downgrade <program> <name>       back to the version before, from the program's store (§4b)
 //   ters broken <module.json> <name> <n> <reason…>  mark a version broken in the module's signed log (§4)
 //   ters fetch <program> <url>            a module from any host into the program's modules, checked by hash (§4)
-//   ters diff <before.json> <after.json>  what changed, by definition and name (merge-files.ts)
+//   ters diff <before> <after>            what changed, by definition, line by line by node id
+//                                        (two programs: diff.ts, DIFF.md), or a JSON file's ids (merge-files.ts)
+//   ters diff [<program>] --from REV [--to REV]
+//                                        a program, or every changed one, against git revisions
 //   ters merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
 //                                        written with theirs taken in (SHARING.md §6)

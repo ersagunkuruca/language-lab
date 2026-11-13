@@ -2,7 +2,7 @@
 import type { Plugin } from "esbuild";
 import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { merge, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
@@ -395,7 +395,64 @@ if (command === "diff" || command === "merge") {
   const { describe, diffLines, merge3 } = await import("../src/merge-files.ts");
   const json = (f: string | undefined) => { if (!f || !existsSync(f)) return undefined; try { return JSON.parse(readFileSync(f, "utf8")); } catch { fail(`${f} isn't JSON`); } };
   if (command === "diff") {
-    if (!path || !rest[0]) fail("diff needs two files: before and after");
+    // A program against a git revision (E255b, DIFF.md): `--from REV`, and
+    // `--to REV` (else the working tree). With no program, every program
+    // folder (one with a code.json) that changed between the two.
+    const args = [path, ...rest].filter((x): x is string => x !== undefined);
+    const flag = (f: string) => { const i = args.indexOf(f); if (i < 0) return undefined; const v = args[i + 1] ?? fail(`${f} needs a revision`); args.splice(i, 2); return v; };
+    const from = flag("--from"), to = flag("--to");
+    if (from !== undefined || to !== undefined) {
+      const { Session } = await import("../mcp/session.ts");
+      const { diffPrograms, diffText } = await import("../src/diff.ts");
+      const { mkdtempSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { execFileSync } = await import("node:child_process");
+      const git = (...a: string[]) => execFileSync("git", a, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 1 << 30 });
+      let top: string;
+      try { top = git("rev-parse", "--show-toplevel").trim(); } catch { fail("--from and --to need a git repository"); }
+      const rel = (dir: string) => relative(top, resolve(dir)).split(sep).join("/");
+      // The folder as it is at rev, written out to read as any folder; null
+      // where it has no code.json then.
+      const at = (dir: string, rev: string | undefined): string | null => {
+        if (rev === undefined) return existsSync(join(dir, "code.json")) ? dir : null;
+        const out = mkdtempSync(join(tmpdir(), "ters-diff-"));
+        let any = false;
+        for (const f of ["code.json", "names.default.json", "comments.json", "signatures.json"]) {
+          try { writeFileSync(join(out, f), execFileSync("git", ["show", `${rev}:${rel(dir)}/${f}`], { cwd: top, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1 << 30 })); if (f === "code.json") any = true; } catch { /* not in that version */ }
+        }
+        return any ? out : null;
+      };
+      const version = (f: string) => { const v = new Session(f); return { code: v.code, own: v.own, names: v.allNames, comments: v.comments, info: v.info, style: v.pres().style }; };
+      const empty = { code: base({ nodes: {}, defs: [] }), own: [], names: {}, comments: {}, info: null, style: { view: "blocks", notation: {} } };
+      const one = (dir: string): string => {
+        const a = at(dir, from), b = at(dir, to);
+        if (!a && !b) fail(`${dir} has no code.json in either version`);
+        const text = diffText(diffPrograms(a ? version(a) : empty, b ? version(b) : empty));
+        return text || "no changes";
+      };
+      let dirs: string[];
+      if (args.length) dirs = [args[0]];
+      else {
+        const files = git("diff", "--name-only", ...(from ? [from] : []), ...(to ? [to] : []), "--", ".").split("\n").filter(Boolean);
+        dirs = [...new Set(files.filter((f) => /(^|\/)(code|names\.default|comments)\.json$/.test(f)).map((f) => f.replace(/\/[^/]+$/, "")))].map((d) => join(top, d));
+        if (!dirs.length) { process.stdout.write("no program changed\n"); process.exit(0); }
+      }
+      process.stdout.write(dirs.map((d) => (dirs.length > 1 ? `== ${rel(d)}\n` : "") + one(d)).join("\n\n") + "\n");
+      process.exit(0);
+    }
+    if (!path || !rest[0]) fail("diff needs two versions: before and after, or --from REV");
+    // Two programs (folders, or files the editor saves): by definition, each
+    // one's view lines matched by node id (DIFF.md, E255a). Two other JSON
+    // files (a code.json, a side table): the summary by id (L113).
+    const isProgram = (f: string) => existsSync(f) && (statSync(f).isDirectory() || (() => { try { return "format" in JSON.parse(readFileSync(f, "utf8")); } catch { return false; } })());
+    if (isProgram(path) && isProgram(rest[0])) {
+      const { Session } = await import("../mcp/session.ts");
+      const { diffPrograms, diffText } = await import("../src/diff.ts");
+      const version = (f: string) => { const v = new Session(f); return { code: v.code, own: v.own, names: v.allNames, comments: v.comments, info: v.info, style: v.pres().style }; };
+      const text = diffText(diffPrograms(version(path), version(rest[0])));
+      process.stdout.write(text ? text + "\n" : "no changes\n");
+      process.exit(0);
+    }
     const beside = join(dirname(rest[0]), "names.default.json");
     const lines = diffLines(json(path), json(rest[0]), basename(rest[0]) === "code.json" && existsSync(beside) ? json(beside) : {});
     process.stdout.write(lines.length ? lines.join("\n") + "\n" : "no changes\n");

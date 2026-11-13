@@ -3,7 +3,8 @@
 This list used to be the last part of the [tutorial](../learn/TUTORIAL.md).
 It's for us, not for readers learning the language, so it lives here now.
 Each problem that is still open is also a row in
-[BACKLOG.md](../../BACKLOG.md), the project's one list of open work.
+[BACKLOG.md](../../BACKLOG.md), the project's one list of open work, named
+under its item. Checked against the editor on 2026-11-13 (E256).
 
 This is the candid part. Each item says what's there today, why it's a
 problem, and a proposal. [REVIEW-2026-10-26.md](../reports/reviews/REVIEW-2026-10-26.md) has
@@ -37,6 +38,10 @@ left shows in `rotate`:
 **Proposal.** Names drawn with a background so a wire can't cover them, and
 wires routed around nodes.
 
+**2026-11-13.** Still so. In `rotate` unfolded, wires cross the frame
+edges and each other, and the inner frame's `for some` node is drawn over
+the first `polar`'s `x` input. Row **E257**.
+
 ### 2. Cases that are values are drawn as functions
 
 **Today.** The `then` and `else` of an `if`, and every case with no fields
@@ -48,6 +53,10 @@ wire.
 **Proposal.** Draw a zero-input frame as just its contents, with no box,
 unless it's a real action passed to a handler like `first` or `all`.
 
+**2026-11-13.** Still so: in `queens`, `nil`, the `then` (`cons(column,
+board)`) and the `else` (`fail()`) each sit in a `() =>` frame. Row
+**E258**.
+
 ### 3. "Output" and "dot" are almost the same thing
 
 **Today.** A node's output is a filled circle on its right. Dragging it to a
@@ -58,19 +67,7 @@ solved ports of a `solve` node are dots, but a node's output isn't.
 wire; there's nothing to create when you use it a second time. That removes
 one shape and one gesture.
 
-### 4. Order is shown by position only
-
-**Today.** Steps are now drawn flat: in the blocks a run of `print`s is one
-list, and in the graph they stack top to bottom in the order they run. But
-that order is only where the layout put them; drag one and nothing says
-which runs first. A fold computes its children before the parent, so effects
-inside a fold run bottom-up, and the docs say "use `for each` when order
-matters".
-
-![main in the graph: one step per row, values in chips](../learn/tutorial/queens-main.png)
-
-**Proposal.** Draw a thin "then" wire between effectful steps, the way Unreal
-Blueprints have execution pins, so order survives moving things around.
+**2026-11-13.** Still so. Row **E259**.
 
 ### 5. `for some` is two nodes for two wires
 
@@ -81,6 +78,9 @@ The picture of "a wire that isn't an input" is a frame and two nodes.
 **Proposal.** One `for some` node for all of a frame's unknowns, or draw an
 existential as a dot inside the frame with no wire coming in, labelled
 "some".
+
+**2026-11-13.** Still so: `rotate` is `for some((length) => for some((angle)
+=> …))`, two frames and two nodes. Row **E260**.
 
 ### 6. ~~Effects: nine of them, and the editor shows three~~ (done)
 
@@ -105,44 +105,20 @@ Float64`.
 **Proposal.** Show it in words on hover ("has the effects of `f`") and hide
 `e` by default. The badges already say what a node does.
 
-### 8. Three ways to repeat
-
-**Today.** `fold`, plain recursion (with termination inferred) and `with fuel`
-(recursion with a limit). They exist for good reasons, but a newcomer will
-ask which to use.
-
-**Proposal.** Teach fold first and present recursion as "a fold the checker
-couldn't see", and fuel as "recursion with a budget".
+**2026-11-13.** Still so: the blocks show `newton : ((Float64) -[Choice,
+Diverge, e]-> Float64, …) -[Choice, Diverge, e]-> Float64` and Markov's
+`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`. Row **E261**.
 
 ### 9. Small inconsistencies worth fixing
 
-- The palette labels some fillings with an empty name ("match , match ,
-  fold"), for values that have no name of their own.
 - `+` is still three built-ins in tree code (`add`, `subtract`, `negate`), each
   with its own equation, where one sum `a + b = total` read in different
-  directions would do.
+  directions would do. Row **L244**.
 - `Int` and `Float64` share every operation's name. The types tell them apart
   and the palette only offers the right one, but a reader of the blocks can't
-  see which `+` it is.
-- `equal` on numbers was approximate (1e-9) until L197 (2026-11-03): it is
-  exact now; `near(a, b)` (the prelude) says "the same up to rounding",
-  and the solver takes two near numbers for one.
-- The docs overlap: LANGUAGE, BACKWARDS, NUMBERS, COMPILER, REVIEW and this
-  tutorial each restate parts of the model and the error table. LANGUAGE.md
-  should be the reference, the rest should link to it.
-
-### 10. Cells: the handler is the runtime's, and lazy producers say Diverge
-
-Today: `Cells` (reactivity and values on demand) is handled only by the
-runtime, because its handler keeps state and handlers in the language
-can't. And a formula's action may loop, so a lazy producer like √2's terms
-has `Diverge` in its type even though each step makes a term.
-
-Proposal: a handler form with state (a `match` that carries a value from
-one operation to the next) would let a program write its own Cells handler,
-for example a server-side renderer or a test that answers reads. A guarded
-corecursion check (a recursive call under a `formula`, inside a
-constructor) would drop `Diverge` from productive producers.
+  see which `+` it is. Kept: one name per operation is what the generic
+  operations (`+` on any number type) are for, and clicking a part shows its
+  type.
 
 ### 11. Things that are good and should stay
 
@@ -160,6 +136,26 @@ So the list above isn't read as "everything is wrong":
 - Libraries by content hash, with no import statements.
 
 ### Fixed since the first version of this list
+
+- ~~**Order is shown by position only.**~~ (Was item 4.) An action's steps
+  keep their order in one column wherever the layout puts them, and a dashed
+  line leads from each step to the next, so the order is drawn, not only
+  placed.
+- ~~**Three ways to repeat.**~~ (Was item 8.) The tutorial (3.8) teaches
+  fold first, then a function calling itself as what the checker can see
+  ends, and `with fuel` as a budget that turns `Diverge` into `Choice`.
+- ~~**Cells: the handler is the runtime's, and lazy producers say
+  Diverge.**~~ (Was item 10.) Handlers with state are in the language
+  (`with state`, L16a), so a program can write a handler that keeps a value
+  between operations, and guarded corecursion (L16) drops `Diverge` from a
+  producer whose every call into itself is inside a constructor's field.
+  Cells' own handler stays the runtime's, where reactivity is.
+- ~~**Small inconsistencies.**~~ (Parts of item 9.) The palette names every
+  filling (`match □ · Type`, `handle Ask in □`), with no empty names. `equal`
+  on numbers is exact (L197), with `near(a, b)` for "the same up to
+  rounding". The docs have one index ([docs/README.md](../README.md)) and one
+  reference folder ([language/](../language/)), and dated reports are kept
+  as written instead of restating the model.
 
 - ~~**Sequences are drawn as nesting.**~~ Adjacent `print`s and lets are
   one flat list in the blocks and one column in the graph, and a `cons`
