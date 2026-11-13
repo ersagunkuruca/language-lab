@@ -428,7 +428,7 @@
       "@k9fr8o3154secpp3c3hegd2okf:17": {
         "id": "@k9fr8o3154secpp3c3hegd2okf:17",
         "kind": "lit",
-        "value": 1
+        "num": "1"
       },
       "@k9fr8o3154secpp3c3hegd2okf:19": {
         "id": "@k9fr8o3154secpp3c3hegd2okf:19",
@@ -890,7 +890,7 @@
       "@t00b0t42fe9h0rreh10m9k0s9p:11": {
         "id": "@t00b0t42fe9h0rreh10m9k0s9p:11",
         "kind": "lit",
-        "value": 2
+        "num": "2"
       },
       "@t00b0t42fe9h0rreh10m9k0s9p:13": {
         "id": "@t00b0t42fe9h0rreh10m9k0s9p:13",

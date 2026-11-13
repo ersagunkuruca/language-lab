@@ -19,6 +19,7 @@ import { WASI } from "node:wasi";
 import { B } from "../../ters/src/prelude.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { build, skip } from "./c-harness.ts";
+import { parseSaved } from "../../ters/src/saved.ts";
 
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 
@@ -264,7 +265,7 @@ test("every three-way split of a list comes in relate.ts's interleaved order on 
 // round closures they overflowed the stack.
 test("ten thousand numbers read back on WebAssembly and C as ters run reads them", async () => {
   const dir = mkdtempSync(join(tmpdir(), "solved-")), src = join(import.meta.dirname, "../../ters/examples/backwards");
-  const k = JSON.parse(readFileSync(join(src, "code.json"), "utf8")) as { nodes: Record<string, { kind: string; value?: unknown }> };
+  const k = parseSaved<{ nodes: Record<string, { kind: string; value?: unknown }> }>(readFileSync(join(src, "code.json"), "utf8"));
   const numbers = Array.from({ length: 10_000 }, (_, i) => (i * 37) % 1000);
   for (const n of Object.values(k.nodes)) {
     if (n.kind === "lit" && n.value === "10 20 30") n.value = numbers.join(" ");
@@ -284,7 +285,7 @@ test("ten thousand numbers read back on WebAssembly and C as ters run reads them
 // here, and C took a second, nine at three hundred thousand.
 test("a hundred thousand numbers read back on WebAssembly and C", async () => {
   const dir = mkdtempSync(join(tmpdir(), "solved-")), src = join(import.meta.dirname, "../../ters/examples/backwards");
-  const k = JSON.parse(readFileSync(join(src, "code.json"), "utf8")) as { nodes: Record<string, { kind: string; value?: unknown }> };
+  const k = parseSaved<{ nodes: Record<string, { kind: string; value?: unknown }> }>(readFileSync(join(src, "code.json"), "utf8"));
   const numbers = Array.from({ length: 100_000 }, (_, i) => (i * 37) % 1000);
   for (const n of Object.values(k.nodes)) {
     if (n.kind === "lit" && n.value === "10 20 30") n.value = numbers.join(" ");

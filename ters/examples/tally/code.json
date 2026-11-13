@@ -120,7 +120,7 @@
     "8en1qq392e8oghh45d33j2hfsh": {
       "id": "8en1qq392e8oghh45d33j2hfsh",
       "kind": "lit",
-      "value": 0
+      "num": "0"
     },
     "q5fdugjbj3ottd2rsvcgtavo6k": {
       "id": "q5fdugjbj3ottd2rsvcgtavo6k",
@@ -134,7 +134,7 @@
     "chk62l5pkk194g18sjri7tg06n": {
       "id": "chk62l5pkk194g18sjri7tg06n",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "766lr9f7rth3ehgfrr1866t8n9": {
       "id": "766lr9f7rth3ehgfrr1866t8n9",
@@ -304,7 +304,7 @@
     "tu881k4uv8j1m9rl9l83te8a6h": {
       "id": "tu881k4uv8j1m9rl9l83te8a6h",
       "kind": "lit",
-      "value": 1009,
+      "num": "1009",
       "of": "type.int"
     },
     "ib7qdvf2r0b7buho083jmscjco": {
@@ -330,7 +330,7 @@
     "h0thuj9m25ns991mm5t8an38d4": {
       "id": "h0thuj9m25ns991mm5t8an38d4",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "a5af52vl0el8dpdln5m0aj874s": {
@@ -394,7 +394,7 @@
     "3o43f296b4nth5d1kii4dv3rri": {
       "id": "3o43f296b4nth5d1kii4dv3rri",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "nj69ubvqmusao40nd4nsdfm89e": {
@@ -439,7 +439,7 @@
     "0k89btfmjb3km1ivf6i9d4fsjt": {
       "id": "0k89btfmjb3km1ivf6i9d4fsjt",
       "kind": "lit",
-      "value": 2000000,
+      "num": "2000000",
       "of": "type.int"
     },
     "q10o3a1hfsthkc0qeq3ur1v51a": {
@@ -491,7 +491,7 @@
     "jes2b2gs6eb12r5fobqh5f2i0u": {
       "id": "jes2b2gs6eb12r5fobqh5f2i0u",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "clvu1bgg82oehpl21prd8ju2j1": {
@@ -719,7 +719,7 @@
     "7kircj96p8ls16v7qdu0co33p8": {
       "id": "7kircj96p8ls16v7qdu0co33p8",
       "kind": "lit",
-      "value": 0
+      "num": "0"
     },
     "merb6v0ljtc7fhfja11rl5pi8q": {
       "id": "merb6v0ljtc7fhfja11rl5pi8q",
@@ -820,7 +820,7 @@
     "uu5ohfb0uv628i8rir93lr0p36": {
       "id": "uu5ohfb0uv628i8rir93lr0p36",
       "kind": "lit",
-      "value": 0
+      "num": "0"
     },
     "g41daoghqhsoc306s5neuu1p6h": {
       "id": "g41daoghqhsoc306s5neuu1p6h",
@@ -909,7 +909,7 @@
     "nkksimodnbfu6es46uqb28bilp": {
       "id": "nkksimodnbfu6es46uqb28bilp",
       "kind": "lit",
-      "value": 3,
+      "num": "3",
       "of": "type.int"
     },
     "1ep74kn68assp2oio2o9712to9": {
@@ -966,7 +966,7 @@
     "lcqhme7u71dp3bjpn6b6fkao1g": {
       "id": "lcqhme7u71dp3bjpn6b6fkao1g",
       "kind": "lit",
-      "value": 2,
+      "num": "2",
       "of": "type.int"
     },
     "qqhsso14ddpom0bnhn89duvs0q": {

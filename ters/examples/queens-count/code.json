@@ -191,7 +191,7 @@
     "57ae05b8": {
       "id": "57ae05b8",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "2f66a297": {
       "id": "2f66a297",
@@ -264,7 +264,7 @@
     "9eeaccc9": {
       "id": "9eeaccc9",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "0b039492": {
       "id": "0b039492",
@@ -514,7 +514,7 @@
     "sa26cs06sk38q9ou82vf2abbj4": {
       "id": "sa26cs06sk38q9ou82vf2abbj4",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "gbum2ko6jcissnuveansf1q10a": {
@@ -564,7 +564,7 @@
     "s2gb8fott4ithcsqamnke7irnq": {
       "id": "s2gb8fott4ithcsqamnke7irnq",
       "kind": "lit",
-      "value": 11,
+      "num": "11",
       "of": "type.int"
     },
     "qh6e5ipd6k7g3id8p03ujrctg4": {
