@@ -22,6 +22,14 @@
 // the result is in `out`, and nothing is left entangled with it, which a
 // quantum algorithm needs of an oracle. Constants are folded as the
 // circuit is made, so `x + 1` costs what it should.
+//
+// Ancillas are reused (C219): each call and each arithmetic step is
+// computed, its answer copied into fresh qubits, and its own steps undone
+// at once, so the qubits it used for scratch are 0 again and the next
+// steps take them. A circuit is then as wide as the values alive at once,
+// not as long as its steps, for about twice the gates (Bennett's pebbling
+// at its simplest; Meuli et al., "Reversible pebbling game for quantum
+// memory management", DATE 2019, trade the two more finely).
 
 import type { CoreIR, SExpr, SFunc } from "./scalar.ts";
 
@@ -35,8 +43,44 @@ class Refused extends Error {}
 class Circuit {
   gates: Gate[] = [];
   qubits: number;
-  constructor(first: number) { this.qubits = first; }
-  fresh(): number { return this.qubits++; }
+  // Qubits back at 0, to take before new ones; and every qubit taken, in
+  // order, so a scope knows its own.
+  free: number[] = [];
+  made: number[] = [];
+  reuse: boolean;
+  constructor(first: number, reuse = true) { this.qubits = first; this.reuse = reuse; }
+  fresh(): number {
+    const q = this.free.pop() ?? this.qubits++;
+    this.made.push(q);
+    return q;
+  }
+  // `step`'s answer with the qubits it took for scratch given back at 0:
+  // its gates, the answer's own qubits copied into fresh ones, then its
+  // gates undone. Where the answer is all it took, nothing is undone.
+  scoped(step: () => Val): Val {
+    if (!this.reuse) return step();
+    const g0 = this.gates.length, m0 = this.made.length;
+    const v = step();
+    const own = new Set(this.made.slice(m0));
+    const kept = new Set(v.filter((w): w is number => typeof w === "number" && own.has(w)));
+    if (kept.size === own.size) return v;
+    const steps = this.gates.slice(g0);
+    // A copy goes to a qubit none of the steps wrote, since undoing them
+    // must find each as they left it: not one an inner step gave back.
+    const wrote = new Set(steps.map((g) => g.t));
+    const target = () => {
+      const i = this.free.findLastIndex((q) => !wrote.has(q));
+      const q = i >= 0 ? this.free.splice(i, 1)[0] : this.qubits++;
+      this.made.push(q);
+      return q;
+    };
+    const copies = new Map<number, number>();
+    for (const w of kept) { const t = target(); copies.set(w, t); this.gates.push({ g: "cx", c: w, t }); }
+    for (let i = steps.length - 1; i >= 0; i--) this.gates.push(steps[i]);
+    for (const q of own) this.free.push(q);
+    this.made.splice(m0, this.made.length - m0, ...copies.values());
+    return v.map((w) => (typeof w === "number" && copies.has(w) ? copies.get(w)! : w));
+  }
   not(a: Wire): Wire {
     if (typeof a === "boolean") return !a;
     const t = this.fresh();
@@ -103,7 +147,8 @@ export interface Qasm { text: string; gates: Gate[]; inputs: { name: string; bit
 
 // The circuit of `def` (one of ir.funcs, lowered with `shader`), its Ints
 // `bits` wide. Throws with the reason when the function isn't one.
-export function printQasm(ir: CoreIR, def: string, bits: number, paramNames: string[] = []): Qasm {
+// `reuse` false: every step's scratch kept to the end, as before C219.
+export function printQasm(ir: CoreIR, def: string, bits: number, paramNames: string[] = [], options: { reuse?: boolean } = {}): Qasm {
   const f = ir.funcs.find((g) => g.def === def && !g.inner);
   if (!f) throw new Error(ir.refused.get(def) ?? "isn't among the lowered functions");
   const width = (t: string) => {
@@ -118,7 +163,7 @@ export function printQasm(ir: CoreIR, def: string, bits: number, paramNames: str
     const outBits = width(f.result);
     const out = { bits: outBits, at };
     at += outBits;
-    const c = new Circuit(at);
+    const c = new Circuit(at, options.reuse !== false);
     const args: Val[] = placed.map((p) => Array.from({ length: p.bits }, (_, i) => p.at + i));
     const result = run(ir, f, args, c, bits, 0);
     const compute = c.gates;
@@ -157,39 +202,43 @@ function run(ir: CoreIR, f: SFunc, args: Val[], c: Circuit, bits: number, depth:
       }
       case "call": {
         const g = ir.funcs[e.fn];
-        return run(ir, g, e.args.map(ev), c, bits, depth + 1);
+        const as = e.args.map(ev);
+        return c.scoped(() => run(ir, g, as, c, bits, depth + 1));
       }
       case "op": {
         const a = e.args.map(ev);
-        switch (e.op) {
-          case "iadd": return c.add(a[0], a[1]);
-          case "isub": return c.add(a[0], a[1].map((w) => c.not(w)), true);
-          case "ineg": return c.add(a[0].map((w) => c.not(w)), constant(0n), true);
-          case "imul": return c.mul(a[0], a[1]);
-          case "iand": return a[0].map((w, i) => c.and(w, a[1][i]));
-          case "ior": return a[0].map((w, i) => c.or(w, a[1][i]));
-          case "ixor": return a[0].map((w, i) => c.xor(w, a[1][i]));
-          case "ishr": {
-            const n = asInt(a[1]);
-            if (n === null) throw new Refused("shifts by an amount that isn't known when compiled");
-            return a[0].map((_, i) => (i + Number(n) < bits ? a[0][i + Number(n)] : false));
-          }
-          // A remainder by a power of two is the low bits.
-          case "irem": {
-            const n = asInt(a[1]);
-            if (n === null || n <= 0n || (n & (n - 1n)) !== 0n) throw new Refused("takes a remainder by something other than a known power of two");
-            return a[0].map((w, i) => (1n << BigInt(i) < n ? w : false));
-          }
-          case "iless": return [c.less(a[0], a[1])];
-          case "ieq": return [c.equal(a[0], a[1])];
-          case "beq": return [c.not(c.xor(a[0][0], a[1][0]))];
-          case "and": return [c.and(a[0][0], a[1][0])];
-          case "or": return [c.or(a[0][0], a[1][0])];
-          case "not": return [c.not(a[0][0])];
-          default: throw new Refused(`uses ${e.op}, which has no circuit here`);
-        }
+        return ["iadd", "isub", "ineg", "imul", "iless", "ieq"].includes(e.op) ? c.scoped(() => op(e.op, a)) : op(e.op, a);
       }
       default: throw new Refused(`has a ${e.k}, which has no circuit here: only Ints, Bools, if, let and calls do`);
+    }
+  };
+  const op = (name: string, a: Val[]): Val => {
+    switch (name) {
+      case "iadd": return c.add(a[0], a[1]);
+      case "isub": return c.add(a[0], a[1].map((w) => c.not(w)), true);
+      case "ineg": return c.add(a[0].map((w) => c.not(w)), constant(0n), true);
+      case "imul": return c.mul(a[0], a[1]);
+      case "iand": return a[0].map((w, i) => c.and(w, a[1][i]));
+      case "ior": return a[0].map((w, i) => c.or(w, a[1][i]));
+      case "ixor": return a[0].map((w, i) => c.xor(w, a[1][i]));
+      case "ishr": {
+        const n = asInt(a[1]);
+        if (n === null) throw new Refused("shifts by an amount that isn't known when compiled");
+        return a[0].map((_, i) => (i + Number(n) < bits ? a[0][i + Number(n)] : false));
+      }
+      // A remainder by a power of two is the low bits.
+      case "irem": {
+        const n = asInt(a[1]);
+        if (n === null || n <= 0n || (n & (n - 1n)) !== 0n) throw new Refused("takes a remainder by something other than a known power of two");
+        return a[0].map((w, i) => (1n << BigInt(i) < n ? w : false));
+      }
+      case "iless": return [c.less(a[0], a[1])];
+      case "ieq": return [c.equal(a[0], a[1])];
+      case "beq": return [c.not(c.xor(a[0][0], a[1][0]))];
+      case "and": return [c.and(a[0][0], a[1][0])];
+      case "or": return [c.or(a[0][0], a[1][0])];
+      case "not": return [c.not(a[0][0])];
+      default: throw new Refused(`uses ${name}, which has no circuit here`);
     }
   };
   return ev(f.body);
