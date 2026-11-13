@@ -1653,7 +1653,7 @@ as in SI. A record's field can say its unit in its type, `speed: Float64 m/s`
 match takes out of it are in that unit. The view prints units on fields and
 on numbers (`9.81 m/s²`), and text reads them back: a number then a word
 that reads as a unit and names nothing in scope is that number with that
-unit, a Float64 (with a variable `m` in scope, `2 m` doesn't read).
+unit, never an Int (with a variable `m` in scope, `2 m` doesn't read).
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
