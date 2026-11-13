@@ -166,7 +166,11 @@ export class Session {
     // The builtins too (range, floor, …): typed by their signatures.
     const builtins = pick(Object.keys(SIGS).filter((b) => this.code.nodes[b] && this.allNames[b] && !/^builtin\.(int\.|arith\.)/.test(b)));
     const sig = (b: Id) => `${this.name(b)} : ${showType(this.info.subst.zonk(SIGS[b](this.info.subst)), this.allNames)}`;
-    const all = [...lib.map(line), ...builtins.map(sig)];
+    // A name several library definitions share (for each on a List and on
+    // a Cell) lists each with its id, so one can be named (I230).
+    const shared = new Set([...lib, ...builtins].map((d) => this.name(d)).filter((n, i, ns) => ns.indexOf(n) !== i));
+    const idd = (d: Id, l: string) => (shared.has(this.name(d)) ? `${this.id(d)}  ${l}` : l);
+    const all = [...lib.map((d) => idd(d, line(d))), ...builtins.map((b) => idd(b, sig(b)))];
     return [...mine, ...all.slice(0, 60), ...(all.length > 60 ? [`… ${all.length - 60} more: narrow the filter`] : [])].join("\n") || "(none)";
   }
 
