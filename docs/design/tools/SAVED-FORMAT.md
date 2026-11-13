@@ -1,6 +1,6 @@
 # The saved program format: literals as digits, one node per line
 
-*Status 2026-11-13: design, for rows I237 (number literals saved as their
+*Status 2026-11-13: I237 built (#2556, #2564), I240 built; the design of rows I237 (number literals saved as their
 digits) and I240 (canonical JSON, one node per line). Ersagun picked
 canonical JSON over an own text format and over today's layout (thread
 "Decide the saved program format", 2026-11-13).*

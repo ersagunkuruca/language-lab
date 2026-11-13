@@ -1,142 +1,33 @@
-{
-  "nodes": {
-    "87212469": {
-      "id": "87212469",
-      "kind": "call",
-      "fn": "ec66a952",
-      "args": [
-        "139d9d83",
-        "06366341"
-      ]
-    },
-    "3bac759d": {
-      "id": "3bac759d",
-      "kind": "def",
-      "body": null
-    },
-    "2bcee98c": {
-      "id": "2bcee98c",
-      "kind": "def",
-      "body": null
-    },
-    "84eeff28": {
-      "id": "84eeff28",
-      "kind": "def",
-      "body": null
-    },
-    "d9242bcf": {
-      "id": "d9242bcf",
-      "kind": "def",
-      "body": null
-    },
-    "3abf16a5": {
-      "id": "3abf16a5",
-      "kind": "def",
-      "body": null
-    },
-    "b8151c72": {
-      "id": "b8151c72",
-      "kind": "def",
-      "body": null
-    },
-    "c717dc83": {
-      "id": "c717dc83",
-      "kind": "def",
-      "body": "2765dea8"
-    },
-    "0d322638": {
-      "id": "0d322638",
-      "kind": "binder"
-    },
-    "ec66a952": {
-      "id": "ec66a952",
-      "kind": "ref",
-      "target": "84eeff28"
-    },
-    "139d9d83": {
-      "id": "139d9d83",
-      "kind": "ref",
-      "target": "d9242bcf"
-    },
-    "06366341": {
-      "id": "06366341",
-      "kind": "ref",
-      "target": "0d322638"
-    },
-    "08f205f9": {
-      "id": "08f205f9",
-      "kind": "ref",
-      "target": "2bcee98c"
-    },
-    "ac449aa1": {
-      "id": "ac449aa1",
-      "kind": "ref",
-      "target": "0d322638"
-    },
-    "02237ca0": {
-      "id": "02237ca0",
-      "kind": "call",
-      "fn": "08f205f9",
-      "args": [
-        "ac449aa1",
-        "87212469"
-      ]
-    },
-    "e4959214": {
-      "id": "e4959214",
-      "kind": "ref",
-      "target": "3bac759d"
-    },
-    "e110be8e": {
-      "id": "e110be8e",
-      "kind": "call",
-      "fn": "e4959214",
-      "args": [
-        "02237ca0"
-      ]
-    },
-    "658e4684": {
-      "id": "658e4684",
-      "kind": "lambda",
-      "params": [
-        "0d322638"
-      ],
-      "body": "e110be8e"
-    },
-    "6cb157bf": {
-      "id": "6cb157bf",
-      "kind": "ref",
-      "target": "3abf16a5"
-    },
-    "2192e272": {
-      "id": "2192e272",
-      "kind": "ref",
-      "target": "b8151c72"
-    },
-    "a70a752d": {
-      "id": "a70a752d",
-      "kind": "call",
-      "fn": "6cb157bf",
-      "args": [
-        "2192e272"
-      ]
-    },
-    "2765dea8": {
-      "id": "2765dea8",
-      "kind": "call",
-      "fn": "658e4684",
-      "args": [
-        "a70a752d"
-      ]
-    }
-  },
-  "defs": [
-    "3bac759d",
-    "2bcee98c",
-    "84eeff28",
-    "d9242bcf",
-    "3abf16a5",
-    "b8151c72",
-    "c717dc83"
-  ]
-}
+{"defs": [
+"3bac759d",
+"2bcee98c",
+"84eeff28",
+"d9242bcf",
+"3abf16a5",
+"b8151c72",
+"c717dc83"
+],
+"nodes": {
+"02237ca0": {"kind": "call", "args": ["ac449aa1", "87212469"], "fn": "08f205f9"},
+"06366341": {"kind": "ref", "target": "0d322638"},
+"08f205f9": {"kind": "ref", "target": "2bcee98c"},
+"0d322638": {"kind": "binder"},
+"139d9d83": {"kind": "ref", "target": "d9242bcf"},
+"2192e272": {"kind": "ref", "target": "b8151c72"},
+"2765dea8": {"kind": "call", "args": ["a70a752d"], "fn": "658e4684"},
+"2bcee98c": {"kind": "def", "body": null},
+"3abf16a5": {"kind": "def", "body": null},
+"3bac759d": {"kind": "def", "body": null},
+"658e4684": {"kind": "lambda", "body": "e110be8e", "params": ["0d322638"]},
+"6cb157bf": {"kind": "ref", "target": "3abf16a5"},
+"84eeff28": {"kind": "def", "body": null},
+"87212469": {"kind": "call", "args": ["139d9d83", "06366341"], "fn": "ec66a952"},
+"a70a752d": {"kind": "call", "args": ["2192e272"], "fn": "6cb157bf"},
+"ac449aa1": {"kind": "ref", "target": "0d322638"},
+"b8151c72": {"kind": "def", "body": null},
+"c717dc83": {"kind": "def", "body": "2765dea8"},
+"d9242bcf": {"kind": "def", "body": null},
+"e110be8e": {"kind": "call", "args": ["02237ca0"], "fn": "e4959214"},
+"e4959214": {"kind": "ref", "target": "3bac759d"},
+"ec66a952": {"kind": "ref", "target": "84eeff28"}
+}}

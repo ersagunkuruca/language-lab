@@ -15,7 +15,7 @@ import { prelude } from "../src/prelude.ts";
 import { std } from "../src/lang/std.ts";
 import { addVersions } from "../src/lang/modules.ts";
 import { buildModules } from "./modules.ts";
-import { printSaved } from "../src/saved.ts";
+import { parseSaved, printSaved } from "../src/saved.ts";
 
 const here = import.meta.dirname;
 // --check: build the modules, write nothing, and say which kept file a
@@ -89,7 +89,7 @@ for (const [dir, d] of programs) {
     const out = moved.reduce((t, [a, b]) => t.split(`"${a}"`).join(`"${b}"`), text);
     if (out !== text) { writeFileSync(join(d, f), out); console.log(`${dir}: ${f} now refers to the changed library definitions`); }
   }
-  const read = (f: string) => (existsSync(join(d, f)) ? JSON.parse(readFileSync(join(d, f), "utf8")) : {});
+  const read = (f: string) => (existsSync(join(d, f)) ? parseSaved(readFileSync(join(d, f), "utf8")) : {});
   const r = adoptLibrary(read("code.json"), read("names.default.json"), read("comments.json"));
   if (!r.adopted.length) continue;
   save(join(d, "code.json"), r.code);
