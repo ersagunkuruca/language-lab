@@ -142,7 +142,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C219 | `ters qasm`: reuse an ancilla once it is uncomputed (circuits are as wide as they are long today), and unroll a loop to a known bound (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
+| C219 | `ters qasm`: unroll a loop to a known bound (ancillas reused since C219a) (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
 
 ## L: Language and library
 

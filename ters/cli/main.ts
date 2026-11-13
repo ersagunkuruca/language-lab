@@ -74,7 +74,7 @@ usage:
   ters check <program>                   type-check, and list the definitions and their types
   ters qasm <program> --main f [--bits n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
-                                        its Ints n bits wide (default 8), its scratch qubits uncomputed after
+                                        its Ints n bits wide (default 8), scratch qubits uncomputed and reused
   ters hosts <program> [--c|--android]   print a hosts/js.js answering the program's own effects, to start from;
                                         with --c a hosts/c.c, for ters native (FOREIGN.md); with --android a
                                         hosts/android.java, for ters build-native-app
