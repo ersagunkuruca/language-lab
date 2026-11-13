@@ -61,7 +61,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E259 | Every output a dot (CONFUSING item 3): a node's output is the same dot a let has, so sharing a value is one more wire from it, not a gesture that makes a dot. Example: `queens` with its outputs as dots and nothing else changed | [CONFUSING.md](docs/design/CONFUSING.md) item 3, checked 2026-11-13 (E256) | P3 | M | |
-| E260 | One `for some` for a frame's unknowns (CONFUSING item 5): `rotate`'s `for some((length) => for some((angle) => …))` drawn as one frame with two unknowns, each a dot labelled some, instead of two nested frames and two nodes. A view: the tree is unchanged | [CONFUSING.md](docs/design/CONFUSING.md) item 5, checked 2026-11-13 (E256) | P3 | S | |
 
 ### Speed of editing
 

@@ -528,6 +528,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
 
   // An input's argument: laid out to its left, or (a variable shown as a
   // wire) nothing, the wire comes from the variable's source.
+  // The functions given to for some, whose own for somes they take in.
+  const someArgs = new Set<Id>();
   const arg = (a: Id): Sub | null => {
     const d = dotOf(a);
     if (d && !named(d)) return null;
@@ -561,6 +563,13 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         const params = [...n.params];
         let body = n.body;
         for (let b = node(body); b?.kind === "lambda"; b = node(body)) { params.push(...b.params); body = b.body; }
+        // for some((length) => for some((angle) => …)) is one frame with
+        // both unknowns under one for some node (CONFUSING.md item 5).
+        if (someArgs.has(id)) for (let c = node(body); ; c = node(body)) {
+          const lam = isCall(c) && !dotOf(body) && node(c.fn)?.kind === "ref" && (node(c.fn) as NodeOf<"ref">).target === S.exists && c.args.length === 1 && !dotOf(c.args[0]) ? node(c.args[0]) : null;
+          if (lam?.kind !== "lambda") break;
+          params.push(...lam.params); body = lam.body;
+        }
         // A function of nothing is an action, run when what it's given to
         // asks: first(queens(8), else nil) in the text.
         // A function that names its results (L128b) gives each part to
@@ -660,6 +669,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const items = inPlace(a);
       return items ? [...items.map((x) => ({ a: x, list: a })), { a, list: a, add: true }] : [{ a }];
     });
+    if (f.kind === "ref" && f.target === S.exists && n.args.length === 1) someArgs.add(n.args[0]);
     const kids = rows.map((r) => (r.add || empty(r.a) ? null : arg(r.a)));
     const eff = effectsOf(n);
     const badge = [...eff.does, ...(eff.handles ? [`handles ${eff.handles}`] : [])].join(" · ");
