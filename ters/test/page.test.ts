@@ -284,3 +284,40 @@ test("the interpreted page steps through the compiled page's window, and goes on
   root.find("roll").fire("click");
   assert.match(root.find("status").textContent, /^Rolls: 104;/);
 });
+
+// What the editor does around Pause (I239f): the window's start shown
+// with nothing read from the log after, and the page gone on from a step
+// handed back to the compiled page.
+test("a page stepped to the window's start reads nothing more from the log, and hands back to the compiled page", async () => {
+  const { lowerCore, corePageScript } = await import("../../compiler/src/core-js.ts");
+  const core = await import("../../compiler/src/core-page-runtime.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const ir = lowerCore(p.code, info, p.pres.names, p.own.defs);
+  let given: unknown[] | null = null;
+  new Function("$core", corePageScript(ir, p.pres.names[main], "$core", ""))({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
+  const [tables, worlds, defs, name, , nodes] = given! as never[];
+  let t = 0;
+  const window = { seconds: 10, keep: 30, clock: () => t };
+  const compiled = (log: import("../src/lang/worldlog.ts").LogEntry[], handFrom?: NonNullable<import("../src/lang/cells.ts").Cells["kept"]>) =>
+    core.mountCorePage(tables, worlds, defs, name, "dice", nodes, { doc: fakeDoc(), store: store(), frame: () => {}, log, window, handFrom });
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  const m = compiled(log);
+  for (let i = 0; i < 4; i++) { t += 1000; (m.root as FakeEl).find("roll").fire("click"); }
+  m.stop();
+  const errors: unknown[] = [], frames: (() => void)[] = [];
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: (f) => frames.push(f), doc: fakeDoc(), store: store(), log, window, keepCells: true, stopped: (e) => errors.push(e), stepFrom: { firsts: m.kept.map((k) => k.first), snapshots: m.window!.snapshots } });
+  const root = page.root as FakeEl, steps = page.steps!;
+  steps.to(steps.from());
+  assert.match(root.find("status").textContent, /^Rolls: 0/);
+  // Its clock runs on while stepped, answered live.
+  for (let i = 0; i < 3; i++) { t += 1000; frames.splice(0).forEach((f) => f()); }
+  assert.deepEqual(errors, []);
+  steps.to(1);
+  steps.resume();
+  assert.match(root.find("status").textContent, /^Rolls: 1;/);
+  const back = compiled(log, page.kept!);
+  page.stop();
+  assert.match((back.root as FakeEl).find("status").textContent, /^Rolls: 1;/);
+});
