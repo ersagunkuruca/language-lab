@@ -66,9 +66,9 @@ test("the pedal: the evaluator and the core IR's JavaScript play the same sample
 
 // The pedal's solves (Haar's join and tanh, each run backwards) have their
 // plans written out on the core IR (C137d8), so its page is the core IR's
-// (C137d9); a program whose solve those plans can't write (calculus's
-// derivative) runs the evaluator's solver on every call.
-test("the pedal solves quickly on the core IR, calculus's derivative doesn't", () => {
+// (C137d9). calculus's derivative once ran the evaluator's on every call;
+// its functions now carry their derivatives (I245), so it is quick too.
+test("the pedal solves quickly on the core IR, and calculus's derivative does too", () => {
   const { p, main } = pedal();
   const ir = lowerCore(p.code, p.info, p.names, [main]);
   assert.equal(solvesSlowly(ir), false);
@@ -79,7 +79,7 @@ test("the pedal solves quickly on the core IR, calculus's derivative doesn't", (
   assert.doesNotMatch(js, /solveAll/);
   const c = loadProgram(join(import.meta.dirname, "../examples/calculus"));
   const info = infer(c.code, c.pres.names, undefined, c.options);
-  assert.equal(solvesSlowly(lowerCore(c.code, info, c.pres.names, [c.named("main")])), true);
+  assert.equal(solvesSlowly(lowerCore(c.code, info, c.pres.names, [c.named("main")])), false);
 });
 
 // A sound whose state carries from block to block: each block is scaled by

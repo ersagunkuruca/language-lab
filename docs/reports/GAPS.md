@@ -9,13 +9,14 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
-**Rounds so far (2026-11-12):** 1 calc, 2 Countdown and chapters, 3
+**Rounds so far (2026-11-13):** 1 calc, 2 Countdown and chapters, 3
 ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
 editor), 8 board (a page, written in the editor), 9 machine (an assembler
 and interpreter, on every target), 10 clinic (a simulation, written in
 the editor), 11 crew (workers as fibers), 12 break (written through the
 MCP), 13 pond (stable references, free lists and threads), 14 rota (a
-search written with Choice). Each round's gaps are
+search written with Choice), 15 fit (gradients of functions chosen at
+run time). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
 C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
@@ -3285,3 +3286,142 @@ from the cause (I218):
 2. R1 (I215), the tuple key compiled for its type: 1.25x measured.
 3. R2 and R3 (I216), the native search on threads and against WASI.
 4. I217 and I218, the MCP reading back what it prints.
+
+## Round 15: fit, gradients of functions chosen at run time (2026-11-13)
+
+`compiler/gaps/fit` fits four two-parameter models to a file of
+measurements: a + b·x, a·e^(b·x), a·x^b and a / (1 + e^(−b·x)). It uses
+damped Gauss-Newton: each step solves (JᵀJ) δ = Jᵀr by Cramer's rule, and
+is halved until it lowers the squared residuals. It prints each fit and
+names the best. Each model is a function of its parameters (a record)
+**picked by name at run time**, closing over the x it is at, and a
+residual's slopes are `gradient` of that function. **44 definitions**
+(4 types, 40 functions and values).
+
+New for the rounds is calculus at run time. Round 14's search was
+Choice; here the program asks `gradient` of closures the compiler can't
+see until they run, which is what I245 had just made `derivative` do on
+every target.
+
+It was written through the MCP, like rounds 12 to 14
+(`gaps-round15/drive.ts` in the project's files): 44 `define`s, 62
+`replace`s, and 6 `as` answers. Before it, a probe with small programs
+found I246 and L245 below.
+
+Files:
+- `compiler/gaps/fit/`: the program, its README (credits) and a sample
+  `data.txt` (20 readings of a growing culture).
+- `compiler/gaps/fit.ideal.js`: the same fit by hand. Each model's value
+  and partial derivatives are written out, and the sums are taken in one
+  loop over arrays.
+- `compiler/gaps/fit.ts`: the evaluator, the core IR's module and the
+  ideal, in one process, with a generator of made-up measurements.
+- `compiler/test/fit.test.ts`: the three print the same and exit the same
+  way on the sample, data with a negative x (no power fit), bad lines and
+  usage, and 500 made-up points. `ters wasi` and `ters native` print what
+  `ters run` prints.
+- `compiler/gaps/bench-fit.ts`: the table below.
+
+After G1 and B1 were fixed (I247, I246), the evaluator, the core IR's
+module, `ters wasi`, `ters native` and the ideal print the same on
+everything tried.
+
+### Results
+
+```
+points  way          all four fits   against the ideal
+20      evaluator       3760 ms       1262x
+20      core             7.2 ms        2.4x
+20      ideal            3.0 ms
+20      native           7.9 ms        2.6x   (a process, start-up included)
+20      wasi              76 ms         26x   (a process in Node)
+500     evaluator      73238 ms      10735x
+500     core             160 ms         23x
+500     ideal            6.8 ms
+500     native            47 ms        6.8x   (a process)
+500     wasi             211 ms         31x   (a process in Node)
+5000    core            1474 ms         17x
+5000    ideal             89 ms
+5000    native           363 ms        4.1x   (a process)
+5000    wasi             854 ms        9.6x   (a process in Node)
+```
+
+The command was `BUILT=1 node compiler/gaps/bench-fit.ts 20 500 5000`. Each figure is the median of 3 runs after a warm-up, except the evaluator's, which ran once. Most of the time goes to the logistic model, which takes all 100 steps, halving many of them.
+
+A profile of the core IR's module at 5000 points:
+- the logistic's value (`value at.λ`) 10% and its carried gradient 10%;
+- the fold of the sums 6%;
+- the collector 12%.
+
+Every step makes a closure per point (`value at(model, x)`) and a record for its gradient, and compares the model's name as text down the chain of `if`s. The ideal does none of this.
+
+### The gaps, ranked
+
+**G1. `gradient` of a function chosen at run time wasn't compiled
+(fixed, I247).** `derivative` was carried (I245); `gradient` wasn't.
+- fit's JavaScript shipped the program's nodes and ran the evaluator's
+  derive on each closure's lambda: 1.4 MB.
+- `ters wasi` and `ters native` refused the program ("uses gradient,
+  which isn't in the scalar profile").
+
+Now a function type asked for its gradient carries derive.ts's gradient,
+made ahead, as a derivative is carried. The JavaScript is 305 KB with no
+nodes, and all four targets print the same.
+
+**B1. A derivative through `sum(map(xs, …))` of a captured list
+(bugs, fixed, I246).** The probe tried
+`derivative((q) => sum(map(xs, (x) => q * x)))` at xs = [1, 2]. It found
+two bugs:
+- Compiled JavaScript gave **1**, not 3. The carried derivative had been
+  made from code where the sum and the map were already fused into one
+  fold, and derive.ts didn't follow the fused fold's accumulator. It is
+  now made from the code as staged, before the fold rewrites.
+- Where the evaluator's derive was lowered instead, the printed nodes
+  lacked a pair's `second`, which the derivative writes, so it crashed.
+
+**L1. `ters run` can't differentiate through a map of the variable
+(L245, Language lane B).** For the same lambda, the evaluator has no
+answer ("this fold takes apart data built from the variable"). Written
+as a fold over `xs`, the same sum works. So `ters run` and `ters compile`
+disagree there. fit's sums are written as folds over the data for this
+reason. Language lane B is building forward mode through data in
+derive.ts.
+
+**M1. The third `show` in one line reads as show at Int (MCP text, bug,
+I248).** `show(1.5) ++ show(2.5) ++ show(3.5)` is refused: "show needs an
+Int here, and a number with a fraction part can't be one". Two shows
+read; a third doesn't. fit shows each Float64 in a let of its own.
+
+**M2. `as` doesn't settle a field in a match case (MCP text, I249).**
+In `largest y`, `larger(pt.y, largest y(more))` in a `cons(pt, more)`
+case asks for `as` ("Point" or "Event"), and given `as` "Point" it asks
+again. fit takes the ys out with a `map` first.
+
+**M3. A call of a call doesn't read (MCP text, I250).**
+`derivative(f)(x)`, the way the Guide writes it, is "isn't read as a
+whole"; inside `first(…, else …)` it is "no case named derivative at 11".
+fit names the derivative in a let first (`g = gradient(…); g(p)`). This
+is how calculus is written too, which hid the gap.
+
+**R1. The evaluator, 1262x at 20 points and 10735x at 500 (perf).**
+A profile shows the machine's own steps (`going`, `step`, `apply`,
+`parts`) and the collector, 20%; nothing stands out. The ratio grows
+with n, unlike round 14's 330x. Not measured further: the next look is
+whether the evaluator re-derives a lambda each time `gradient` is asked
+of a new closure of it (its cache is by closure).
+
+**R2. A closure per point and a name compared per point (perf, core JS
+17 to 23x).** fit's structure costs it: `value at(model, x)` builds a
+closure for every point at every step, and walks a chain of text
+comparisons to pick it. A model picked once per fit, outside the loop,
+would fix both, in the program or in the compiler; the compiler could
+lift the choice out of the fold, since `model` doesn't change in it. Not
+measured.
+
+### Next
+
+1. L245, which Language lane B is building: `ters run` and the compiled
+   targets agreeing on sums over maps.
+2. I248 to I250, the MCP text reader. M1 is a plain bug.
+3. R1, measured before anything is built.
+
