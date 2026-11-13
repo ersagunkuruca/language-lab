@@ -360,6 +360,9 @@ a page. Here are its parts:
 
 A page's `main` doesn't print anything. The Run pane *is* the page.
 **Restart** runs it from scratch. **Open in a tab** shows it on its own.
+**Pause** stops it where it is; then **◀ Back** and **On ▶** step through
+what it was given, one click or tick at a time, as far back as its log
+reaches.
 
 To add a button, copy one that's there:
 
@@ -419,6 +422,11 @@ new type. Undo twice to get back.
 - In the **Program** tab, **Save file** downloads the whole program as one
   file: code, names, comments and layout. **Open file…** loads one back.
   **New program** starts an empty one.
+- The **Changes** tab lists what you changed, definition by definition,
+  and marks the changed blocks: green added, amber changed. It compares
+  with the version you opened, or with the one you last marked with
+  **Mark reviewed**. For an example, type a branch, a commit or a pull
+  request (`#123`) to compare with that version on GitHub.
 
 Your edits live only in this browser. Another browser, or this one after
 clearing its data, won't have them. Save a file of anything you want to

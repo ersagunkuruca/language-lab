@@ -76,7 +76,7 @@ not only code: an influence is credited even when nothing was copied.
 | Strongly connected components for dependency order | Textbook | Tarjan's algorithm (R. E. Tarjan, SIAM J. Computing, 1972), `src/lang/infer.ts`, `src/hash.ts`. |
 | SHA-256 | Adapted | Written from the standard, FIPS 180-4, in `src/sha256.ts`. |
 
-## Sharing, versions and merging (designed, not built)
+## Sharing, versions and merging
 
 Proposed in [SHARING.md](../design/sharing/SHARING.md) (BACKLOG L109-L115); its Credits table has the full list.
 
@@ -87,9 +87,9 @@ Proposed in [SHARING.md](../design/sharing/SHARING.md) (BACKLOG L109-L115); its 
 | Imports pinned by hash from any host; signed append-only logs of which version is current | Prior art | Dhall (Gabriella Gonzalez); Nix (Eelco Dolstra); Go's checksum database; Sigstore's Rekor; Certificate Transparency. |
 | Compatibility checked from types | Influence | Elm's `elm diff` (Evan Czaplicki). |
 | The checker's problems as one table, each with the usual fix and its smallest program (`src/lang/problems.ts`, L187) | Influence | Elm's "Compiler Errors for Humans" (Evan Czaplicki, 2015); Rust's error index and `rustc --explain`. |
-| Structural diff and merge; history as commuting patches | Prior art | GumTree (Falleri et al. 2014), Difftastic (Wilfred Hughes); Darcs (David Roundy), Pijul (Meunier, Becker), CRDTs (Shapiro et al. 2011), Automerge (Martin Kleppmann). |
+| Structural diff and merge; history as commuting patches; `ters diff` and the editor's Changes tab, by definition and node id (DIFF.md, E255, E262, E263) | Prior art | Unison's namespace diffs (a diff of definitions by hash, names apart); GumTree (Falleri et al. 2014), Difftastic (Wilfred Hughes); Darcs (David Roundy), Pijul (Meunier, Becker), CRDTs (Shapiro et al. 2011), Automerge (Martin Kleppmann). |
 
-## Physics and planning (designed, not built)
+## Physics and planning
 
 Proposed in [PHYSICS-AND-PLANNING.md](../design/physics/PHYSICS-AND-PLANNING.md) (BACKLOG L119-L124); its Credits table has the full list.
 
@@ -167,9 +167,9 @@ Proposed in [PHYSICS-AND-PLANNING.md](../design/physics/PHYSICS-AND-PLANNING.md)
 | Checking per definition group, cached by hash with early cutoff (designed, CHECK-BY-GROUP-2026-11-03.md, L183) | Prior art | Unison (definitions checked once by hash); Salsa; Adapton (Hammer et al., PLDI 2014); GHC's interface fingerprints; Mokhov, Mitchell and Peyton Jones, "Build systems à la carte" (ICFP 2018) |
 | `Word8`, `Word32`, `Word64` and the `Bits` interface (L193): wrapping arithmetic as its own types beside an Int that never overflows | Influence (the types), prior art (the test's algorithms) | Unsigned arithmetic mod 2ⁿ as in C's unsigned types and Rust's `u32` with `wrapping_add`; Zig's `+%`. ters/test/words.test.ts checks FNV-1a (Glenn Fowler, Landon Curt Noll and Kiem-Phong Vo; the published test vectors for "foobar") and xorshift32 (George Marsaglia, "Xorshift RNGs", *Journal of Statistical Software* 8(14), 2003) |
 | GET as a read that may run under `Choice`, fetched once per address per run | Our own | Leans on HTTP's definition of safe methods (RFC 9110, §9.2.1). LANGUAGE.md "The web". |
-| The world's answers in one log: a run kept as what the world answered it, replayed from the log alone, its writes checked against it (ters/src/lang/worldlog.ts `logged`, `replaying`, L186, E232a); the Run panel's "What the world answered" | Influence | Elm's time-travel debugger (Laszlo Pandy, 2014); Mozilla's rr (record and replay at the system-call boundary); Redux DevTools; FoundationDB's deterministic simulation. HOSTS.md "L186". |
+| The world's answers in one log: a run kept as what the world answered it, replayed from the log alone, its writes checked against it (ters/src/lang/worldlog.ts `logged`, `replaying`, L186, E232a); the Run panel's "What the world answered" | Influence | Elm's time-travel debugger (Laszlo Pandy, 2014); Mozilla's rr (record and replay at the system-call boundary); Redux DevTools; FoundationDB's deterministic simulation. HOSTS.md "L186". The log kept as a window of snapshots, stepped back within it (WORLD-LOG-WINDOW.md, I239): rr's checkpoints and Redux DevTools' `maxAge`. |
 
-## Concurrency, parallelism and collections (designed, not built)
+## Concurrency, parallelism and collections
 
 Proposed in [LANGUAGE-NEEDS-2026-10-24.md](../reports/reviews/LANGUAGE-NEEDS-2026-10-24.md); the full list of sources is there. When a row is built, its entry moves to the section of the feature.
 
@@ -184,7 +184,7 @@ Proposed in [LANGUAGE-NEEDS-2026-10-24.md](../reports/reviews/LANGUAGE-NEEDS-202
 | Channels; actors not a construct; STM | Influence / Considered, rejected | CSP (Hoare 1978), Go, Erlang (Armstrong); STM (Harris, Marlow, Peyton Jones, Herlihy 2005). |
 | Maps with one meaning and several representations; an order on data; Outcome; foreign definitions | Influence | Weight-balanced trees (Adams 1993), HAMT (Bagwell 2001), RRB vectors (Bagwell, Rompf 2012); OCaml's `compare` and Erlang's term order; Rust's `Result`; Gleam's `@external` and Elm's ports. |
 
-## Stable references, in place and reactive collections (designed, not built)
+## Stable references, in place and reactive collections
 
 Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG L98-L101, C56-C61); the full list of sources is there. When a row is built, its entry moves to the section of the feature.
 
@@ -248,7 +248,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | A function's inputs are one tuple and its results another, so `f(x, y)` is `f(p)` and a relation is the same box with no favourite direction (design, PORTS-2026-11-01.md) | Ersagun's idea / Prior art | Ersagun asked for one view of inputs, results and relations (2026-11-01). Done before: Standard ML, where every function takes one argument, maybe a tuple (Milner, Tofte, Harper and MacQueen, *The Definition of Standard ML*); multiple values in Go, Lua and Common Lisp, and WebAssembly's multi-value. Considered: Swift's tuple splat, removed by SE-0029 and SE-0110 as ambiguous. Influence: the category of relations and its string diagrams. A list port drawn as growing sockets: prior art Blender's multi-input sockets. |
 | Hashes that ignore port order and the order of commutative operands (design, PORTS-2026-11-01.md §7) | Ersagun's idea / Prior art | Ersagun asked (2026-11-01) for `x*x+y*y` and `y*y+x*x` to hash the same. Done before: tree canonization (Aho, Hopcroft and Ullman, 1974), canonical graph labelling (McKay's nauty), matching modulo associativity and commutativity in Maude (Clavel, Eker, Meseguer et al.), equality saturation with e-graphs (egg, Willsey et al., POPL 2021). |
 
-## Reversible and quantum computing (designed, not built)
+## Reversible and quantum computing (the reversible classical part built, `ters qasm`)
 
 | What | Label | Who and where |
 |---|---|---|
@@ -300,7 +300,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | Calls given data written down, worked out when compiled (ters/src/lang/stage.ts) | Prior art | Partial evaluation: Futamura (1971); Jones, Gomard and Sestoft, "Partial Evaluation and Automatic Program Generation" (1993). Specialising geometric-algebra products to a known signature, as Gaigen (Fontijne) and ganja.js generate them. |
 | Copies of a definition for data known at its call (ters/src/lang/stage.ts `specialiseCalls`) | Prior art | Polyvariant specialisation: C++ templates instantiated per argument; MLton's whole-program specialisation; online partial evaluation (Jones, Gomard and Sestoft, 1993). |
 | Arrays as views on a buffer with free room at both ends (ters/src/lang/std.ts `ArrayView`, shared by the evaluator and compiled JS, C30d and C30d3a; WebAssembly wasm-rt.ts, C66a; C c.ts `arrayC`, C66b) | Design; prior art | Ersagun's design: a two-ended array list with an offset for where 0 is, from one of his Unity C# projects. Prior art: deques kept as ring buffers; gap buffers; Go's slices, which share a backing array and append into its free room. In C, a view nobody else holds is reused for the longer one, as Perceus reuses a cell whose count is 1 (Reinking, Xie, de Moura and Leijen, PLDI 2021). |
-| The design of `Fixed` for deterministic game numbers (FIXED-POINT.md, not built yet) | Prior art | Doom's 16.16 `fixed_t` (id Software, 1993); Bettner and Terrano, "1500 Archers on a 28.8" (GDC 2001) on deterministic lockstep; CORDIC (Jack Volder, 1959; Specker 1965); libfixmath; Ada's and ISO/IEC TR 18037's fixed-point types. Ersagun's ask (2026-10-26). |
+| The design of `Fixed` for deterministic game numbers (FIXED-POINT.md, built: L89) | Prior art | Doom's 16.16 `fixed_t` (id Software, 1993); Bettner and Terrano, "1500 Archers on a 28.8" (GDC 2001) on deterministic lockstep; CORDIC (Jack Volder, 1959; Specker 1965); libfixmath; Ada's and ISO/IEC TR 18037's fixed-point types. Ersagun's ask (2026-10-26). |
 | Factoring over the integers for minimal polynomials | Textbook | Hans Zassenhaus, "On Hensel factorization I" (J. Number Theory 1969); David Cantor and Hans Zassenhaus, "A new algorithm for factoring polynomials over finite fields" (Math. Comp. 1981); Maurice Mignotte's coefficient bound (1974); Hensel lifting as in von zur Gathen and Gerhard, *Modern Computer Algebra*, Algorithm 15.10. `src/lang/factor.ts`. |
 | `Real` as lazy nested intervals (designed, EXACT-REALS.md) | Prior art | Hans-J. Boehm, "Towards an API for the real numbers" (PLDI 2020); iRRAM (Norbert Müller); Edalat and Potts' exact real arithmetic. |
 | Mathematics as libraries: number types, literals and display through interfaces, so a library's type runs and feels like a built-in one (designed, MATHEMATICS-AS-LIBRARIES-2026-11-03.md, L202 to L209) | Influence | Julia's multiple dispatch with per-type specialisation, with `Complex` and `Rational` written in Julia in Base (Bezanson, Edelman, Karpinski and Shah, "Julia: A Fresh Approach to Numerical Computing", SIAM Review 2017); Haskell's `Num` class and `fromInteger` for literals; Lean 4's small core with the algebraic hierarchy in Mathlib; Swift Numerics, which ships `Complex` as a package outside the standard library. Generalization as embeddings (L208): Scheme's numeric tower (R7RS §6.2), Lean 4's coercions and Mathlib's `algebraMap`. |
