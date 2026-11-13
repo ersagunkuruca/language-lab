@@ -647,7 +647,10 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 // `uses`: an interface's operation used at a type variable (Scheme.effectsAt),
 // whose row then also does what that type's implementation does: shown in
 // the arrow as "a's Division" (L233).
-export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = [], needs?: ReadonlyMap<number, Iterable<Id>>, uses: readonly SchemeEffectsAt[] = []): string {
+// `dots`: when one row variable is shown, it reads … rather than e (E261,
+// CONFUSING item 7); with several, they keep their names, e and e2, so
+// which is which can be told.
+export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = [], needs?: ReadonlyMap<number, Iterable<Id>>, uses: readonly SchemeEffectsAt[] = [], dots = false): string {
   const varNames = new Map<number, string>();
   const tailCount = new Map<number, number>();
   const root = new Map<number, number>();
@@ -664,13 +667,14 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
     }
   };
   count(t);
+  const shownTails = [...tailCount.values()].filter((n) => n > 1).length;
   const tailNames = new Map<number, string>();
   const name = (id: Id) => names[id] ?? id;
   const rowText = (eff: Row): string[] => {
     const effs = eff.effs.map((e) => { const xs = eff.args?.[e]; return xs?.length ? `${name(e)} ${xs.map((a) => (a.t === "con" && a.args.length) || a.t === "fn" ? `(${go(a, true)})` : go(a, true)).join(" ")}` : name(e); });
     const tail = eff.tail === null ? null : tailOf(eff.tail);
     if (tail !== null && (tailCount.get(tail) ?? 0) > 1) {
-      if (!tailNames.has(tail)) tailNames.set(tail, `e${tailNames.size ? tailNames.size + 1 : ""}`);
+      if (!tailNames.has(tail)) tailNames.set(tail, dots && shownTails === 1 ? "…" : `e${tailNames.size ? tailNames.size + 1 : ""}`);
       effs.push(tailNames.get(tail)!);
     }
     return effs;
@@ -718,19 +722,19 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
 
 // A type as the checker `s` has it: its number-type variables said, and
 // rows one inside the other (Subst.subs) printed as one.
-export function showIn(t: Type, names: Names, s: Subst): string {
-  return shownIn(s)(t, names);
+export function showIn(t: Type, names: Names, s: Subst, dots = false): string {
+  return shownIn(s, dots)(t, names);
 }
 // The same for many types of one checker that is done (an editor's
 // tooltips, one for each node of a definition): what it reads of s besides
 // the type, its rows inside others and its interfaces' uses, worked out
 // once (Spacetime's `rapidity picture` spent 170 ms on them, I192).
-export function shownIn(s: Subst): (t: Type, names: Names) => string {
+export function shownIn(s: Subst, dots = false): (t: Type, names: Names) => string {
   const links: [number, number][] = [];
   for (const c of s.subs) { const f = s.resolveRow(c.from).tail, to = s.resolveRow(c.to).tail; if (f !== null && to !== null) links.push([f, to]); }
   const uses = s.effectsAt.flatMap((e): SchemeEffectsAt[] => { const v = s.resolve(e.t); return v.t === "var" ? [[v.v, e.iface, e.field, s.resolveRow(e.row).tail]] : []; });
   const needs = new Map([...s.needs].map(([v, m]) => [v, [...m.keys()]]));
-  return (t, names) => showType(s.zonk(t), names, s.arith, links, needs, uses);
+  return (t, names) => showType(s.zonk(t), names, s.arith, links, needs, uses, dots);
 }
 
 // A scheme's interfaces, for showType.
