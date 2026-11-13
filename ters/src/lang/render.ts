@@ -26,6 +26,7 @@ import { implementationOps, isOperation } from "./records.ts";
 import { partPort } from "./results.ts";
 import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE, tupleVariant } from "./std.ts";
 import { NUMBER, showIn } from "./types.ts";
+import { formatUnit } from "../units.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
@@ -217,7 +218,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       case "lit": {
         // A number written as text (1/2 at Rational) is a number.
         // A whole Float64 keeps its point, 1500.0, so it reads back as one (E192).
-        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [n.of === NUMBER && Number.isInteger(n.value) ? `${n.value}.0` : String(n.value)], id));
+        // A number with a unit says it: 9.81 m/s² (L252).
+        const unit = n.unit && Object.keys(n.unit).length ? ` ${formatUnit(n.unit)}` : "";
+        if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [(n.of === NUMBER && Number.isInteger(n.value) ? `${n.value}.0` : String(n.value)) + unit], id));
         if (pane) { const l = litLabel(n.value); return atom(part("lit", [l.short], id, l.full)); }
         return atom(part("lit", [JSON.stringify(n.value)], id));
       }
@@ -651,6 +654,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     const n = node(id);
     if (n.kind === "tfun") return `(${n.params.map(typeText).join(", ")}) ${n.effects?.length ? `-[${n.effects.map(nameOf).join(", ")}]->` : "->"} ${typeText(n.result)}`;
     const r = n as NodeOf<"tref">;
-    return [nameOf(r.target), ...r.args.map((a) => { const s = typeText(a); return s.includes(" ") ? `(${s})` : s; })].join(" ");
+    // A unit written in the type follows it (`Float64 m/s`, L252).
+    return [nameOf(r.target), ...r.args.map((a) => { const s = typeText(a); return s.includes(" ") ? `(${s})` : s; }), ...(r.unit && Object.keys(r.unit).length ? [formatUnit(r.unit)] : [])].join(" ");
   }
 }

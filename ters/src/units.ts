@@ -47,6 +47,33 @@ export function formatUnit(u: Unit): string {
   return den ? `${num || "1"}/${den}` : num;
 }
 
+// A unit as formatUnit writes it, read back (L252): base units and the
+// named ones, each with an exponent (s², s^2, s⁻¹), joined by · or *, and
+// everything after a / divides: `m/s²`, `kg·m/s²`, `N`, `1/s`. Null when
+// it isn't one, so a type's word can be tried as a unit after its names.
+const SUPER: Record<string, string> = { "⁻": "-", "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9" };
+export function parseUnit(text: string): Unit | null {
+  const [num, ...dens] = text.split("/");
+  if (dens.length > 1) return null;
+  const v = BASE.map(() => 0);
+  const part = (s: string, sign: number): boolean => {
+    if (s === "1") return true;
+    for (const f of s.split(/[·*]/)) {
+      const m = /^([A-Za-zΩ]+)(?:\^(-?\d+)|([⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+))?$/.exec(f);
+      if (!m) return false;
+      const e = m[2] !== undefined ? Number(m[2]) : m[3] ? Number([...m[3]].map((c) => SUPER[c]).join("")) : 1;
+      const named = NAMED.find(([n]) => n === m[1])?.[1];
+      const base = (BASE as readonly string[]).indexOf(m[1]);
+      if (!named && base < 0) return false;
+      if (named) toVec(named).forEach((x, i) => (v[i] += sign * e * x));
+      else v[base] += sign * e;
+    }
+    return true;
+  };
+  if (!num || !part(num, 1) || (dens.length && !part(dens[0], -1))) return null;
+  return toUnit(v);
+}
+
 // ---------------------------------------------------------------- constraints
 
 // sum(coef · U(term)) = rhs, per base dimension. `why` names the node the
@@ -80,6 +107,13 @@ function rules(op: string, port: (k: string) => string, why: string, node: Id): 
 }
 
 const unitOf = (n: Node | undefined): Unit | undefined => (n as { unit?: Unit } | undefined)?.unit;
+// A constraint from a field's type names the unit, for the message.
+const FIELD = "field's unit ";
+// The unit a field's type says (`speed: Float64 m/s`, L252), if it says one.
+const fieldUnit = (code: Code, field: Id): Unit | undefined => {
+  const f = code.nodes[field];
+  return f?.kind === "field" ? unitOf(code.nodes[f.type]) : undefined;
+};
 
 // Constraints for one def. Calls to other defs are inlined under a prefix,
 // so a def used twice can take different units each time (it's polymorphic
@@ -143,6 +177,17 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         if (fn.kind !== "ref") return;
         const callee = code.nodes[fn.target];
         if (callee.kind === "builtin") { out.push(...rules(callee.op, port, id, id)); return; }
+        // A case made with a field whose type has a unit: the value given
+        // has it. A field read: what it gives has it (L252).
+        if (callee.kind === "variant") {
+          callee.fields.forEach((f, i) => { const u = fieldUnit(code, f); if (u && n.args[i] !== undefined) out.push({ terms: [[t(n.args[i]), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: n.args[i] }); });
+          return;
+        }
+        if (callee.kind === "field") {
+          const u = fieldUnit(code, fn.target);
+          if (u) out.push({ terms: [[t(id), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: id });
+          return;
+        }
         if (callee.kind === "def") {
           const keys = paramsOf(fn.target);
           out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, [...path, defId]));
@@ -153,6 +198,9 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         visit(n.scrutinee);
         for (const a of n.arms) {
           const arm = code.nodes[a] as Extract<Node, { kind: "arm" }>;
+          // A case's fields, taken out: each has its field's unit.
+          const v = code.nodes[arm.variant];
+          if (v?.kind === "variant") arm.binds.forEach((b, i) => { const u = v.fields[i] && fieldUnit(code, v.fields[i]); if (u) out.push({ terms: [[t(b), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: b }); });
           visit(arm.body);
           same(id, arm.body, "a case", id);
         }
@@ -459,6 +507,7 @@ function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts
     const u = unitOf(code.nodes[node]);
     return `declared ${u ? formatUnit(u) : "a unit"}, but the rest ${was ? `makes it ${formatUnit(was)}` : "says otherwise"}`;
   }
+  if (why.startsWith(FIELD)) return `the field's type says ${why.slice(FIELD.length)}, but ${was ? `this is ${formatUnit(was)}` : "the rest says otherwise"}`;
   if (why === "a plain number") return "a plain number can't stand where a unit is needed";
   if (sides) {
     const [[a, ua], [b, ub]] = sides, na = termName(code, names, a), nb = termName(code, names, b);
