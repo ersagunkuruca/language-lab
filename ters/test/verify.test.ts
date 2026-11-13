@@ -11,8 +11,11 @@ import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { elaborate, verify, type Elaboration } from "../src/lang/verify.ts";
-import { STRING, type Type } from "../src/lang/types.ts";
-import { subtree } from "../src/model.ts";
+import { DIVERGE, STRING, type Type } from "../src/lang/types.ts";
+import { subtree, type Node } from "../src/model.ts";
+import { Lang } from "../src/lang/dsl.ts";
+import { base, baseNames } from "../src/lang/load.ts";
+import { INT_OPS } from "../src/lang/std.ts";
 
 const text: Type = { t: "con", id: STRING, args: [] };
 test("the library's typing verifies, every node of it", () => {
@@ -88,4 +91,32 @@ test("a written list, an effect's operation, an interface's and a handler are ch
     const changed: Elaboration = { ...e, types: new Map(e.types).set(id, change(e.types.get(id)!)) };
     assert.ok(verify(code, changed).problems.some((x) => x.id === id), `${id} let through`);
   }
+});
+
+// Termination (L242): a recursion whose type leaves out Diverge is
+// measured again on the code as it stands. A countdown verifies; the same
+// countdown with its call given n itself (a pass that changed the code and
+// kept its type) is refused, as is a loop whose Diverge is dropped.
+test("a recursion whose type leaves out Diverge is checked to end", () => {
+  const k = new Lang();
+  const down = k.def("count down"), spin = k.def("spin");
+  k.define(down, k.fn(["n"], (n) => k.if(k.call(INT_OPS.less, n, k.int(1)), k.int(0), k.call(down, k.call(INT_OPS.sub, n, k.int(1))))));
+  k.define(spin, k.fn(["n"], (n) => k.call(spin, n)));
+  const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  const e = elaborate(code, info), own = [down, spin];
+  const effs = (d: string) => { const t = e.types.get(d); return t?.t === "fn" ? t.eff.effs : null; };
+  assert.deepEqual(effs(down), []);
+  assert.ok(effs(spin)?.includes(DIVERGE));
+  assert.deepEqual(verify(code, e, own).problems, []);
+  // spin's Diverge dropped, from its definition and its body.
+  const noDiverge = (t: Type): Type => (t.t === "fn" ? { ...t, eff: { ...t.eff, effs: t.eff.effs.filter((x) => x !== DIVERGE) } } : t);
+  const types = new Map(e.types);
+  for (const id of [spin, (code.nodes[spin] as { body: string }).body]) types.set(id, noDiverge(types.get(id)!));
+  assert.deepEqual(verify(code, { ...e, types, schemes: new Map(e.schemes).set(spin, { ...e.schemes.get(spin)!, type: noDiverge(e.schemes.get(spin)!.type) }) }, own).problems.map((x) => [x.id, x.rule]), [[spin, "a recursion whose type leaves out Diverge ends"]]);
+  // count down's call given n, not n - 1: every type as it was.
+  const call = subtree(code, down).find((id) => { const n = code.nodes[id]; return n?.kind === "call" && (code.nodes[n.fn] as { target?: string }).target === down; })!;
+  const sub = (code.nodes[call] as { args: string[] }).args[0], nRef = (code.nodes[sub] as { args: string[] }).args[0];
+  const changed = { ...code, nodes: { ...code.nodes, [call]: { ...code.nodes[call], args: [nRef] } as Node } };
+  assert.deepEqual(verify(changed, e, own).problems.map((x) => [x.id, x.rule]), [[down, "a recursion whose type leaves out Diverge ends"]]);
 });

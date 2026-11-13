@@ -1,7 +1,8 @@
 # Reading a change to a program: `ters diff` by node id
 
-*Status 2026-11-13: partly built. E255a (`diffPrograms`, `ters diff` on two
-programs) and E255b (`--from REV`) are done; E255c is a row.*
+*Status 2026-11-13: built. E255a (`diffPrograms`, `ters diff` on two
+programs), E255b (`--from REV`) and E255c (the editor's Changes tab) are
+done; E255d (a PR comment workflow) was declined (Ersagun, 2026-11-13: not needed).*
 
 A saved program is JSON keyed by node ids: `code.json`, `names.default.json`
 and `comments.json` in a folder, or one file the editor saves. A change to
@@ -74,8 +75,8 @@ git's own `diff` can't do this alone: a textconv driver sees one file, and
 a definition's text needs the names beside it. So `ters diff --from` is the
 way in from git. A GitHub comment with the diff, posted by a workflow on a
 PR that touches `ters/examples` or `ters/library`, would let a reviewer read
-a change without running anything. It costs CI minutes, so it's a separate
-step for Ersagun to choose.
+a change without running anything. It would cost CI minutes, and Ersagun
+declined it (2026-11-13: not needed).
 
 ## In the editor
 
@@ -99,7 +100,7 @@ need git.
 | E255a | `diffPrograms` (ters/src/diff.ts): definitions by id, the view's lines by node id with both versions printed with the new names, renames, comments, types; `ters diff` on two folders or files prints it (L113's summary stays for a bare code.json pair) | `ters diff` on dice and a copy with one literal changed, one definition added and one renamed prints exactly those three, with the literal's line as `~` |
 | E255b | `--from REV` / `--to REV` through `git show`, and a PR's changed program folders with `--from` alone | `ters diff ters/examples/pig --from` a commit before #2240 prints the change #2240 made to pig's handler |
 | E255c | The editor's Changes view against the opened version or the last Reviewed one, with marks in blocks and graph | Edit a literal and add a definition in dice: Changes lists both, the literal's block amber, the new definition green |
-| E255d | (Ersagun's call: CI minutes) a workflow that comments `ters diff` on PRs touching program folders | A PR changing an example gets the comment |
+| E255d | Declined 2026-11-13 (Ersagun: not needed). Was: a workflow that comments `ters diff` on PRs touching program folders | A PR changing an example gets the comment |
 
 ## Prior art
 

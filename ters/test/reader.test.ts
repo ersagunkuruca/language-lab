@@ -650,3 +650,27 @@ test("typed text reads a function as a value, a quoted name, and a rack of overl
   reads("shifted(‹foot spot›, vec(1, 0))");
   reads("flatten(map(range(5), (r) => map(range(r + 1), (k) => ball(sum(range(r + 1)) + k + 1, shifted(‹foot spot›, vec(‹as float64›(r) · spacing · 0.866, (‹as float64›(k) − ‹as float64›(r) · 0.5) · spacing)), vec(0, 0)))))");
 });
+
+// Text that doesn't read says what to write (I231): an operator from
+// another language named with Ters's own, a bracket left open, the token
+// the reader stopped at. The outsider's `==` answered only "a binder".
+test("typed text that doesn't read names the token and what Ters writes", () => {
+  const p = loadProgram(join(root, "examples", "mandelbrot"));
+  const { code } = p, names = p.pres.names, escape = p.named("escape");
+  const re = subtree(code, escape).map((x) => code.nodes[x]).find((n): n is Call => isCall(n) && code.nodes[n.fn]?.kind === "ref" && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "re")!;
+  const open = replace(code, re.id, () => ({ kind: "hole" }));
+  const info = infer(open, names);
+  const why = (t: string) => { const r = fillValue(open, names, info, re.id, t, escape); return r.ok ? "" : r.reason; };
+  assert.match(why("if z.re == 1.0 then 1.0 else 2.0"), /^== isn't Ters: equality is one =/);
+  assert.match(why("1 == 2"), /^== isn't Ters/);
+  assert.match(why("if z.re < 1.0 && z.im < 1.0 then 1.0 else 2.0"), /^&& isn't Ters: write and/);
+  assert.match(why("if z.re < 1.0 || z.im < 1.0 then 1.0 else 2.0"), /^\|\| isn't Ters: write or/);
+  assert.match(why("if !(z.re < 1.0) then 1.0 else 2.0"), /^! isn't Ters: write not/);
+  assert.equal(why("max(z.re, z.im"), "a ( isn't closed");
+  assert.equal(why("1 2"), "unexpected text: “2” isn't read");
+  // What Ters writes still reads, and `!=` is read as not (… = …).
+  assert.equal(why("if z.re = 1.0 then 1.0 else 2.0"), "");
+  assert.equal(why("if z.re != 1.0 then 1.0 else 2.0"), "");
+  // Inside a string, == is text.
+  assert.doesNotMatch(why(`show("a == b")`), /isn't Ters/);
+});
