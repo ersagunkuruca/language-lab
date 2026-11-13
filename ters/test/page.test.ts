@@ -152,3 +152,34 @@ test("a page's logged run replays to the same page (C172g)", () => {
   const wrong = log.map((e) => (e.op === "event" ? { ...e, args: [...e.args.slice(0, 6), [9, 9, 9]] } : e));
   assert.throws(() => showPage({ ...base, doc: fakeDoc(), store: store(), replay: wrong }), /went another way/);
 });
+
+// I239b (WORLD-LOG-WINDOW.md §2): a page's log as a window. Every 10
+// seconds, at the next event, a snapshot of its cells; past the last 3,
+// the oldest segment leaves the log, so the log stays as long as 3
+// segments however long the page runs.
+test("a page's log keeps a window of segments, each from a snapshot", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  let t = 0;
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log, window: { seconds: 10, keep: 3, clock: () => t } });
+  const root = page.root as FakeEl, w = page.window!;
+  const lengths: number[] = [];
+  for (let i = 0; i < 40; i++) {
+    t += 4000;
+    root.find("hundred").fire("click");
+    lengths.push(log.length);
+  }
+  assert.match(root.find("status").textContent, /^Rolls: 4000;/);
+  // 40 clicks over 160 s: a snapshot every 3 clicks, 3 kept.
+  assert.equal(w.snapshots.length, 3);
+  assert.ok(w.dropped > 0);
+  assert.ok(Math.max(...lengths.slice(20)) <= Math.max(...lengths.slice(0, 20)) + 2, `${lengths}`);
+  // Each segment starts at an event, with the cells main made and where
+  // the generator was.
+  for (const s of w.snapshots) {
+    assert.equal(log[s.at]?.op, "event");
+    assert.ok(s.state && s.state.cells.length > 0);
+  }
+});
