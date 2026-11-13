@@ -96,6 +96,9 @@ export const TARGETS: Record<Id, Target> = {
   [S.byItsWays]: { js: written("an implementation's field, replaced by one of its ways before compiling"), scalar: no("is replaced by one of its ways before compiling") },
   [S.all]: { js: written("handlerEx(): a loop collecting the answers"), scalar: CHOOSES },
   [S.count]: { js: written("handlerEx(): a loop counting the answers"), scalar: CHOOSES },
+  // Answered for the platform before anything is lowered (L234): each
+  // call becomes true or false, and the branch it drops is never compiled.
+  [S.supports]: { js: written("supports.ts answerSupports: each call answered for the target before compiling"), scalar: written("supports.ts answerSupports: each call answered for the target before lowering") },
   [S.optional]: { js: written("handlerEx(): the first answer as some, or none"), scalar: CHOOSES },
   [S.first]: { js: written("handlerEx(): the first answer, or the default"), scalar: written("budget(): first over with fuel is a counted loop") },
   [S.fuel]: { js: written("handlerEx(): calls spend from a budget"), scalar: written("budget(): under first, a counted loop") },
