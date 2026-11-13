@@ -27,7 +27,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
-| L Language and library | "Language lane B" | L249, L251, L253 (P3, from the 2026-11-13 docs refresh) |
+| L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
 
 ## Inbox
@@ -37,8 +37,15 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I219 | What the full run fails on, on main (2026-11-12; draws fixed in I219a, board, effects and finite in I219b, lang.test's palette sweep, map-tree.test's timing and C42h's names in c-names.test in I219 part, palette in I219c, the editor's shaders ("process is not defined") in I219d, the smoke's first-steps check (it waited for main, but a first visit opens on fall since E235) in I219e, the rest of the smoke (Countdown's solutions read [] once relate's settles spent steps) in I219f, fixed.test's CORDIC and core-js.test's pig in I219 part 2, each file run alone; the nightly hasn't passed since 10-28): on CI resolve-once.test (a kept library resolving typed `List Case several` where it is `List a`), passing here; likely the same cause as CORDIC (a kept resolving read over another library check), fixed by part 2, for the next Nightly to confirm. | I208 | 2026-11-12 |
-| I239 | (Design: docs/design/tools/WORLD-LOG-WINDOW.md, steps I239a to I239g and I255 all built, the page panel's Pause, step back and step on included; left: the example's check below.) A run's log of the world's answers within bounded memory (Ersagun 2026-11-13: "it's still a memory hole"). Each world effect says how it is recorded: random as one seed for the run (our generator, seeded once from the world), the clock once per frame as a difference from the last reading. The log is kept as a window: a snapshot of the page's state every N seconds, older entries dropped, replay and step-back going as far back as the window. Prior art: rr's checkpoints, Redux DevTools' maxAge. Design note first. Example: tumble running an hour in the editor with its log under a fixed size, and step-back working inside the window. Suggested lane: Language | thread "Decide the saved program format"; worldlog.ts | 2026-11-13 |
 | I241 | A trial repository holding one real Ters program, to try the format and `ters diff` in real git use: edits on two branches touching the same definitions, PRs read in GitHub's raw view and with `ters diff`, merges with and without the driver, findings in a dated report. Needs Ersagun to create the repository. After I240 | thread "Decide the saved program format" | 2026-11-13 |
+| I258 | **Bug.** A name ending in `or` or `and` before an operator isn't read from text: `b.anchor + x` is "after .anchor, “+ x” isn't read". editor/typed.ts `typedOut` skips an operator whose left side ends with any operator's symbol, with no word boundary for `or` and `and` (`colour + x`, `band + x`). Editor lane's file | GAPS.md round 16 B1 | 2026-11-13 |
+| I259 | **Bug.** A call of an unknown name is refused after 8.5 s in a 50-definition program, and each `++` before it multiplies that (51 s for two): editor/typed.ts `isOperation` scans every node for each field `closest` weighs (O(n²)), and the operator split retries each operand. Make the refusal instant | GAPS.md round 16 B2 | 2026-11-13 |
+| I260 | The MCP text reader's smaller gaps from round 16: a `match` as a step with steps after it; the message for `0.0 m` where m is a parameter (say m is a name here); `first` on an Optional (the message reads backwards); `not in order(ps)` (suggest `not (in order(ps))`); a `replace` taking 1.5 s at 50 definitions | GAPS.md round 16 M1 | 2026-11-13 |
+| I261 | `ters run` takes 11 s on trek's 400-fix sample, 0.8 s of it running: 5.9 s re-checks units on the represented program (a rewrite changes no units, so skip it), 5.1 s lowers (`firstArms` 2 s) | GAPS.md round 16 R4 | 2026-11-13 |
+| L257 | Units through constants and builtins (beside L252d): a value definition is unit-checked and its unit used where it's named (`limit = 3.0 s` then `1.0 m + limit` refused; trek's `earth radius`, `gravity` type as `a` today); `first(x, else y)` gives x's and y's unit; `exp`, `log`, `asin` and the like take and give a number without units. trek: 7 of 96 signatures show a unit, 26 a plain Float64 where one is known | GAPS.md round 16 U1 | 2026-11-13 |
+| L258 | **Ersagun's call.** A division guarded by a comparison is still a Choice (`if d > 0.0 m then x / d`): trek has 9 `first(…, else 0)` for divisions, `sqrt` and `asin` that always answer. Either the checker reads the guard, or Float64 division always answers as IEEE's does (∞, NaN) | GAPS.md round 16 L1 | 2026-11-13 |
+| C221 | `drop` and `take` on a list stored as an array as jobs (a view, O(1); O(k)), as `item at` is: trek's smoothing, `take(drop(hs, i − k), 2k + 1)`, walks i items per window, so the core module is 47x the ideal at 4000 fixes and 713x at 40000, `ters native` 1271x | GAPS.md round 16 R1 | 2026-11-13 |
+| C222 | `ters wasi` runs out of stack from 10000 fixes on trek (`points from`, `legs of`, std's `sum` recurse per item); the core module and `ters native` don't. A way to grow the stack while C187 waits for stack switching | GAPS.md round 16 R3 | 2026-11-13 |
 
 ## E: Editor
 
@@ -158,7 +165,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L250 | Check whether a representation's rewrite still loses a totality proof (NUMBERS.md "What's still rough"): `is even` is structural on Nat, but after the rewrite onto Int its recursion goes through `match Nat′`'s function argument and the checker gave it `Diverge`. Close if it no longer happens; else keep the original's effects through the rewrite. Example: examples/numbers' `is even` has no Diverge on its represented program | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P2 | S | |
 
 ### Ersagun's current asks
 
@@ -171,21 +177,19 @@ all of these.
 |---|---|---|---|---|---|
 | L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its folds and the sizes of its values, checked against measurements (rep-costs.test.ts measures today's declared ones). L24 found the declared costs right on the examples, so this waits for a program where a declared cost is wrong | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md, RESEARCH-L24-2026-11-12 | P3 | L | waits for an example |
 | L248 | Ropes as one more representation of List (NUMBERS.md stage 3): `append` and `split` in log n, chosen by cost like `array of List`. Waits for a program that splits and joins long lists | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | M | waits for an example |
-| L249 | Int as data and Nat in std (NUMBERS.md stage 1): `match` and `fold` on an Int as a view (zero / succ), and `Nat` in std represented as Int, so Peano code from examples/numbers runs on std's Nat | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | M | |
-| L252 | Units written in a type (`Float64 m/s`) and functions generic over a unit; units are inferred and checked today, not written (LANGUAGE.md "What's next") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md, NUMBERS.md "Units" | P3 | L | |
+| L249b | Int's own definition as data (NUMBERS.md stage 1, the rest of L249): Lean's `from(Nat) \| ‹minus one minus›(Nat)`, one spelling per integer, so a `match` on an Int splits it by sign into std's Nat, stored as the Int itself; and Nat literals (`3` at Nat). Nat in std is done (L249). Waits for a program that matches on an Int's sign or writes a Nat literal | L249 (Language lane B, 2026-11-13); NUMBERS.md | P3 | S | waits for an example |
+| L252d | Units in a pinned signature (the rest of L252): a pin keeps its definition's units, concrete (`Float64 m`) and related (`(Float64 u) -> Float64 u²`, a unit variable), so an edit that changes them is refused as one that changes the type is; and units inside other types (`List (Float64 s)`). Today a definition is already generic over its units (units.ts inlines it at each call), its signature shows the known ones (L252c), and fields carry written ones (L252a). Waits for a program that pins a unit-generic function or keeps unit numbers in lists; trek (GAPS.md round 16, U1) keeps them in lists | L252 (Language lane B, 2026-11-13); LANGUAGE.md "What's next" | P3 | M | its example: trek (round 16) |
 | L256 | A value packed with its implementation (INTERFACES.md step 6): a list of things of different types sharing an interface, paid for only where used. Waits for a program that needs it | docs refresh 2026-11-13 (thread "Update all project docs"); INTERFACES.md | P3 | M | waits for an example |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L251 | A test that representations rewrite inside a program's own types: a record with a Nat field runs on Int, evaluated and compiled, with the same answers (NUMBERS.md "What's still rough": rewritten, never tested) | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P3 | S | |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L253 | Environment variables as a world operation (`environment variable(name)` in Files' or a new effect's place, refusable by `--allow`), on every target (LANGUAGE.md "What's next") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | S | |
 | L254 | Lazy fold results, so the effects in a fold could run top-down (LANGUAGE.md "What's next"). Research first: what it would mean for Choice and for the compiled loops | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | L | |
 | L255 | Cells holding a value that arrives later, as Solid's resources (a fetch's text as a cell with a loading state). Check first how much L59's page fetch already covers (LANGUAGE.md "Cells, further") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | M | |
 

@@ -257,7 +257,7 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       case "field": { const ports = (code.nodes[n.type] as { ports?: string[] } | undefined)?.ports; return [...(n.same ? ["field", go(n.type), ["same", ...samePlace(n.same)]] : ["field", go(n.type)]), ...(ports ? [["ports", ports.length]] : [])]; }
       case "tref": {
         const head = binders.has(n.target) ? ["var", binders.get(n.target)] : defRef(n.target);
-        return ["tref", head, ...n.args.map(go)];
+        return n.unit ? ["tref", head, ...n.args.map(go), ["unit", unitKey(n.unit)]] : ["tref", head, ...n.args.map(go)];
       }
       case "tfun": return n.effects?.length ? ["tfun", n.params.map(go), go(n.result), n.effects.map(defRef)] : ["tfun", n.params.map(go), go(n.result)];
       case "match": return ["match", go(n.scrutinee), n.arms.map(go), n.otherwise ? go(n.otherwise) : null];

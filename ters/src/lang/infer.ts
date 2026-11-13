@@ -127,7 +127,12 @@ export const implementationOf = (info: Info, iface: Id, t: Type): Id | undefined
 // is its pin, and its nodes' types are found when asked for (libraryLater).
 // `firstVar`: where the check's type variables start, so a library's
 // bodies typed later (WHOLE_VARS) never share one with a check over it.
-export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache; bodiesLater?: boolean; firstVar?: number }
+// `ends` (L250): definitions known to end though their recursion may not
+// show it, those of a rewrite (a representation chosen) that ended as
+// written: a rewrite changes no answer, so they keep no Diverge, nor do
+// their callers on their account (`is even` on Nat, its recursion through
+// `match Nat′`'s function argument once on Int).
+export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache; bodiesLater?: boolean; firstVar?: number; ends?: Iterable<Id> }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
@@ -287,7 +292,9 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
   let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
     const names = underAll.names;
-    const libOpts: Options = insiders ? { ...opts, insiders } : opts;
+    // A program's `ends` are its own definitions: none of the library's.
+    const { ends: _, ...rest } = opts;
+    const libOpts: Options = insiders ? { ...rest, insiders } : opts.ends ? rest : opts;
     const check = (kind: LibraryCheck): Info => {
       const opts = libOpts;
       const stored = libraryStore?.load(lib, opts, mine, kind);
@@ -338,6 +345,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const owner = reuse && ![...reuse.only].some((d) => (code.nodes[(code.nodes[d] as NodeOf<"def">)?.body ?? ""] as Node | undefined)?.kind === "typedef") ? reuse.from.owner : ownerOfTypeParts(code);
   const insiders = opts.insiders ? new Set(opts.insiders) : null;
   const library = opts.library ? new Set(opts.library) : null;
+  const ends = new Set(opts.ends ?? []);
   // Whether a type's private cases are the library's to build.
   const libraryType = (def: Id) => !library || library.has(def);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set(), reshape: new Map() };
@@ -888,7 +896,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     // Pinned, its body typed later: what callers see is the pin, and
     // whether it may not finish is read from its shape alone.
     if (opts.bodiesLater && group.every((d) => opts.pins?.[d])) {
-      if ((group.length > 1 || deps(group[0]).includes(group[0])) && !terminates(code, group)) for (const d of group) info.divergent.add(d);
+      if ((group.length > 1 || deps(group[0]).includes(group[0])) && !group.every((d) => ends.has(d)) && !terminates(code, group)) for (const d of group) info.divergent.add(d);
       for (const d of group) { const sc = fresh(opts.pins![d], s); info.schemes.set(d, sc); info.typeOf.set(d, sc.type); }
       continue;
     }
@@ -947,7 +955,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const body = (code.nodes[d] as NodeOf<"def">).body;
       if (body && code.nodes[body].kind !== "lambda") err(d, `${nm(d)} is defined in terms of itself; only a function can be recursive`);
     }
-    if (recursive && !terminates(code, group, undefined, settledInt)) {
+    if (recursive && !group.every((d) => ends.has(d)) && !terminates(code, group, undefined, settledInt)) {
       for (const d of group) {
         info.divergent.add(d);
         const t = s.resolve(mono.get(d)!);
@@ -1259,10 +1267,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // A plain number literal is some Number, whichever its use needs
         // (WHAT-NUMBER-MEANS.md; Haskell's fromInteger and fromRational):
         // arith.ts writes it at that type, and Float64 when nothing says.
-        // One with a fraction part isn't an Int.
+        // One with a fraction part isn't an Int, nor is one with a unit
+        // (2 s, L252): units are checked on the other Numbers.
         if (!n.of && typeof n.value === "number") {
           const v = s.fresh(false, false, "arith") as { t: "var"; v: number };
-          if (!Number.isInteger(n.value)) s.fractional.add(v.v);
+          if (!Number.isInteger(n.value) || (n.unit && Object.keys(n.unit).length)) s.fractional.add(v.v);
           else s.whole.add(v.v);
           t = v;
         } else t = n.of ? { t: "con", id: n.of, args: [] } : str;

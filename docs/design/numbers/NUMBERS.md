@@ -177,7 +177,7 @@ meaning(bits) =
 ```
 
 and definitions that do Nat's jobs on `Binary`: `zero′`, `succ′`, `add′`,
-`multiply′`, `number′`, and the two that make *any* Nat code run on
+`multiply′`, `integer′`, and the two that make *any* Nat code run on
 binary, a match and a fold:
 
 ```
@@ -415,7 +415,7 @@ Other representations run the same fold differently:
 | `text` | `List Text` of single characters | a JS string | `characters` | one pass over the code points, from the end | built |
 | `counted` | `List Float64` from `range` | a number n | `range` | a counted loop from n − 1 down to 0 | built (`range` and Int `range`) |
 | `binary` | `Nat` | `Binary` | `meaning` (a definition) | `fold Nat′` (a definition) | PR #30, whole program |
-| `int` | `Nat` | an `Int` | `natural` (a definition) | `fold Nat (Int)` (a definition): a fold over `range(n)`, so a counted loop | built, whole program |
+| `int` | `Nat` | an `Int` | `natural` (a definition) | `fold Nat (Int)` (a definition): a fold over `range(n)`, so a counted loop | built, whole program; std's own row since L249 |
 | `array` | `List a` | a JS array and a start | `items` | an index loop | built in the compiler for lists walked whole, and for lists consed onto then walked (kept from the other end); the start, for matches, is next (GAPS.md G21) |
 | `build` | `List a` | a function of `cons` and `nil` | `build` | apply it | later |
 
@@ -548,8 +548,14 @@ representation", CACM 1969; used on the MIT Lisp Machine and Symbolics).
 Ours is decided at compile time, by the uses, rather than per cell.
 
 **Peano `Nat` stored as an `Int` (done).** This one needs no template. It
-is a representation written in the language, in `examples/numbers` next
-to `binary`, and chosen for the whole program by the chooser of PR #30:
+is a representation written in the language, and chosen for the whole
+program by the chooser of PR #30. It started in `examples/numbers` next to
+`binary`; since L249 `Nat` is std's (the numbers module), with `add`,
+`multiply`, `natural` (Int → Nat) and `integer` (Nat → Int), and this row
+and the definition itself (`unary`) are std's rows for it. A program that
+says `Nat` gets it as an `Int` with nothing written; one that writes a row
+of its own for std's `Nat`, as `examples/numbers` writes `binary`, has it
+weighed beside std's:
 
 ```
 natural(i) =                          ← meaning: Int → Nat
@@ -569,13 +575,16 @@ them total, unlike a recursion that counts down. A fold over a Nat calls
 `fold Nat (Int)`, whose fold over `range(n)` the compiler runs on n
 (`counted`, above), so the control (a loop) and the data (an Int) come
 from one entry in the table. The program still says `zero` and `succ`.
-The chooser now picks `int` for `numbers`' `main` (its `number` job is 1,
+The chooser picks `int` for `numbers`' `main` (its `integer` job is 1,
 against binary's log n). `main` (18!, 2⁵⁰, is 100 even) takes about 6 ms
 evaluated, against about 13 to 45 ms on binary, and about 0.03 ms compiled,
 against 0.09 ms. `ters run` and `ters compile` choose too: a program that
 writes representations runs on the chooser's pick for each type `main`
-uses (`ters run examples/numbers` prints 18! instead of running out of
-memory), and `--as-defined` runs the definitions as written.
+uses, std's rows among them (`ters run examples/numbers` prints 18!
+instead of running out of memory), and `--as-defined` runs the definitions
+as written. The rows for a type std stores whole are read by
+`storedRows` (library-reps.ts); Map, Set and List, whose rows go through
+their meaning by type, are chosen for apart.
 
 ## Number systems, one by one
 
@@ -928,7 +937,7 @@ In order. Each stage says when to start it.
 | stage | what | start when |
 |---|---|---|
 | 0 | representations (side tables then, language definitions since L108, REPRESENTATIONS.md); `represent` (code → code) and `choose` (declared costs); laws as tests; Peano Nat with binary | done |
-| 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | **partly done**: `Int` is a builtin type with JS number / BigInt values, literals, operations, compiler templates, and overflow is in the error table as impossible (LANGUAGE.md); Rational as lowest-terms pairs (L39, now in the numbers module, L207f4). Still to do: Int's definition as data (match and fold on it as a view), and Nat in std |
+| 1 | **Builtin representations and real integers.** Nat and Int in std as definitions, represented by JS integers with a BigInt fallback; Nat literals; Rational as lowest-terms pairs; the compiler's templates for them; integer overflow joins the error table as impossible | **mostly done**: `Int` is a builtin type with JS number / BigInt values, literals, operations, compiler templates, and overflow is in the error table as impossible (LANGUAGE.md); Rational as lowest-terms pairs (L39, now in the numbers module, L207f4); `Nat = zero \| succ(pred: Nat)` in std (the numbers module, L249), matched and folded as data and stored as an `Int` by default, so a match on it tests for 0 and a fold is a loop (above, "Peano `Nat` stored as an `Int`"). Still to do: Int's own definition as data (`from(Nat) \| ‹minus one minus›(Nat)`, so a match on an Int splits it by sign), and Nat literals |
 | 2 | **One `+`.** ~~Several defs displayed as `+`, operation records as arguments~~ Decided 2026-10-24: one generic `+ − · −x <` over a closed set of structures, resolved by type before anything runs (above, "One `+` for every number system") | **done** (L38), now the interfaces `Arithmetic` and `Ordered` (INTERFACES.md, L40h) |
 | 3 | **Lists as arrays and ropes.** `length`, `index`, `append`, `split` as jobs; array and rope representations, written in the language; the editor showing which one the compiler chose (no picker: the compiler always chooses) | **mostly done**: `array of List`, written in the language, chosen from use on every target (C30, C30d, C30e), and shown in the editor's type panel (E159); ropes not built |
 | 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | **done**: complex (L40), dual (L40g), `clifford table` (L42a), rotors and quaternions (L43a), PGA motors (L42), grades as types (L43, GRADES.md) |
@@ -939,12 +948,12 @@ In order. Each stage says when to start it.
 
 ## What's still rough
 
-- **The rewrite can lose a totality proof.** `is even` is structural on
-  Nat, but after the rewrite its recursion goes through `match Nat′`'s
-  function argument, and the checker gives it `Diverge`. The meaning is
-  total, and the laws make the rewrite correct, so the compiler should keep
-  the effects of the original. For now the rewritten program's type is
-  less precise than it should be.
+- ~~**The rewrite can lose a totality proof.**~~ Fixed (L250): `is even`
+  is structural on Nat, but after the rewrite onto Int its recursion goes
+  through `match Nat′`'s function argument, which the checker can't see
+  shrink. A rewrite changes no answer, so the check of the rewritten
+  program is told which definitions ended as written (infer.ts Options
+  `ends`), and they and their callers keep no `Diverge`.
 - ~~**The evaluator recurses on the JS stack.**~~ Fixed: the evaluator is
   now a machine with its continuation on the heap (LANGUAGE.md, "How it
   runs"), so `is even` of any size runs.
@@ -952,8 +961,6 @@ In order. Each stage says when to start it.
   type by groups of values since C93, on every target (C218 measured
   machine's split on WebAssembly and C: about 2× to 5× faster than trees).
 - **Costs are declared.** Stage 7 makes them checked, then computed.
-- **Representation rewrites inside a user's own types** (a record with a
-  Nat field) rewrite the field's type, but nothing tests it yet.
 
 ## Files
 

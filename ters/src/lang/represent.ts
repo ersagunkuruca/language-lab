@@ -365,10 +365,11 @@ function ownerOf(code: Code, variant: Id): Id | null {
 }
 function namesType(code: Code, typedef: Id, t: Id): boolean {
   const td = code.nodes[(code.nodes[typedef] as NodeOf<"def">).body ?? ""];
-  // A holder of no parameters a builtin takes or gives (a Response's
-  // Bytes) gets the program's own copy instead (library-reps.ts
-  // plainBoundary), the builtin's type left as it is.
-  if (td?.kind !== "typedef" || !td.params.length) return false;
+  // A builtin holder of no parameters (a Response's Bytes) gets the
+  // program's own copy instead (library-reps.ts plainBoundary), the
+  // builtin's type left as it is. The program's own (a record with a Nat
+  // field, L251) is rewritten with the definitions.
+  if (td?.kind !== "typedef" || (!td.params.length && /^(std|type)\./.test(typedef))) return false;
   const mentions = (x: Id): boolean => { const n = code.nodes[x]; return n?.kind === "tref" ? n.target === t || n.args.some(mentions) : n?.kind === "tfun" ? [...n.params, n.result].some(mentions) : false; };
   return td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => mentions((code.nodes[f] as NodeOf<"field">).type)));
 }

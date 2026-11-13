@@ -59,6 +59,32 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // creating cons lists in the audio loop. That's just wrong").
 export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean }
 
+// The rows the chooser picks from for each type a program stores: its own
+// representations, and the library's rows for a type stored whole (std's
+// Nat, as written or as an Int: the numbers module's, L249), beside the
+// program's own for it, where the program names the type, a case of it or
+// a definition on it. A type with rows read through their meaning by type
+// (Map, Set, List) is chosen for by withLibraryRepresentations.
+export function storedRows(code: Code, own: Id[], reps: Representation[]): Representation[] {
+  const byType = new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of));
+  const whole = LIBRARY.reps.filter((r) => !byType.has(r.of));
+  if (!whole.length) return reps;
+  const named = new Set<Id>();
+  for (const d of own) for (const id of subtree(code, d)) {
+    const n = code.nodes[id];
+    if (n?.kind === "ref" || n?.kind === "tref") named.add(n.target);
+    else if (n?.kind === "arm") named.add(n.variant);
+  }
+  const wanted = new Set(whole.filter((r) => named.has(r.of) || Object.keys(r.cost).some((j) => named.has(j))).map((r) => r.of));
+  return [...reps, ...whole.filter((r) => wanted.has(r.of))];
+}
+
+// A program's own definitions its check found end (no Diverge), for the
+// check of a rewrite of it (infer.ts Options `ends`, L250).
+export function endedAsWritten(info: Info, defs: Iterable<Id>): Id[] {
+  return [...defs].filter((d) => info.typeOf.has(d) && !info.divergent.has(d));
+}
+
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
   const skip = new Set<Id>();
   for (;;) {
@@ -71,7 +97,9 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // check scans only what isn't the library's (model.ts onLayer).
     const layer = layerOf(code);
     if (layer && layer !== r.code) onLayer(r.code, layer);
-    const checked = infer(r.code, r.names, undefined, r.insiders.length ? { ...info.options, insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : info.options);
+    // What ended as written ends rewritten (infer.ts Options `ends`, L250).
+    const ends = endedAsWritten(info, defs);
+    const checked = infer(r.code, r.names, undefined, { ...info.options, ...(r.insiders.length ? { insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : {}), ends });
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as

@@ -1,4 +1,5 @@
 // The commands of ters (cli/ters.ts says what each does).
+import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import type { Plugin } from "esbuild";
 import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
@@ -27,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
+import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
@@ -125,7 +127,8 @@ usage:
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore the program's representations and run the definitions as written
-  --allow <list>   ters run answers only these: network, files, fetch=host (the network for one host);
+  --allow <list>   ters run answers only these: network, files, environment (its variables),
+                   fetch=host (the network for one host);
                    without it a run reaches everything
 A program is a file saved by the editor, or a folder like examples/sort.`;
 
@@ -808,7 +811,7 @@ switch (command) {
     for (const g of wrongGrades) console.log(`error  ${p.names[g.def] ?? g.def}: ${g.message}`);
     for (const d of p.own) {
       const t = p.info.typeOf.get(d);
-      console.log(`${p.names[d] ?? d} : ${t ? showType(t, p.names) : "(a type)"}`);
+      console.log(`${p.names[d] ?? d} : ${t ? showTypeWithUnits(p.code, d, t, p.names) : "(a type)"}`);
     }
     // Drafts the same as a library definition or another draft, by hash
     // (SHARING.md §7): said, never merged, and not an error.
@@ -816,8 +819,9 @@ switch (command) {
     // How main stores each type the program writes representations for:
     // the compiler's choice, never the program's (REPRESENTATIONS.md).
     const start = p.own.find((d) => p.names[d] === mainName);
-    if (start && !p.info.errors.length) for (const of of new Set(p.reps.map((r) => r.of))) {
-      const c = choose(p.code, start, p.reps.filter((r) => r.of === of));
+    const rows = storedRows(p.code, p.own, p.reps);
+    if (start && !p.info.errors.length) for (const of of new Set(rows.map((r) => r.of))) {
+      const c = choose(p.code, start, rows.filter((r) => r.of === of));
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;

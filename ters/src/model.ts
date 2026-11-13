@@ -93,7 +93,8 @@ export type Node =
   | { id: Id; kind: "field"; type: Id; same?: Id }
   // Type expressions, used for fields. target is a typedef's def, a builtin
   // type (type.number, type.string) or one of the typedef's param binders.
-  | { id: Id; kind: "tref"; target: Id; args: Id[] }
+  // `unit`: a number's unit, written in the type (`Float64 m/s`, L252).
+  | { id: Id; kind: "tref"; target: Id; args: Id[]; unit?: Unit }
   // A function type. `effects` (effect defs or the builtin effects) is its
   // row, closed: a function type with none listed is pure. `ports` names
   // its inputs, then the parts of its result (L182c3): an interface's
@@ -366,7 +367,7 @@ export const SCHEMA: Schema = {
   typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref", pure: "meaning" },
   variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning" },
   field: { type: "child", same: "ref" },
-  tref: { target: "ref", args: "child" },
+  tref: { target: "ref", args: "child", unit: "meaning" },
   tfun: { params: "child", result: "child", effects: "ref", ports: "meaning" },
   match: { name: "child", scrutinee: "child", arms: "child", otherwise: "child" },
   fold: { scrutinee: "child", arms: "child" },
