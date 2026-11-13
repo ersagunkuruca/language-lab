@@ -1203,13 +1203,22 @@ function topLevel(text: string, by = ","): string[] | undefined {
 // with those places left open, then filling each as its hole expects.
 function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, fit: boolean, defId?: Id): TEdit {
   const nodes = { ...code.nodes };
-  // Typed alone, an Int is read from the text, so one past 2⁵³ stays exact.
-  const exact = /^\s*-?\d+\s*$/.test(text) ? readInt(text.trim())[0] : undefined;
-  const open = new Map<Id, { n: number } | { p: number; q: number }>();
+  // Each whole number keeps the digits it was typed with (I236), so one
+  // past 2⁵³ stays exact as an Int wherever it is: `[12345678901234567891,
+  // 2]`. The text's numbers, outside quotes, in order; each whole number
+  // the value has takes the first one left that reads as it.
+  const typedDigits = [...text.replace(/"(?:[^"\\]|\\.)*"/g, '""').matchAll(/(?<![\p{L}\p{N}_.'])\d+(?![\p{L}\p{N}_.']|e[+-]?\d)/giu)].map((m) => m[0]);
+  const digitsOf = (v: number): string | undefined => {
+    const i = typedDigits.findIndex((d) => Number(d) === Math.abs(v));
+    if (i < 0) return undefined;
+    const [d] = typedDigits.splice(i, 1);
+    return v < 0 ? `-${d}` : d;
+  };
+  const open = new Map<Id, { n: number; digits?: string } | { p: number; q: number }>();
   const isWhole = (t: Typed) => ("value" in t && typeof t.value === "number" && Number.isInteger(t.value) ? t.value : null);
   const build = (v: Value, place?: Id): Id => {
     const id = place ?? freshId();
-    if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v }); nodes[id] = { id, kind: "hole" }; }
+    if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v, digits: digitsOf(v) }); nodes[id] = { id, kind: "hole" }; }
     else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: nfc(v) };
     else if (typeof v === "object" && "tag" in v && v.tag === CONS) {
       // A list value written out is one `list of` call (L181, E241).
@@ -1276,10 +1285,14 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
       const e = seen.holes.get(id)?.expected;
       // An Int, or a type whose Literal spells its numbers (Rational, …).
       const spelled = spelledByLiteral(seen, e);
-      const of = e?.t === "con" && (e.id === INT || spelled) ? e.id : undefined;
+      // A whole number past 2⁵³ where nothing says what it is yet is an
+      // Int: as a Float64 it isn't the number typed (a point says Float64,
+      // E192).
+      const past = "n" in w && w.digits !== undefined && !Number.isSafeInteger(Number(w.digits)) && e?.t !== "con";
+      const of = e?.t === "con" && (e.id === INT || spelled) ? e.id : past ? INT : undefined;
       const lit = (v: number | string, at = of) => { const x = freshId(); nodes[x] = { id: x, kind: "lit", value: v, ...(at ? { of: at } : {}) }; return x; };
       if ("n" in w) {
-        const n = of && exact !== undefined ? exact : w.n;
+        const n = of && w.digits !== undefined ? readInt(w.digits)[0] ?? w.n : w.n;
         nodes[id] = { id, kind: "lit", value: typeof n === "number" ? n : String(n), ...(of ? { of } : {}) };
       } else if (spelled) nodes[id] = { id, kind: "lit", value: `${w.p}/${w.q}`, of };
       else call(B.div, [lit(w.p, undefined), lit(w.q, undefined)], id);
@@ -1517,6 +1530,15 @@ export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string
   }
   // Text is stored in NFC (L214a, E239): "é" typed as one character or as
   // "e" and an accent is the same literal, and the same key as text from the world.
+  // A whole number at a literal the check has settled to Int, or one past
+  // 2⁵³ where nothing says, is an Int of its digits (I236): read with
+  // Number, 12345678901234567891 was 12345678901234567168.
+  if (typeof old.value === "number" && /^\s*-?\d+\s*$/.test(raw)) {
+    const t = info.typeOf.get(id), settled = t ? info.subst.resolve(t) : undefined;
+    const [n] = readInt(raw.trim());
+    if (n !== undefined && ((settled?.t === "con" && settled.id === INT) || (settled?.t !== "con" && !Number.isSafeInteger(Number(raw)))))
+      return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: typeof n === "number" ? n : String(n), of: INT })), names, id, "Changed a literal.");
+  }
   const v = typeof old.value === "number" ? Number(raw) : nfc(raw);
   if (typeof v === "number" && !Number.isFinite(v)) return { ok: false, reason: "this is a number; that isn't one" };
   return guardTyped(info, replace(code, id, () => ({ ...old, kind: "lit", value: v })), names, id, "Changed a literal.");
