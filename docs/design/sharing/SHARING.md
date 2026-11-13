@@ -1,7 +1,13 @@
 # Sharing programs and libraries: lineages, versions and names
 
 Written 2026-10-31 from the thread "Design sharing libraries and
-versioning". **Status (2026-10-31):** proposal, nothing built. The steps
+versioning".
+
+**Status (2026-11-13): built.** Every section's step is done (L109 to
+L115, dated below), and git shows a program's change with `ters diff`
+since `ters git-setup` (E262, DIFF.md).
+
+**Status (2026-10-31):** proposal, nothing built. The steps
 are BACKLOG rows L109 to L115, which take over L17 and L68.
 **2026-11-05:** §3 built (L109): std's versions kept by lineage, modules
 saying which std they were published on, ids saying their recipe.

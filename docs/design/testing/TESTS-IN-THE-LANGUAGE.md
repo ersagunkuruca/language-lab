@@ -1,5 +1,10 @@
 # Tests in the language (T7)
 
+**Status (2026-11-13): built.** T7 finished with all its steps (DONE.md,
+T7 and T7a to T7e): `ters test`, std's `Check`, accepted answers in
+examples.json, results kept by hash in `.lab/checks.json`, and each
+representation's jobs checked against its type's through `meaning`.
+
 Status (2026-10-31): T7a built: std's `Check`, `ters test`, and small
 values (src/lang/tests.ts). The small values come from the types in
 TypeScript for now: Float64 from the fixed list below, Int from −3 to 3,

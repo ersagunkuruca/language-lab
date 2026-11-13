@@ -1,5 +1,9 @@
 # Flat layout for data built once and read: where C59 would pay
 
+**Status (2026-11-13).** Not built: no example gained over 10%, so C59
+closed on 2026-11-12 until a program needs it (the likely first case is a
+program's saved file).
+
 Design step, 2026-11-10, written before anything is built.
 [STABLE-REFERENCES.md](STABLE-REFERENCES.md) §4 planned C59 as "flat, inline
 layout for data built once and then read: nested records inside each other

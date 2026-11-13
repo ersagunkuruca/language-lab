@@ -2,7 +2,17 @@
 
 Written 2026-10-29 from the thread "Design reactive lists for cells". The
 discussion is in a Claude doc of the same name; this file is the reasoning
-and the design the repository keeps. **Status (2026-10-30):** built are
+and the design the repository keeps.
+
+**Status (2026-11-13):** built are §1's paths and edits by position (L98a;
+its in-place store measured and not built, L98c), §2's reads tracked by
+path (L99, L100), §3's owned values changed in place on every target
+(C56), §5's columns (C60) and threads on C (L101), and §6's places chosen
+by cost (C61). §4's regions and flat layout (C57, C59), and keyed
+collections (C58), were built as far as an example paid, then closed until
+a program needs more (2026-11-12).
+
+**Status (2026-10-30):** built are
 §1's paths and edits by position (L98a), §2's `each` driven by edits
 (L99a), tracked views (L99b) and `each of` for nested lists (L99c), and
 the nested to-do demo (L100); the rest is not yet. The steps

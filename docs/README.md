@@ -20,7 +20,7 @@ The tables below list every document with a status: **current**
 (describes what's built), **built** (a design note whose steps are all
 done), **partly built** (some steps done, the rest are backlog rows),
 **proposal** (nothing built yet), or **history** (kept as written,
-superseded). Statuses were checked on 2026-10-30. When a step of a design
+superseded). Statuses were checked on 2026-11-13. When a step of a design
 note is done, update its line here in the same PR. Dated reports are never
 updated; their findings are rows in the backlog.
 
@@ -56,11 +56,13 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [CONFUSING.md](design/CONFUSING.md) | What's confusing in the language and the editor, and what could be simpler; moved out of the tutorial | current; open items are backlog rows |
-| [CHECK-BY-GROUP-2026-11-03.md](design/tools/CHECK-BY-GROUP-2026-11-03.md) | Checking per definition group, cached by its hash and its dependencies' schemes, so an edit rechecks only what it changed | design (L183; steps L215) |
+| [CHECK-BY-GROUP-2026-11-03.md](design/tools/CHECK-BY-GROUP-2026-11-03.md) | Checking per definition group, cached by its hash and its dependencies' schemes, so an edit rechecks only what it changed | built (L183, L215) |
+| [INCREMENTAL-CHECK-2026-11-10.md](design/tools/INCREMENTAL-CHECK-2026-11-10.md) | What a hole's offers still spend, measured on physics `fall`, and what to build next | built (E103 closed 2026-11-11) |
+| [CHECKED-ONCE-2026-11-11.md](design/tools/CHECKED-ONCE-2026-11-11.md) | A check kept by content hash and trusted without rerunning it: the library's skeleton, the editor's kept checks, a verifier instead of certificates | built (I193a to I193h, L242) |
 | [DIFF.md](design/tools/DIFF.md) | Reading a change to a program: `ters diff` by node id, in the CLI, from git and in the editor | built (E255a to E255c; E255d declined) |
-| [WORLD-LOG-WINDOW.md](design/tools/WORLD-LOG-WINDOW.md) | A run's world log in bounded memory: random as one seed, frames as chunks of seconds, a window of segments with snapshots for replay and step-back | design (I239) |
+| [WORLD-LOG-WINDOW.md](design/tools/WORLD-LOG-WINDOW.md) | A run's world log in bounded memory: random as one seed, frames as chunks of seconds, a window of segments with snapshots for replay and step-back; the page panel's Pause, Back and On | built (I239a to I239g, I255); the hour-long tumble check is the open row I239 |
 | [SAVED-FORMAT.md](design/tools/SAVED-FORMAT.md) | The saved program format: number literals as their digits, canonical JSON with one node per line | built (I237, I240) |
-| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`ters mcp`) | built: read tools, edits, eval |
+| [MCP.md](design/tools/MCP.md) | The Ters MCP server: an LLM views, edits, runs and tests programs by id (`ters mcp`) | built: read tools, edits, eval, typed text |
 
 ### Numbers
 
@@ -87,13 +89,18 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 
 | doc | what it is | status |
 |---|---|---|
-| [REPRESENTATIONS.md](design/data/REPRESENTATIONS.md) | How a value is stored, written in the language; the compiler chooses, never the program | partly built (L108; laws after T7) |
-| [TEXT-2026-11-03.md](design/data/TEXT-2026-11-03.md) | Text decisions: code-point equality with NFC where text enters, case by locale argument, graphemes, collation as a separate order | decided (L185; steps L214) |
-| [DATA-STRUCTURES.md](design/data/DATA-STRUCTURES.md) | Maps, sets and more as meanings with representations | partly built (Map and Set; L61) |
-| [STABLE-REFERENCES.md](design/data/STABLE-REFERENCES.md) | Cells that own their value, edits at a path, tracked reads, memory layout | partly built (L98, L99; C56 to C61) |
-| [SHARED-FIELDS-2026-11-02.md](design/data/SHARED-FIELDS-2026-11-02.md) | A field several cases of a type share: read as a Choice, set where present (L168) | design only |
-| [IN-PLACE.md](design/data/IN-PLACE.md) | Changing a value in place when it has one holder, invisibly | proposal (C62, C63) |
+| [REPRESENTATIONS.md](design/data/REPRESENTATIONS.md) | How a value is stored, written in the language; the compiler chooses, never the program | built (L108a to L108d; lists as arrays, C30) |
+| [TEXT-2026-11-03.md](design/data/TEXT-2026-11-03.md) | Text decisions: code-point equality with NFC where text enters, case by locale argument, graphemes, collation as a separate order | built (L185, L214) |
+| [DATA-STRUCTURES.md](design/data/DATA-STRUCTURES.md) | Maps, sets and more as meanings with representations | built (Map and Set as trees and hash tables, L61); HAMT and RRB measured, not needed (L212) |
+| [STABLE-REFERENCES.md](design/data/STABLE-REFERENCES.md) | Cells that own their value, edits at a path, tracked reads, memory layout | built (L99, L100, L101, C56, C61); L98's in-place store, C57, C58, C59 and C60 measured, then closed until a program needs them |
+| [SHARED-FIELDS-2026-11-02.md](design/data/SHARED-FIELDS-2026-11-02.md) | A field several cases of a type share: read as a Choice, set where present (L168) | built (L168) |
+| [IN-PLACE.md](design/data/IN-PLACE.md) | Changing a value in place when it has one holder, invisibly | built (C56, C63; C62 measured, not built) |
 | [REGIONS.md](design/data/REGIONS.md) | A region per scope (C57), measured on C: not worth building yet | measured, not built |
+| [REPRESENTATION-PER-VALUE-2026-11-05.md](design/data/REPRESENTATION-PER-VALUE-2026-11-05.md) | A representation per group of values that flow into one another, not per type (machine's lists) | built (C93, on JavaScript) |
+| [KEYED-COLLECTIONS.md](design/data/KEYED-COLLECTIONS.md) | Collections that give out their own keys (free lists, a `Pool`) | built: std's `Pool` (C58c) and the default Map of Int keys brought toward hand-written C; closed until a program needs more (C58) |
+| [COLUMNS.md](design/data/COLUMNS.md) | An array of records stored as an array per field, as data-oriented C does | built on JavaScript, WebAssembly and C (C60); closed until a program needs more |
+| [FLAT-LAYOUT.md](design/data/FLAT-LAYOUT.md) | Data built once and read, laid out flat (FlatBuffers) | design; no example gained 10%, closed until a program needs it (C59) |
+| [CELL-READERS-2026-11-03.md](design/data/CELL-READERS-2026-11-03.md) | Waking only the readers a write concerns: tracked views measured and not merged (C86b), then reads tracked by the compiler | partly built (C162a, C162b) |
 
 ### Relations, patterns and effects
 
@@ -101,29 +108,31 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 |---|---|---|
 | [MODES.md](design/relations-and-effects/MODES.md) | Mode analysis: in which order a function run backwards does its work, how many answers, whether it ends | built (L11; editor display E160) |
 | [FIXPOINT.md](design/relations-and-effects/FIXPOINT.md) | Fixed points: the three ways one ends (finite and growing, contraction, neither), `grow`, a proposed `settled` with a contraction checked as it runs, PageRank worked | `grow` built (L237); the rest designed (L238) |
-| [PATTERNS.md](design/relations-and-effects/PATTERNS.md) | Nested patterns as a view over nested matches | partly built (E61 steps 3, 4) |
-| [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | partly built (L54, L71, C40) |
+| [PATTERNS.md](design/relations-and-effects/PATTERNS.md) | Nested patterns as a view over nested matches | built |
+| [GRAMMARS-2026-11-02.md](design/relations-and-effects/GRAMMARS-2026-11-02.md) | Grammars written once, as printers, and parsed by running them backwards | built (L70, C110) |
+| [GRAMMAR-DESCENT-2026-11-05.md](design/relations-and-effects/GRAMMAR-DESCENT-2026-11-05.md) | Which printers read backwards as recursive descent, and binding strength as precedence climbing; calc's hand parser gone | built (C110) |
+| [ANSWERED-LATER.md](design/relations-and-effects/ANSWERED-LATER.md) | Operations answered later, at most once; `together`, `race`, `within` | built (L54, L56, L71, C40) |
 | [PORTS-2026-11-01.md](design/relations-and-effects/PORTS-2026-11-01.md) | One shape for inputs, results and relations: ports, tuples, directions, variable inputs | design (L128, L130 to L132, E165 to E168, C68, C69) |
-| [RESOURCES-2026-11-03.md](design/relations-and-effects/RESOURCES-2026-11-03.md) | Resources as handlers, never values: a release on every exit, handler names that can't escape | design (L192; steps L213) |
+| [RESOURCES-2026-11-03.md](design/relations-and-effects/RESOURCES-2026-11-03.md) | Resources as handlers, never values: a release on every exit, handler names that can't escape | built (L192, L213, on every target) |
 | [HOSTS.md](design/relations-and-effects/HOSTS.md) | Hosts as handlers: named rows (L58) and Console, Files, Network declared in std (L55) | built |
 
 ### Physics and planning
 
 | doc | what it is | status |
 |---|---|---|
-| [PHYSICS-AND-PLANNING.md](design/physics/PHYSICS-AND-PLANNING.md) | Fast bodies passing through each other (time of impact in spacetime) and A* for an agent with inertia (search over position and velocity); costs and prior art | proposal (L119 to L124) |
+| [PHYSICS-AND-PLANNING.md](design/physics/PHYSICS-AND-PLANNING.md) | Fast bodies passing through each other (time of impact in spacetime) and A* for an agent with inertia (search over position and velocity); costs and prior art | built (L119 to L124: Bounce's first impact, examples/impact, examples/agent) |
 
 ### Sharing and versions
 
 | doc | what it is | status |
 |---|---|---|
-| [SHARING.md](design/sharing/SHARING.md) | Lineage ids and version hashes, upgrades by pin, names pinned per program, lineage logs, a structural merge driver over git | proposal (L109 to L115) |
+| [SHARING.md](design/sharing/SHARING.md) | Lineage ids and version hashes, upgrades by pin, names pinned per program, lineage logs, a structural merge driver over git | built (L109 to L115; `ters diff` and `git-setup` since, DIFF.md) |
 
 ### Testing
 
 | doc | what it is | status |
 |---|---|---|
-| [TESTS-IN-THE-LANGUAGE.md](design/testing/TESTS-IN-THE-LANGUAGE.md) | Tests as definitions doing a `Check` effect, small values from constructors run backwards, accepted answers in examples.json, results cached by hash, `ters test` | proposal (T7a to T7e) |
+| [TESTS-IN-THE-LANGUAGE.md](design/testing/TESTS-IN-THE-LANGUAGE.md) | Tests as definitions doing a `Check` effect, small values from constructors run backwards, accepted answers in examples.json, results cached by hash, `ters test` | built (T7) |
 
 ### Compiler and targets
 
@@ -179,10 +188,12 @@ Kept as written; the newer document is named in each.
 |---|---|
 | Whole-project reviews | [STANDING-2026-11-13](reports/reviews/STANDING-2026-11-13.md) (where Ters stands against every earlier review), [PROGRESS-2026-11-05](reports/reviews/PROGRESS-2026-11-05.md) (is progress slowing, and why), [FOUNDATIONS-2026-11-03](reports/reviews/FOUNDATIONS-2026-11-03.md) (foundations and maintainability), [BLIND-SPOTS-2026-11-03](reports/reviews/BLIND-SPOTS-2026-11-03.md) (aspects not thought about yet), [OUTSIDER-READ-2026-11-03](reports/reviews/OUTSIDER-READ-2026-11-03.md) (a cold reader marks what it can't follow), [OUTSIDER-WRITE-2026-11-13](reports/reviews/OUTSIDER-WRITE-2026-11-13.md) (four cold writers each write and run a program), [REVIEW-2026-10-22b](reports/reviews/REVIEW-2026-10-22b.md), [REVIEW-2026-10-26](reports/reviews/REVIEW-2026-10-26.md), [REVIEW-2026-11-01](reports/reviews/REVIEW-2026-11-01.md), [REVIEW-2026-11-01b](reports/reviews/REVIEW-2026-11-01b.md), [REVIEW-2026-11-02](reports/reviews/REVIEW-2026-11-02.md), [REVIEW-2026-11-02b](reports/reviews/REVIEW-2026-11-02b.md) (the editor), [REVIEW-2026-11-02c](reports/reviews/REVIEW-2026-11-02c.md), [REVIEW-2026-11-02d](reports/reviews/REVIEW-2026-11-02d.md) (the language as machine and board use it), [REVIEW-2026-11-09](reports/reviews/REVIEW-2026-11-09.md) (a week of 1,060 PRs), [REVIEW-2026-11-11](reports/reviews/REVIEW-2026-11-11.md) (checked once, carried types, and what watches them), [REVIEW-2026-11-13](reports/reviews/REVIEW-2026-11-13.md) (what a merge is checked by, and what the world log costs) |
 | Language and effects reviews | [LANGUAGE-REVIEW-2026-10-24](reports/reviews/LANGUAGE-REVIEW-2026-10-24.md), [EFFECTS-REVIEW-2026-10-24](reports/reviews/EFFECTS-REVIEW-2026-10-24.md), [LANGUAGE-NEEDS-2026-10-24](reports/reviews/LANGUAGE-NEEDS-2026-10-24.md) |
+| What a good language needs, from an unprimed list | [ASPECTS-2026-11-03](reports/reviews/ASPECTS-2026-11-03.md) and its list [ASPECTS-UNPRIMED-2026-11-03](reports/reviews/ASPECTS-UNPRIMED-2026-11-03.md); the second run [ASPECTS-2026-11-03b](reports/reviews/ASPECTS-2026-11-03b.md) and [ASPECTS-UNPRIMED-2026-11-03b](reports/reviews/ASPECTS-UNPRIMED-2026-11-03b.md) |
 | Writing a program in the editor | [WRITING-2026-10-27](reports/reviews/WRITING-2026-10-27.md) |
 | Demos that look for gaps | [CLIFFORD-DEMOS-2026-10-31](reports/CLIFFORD-DEMOS-2026-10-31.md) |
 | Using Ters as an LLM, through its MCP server | [MCP-TRIAL-2026-11-01](reports/MCP-TRIAL-2026-11-01.md) |
 | Why the unit tests are slow | [TEST-SPEED-2026-11-03](reports/TEST-SPEED-2026-11-03.md) (rows L216, L217, T12 to T14) |
+| The evaluator's speed | [EVALUATOR-SPEED-2026-10-31](reports/EVALUATOR-SPEED-2026-10-31.md) (L118) |
 | Editor QA passes | [10-22](reports/qa/QA-2026-10-22.md), [10-23](reports/qa/QA-2026-10-23.md), [10-23b](reports/qa/QA-2026-10-23b.md), [10-24](reports/qa/QA-2026-10-24.md), [10-24b](reports/qa/QA-2026-10-24b.md), [10-26](reports/qa/QA-2026-10-26.md), [10-27](reports/qa/QA-2026-10-27.md), [10-28](reports/qa/QA-2026-10-28.md), [10-29](reports/qa/QA-2026-10-29.md), [10-29b](reports/qa/QA-2026-10-29b.md), [10-30](reports/qa/QA-2026-10-30.md), [10-31](reports/qa/QA-2026-10-31.md), [11-01](reports/qa/QA-2026-11-01.md), [11-01b](reports/qa/QA-2026-11-01b.md), [11-02](reports/qa/QA-2026-11-02.md), [11-02b](reports/qa/QA-2026-11-02b.md) |
 
 A new dated report goes in its folder and in this table, in its own PR. A QA pass keeps its screenshots in `reports/qa/screenshots/<date>/`.
