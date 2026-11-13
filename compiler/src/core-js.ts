@@ -1086,7 +1086,7 @@ export function solverCode(ir: CoreIR, js: string): Code {
   // own nodes when only a derivative uses them.
   if (/R\.rt\("derive:/.test(js)) {
     for (const id of Object.keys(nodes)) if (id.startsWith("builtin.")) add(id);
-    for (const id of [FIRST, SECOND, PAIR_V, ...Object.values(ARITH), S.mapParts, S.zipParts, S.fail, S.total, S.abs, S.floor, S.float, S.mod, S.md]) add(id);
+    for (const id of [FIRST, SECOND, PAIR_V, ...Object.values(ARITH), S.mapParts, S.zipParts, S.fail, S.total, S.abs, S.floor, S.float32, S.mod]) add(id);
   }
   for (let before = -1; before !== seen.size; ) {
     before = seen.size;
