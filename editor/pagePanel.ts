@@ -208,11 +208,12 @@ export function pagePanels(host: PageHost) {
   // minutes or so, from snapshots ten seconds apart (I239b,
   // WORLD-LOG-WINDOW.md), so a page open for an hour keeps no more. With
   // `stepFrom`, built from the compiled page's snapshots and stepped at
-  // the log's last event (I239f).
-  function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>): Preview {
+  // the log's last event (I239f), running the code as the compiled page
+  // runs it (`run`, I255).
+  function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>, run?: RunCode): Preview {
     return showPage({
       log: page.log, window: LOG_WINDOW, stepFrom,
-      code: prog(), info, names: pres().names, main, program: titleOf(doc()),
+      code: run?.code ?? prog(), info: run?.info ?? info, names: run?.names ?? pres().names, main, program: titleOf(doc()),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
       frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
     });
@@ -312,12 +313,16 @@ export function pagePanels(host: PageHost) {
   }
   // The compiled page keeps snapshots but doesn't step: the interpreted
   // page is built from them, stepped at the log's last event, in its place.
+  // Its cells hold the program's values as stored for running (lists as
+  // trees on bounce, coreMain.ts checkedForRun), so the interpreted page
+  // runs that code too: one written as it was has cons lists there, takes
+  // up none of the snapshots and replays from the run's start (I255).
   function pauseCompiled() {
     const from = page.now?.stepFrom?.(), started = page.started;
     if (!from || !started) return;
     const old = page.root;
     page.now!.stop();
-    try { page.now = interpreted(started.info, started.main, from); }
+    try { page.now = interpreted(started.info, started.main, from, runCode(page.for ?? prog(), started.main)); }
     catch (e) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); return; }
     page.root = page.now.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
@@ -397,6 +402,16 @@ export function pagePanels(host: PageHost) {
   // into the frame the same way: its script's call of startCorePage is
   // caught, and what it was given mounted here (core-page.ts mountCorePage).
   type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; stop(): void };
+  // The program as the compiled page runs it, its lists and Maps chosen
+  // (coreMain.ts checkedForRun), for each version of the program: a few
+  // seconds the first time (bounce 2 s), at once after.
+  type RunCode = ReturnType<typeof checkedForRun>;
+  const runCodes = new WeakMap<Code, RunCode>();
+  function runCode(code: Code, main: Id): RunCode {
+    let r = runCodes.get(code);
+    if (!r) runCodes.set(code, (r = checkedForRun(code, pres().names, main)));
+    return r;
+  }
   function swapCompiled(code: Code, made: CompiledPage) {
     // Not while the page is stepped through: it takes over when the page
     // goes on (goOn).
@@ -440,7 +455,7 @@ export function pagePanels(host: PageHost) {
     const core = corePageRuntimeText();
     if (!core) throw new Error("this editor has no core IR runtime");
     // Stored as ters build-web stores it (C197): its lists and Maps chosen.
-    const r = checkedForRun(prog(), pres().names, main);
+    const r = runCode(prog(), main);
     const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     return { html: corePageFile(title, core, r.code, r.info, r.names, own, main, coreWorkletRuntimeText()), name };
   }

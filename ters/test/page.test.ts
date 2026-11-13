@@ -328,9 +328,9 @@ test("a page stepped to the window's start reads nothing more from the log, and 
   assert.match((back.root as FakeEl).find("status").textContent, /^Rolls: 1;/);
 });
 
-// I252: inside a segment, a snapshot every 30 events, so a step back gives
-// at most 30 again (a page hearing frames has 600 in a segment).
-test("a page's window snapshots every 30 events inside a segment, and steps from them", () => {
+// I252, I255: inside a segment, a snapshot every 10 events, so a step back
+// gives at most 10 again (a page hearing frames has 600 in a segment).
+test("a page's window snapshots every 10 events inside a segment, and steps from them", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   const main = pageMain(p.own.defs, info, p.pres.names)!;
@@ -339,13 +339,57 @@ test("a page's window snapshots every 30 events inside a segment, and steps from
   const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store: store(), log, window: { seconds: 10, keep: 3, clock: () => t } });
   const root = page.root as FakeEl, w = page.window!;
   const shown: string[] = [root.find("status").textContent];
-  for (let i = 0; i < 130; i++) { t += 10; root.find("roll").fire("click"); shown.push(root.find("status").textContent); }
+  for (let i = 0; i < 45; i++) { t += 10; root.find("roll").fire("click"); shown.push(root.find("status").textContent); }
   // All within one segment: the run's start and four step snapshots.
   assert.deepEqual(w.snapshots.map((s) => !!s.step), [false, true, true, true, true]);
   const steps = page.steps!;
-  for (const n of [125, 61, 59, 130]) { steps.to(n); assert.equal(root.find("status").textContent, shown[n], `after ${n}`); }
+  for (const n of [42, 21, 19, 45]) { steps.to(n); assert.equal(root.find("status").textContent, shown[n], `after ${n}`); }
   // Past `keep` segments, a segment leaves with its step snapshots.
   for (let i = 0; i < 4; i++) { t += 11000; steps.resume(); root.find("roll").fire("click"); }
   assert.equal(w.snapshots.filter((s) => !s.step).length, 3);
   assert.ok(w.snapshots.every((s) => s.at < log.length));
+});
+
+// I255: bounce's compiled page holds its lists of points as trees (the
+// representation chosen for running, editor/coreMain.ts checkedForRun).
+// The interpreted page the editor pauses into runs that code too, so it
+// takes up every snapshot of the compiled page's window and a step back
+// replays at most 10 frames, not the run since its start.
+test("a compiled page with chosen representations is stepped from every snapshot", async () => {
+  const { compilePageProgram } = await import("../../editor/pageCompile.ts");
+  const { checkedForRun } = await import("../../editor/coreMain.ts");
+  const { corePageRuntime } = await import("../cli/web.ts");
+  const bundled = new Function(`${await corePageRuntime()}\nreturn $core;`)() as typeof import("../../compiler/src/core-page-runtime.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples", "bounce"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const made = compilePageProgram(p.code, p.pres.names, {}, main);
+  let given: unknown[] | null = null;
+  new Function("$core", made.program)({ ...bundled, startCorePage: (...a: unknown[]) => { given = a; } });
+  const [tables, worlds, defs, name, , nodes] = given! as Parameters<typeof bundled.mountCorePage>;
+  let t = 0, frames: (() => void)[] = [];
+  const tick = () => { t += 1000 / 60; const fs = frames; frames = []; fs.forEach((f) => f()); };
+  const connected = Object.getOwnPropertyDescriptor(FakeEl.prototype, "isConnected");
+  Object.defineProperty(FakeEl.prototype, "isConnected", { get: () => true, configurable: true });
+  const raf = (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame;
+  (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = (f: (ms: number) => void) => { frames.push(() => f(t)); return 0; };
+  try {
+    const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+    const window = { seconds: 2, keep: 30, clock: () => t };
+    const c = bundled.mountCorePage(tables, worlds, defs, name, "bounce", nodes, { doc: fakeDoc(), store: store(), frame: (f: () => void) => frames.push(f), log, window });
+    for (let i = 0; i < 150; i++) tick();
+    c.stop();
+    frames = [];
+    const stepFrom = { firsts: c.kept.map((k) => k.first), snapshots: c.window!.snapshots };
+    const run = checkedForRun(p.code, p.pres.names, main);
+    const page = showPage({ code: run.code, info: run.info, names: run.names, main, program: "bounce", console: { log() {}, error() {} }, frame: (f) => frames.push(f), doc: fakeDoc(), store: store(), log, window, keepCells: true, stepFrom });
+    assert.equal(page.window!.snapshots.length, c.window!.snapshots.length);
+    const steps = page.steps!, n = steps.events();
+    assert.equal(steps.from(), 0);
+    steps.to(n - 1);
+    assert.equal(steps.at, n - 1);
+  } finally {
+    if (connected) Object.defineProperty(FakeEl.prototype, "isConnected", connected); else delete (FakeEl.prototype as { isConnected?: unknown }).isConnected;
+    (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = raf;
+  }
 });
