@@ -12,14 +12,17 @@ import { corePageRuntimeText, coreWorkletRuntimeText, newWorker } from "./runVie
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
-import { handOver, type Cells } from "../ters/src/lang/cells.ts";
+import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { checkedForRun } from "./coreMain.ts";
 import { PAGE_BASE, corePageFile, hasSound, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
-import { eventsIn, isEvent, type LogEntry } from "../ters/src/lang/worldlog.ts";
+import { eventsIn, isEvent, type LogEntry, type LogWindow, type PlacedSnapshot } from "../ters/src/lang/worldlog.ts";
+// The page's log kept as a window (I239b): a snapshot every 10 seconds, the
+// last 30 (about five minutes) kept, interpreted or compiled.
+const LOG_WINDOW = { seconds: 10, keep: 30 };
 
 export interface PageHost {
   doc(): Doc;
@@ -208,7 +211,7 @@ export function pagePanels(host: PageHost) {
       page.now = showPage({
         // The last five minutes or so, from snapshots ten seconds apart
         // (I239b, WORLD-LOG-WINDOW.md): a page open for an hour keeps no more.
-        log: page.log, window: { seconds: 10, keep: 30 },
+        log: page.log, window: LOG_WINDOW,
         code: prog(), info, names: pres().names, main, program: titleOf(doc()),
         doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
         frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
@@ -295,19 +298,18 @@ export function pagePanels(host: PageHost) {
   // elements are made in the same document as the interpreted page's and go
   // into the frame the same way: its script's call of startCorePage is
   // caught, and what it was given mounted here (core-page.ts mountCorePage).
-  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; stop(): void };
+  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; stop(): void };
   function swapCompiled(code: Code, made: CompiledPage) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log };
+      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: page.now?.kept ?? undefined };
       const core = new Function(`${corePageRuntimeText()}\nreturn $core;`)() as Core & Record<string, unknown>;
       let given: unknown[] | null = null;
       new Function("$core", made.program)({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
       if (!given) throw new Error("the core IR's script started no page");
       const [tables, worlds, defs, name, , nodes] = given as unknown[];
       m = core.mountCorePage(tables, worlds, defs, name, titleOf(doc()), nodes, o);
-      if (page.now?.kept) handOver(page.now.kept, m.kept, m.cells);
     } catch (e) {
       m?.stop();
       compiledPages.set(code, null);
@@ -316,7 +318,10 @@ export function pagePanels(host: PageHost) {
     }
     const old = page.root;
     page.now?.stop();
-    page.now = { root: m.root, cells: null as never, stop: m.stop };
+    // Its log a window too, which an interpreted page built at its last
+    // event steps through (I239f, page.ts showPage stepFrom).
+    const mounted = m;
+    page.now = { root: m.root, cells: null as never, stop: m.stop, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
     page.root = m.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
     page.status.textContent = "";
