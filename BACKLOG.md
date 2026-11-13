@@ -78,7 +78,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E255a | `diffPrograms` (ters/src/diff.ts) and `ters diff` on two program folders or files: definitions by id, their view lines matched by node id (same, changed, moved, added, removed), both printed with the new names so a rename is one line, comments and changed types. Example: dice and a copy with one literal changed, one definition added and one renamed print exactly those three | [DIFF.md](docs/design/tools/DIFF.md); STANDING-2026-11-13 §6.7 | P3 | M | |
 | E255b | `ters diff --from REV [--to REV]` through `git show`, and every changed program folder of a PR with `--from` alone. Example: pig across #2240 prints its handler change | [DIFF.md](docs/design/tools/DIFF.md); STANDING-2026-11-13 §6.7 | P3 | S | after E255a |
 | E255c | The editor's Changes view: the program against the version it was opened as or the last one marked Reviewed, changed definitions listed, blocks and graph nodes marked added or changed. Example: a literal edited and a definition added in dice, both listed and marked | [DIFF.md](docs/design/tools/DIFF.md); STANDING-2026-11-13 §6.7 | P3 | M | after E255a |
 

@@ -395,7 +395,19 @@ if (command === "diff" || command === "merge") {
   const { describe, diffLines, merge3 } = await import("../src/merge-files.ts");
   const json = (f: string | undefined) => { if (!f || !existsSync(f)) return undefined; try { return JSON.parse(readFileSync(f, "utf8")); } catch { fail(`${f} isn't JSON`); } };
   if (command === "diff") {
-    if (!path || !rest[0]) fail("diff needs two files: before and after");
+    if (!path || !rest[0]) fail("diff needs two versions: before and after");
+    // Two programs (folders, or files the editor saves): by definition, each
+    // one's view lines matched by node id (DIFF.md, E255a). Two other JSON
+    // files (a code.json, a side table): the summary by id (L113).
+    const isProgram = (f: string) => existsSync(f) && (statSync(f).isDirectory() || (() => { try { return "format" in JSON.parse(readFileSync(f, "utf8")); } catch { return false; } })());
+    if (isProgram(path) && isProgram(rest[0])) {
+      const { Session } = await import("../mcp/session.ts");
+      const { diffPrograms, diffText } = await import("../src/diff.ts");
+      const version = (f: string) => { const v = new Session(f); return { code: v.code, own: v.own, names: v.allNames, comments: v.comments, info: v.info, style: v.pres().style }; };
+      const text = diffText(diffPrograms(version(path), version(rest[0])));
+      process.stdout.write(text ? text + "\n" : "no changes\n");
+      process.exit(0);
+    }
     const beside = join(dirname(rest[0]), "names.default.json");
     const lines = diffLines(json(path), json(rest[0]), basename(rest[0]) === "code.json" && existsSync(beside) ? json(beside) : {});
     process.stdout.write(lines.length ? lines.join("\n") + "\n" : "no changes\n");
