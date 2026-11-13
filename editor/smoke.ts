@@ -104,11 +104,16 @@ async function visit(saved: string | null, only?: string) {
         const svg = p.locator(".p-graph svg.canvas");
         const bb = await svg.boundingBox();
         if (bb) {
-          await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
-          await click('.ctx-item[data-menu="tidy-all"]');
+          // Each time from the menu once it shows: a click on a menu not
+          // drawn yet was skipped, and the status still said the first Tidy.
+          const tidy = async () => {
+            await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
+            await p.locator('.ctx-item[data-menu="tidy-all"]').first().waitFor({ timeout: 5000 }).catch(() => {});
+            await click('.ctx-item[data-menu="tidy-all"]');
+          };
+          await tidy();
           // Tidy everything is one layout: doing it again moves nothing (BACKLOG E106).
-          await p.mouse.click(bb.x + 8, bb.y + bb.height - 8, { button: "right" });
-          await click('.ctx-item[data-menu="tidy-all"]');
+          await tidy();
           if (!/^Already tidy/.test(await p.locator(".status").innerText())) errors.push(`${where}: tidying twice moved nodes: ${await p.locator(".status").innerText()}`);
           // The map, when part of the graph is out of the window.
           if (await p.locator(".p-graph .minimap").isVisible().catch(() => false)) {
@@ -120,16 +125,23 @@ async function visit(saved: string | null, only?: string) {
           await click(".p-graph .reroute:not(.silent)");
           await p.locator(".p-graph .reroute:not(.silent)").first().click({ button: "right", timeout: 500 }).catch(() => {});
           await click('.ctx-item[data-menu="named"]');
-          // A frame folded into one box, and unfolded.
-          // Some start folded (I43), so it counts: one more, then as many.
+          // A frame folded into one box, and unfolded. Some start folded
+          // (I43), and an unfolded frame shows the folded ones inside it, so
+          // it follows one frame's toggle rather than counting boxes: an
+          // open one (unfolded first if all start folded) folds, then opens.
           if (await p.locator(".p-graph [data-fold]").count()) {
-            const folded = () => p.locator(".p-graph .rg.folded").count(), had = await folded();
-            const frameId = await p.locator(".p-graph [data-fold]").first().getAttribute("data-fold");
-            await p.locator(".p-graph [data-fold]").first().dispatchEvent("click");
-            if ((await folded()) <= had) errors.push(`${where}: folding a frame drew no folded box`);
-            // The box just folded, not another that started folded.
-            await p.locator(`.p-graph .items [data-fold="${frameId}"]`).first().dispatchEvent("click", {}, { timeout: 500 }).catch(() => {});
-            if ((await folded()) > had) errors.push(`${where}: unfolding left a folded box`);
+            const toggles = () => p.locator(".p-graph [data-fold]").evaluateAll((es) => es.map((e) => [e.getAttribute("data-fold")!, e.querySelector("title")?.textContent ?? ""] as const));
+            const isOpen = async (id: string) => (await toggles()).some(([f, t]) => f === id && t.startsWith("Fold"));
+            const toggle = (id: string) => p.locator(`.p-graph [data-fold="${id}"]`).first().dispatchEvent("click");
+            let id = (await toggles()).find(([, t]) => t.startsWith("Fold"))?.[0];
+            if (!id) { id = (await toggles())[0][0]; await toggle(id); }
+            if (!(await isOpen(id))) errors.push(`${where}: unfolding a folded frame left it folded`);
+            else {
+              await toggle(id);
+              if (await isOpen(id) || !(await p.locator(".p-graph .rg.folded").count())) errors.push(`${where}: folding a frame drew no folded box`);
+              await toggle(id);
+              if (!(await isOpen(id))) errors.push(`${where}: unfolding left a folded box`);
+            }
           }
           await stopped(p);
         }
