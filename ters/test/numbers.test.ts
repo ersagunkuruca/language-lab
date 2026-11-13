@@ -191,3 +191,16 @@ test("storedAll gives each type's choice, the same as storedAs", async () => {
   assert.equal(all.get(nat)?.rep, storedAs(p.code, info, names, p.own.defs, nat, p.named("main"))?.rep);
   assert.equal(storedAll(p.code, info, names, p.own.defs, null).size, 0);
 });
+
+// L250: `is even` is structural on Nat; on Int its recursion goes through
+// `match Nat′`'s function argument, which the checker can't see shrink. A
+// rewrite changes no answer, so it keeps the type it had: no Diverge, on
+// it or on main that calls it.
+test("a representation's rewrite keeps what ended as written total", async () => {
+  const { represented } = await import("../cli/represented.ts");
+  const main = p.named("main"), checked = infer(p.code, names, undefined, p.options);
+  const made = represented({ title: "numbers", code: p.code, own: p.own.defs, names, info: checked, reps: representationsIn(p.code, checked, names, p.own.defs), options: p.options }, main, true);
+  assert.deepEqual((made as { chosen?: string[] }).chosen, ["Nat as int"]);
+  for (const d of ["is even", "main"]) assert.doesNotMatch(showType(made.info.typeOf.get(p.named(d))!, made.names), /Diverge/, d);
+  assert.ok(!made.info.divergent.has(p.named("is even")));
+});

@@ -249,6 +249,7 @@ export class CheckCache {
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => spelled(defText(code, d))),
       a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => spelled(defText(code, d))),
     ]));
+    const ends = new Set(opts.ends ?? []);
     const missed: { group: Id[]; key: string; stored: (() => string) | null; from: number; to: number }[] = [];
     const keyOf = (group: Id[]): { key: string; stored: (() => string) | null } | null => {
       const own = new Set(group);
@@ -259,8 +260,10 @@ export class CheckCache {
         seen.push(d, canonical(sc, s, layer?.schemes.get(d) === sc), info.divergent.has(d) ? "!" : "");
       }
       const texts = group.map((d) => defText(code, d)), pins = group.map((d) => opts.pins?.[d] ?? null);
+      // A group known to end (infer.ts Options `ends`) is checked apart.
+      const ended = ends.size && group.every((d) => ends.has(d)) ? ["ends"] : [];
       // On disk the group's ids too: a kept result names its nodes by id.
-      return { key: JSON.stringify([global, texts, pins, seen]), stored: onDisk ? () => JSON.stringify([globalOnDisk(), group, texts.map(spelled), pins, seen]) : null };
+      return { key: JSON.stringify([global, texts, pins, seen, ...ended]), stored: onDisk ? () => JSON.stringify([globalOnDisk(), group, texts.map(spelled), pins, seen, ...ended]) : null };
     };
     const finish = () => { const last = missed[missed.length - 1]; if (last && last.to < 0) last.to = s.wanted.length; };
     return {

@@ -159,7 +159,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L250 | Check whether a representation's rewrite still loses a totality proof (NUMBERS.md "What's still rough"): `is even` is structural on Nat, but after the rewrite onto Int its recursion goes through `match Nat′`'s function argument and the checker gave it `Diverge`. Close if it no longer happens; else keep the original's effects through the rewrite. Example: examples/numbers' `is even` has no Diverge on its represented program | docs refresh 2026-11-13 (thread "Update all project docs"); NUMBERS.md | P2 | S | |
 
 ### Ersagun's current asks
 
