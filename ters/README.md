@@ -16,7 +16,7 @@ How a program runs (the editor's Run, the command line, and the compiled
 targets: JavaScript, WebAssembly, native, GPU) is in [RUNNING.md](../docs/learn/RUNNING.md).
 Every document, with how much of it is built, is listed in
 [the docs index](../docs/README.md); the latest whole-project review is
-[REVIEW-2026-10-26.md](../docs/reports/reviews/REVIEW-2026-10-26.md). What comes next is in
+[REVIEW-2026-11-13.md](../docs/reports/reviews/REVIEW-2026-11-13.md). What comes next is in
 [BACKLOG.md](../BACKLOG.md). Where the ideas and code come from (influences, prior
 work, adapted code) is in [CREDITS.md](../docs/language/CREDITS.md).
 
@@ -28,8 +28,13 @@ npm test
 
 ## The core data model
 
-`code.json` is a flat map of nodes keyed by random ID. That's the whole
-semantic program. The expression node kinds (`src/model.ts`; holes, data
+`code.json` is a flat map of nodes keyed by random ID, with the list of
+top-level definitions. That's the whole semantic program. It is saved as
+canonical JSON, one node per line in a fixed key order, so saving an
+unchanged program gives the same bytes and a change is a few lines in git;
+a number literal is saved as its digits, `{"kind": "lit", "num": "0.1"}`,
+never as a JSON number (`src/saved.ts`,
+[SAVED-FORMAT.md](../docs/design/tools/SAVED-FORMAT.md)). The expression node kinds (`src/model.ts`; holes, data
 types and `solve` are covered in LANGUAGE.md):
 
 | kind      | fields                 | notes                                                        |
@@ -179,8 +184,11 @@ assigns paths), not something the compiler has to resolve.
 
 ## The editor
 
-`npm install && npm run build-editor` writes the repository's root `index.html`, a
-self-contained browser editor over the same core; open it directly.
+`npm ci && npm run build-editor` writes the repository's root `index.html`, a
+self-contained browser editor over the same core, with the learn page, the
+tutorial, shaders.html and the apps beside it. Open it over http (for
+example `python3 -m http.server` at the repository's root): opened from
+disk, it can't read what the build compiled, so Run compiles on the page.
 It never shows editable source text. Every program is typed, and there is
 one kind of definition: a function (or a value, or a data type), shown as a
 graph, as blocks and as text, with selection shared between them.
@@ -199,7 +207,10 @@ direction (the quadratic formula, for `fall` asked for its time).
 A **Files** panel shows which file each gesture touched, plus the meaning
 hash, so you can see that renames, comments, notation, layout and direction
 never move it. Edits are kept in your browser's local storage; Reset brings
-the examples back.
+the examples back. A **Changes** tab beside it lists what changed against
+the version opened, the last one marked Reviewed, or a branch, commit or
+pull request on GitHub, definition by definition, and marks the changed
+blocks (DIFF.md).
 
 ### Typed programs in the editor
 
@@ -376,7 +387,9 @@ The full list of influences and prior work, for every feature, is in
    for one function) become a search problem, which the wrap picker shows.
 4. **Orphaned side-table entries** when a node is deleted, and merging two
    people's side tables. Since everything is keyed by id, merges are
-   per-node rather than per-line, which should be much nicer than text.
+   per-node rather than per-line: `ters merge` merges two versions id by
+   id, and `ters git-setup` makes git use it, with `ters diff` for
+   `git diff` (DIFF.md, SHARING.md §6).
 5. **Units beyond exponents.** Offsets (°C vs K), named-but-equal units
    (J vs N·m are the same here) and a fractional exponent from `√` of an odd
    power all fall out of the vector model unevenly.
@@ -409,11 +422,19 @@ src/lang/             the typed core: types + effects, inference, evaluator,
                       relate.ts runs any function backwards, derive.ts
                       differentiates functions (BACKWARDS.md); represent.ts
                       runs a program on another representation of its data (NUMBERS.md)
-editor/               browser editor (main.ts, page.html, build.ts → /index.html, /tutorial.html)
+src/saved.ts          the saved format: canonical JSON, one node per line, literals as digits
+src/diff.ts           what changed between two versions, by definition and node id (ters diff)
+../editor/            browser editor (main.ts, page.html, build.ts → /index.html, /learn.html,
+                      /tutorial.html, /shaders.html, /apps/)
+library/              the published library modules (prelude, std's companions, numbers,
+                      trees, vectors, steady, html); build.ts rebuilds them, and
+                      `build.ts --check` says whether the kept ones equal a rebuild
+mcp/                  ters mcp: a language model views, edits, runs and tests programs
 examples/             the example programs, one folder of side tables each (code.json,
                       names, comments, layout, examples). They are the source: edit
                       them in the editor, Save file, then examples/unpack.ts
-cli/ters.ts            the command line: run, compile or check a saved program (LANGUAGE.md, "The command line")
+cli/ters.ts           the command line: run, compile, check, test, diff, build a page or an app
+                      (`ters` alone lists every command; LANGUAGE.md, "The command line")
 test/                 core, lang, backwards, numbers, oneworld (networks as
                       predicates), guarantees, scale, dots, graph, toplevel, and
                       known-holes (holes found by the reviews, as todo tests)

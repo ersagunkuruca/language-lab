@@ -3,7 +3,7 @@
 One page for a newcomer: what happens when you press Run, and every other
 way a program can run. The long design notes are COMPILER.md, WASM.md,
 NATIVE.md, WEB.md and AUDIO.md; this page is their summary, current on
-2026-10-30.
+2026-11-13.
 
 ## One program, several runners
 
@@ -17,11 +17,11 @@ of them parses anything.
 
 | runner | what it is | where you meet it |
 |---|---|---|
-| **evaluator** | walks the tree directly; the definition of the language | the editor's Run and Show values, `ters run` |
-| **JavaScript** | the tree compiled to plain JS | `ters compile`, every page (`ters build-web`, `ters build-app`), the audio thread |
-| **WebAssembly** | compiled to WASM with the host's garbage collector, or as a WASI command needing no JavaScript | `npm run wasi -- wc` in compiler/, then wasmtime |
-| **native** | compiled to C, built with `cc`, memory by reference counting | `ters native` |
-| **GPU** | a pixel function compiled to a WGSL shader | the editor's live picture, shaders.html |
+| **evaluator** | walks the tree directly; the definition of the language | Show values, Run on a function, `ters run --evaluator`, and wherever a program doesn't compile |
+| **JavaScript** | printed from the core IR, the compiler's one middle form | the editor's Run of `main` and its page preview, `ters run`, `ters compile`, every page (`ters build-web`, `ters build-app`), the audio thread |
+| **WebAssembly** | printed from the core IR, with the host's garbage collector, or as a WASI command needing no JavaScript | `ters wasi`, then wasmtime or Node's WASI |
+| **native** | printed from the core IR as C, built with `cc`, memory by reference counting, searches and maps on every core | `ters native`, the native phone apps (`ters build-native-app`) |
+| **GPU** | a pixel function printed from the core IR as a WGSL shader | the editor's live picture, shaders.html |
 
 The evaluator is the reference. Every compiled target is tested against
 it: the same input must give the same output, bit for bit for numbers.
@@ -31,16 +31,21 @@ reported, and the editor shows that reason.
 
 ## What you see in the editor
 
-- **Run** runs the definition you're looking at with the evaluator, in a
-  worker, so a slow program doesn't freeze the page (Stop ends it). You
-  give it some inputs; a function built from `equal` and `and` can also
-  be run backwards, given its outputs.
+- **Run** runs the definition you're looking at in a worker, so a slow
+  program doesn't freeze the page (Stop ends it). `main` runs compiled to
+  JavaScript, as `ters run` does, and with the evaluator where it doesn't
+  compile; another function runs with the evaluator. You give it some
+  inputs; a function built from `equal` and `and` can also be run
+  backwards, given its outputs.
 - **Show values** runs it and shows the value every node made.
 - A **picture** (a function of x, y and time giving a colour) is compiled
   to WGSL and drawn live on the GPU above Run.
-- A **page** (a `main` that returns `Html`) is previewed live above Run by
-  the evaluator. Buttons write cells, and only the parts that read them
-  redraw. Restart runs `main` again from the first values.
+- A **page** (a `main` that returns `Html`) is previewed live above Run,
+  compiled to JavaScript as a built page is (the evaluator where it doesn't
+  compile). Buttons write cells, and only the parts that read them
+  redraw. Restart runs `main` again from the first values. Pause stops it,
+  and step back and step on move through its log of the world's answers,
+  kept in bounded memory (WORLD-LOG-WINDOW.md).
 - A page with **sound** (the guitar pedal) plays through the browser's
   audio thread, which runs the compiled JavaScript, because the evaluator
   is too slow for 375 blocks a second.
@@ -50,15 +55,18 @@ reported, and the editor shows that reason.
 In `ters/`, with `node cli/ters.ts` (or `ters` if linked):
 
 ```sh
-ters run examples/wc a.txt         # main with the evaluator, the real console and files
+ters run examples/wc a.txt         # main compiled (the evaluator where it doesn't compile), the real console and files
+ters run examples/wc a.txt --evaluator   # the same with the evaluator
 ters check examples/wc             # types of every definition
+ters test examples/wc              # its tests
 ters compile examples/wc -o wc.mjs # a JavaScript module that runs main
-ters compile examples/wc --core -o wc.mjs # the same, printed from the core IR as WebAssembly and C are (C137, to replace the first)
 ters native examples/wc -o wc      # a native program through C
+ters wasi examples/wc -o wc.wasm   # a WASI command (WebAssembly with GC)
 ters build-web examples/dice       # one HTML file running the page
-ters build-web examples/compass --core # the same, printed from the core IR (C137; not every page lowers yet)
-ters build-app examples/dice       # the page as a phone app (PWA + Capacitor)
+ters build-app examples/dice       # the page as a phone web app (PWA + Capacitor)
+ters build-native-app examples/dice      # a native Android app, no web view (--ios: an iPhone app)
 ters render examples/pedal in.wav  # play a sound over a WAV file
+ters qasm <program> --main f --bits 4   # f as a reversible circuit of X, CNOT and Toffoli gates (OpenQASM 3)
 ```
 
 `main` gets the arguments as a list of texts and returns the exit code. An
@@ -97,7 +105,8 @@ run time:
 - **Native** starts in a millisecond, holds only what it uses, and links
   into anything (an audio plugin, a phone app). It's the fastest target:
   a cell nobody else holds is reused in place (Koka's Perceus, Lean's
-  reset/reuse).
+  reset/reuse), and a search, or a map that only computes, runs on every
+  core (NATIVE.md).
 - **GPU** runs a pixel function for every pixel at once. It allows no
   recursion except a loop, and nothing that might not stop unless it has a
   budget, because a hung shader freezes the tab.
@@ -164,7 +173,7 @@ Note that the ordinary fold isn't a generator or an iterator. A fold
 without `Choice` is always a plain loop (COMPILER.md, "Folds are loops").
 Generators are only for code that can give several answers.
 
-**The passes.** Representations are picked before compiling (`src/lang/library-reps.ts`), the rest in `compiler/src/compile.ts`:
+**The passes.** Representations are picked before compiling (`src/lang/library-reps.ts`). The rest run on the program before it is lowered, or on the core IR after (`compiler/src/scalar.ts` lowers it; each pass below is a file in `compiler/src/`), so every target gets them:
 
 | pass | what it recognises | what it does | kind |
 |---|---|---|---|
@@ -173,10 +182,11 @@ Generators are only for code that can give several answers.
 | representations | a type the program uses | the chooser's pick replaces its constructors, matches and jobs; `ters check` says what it picked | cost-based |
 | derivatives and inverses | `derivative(f)`, `inverse(f, …)` of a known `f` | the derivative's code; a solve | fixed rule |
 | folds | `fold` of `range(n)` or `characters(t)`; a fold that only adds Ints | a counted loop; a loop over the text; an accumulator from the front | fixed rule (the table) |
-| list chains | `keep`- and `map`-shaped steps between `split` and `length` | one loop, no list between | fixed rule |
-| lists as arrays | a list that is only walked whole | kept as a JS array | whole-program analysis |
-| in place | a list nobody else holds | its cells reused (Perceus, PLDI 2021, decided at compile time) | whole-program analysis |
-| calls | a call of itself as the last step | a loop | fixed rule |
+| list chains | `keep`- and `map`-shaped steps between `split` and `length`; `sum(map(xs, g))` | one loop, no list between (fuse-steps.ts; Wadler's fusion) | fixed rule |
+| lists as arrays | a list read by position or asked its length | stored as an array, `array of List` (a representation, above); split per group of values on JavaScript | cost-based |
+| in place | an array, a record or a hash table nobody else holds | changed in place (owned-arrays.ts, owned-records.ts, owned-tables.ts; Perceus, PLDI 2021, decided at compile time) | whole-program analysis |
+| loops on machine words | a loop that only computes on Ints or Float64s | its Ints kept as int64s, checks made once (untagged-ints.ts, finite-checks.ts) | whole-program analysis |
+| calls | a call of itself as the last step; a small pure function; the same call twice | a loop; put in place; made once (inline-small.ts, share-calls.ts) | fixed rule |
 
 The C target adds reference counting with reuse at run time (Perceus;
 Lean 4's reset/reuse), NATIVE.md.
@@ -197,17 +207,19 @@ data is stored (a count instead of a list, a string instead of
 characters, a tree instead of a sorted list), and each of those is one
 representation with laws that the tests check against the evaluator.
 Second, the order problem is small while the passes are few and don't
-compete. Where a real search could pay off later is choosing a
-representation per value instead of per type, since conversions at the
-boundaries make it a small optimisation problem over the data flow
-(NUMBERS.md, "Costs and the chooser"). If that comes, an e-graph is the
-first prior art to try.
+compete. Choosing a representation per value instead of per type, where
+conversions at the boundaries make a small optimisation problem over the
+data flow, is done without a search: the chooser splits a type's values
+into groups and keeps a split only when it costs less
+(REPRESENTATION-PER-VALUE-2026-11-05.md). If a real search pays off later,
+an e-graph is the first prior art to try.
 
 ## Where to read more
 
 | about | read |
 |---|---|
 | why compile, the JS backend, shaders | COMPILER.md |
+| the core IR every target prints from | CORE-IR.md |
 | WebAssembly and WASI | WASM.md |
 | native through C, memory, measurements | NATIVE.md |
 | pages, cells, apps | WEB.md |
