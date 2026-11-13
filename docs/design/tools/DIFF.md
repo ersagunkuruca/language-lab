@@ -1,0 +1,112 @@
+# Reading a change to a program: `ters diff` by node id
+
+*Status 2026-11-13: proposal (E255). Nothing in it is built yet beyond
+L113's summary diff.*
+
+A saved program is JSON keyed by node ids: `code.json`, `names.default.json`
+and `comments.json` in a folder, or one file the editor saves. A change to
+one, in a pull request or between two saves, reads today as JSON. Three
+reviews asked for a way to read it: BLIND-SPOTS-2026-11-03 §13, both
+ASPECTS runs (#37) and STANDING-2026-11-13 §6.7. It matters as soon as a
+second person sends a change.
+
+## What there is
+
+- `ters diff before.json after.json` (L113, `merge-files.ts diffLines`)
+  says which definitions were added, removed or changed, and how many nodes
+  changed in each: `changed \`area\` (3 nodes)`. It doesn't say what
+  changed, and it takes two files, not two versions of a program.
+- The MCP's `view` prints a definition as the blocks text with each line's
+  node id (`render.ts blocksOf`, `mcp/session.ts`). Its edits answer with a
+  diff of those lines, matched as text (a longest common subsequence).
+- `ters merge` already merges id by id, so a program's change is a set of
+  node changes. The diff is the reading side of the same idea.
+
+## What a diff says
+
+For each definition, matched by its id (never by name or position):
+
+    ters diff examples/dice --from HEAD~1
+
+    changed roll : (Int) -[Random]-> List Int
+      roll(n) =
+    ~   range(n) |> map(_ => one of(1 .. 6))      was: range(n) |> map(_ => one of(1 .. 4))
+    + added tally : (List Int) -> Map Int Int
+    +   tally(rolls) = fold rolls …
+    renamed `count` to `tally of`
+    - removed old roll
+    comment on roll: "One die per throw" → "One six-sided die per throw"
+
+- **Lines are matched by node id, not text.** Each line of the view shows
+  one block and starts with that block's id. A line whose id is in both
+  versions is kept (same text), changed (`~`, with what it was) or moved (its
+  parent changed). An id only in the new version is added (`+`), only in the
+  old one removed (`-`). A block moved inside the definition reads as moved,
+  not as a removal and an addition. Two edits that print the same text
+  aren't mistaken for each other. This is the "by node id" in the row; a
+  text diff would only guess it.
+- **Both versions are printed with the new names**, so a rename is one line
+  (`renamed \`count\` to \`tally of\``) and not a change to every line that
+  uses the name. Comments, examples and hints are the side tables'
+  entries, listed by what they're on.
+- **A changed type is shown** when the definition's type changed (both
+  versions are checked), since the type is what callers see.
+- **Layout isn't a change.** Graph positions, folds and the view style are
+  shown only with `--all`.
+- **Unchanged definitions aren't printed.** A changed one prints its lines
+  with three lines of context around each change, and `…` for the rest.
+
+The same result is a value: `diffPrograms(before, after)` gives per
+definition its status, its new type and old type, and its lines, each with
+its node id and `same | changed | moved | added | removed`. The CLI prints
+it, and the editor draws it.
+
+## Where the two versions come from
+
+- Two program folders or two saved files: `ters diff old/ new/`.
+- A program and a git revision: `ters diff examples/dice --from HEAD~1`
+  reads the old version's three files with `git show REV:path` (and `--to
+  REV` for the new one, else the working tree).
+- Inside a pull request: `ters diff --from origin/main` lists every program
+  folder that changed between the two, so a reviewer runs one command.
+
+git's own `diff` can't do this alone: a textconv driver sees one file, and
+a definition's text needs the names beside it. So `ters diff --from` is the
+way in from git. A GitHub comment with the diff, posted by a workflow on a
+PR that touches `ters/examples` or `ters/library`, would let a reviewer read
+a change without running anything. It costs CI minutes, so it's a separate
+step for Ersagun to choose.
+
+## In the editor
+
+A **Changes** view (a tab beside Files) compares the program with a base:
+
+- the version it was opened as (a file, an example as shipped), or
+- the last version marked **Reviewed** (a button in the view, kept with the
+  program in local storage).
+
+It lists the changed definitions as the CLI does. Clicking one opens it with
+its blocks marked by the same per-node status: added green, changed amber,
+removed listed under the definition. The graph marks nodes the same way. It
+reads the code, never changes it, and *Undo* is unaffected. Since both
+versions are in memory, the editor uses the same `diffPrograms` and doesn't
+need git.
+
+## Steps
+
+| step | what | example that shows it works |
+|---|---|---|
+| E255a | `diffPrograms` (ters/src/diff.ts): definitions by id, the view's lines by node id with both versions printed with the new names, renames, comments, types; `ters diff` on two folders or files prints it (L113's summary stays for a bare code.json pair) | `ters diff` on dice and a copy with one literal changed, one definition added and one renamed prints exactly those three, with the literal's line as `~` |
+| E255b | `--from REV` / `--to REV` through `git show`, and a PR's changed program folders with `--from` alone | `ters diff ters/examples/pig --from` a commit before #2240 prints the change #2240 made to pig's handler |
+| E255c | The editor's Changes view against the opened version or the last Reviewed one, with marks in blocks and graph | Edit a literal and add a definition in dice: Changes lists both, the literal's block amber, the new definition green |
+| E255d | (Ersagun's call: CI minutes) a workflow that comments `ters diff` on PRs touching program folders | A PR changing an example gets the comment |
+
+## Prior art
+
+- Unison's `diff.namespace`: a diff of definitions by hash, with names
+  separate, as here (unison-lang.org, "Namespace diffs").
+- GumTree (Falleri et al., "Fine-grained and accurate source code
+  differencing", ASE 2014) matches tree nodes when there are no ids to
+  match by. Ters has ids, so it needs only the matching GumTree has to infer.
+- Darcs and Pijul treat a change as a set of edits to identified pieces. Ids
+  give the same thing for a tree.
