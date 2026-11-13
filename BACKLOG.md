@@ -230,7 +230,6 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T15 | Check main finishes: 0 of its last 100 runs passed (94 cancelled at the 20-minute timeout; newest finished one a failure on 11-11), so its base never moves and every run tests too much (I110's fix waits on a finished run). Split it into shards under the timeout, as I208 did for the Nightly, or test only what its own merge changed; then see it pass. With I219, until the Nightly passes and `good` moves off 10-28 | [STANDING-2026-11-13](docs/reports/reviews/STANDING-2026-11-13.md) §6.1 | P0 | M | |
 
 ## Coordinator and process
 

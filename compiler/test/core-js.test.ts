@@ -302,12 +302,14 @@ test("for some in JavaScript from the core IR: the evaluator's relational interp
   }
 });
 
+// Since I234 the checker says so itself (a remainder by an input shown
+// fine has no Choice), so it is the plain remainder, not R.remk.
 test("a remainder by a positive literal is worked out with no try, as it always has an answer (round 13 P4)", () => {
   const p = load("../../compiler/gaps/pond");
   const wrapped = p.named("wrapped cell");
   const { js } = emitCoreJs(lowerCore(p.code, p.info, p.pres.names, [wrapped]));
-  assert.match(js, /R\.remk\(/);
   assert.doesNotMatch(js, /try \{/);
+  assert.doesNotMatch(js, /R\.ck\(|R\.FAIL/);
   const f = compiledDefs(p.code, p.info, p.pres.names, ["wrapped cell"])["wrapped cell"];
   const r = makeRunner(p.code, p.info, { print: () => {} });
   for (const x of [0, 5, -1, -48, -49, 47, 1000, 2 ** 52, -(2 ** 52), 10n ** 30n, -(10n ** 30n)]) {
