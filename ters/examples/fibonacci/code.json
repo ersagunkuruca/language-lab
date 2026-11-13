@@ -35,7 +35,7 @@
     "v7d5k4uktkiv5lvu17167sjqp3": {
       "id": "v7d5k4uktkiv5lvu17167sjqp3",
       "kind": "lit",
-      "value": 2
+      "num": "2"
     },
     "9dj990ll0jhqhgf1cps40bhku4": {
       "id": "9dj990ll0jhqhgf1cps40bhku4",
@@ -72,7 +72,7 @@
     "pma15kgvi69o3hkqkqv8c4079b": {
       "id": "pma15kgvi69o3hkqkqv8c4079b",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "ud2ojinp39muf6c9umaka27l3g": {
       "id": "ud2ojinp39muf6c9umaka27l3g",
@@ -109,7 +109,7 @@
     "c5a97jnbsllv798si77l5fdk20": {
       "id": "c5a97jnbsllv798si77l5fdk20",
       "kind": "lit",
-      "value": 2
+      "num": "2"
     },
     "9kvsqnllbgh3dkain3k274esev": {
       "id": "9kvsqnllbgh3dkain3k274esev",
@@ -193,7 +193,7 @@
     "b8eo3e2rc1oq2hjkdgvctu8gph": {
       "id": "b8eo3e2rc1oq2hjkdgvctu8gph",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "kuu3cjvgn3uk2tl7sdkcttp7g2": {
@@ -238,7 +238,7 @@
     "i6tst9srvi7s0s2jrijkotclna": {
       "id": "i6tst9srvi7s0s2jrijkotclna",
       "kind": "lit",
-      "value": 30,
+      "num": "30",
       "of": "type.int"
     },
     "mtjvnjd1jj1mkcfmtllm1k1pmr": {

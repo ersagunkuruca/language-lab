@@ -464,7 +464,7 @@
     "n80ejkpdeq2oa00n8c9rprqbkl": {
       "id": "n80ejkpdeq2oa00n8c9rprqbkl",
       "kind": "lit",
-      "value": 1.7
+      "num": "1.7"
     },
     "3n8osi08b01v5cm7ks8fca98n3": {
       "id": "3n8osi08b01v5cm7ks8fca98n3",
@@ -496,7 +496,7 @@
     "s4hgqjdjv4bi9hgk2e2568ch7s": {
       "id": "s4hgqjdjv4bi9hgk2e2568ch7s",
       "kind": "lit",
-      "value": 100
+      "num": "100"
     },
     "d2ragoggseah48at2jit5itji7": {
       "id": "d2ragoggseah48at2jit5itji7",
@@ -520,7 +520,7 @@
     "63v1rcqjl4im58n7rei505n0qt": {
       "id": "63v1rcqjl4im58n7rei505n0qt",
       "kind": "lit",
-      "value": 2.3
+      "num": "2.3"
     },
     "u2b7r6ip236ed09tq6bv0ml4mk": {
       "id": "u2b7r6ip236ed09tq6bv0ml4mk",
@@ -552,7 +552,7 @@
     "i0qv9vu64a1k750ph19ocujsts": {
       "id": "i0qv9vu64a1k750ph19ocujsts",
       "kind": "lit",
-      "value": 100
+      "num": "100"
     },
     "88ok93g3r51lnhqi3j6k2d7opa": {
       "id": "88ok93g3r51lnhqi3j6k2d7opa",
@@ -576,7 +576,7 @@
     "9l33bkg63oeb312p2irle1tj49": {
       "id": "9l33bkg63oeb312p2irle1tj49",
       "kind": "lit",
-      "value": 0.31
+      "num": "0.31"
     },
     "2hok6j29ec5joohbbhi5q6rl4s": {
       "id": "2hok6j29ec5joohbbhi5q6rl4s",
@@ -613,7 +613,7 @@
     "0g6gmcpokjhk95745m279s5ksr": {
       "id": "0g6gmcpokjhk95745m279s5ksr",
       "kind": "lit",
-      "value": 0.17
+      "num": "0.17"
     },
     "i5h8av9phn2md6m0e57mqepduj": {
       "id": "i5h8av9phn2md6m0e57mqepduj",
@@ -645,7 +645,7 @@
     "a0ftqjr5us3lu495jk88rsdjam": {
       "id": "a0ftqjr5us3lu495jk88rsdjam",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "39io5ko0bdg9c16i7fqjp6kao9": {
       "id": "39io5ko0bdg9c16i7fqjp6kao9",
@@ -714,17 +714,17 @@
     "rlpu9krniten9t6hr95k6le5nk": {
       "id": "rlpu9krniten9t6hr95k6le5nk",
       "kind": "lit",
-      "value": 0.5
+      "num": "0.5"
     },
     "ot3s0htaiuor836fr0js5mt46v": {
       "id": "ot3s0htaiuor836fr0js5mt46v",
       "kind": "lit",
-      "value": 0.25
+      "num": "0.25"
     },
     "ph84lt4jnpl59m3nmbv3bcolr0": {
       "id": "ph84lt4jnpl59m3nmbv3bcolr0",
       "kind": "lit",
-      "value": 0.75
+      "num": "0.75"
     },
     "qvb6cdbrum2jfn340t3c2rnhgs": {
       "id": "qvb6cdbrum2jfn340t3c2rnhgs",
@@ -744,7 +744,7 @@
     "rbfif31cb6tqet9nq6k3bunvek": {
       "id": "rbfif31cb6tqet9nq6k3bunvek",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "2n7kcrvcqsssrjaj647qee9v1r": {
       "id": "2n7kcrvcqsssrjaj647qee9v1r",
@@ -805,7 +805,7 @@
     "57nt7p01844eiq4ar6da0agh3e": {
       "id": "57nt7p01844eiq4ar6da0agh3e",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "gd5fnj3rvq1vuknqig6hjdjbcc": {
       "id": "gd5fnj3rvq1vuknqig6hjdjbcc",
@@ -905,7 +905,7 @@
     "vuuerb7t70kjvqs1h3lush2r1t": {
       "id": "vuuerb7t70kjvqs1h3lush2r1t",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "9935jfh28j4gvq03j6is7h4093": {
@@ -950,7 +950,7 @@
     "vtbjmg9ap8ajcf070c81fmtusp": {
       "id": "vtbjmg9ap8ajcf070c81fmtusp",
       "kind": "lit",
-      "value": 1000,
+      "num": "1000",
       "of": "type.int"
     },
     "mnsbshb4o9m9bbvjj43dt02uvf": {
@@ -1022,7 +1022,7 @@
     "0qkom2c5obqer86tq23nlodi6g": {
       "id": "0qkom2c5obqer86tq23nlodi6g",
       "kind": "lit",
-      "value": 100
+      "num": "100"
     },
     "2oegg9pq4cr9pic5beqeqcpsiv": {
       "id": "2oegg9pq4cr9pic5beqeqcpsiv",

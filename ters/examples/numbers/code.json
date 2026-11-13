@@ -3,7 +3,7 @@
     "17836160": {
       "id": "17836160",
       "kind": "lit",
-      "value": 100
+      "num": "100"
     },
     "18880581": {
       "id": "18880581",
@@ -396,7 +396,7 @@
     "4dba063c": {
       "id": "4dba063c",
       "kind": "lit",
-      "value": 0
+      "num": "0"
     },
     "872927eb": {
       "id": "872927eb",
@@ -417,7 +417,7 @@
     "c0850ad9": {
       "id": "c0850ad9",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "d1c72567": {
       "id": "d1c72567",
@@ -872,7 +872,7 @@
     "cdb060d1": {
       "id": "cdb060d1",
       "kind": "lit",
-      "value": 6
+      "num": "6"
     },
     "f5e44f98": {
       "id": "f5e44f98",
@@ -961,7 +961,7 @@
     "d242b4d0": {
       "id": "d242b4d0",
       "kind": "lit",
-      "value": 2
+      "num": "2"
     },
     "e30bff83": {
       "id": "e30bff83",
@@ -979,7 +979,7 @@
     "efe85b9e": {
       "id": "efe85b9e",
       "kind": "lit",
-      "value": 10
+      "num": "10"
     },
     "04ae2b2e": {
       "id": "04ae2b2e",
@@ -1069,7 +1069,7 @@
     "7f1d08c3": {
       "id": "7f1d08c3",
       "kind": "lit",
-      "value": 7
+      "num": "7"
     },
     "d6d49f75": {
       "id": "d6d49f75",
@@ -1219,7 +1219,7 @@
     "fd798fa3": {
       "id": "fd798fa3",
       "kind": "lit",
-      "value": 18
+      "num": "18"
     },
     "9d27c667": {
       "id": "9d27c667",
@@ -1308,7 +1308,7 @@
     "622212d3": {
       "id": "622212d3",
       "kind": "lit",
-      "value": 2
+      "num": "2"
     },
     "401e1843": {
       "id": "401e1843",
@@ -1326,7 +1326,7 @@
     "d1899a74": {
       "id": "d1899a74",
       "kind": "lit",
-      "value": 50
+      "num": "50"
     },
     "91215a2a": {
       "id": "91215a2a",
@@ -2570,7 +2570,7 @@
     "0152dc72": {
       "id": "0152dc72",
       "kind": "lit",
-      "value": 0
+      "num": "0"
     },
     "cfc9d960": {
       "id": "cfc9d960",
@@ -2591,7 +2591,7 @@
     "786d4abd": {
       "id": "786d4abd",
       "kind": "lit",
-      "value": 2
+      "num": "2"
     },
     "1d0b8579": {
       "id": "1d0b8579",
@@ -2635,7 +2635,7 @@
     "e649401d": {
       "id": "e649401d",
       "kind": "lit",
-      "value": 2
+      "num": "2"
     },
     "fe1087df": {
       "id": "fe1087df",
@@ -2659,7 +2659,7 @@
     "9573083f": {
       "id": "9573083f",
       "kind": "lit",
-      "value": 1
+      "num": "1"
     },
     "2427a1f7": {
       "id": "2427a1f7",
@@ -3242,7 +3242,7 @@
     "rv6n9oea90i663obsanmij91ns": {
       "id": "rv6n9oea90i663obsanmij91ns",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "s9fs69p2k7g20pkmllcms2prst": {
@@ -3257,7 +3257,7 @@
     "gg02ibvjp0rekui4kbgi5g1p7i": {
       "id": "gg02ibvjp0rekui4kbgi5g1p7i",
       "kind": "lit",
-      "value": 1,
+      "num": "1",
       "of": "type.int"
     },
     "i7tb9f8us5pphual64o7kugl96": {
@@ -3307,7 +3307,7 @@
     "6ehu3eerludbmtj3qi7b9s35d0": {
       "id": "6ehu3eerludbmtj3qi7b9s35d0",
       "kind": "lit",
-      "value": 0,
+      "num": "0",
       "of": "type.int"
     },
     "7gavsu27famm8pbj7ctkvmtdq8": {
@@ -3343,7 +3343,7 @@
     "tvmriuavo3qqnruki68gaks140": {
       "id": "tvmriuavo3qqnruki68gaks140",
       "kind": "lit",
-      "value": 1,
+      "num": "1",
       "of": "type.int"
     },
     "npk365pqt33ak5echric4v7h9c": {
@@ -3483,7 +3483,7 @@
     "e7gfkd3ft58dk5uelcis3l4tlf": {
       "id": "e7gfkd3ft58dk5uelcis3l4tlf",
       "kind": "lit",
-      "value": 1,
+      "num": "1",
       "of": "type.int"
     },
     "pml12njl2kmmoiv9kf50rrlnen": {

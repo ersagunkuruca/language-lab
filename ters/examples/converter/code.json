@@ -47,7 +47,7 @@
     "jb46c6ic8u5stf8b6igkr1rheb": {
       "id": "jb46c6ic8u5stf8b6igkr1rheb",
       "kind": "lit",
-      "value": 9
+      "num": "9"
     },
     "8dmt33f15394e95e7upfjub278": {
       "id": "8dmt33f15394e95e7upfjub278",
@@ -71,7 +71,7 @@
     "343gp9cc2glso7seu5jau45egl": {
       "id": "343gp9cc2glso7seu5jau45egl",
       "kind": "lit",
-      "value": 5
+      "num": "5"
     },
     "q5b06bf9t27bed0tfrql25pvks": {
       "id": "q5b06bf9t27bed0tfrql25pvks",
@@ -90,7 +90,7 @@
     "odf1mevfb3l791nstf3ug7vgvs": {
       "id": "odf1mevfb3l791nstf3ug7vgvs",
       "kind": "lit",
-      "value": 32
+      "num": "32"
     },
     "6us9pi7ma7lqs3p3rqdan24u8q": {
       "id": "6us9pi7ma7lqs3p3rqdan24u8q",
@@ -139,7 +139,7 @@
     "5aa44asf0dtbkr26i32p46jur9": {
       "id": "5aa44asf0dtbkr26i32p46jur9",
       "kind": "lit",
-      "value": 273.15
+      "num": "273.15"
     },
     "dcas47r7to154f2s39vfbjk2ni": {
       "id": "dcas47r7to154f2s39vfbjk2ni",
@@ -193,7 +193,7 @@
     "527j5ije19pc14u2lqhelnigq7": {
       "id": "527j5ije19pc14u2lqhelnigq7",
       "kind": "lit",
-      "value": 48
+      "num": "48"
     },
     "pb62lr4s7sii55c77hphpagk2g": {
       "id": "pb62lr4s7sii55c77hphpagk2g",
@@ -247,7 +247,7 @@
     "stno0cgcuiiaanm0bmlmilmbmd": {
       "id": "stno0cgcuiiaanm0bmlmilmbmd",
       "kind": "lit",
-      "value": 3
+      "num": "3"
     },
     "6p41598recup93n0l03tit150n": {
       "id": "6p41598recup93n0l03tit150n",
@@ -336,7 +336,7 @@
     "9umcdptq9qgo8s9cncg6iab2u8": {
       "id": "9umcdptq9qgo8s9cncg6iab2u8",
       "kind": "lit",
-      "value": 4.92892159375
+      "num": "4.92892159375"
     },
     "h1n5nt8rcf8v86478opb1al6ov": {
       "id": "h1n5nt8rcf8v86478opb1al6ov",
@@ -425,7 +425,7 @@
     "orrk1hvlrnta952aqaflt5ufgh": {
       "id": "orrk1hvlrnta952aqaflt5ufgh",
       "kind": "lit",
-      "value": 60
+      "num": "60"
     },
     "d502vk5sl0ag9esvmqbs3l047v": {
       "id": "d502vk5sl0ag9esvmqbs3l047v",
@@ -479,7 +479,7 @@
     "k056uk3jes4obgputul8p2g22u": {
       "id": "k056uk3jes4obgputul8p2g22u",
       "kind": "lit",
-      "value": 300
+      "num": "300"
     },
     "djfunbsq44nrkj0uq9b1rugbrj": {
       "id": "djfunbsq44nrkj0uq9b1rugbrj",
@@ -1261,7 +1261,7 @@
     "r3q046v5vvjk864u1s7fgcoa8j": {
       "id": "r3q046v5vvjk864u1s7fgcoa8j",
       "kind": "lit",
-      "value": 20
+      "num": "20"
     },
     "6k967jctu8pa0j4ofoovk6i1dv": {
       "id": "6k967jctu8pa0j4ofoovk6i1dv",
@@ -1289,7 +1289,7 @@
     "ln9l9adbrlhpppn4d4ev5js9pq": {
       "id": "ln9l9adbrlhpppn4d4ev5js9pq",
       "kind": "lit",
-      "value": 48
+      "num": "48"
     },
     "3kj2332uhdks9ep4bf9toaidc2": {
       "id": "3kj2332uhdks9ep4bf9toaidc2",
@@ -1317,7 +1317,7 @@
     "jpv6050bsoh30v8mnceqo3mhgg": {
       "id": "jpv6050bsoh30v8mnceqo3mhgg",
       "kind": "lit",
-      "value": 12
+      "num": "12"
     },
     "21r2j2po9tsgfv1d5jrrdksnlm": {
       "id": "21r2j2po9tsgfv1d5jrrdksnlm",
