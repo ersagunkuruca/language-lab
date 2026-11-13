@@ -19,6 +19,7 @@ import { formatUnit, infer as unitInfer } from "../ters/src/units.ts";
 import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { shower } from "./shown.ts";
+import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { declaresUnits } from "./selectedParts.ts";
 import { newWorker } from "./runViews.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
@@ -261,13 +262,16 @@ export function backwards(host: BackHost) {
       const shown = r.answers[0]?.values[p];
       // Left free: every value fits (the angle of the origin).
       const any = !!r.answers[0]?.free.includes(p) && shown !== undefined && /^_\d+$/.test(shown);
+      // An Html is drawn below as the page draws it, not printed (I256).
+      const part = p === "out" && !on && shown !== undefined && forwards && givesHtml(info, ui.def) ? traced(info)?.result : undefined;
       const input = on
         ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false", "aria-label": `${label}, the value given` }) as HTMLInputElement
-        : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : nice(shown));
+        : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : part !== undefined ? "an Html, drawn below" : nice(shown));
       if (on) (input as HTMLInputElement).addEventListener("change", () => setPortText(p, (input as HTMLInputElement).value));
       // A multivector result says what it is (L43d).
       const kind = p === "out" && !on && shown !== undefined && forwards ? (() => { const tr = traced(info); return tr?.result !== undefined ? kindOf(info, tr.result) : null; })() : null;
       box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p), kind ? ` ${kind}` : "")));
+      if (part !== undefined) box.append(htmlPart(part, namer.name(ui.def)));
     }
     if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : portName(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
     else if (r.error) box.append(LIMIT.test(r.error) ? h("p", { class: "hint" }, `It doesn't run backwards: ${r.error}.`) : h("p", { class: "status-line bad" }, r.error));
@@ -290,7 +294,8 @@ export function backwards(host: BackHost) {
     }
     // An answer run forwards can be accepted, and one accepted is checked
     // against what it gives now: a tick, or both side by side (T7d).
-    const got = forwards && !missing.length ? forward()?.answers[0]?.values.out : undefined;
+    // Not an Html: its views print as <function>, so any two would match.
+    const got = forwards && !missing.length && !givesHtml(info, ui.def) ? forward()?.answers[0]?.values.out : undefined;
     if (got !== undefined) {
       const inputs = ports.filter((p) => p !== "out").map((p) => portText(info, p));
       const acc = (savedOf(ui.def) ?? []).find((e) => e.answer !== undefined && e.inputs.length === inputs.length && e.inputs.every((x, i) => x === inputs[i]));

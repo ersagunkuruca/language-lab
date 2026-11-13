@@ -19,11 +19,15 @@ const get = async (url: string): Promise<Response> => {
 
 // A folder's tables at `rev`: a branch, a tag or a commit. A table the
 // folder hasn't then is left out; a folder with no code.json then isn't
-// there, and that's an error.
+// there, and that's an error. Which files it has is asked first (one
+// api.github.com read), so no file it hasn't is fetched: each would be a
+// 404 in the console (I257). Past the limit for reading without signing
+// in, every table is tried instead, the 404s and all.
 export async function tablesAt(rev: string, folder: string): Promise<Record<string, unknown>> {
   const at = `https://raw.githubusercontent.com/${REPO}/${rev.split("/").map(encodeURIComponent).join("/")}/${pathOf(folder)}/`;
+  const has = await filesAt(rev, folder);
   const tables: Record<string, unknown> = {};
-  await Promise.all(TABLES.map(async ([table, file]) => {
+  await Promise.all(TABLES.filter(([, file]) => !has || has.has(`${file}.json`)).map(async ([table, file]) => {
     const r = await get(`${at}${file}.json`);
     if (r.status === 404) return;
     if (!r.ok) throw new Error(`GitHub answered ${r.status} for ${file}.json`);
@@ -31,6 +35,21 @@ export async function tablesAt(rev: string, folder: string): Promise<Record<stri
   }));
   if (!tables.code) throw new Error(`${rev} has no ${pathOf(folder)}/code.json (or no such branch, tag or commit)`);
   return tables;
+}
+
+// The files in a folder at `rev`, or null when GitHub won't say (its
+// limit). A commit's are kept: they never change.
+const listed = new Map<string, Set<string>>();
+async function filesAt(rev: string, folder: string): Promise<Set<string> | null> {
+  const key = `${rev}\u0000${folder}`;
+  const was = listed.get(key);
+  if (was) return was;
+  const r = await get(`https://api.github.com/repos/${REPO}/contents/${pathOf(folder).split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(rev)}`);
+  if (r.status === 404) throw new Error(`${rev} has no ${pathOf(folder)} (or no such branch, tag or commit)`);
+  if (!r.ok) return null;
+  const files = new Set((await r.json() as { name: string }[]).map((f) => f.name));
+  if (/^[0-9a-f]{40}$/.test(rev)) listed.set(key, files);
+  return files;
 }
 
 export interface PullRequest { number: number; title: string; base: string; head: string; url: string }
