@@ -402,7 +402,10 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
         // answers) is given one when called from outside (core-rt.ts).
         case "closure": {
           const rest = e.t.waits || e.t.several;
-          const src = carries ? e.src : undefined, c = `R.closure(${names[e.fn]}, [${e.caps.map((a) => ex(a, pre, d)).join(", ")}]${src || rest ? `, ${src ? JSON.stringify(src) : "undefined"}` : ""}${rest ? ", true" : ""})`;
+          // `d` (I245): the maker of its derivative's closure, last.
+          const src = carries ? e.src : undefined, more = [src ? JSON.stringify(src) : "undefined", rest ? "true" : "undefined", e.d !== undefined ? names[e.d] : "undefined"];
+          while (more.length && more[more.length - 1] === "undefined") more.pop();
+          const c = `R.closure(${[names[e.fn], `[${e.caps.map((a) => ex(a, pre, d)).join(", ")}]`, ...more].join(", ")})`;
           // One that captures nothing is the same function every time, so
           // it's made once, at load (C137d18): sheet's tokenizer made one
           // per character for its fold.
@@ -429,6 +432,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           if (e.fn === "fuel.get") return fuel ? "fuel" : "Infinity";
           // One of an answer's values (core-rt.ts pick), read where it is used.
           { const m = /^pick:(\d+)$/.exec(e.fn); if (m && xs.length === 1) return `(${xs[0]})[${m[1]}]`; }
+          // derivative(f) of a function chosen at run time (I245): f's maker
+          // of its derivative, given f.
+          if (e.fn === "derived") { const t = temp(); pre.push(`${d}const ${t} = ${xs[0]};`); return `${t}.d(${t})`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
           // An array of records as columns (columns.ts, C60): an array per
           // field, a Float64Array for a Float64.

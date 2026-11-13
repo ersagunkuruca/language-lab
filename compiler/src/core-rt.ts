@@ -539,16 +539,18 @@ export const RUNTIME = {
   // `rest` (C40 step 4): its code takes the rest of the run last, as a
   // page handler that waits does; called from outside, the rest keeps
   // the answer, and a wait goes on by it later (core-rt.ts worldFn).
-  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }, rest?: boolean) => {
+  // `d` (I245): given the closure, its derivative's closure.
+  closure: (code: (...xs: unknown[]) => unknown, caps: unknown[], src?: { lambda: Id; binders: Id[]; bools: number[] } | { prim: Id }, rest?: boolean, d?: (c: unknown) => unknown) => {
     // Called from outside (a page's mount, the host): the first answer,
     // and none is FAIL.
     const whole = (...xs: unknown[]) => { let out: unknown = FAIL; RUNTIME.ck(code(c, ...xs, (v: unknown) => { out = v; return true; })); if (out === FAIL) throw FAIL; return out; };
     // Its fields set one by one, not by Object.assign: a closure is made
     // per call of a several-answer function (Countdown's rest of the
     // search), and every one then has the same shape (C137d25).
-    const c = (rest ? whole : (...xs: unknown[]) => RUNTIME.ck(code(c, ...xs))) as ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code };
+    const c = (rest ? whole : (...xs: unknown[]) => RUNTIME.ck(code(c, ...xs))) as ((...xs: unknown[]) => unknown) & { caps: unknown[]; code: typeof code; d?: typeof d };
     c.caps = caps;
     c.code = code;
+    c.d = d;
     if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
     return c;
   },
