@@ -276,6 +276,37 @@ export function fill(code: Code, names: Names, info: Info, hole: Id, f: Filling,
   return guardTyped(info, e.code, e.names, next ?? hole, `Filled with ${label}.${defId && f.kind !== "lit" && !next ? " No holes left in this definition." : ""}`);
 }
 
+// What text that didn't read says (I231): an operator from another
+// language named with Ters's own, a bracket left open, else the token the
+// reader stopped at. The reader's own words ("a binder", "unexpected text
+// at 3") named neither the token nor what to write instead.
+const FOREIGN: [RegExp, string][] = [
+  [/===?/, "equality is one =, as in if x = 1 then …"],
+  [/&&/, "write and"],
+  [/\|\|/, "write or"],
+  [/(?<![\p{L}\p{N}_')\]])!(?!=)/u, "write not, as in not (x < 1)"],
+];
+export function readError(text: string, error: string, code: Code, names: Names): string {
+  const bare = text.replace(/"(?:[^"\\]|\\.)*"/g, (m) => " ".repeat(m.length));
+  for (const [re, say] of FOREIGN) { const m = re.exec(bare); if (m) return `${m[0]} isn't Ters: ${say}`; }
+  const open: string[] = [], pair: Record<string, string> = { ")": "(", "]": "[", "}": "{", "›": "‹" };
+  for (const c of bare) {
+    if ("([{‹".includes(c)) open.push(c);
+    else if (c in pair) { if (open.pop() !== pair[c]) return `a ${c} with no ${pair[c]} before it`; }
+  }
+  if (open.length) return `a ${open.at(-1)} isn't closed`;
+  // The reader's position is in the whole text only when the whole text
+  // gave that error.
+  const at = / at (\d+)$/.exec(error);
+  if (at) {
+    const whole = parseValue(text, code, names);
+    const tok = "error" in whole && whole.error === error ? /^\s*(\S+)/.exec(text.slice(Number(at[1]) - 1))?.[1] : undefined;
+    if (tok) return `${error.replace(/ at \d+$/, "")}: “${tok}” isn't read`;
+  }
+  if (error === "a binder") return `“${text.trim()}” isn't read as a whole: an operator or a word in it isn't Ters's (equality is =; and, or, not; the Guide's “Text you can type” lists what reads)`;
+  return error;
+}
+
 // Fill a hole with a value written out, the way values print: 3, "text",
 // [3, 1, 2], circle(2). It becomes the code that builds it (literals and
 // constructor calls), type-checked like any other filling. Arithmetic on
@@ -288,7 +319,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   for (const d of code.defs) if (all[d]) scope.set(all[d], d);
   for (const b of defId ? scopeAt(code, defId, hole) : []) if (all[b]) scope.set(all[b], b);
   const r = typedOut(text, code, all, scope);
-  if ("error" in r) return { ok: false, reason: r.error };
+  if ("error" in r) return { ok: false, reason: readError(text, r.error, code, all) };
   // A name alone is already in the palette's list.
   if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
   // A whole number where an Int goes is an Int: 0 in slice's position. And
@@ -457,7 +488,11 @@ function refusal(first: TEdit & { ok: false }, why: string[], shared: string[]):
     at.n++;
     if (m && !at.wants.includes(m[2])) at.wants.push(m[2]);
   }
-  const kinds = [...places].sort((a, b) => b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
+  // A version that takes another number of inputs than given comes last:
+  // the one whose count fits has the reason that matters (I230: a List
+  // for each led with the page's Cell one's "takes 3 inputs, given 2").
+  const count = (key: string) => +/ takes \d+ inputs?, given \d+$/.test(key);
+  const kinds = [...places].sort((a, b) => count(a[0]) - count(b[0]) || b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
   if (kinds.length < 2) return { ...first, reason: kinds[0] };
   const which = shared.length ? `whichever ${shared.length > 1 ? `${shared.slice(0, -1).join(", ")} or ${shared.at(-1)}` : shared[0]} is meant` : "however it's read";
   return { ...first, reason: `nothing fits ${which}: ${kinds.slice(0, 2).join("; or ")}${kinds.length > 2 ? `; or ${kinds.length - 2} more` : ""}` };
@@ -1001,7 +1036,7 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     // An operator expression whose last operand is a call reaches here
     // whole (a + nosuch(b)): the operand's own error says more (E174).
     if (!alts.length && inner) return inner;
-    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.values(names)], scope)}` };
+    if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.keys(names).filter((id) => { const k = code.nodes[id]?.kind; return k === "def" || k === "builtin" || k === "variant" || isOperation(code, id); }).map((id) => names[id])], scope)}` };
     return args.find((a) => "error" in a) as { error: string };
   }
   if (dot > 0) {
@@ -1168,13 +1203,22 @@ function topLevel(text: string, by = ","): string[] | undefined {
 // with those places left open, then filling each as its hole expects.
 function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, fit: boolean, defId?: Id): TEdit {
   const nodes = { ...code.nodes };
-  // Typed alone, an Int is read from the text, so one past 2⁵³ stays exact.
-  const exact = /^\s*-?\d+\s*$/.test(text) ? readInt(text.trim())[0] : undefined;
-  const open = new Map<Id, { n: number } | { p: number; q: number }>();
+  // Each whole number keeps the digits it was typed with (I236), so one
+  // past 2⁵³ stays exact as an Int wherever it is: `[12345678901234567891,
+  // 2]`. The text's numbers, outside quotes, in order; each whole number
+  // the value has takes the first one left that reads as it.
+  const typedDigits = [...text.replace(/"(?:[^"\\]|\\.)*"/g, '""').matchAll(/(?<![\p{L}\p{N}_.'])\d+(?![\p{L}\p{N}_.']|e[+-]?\d)/giu)].map((m) => m[0]);
+  const digitsOf = (v: number): string | undefined => {
+    const i = typedDigits.findIndex((d) => Number(d) === Math.abs(v));
+    if (i < 0) return undefined;
+    const [d] = typedDigits.splice(i, 1);
+    return v < 0 ? `-${d}` : d;
+  };
+  const open = new Map<Id, { n: number; digits?: string } | { p: number; q: number }>();
   const isWhole = (t: Typed) => ("value" in t && typeof t.value === "number" && Number.isInteger(t.value) ? t.value : null);
   const build = (v: Value, place?: Id): Id => {
     const id = place ?? freshId();
-    if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v }); nodes[id] = { id, kind: "hole" }; }
+    if (fit && typeof v === "number" && Number.isInteger(v)) { open.set(id, { n: v, digits: digitsOf(v) }); nodes[id] = { id, kind: "hole" }; }
     else if (typeof v === "number" || typeof v === "string") nodes[id] = { id, kind: "lit", value: nfc(v) };
     else if (typeof v === "object" && "tag" in v && v.tag === CONS) {
       // A list value written out is one `list of` call (L181, E241).
@@ -1241,10 +1285,14 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
       const e = seen.holes.get(id)?.expected;
       // An Int, or a type whose Literal spells its numbers (Rational, …).
       const spelled = spelledByLiteral(seen, e);
-      const of = e?.t === "con" && (e.id === INT || spelled) ? e.id : undefined;
+      // A whole number past 2⁵³ where nothing says what it is yet is an
+      // Int: as a Float64 it isn't the number typed (a point says Float64,
+      // E192).
+      const past = "n" in w && w.digits !== undefined && !Number.isSafeInteger(Number(w.digits)) && e?.t !== "con";
+      const of = e?.t === "con" && (e.id === INT || spelled) ? e.id : past ? INT : undefined;
       const lit = (v: number | string, at = of) => { const x = freshId(); nodes[x] = { id: x, kind: "lit", value: v, ...(at ? { of: at } : {}) }; return x; };
       if ("n" in w) {
-        const n = of && exact !== undefined ? exact : w.n;
+        const n = of && w.digits !== undefined ? readInt(w.digits)[0] ?? w.n : w.n;
         nodes[id] = { id, kind: "lit", value: typeof n === "number" ? n : String(n), ...(of ? { of } : {}) };
       } else if (spelled) nodes[id] = { id, kind: "lit", value: `${w.p}/${w.q}`, of };
       else call(B.div, [lit(w.p, undefined), lit(w.q, undefined)], id);
@@ -1482,6 +1530,15 @@ export function setLit(code: Code, names: Names, info: Info, id: Id, raw: string
   }
   // Text is stored in NFC (L214a, E239): "é" typed as one character or as
   // "e" and an accent is the same literal, and the same key as text from the world.
+  // A whole number at a literal the check has settled to Int, or one past
+  // 2⁵³ where nothing says, is an Int of its digits (I236): read with
+  // Number, 12345678901234567891 was 12345678901234567168.
+  if (typeof old.value === "number" && /^\s*-?\d+\s*$/.test(raw)) {
+    const t = info.typeOf.get(id), settled = t ? info.subst.resolve(t) : undefined;
+    const [n] = readInt(raw.trim());
+    if (n !== undefined && ((settled?.t === "con" && settled.id === INT) || (settled?.t !== "con" && !Number.isSafeInteger(Number(raw)))))
+      return guardTyped(info, replace(code, id, () => ({ kind: "lit", value: typeof n === "number" ? n : String(n), of: INT })), names, id, "Changed a literal.");
+  }
   const v = typeof old.value === "number" ? Number(raw) : nfc(raw);
   if (typeof v === "number" && !Number.isFinite(v)) return { ok: false, reason: "this is a number; that isn't one" };
   return guardTyped(info, replace(code, id, () => ({ ...old, kind: "lit", value: v })), names, id, "Changed a literal.");

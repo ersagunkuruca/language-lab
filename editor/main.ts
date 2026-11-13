@@ -44,6 +44,7 @@ import { palette, typeName } from "./palette.ts";
 import { structure } from "./structure.ts";
 import { parentsOf, selection, warmParents } from "./selection.ts";
 import { filesPanels, fnv, userCode } from "./filesPanel.ts";
+import { changesPanels } from "./changesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
 import { pagePanels } from "./pagePanel.ts";
@@ -186,7 +187,7 @@ export interface UI {
   menu: { target: MenuTarget; x: number; y: number; world: Pos; blocks?: boolean } | null;
   // Definitions open as tabs over the graph, and which inspector tab shows.
   tabs: Id[];
-  panel: "node" | "program" | "checks" | "files" | "guide";
+  panel: "node" | "program" | "checks" | "files" | "changes" | "guide";
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
@@ -532,6 +533,7 @@ function switchProgram(p: Program) {
 }
 
 function showProgram() {
+  changes.opened(doc);
   undo.length = 0;
   redo.length = 0;
   ui.def = startDef();
@@ -876,6 +878,28 @@ const pres = (names: Names = {}, comments: Comments = doc.comments): Presentatio
 });
 
 const { files, filesPanel } = filesPanels({ doc: () => doc, ui, undo, prog: (d) => prog(d), draftsOf: (d) => draftsOf(d) });
+
+// The Changes tab (E255c): the program against the version it was opened
+// as, or the last one marked Reviewed. Another version's names are built
+// as shownNames builds the open one's, once per version.
+const BLOCKS_STYLE = blocksStyle as unknown as Style;
+const namesKept = new WeakMap<Doc, { layer: Layer; names: Names }>();
+function namesOf(d: Doc): Names {
+  if (d === doc) return shownNames();
+  const hit = namesKept.get(d);
+  if (hit?.layer === ui.layer) return hit.names;
+  const names = layer<Names>(LIBRARY.names, ...fileModules(d).map((m) => m.names), d.names.short, ui.layer === "descriptive" ? d.names.descriptive : {});
+  namesKept.set(d, { layer: ui.layer, names });
+  return names;
+}
+const changes = changesPanels({
+  doc: () => doc, ui, namesOf, style: () => BLOCKS_STYLE,
+  infoOf: (d) => { if (d === doc) return typesOf(); try { return T.infer(d.code, namesOf(d)); } catch { return null; } },
+  ownDefs: (d) => ownDefs(d), keep: (d) => kept(d), restore: (d) => onToday(d),
+  shipped: (d) => (isExample(d.program) ? initialFor(d.program) : null),
+  key: `${STORE}-reviewed`,
+});
+changes.opened(doc);
 
 // The def a call, ref or solve refers to, if it's a user def.
 function calleeDef(id: Id): Id | null {
@@ -2289,6 +2313,7 @@ function draw() {
     ["program", "Program", () => [programPanel()]],
     ["checks", "Checks", () => [typedChecks(namer, info)]],
     ["files", "Files", () => [filesPanel()]],
+    ["changes", "Changes", () => [changes.changesPanel()]],
     ["guide", "Guide", () => [guide()]],
   ];
   const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
@@ -2376,9 +2401,10 @@ function draw() {
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
   restore();
+  changes.markChanges(app);
   if (later) {
     const code = doc.code, def = ui.def, host = app.querySelector<HTMLElement>(".p-graph .graph-host");
-    setTimeout(() => { const now = typesOf(); if (now === info && doc.code === code && ui.def === def && host?.isConnected && !host.firstChild) host.append(graphOf(now)); }, 0);
+    setTimeout(() => { const now = typesOf(); if (now === info && doc.code === code && ui.def === def && host?.isConnected && !host.firstChild) { host.append(graphOf(now)); changes.markChanges(host); } }, 0);
   }
 }
 
@@ -2435,6 +2461,8 @@ document.addEventListener("click", (e) => {
     const a = act.dataset.act;
     if (a === "undo") return travel(undo, redo, "Undid");
     if (a === "redo") return travel(redo, undo, "Redid");
+    if (a === "mark-reviewed") { changes.markReviewed(); ui.note = `Marked reviewed: Changes compares ${titleOf(doc)} with this version from now on.`; return render(); }
+    if (a === "forget-reviewed") { changes.forgetReviewed(); ui.note = "Changes compares with the version opened again."; return render(); }
     if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.tabs = startTabs(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
     if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
