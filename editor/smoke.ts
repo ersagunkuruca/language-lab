@@ -40,6 +40,8 @@ async function visit(saved: string | null, only?: string) {
     if (await el.count()) await el.click({ timeout: 500 }).catch(() => {});
   };
   await p.goto(page);
+  // A slow machine may draw the picker after the page loads.
+  await p.locator('[data-set="program"]').first().waitFor({ timeout: 60000 }).catch(() => {});
   const programs = await p.locator('[data-set="program"]').allInnerTexts();
   if (programs.length < 2) errors.push(`only ${programs.length} programs in the picker`);
   for (const [i, program] of programs.entries()) {
@@ -122,9 +124,11 @@ async function visit(saved: string | null, only?: string) {
           // Some start folded (I43), so it counts: one more, then as many.
           if (await p.locator(".p-graph [data-fold]").count()) {
             const folded = () => p.locator(".p-graph .rg.folded").count(), had = await folded();
+            const frameId = await p.locator(".p-graph [data-fold]").first().getAttribute("data-fold");
             await p.locator(".p-graph [data-fold]").first().dispatchEvent("click");
             if ((await folded()) <= had) errors.push(`${where}: folding a frame drew no folded box`);
-            await p.locator(".p-graph .items [data-fold]").first().dispatchEvent("click", {}, { timeout: 500 }).catch(() => {});
+            // The box just folded, not another that started folded.
+            await p.locator(`.p-graph .items [data-fold="${frameId}"]`).first().dispatchEvent("click", {}, { timeout: 500 }).catch(() => {});
             if ((await folded()) > had) errors.push(`${where}: unfolding left a folded box`);
           }
           await stopped(p);
@@ -168,7 +172,15 @@ async function editKeepsPlaces() {
   await p.locator(".ctx-menu button, .menu button", { hasText: "Replace with" }).first().click();
   await p.locator("#f-query").fill("2 · 3 · 4 · 5"); await p.waitForTimeout(400);
   await p.keyboard.press("Enter");
-  const after = await places();
+  // The graph can be drawn a moment after the text (draw's `later`): on a
+  // slow machine read it once it holds the edit and has stopped changing.
+  let after = await places();
+  for (let i = 0; i < 20; i++) {
+    await p.waitForTimeout(250);
+    const now = await places();
+    if (Object.keys(now).length > Object.keys(before).length && JSON.stringify(now) === JSON.stringify(after)) break;
+    after = now;
+  }
   const moved = Object.keys(before).filter((k) => k in after && before[k] !== after[k]);
   if (Object.keys(after).length <= Object.keys(before).length) errors.push(`${where}: the edit added nothing to the graph`);
   if (moved.length) errors.push(`${where}: ${moved.length} of ${Object.keys(before).length} nodes moved: ${moved.map((k) => `${before[k]} → ${after[k]}`).join(", ")}`);
@@ -186,10 +198,18 @@ async function textKeepsPlace() {
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   const body = p.locator(".p-text .body");
   const top = () => body.evaluate((e) => e.scrollTop);
-  await body.evaluate((e) => { e.scrollTop = e.scrollHeight; });
+  // Its end, with its last part in view (below it are only brackets).
+  await body.evaluate((e) => { e.scrollTop = e.scrollHeight; [...e.querySelectorAll(".blocks-wrap [data-id]")].at(-1)?.scrollIntoView({ block: "end" }); });
   const end = await top();
   if (end < 50) errors.push(`${where}: main's text doesn't scroll at 700 px (${end})`);
-  await p.locator(".blocks-wrap .head").last().click();
+  // A part in view, clicked where it is: a click on one out of view would
+  // scroll to it first (the text is short at this height, about 90 px).
+  const seen = await p.locator(".blocks-wrap [data-id]").evaluateAll((es) => {
+    const box = document.querySelector(".p-text .body")!.getBoundingClientRect();
+    const r = es.map((e) => e.getBoundingClientRect()).reverse().find((q) => q.top >= box.top && q.bottom <= box.bottom && q.width);
+    return r ? { x: r.x + Math.min(r.width / 2, 20), y: r.y + r.height / 2 } : null;
+  });
+  if (seen) await p.mouse.click(seen.x, seen.y); else errors.push(`${where}: no part of main's text in view at its end`);
   if (Math.abs((await top()) - end) > 40) errors.push(`${where}: clicking a part scrolled the text from ${end} to ${await top()}`);
   await p.locator(".p-graph [data-move]").first().dispatchEvent("click");
   await p.locator(".p-graph [data-move]").first().dispatchEvent("pointerdown", { button: 0 });
@@ -214,7 +234,16 @@ async function swapDrop() {
   await p.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await p.mouse.down();
   await p.mouse.move(from.x + 40, from.y + 40, { steps: 3 });
   // While dragging, the inputs it fits are marked; pick a filled one.
-  const to = await p.locator(".p-graph circle.inp.can:not(.use)").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  // Checks that take long (main's do) aren't marked ahead, only the input
+  // under the pointer (I161): pass over the filled Html inputs until one fits.
+  let to = await p.locator(".p-graph circle.inp.can:not(.use)").evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  if (!to.length) {
+    const html = await p.locator(".p-graph circle.inp:not(.use):not(.empty)[data-slot]").evaluateAll((els) => els.filter((e) => e.querySelector("title")?.textContent === "Html").map((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2, slot: e.getAttribute("data-slot") }; }));
+    for (const c of html.slice(0, 12)) {
+      await p.mouse.move(c.x, c.y, { steps: 2 });
+      if (await p.locator(`.p-graph circle.inp.can[data-slot="${c.slot}"]`).count()) { to = [c]; break; }
+    }
+  }
   if (!to.length) { await p.mouse.up(); errors.push(`${where}: no filled input takes the words`); return p.close(); }
   await p.mouse.move(to[0].x, to[0].y, { steps: 8 }); await p.mouse.up();
   const status = await p.locator(".status").innerText();
