@@ -34,6 +34,9 @@ export interface Style {
   // How to show a name that wouldn't survive in a plain-text language.
   quote?: [string, string];
   comments?: boolean;
+  // A type's one effect-row variable shown as … instead of e (the editor,
+  // E261): `(List a, (a) -[…]-> b) -[…]-> List b`.
+  rowDots?: boolean;
 }
 
 export interface Presentation {

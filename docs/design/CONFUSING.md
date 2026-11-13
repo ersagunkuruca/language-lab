@@ -11,7 +11,7 @@ problem, and a proposal. [REVIEW-2026-10-26.md](../reports/reviews/REVIEW-2026-1
 the latest longer review, [BACKLOG.md](../../BACKLOG.md) the order of work,
 and [NOTES.md](../history/NOTES.md) the early design discussion behind them. Fixed items are at the end, so the list shows what moved.
 
-### 1. The graph still crosses itself
+### 1. ~~The graph still crosses itself~~ (decided 2026-11-13)
 
 **Today.** The node editor work (NODE-EDITOR.md) fixed most of what made the
 graph hard to read: values are chips that avoid nodes and each other, nodes
@@ -38,11 +38,16 @@ left shows in `rotate`:
 **Proposal.** Names drawn with a background so a wire can't cover them, and
 wires routed around nodes.
 
-**2026-11-13.** Still so. In `rotate` unfolded, wires cross the frame
-edges and each other, and the inner frame's `for some` node is drawn over
-the first `polar`'s `x` input. Row **E257**.
+**2026-11-13: decided, closed.** In `rotate` unfolded, the frames draw
+over their neighbours (the inner `for some` node lands inside the frame it
+takes, over the first `polar`'s `x` input) and wires cross the frame edges.
+That is the design: an unfolded frame opens where its box was, over its
+neighbours, and nothing else moves; *Tidy everything* spaces them out,
+and after it `rotate` reads cleanly (each `for some` right of its frame).
+Ersagun has decided this several times (2026-11-01, again 2026-11-13: "Draw
+over neighbors"). Row E257 closed with it.
 
-### 2. Cases that are values are drawn as functions
+### 2. ~~Cases that are values are drawn as functions~~ (fixed 2026-11-13)
 
 **Today.** The `then` and `else` of an `if`, and every case with no fields
 (`nil`), are drawn inside `() =>` frames, because internally they run only
@@ -54,10 +59,15 @@ wire.
 unless it's a real action passed to a handler like `first` or `all`.
 
 **2026-11-13.** Still so: in `queens`, `nil`, the `then` (`cons(column,
-board)`) and the `else` (`fail()`) each sit in a `() =>` frame. Row
-**E258**.
+board)`) and the `else` (`fail()`) each sit in a `() =>` frame.
 
-### 3. "Output" and "dot" are almost the same thing
+**Fixed 2026-11-13 (E258).** A case with nothing to name is drawn as its
+value wired straight into its port: `queens`'s `nil`, `cons(column, board)`
+and `fail()` go into the fold's and the if's ports with no frames, and
+`magnitude`'s `else` is one wire from `x`. A case with fields, and an action
+given to a handler like `first` or `all`, keep their frames.
+
+### 3. ~~"Output" and "dot" are almost the same thing~~ (fixed 2026-11-13)
 
 **Today.** A node's output is a filled circle on its right. Dragging it to a
 second input creates a dot on its wire. Inputs of functions are dots, the
@@ -67,9 +77,16 @@ solved ports of a `solve` node are dots, but a node's output isn't.
 wire; there's nothing to create when you use it a second time. That removes
 one shape and one gesture.
 
-**2026-11-13.** Still so. Row **E259**.
+**2026-11-13.** Still so.
 
-### 5. `for some` is two nodes for two wires
+**Fixed 2026-11-13 (E259).** A shared value's dot is the output of the node
+that gives it: the output itself turns into the dot, with the value's name
+above it, and dragging from it to another input is one more wire. A dot
+clicked onto a wire out of a node appears on that node's output, and nothing
+else moves (E109). A dot on a wire from a frame's parameter, and a let node
+(`name =`), are drawn as before.
+
+### 5. ~~`for some` is two nodes for two wires~~ (fixed 2026-11-13)
 
 **Today.** `rotate`'s two internal wires, `length` and `angle`, now share one
 frame, but each still has its own `for some` node, one feeding the other.
@@ -80,7 +97,12 @@ existential as a dot inside the frame with no wire coming in, labelled
 "some".
 
 **2026-11-13.** Still so: `rotate` is `for some((length) => for some((angle)
-=> …))`, two frames and two nodes. Row **E260**.
+=> …))`, two frames and two nodes.
+
+**Fixed 2026-11-13 (E260).** A `for some` whose function's body is another
+`for some` is drawn as one: `rotate` is one `for some` node and one
+`(length, angle) =>` frame, the unknowns side by side on its left edge. The
+tree is unchanged: this is how the graph draws it.
 
 ### 6. ~~Effects: nine of them, and the editor shows three~~ (done)
 
@@ -95,7 +117,7 @@ a declared effect and `Abort`, built in the editor by clicks only.
 What's left is the three ways to say "no answer" (`Choice`, `Abort`,
 `Optional`); [tutorial 3.9](../learn/TUTORIAL.md#39-effects) gives the rule of thumb.
 
-### 7. The type syntax has a variable most people won't understand
+### 7. ~~The type syntax has a variable most people won't understand~~ (fixed 2026-11-13)
 
 **Today.** Types like `(List a, (a) -[e]-> b) -[e]-> List b` show `e`, a row
 variable meaning "whatever effects the function you pass has". `root near`'s
@@ -107,7 +129,14 @@ Float64`.
 
 **2026-11-13.** Still so: the blocks show `newton : ((Float64) -[Choice,
 Diverge, e]-> Float64, …) -[Choice, Diverge, e]-> Float64` and Markov's
-`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`. Row **E261**.
+`shown : (() -[Choice, e]-> List Float64) -[e]-> Text`.
+
+**Fixed 2026-11-13 (E261).** The editor's blocks show a type's one row
+variable as `…`: `newton : ((Float64) -[Choice, Diverge, …]-> Float64, …)
+-[Choice, Diverge, …]-> Float64`, and hovering the type says "… is whatever
+f and slope do when called: the effects of the functions it's given". A type
+with two row variables keeps their names, since `…` would merge them. The
+CLI, the MCP and printed text keep `e`, where it is the exact type.
 
 ### 9. Small inconsistencies worth fixing
 

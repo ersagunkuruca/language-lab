@@ -1,5 +1,6 @@
 // The modules every program is loaded with, on top of the builtins and std.
-// Browser-safe (the editor uses it), so modules come in as JSON imports.
+// Browser-safe (the editor uses it), so modules come in as JSON imports,
+// their literals' digits read as values (saved.ts).
 
 import prelude0 from "../../library/prelude.json" with { type: "json" };
 import vectors0 from "../../library/vectors.json" with { type: "json" };
@@ -8,6 +9,7 @@ import trees0 from "../../library/trees.json" with { type: "json" };
 import steady0 from "../../library/steady.json" with { type: "json" };
 import cases0 from "../../library/cases.json" with { type: "json" };
 import numbers0 from "../../library/numbers.json" with { type: "json" };
+import { readSaved } from "../saved.ts";
 import { merge, shapeHooks, type Code, type Id } from "../model.ts";
 import { fillLater, usesGiveTheirPorts } from "./ports.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
@@ -19,20 +21,20 @@ import { NOTES } from "./notes.ts";
 import { declarePureHosts } from "./hosts.ts";
 import { LIBRARY_HOSTS } from "../../library/hosts.ts";
 
-export const PRELUDE = prelude0 as unknown as Module;
-export const VECTORS = vectors0 as unknown as Module;
-export const HTML_MODULE = html0 as unknown as Module;
+export const PRELUDE = readSaved(prelude0) as unknown as Module;
+export const VECTORS = readSaved(vectors0) as unknown as Module;
+export const HTML_MODULE = readSaved(html0) as unknown as Module;
 // The trees for Map and Set: nothing offered, only representation rows
 // (map-tree.ts).
-export const TREES = trees0 as unknown as Module;
+export const TREES = readSaved(trees0) as unknown as Module;
 // sin, cos, exp and log with the same bits everywhere (steady-source.ts).
-export const STEADY = steady0 as unknown as Module;
+export const STEADY = readSaved(steady0) as unknown as Module;
 // uppercase and lowercase over the Unicode case tables, for the targets
 // with no host to ask (cases-source.ts, L214e2).
-export const CASES = cases0 as unknown as Module;
+export const CASES = readSaved(cases0) as unknown as Module;
 // The number types written in the language (numbers-source.ts, L207):
 // Dual so far.
-export const NUMBERS = numbers0 as unknown as Module;
+export const NUMBERS = readSaved(numbers0) as unknown as Module;
 // The numbers module's types and their one case, by name (their ids are
 // their hashes).
 const numbersNode = (kind: string, name: string) => Object.keys(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === kind && NUMBERS.names[d] === name)!;

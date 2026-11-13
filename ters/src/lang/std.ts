@@ -6,6 +6,7 @@
 import { discharge } from "./ledger.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { isCall, toTodaysShape } from "../model.ts";
+import { readSaved } from "../saved.ts";
 import moved0 from "../../library/moved.json" with { type: "json" };
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
@@ -1848,14 +1849,15 @@ const todaysId = (id: string): string => {
 // A saved value (a program's code, names, comments) read as today's: each
 // renamed or moved id in it, as a key or a string, and its nodes moved
 // through every change of shape since the one it was saved at (`shape`,
-// model.ts SHAPE_STEPS; all of them when it has none).
+// model.ts SHAPE_STEPS; all of them when it has none), its number
+// literals' digits read as values (saved.ts, I237).
 export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.shape): T {
   const shape = typeof from === "number" ? from : 0;
   if (typeof x === "string") return todaysId(x) as T;
   if (Array.isArray(x)) return x.map((v) => onTodaysIds(v, shape)) as T;
   if (x && typeof x === "object") {
     const o = Object.fromEntries(Object.entries(x).map(([k, v]) => [todaysId(k), onTodaysIds(v, shape)]));
-    if (o.nodes && typeof o.nodes === "object" && !Array.isArray(o.nodes)) toTodaysShape(o.nodes as Record<Id, unknown>, shape);
+    if (o.nodes && typeof o.nodes === "object" && !Array.isArray(o.nodes)) { readSaved({ nodes: o.nodes }); toTodaysShape(o.nodes as Record<Id, unknown>, shape); }
     return o as T;
   }
   return x;

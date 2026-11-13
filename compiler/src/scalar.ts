@@ -610,7 +610,7 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `hosted`: the program's own effects its host answers where nothing
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -623,7 +623,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes); } finally { stopSite = outer; }
 }
@@ -640,7 +640,7 @@ export function vouched(code: Code, info: Info, names: Names): Info {
   return again;
 }
 
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean }, severalTypes: Set<string>): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -1260,6 +1260,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       case "call": {
         if (isUse(n)) {
           if (!opts.host) return writtenSolve(n, env, f, tail);
+          // JavaScript too (I238): where core-js.ts has no printed plan for
+          // it, written out as WebAssembly and C have it, where it can be,
+          // so the module ships no nodes and no solver for it; else the
+          // evaluator's solve.
+          if (!opts.printed?.(code, n.id)) try { return writtenSolve(n, env, f, tail); } catch (e) { if (!(e instanceof Refused)) throw e; }
           return solveUse(n, env, f, tail);
         }
         // g(f(a), f(b)) in f's own body (C61 e): the two calls of f given to
@@ -1752,7 +1757,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // for some(x => …), for JavaScript from the core IR (C137c16): the
         // evaluator's relational interpreter (relate.ts satisfiable) on the
         // closure, which carries its lambda (closure.src).
-        if (opts.host && target === S.exists && n.args.length === 1) return { k: "rt", fn: "exists", args: [expr(n.args[0], env, f, false)], host: { t: "i32", partial: false } };
+        if (opts.host && target === S.exists && n.args.length === 1) {
+          try { return existsSolve(n, env, f); } catch (e) { if (!(e instanceof Refused)) throw e; }
+          return { k: "rt", fn: "exists", args: [expr(n.args[0], env, f, false)], host: { t: "i32", partial: false } };
+        }
         if (!opts.host && opts.data && target === S.exists && n.args.length === 1) return existsSolve(n, env, f);
         // derivative(f) and gradient(f) of a function value, for JavaScript
         // from the core IR (C137c20): the evaluator's, which looks inside

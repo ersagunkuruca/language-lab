@@ -147,7 +147,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     }
   };
   const leave = (ids: Id[]) => ids.forEach(() => inScope.pop());
-  const typeAt = (id: Id) => { const t = info?.typeOf.get(id); return t ? showIn(t, names, info!.subst) : null; };
+  const typeAt = (id: Id) => { const t = info?.typeOf.get(id); return t ? showIn(t, names, info!.subst, pres.style.rowDots) : null; };
   // A name, with its type beside it in the pane.
   const bind = (id: Id): Part => { const t = typeAt(id); return part("bnd", [nameOf(id), ...(t ? [{ cls: "ty", pane: true as const, kids: [`: ${t}`] }] : [])], id); };
   const con = (id: Id) => part("con", [base(id)]);
@@ -611,7 +611,11 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   const t = shape && effs && shape.params.every((p) => typeAt(p))
     ? `(${shape.params.filter((p) => !defResults!.includes(p)).map(bare).join(", ")}) ${effs.length ? `-[${effs.map(nameOf).join(", ")}]->` : "->"} ${defResults!.map((r) => `${nameOf(r)}: ${bare(r)}`).join(", ")}${where}`
     : typeAt(defId);
-  if (t) out.push(ln(self(), part("ty big", [` : ${t}`])));
+  // A … in it says, on hover, whose effects it stands for (E261): the
+  // functions the definition is given.
+  const fnsGiven = t?.includes("…") && body?.kind === "lambda" ? body.params.filter((p) => { const n = node(p); const ty = info?.typeOf.get(p); return n && ty && info!.subst.resolve(ty).t === "fn"; }).map(nameOf) : [];
+  const dotsSay = fnsGiven.length ? `… is whatever ${fnsGiven.length > 1 ? `${fnsGiven.slice(0, -1).join(", ")} and ${fnsGiven.at(-1)} do` : `${fnsGiven[0]} does`} when called: the effects of the function${fnsGiven.length > 1 ? "s" : ""} it's given` : undefined;
+  if (t) out.push(ln(self(), part("ty big", [` : ${t}`], undefined, dotsSay)));
   if (!body) return [...out, ln(self(), pn(" = "), kw("extern"))];
   if (body.kind === "lambda") {
     enter(body.params);
