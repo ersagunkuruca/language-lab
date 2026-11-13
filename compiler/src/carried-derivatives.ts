@@ -30,6 +30,8 @@ export interface Carried {
   // A lambda of the program → the lambda of its derivative, and the
   // inputs of its definition standing for what the lambda captures.
   derivativeOf: Map<Id, { lambda: Id; stand: Map<Id, Id> }>;
+  // The run-time `derivative` calls.
+  calls: Id[];
 }
 
 // A function type with its effects left out: a lambda that can't fail is
@@ -163,5 +165,5 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
     if ([...c.stand.values()].some((b) => open(checked.subst.zonk(checked.typeOf.get(b) ?? { t: "var", v: -1 })))) derivativeOf.delete(id);
   }
   if (!derivativeOf.size) return null;
-  return { code: out, names: all, info: checked, derivativeOf };
+  return { code: out, names: all, info: checked, derivativeOf, calls };
 }

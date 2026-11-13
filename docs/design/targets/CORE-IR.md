@@ -189,6 +189,12 @@ WebAssembly and C refused). Instead, the function carries its derivative:
   constant there, its slope 0).
 - **The call.** `derivative(f)` is `{ k: "rt", fn: "derived", args: [f] }`:
   f's `d`, given f. JavaScript keeps `d` as a property of the function.
+  WebAssembly gives a derived type's closure struct a second field after
+  the code, a typed reference to the maker (`(param closure) (result
+  derivative's closure)`, null on a closure with none), so its captures
+  start one field later; `derivative(f)` is `call_ref` of that field on f.
+  C does the same with a `void (*d)(void)` after `code`, read through
+  `lab_dclosure`; the maker owns its input as a closure's code does.
 - **Only the first order.** Each `derivative` call's result must be only
   applied: called where it is made, or handed to a parameter that is only
   ever applied (newton's slope, handed on to newton again). Otherwise, or
@@ -201,8 +207,9 @@ WebAssembly and C refused). Instead, the function carries its derivative:
   captures off the closure into those inputs. Where one's type is left
   open (generic), it is left without.
 - **Not yet.** A derivative that asks for another (of a function the
-  lambda captured), `gradient`, and WebAssembly and C (a `d` field on a
-  derived type's closure): later steps of I245.
+  lambda captured), and `gradient`: no example needs them, so on
+  JavaScript the evaluator's derive stays for them and WebAssembly and C
+  refuse them; a new row when an example does.
 
 So no target looks inside a function at run time, and the evaluator's
 `derivative` stays the reference the tests compare with.

@@ -554,15 +554,17 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; derived?: Map<string, FType> }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
 // starts again with that type's closures taking the rest (C137c22). Only
 // types that need it are transformed, as in Koka's and Effekt's selective
 // CPS; the rest is Mercury's success continuation, as for definitions.
-class Uncarried extends Error {}
 class NeedsSeveral extends Error { key: string; constructor(key: string) { super(`closures of ${key} give several answers`); this.key = key; } }
+// A closure `derivative` may be asked of has no derivative carried
+// (I245): lowering starts again with the evaluator's derive.
+class Uncarried extends Error {}
 // A solve's answers, a List of opaque values (each one answer's binds),
 // for JavaScript from the core IR (C137c11).
 const ANSWERS: DType = { key: "answers", name: "List", def: LIST, cases: [{ variant: NIL, name: "nil", fields: [] }, { variant: CONS, name: "cons", fields: [{ name: "item", t: "host" }] }] };
@@ -753,7 +755,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   }
   // A function chosen at run time that `derivative` is asked of carries
   // its derivative, made ahead here (carried-derivatives.ts, I245).
-  const carried = opts.host && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
+  const carried = !opts.shader && carry.derive ? carriedDerivatives(code, info, names, roots) : null;
   if (carried) ({ code, names, info } = carried);
   const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives
@@ -761,6 +763,25 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // derivatives.ts made sure).
   const derivedKeys = new Set<string>(), derivedCode = new Set<number>();
   const plainKey = (t: FType) => t.key.replace(/[!*]+$/, "");
+  // The type of a derivative of a closure of t: what the `derivative`
+  // calls asked of t's closures give, one type for all of them, so a
+  // closure's maker has one type whatever its lambda (WebAssembly's and
+  // C's call through it).
+  const derivedAs = new Map<string, FType>();
+  function derivativeType(t: FType): FType {
+    const k = plainKey(t);
+    if (!derivedAs.has(k)) {
+      const ts = new Set<string>();
+      let out: FType | undefined;
+      for (const c of carried?.calls ?? []) {
+        const at = stype(zonk((code.nodes[c] as Call).args[0])), r = stype(zonk(c));
+        if (at && isFn(at) && plainKey(at) === k && r && isFn(r)) { out ??= r; ts.add(r.key); }
+      }
+      if (!out || ts.size > 1) throw new Uncarried();
+      derivedAs.set(k, out);
+    }
+    return derivedAs.get(k)!;
+  }
   // Each step above changes no answer, so what ended as given still ends.
   info = endsAsBefore(asGiven, info);
   // A generic definition (the vectors module's plus, for any record of
@@ -1785,15 +1806,19 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // from the core IR (C137c20): the evaluator's, which looks inside
         // the closure (it carries its lambda, closure.src); what it gives
         // is the evaluator's function, called for its one answer.
+        // One the function carries (I245), on every target: its maker,
+        // given the closure (in a local, as a printer reads it twice).
+        if (carried && target === S.derivative && n.args.length === 1) {
+          const ft = stype(zonk(n.args[0]));
+          if (ft && isFn(ft)) {
+            derivedKeys.add(plainKey(ft));
+            const i = f.locals.push(ft) - 1;
+            return { k: "let", i, value: expr(n.args[0], env, f, false), body: { k: "rt", fn: "derived", args: [{ k: "local", i }], host: { t: derivativeType(ft), partial: false } } };
+          }
+        }
         if (opts.host && (target === S.derivative || target === S.gradient) && n.args.length === 1) {
           const t = stype(zonk(id));
           if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
-          // One the function carries (I245): its maker, called.
-          const ft = stype(zonk(n.args[0]));
-          if (carried && target === S.derivative && ft && isFn(ft)) {
-            derivedKeys.add(plainKey(ft));
-            return { k: "rt", fn: "derived", args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
-          }
           return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
         }
         const why = TARGETS[target]?.scalar;
@@ -3748,8 +3773,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // derivative's lambda over the same captures. Its code is made as any
   // lambda's, and carries no derivative of its own.
   function maker(of: { lambda: Id; stand: Map<Id, Id> }, t: FType, shape: number, free: Id[], caps: LType[], name: string): number | undefined {
-    const dl = of.lambda, dt = stype(zonk(dl));
-    if (!dt || !isFn(dt)) return undefined;
+    const dl = of.lambda, dt = derivativeType(t);
     const m: SFunc = { def: dl, name: `${name}.derivative`, params: [t], result: dt, locals: [t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
     const mi = funcs.push(m) - 1;
     const env = new Map<Id, number>();
@@ -5574,9 +5598,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const uncarried = (e: SExpr): boolean => (e.k === "closure" && e.d === undefined && !derivedCode.has(e.fn) && derivedKeys.has(plainKey(e.t))) || kids(e).some(uncarried);
     if (funcs.some((g) => uncarried(g.body))) throw new Uncarried();
   }
+  // The function types whose closures carry a derivative's maker, and
+  // the type it makes (I245): WebAssembly's and C's closures of one hold
+  // it after their code.
+  const derived = new Map([...fns.values()].flatMap((t): [string, FType][] => (derivedKeys.has(plainKey(t)) ? [[t.key, derivativeType(t)]] : [])));
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(derived.size ? { derived } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a

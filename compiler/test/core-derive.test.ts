@@ -12,6 +12,14 @@ import { makeRunner } from "../../ters/src/lang/run.ts";
 import { S } from "../../ters/src/lang/std.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { emitCoreJs, loadCoreJs, loadPrinted, lowerCore, printed } from "../src/core-js.ts";
+import { lowerScalar } from "../src/scalar.ts";
+import { emitWasm, instantiate } from "../src/wasm.ts";
+import { build, skip } from "./c-harness.ts";
+import { spawnSync } from "node:child_process";
+import { closeSync, mkdtempSync, openSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { WASI } from "node:wasi";
 
 test("derivative and gradient of a function value, and a second derivative, as the evaluator gives them", () => {
   const k = new Lang();
@@ -104,4 +112,70 @@ test("a derivative that asks for another: the evaluator's derivative still (I245
   assert.match(emitCoreJs(core).js, /R\.rt\("derive:/);
   const f = loadCoreJs(core)[core.funcs.findIndex((g) => g.def === at && !g.inner)];
   for (const x of [2, 0.5, -1]) { let want; for (const v of r.call(r.value(at), x)) { want = v; break; } assert.equal(f(x), want, `at ${x}`); }
+});
+
+// The same on WebAssembly and C (I245 step 3): a carried derivative's
+// closure holds its maker after its code, and `derivative(f)` calls it.
+function newtonAndScaled() {
+  const k = new Lang();
+  const cube = k.def("cube"), wave = k.def("wave"), pick = k.def("pick"), newton = k.def("newton"), root = k.def("root"), at = k.def("at");
+  const scaled = k.def("scaled"), steep = k.def("steep");
+  k.define(cube, k.fn(["x"], (x) => k.call(B.sub, k.call(B.mul, x, k.call(B.mul, x, x)), k.lit(2))));
+  k.define(wave, k.fn(["x"], (x) => k.call(B.sub, k.call(B.mul, x, x), k.lit(3))));
+  k.define(pick, k.fn(["n"], (n) => k.if(k.call(S.less, n, k.lit(1)), cube, wave)));
+  k.define(newton, k.fn(["f", "slope", "x", "n"], (f, slope, x, n) => k.if(k.call(S.less, n, k.lit(1)), x,
+    k.call(newton, f, slope, k.call(B.sub, x, k.call(B.div, k.call(f, x), k.call(slope, x))), k.call(B.sub, n, k.lit(1))))));
+  k.define(root, k.fn(["n"], (n) => k.let("f", k.call(pick, n), (f) => k.call(newton, f, k.call(S.derivative, f), k.lit(1), k.lit(30)))));
+  k.define(at, k.fn(["n", "x"], (n, x) => k.call(B.add, k.call(root, n), k.call(k.call(S.derivative, k.call(pick, n)), x))));
+  k.define(scaled, k.fn(["a"], (a) => k.fn(["y"], (y) => k.call(B.mul, a, k.call(B.mul, y, k.call(B.sin, y))))));
+  k.define(steep, k.fn(["a", "x"], (a, x) => k.call(k.call(S.derivative, k.call(scaled, a)), x)));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const ev = (d: string, xs: number[]) => { for (const v of r.call(r.value(d), ...xs)) return v as number; };
+  return { code, names, info, at, steep, ev };
+}
+const inputs: [number, number][] = [[0, 2], [1, 2], [0, -1.5], [1, 0.5], [2, 3], [-1, 0.5], [0.25, -2]];
+
+test("a carried derivative on WebAssembly: the evaluator's numbers (I245)", async () => {
+  const p = newtonAndScaled();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.at, p.steep], { data: true });
+  assert.ok(lowered.derived?.size, "closures carry a maker");
+  const w = await instantiate(emitWasm(lowered));
+  for (const d of [p.at, p.steep]) {
+    const f = lowered.funcs.find((g) => g.def === d && !g.inner)!;
+    // A partial function gives its value and a status (0: an answer).
+    const got = (xs: number[]) => { const r = w[f.name](...xs) as unknown; return f.partial ? (r as [number, number])[1] === 0 ? (r as [number, number])[0] : undefined : r; };
+    for (const xs of inputs) assert.equal(got(xs), p.ev(d, xs), `${d}(${xs})`);
+  }
+});
+
+test("a carried derivative in C: the evaluator's numbers, every cell freed (I245)", { skip }, () => {
+  const p = newtonAndScaled();
+  const lowered = lowerScalar(p.code, p.info, p.names, [p.at, p.steep], { data: true });
+  const run = build(lowered);
+  const calls = [p.at, p.steep].flatMap((d) => inputs.map((xs): [number, number[]] => [lowered.funcs.findIndex((g) => g.def === d && !g.inner), xs]));
+  const got = run(calls);
+  calls.forEach(([i, xs], j) => assert.equal(got[j].value, p.ev(lowered.funcs[i].def, xs), `${lowered.funcs[i].name}(${xs})`));
+});
+
+// calculus as a program (I238, I245): ters wasi and ters native print what
+// ters run prints.
+test("calculus through ters wasi and ters native prints what ters run prints (I245)", async () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), calculus = join(import.meta.dirname, "../../ters/examples/calculus");
+  const dir = mkdtempSync(join(tmpdir(), "calculus-"));
+  const want = spawnSync(process.execPath, [lab, "run", calculus], { encoding: "utf8" });
+  assert.equal(want.status, 0, want.stderr);
+  assert.match(want.stdout, /^cubic: f\(2\) = 5, f′\(2\) = 11/);
+  const made = spawnSync(process.execPath, [lab, "wasi", calculus, "-o", join(dir, "p.wasm")], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr);
+  const of = join(dir, "out.txt"), fd = openSync(of, "w");
+  const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
+  w.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), w.getImportObject() as WebAssembly.Imports));
+  closeSync(fd);
+  assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
+  if (skip) return;
+  const built = spawnSync(process.execPath, [lab, "native", calculus, "-o", join(dir, "p")], { encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  assert.equal(spawnSync(join(dir, "p"), [], { encoding: "utf8" }).stdout, want.stdout, "ters native");
 });

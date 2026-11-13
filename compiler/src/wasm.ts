@@ -278,7 +278,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     rt(name).uses.forEach(need);
   };
   const rtCalls = (e: SExpr): void => {
-    if (e.k === "rt") { if (STACK.test(e.fn)) stackArity.set(e.fn, e.args.length); need(e.fn); if (stepped(e)) need("i64.box"); }
+    // (derivative(f) carried by f is printed in place, I245.)
+    if (e.k === "rt" && e.fn !== "derived") { if (STACK.test(e.fn)) stackArity.set(e.fn, e.args.length); need(e.fn); if (stepped(e)) need("i64.box"); }
     if (e.k === "op" && e.op === "mod") need("number.mod");
     if (e.k === "op" && INT32_RT.includes(e.op)) need(`int32.${e.op}`);
     kids(e).forEach(rtCalls);
@@ -363,7 +364,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // `bytes`: Text's array.
   // `items`: an Array's items (C66), a mutable array of the item type;
   // a field with `ref` holds a (nullable) reference to that type.
-  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number }[]; sup?: number; final: boolean; func?: FType; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
+  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   // A Text (I222): its bytes' array, where in it the text starts, its
   // size, its characters (-1 till counted), and the array's fill when it
@@ -393,16 +394,23 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // A function type: its closure's struct, holding the code, then the
   // code's type, taking the closure and the inputs; each closure's own
   // struct (a shape) adds what it captured.
+  // A function type whose closures carry a derivative (I245) holds, after
+  // the code, its maker (`d`): given the closure, the derivative's
+  // closure; null on a closure with none.
+  const derived = lowered.derived ?? new Map<string, FType>();
   const cloIndex = new Map<string, number>();
   for (const t of lowered.fns) {
-    const c = structs.length;
+    const c = structs.length, dt = derived.get(t.key);
     cloIndex.set(t.key, c);
-    structs.push({ name: `fn${c}`, fields: [{ name: "code", t: "i32", code: c + 1 }], final: false });
+    structs.push({ name: `fn${c}`, fields: [{ name: "code", t: "i32", code: c + 1 }, ...(dt ? [{ name: "d", t: "i32" as const, ref: c + 2 }] : [])], final: false });
     structs.push({ name: `fn${c}.code`, fields: [], final: true, func: t });
+    if (dt) structs.push({ name: `fn${c}.maker`, fields: [], final: true, maker: { self: t, result: dt } });
   }
+  // Where a closure's captures start: after its code, and its maker.
+  const capsAt = (t: FType) => (derived.has(t.key) ? 2 : 1);
   const shapeIndex = lowered.shapes.map((sh, i) => {
     const c = cloIndex.get(sh.t.key)!;
-    structs.push({ name: `fn${c}.closure${i}`, fields: [{ name: "code", t: "i32", code: c + 1 }, ...sh.caps.map((t, j) => ({ name: `c${j}`, t }))], sup: c, final: true });
+    structs.push({ name: `fn${c}.closure${i}`, fields: [{ name: "code", t: "i32", code: c + 1 }, ...(derived.has(sh.t.key) ? [{ name: "d", t: "i32" as const, ref: c + 2 }] : []), ...sh.caps.map((t, j) => ({ name: `c${j}`, t }))], sup: c, final: true });
     return structs.length - 1;
   });
   // An Array (C66): its items, its buffer (the items, and the lowest and
@@ -502,9 +510,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const wasiSig = wasiImports.map((n) => sig(WASI_IMPORTS[n.slice(5)].params, WASI_IMPORTS[n.slice(5)].result));
   // A closure's code has its function type's code type, so call_ref takes it.
   const codeOf = new Map<number, FType>();
-  const closures = (e: SExpr): void => { if (e.k === "closure") codeOf.set(e.fn, e.t); kids(e).forEach(closures); };
+  // And a derivative's maker its type's maker type (I245).
+  const makerOf = new Map<number, FType>();
+  const closures = (e: SExpr): void => { if (e.k === "closure") { codeOf.set(e.fn, e.t); if (e.d !== undefined) makerOf.set(e.d, e.t); } kids(e).forEach(closures); };
   funcs.forEach((f) => closures(f.body));
-  const funcSig = funcs.map((f, i) => (codeOf.has(i) ? cloIndex.get(codeOf.get(i)!.key)! + 1 : sig(f.params, f.result, f.partial)));
+  const funcSig = funcs.map((f, i) => (codeOf.has(i) ? cloIndex.get(codeOf.get(i)!.key)! + 1 : makerOf.has(i) ? cloIndex.get(makerOf.get(i)!.key)! + 2 : sig(f.params, f.result, f.partial)));
+  const declared = [...codeOf.keys(), ...makerOf.keys()];
   // For the host, which can't look inside a struct: a reader for each
   // field of each record, exported as `Colour.red`; for each data type
   // `List.case`, the number of a value's case, and for each case a maker
@@ -606,6 +617,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (x.refs) return [0x5e, 0x6d, 0x01];
     if (x.items) return [0x5e, ...typeOf(x.items), 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
+    if (x.maker) return [0x60, ...vec([typeOf(x.maker.self)]), ...vec([typeOf(x.maker.result)])];
     const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
@@ -657,7 +669,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const fails = new WeakMap<SExpr, boolean>();
   const failing = (e: SExpr): boolean => {
     let r = fails.get(e);
-    if (r === undefined) fails.set(e, r = e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && !!runtime(e.fn).partial) || kids(e).some(failing));
+    if (r === undefined) fails.set(e, r = e.k === "fail" || (e.k === "world" && e.aborts) || e.k === "attempt" || e.k === "abort" || e.k === "handle" || (e.k === "call" && !!funcs[e.fn].partial) || (e.k === "apply" && !!e.t.partial) || (e.k === "rt" && e.fn !== "derived" && !!runtime(e.fn).partial) || kids(e).some(failing));
     return r;
   };
   const statusOf = (f: SFunc) => (f.partial || failing(f.body) ? f.locals.length : -1);
@@ -721,6 +733,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "text": { const b = textBytes(e.v); return [...b.flatMap((x) => [0x41, ...s(x)]), 0xfb, 0x08, ...u(bytesIndex), ...u(b.length), 0x41, 0x00, 0x41, ...s(b.length), 0x41, ...s([...e.v].length), 0xd0, ...s(textIndex), 0xfb, 0x00, ...u(textIndex)]; }
       case "rt": {
         if (e.fn === "i64.lit" && e.args[0].k === "int") return [0x42, ...sBig(e.args[0].v)];
+        // derivative(f) carried by f (I245): f's maker, given f.
+        if (e.fn === "derived" && e.args[0].k === "local") {
+          const x = e.args[0].i, c = cloIndex.get((f.locals[x] as FType).key)!;
+          return [0x20, ...u(x), 0x20, ...u(x), 0xfb, 0x02, ...u(c), 0x01, 0x14, ...u(c + 2)];
+        }
         // A loop's i64 compares, masks and shifts as instructions, no call.
         const op = I64_OPS[e.fn];
         if (op !== undefined && e.args.length === 2) return [...e.args.flatMap(code1), op];
@@ -777,9 +794,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       // ref.cast to the case, then its field (after the case's number).
       case "field": { const k = caseIndex(e.t, e.c); return [...code1(e.rec), 0xfb, 0x16, ...s(k), 0xfb, 0x02, ...u(k), ...u(e.i + 1)]; }
       case "tag": return [...code1(e.rec), 0xfb, 0x02, ...u(baseIndex.get(e.t.key)!), 0x00];
-      case "closure": return [0xd2, ...u(fnIndex(e.fn)), ...e.caps.flatMap(code1), 0xfb, 0x00, ...u(shapeIndex[e.shape])];
+      case "closure": {
+        const maker = !derived.has(e.t.key) ? [] : e.d !== undefined ? [0xd2, ...u(fnIndex(e.d))] : [0xd0, ...s(cloIndex.get(e.t.key)! + 2)];
+        return [0xd2, ...u(fnIndex(e.fn)), ...maker, ...e.caps.flatMap(code1), 0xfb, 0x00, ...u(shapeIndex[e.shape])];
+      }
       // What a closure captured: the closure is the code's first input.
-      case "cap": return [0x20, 0x00, 0xfb, 0x16, ...s(shapeIndex[e.shape]), 0xfb, 0x02, ...u(shapeIndex[e.shape]), ...u(e.i + 1)];
+      case "cap": return [0x20, 0x00, 0xfb, 0x16, ...s(shapeIndex[e.shape]), 0xfb, 0x02, ...u(shapeIndex[e.shape]), ...u(e.i + capsAt(e.t))];
       case "apply": {
         const c = cloIndex.get(e.t.key)!;
         const tail = e.tail && !!e.t.partial === !!f.partial;
@@ -895,7 +915,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(wasi ? section(5, vec([[0x00, math ? 0x02 : 0x01]])) : []),
     ...(fuel || aborts || ryu || math || escapes || flags || rand || kept.size || stack ? section(6, globalSec) : []), ...section(7, exportSec),
     // ref.func needs the functions declared: one declarative segment.
-    ...(codeOf.size ? section(9, vec([[0x03, 0x00, ...vec([...codeOf.keys()].map((i) => u(fnIndex(i))))]])) : []),
+    ...(declared.length ? section(9, vec([[0x03, 0x00, ...vec(declared.map((i) => u(fnIndex(i))))]])) : []),
     ...section(10, codeSec),
     // fdlibm's tables, in the math functions' page.
     ...(math ? section(11, vec([[0x00, 0x41, ...s(MATH_AT + MATH_DATA_AT), 0x0b, ...vec(MATH_DATA.map((b) => [b]))]])) : []),
@@ -922,6 +942,10 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "text": { const b = textBytes(e.v); return `${d}(struct.new $text (array.new_fixed $bytes ${b.length}${b.map((x) => ` (i32.const ${x})`).join("")}) (i32.const 0) (i32.const ${b.length}) (i32.const ${[...e.v].length}) (ref.null $text)) ;; ${JSON.stringify(e.v)}`; }
       case "rt": {
         if (e.fn === "i64.lit" && e.args[0].k === "int") return `${d}i64.const ${e.args[0].v}`;
+        if (e.fn === "derived" && e.args[0].k === "local") {
+          const x = local(f, e.args[0].i), c = cloIndex.get((f.locals[e.args[0].i] as FType).key)!;
+          return [`${d}local.get ${x}`, `${d}local.get ${x}`, `${d}struct.get ${sname(c)} 1`, `${d}call_ref ${sname(c + 2)}`].join("\n");
+        }
         const fast = intFast(e, (i) => [`local.get ${local(f, i)}`, []], [`call $${e.fn}`, []]);
         if (fast) return fast.map((x) => `${d}${x[0]}`).join("\n");
       }
@@ -947,8 +971,11 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       }
       case "field": { const k = sname(caseIndex(e.t, e.c)); return `${w(e.rec)}\n${d}ref.cast (ref ${k})\n${d}struct.get ${k} ${e.i + 1}`; }
       case "tag": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} 0`;
-      case "closure": return [`${d}ref.func ${id(funcs[e.fn])}`, ...e.caps.map(w), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");
-      case "cap": return [`${d}local.get ${local(f, 0)}`, `${d}ref.cast (ref ${sname(shapeIndex[e.shape])})`, `${d}struct.get ${sname(shapeIndex[e.shape])} ${e.i + 1}`].join("\n");
+      case "closure": {
+        const maker = !derived.has(e.t.key) ? [] : [e.d !== undefined ? `${d}ref.func ${id(funcs[e.d])}` : `${d}ref.null ${sname(cloIndex.get(e.t.key)! + 2)}`];
+        return [`${d}ref.func ${id(funcs[e.fn])}`, ...maker, ...e.caps.map(w), `${d}struct.new ${sname(shapeIndex[e.shape])}`].join("\n");
+      }
+      case "cap": return [`${d}local.get ${local(f, 0)}`, `${d}ref.cast (ref ${sname(shapeIndex[e.shape])})`, `${d}struct.get ${sname(shapeIndex[e.shape])} ${e.i + capsAt(e.t)}`].join("\n");
       case "apply": {
         const c = cloIndex.get(e.t.key)!, t = local(f, e.tmp), tail = e.tail && !!e.t.partial === !!f.partial;
         return [w(e.fn), `${d}local.set ${t}`, `${d}local.get ${t}`, ...e.args.map(w), `${d}local.get ${t}`, `${d}struct.get ${sname(c)} 0`, `${d}${tail ? "return_call_ref" : "call_ref"} ${sname(c + 1)}`, ...(e.t.partial && !tail ? check(ld) : [])].join("\n");
@@ -1028,6 +1055,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (x.refs) return "    (type $hstack (array (mut eqref)))";
       if (x.items) return `    (type $${x.name} (array (mut ${ty(x.items)})))`;
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
+      if (x.maker) return `    (type $${x.name} (func (param ${ty(x.maker.self)}) (result ${ty(x.maker.result)})))`;
       const fty = (y: (typeof x.fields)[number]) => (y.ref !== undefined ? `(ref null ${sname(y.ref)})` : ty(y.t));
       const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${fty(y)})` : fty(y)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
@@ -1047,7 +1075,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...(rand ? [0, 1, 2, 3].map((k) => `  (global $r${k} (mut i32) (i32.const 0))`) : []),
     ...[...kept.keys()].map((i) => `  (global $kept${i} (mut ${ty(funcs[i].result as MType)}) (${zeroText(funcs[i].result as MType)}))`),
     ...(stack ? [`  (global $hs (ref $hstack) (array.new_default $hstack (i32.const ${FRAME * FRAMES})))`, "  (global $hn (mut i32) (i32.const 0))"] : []),
-    ...(codeOf.size ? [`  (elem declare func${[...codeOf.keys()].map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
+    ...(declared.length ? [`  (elem declare func${declared.map((i) => ` ${id(funcs[i])}`).join("")})`] : []),
     ...funcs.map((f, i) => {
       const ps = f.params.map((t, i) => ` (param ${local(f, i)} ${ty(t)})`).join("");
       const st = statusOf(f);
@@ -1057,7 +1085,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       const body = f.partial
         ? `    (block (result i32) ;; no answer\n${wat(f.body, f, "      ", 1, 0)}\n      i32.const 0\n      return)\n    local.set ${local(f, st)}\n    ${zeroText(f.result)}\n    local.get ${local(f, st)}`
         : wat(f.body, f, "    ", 0, -1);
-      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : ""}${ps} (result ${ty(f.result)}${f.partial ? " i32" : ""})${ls}\n${spends}${body})`;
+      return `  ;; ${f.name}\n  (func ${id(f)}${f.budgeted || f.inner ? "" : ` (export "${exportName(f)}")`}${codeOf.has(i) ? ` (type ${sname(cloIndex.get(codeOf.get(i)!.key)! + 1)})` : makerOf.has(i) ? ` (type ${sname(cloIndex.get(makerOf.get(i)!.key)! + 2)})` : ""}${ps} (result ${ty(f.result)}${f.partial ? " i32" : ""})${ls}\n${spends}${body})`;
     }),
     ...helpers.map((x) => `  (func (export "${x.name}")${x.params.map((t) => ` (param ${ty(t)})`).join("")} (result ${ty(x.result)})\n${x.wat.map((l) => `    ${l}`).join("\n")})`),
     ...rtCode.map((c, k) => c.wat.replace(`(func $${rts[k].name}`, `(func $${rts[k].name}${RT_EXPORTS[rts[k].name] ? ` (export "${RT_EXPORTS[rts[k].name]}")` : ""}`)),
