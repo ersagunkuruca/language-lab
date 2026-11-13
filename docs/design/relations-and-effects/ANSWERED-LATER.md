@@ -1,5 +1,11 @@
 # Operations answered later, and concurrency on them
 
+**Status (2026-11-13).** Steps 1 to 4 are built: the evaluator (L54a),
+compiled code and pages going on from a wait (C40, L59), effects that take
+a type (L56), the audio runtime (L60), `together`, `race` and `within`
+(L71a to L71c), and a simulated clock for tests (L63). Step 5 (WebAssembly
+and C) waits for a program there that needs it.
+
 BACKLOG L54, written together with L71 as both rows ask. **Status
 (2026-10-30):** step 1 (L54a) is built: the evaluator and the checker run
 it (`test/later.test.ts`). Step 2 (C40) is mostly built (2026-11-01: a search defined on its own that waits compiles too), step 3 (L56,

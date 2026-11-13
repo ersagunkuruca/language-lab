@@ -4,6 +4,12 @@ Ersagun, 2026-10-30: "aren't we going to have the multiple representations
 the part of the language at all? Are they gonna stay only as a part of the
 compiler?"
 
+**Status (2026-11-13).** Built: steps 1 to 3, showing the choice in the
+editor (E159), the laws checked by `ters test` (L108d), and lists as
+arrays as one more representation, `array of List`, chosen from use on
+every target (C30). A type may have two representations in one program,
+one per group of values (C93, REPRESENTATION-PER-VALUE-2026-11-05.md).
+
 **Status (2026-10-30).** Steps 1 to 3 are built (L108a to L108c, #679 to
 #682): representations are definitions in the language, the library's Map
 and Set are written that way, and the compiler chooses and `ters check`

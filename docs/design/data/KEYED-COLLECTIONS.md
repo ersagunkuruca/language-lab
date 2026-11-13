@@ -1,5 +1,12 @@
 # Keyed collections: what C58 should be in Ters (C58)
 
+**Status (2026-11-13).** Built, then closed until a program needs more
+(C58, 2026-11-12): std's `Pool` gives out keys with a free list and
+generations (C58c, examples/swarm-pool), and the default `Map` of Int keys
+was brought toward the data-oriented ideal on every target (swarm: compiled
+JavaScript 2.8 s to about 0.43 s, native 1.35 s to 146 ms). Each next step
+measured under 10%.
+
 Design step, 2026-11-10, written before anything is built.
 [STABLE-REFERENCES.md](STABLE-REFERENCES.md) §4 planned C58 as "a keyed
 collection stored as a grow-only array with a free list and generational

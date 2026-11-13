@@ -1,7 +1,15 @@
 # Fast bodies and agents with inertia: two questions
 
 Written 2026-11-01 from the thread "Explore Clifford ideas for physics and
-pathfinding". **Status (2026-11-01):** proposal, nothing built. The steps
+pathfinding".
+
+**Status (2026-11-13): built.** Bounce steps to the first
+impact and keeps speculative contacts (L119, L121), examples/impact
+solves the time two things touch as a relation (L120), and examples/agent
+has an agent with inertia found by a Hybrid A*-style search and chasers
+with a rapidity cap (L123, L124).
+
+**Status (2026-11-01):** proposal, nothing built. The steps
 are BACKLOG rows L119 to L124, all later goals.
 
 Ersagun asked two things:
