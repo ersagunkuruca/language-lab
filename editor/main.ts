@@ -48,6 +48,7 @@ import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { changesPanels } from "./changesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
 import { shower } from "./shown.ts";
+import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { pagePanels } from "./pagePanel.ts";
 import { whereRuns } from "./whereRuns.ts";
 import { answersView, lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
@@ -1978,7 +1979,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // A step at a time (E232d), once there are values to step through.
   const bar = tr && !tr.error ? stepBar(info, tr) : null;
   if (bar) box.append(bar);
-  if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
+  // An Html, drawn as the page draws it (I256).
+  if (tr?.result !== undefined && (action || value) && givesHtml(info, ui.def)) box.append(htmlPart(tr.result, namer.name(ui.def)));
+  else if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   // Nor the graph's own time limit (E207): Run main runs it in full. Nor
