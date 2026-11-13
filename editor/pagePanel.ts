@@ -340,7 +340,8 @@ export function pagePanels(host: PageHost) {
   }
   // How far back the window reaches, in its snapshots' seconds.
   function reach(): string {
-    const kept = page.now?.window?.snapshots.length ?? page.now?.stepFrom?.().snapshots.length ?? 1;
+    // Segments only: a step snapshot (I252) sits inside one.
+    const kept = (page.now?.window?.snapshots ?? page.now?.stepFrom?.().snapshots)?.filter((x) => !x.step).length ?? 1;
     const s = Math.max(1, kept) * LOG_WINDOW.seconds, most = LOG_WINDOW.keep * LOG_WINDOW.seconds;
     const say = (t: number) => (t >= 60 ? `${Math.round(t / 6) / 10} min` : `${t} s`);
     return s >= most ? `back about ${say(most)}, as far as the window keeps` : `back at most ${say(s)}`;

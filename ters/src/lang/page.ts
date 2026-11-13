@@ -176,7 +176,7 @@ function takenUp(from: { firsts: unknown[]; snapshots: Snapshot<PlacedSnapshot>[
       const c = carried(from.firsts[i], made[i].first, v);
       if (c) cells.push([made[i].cell, c.value]); else ok = false;
     });
-    if (ok) out.push({ at: s.at, state: { cells, random: s.state.random } });
+    if (ok) out.push({ at: s.at, state: { cells, random: s.state.random }, ...(s.step ? { step: true as const } : {}) });
   }
   if (!out.length) throw new Error("the compiled page's snapshots hold functions made since the page started, so the interpreted page can't take them up");
   return out;

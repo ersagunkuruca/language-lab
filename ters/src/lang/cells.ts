@@ -96,7 +96,11 @@ export const KEPT = new WeakMap<object, CellNode>();
 // identity, and the checker treats `Cell a` as not plain) that carries its
 // node. Calling it is a mistake the checker prevents: cells are read with
 // `read`.
-export const CELL = Symbol("cell");
+// Shared by every copy of this module (Symbol.for): the editor mounts the
+// compiled page from its own bundle of the core runtime, and handOver
+// there reads the interpreted page's cells, made by the editor's copy
+// (I253; with a symbol of each copy's own, it read none of them).
+export const CELL = Symbol.for("ters.cell");
 export const nodeOf = (v: Value): CellNode | null => (typeof v === "function" ? ((v as unknown as Record<symbol, CellNode>)[CELL] ?? null) : null);
 
 // A place inside a cell's value (L98, STABLE-REFERENCES.md §1): item i of

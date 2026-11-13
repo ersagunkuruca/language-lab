@@ -190,7 +190,11 @@ export const readLog = (text: string): LogEntry[] =>
 // next, is dropped. A replay or a step back starts from a snapshot
 // (rr's checkpoints; Redux DevTools' maxAge). The run's start is the
 // first snapshot, with nothing to restore: what main makes.
-export interface Snapshot<S = unknown> { at: number; state: S | null }
+// Inside a segment, a snapshot every `events` events as well (I252, 30
+// by default), a `step` one: a step back then gives at most that many
+// events again, where a page that hears frames has 600 in 10 seconds.
+// Step snapshots leave with their segment and aren't counted in `keep`.
+export interface Snapshot<S = unknown> { at: number; state: S | null; step?: true }
 // A compiled page's snapshot (I239f): each cell's value in the order the
 // cells were made (undefined for one gone), for the interpreted page's
 // cells at the same places.
@@ -200,10 +204,11 @@ export class LogWindow<S = unknown> {
   // Entries dropped from the front since the run started.
   dropped = 0;
   private last: number;
+  private heard = 0;
   readonly log: LogEntry[];
   readonly take: () => S;
-  readonly o: { seconds: number; keep: number; clock?: () => number };
-  constructor(log: LogEntry[], take: () => S, o: { seconds: number; keep: number; clock?: () => number }) {
+  readonly o: { seconds: number; keep: number; events?: number; clock?: () => number };
+  constructor(log: LogEntry[], take: () => S, o: { seconds: number; keep: number; events?: number; clock?: () => number }) {
     this.log = log; this.take = take; this.o = o;
     this.last = this.now();
   }
@@ -212,11 +217,19 @@ export class LogWindow<S = unknown> {
   // Between two events: the page is as its handlers left it.
   mayTake(): void {
     const t = this.now();
-    if (t - this.last < this.o.seconds * 1000) return;
+    if (t - this.last < this.o.seconds * 1000) {
+      if (++this.heard < (this.o.events ?? 30)) return;
+      this.heard = 0;
+      this.snapshots.push({ at: this.log.length, state: this.take(), step: true });
+      return;
+    }
     this.last = t;
+    this.heard = 0;
     this.snapshots.push({ at: this.log.length, state: this.take() });
-    if (this.snapshots.length <= this.o.keep) return;
+    if (this.snapshots.filter((x) => !x.step).length <= this.o.keep) return;
+    // The oldest segment leaves, with its step snapshots.
     this.snapshots.shift();
+    while (this.snapshots.length > 1 && this.snapshots[0].step) this.snapshots.shift();
     const cut = this.snapshots[0].at;
     this.log.splice(0, cut);
     this.dropped += cut;
