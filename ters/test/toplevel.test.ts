@@ -582,6 +582,36 @@ test("a whole number typed where an Int goes fills it as an Int; a fraction is r
   assert.equal(T.fillValue(code, p.pres.names, info, lit.id, "0.5", def).ok, false);
 });
 
+// I236: a whole number past 2⁵³ keeps its digits inside an expression,
+// at an Int's place and where nothing says yet, and when a literal is
+// edited; read as a Float64, 12345678901234567891 was 12345678901234567168.
+test("a big whole number typed inside a value or edited keeps its digits as an Int", async () => {
+  const T = await import("../../editor/typed.ts");
+  const s = new Session();
+  s.ok(Top.newDefinition(s.code, s.names, "big", { kind: "value" }));
+  const big = s.def("big"), hole = s.holes(big)[0];
+  const r = T.fillValue(s.code, s.all(), s.info(), hole, "[12345678901234567891, 2]", big);
+  assert.ok(r.ok, r.ok ? "" : r.reason);
+  if (!r.ok) return;
+  const lits = Object.values(r.code.nodes).filter((n): n is NodeOf<"lit"> => n.kind === "lit" && subtree(r.code, big).includes(n.id)).map((n) => [n.value, n.of]);
+  assert.deepEqual(lits, [["12345678901234567891", INT], [2, undefined]]);
+  const info = infer(r.code, s.all());
+  // At an Int's place, inside an expression: 1 + 12345678901234567891.
+  const wc = (await import("../src/lang/load.ts")).loadProgram((await import("node:path")).join(import.meta.dirname, "../examples/wc"));
+  const lit = Object.values(wc.code.nodes).find((n) => n.kind === "lit" && n.of === INT && !isPublished(n.id))!;
+  const code: Code = { ...wc.code, nodes: { ...wc.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const def = code.defs.find((d) => subtree(code, d).includes(lit.id));
+  const sum = T.fillValue(code, wc.pres.names, infer(code, wc.pres.names), lit.id, "12345678901234567891 - 12345678901234567890", def);
+  assert.ok(sum.ok, sum.ok ? "" : sum.reason);
+  if (sum.ok) assert.deepEqual(subtree(sum.code, lit.id).map((id) => sum.code.nodes[id]).filter((n) => n.kind === "lit").map((n) => (n as NodeOf<"lit">).value), ["12345678901234567891", "12345678901234567890"]);
+  // A literal edited: an untyped one past 2⁵³ becomes an Int of its digits.
+  const two = subtree(r.code, big).find((id) => { const n = r.code.nodes[id]; return n.kind === "lit" && n.value === 2; })!;
+  const untyped: Code = { ...r.code, nodes: { ...r.code.nodes, [two]: { id: two, kind: "lit", value: 2 } } };
+  const edited = T.setLit(untyped, s.all(), infer(untyped, s.all()), two, "98765432109876543210");
+  assert.ok(edited.ok, edited.ok ? "" : edited.reason);
+  if (edited.ok) assert.deepEqual(edited.code.nodes[two], { id: two, kind: "lit", value: "98765432109876543210", of: INT });
+});
+
 test("an input with no type yet can be called: before(□, □) makes it a function of two", () => {
   const s = new Session();
   s.ok(Top.newDefinition(s.code, s.names, "pick", { kind: "function", params: ["before", "x", "y"] }));
