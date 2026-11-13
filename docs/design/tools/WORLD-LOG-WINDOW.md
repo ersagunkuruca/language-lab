@@ -15,9 +15,12 @@ keeps every answer from the start of the run, and nothing ever leaves it.
 - **A page's animation is the bulk.** An element that hears `frame` logs
   one `event` entry per browser frame:
   `{op: "event", args: ["frame", value, key, x, y, seconds, path]}`. That
-  is an object and two arrays per frame, about 200 bytes. At 60 frames a
-  second, tumble running for an hour holds about 216,000 of them, around
-  40 MB, plus one entry for each `random` draw.
+  is an object and two arrays per frame. Measured on bounce (I254, below),
+  one such entry holds about 320 bytes of the heap (66 as JSON). At 60
+  frames a second an hour is 216,000 of them, about 69 MB, plus one entry
+  for each `random` draw. (The pages that hear `frame` are agent, bounce
+  and spacetime. Tumble, which this note first used, animates with CSS
+  and logs only its taps.)
 - **A compiled page** keeps the same log when opened with `?ters-log`
   (core-page.ts). It is opt-in, but just as unbounded.
 - **A main run** (Run panel, `ters run`) logs one run, which ends. A main
@@ -47,8 +50,9 @@ needs to be given again:
   click with its path. These are few and come from a person or the
   network.
 
-This alone takes tumble's hour from about 40 MB to about 2 MB. That is
-smaller, but still a log that only grows.
+This alone takes bounce's hour from about 69 MB to about 1.7 MB (8 bytes
+a frame in memory; about 20 as JSON). That is smaller, but still a log
+that only grows.
 
 ### 2. The log is a window, with snapshots
 
@@ -66,7 +70,8 @@ every event since the snapshot before it. These step snapshots leave with
 their segment.
 
 Once the log holds more than M segments (30 by default, about 5 minutes),
-the oldest segment and its snapshot are dropped. Memory is then at most M
+the oldest segment and its snapshot are dropped. On bounce that is 18,000
+frames, about 144 KB, and 30 snapshots of its cells (kept by reference). Memory is then at most M
 snapshots and M segments, whatever the run's length. The window's length
 is a setting, not a constant, and the Run panel says how far back it
 reaches.
@@ -125,19 +130,34 @@ interpreted.
      `randomSeed`.
    - Frame events are kept as chunks of seconds.
    - `replaying` reads both.
-   - Example: tumble running 10 simulated minutes logs under 100 KB.
+   - Example: bounce running 10 simulated minutes logs under 100 KB.
 2. **I239b, the window.**
    - The page's log is kept as segments with snapshots (cells, generator,
      last frame), and the oldest are dropped past M.
-   - Example: tumble running a simulated hour keeps its log and
+   - Example: bounce running a simulated hour keeps its log and
      snapshots under a fixed size.
 3. **I239c, step back in the window.**
    - In the page panel: pause, step back and step on by frame, from a
      snapshot.
    - Saving the log saves the window.
-   - Example: in tumble, step back 3 seconds and see the board as it
-     was.
+   - Example: in bounce, step back 3 seconds and see the balls as they
+     were.
 4. **I239d, main runs' cap and the compiled page's `?ters-log`** use the
    same window rules.
 5. **I239f, the compiled page's snapshots** (§5): Pause and step in the
    editor after the compiled page takes over.
+
+## Measured (I254, 2026-11-13)
+
+Bounce in Node with a fake document, its frames driven at 60 a second of
+simulated time (each frame about 20 ms of evaluation, so a simulated
+minute takes about a minute):
+
+| | per frame | an hour |
+|---|---|---|
+| one `event` entry a frame, before I239a | 320 bytes of heap, 66 as JSON | about 69 MB |
+| a run of seconds (I239a) | 8 bytes, about 20 as JSON | about 1.7 MB |
+| the window, 10 s × 30 segments (I239b) | | about 144 KB of frames, and 30 snapshots |
+
+With a window of 10 s × 3, a simulated minute kept 3 snapshots and the
+last 30 seconds' 1,800 frames, the older entries dropped.
