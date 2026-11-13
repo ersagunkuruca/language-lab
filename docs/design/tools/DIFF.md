@@ -116,6 +116,15 @@ A **Changes** view (a tab beside Files) compares the program with a base:
 - the last version marked **Reviewed** (a button in the view, kept with the
   program in local storage).
 
+- a git revision of an example (E263): a branch, tag or commit typed into
+  the tab, its files read from raw.githubusercontent.com, or a pull request
+  (`#123` or its link), whose own change to the program is shown, from
+  where its branch left the base (api.github.com's compare) to its newest
+  commit. Both answer any page without signing in, so the site does this
+  as it is, within GitHub's 60 unsigned requests an hour (a pull request
+  takes two). A pull request's change isn't the open version's, so nothing
+  is marked in the blocks then.
+
 It lists the changed definitions as the CLI does. Clicking one opens it with
 its blocks marked by the same per-node status: added green, changed amber,
 removed listed under the definition. The graph marks nodes the same way. It
@@ -130,6 +139,7 @@ need git.
 | E255a | `diffPrograms` (ters/src/diff.ts): definitions by id, the view's lines by node id with both versions printed with the new names, renames, comments, types; `ters diff` on two folders or files prints it (L113's summary stays for a bare code.json pair) | `ters diff` on dice and a copy with one literal changed, one definition added and one renamed prints exactly those three, with the literal's line as `~` |
 | E255b | `--from REV` / `--to REV` through `git show`, and a PR's changed program folders with `--from` alone | `ters diff ters/examples/pig --from` a commit before #2240 prints the change #2240 made to pig's handler |
 | E255c | The editor's Changes view against the opened version or the last Reviewed one, with marks in blocks and graph | Edit a literal and add a definition in dice: Changes lists both, the literal's block amber, the new definition green |
+| E263 | The Changes tab compares an example with a branch, tag or commit from GitHub, or shows a pull request's own change to it | In dice, `2d173aa^` lists bar's two changed lines (#2194's `times rolled` to `nth`); `#2194` lists the same as the pull request's change; a branch that isn't there says so and keeps the version opened |
 | E262 | git's diff driver (`ters git-diff`) and `ters git-setup`: `git diff`, `--staged`, `git show --ext-diff` print `ters diff`, with each version's names, comments and signatures | Renaming `expression` in algebra's names prints `renamed \`expression\` to \`term\`` under `git diff` and `git diff --staged`; `git show --ext-diff` of #2422 prints markov's added definitions |
 | E255d | Declined 2026-11-13 (Ersagun: not needed). Was: a workflow that comments `ters diff` on PRs touching program folders | A PR changing an example gets the comment |
 
