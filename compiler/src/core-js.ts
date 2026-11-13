@@ -892,9 +892,9 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     // With TERS_LOG set, the world's answers are logged to that file
     // (L186's log, C172a), for \`ters run --replay\` to give the evaluator.
-    `import { logged, logText } from ${JSON.stringify(world.replace(/[^/]*$/, "worldlog.ts"))};`,
+    `import { logged, logText, MAIN_LOG_CAP } from ${JSON.stringify(world.replace(/[^/]*$/, "worldlog.ts"))};`,
     `import { writeFileSync as $writeLog } from "node:fs";`,
-    "const $logTo = process.env.TERS_LOG, $logged = $logTo ? logged(nodeWorld()) : null;",
+    "const $logTo = process.env.TERS_LOG, $logged = $logTo ? logged(nodeWorld(), [], { cap: MAIN_LOG_CAP }) : null;",
     "if ($logged) process.on(\"exit\", () => $writeLog($logTo, logText($logged.log)));",
     `const rt = { print: (s) => console.log(s), world: $logged ? $logged.world : nodeWorld()${hosts ? ", hosts: $hostAnswers" : ""} };`,
     `const R = coreRuntime(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, rt, ${code}${hosts ? `, undefined, ${JSON.stringify(hosts.ops)}` : ""});`,

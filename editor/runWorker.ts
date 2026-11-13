@@ -7,7 +7,7 @@
 // The worker has no localStorage: the program's files come in as a copy,
 // and what the run wrote goes back to the page with the result.
 
-import { logged, replaying, type LogEntry } from "../ters/src/lang/worldlog.ts";
+import { logged, MAIN_LOG_CAP, replaying, type LogEntry } from "../ters/src/lang/worldlog.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import { subtree } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
@@ -167,7 +167,7 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     // Paused, the run prints nothing more: what shows is where it was.
     const print = (line: string) => { if (paused) return; lines.push(line); if (Date.now() - sent > 100) flush(); };
     const real = denied(withInput(browserWorld(store, title), stdin), deny ?? [], names);
-    const logging = logged(replay ? replaying(replay, real, until, () => { paused = true; }) : real);
+    const logging = logged(replay ? replaying(replay, real, until, () => { paused = true; }) : real, [], { cap: MAIN_LOG_CAP });
     const world = logging.world;
     answers = logging.log;
     if (core && core.args === !!args && runPrinted(core, undefined, args, world, print, flush, () => [...wrote])) return;
