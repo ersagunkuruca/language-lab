@@ -949,7 +949,8 @@ In order. Each stage says when to start it.
   now a machine with its continuation on the heap (LANGUAGE.md, "How it
   runs"), so `is even` of any size runs.
 - ~~**One representation per type, per program.**~~ The chooser splits a
-  type by groups of values since C93, on JavaScript.
+  type by groups of values since C93, on every target (C218 measured
+  machine's split on WebAssembly and C: about 2× to 5× faster than trees).
 - **Costs are declared.** Stage 7 makes them checked, then computed.
 - **Representation rewrites inside a user's own types** (a record with a
   Nat field) rewrite the field's type, but nothing tests it yet.
