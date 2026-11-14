@@ -3575,7 +3575,11 @@ from`, `legs of`, `with heights` and std's `sum` recurse once per item.
 Node's stack takes 4000 but not 10000. The core module counts its depth
 and goes on from where it was; `ters native` has a bigger stack. With
 C187 waiting for stack switching, WASI needs another way to grow (or a
-deeper stack where the host allows one).
+deeper stack where the host allows one). Built by C222:
+on WebAssembly each such function is a loop, consing and `and` carried
+along (cons-loops.ts) and the rest with its frames on the heap
+(deep-loops.ts); WASI prints the ideal's output at 10000 and 40000 fixes
+(6.3x the ideal's time at 40000).
 
 **L1. A division guarded by a comparison is still a Choice (language).**
 `if d > 0.0 m then x / d` and `l.took > 0.0 s and l.length / l.took`
