@@ -94,3 +94,29 @@ test("a page's view with no answer shows nothing there, and its answer when it h
   click("four");
   assert.equal(shown(), "2.5");
 });
+
+// A division guarded as a person writes it (L258, Ersagun 2026-11-14: Float64
+// stays finite, so the checker reads the guard): `>` is a definition of the
+// library's (`more than`, read through its body), and the divisor may be a
+// field read (`l.took`), the same value as the one tested.
+test("a division guarded by `if d > 0` or `if l.took > 0 s` has no Choice (L258)", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { Session } = await import("../mcp/session.ts");
+  const dir = mkdtempSync(join(tmpdir(), "no-answer-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(dir, "names.default.json"), "{}");
+  const s = new Session(dir);
+  s.define("Leg", "type", [], "leg(length: Float64 m, took: Float64 s)");
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); s.replace(/□#(\w+)/.exec(s.view(name))![1], text); return s.typeOf(s.resolve(name)); };
+  assert.equal(fill("over", ["x", "d"], "if d > 0.0 then x / d else 0.0"), "(Float64, Float64) -> Float64");
+  assert.equal(fill("not under", ["x", "d"], "if d ≤ 0.0 then 0.0 else x / d"), "(Float64, Float64) -> Float64");
+  assert.equal(fill("speed", ["l"], "if l.took > 0.0 s then l.length / l.took else 0.0 m/s"), "(Leg) -> Float64 m/s");
+  // Tested on one field, divided by another: still a Choice.
+  assert.equal(fill("wrong", ["l"], "if l.length > 0.0 m then l.length / l.took else 0.0 m/s"), "(Leg) -[Choice]-> Float64 m/s");
+  // `and` works out both sides (run.ts), so its guard guards nothing.
+  assert.equal(fill("both", ["l"], "l.took > 0.0 s and l.length / l.took > 1.0 m/s"), "(Leg) -[Choice]-> Bool");
+  assert.equal(s.errors(), "ok");
+  assert.equal(s.eval("over(1.0, 0.0)"), "= 0 : Float64");
+});

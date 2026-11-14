@@ -72,7 +72,8 @@ export function litLabel(v: string | number | boolean, max = SHORT): { short: st
   return { short: `${JSON.stringify(clip).slice(0, -1)}"${lines.length > 1 ? ` · ${lines.length} lines` : ""}`, full: v };
 }
 
-type I = { p: Piece[]; prec: number };
+// `glyph`: the infix operator an operand is written with, if any.
+type I = { p: Piece[]; prec: number; glyph?: string };
 const ATOM = 100;
 const part = (cls: string, kids: Piece[], id?: Id, title?: string): Part => ({ cls, kids, ...(id ? { id } : {}), ...(title ? { title } : {}) });
 const kw = (s: string) => part("kw", [s]);
@@ -287,14 +288,17 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         if (nota?.fixity === "infix" && ops) {
           // a ++ b ++ c: one chain, whichever way the pairs nest.
           const p = nota.prec ?? 5;
-          return { p: [part("call", args.flatMap((a, i) => [...(i ? [op(` ${nota.glyph} `)] : []), ...paren(a, a.prec > p)]), id)], prec: p };
+          return { p: [part("call", args.flatMap((a, i) => [...(i ? [op(` ${nota.glyph} `)] : []), ...paren(a, a.prec > p)]), id)], prec: p, glyph: nota.glyph };
         }
         if (nota?.fixity === "infix" && args.length === 2) {
           const p = nota.prec ?? 5;
           const [l, r] = args;
           const lok = l.prec > p || (l.prec === p && nota.assoc !== "right");
-          const rok = r.prec > p || (r.prec === p && nota.assoc !== "left" && nota.assoc !== undefined);
-          return { p: [part("call", [...paren(l, lok), op(` ${nota.glyph} `), ...paren(r, rok)], id)], prec: p };
+          // A right operand at the same level needs none only when it is
+          // the same operator, one that associates: a · (b / c) isn't
+          // a · b / c, which reads as (a · b) / c.
+          const rok = r.prec > p || (r.prec === p && nota.assoc !== "left" && nota.assoc !== undefined && r.glyph === nota.glyph);
+          return { p: [part("call", [...paren(l, lok), op(` ${nota.glyph} `), ...paren(r, rok)], id)], prec: p, glyph: nota.glyph };
         }
         if (nota?.fixity === "prefix" && args.length === 1) {
           const p = nota.prec ?? 9;
