@@ -6,4 +6,5 @@
 "f6pq2ouunissq52d1no7qike31": "Below 0 inside a square this far from the middle to each side.",
 "giafff9o7tka73kuoo5d96nslf": "The colour at (x, y), from −1 to 1 each way: four tiles a side, each filled where its shape's distance is below 0.",
 "mqusve65io182iq6g14qo45f9a": "Below 0 inside a diamond whose corners are this far from the middle.",
-"rud61elo6tp8phgbnr335ui43j": "Below 0 inside a circle of this radius around the middle of a tile, above outside. A function of where in the tile: each shape is one, and a tile picks its shape as the picture is drawn."}
+"rud61elo6tp8phgbnr335ui43j": "Below 0 inside a circle of this radius around the middle of a tile, above outside. A function of where in the tile: each shape is one, and a tile picks its shape as the picture is drawn.",
+"program": "Four tiles a side, each drawing a disc, a box or a diamond, and the shapes go round as time passes. What it shows is on the GPU side: shape of gives back a function, chosen as the picture runs, and the shader calls it. A GPU has no functions as values, so the compiler turns the choice into which shape and its size, and the call into a branch on that (defunctionalisation, C225)."}
