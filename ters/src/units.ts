@@ -99,13 +99,18 @@ function rules(op: string, port: (k: string) => string, why: string, node: Id): 
     case "pow": return [is(port("1"), ZERO)];
     case "sin": case "cos": case "tan": return [is(port("0"), ZERO), is(port("out"), ZERO)];
     case "atan2": return [eq(port("0"), port("1")), is(port("out"), ZERO)];
-    case "exp": case "log": return [is(port("0"), ZERO), is(port("out"), ZERO)];
+    case "exp": case "log": case "asin": case "acos": return [is(port("0"), ZERO), is(port("out"), ZERO)];
+    // first(x, else d) is x or d (L257): one unit for all three.
+    case "first": return [eq(port("0"), port("out")), eq(port("1"), port("out"))];
     // Comparing two numbers: a wire between them, so the same unit.
     case "equal": case "less": return [eq(port("0"), port("1"))];
     default: return [];
   }
 }
 
+// Trig's operations' ids (std.ts TRIG_V), named here so units.ts doesn't
+// load the library.
+const TRIG_FIELD = "std.trig.trig.";
 const unitOf = (n: Node | undefined): Unit | undefined => (n as { unit?: Unit } | undefined)?.unit;
 // A constraint from a field's type names the unit, for the message.
 const FIELD = "field's unit ";
@@ -134,6 +139,7 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
     const u = unitOf(code.nodes[id]);
     if (u) out.push({ terms: [[t(id), 1]], rhs: toVec(u), why: "declared unit", node: id });
   };
+  const thunk = (a: Id) => { const l = code.nodes[a]; return t(l?.kind === "lambda" && !l.params.length ? l.body : a); };
   const paramsOf = (fn: Id): Id[] => {
     const callee = code.nodes[fn];
     const cb = callee?.kind === "def" && callee.body ? code.nodes[callee.body] : null;
@@ -152,6 +158,9 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
       case "ref": {
         const target = code.nodes[n.target];
         if (target.kind === "binder") same(id, n.target, "variable", id);
+        // A value named, `earth radius` (L257): what its definition says of
+        // its value is said of this use, so 6371000.0 m is a length here.
+        else if (target.kind === "def" && target.body && code.nodes[target.body]?.kind !== "lambda") out.push(...calleeConstraints(code, n.target, (k) => (k === "out" ? t(id) : `${prefix}${id}:${k}`), `${prefix}${id}/`, [...path, defId]));
         return;
       }
       case "lambda": n.params.forEach(declare); visit(n.body); return;
@@ -176,7 +185,12 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         }
         if (fn.kind !== "ref") return;
         const callee = code.nodes[fn.target];
+        // first's inputs are thunks: what each gives is its body (L257).
+        if (callee.kind === "builtin" && callee.op === "first") { out.push(...rules("first", (k) => (k === "out" ? t(id) : thunk(n.args[+k])), id, id)); return; }
         if (callee.kind === "builtin") { out.push(...rules(callee.op, port, id, id)); return; }
+        // Trig's operations, sin(x) at any type with Trig, are its
+        // builtins' at Float64, units and all (L257).
+        if (callee.kind === "field" && fn.target.startsWith(TRIG_FIELD)) { out.push(...rules(fn.target.slice(TRIG_FIELD.length), port, id, id)); return; }
         // A case made with a field whose type has a unit: the value given
         // has it. A field read: what it gives has it (L252).
         if (callee.kind === "variant") {
@@ -249,7 +263,7 @@ function summaryOf(code: Code, fn: Id): Constraint[] {
     if (cb?.kind === "lambda") {
       cb.params.forEach((p) => map.set(p, PORT + p));
       map.set(cb.body, PORT + "out");
-    }
+    } else if (cdef.body) map.set(cdef.body, PORT + "out");
     for (const id of subtreeIds(code, fn)) read.push([id, code.nodes[id]]);
     const out = project(cb ? constraints(code, fn, "\u0001/", map, []) : [], (t) => t.startsWith(PORT), fn);
     summaries.set(def, { out, read });
@@ -314,14 +328,12 @@ function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, pref
     if (cb.kind === "lambda") {
       cb.params.forEach((p) => map.set(p, port(p)));
       map.set(cb.body, port("out"));
-    }
+    } else map.set(cdef.body!, port("out"));
     return constraints(code, fn, prefix, map, path);
   }
   const ports = new Map<string, string>();
-  if (cb.kind === "lambda") {
-    cb.params.forEach((p) => ports.set(PORT + p, port(p)));
-    ports.set(PORT + "out", port("out"));
-  }
+  if (cb.kind === "lambda") cb.params.forEach((p) => ports.set(PORT + p, port(p)));
+  ports.set(PORT + "out", port("out"));
   return summaryOf(code, fn).map((c) => ({ ...c, terms: c.terms.map(([t, v]) => [ports.get(t) ?? t, v] as [string, number]) }));
 }
 
@@ -486,7 +498,8 @@ export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: 
   for (const d of code.defs) {
     if ((only && !only.has(d)) || isPublished(d)) continue;
     const def = code.nodes[d];
-    if (def?.kind !== "def" || !def.body || code.nodes[def.body]?.kind !== "lambda") continue;
+    // A value's own body too (L257): `limit = 3.0 m + 1.0 s`.
+    if (def?.kind !== "def" || !def.body) continue;
     for (const c of conflictsWith(code, d, before, quick)) out.push({ id: c.node ?? d, message: c.why === UNWORDED ? UNWORDED : unitMessage(code, c, names) });
   }
   return out;

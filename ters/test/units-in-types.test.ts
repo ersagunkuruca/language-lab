@@ -94,3 +94,25 @@ test("a definition's signature shows its known units, and a unit-generic one sho
   assert.equal(p.typeOf(p.resolve("lifted")), "(Body) -> Float64 m");
   assert.doesNotMatch(p.typeOf(p.resolve("twice")), /Float64 \S*m/);
 });
+
+// L257 (round 16, trek): a constant's unit is used where it's named, and
+// first, exp and asin have unit rules, so these mistakes are refused.
+test("a constant's unit, first's and the transcendental functions' are checked", () => {
+  const s = program(["body(position: Float64 m, time: Float64 s)"]);
+  s.define("limit", "value", []);
+  s.replace(/□#(\w+)/.exec(s.view("limit"))![1], "3.0 s");
+  // b is a Body (`as`: time names other fields too).
+  const fill = (name: string, text: string) => { s.define(name, "function", ["b"]); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text, undefined, undefined, "Body"); };
+  assert.throws(() => fill("wrong constant", "1.0 m + limit"), /units don't agree here/);
+  // (refused for its units: the same without `+ 1.0 s` reads, below)
+  assert.throws(() => fill("wrong first", "first(b.position / b.time, else 0.0 m/s) + 1.0 s"), /m\/s can't meet s|nothing fits/);
+  assert.throws(() => fill("wrong exp", "2.0 m · exp(0.5) + 1.0 s"), /units don't agree here/);
+  assert.throws(() => fill("wrong asin", "asin(2.0 m)"), /units don't agree here/);
+  fill("later", "b.time + limit");
+  assert.equal(s.typeOf(s.resolve("later")), "(Body) -> Float64 s");
+  fill("speed", "first(b.position / b.time, else 0.0 m/s)");
+  assert.equal(s.typeOf(s.resolve("speed")), "(Body) -> Float64 m/s");
+  // A value whose own body disagrees is refused too.
+  s.define("mixed", "value", []);
+  assert.throws(() => s.replace(/□#(\w+)/.exec(s.view("mixed"))![1], "1.0 m + 1.0 s"), /units don't agree here/);
+});
