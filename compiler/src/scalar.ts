@@ -379,7 +379,7 @@ export function tidied(f: SFunc, self: number): SFunc {
   return { ...f, body: tidy(f.body) };
 }
 // The locals e reads that it doesn't set itself, in the order first read.
-function freeLocals(e: SExpr): number[] {
+export function freeLocals(e: SExpr): number[] {
   const read: number[] = [], set = new Set<number>();
   const walk = (x: SExpr) => {
     switch (x.k) {

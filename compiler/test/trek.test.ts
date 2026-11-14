@@ -64,3 +64,19 @@ test("trek through ters wasi and ters native prints what ters run prints", async
   assert.equal(built.status, 0, built.stderr);
   assert.equal(spawnSync(join(dir, "p"), [join(dir, "t.txt")], { encoding: "utf8" }).stdout, want.stdout, "ters native");
 });
+
+// 10,000 fixes through `ters wasi`: every function going down the fixes
+// one by one is a loop there (C222, cons-loops.ts and deep-loops.ts),
+// where WebAssembly's stack held some thousands of frames.
+test("trek: 10000 fixes through ters wasi print what the ideal prints (C222)", async () => {
+  const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), dir = mkdtempSync(join(tmpdir(), "trek-"));
+  const files = { "t.txt": track(10000) };
+  writeFileSync(join(dir, "t.txt"), files["t.txt"]);
+  const made = spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "p.wasm")], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr);
+  const of = join(dir, "out.txt"), fd = openSync(of, "w");
+  const wasi = new WASI({ version: "preview1", args: ["p", "t.txt"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
+  wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
+  closeSync(fd);
+  assert.equal(readFileSync(of, "utf8"), w.ideal(["t.txt"], files).out.join("\n") + "\n");
+});
