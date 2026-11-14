@@ -96,6 +96,23 @@ It also asks git (`check-attr`) whether a program file at a place nothing
 names has both drivers, and where it doesn't, adds those four patterns to
 the repository's `.gitattributes`. Other files diff as before.
 
+In a repository without language-lab beside it (I272), ters is one file,
+`ters.mjs`, which the Pages site builds (`ters/cli/bundle.ts`):
+
+```
+curl -LO https://ersagunkuruca.github.io/language-lab/ters.mjs
+node ters.mjs git-setup
+```
+
+It needs Node 22.18 or later and nothing else, and `git-setup` points both
+drivers at that file, so it is kept where it was downloaded (or put beside
+the programs and committed, for CI and teammates). It runs, checks, tests,
+views, diffs, merges and compiles to C and WebAssembly. What it keeps
+between runs (the library's check, kept runs and test results) goes to
+`~/.cache/ters` (`$XDG_CACHE_HOME/ters`), not into the repository.
+`ters compile` and the page and app builds bundle the runtime's own
+sources, so they say they need a checkout.
+
 git calls an external diff driver once per changed file with its two
 versions, never with the files beside it, and a definition's text needs
 them (its names, comments, signatures). So `ters git-diff` (cli/git-diff.ts)
