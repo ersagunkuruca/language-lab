@@ -786,6 +786,40 @@ quaternion(top / bottom, 0, 0, 0))` makes `2 · i` the quaternion 2i, and
 number in every part; another type with none is told where the number is
 written.
 
+### One shape, four readings
+
+A record, a sum, an effect and an interface are one thing in the code: a
+`typedef`, with a flag for the last two (model.ts, SPEC §1.5). A record is
+a typedef with one case, a sum one with several, an effect one whose cases
+are operations (each a call that a handler answers, below), and an
+interface one whose fields are functions over a type. So a handler is a
+`match` on the operations, an implementation is an ordinary definition of
+the record, and at run time there is nothing but records, cases and
+closures. Each pair keeps apart only what says something:
+
+- **A closure and an implementation** are both records of functions. A
+  closure is picked by the value you hold; an implementation by a type,
+  before the program runs, one per type, so a call through it is a direct
+  call (arith.ts copies the function per type).
+- **A datum and an operation** have the same shape: an operation is a
+  constructor and a handler a fold over what a computation performs. A
+  datum is stored; an operation is performed where it is written, and the
+  rest of the computation is the handler's to resume, later or not at all.
+
+The bridges are written in the language:
+
+| computed | stored | across |
+|---|---|---|
+| `Choice` | `Optional a` | `optional(action)`; `value of(o)` |
+| `Abort` | `Outcome a` | `attempt(action)`; `value or abort(o)` |
+| any effect `E` | `Steps of E R ε` | `steps of E(c)`: the next operation, with the rest, as data (relations-and-effects/ANSWERED-LATER.md) |
+| an implementation | a record value | pass the record by hand and take it apart with a match: dispatch you ask for |
+
+The compiler uses the laws between them (monomorphisation, closure
+conversion, lambda lifting, a handler fused with its calls) and never
+changes an answer doing so. Why they stay four and aren't merged into
+fewer: docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md.
+
 ## Effects, and why not monads
 
 A function type is `(params) -[effects]-> result`. The effect part is a row:
