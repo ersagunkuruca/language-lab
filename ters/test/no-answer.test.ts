@@ -115,8 +115,34 @@ test("a division guarded by `if d > 0` or `if l.took > 0 s` has no Choice (L258)
   assert.equal(fill("speed", ["l"], "if l.took > 0.0 s then l.length / l.took else 0.0 m/s"), "(Leg) -> Float64 m/s");
   // Tested on one field, divided by another: still a Choice.
   assert.equal(fill("wrong", ["l"], "if l.length > 0.0 m then l.length / l.took else 0.0 m/s"), "(Leg) -[Choice]-> Float64 m/s");
-  // `and` works out both sides (run.ts), so its guard guards nothing.
-  assert.equal(fill("both", ["l"], "l.took > 0.0 s and l.length / l.took > 1.0 m/s"), "(Leg) -[Choice]-> Bool");
+  // `and` works out its second side only where the first holds (L259).
+  assert.equal(fill("both", ["l"], "l.took > 0.0 s and l.length / l.took > 1.0 m/s"), "(Leg) -> Bool");
+  assert.equal(fill("either", ["x", "d"], "d = 0.0 or x / d > 1.0"), "(Float64, Float64) -> Bool");
   assert.equal(s.errors(), "ok");
   assert.equal(s.eval("over(1.0, 0.0)"), "= 0 : Float64");
+});
+
+// `and` and `or` work out their second side only when the first doesn't
+// decide (L259, Ersagun 2026-11-14), on the evaluator's three ways of
+// running code: so a search counts one false, not one per answer of the
+// second side.
+test("`and` and `or` skip their second side once the first decides (L259)", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { Session } = await import("../mcp/session.ts");
+  const dir = mkdtempSync(join(tmpdir(), "no-answer-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(dir, "names.default.json"), "{}");
+  const s = new Session(dir);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  fill("f", ["d"], "d > 0.0 and 1.0 / d > 1.0");
+  fill("h", ["x"], "x > 2 and one of([1, 2, 3, 4]) > x");
+  fill("g", ["x"], "x > 2 or one of([1, 2, 3, 4]) > x");
+  assert.equal(s.eval("count(f(0.0))"), "= 1 : Int");
+  assert.equal(s.eval("all(f(0.5))"), "= [true] : List Bool");
+  assert.equal(s.eval("all(h(1))"), "= [false] : List Bool");
+  assert.equal(s.eval("all(h(3))"), "= [false, false, false, true] : List Bool");
+  assert.equal(s.eval("all(g(3))"), "= [true] : List Bool");
+  assert.equal(s.eval("all(g(1))"), "= [false, true, true, true] : List Bool");
 });

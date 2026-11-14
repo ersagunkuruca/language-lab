@@ -1379,6 +1379,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (head.kind !== "ref") throw new Refused("calls a computed function (that needs closures)");
         const args = () => given.get(n.id) ?? n.args.map((a) => expr(a, env, f, false));
         const target = (!tailOps.has(head.target) && !laterOps.has(head.target) && builtinOf.get(head.target)) || head.target;
+        // `a and b` works out b only when a is true, `a or b` only when a
+        // is false (L259, as the evaluator does): b may have no answer, or
+        // several, or act. A b that only computes stays an op.
+        if ((target === S.and || target === S.or) && n.args.length === 2 && !given.has(n.id)) {
+          const a = expr(n.args[0], env, f, false), b = expr(n.args[1], env, f, tail);
+          const plain = (e: SExpr): boolean => e.k === "bool" || e.k === "num" || e.k === "local" || (e.k === "op" && e.args.every(plain));
+          if (plain(b)) return { k: "op", op: target === S.and ? "and" : "or", args: [a, b] };
+          return target === S.and ? { k: "if", cond: a, then: b, else: { k: "bool", v: false }, t: "i32" } : { k: "if", cond: a, then: { k: "bool", v: true }, else: b, t: "i32" };
+        }
         if (target === S.equal) {
           const t = stype(zonk(n.args[0]));
           if (!t || (typeof t !== "string" && !opts.data)) throw new Refused("compares values that aren't Float64s or Bools");
