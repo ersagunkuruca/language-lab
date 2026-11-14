@@ -62,7 +62,7 @@ jobs:
       # ters/test/schedule.ts), each sweep in full. Each file alone with
       # coverage on, so what it ran and read goes into the test map.
       - name: Share ${{ matrix.shard }} of the test files
-        run: node ters/test/affected.ts --due --shard ${{ matrix.shard }}/4 --record map-part.json
+        run: node ters/test/affected.ts --due --shard ${{ matrix.shard }}/4 --record map-part.json --bisect
       - if: always()
         uses: actions/upload-artifact@v4
         with:
