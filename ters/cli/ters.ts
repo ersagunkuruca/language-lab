@@ -24,6 +24,8 @@
 //                                        (two programs: diff.ts, DIFF.md), or a JSON file's ids (merge-files.ts)
 //   ters diff [<program>] --from REV [--to REV]
 //                                        a program, or every changed one, against git revisions
+//   ters conflicts [program]             what a merge of program files left to resolve, from git's
+//                                        index (conflicts.ts)
 //   ters git-setup                       this clone's git diffs program files with ters diff and
 //                                        merges them id by id (git-diff.ts, DIFF.md "In git")
 //   ters git-diff <git's 7 args>          git's external diff driver for program files
