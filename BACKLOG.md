@@ -164,7 +164,6 @@ all of these.
 |---|---|---|---|---|---|
 | L261c | Countdown as a page: six numbers and a target to choose, the answers listed | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | waits on I291 |
 | L261f | Conjugation as a page: a brightness slider with both swatches (linear light and the stored number), the quarter turn about a point drawn | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | waits on I292 |
-| L261h | Relations left the picker (#2728); move `sum and difference`/`split` and `missing addend` into Run backwards | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
 
 ### Numbers (NUMBERS.md)
 
