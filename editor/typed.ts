@@ -926,6 +926,14 @@ const POWER = (Object.entries(blocksStyle.notation) as [Id, Notation][]).filter(
 // (E249).
 const PREFIX = [...glyphs("prefix")].filter(([g]) => g !== "−");
 const namesDef = (v: unknown): boolean => !!v && typeof v === "object" && ((v as { tag?: unknown }).tag === DEF_VALUE || ((v as { fields?: unknown[] }).fields ?? []).some(namesDef));
+// The names of several words, once per names (I279).
+const wordy = new WeakMap<Names, string[]>();
+const wordyNames = (names: Names): string[] => {
+  let w = wordy.get(names);
+  if (!w) wordy.set(names, (w = [...new Set(Object.values(names).filter((m) => m.includes(" ")))]));
+  return w;
+};
+
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
   // A name of several words alone, quoted as the view prints it: map(xs,
@@ -952,7 +960,16 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // part of a value: `[after, before]` in a case whose fields are after
   // and before is those fields, not Order's (I218 M9).
   const bare = t.replace(/"(?:[^"\\]|\\.)*"/g, '""');
-  const shadows = [...scope].some(([n, id]) => !code.defs.includes(id) && new RegExp(`(?<![\\p{L}\\p{N}_'])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_'])`, "u").test(bare));
+  // A binder that is the last (or any) word of a longer name isn't named
+  // where the longer name is: `comment line` with a parameter `line` is
+  // the case (I279, GAPS round 17 D3).
+  const word = (n: string) => new RegExp(`(?<![\\p{L}\\p{N}_'])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_'])`, "gu");
+  const longer = (n: string) => [...new Set([...scope.keys(), ...wordyNames(names)])].filter((m) => m !== n && m.includes(" ") && word(n).test(m)).sort((a, b) => b.length - a.length);
+  const shadows = [...scope].some(([n, id]) => {
+    if (code.defs.includes(id) || !word(n).test(bare)) return false;
+    const rest = longer(n).reduce((x, m) => x.replace(word(m), " "), bare);
+    return word(n).test(rest);
+  });
   const r = shadows ? { error: "a binder" } as const : parseValue(text, code, names);
   // A value naming a definition (`[styles, …]`, `some(save name)`) is
   // read as the code it is, a reference: as a value it pointed at
