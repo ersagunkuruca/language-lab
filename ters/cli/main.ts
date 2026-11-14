@@ -468,22 +468,33 @@ if (command === "diff" || command === "merge") {
       const rel = (dir: string) => relative(top, resolve(dir)).split(sep).join("/");
       // The folder as it is at rev, written out to read as any folder; null
       // where it has no code.json then.
-      const at = (dir: string, rev: string | undefined): string | null => {
+      // `folder`: where it is in that revision, relative to the top (a
+      // moved program's old place, I268).
+      const at = (dir: string, rev: string | undefined, folder = rel(dir)): string | null => {
         if (rev === undefined) return existsSync(join(dir, "code.json")) ? dir : null;
         const out = mkdtempSync(join(tmpdir(), "ters-diff-"));
         let any = false;
         for (const f of ["code.json", "names.default.json", "comments.json", "signatures.json"]) {
-          try { writeFileSync(join(out, f), execFileSync("git", ["show", `${rev}:${rel(dir)}/${f}`], { cwd: top, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1 << 30 })); if (f === "code.json") any = true; } catch { /* not in that version */ }
+          try { writeFileSync(join(out, f), execFileSync("git", ["show", `${rev}:${folder}/${f}`], { cwd: top, stdio: ["ignore", "pipe", "ignore"], maxBuffer: 1 << 30 })); if (f === "code.json") any = true; } catch { /* not in that version */ }
         }
         return any ? out : null;
       };
+      // Program folders git found moved between the two (its renames, -M):
+      // each new place's old one, so a moved program is diffed against
+      // itself, not read as all added (I268).
+      const moved = new Map<string, string>();
+      for (const line of git("diff", "--name-status", "-M", ...(from ? [from] : []), ...(to ? [to] : []), "--", ".").split("\n")) {
+        const [status, was, now] = line.split("\t");
+        if (status?.startsWith("R") && now && /(^|\/)(code|names\.default|comments|signatures)\.json$/.test(now)) moved.set(now.replace(/\/?[^/]+$/, "") || ".", was.replace(/\/?[^/]+$/, "") || ".");
+      }
       const version = (f: string) => { const v = new Session(f); return { code: v.code, own: v.own, names: v.allNames, comments: v.comments, info: v.info, style: v.pres().style }; };
       const empty = { code: base({ nodes: {}, defs: [] }), own: [], names: {}, comments: {}, info: null, style: { view: "blocks", notation: {} } };
       const one = (dir: string): string => {
-        const a = at(dir, from), b = at(dir, to);
+        const was = moved.get(rel(dir));
+        const a = at(dir, from, was), b = at(dir, to);
         if (!a && !b) fail(`${dir} has no code.json in either version`);
         const text = diffText(diffPrograms(a ? version(a) : empty, b ? version(b) : empty));
-        return text || "no changes";
+        return (was ? `moved from ${was}\n` : "") + (text || "no changes");
       };
       let dirs: string[];
       if (args.length) dirs = [args[0]];
