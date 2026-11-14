@@ -373,6 +373,13 @@ async function stepOrder() {
     const line = (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.includes("solutions for 8"));
     if (!line?.includes("count(queens(8))")) errors.push(`${where}: after Backspace on the wire, count's action doesn't wire back in: ${await p.locator(".status[role=status]").innerText()}`);
   }
+  // A wire goes either way: from the empty input onto the loose action's
+  // frame end wires it in too (I288).
+  const ci2 = await at(countIn);
+  await drag(ci2, { x: ci2.x - 60, y: ci2.y + 260 });
+  await drag(await at(countIn), await at(`${W} .ports circle.outp[data-out]`));
+  const back = (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.includes("solutions for 8"));
+  if (!back?.includes("count(queens(8))")) errors.push(`${where}: a drag from count's empty input onto the action's frame end doesn't wire it: ${await p.locator(".status[role=status]").innerText()}`);
   await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   // A step goes before a step as a plain step, with no name (QA8 M1).
