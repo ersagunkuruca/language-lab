@@ -1885,6 +1885,15 @@ function graphHooks(info: T.Info) {
       const a = T.rowOfItem(doc.code, item), b = T.rowOfItem(doc.code, onto);
       if (a && b && a.row.root === b.row.root) applyT(T.moveItemTo(doc.code, doc.names.short, info, a.row, a.at, b.at));
     },
+    canReorder: (item: Id) => {
+      const a = T.rowOfItem(doc.code, item);
+      if (!a) return null;
+      return (onto: Id) => {
+        if (onto === item) return null;
+        const b = T.rowOfItem(doc.code, onto);
+        return b && b.row.root === a.row.root ? T.whyNotMove(a.row, a.at, b.at) ?? null : `it moves only among the ${a.row.kind === "list" ? "list's items" : "call's inputs"}`;
+      };
+    },
     addFrom: (row: Id, from: Id, binding: boolean) => { const r = T.rowAt(doc.code, row); if (r) applyT(T.addItemFrom(doc.code, doc.names.short, info, ui.def, r, from, binding)); },
     addItem: (row: Id) => { const r = T.rowAt(doc.code, row); if (r && applyT(T.addItem(doc.code, doc.names.short, info, r, r.items.length))) document.getElementById("f-query")?.focus(); },
   };

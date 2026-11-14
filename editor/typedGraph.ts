@@ -123,6 +123,10 @@ export interface GraphHooks {
   // An input of a list or a chain dropped on another of its inputs: it
   // moves there.
   reorder?: (item: Id, onto: Id) => void;
+  // Why a drop of one input onto another in its row wouldn't move it, said
+  // during the drag (a Float64 sum's or product's items stay put, I276).
+  // null when the input isn't in a row.
+  canReorder?: (item: Id) => ((onto: Id) => string | null) | null;
   // Right-click: what was under the pointer, where (screen and world).
   menu?: (target: MenuTarget, screen: Pos, world: Pos) => void;
   // Values from a run on example inputs (src/lang/trace.ts), already shown
@@ -1868,7 +1872,7 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     // and so does a drag from a picked dot: the way to move one by touch.
     if (!ev.altKey && !(src && mv && picked.has(src)) && (src || out || slot)) {
       ev.preventDefault();
-      const check = src ? (t: string) => hooks.canUse(src, t) : out ? hooks.canShare(out) : null;
+      const check = src ? (t: string) => hooks.canUse(src, t) : out ? hooks.canShare(out) : slot ? hooks.canReorder?.(slot) ?? null : null;
       // A value can also go on a list's or a chain's +: a new item, wired to it.
       const targets = (src || out) && hooks.addFrom ? "[data-slot], [data-add]" : "[data-slot]";
       connectDrag(root, ev, targets, check && ((t) => (t.hasAttribute("data-add") ? null : check(t.getAttribute("data-slot")!))), (target) => {
