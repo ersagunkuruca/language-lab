@@ -2124,6 +2124,13 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 
 | id | item | PR |
 |---|---|---|
+| L261a | Lockstep is a page: press left and right and the cart moves on machine A; "Send the presses to B" replays only the presses on machine B, and the two step counts agree (`steps of` names the take-apart). The old Text program is `lockstep-text`, kept for its tests | #2715, #2720 |
+| L261b | Eight queens is a page (`queens-page`): choose n, step through the answers on a board, the count shown; `queens` stays as the test program | #2721 |
+| L261d | Calculus is a page (`calculus-page`): pick a function, f and its derivative made from the definition drawn, Newton's guesses stepped with their tangents | #2725 |
+| L261e | Markov chains as a page (`markov-page`): sliders for the chances, the shares drawn step by step; settles, settles slowly and never settles each a preset | #2726 |
+| L261g | Insertion sort out of the picker (folder stays for its tests) | #2728 |
+| L261i | Shader: ripples out of the picker (folder stays) | #2728 |
+| L261j | Wavetable out of the picker (folder and README stay) | #2728 |
 | D9 | Compass: a perpendicular from a circle's own centre, or an angle bisector with a side point on the corner, drew a line pointing wherever rounding said, swinging as points moved (Ersagun 2026-11-02). Its vector is 0; such a line is now nothing, and the help says so | #1098 |
 | D8 | Compass: an Angle bisector tool, three clicks (a point on one side, the corner, a point on the other). Each side as a line of size 1 running from the corner, l / √(l · l); their sum halves the angle. Test: two bisectors of a triangle cross at a point equally far from all three sides | #1092 |
 | D7 | Compass: a Perpendicular tool. Click a point, then a line: (p ∧ s ∧ ∞)*, the line through p meeting s at right angles (dot 0 with p, s and ∞); with a circle it is the line through the point and the centre | #1090 |
