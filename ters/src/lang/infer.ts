@@ -27,7 +27,7 @@ import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, 
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
 import { laterOps } from "./later-ops.ts";
-import { LITERAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
+import { LITERAL, OPTIONAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
 import { fieldPath, fieldPaths, placePath, readPaths } from "./records.ts";
@@ -1492,6 +1492,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if (back) recursiveCalls.push({ call: n, params, args });
         if (!back && fr.t === "fn" && fr.params.length === params.length) liftThrough(n, given?.kind === "ref" ? given.target : null, fr, params);
         const reshapedBefore = s.reshaped;
+        // What a search is given gives, before the call can open a Choice in
+        // it: an Optional where it performs none is a value, not a search.
+        const searched = search && args.length ? s.resolve(args[0]) : undefined;
+        const optionalGiven = searched?.t === "fn" && (() => { const r = s.resolve(searched.ret); return r.t === "con" && r.id === OPTIONAL; })() && !s.resolveRow(searched.eff).effs.includes(CHOICE);
         try {
           s.tupleOf = tupleType;
           // A function value whose row is closed (a field's `(Int) -> Int`)
@@ -1505,7 +1509,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           } finally { s.tupleOf = null; }
           if (s.reshaped > reshapedBefore) reshape(n, f, args, s.reshaped - reshapedBefore);
         } catch (e) {
-          if (e instanceof WorldError) {
+          // A search given an Optional (I260, round 16's M1): first(largest
+          // of(hs), else 0.0 m) was "first needs Optional a here, and a
+          // number isn't one", blaming the default.
+          if (optionalGiven)
+            err(n.args[0], `${callee(n)} searches: it takes what gives answers (a Choice, as one of does), and this is an Optional. value of(…) gives an Optional's value as the answer, or match it on none and some`);
+          else if (e instanceof WorldError) {
             // The callee acting itself, or a function it's given that it
             // runs under its Choice?
             const ft = s.resolve(f);

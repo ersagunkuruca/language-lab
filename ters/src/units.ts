@@ -482,17 +482,21 @@ export interface Inference {
 // showing: Tumble's tap places spent 8 s solving such a system (QA10 H1).
 const declares = new WeakMap<Code, boolean>();
 const UNITLESS: Inference = { ok: true, conflicts: [], unit: () => undefined };
-export function infer(code: Code, defId: Id, extra: Constraint[] = []): Inference {
+export function infer(code: Code, defId: Id, extra: Constraint[] = [], own?: Constraint[]): Inference {
   let any = declares.get(code);
   if (any === undefined) declares.set(code, (any = nodesWhere(code, "has a unit", (n) => !!unitOf(n)).length > 0));
   if (!any && extra.every((c) => c.rhs.every((x) => x === 0))) return UNITLESS;
   const sys = new System();
   const conflicts: Inference["conflicts"] = [];
-  for (const c of [...constraints(code, defId), ...extra]) {
-    // What each side already was, so the message can name both units.
+  for (const c of [...(own ?? constraints(code, defId)), ...extra]) {
+    if (sys.add(c)) continue;
+    // What each side already was, so the message can name both units: a
+    // constraint that conflicts leaves the system as it was, so they are
+    // read after it, only for a conflict (I260: reading them for every
+    // constraint was most of a check of trek's 96 definitions).
     const sides = c.terms.length === 2 ? c.terms.map(([t]) => [t, sys.value(t)] as const).filter((x): x is [string, Unit] => !!x[1]) : [];
     const was = c.terms.length === 1 ? sys.value(c.terms[0][0]) : undefined;
-    if (!sys.add(c)) conflicts.push({ why: c.why, node: c.node, sides: sides.length === 2 ? sides : undefined, was });
+    conflicts.push({ why: c.why, node: c.node, sides: sides.length === 2 ? sides : undefined, was });
   }
   return { ok: !conflicts.length, conflicts, unit: (term) => sys.value(term) };
 }
@@ -540,15 +544,30 @@ const counts = (cs: Constraint[]) => { const m = new Map<string, number>(); for 
 // now is new.
 const UNWORDED = "\u0000a conflict, not worded";
 const unworded: Inference["conflicts"] = [{ why: UNWORDED }];
+// A definition's conflicts are a function of its constraints alone, and
+// most checks (each MCP edit checks the whole program two or three times)
+// see the same constraints for every definition but the one edited: found
+// by them, a few hundred kept (I260: trek's 96 definitions solved again
+// were most of a replace's 1.5 s and more).
+const solvedBy = new Map<string, Inference["conflicts"]>();
+function conflictsOf(code: Code, d: Id): Inference["conflicts"] {
+  const cs = constraints(code, d), k = JSON.stringify(cs.map((c) => [c.terms, c.rhs, c.why, c.node]));
+  const had = solvedBy.get(k);
+  if (had) { solvedBy.delete(k); solvedBy.set(k, had); return had; }
+  const out = infer(code, d, [], cs).conflicts;
+  solvedBy.set(k, out);
+  if (solvedBy.size > 500) solvedBy.delete(solvedBy.keys().next().value!);
+  return out;
+}
 function conflictsWith(code: Code, d: Id, before?: UnitsBefore, quick = false): Inference["conflicts"] {
   const was = before?.of(d);
-  if (!was) return infer(code, d).conflicts;
+  if (!was) return conflictsOf(code, d);
   const cs = constraints(code, d), left = new Map(was.keys), added: Constraint[] = [];
   for (const c of cs) { const k = key(c), n = left.get(k) ?? 0; if (n) left.set(k, n - 1); else added.push(c); }
-  if ([...left.values()].some((n) => n > 0)) return infer(code, d).conflicts;
+  if ([...left.values()].some((n) => n > 0)) return conflictsOf(code, d);
   if (!added.length) return [];
   const sys = was.sys.copy();
-  return added.some((c) => !sys.add(c)) ? (quick ? unworded : infer(code, d).conflicts) : [];
+  return added.some((c) => !sys.add(c)) ? (quick ? unworded : conflictsOf(code, d)) : [];
 }
 
 // Unit conflicts in every function of a program, as messages, or in the
