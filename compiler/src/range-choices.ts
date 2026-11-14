@@ -111,7 +111,7 @@ export function rangeChoices(ir: CoreIR, js = false): number {
 
 // `array of range x` of Ints on WebAssembly (C207v): filled straight in,
 // no list made and taken apart (wasm-rt.ts `array.range`), as c.ts
-// prints it on C.
+// prints it on C, and the core IR's JavaScript (core-rt.ts, C228).
 export function rangeArrays(ir: CoreIR): number {
   let made = 0;
   const go = (e: SExpr): SExpr => {

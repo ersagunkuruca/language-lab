@@ -915,6 +915,17 @@ export const arrayOfItems = (l: { tag: Id; fields: unknown[] }): ArrayView => {
   const xs = l instanceof ItemsList && l.i === 0 && Array.isArray(l.b) ? l.b : itemsOf(l);
   return xs.length >= 16 && xs.every(isByte) ? byteArray(Uint8Array.from(xs as number[])) : arrayOf(xs);
 };
+// `array of range(n)`, filled with no list made (the core IR's
+// JavaScript, range-choices.ts rangeArrays, C228): what arrayOfItems
+// makes of that list, a byte a slot from 16 to 256 items.
+export const rangeArray = (n: number): ArrayView => {
+  const k = Math.max(0, n);
+  if (k >= 16 && k <= 256) { const b = new Uint8Array(k); for (let i = 0; i < k; i++) b[i] = i; return byteArray(b); }
+  // No room at its ends: a push copies it, as onto a byte array.
+  const xs = new Array<number>(k);
+  for (let i = 0; i < k; i++) xs[i] = i;
+  return new ArrayView(versionOf({ items: xs, lo: 0, hi: k }), 0, k);
+};
 // Either kind of array value: a view, or { tag, fields } made elsewhere
 // (a value read back from JSON).
 export const arrayView = (a: ArrayValue): ArrayView => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));

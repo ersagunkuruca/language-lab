@@ -36,8 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| C227 | depot's `List Station`, built once and then only read by position (`item at`), stays a linked list, so `closest` and the truck walk it for each station: core 27x the ideal at 160 stations, 156x at 640. Find why the chooser keeps List as written there (it took a tree for Map). An array by hand: 640 stations 63 s → 3.5 s | GAPS round 17 D1 | 2026-11-14 |
-| C228 | A range made only to be walked once: depot's `indices(c)`, `range(length(c.stations))`, is made for each `closest` and truck round, and is the largest self time once C227 is done (0.67 of 3.5 s at 640 stations). Fuse the list into the recursion that walks it | GAPS round 17 D5 | 2026-11-14 |
 
 ## E: Editor
 
