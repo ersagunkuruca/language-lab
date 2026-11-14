@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
-| L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L249b, L256, L248, L247, L252e (pins); then L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -166,12 +166,16 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L252e | Units in a pinned signature (the rest of L252): a pin keeps its definition's units, concrete (`Float64 m`) and related (`(Float64 u) -> Float64 u²`, a unit variable), so an edit that changes them is refused as one that changes the type is. Maps' values and tuples' parts carry their units since L252e's first part. Waits for a program that pins a unit-generic function | L252d (Language lane B, 2026-11-14); GAPS.md round 16 U1 | P3 | M | waits for an example |
+| L249b | Int's own definition as data: a match on an Int's sign (negative, zero, positive) and Nat literals (`3` where a Nat is needed). Example to write: a program that recurses on a Nat and splits on a sign | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | M | example to write first |
+| L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its definitions instead of written by hand. Example to write: a program with a representation of its own whose declared cost is wrong for it | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
+| L252e | Units in a pinned signature (the rest of L252): a pin keeps its definition's units, concrete (`Float64 m`) and related (`(Float64 u) -> Float64 u²`, a unit variable), so an edit that changes them is refused as one that changes the type is. Maps' values and tuples' parts carry their units since L252e's first part. Example to write: a program that pins a unit-generic function (a library of its own, published) | L252d (Language lane B, 2026-11-14); GAPS.md round 16 U1 | P3 | M | example to write first |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L256 | A value packed with its implementation: a list of things of different types sharing an interface, each with its own way. Example to write: a program that keeps values of several types in one list and runs one interface over them | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | L | example to write first |
+| L248 | Ropes as one more representation of List (`append` and `split` in log n). Example to write: a program that splits and joins long lists (an editor buffer) | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 
