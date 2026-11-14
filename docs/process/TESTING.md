@@ -401,3 +401,62 @@ rows T12 to T14 (and L216, L217) the fixes.
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting
 one and the one that fits the language best.
+
+## 8. 2026-11-14: select by what a test ran (T16)
+
+Ersagun, 2026-11-14: "Why do we keep having the same discussion again and
+again? I don't like to wait so much. I want the testing to be as granular
+as possible. And I don't want to pay for compute (or tokens) where the
+answer is 'YES 1+1 STILL EQUALS 2' … We don't have to catch everything
+right when they break."
+
+**Why it kept coming back.** Four rounds (10-23 this note, 10-29 browser
+tests nightly, 11-03 the fast set, 11-13 all of affected before a merge)
+each made the full run cheaper or moved it, and none made selection finer:
+
+1. A test file is picked by imports, and the graph is flat: 270 of 372
+   test files import `infer.ts` directly, so any change to the core
+   reaches nearly all of them. §1 said on 10-23 that granularity has to
+   come from the data; it was never built. The suite grew from 7
+   CPU-minutes to about 204 (nightly-times.json), and slices, slow.json
+   and shards kept up only for a while.
+2. The rule before a merge swung: picked by hand (11-05), main red through
+   eight merges, all of affected (I251, 11-13), 10 to 15 minutes a merge.
+   Each red pushed toward more, each wait toward less; there was no
+   principled middle.
+3. Nothing remembered a pass: the same test on the same code ran before
+   the merge, after it in Check main, at night, and again after a fix.
+
+**The plan.** The tool decides what runs; lanes don't choose.
+
+- **T16a The test map.** Check main and the Nightly run each test file alone
+  with V8's coverage on (NODE_V8_COVERAGE, blocks, child processes too;
+  about 2% slower) and `test/reads.mjs` preloaded, and record, per test
+  file, the lines it ran and the data files it read (test-map.ts). The
+  map lives on the branch `test-map` (one file, one commit, no history).
+  Prior art: dynamic regression test selection, Ekstazi (Gligoric,
+  Eloussi and Marinov, ISSTA 2015), which tracks files; this tracks lines.
+- **T16b Select by changed lines.** A change reaches a test when the test
+  ran a line it changes (comments, blank lines and type-only edits left
+  out) or read a file it changes. Before a merge, of those, only a
+  cheapest set that still runs every changed line at least once (greedy
+  weighted set cover over the lines, by each file's seconds), so a big
+  end-to-end test stays out when smaller ones run the same lines. Test
+  suite minimisation by set cover is prior art (Harrold, Gupta and Soffa,
+  TOSEM 1993).
+- **T16c Remember passes; review on a schedule.** A test runs again only
+  when a line it ran or a file it read changed since its entry's commit,
+  or when its review is due: each clean run doubles its interval (1, 2, 4,
+  then 7 days), and a failure or an edit to the test resets it to a day.
+  Like spaced repetition (Leitner boxes), applied to tests that keep
+  passing. Every test still runs at least weekly on the code of the day.
+- **T16d A red finds its culprit.** A file that fails in CI is bisected
+  between its last pass and now, by itself, and the run names the commit
+  (and PR) that broke it. That makes catching a break a day late cheap.
+- **T16e The rule.** WORKFLOW.md says one command before a merge, and
+  trusting it; no hand-picked sets, no full rerun after a fix.
+
+What we give up: a break that only a test the cover left out would see is
+caught after the merge, and one in a test due in a week, within a week,
+with its culprit named. Ersagun accepted that ("we don't have to catch
+everything right when they break").
