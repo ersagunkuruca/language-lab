@@ -1,9 +1,9 @@
 // examples/trits (the example for L249b): balanced ternary from −13 to 13,
 // read back, and an odometer that turns one digit step at a time, run by
 // the evaluator and compiled alike. Its `walked` splits a step count by
-// sign and turns it into a Nat by hand, `natural(d)` and `natural(0 - d)`,
-// and a count written as a literal is `natural(5)`: what L249b's Int as
-// data and Nat literals take away.
+// sign and turns it into a Nat by hand, `natural(d)` and `natural(0 - d)`:
+// what L249b's Int as data takes away. Its five steps are written `5`, a
+// Nat literal (L249b).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

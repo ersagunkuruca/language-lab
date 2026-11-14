@@ -402,7 +402,11 @@ natural numbers as data: `zero | succ(pred: Nat)`, with `add`,
 `multiply`, `natural` (Int → Nat) and `integer` (Nat → Int). A program
 matches and folds on a Nat the Peano way, and `ters run` stores it as an
 Int (zero is 0, succ adds one, a fold loops), with nothing written about
-how. Division rounds down, so
+how. A Nat is written as a number where one goes (L249b): `stepped(f, x,
+5)` is five steps, through Nat's Literal (`natural(5)`), and just 5 when
+it is stored as an Int. Only a whole number from 0 is a Nat (`-1` and
+`2.5` are refused), and a literal something adds to is a Number as
+before, since Nat has no + − ·. Division rounds down, so
 `remainder` has the divisor's sign. Run backwards, Int stays whole: `x · 3
 + 1 = 13` gives 4 and `= 12` gives none, whether it is written with Int's
 own operations or the generic ones at an Int literal. The checker plans it

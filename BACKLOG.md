@@ -166,7 +166,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L249b | Int's own definition as data: a match on an Int's sign (negative, zero, positive) and Nat literals (`3` where a Nat is needed). Example to write: a program that recurses on a Nat and splits on a sign | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | M | example to write first |
+| L249b | Int's own definition as data: a match on an Int's sign, `from(k)` for k ≥ 0 and `minus one minus(k)` for −1 − k, k a Nat (NUMBERS.md stage 1). Nat literals are done. Example: examples/trits, whose `walked` splits a step count with `if d ≥ 0` and `natural(d)`, `natural(0 - d)` | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | M | the match next |
 | L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its definitions instead of written by hand. Example to write: a program with a representation of its own whose declared cost is wrong for it | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
 | L252e | Units in a pinned signature (the rest of L252): a pin keeps its definition's units, concrete (`Float64 m`) and related (`(Float64 u) -> Float64 u²`, a unit variable), so an edit that changes them is refused as one that changes the type is. Maps' values and tuples' parts carry their units since L252e's first part. Example to write: a program that pins a unit-generic function (a library of its own, published) | L252d (Language lane B, 2026-11-14); GAPS.md round 16 U1 | P3 | M | example to write first |
 
