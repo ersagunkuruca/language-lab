@@ -37,6 +37,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | C228 | A range made only to be walked once: depot's `indices(c)`, `range(length(c.stations))`, is made for each `closest` and truck round, and is the largest self time once C227 is done (0.67 of 3.5 s at 640 stations). Fuse the list into the recursion that walks it | GAPS round 17 D5 | 2026-11-14 |
+| E265 | Where effects happen, and in what order, inside one step (the useful part of a "monads view", Ersagun 2026-11-14): the graph numbers an action's lets as steps with dashed then-lines (do-notation's binds, 2026-10-26), but an effect inside a call's inputs shows no order. In `show(roll(6)) ++ show(roll(6))`, or `say(a) + say(b)` under a handler, nothing says the left one runs first, and Earlier and Later on an input change what is printed or drawn without the graph showing it. An overlay: every call whose row isn't empty marked with its effects, numbered in the order it runs (SPEC §5.1, inputs left to right), the steps' numbering continued into them; a view only, nothing in the tree changes. Not a full monads toggle: binding every effectful call to a name would spell the same tree longer and say nothing the numbers don't | Ersagun's question in thread "Analyze unifying closures, interfaces and effects"; [CLOSURES-INTERFACES-EFFECTS-2026-11-14](docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) | 2026-11-14 |
 
 ## E: Editor
 
