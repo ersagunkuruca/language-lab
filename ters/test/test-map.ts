@@ -5,9 +5,12 @@
 // import infer.ts directly, so by imports any change to the core reached
 // nearly all of them.
 //
-// Recording runs each test file alone with V8's coverage on
-// (NODE_V8_COVERAGE, block coverage, child processes included; about 2%
-// slower) and test/reads.mjs preloaded, which notes the files read. Dynamic
+// Recording runs each test file alone with test/reads.mjs preloaded in
+// every process it starts, which turns on V8's precise coverage of
+// functions (which functions ran, not blocks: NODE_V8_COVERAGE's block
+// coverage made evaluator-heavy runs nine times slower, fingerprint's
+// `ters run` 8 s to 72 s; functions cost about 20% there) and notes the
+// files read. Dynamic
 // selection by what a test ran is prior art: Ekstazi (Gligoric, Eloussi and
 // Marinov, ISSTA 2015) at the level of files; this keeps lines.
 //
@@ -135,7 +138,7 @@ export function recordOne(top: string, test: string, at: string, env: NodeJS.Pro
   return new Promise((done) => {
     const c = spawn("node", ["--test", "--test-reporter=dot", relative(pkg, test)], {
       cwd: join(top, pkg), stdio: ["ignore", "pipe", "pipe"],
-      env: { ...rest, ...(coverage ? { NODE_V8_COVERAGE: covDir } : {}), TERS_READS: reads, TERS_TOP: top, NODE_OPTIONS: [env.NODE_OPTIONS, preload].filter(Boolean).join(" ") },
+      env: { ...rest, ...(coverage ? { TERS_COVERAGE: covDir } : {}), TERS_READS: reads, TERS_TOP: top, NODE_OPTIONS: [env.NODE_OPTIONS, preload].filter(Boolean).join(" ") },
     });
     let output = "";
     c.stdout.on("data", (d) => { output += d; });

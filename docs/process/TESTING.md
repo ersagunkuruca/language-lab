@@ -434,8 +434,10 @@ each made the full run cheaper or moved it, and none made selection finer:
 **The plan.** The tool decides what runs; lanes don't choose.
 
 - **T16a The test map.** Check main and the Nightly run each test file alone
-  with V8's coverage on (NODE_V8_COVERAGE, blocks, child processes too;
-  about 2% slower) and `test/reads.mjs` preloaded, and record, per test
+  with V8's precise coverage of functions on (started by `test/reads.mjs`
+  in every process, child processes too; NODE_V8_COVERAGE's block coverage,
+  first used, made evaluator-heavy runs nine times slower, fingerprint 8 s
+  to 72 s, so lines are those of functions that ran; about 20% there) and `test/reads.mjs` preloaded, and record, per test
   file, the lines it ran and the data files it read (test-map.ts). The
   map lives on the branch `test-map` (one file, one commit, no history).
   Prior art: dynamic regression test selection, Ekstazi (Gligoric,
