@@ -10,7 +10,7 @@ import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
-import { city, folder, ways } from "../gaps/depot.ts";
+import { city, folder, program, ways } from "../gaps/depot.ts";
 import { skip } from "./c-harness.ts";
 
 const w = await ways();
@@ -28,6 +28,13 @@ test("depot: the sample town's day", () => {
   assert.match(r.out[1], /^rides \d+, went without \d+ \(\d+\.\d%\), walked on \d+$/);
   assert.equal(r.out.filter((l) => /^(Hilltop|Harbour) /.test(l)).length, 4);
   assert.equal(r.out.at(-1)!.length, 12 + 24);
+});
+
+// The stations are read by position (`station at`) on every event; the
+// World holding them is changed with `set` on every event, which kept
+// every list linked (C227, GAPS round 17 D1): 640 stations took 63 s.
+test("depot: the lists are arrays, beside the map's tree", () => {
+  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "List as array of List"]);
 });
 
 test("depot: other hours and seeds", () => {
