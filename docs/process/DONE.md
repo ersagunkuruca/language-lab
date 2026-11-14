@@ -2124,6 +2124,7 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 
 | id | item | PR |
 |---|---|---|
+| L261k | Numbers & physics in plain words: a comment on main and on each printed line (a check, a run forwards, a run backwards, why polar says false on Float64), quadratic's root explained; a program with only short names (quadratic) loads with them, so `ters run` and the MCP read x₊ and Δ rather than ‹?0f88› | this PR |
 | L261a | Lockstep is a page: press left and right and the cart moves on machine A; "Send the presses to B" replays only the presses on machine B, and the two step counts agree (`steps of` names the take-apart). The old Text program is `lockstep-text`, kept for its tests | #2715, #2720 |
 | L261b | Eight queens is a page (`queens-page`): choose n, step through the answers on a board, the count shown; `queens` stays as the test program | #2721 |
 | L261d | Calculus is a page (`calculus-page`): pick a function, f and its derivative made from the definition drawn, Newton's guesses stepped with their tangents | #2725 |
