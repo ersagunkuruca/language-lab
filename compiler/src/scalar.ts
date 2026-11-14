@@ -135,6 +135,7 @@ export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
   [ARRAY_OPS.length]: "array.length", [ARRAY_OPS.at]: "array.at", [ARRAY_OPS.push]: "array.push",
   [ARRAY_OPS.first]: "array.first", [ARRAY_OPS.rest]: "array.rest", [ARRAY_OPS.pushFront]: "array.pushFront",
+  [ARRAY_OPS.slice]: "array.slice",
 };
 // Int's builtins held in 32 bits (`shader`). quotient, remainder, power
 // and whole part may have no answer, which sets the shader's flag.

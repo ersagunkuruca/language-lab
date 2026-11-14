@@ -73,6 +73,11 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   const itemAt = def("array item at", ["array", "position", "otherwise"], (a, i, o) => k.call(S.first,
     k.thunk(() => k.call(ARRAY_OPS.at, a, i)),
     k.thunk(() => o)));
+  // The items after the first `count`, and the first `count` (C221): a
+  // view on the same buffer, where the list's walk `count` items (trek's
+  // window, `take(drop(hs, i − k), 2k + 1)`, walked i items a fix).
+  const dropped = def("array drop", ["array", "count"], (a, c) => k.call(ARRAY_OPS.slice, a, c, k.call(ARRAY_OPS.length, a)));
+  const taken = def("array take", ["array", "count"], (a, c) => k.call(ARRAY_OPS.slice, a, k.int(0), c));
   // An item replaced by its Int position (C93c), in the buffer, the array
   // it was keeping the change back; the array as it is outside it.
   const replaced = def("array replace at", ["array", "position", "by"], (a, i, x) => k.call(ARRAY_OPS.replaceAt, a, i, x));
@@ -96,6 +101,8 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaced), cost(k, "constant")),
+    k.call(JOBS.job, k.x(prelude("drop")), k.x(dropped), cost(k, "constant")),
+    k.call(JOBS.job, k.x(prelude("take")), k.x(taken), cost(k, "constant")),
     k.call(JOBS.hides, k.x(CONS), k.int(1)),
     // A whole list from outside: one array of it (C76).
     k.call(JOBS.storeBy, k.x(ARRAY_OPS.of)),
@@ -114,6 +121,8 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.asWritten, k.x(prelude("item at")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("map")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("replace at")), cost(k, "linear")),
+    k.call(JOBS.asWritten, k.x(prelude("drop")), cost(k, "linear")),
+    k.call(JOBS.asWritten, k.x(prelude("take")), cost(k, "linear")),
   )));
   defs.push(spec);
   return { representations: [rep, spec], defs };

@@ -293,6 +293,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **first of array** : `(Array a) -[Choice]-> a`. The array's first item; none of an empty array.
 - **front of array** : `(Array a) -> Optional (a, Array a)`. The array's first item and the rest of it, as an Option: some((item, rest)), or none of an empty array. Run backwards, the array made from them.
 - **rest of array** : `(Array a) -> Array a`. The array without its first item; an empty array stays empty. It shares the items rather than copying them.
+- **slice of array** : `(Array a, Int, Int) -> Array a`. Some of the array's items: from a position, so many of them, each clamped to the array. It shares the items rather than copying them, unless a few are taken from a big array.
 - **push front** : `(Array a, a) -> Array a`. The array with one more item at the front. Compiled JS writes into free room before the items when nothing else has taken it.
 - **first of array if any** : `(Array a) -> Optional a`. The array's first item as an Option: some(item), or none of an empty array. No Choice, so nothing searches around it.
 - **replace in array** : `(Array a, Int, a) -> Array a`. The array with the item at this position replaced. A copy: the compiler may write in place when nothing else holds the array.

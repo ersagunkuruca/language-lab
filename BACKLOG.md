@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| C Compiler and targets | "Compiler lane" | C222 (WASI out of stack on trek), C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
@@ -44,7 +44,6 @@ New items land here until the next triage gives them a lane and a priority.
 | I261 | `ters run` takes 11 s on trek's 400-fix sample, 0.8 s of it running: 5.9 s re-checks units on the represented program (a rewrite changes no units, so skip it), 5.1 s lowers (`firstArms` 2 s) | GAPS.md round 16 R4 | 2026-11-13 |
 | L257 | Units through constants and builtins (beside L252d): a value definition is unit-checked and its unit used where it's named (`limit = 3.0 s` then `1.0 m + limit` refused; trek's `earth radius`, `gravity` type as `a` today); `first(x, else y)` gives x's and y's unit; `exp`, `log`, `asin` and the like take and give a number without units. trek: 7 of 96 signatures show a unit, 26 a plain Float64 where one is known | GAPS.md round 16 U1 | 2026-11-13 |
 | L258 | **Ersagun's call.** A division guarded by a comparison is still a Choice (`if d > 0.0 m then x / d`): trek has 9 `first(…, else 0)` for divisions, `sqrt` and `asin` that always answer. Either the checker reads the guard, or Float64 division always answers as IEEE's does (∞, NaN) | GAPS.md round 16 L1 | 2026-11-13 |
-| C221 | `drop` and `take` on a list stored as an array as jobs (a view, O(1); O(k)), as `item at` is: trek's smoothing, `take(drop(hs, i − k), 2k + 1)`, walks i items per window, so the core module is 47x the ideal at 4000 fixes and 713x at 40000, `ters native` 1271x | GAPS.md round 16 R1 | 2026-11-13 |
 | C222 | `ters wasi` runs out of stack from 10000 fixes on trek (`points from`, `legs of`, std's `sum` recurse per item); the core module and `ters native` don't. A way to grow the stack while C187 waits for stack switching | GAPS.md round 16 R3 | 2026-11-13 |
 
 ## E: Editor

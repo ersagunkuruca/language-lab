@@ -955,6 +955,21 @@ const restOf = (a: ArrayValue): ArrayView => {
   v.ver.shared = true;
   return new ArrayView(v.ver, v.start + 1, v.n - 1);
 };
+// `count` items from position `from`, each clamped to the array, as a
+// view on the same buffer (C221): `drop` and `take` of a list stored as
+// an array, in one step where the list's walk `from` items. A few items
+// (under 64) of a big buffer are copied out, so a window doesn't keep a
+// whole track alive (as a rest, I106c); more stay a view, since copying
+// them would make a drop as long as the list (trek's windows, C221).
+const sliceOf = (a: ArrayValue, from: I.Int, count: I.Int): ArrayView => {
+  const v = arrayView(a), n = v.n;
+  const f = Math.max(0, Math.min(n, Number(from))), c = Math.max(0, Math.min(n - f, Number(count)));
+  if (f === 0 && c === n) return v;
+  const size = v.ver.cur ? v.ver.cur.items.length : v.buf.items.length;
+  if (size > 256 && c < 64) return arrayOf(v.buf.items, v.start + f, v.start + f + c);
+  v.ver.shared = true;
+  return new ArrayView(v.ver, v.start + f, c);
+};
 // The item at position i replaced by x (C93c), or the array as it is
 // outside it, as `replace at` on a list: written into the buffer, and the
 // version given becomes the change back.
@@ -1009,6 +1024,7 @@ export const ARRAY_OPS = {
   first: arrayFirst,
   rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf_(a)], arrayOf_(a)]), restOf),
   pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushFront),
+  slice: builtin("array.slice", "slice of array", ofItem((a) => [[arrayOf_(a), int, int], arrayOf_(a)]), sliceOf),
   replaceAt: builtin("array.replaceAt", "replace in array", ofItem((a) => [[arrayOf_(a), int, a], arrayOf_(a)]), replaceIn),
   // The first item as an Option, without Choice: `array of List`'s match
   // (array-list.ts, C30d3b) reads it this way, so the evaluator runs a
