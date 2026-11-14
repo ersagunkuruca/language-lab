@@ -52,8 +52,9 @@ test("an entry has the lines a test ran and the files it read", async () => {
     assert.equal(entry.at, "abc");
     const lib = fromRanges(entry.code["pkg/lib.ts"]).flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => a + i));
     for (const l of [1, 2, 7, 8]) assert.ok(lib.includes(l), `ran line ${l}: ${entry.code["pkg/lib.ts"]}`);
-    // The body of a function never called, and a branch never taken.
-    for (const l of [5, 9]) assert.ok(!lib.includes(l), `didn't run line ${l}: ${entry.code["pkg/lib.ts"]}`);
+    // The body of a function never called (functions, not blocks: half's
+    // untaken branch counts as run).
+    for (const l of [5]) assert.ok(!lib.includes(l), `didn't run line ${l}: ${entry.code["pkg/lib.ts"]}`);
     assert.ok("pkg/x.test.ts" in entry.code);
     assert.deepEqual(entry.files, ["pkg/data/b.json"]);
     assert.deepEqual(entry.dirs, ["pkg/data"]);

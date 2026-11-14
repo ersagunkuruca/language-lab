@@ -72,7 +72,7 @@ test("a number's unit is read from text, and a name in scope is still the name",
   assert.equal(s.errors(), "ok");
   assert.throws(() => fill("mixed", ["x"], "3 m + 2 s"), /units don't agree here: m can't meet s/);
   // m is a parameter here, so `2 m` is no length: it doesn't read.
-  assert.throws(() => fill("shadowed", ["m"], "2 m"), /isn't read/);
+  assert.throws(() => fill("shadowed", ["m"], "2 m"), /in “2 m”, m is the name m here, not a unit/); // I260 says why
   // A unit literal where a field asks for one.
   fill("placed", ["x"], "body(1.5 m)");
   assert.match(s.errors(), /^ok/);

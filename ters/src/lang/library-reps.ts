@@ -18,6 +18,7 @@ import { bindsOf, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtre
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
+import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { listGroups } from "./rep-groups.ts";
@@ -186,8 +187,15 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       grew = false;
       for (const d of boundary.reached) if (!defs.includes(d) && !library.includes(d) && subtree(code, d).some((x) => { const n = code.nodes[x]; return n.kind === "ref" && library.includes(n.target); })) { library.push(d); grew = true; }
     }
+    // Each copy's ids come from what it copies, as it is with the
+    // boundary's changes (src/hash.ts, which reaches what it calls): the
+    // same copy each run, so the check of a rewrite finds its groups kept
+    // from the last (check-cache.ts), on any program that copies them so
+    // (I264). Its original's id is in it too: two definitions written alike
+    // copy apart.
+    const memo = hashes(withBoundary, library);
     const fresh = new Map<Id, Id>();
-    for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, freshId());
+    for (const d of library) for (const id of subtree(withBoundary, d)) fresh.set(id, digest(["copy", d, memo.get(d)!, id]));
     const f = (id: Id) => fresh.get(id) ?? id;
     // Known by their originals' ids too (pure-branches.ts): each takes and
     // gives its lists as the original does.

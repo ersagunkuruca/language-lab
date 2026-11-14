@@ -22,7 +22,7 @@ import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
-import { ARITH, ARITHMETIC, ASSOCIATIVE, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
+import { ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING, schemeArith, shownIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { parseUnit, type Unit } from "../ters/src/units.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
@@ -288,7 +288,7 @@ const FOREIGN: [RegExp, string][] = [
   [/\|\|/, "write or"],
   [/(?<![\p{L}\p{N}_')\]])!(?!=)/u, "write not, as in not (x < 1)"],
 ];
-export function readError(text: string, error: string, code: Code, names: Names): string {
+export function readError(text: string, error: string, code: Code, names: Names, scope?: Map<string, Id>): string {
   const bare = text.replace(/"(?:[^"\\]|\\.)*"/g, (m) => " ".repeat(m.length));
   for (const [re, say] of FOREIGN) { const m = re.exec(bare); if (m) return `${m[0]} isn't Ters: ${say}`; }
   const open: string[] = [], pair: Record<string, string> = { ")": "(", "]": "[", "}": "{", "›": "‹" };
@@ -304,6 +304,12 @@ export function readError(text: string, error: string, code: Code, names: Names)
     const whole = parseValue(text, code, names);
     const tok = "error" in whole && whole.error === error ? /^\s*(\S+)/.exec(text.slice(Number(at[1]) - 1))?.[1] : undefined;
     if (tok) return `${error.replace(/ at \d+$/, "")}: “${tok}” isn't read`;
+  }
+  // A number's unit word that names something in scope is that name (L252b),
+  // so `0.0 m` with a parameter m is m after a number (I260).
+  for (const m of bare.matchAll(/(?<![\p{L}\p{N}_'])(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?\s+([^\s()[\],"+\-−·×÷=<>]+)/giu)) {
+    const u = parseUnit(m[1]);
+    if (u && Object.keys(u).length && scope?.has(m[1])) return `in “${m[0].trim()}”, ${m[1]} is the name ${m[1]} here, not a unit: a unit word that names something in scope is that name. Rename that ${m[1]} to write the unit`;
   }
   if (error === "a binder") return `“${text.trim()}” isn't read as a whole: an operator or a word in it isn't Ters's (equality is =; and, or, not; the Guide's “Text you can type” lists what reads)`;
   return error;
@@ -321,7 +327,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   for (const d of code.defs) if (all[d]) scope.set(all[d], d);
   for (const b of defId ? scopeAt(code, defId, hole) : []) if (all[b]) scope.set(all[b], b);
   const r = typedOut(text, code, all, scope);
-  if ("error" in r) return { ok: false, reason: readError(text, r.error, code, all) };
+  if ("error" in r) return { ok: false, reason: readError(text, r.error, code, all, scope) };
   // A name alone is already in the palette's list.
   if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
   // A whole number where an Int goes is an Int: 0 in slice's position. And
@@ -1172,6 +1178,11 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     // An operator expression whose last operand is a call reaches here
     // whole (a + nosuch(b)): the operand's own error says more (E174).
     if (!alts.length && inner) return inner;
+    // `not in order(ps)` when nothing is named `not in order`: not of the
+    // call, as `not (in order(ps))` (I260, round 16's M1). The word joined
+    // the name, as a name's words do.
+    const notted = /^not\s+(\S[\s\S]*)$/.exec(call[1]);
+    if (!alts.length && notted) { const r = typedOut(`not (${notted[1]}(${call[2]}))`, code, names, scope); if (!("error" in r)) return r; }
     if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.keys(names).filter((id) => { const k = code.nodes[id]?.kind; return k === "def" || k === "builtin" || k === "variant" || isOperation(code, id); }).map((id) => names[id])], scope)}` };
     return args.find((a) => "error" in a) as { error: string };
   }
@@ -2538,8 +2549,15 @@ export function rowAt(code: Code, root: Id): Row | null {
   const op = opOf(code, root);
   if (!op) return null;
   const items: Id[] = [];
-  const walk = (a: Id) => { if (a !== root && opOf(code, a) !== op) items.push(a); else for (const b of (code.nodes[a] as Call).args) walk(b); };
-  walk(root);
+  // A + or · chain is its left-nested pairs: a + (b + c) is two items, a and
+  // the pair (E264, as the text views since I274).
+  const left = LEFT_ONLY.has(op);
+  const walk = (a: Id, right: boolean) => {
+    if (a !== root && (opOf(code, a) !== op || (left && right))) { items.push(a); return; }
+    const [l, r] = (code.nodes[a] as Call).args;
+    walk(l, false); walk(r, true);
+  };
+  walk(root, false);
   return { kind: "chain", root, op, items, spine: [] };
 }
 
@@ -2555,7 +2573,9 @@ export function rowOfItem(code: Code, id: Id): { row: Row; at: number } | null {
   } else {
     const op = opOf(code, root);
     if (!op) return null;
-    for (let p = parentAt(code, root); p && p.slot === "args" && opOf(code, p.parent) === op; p = parentAt(code, root)) root = p.parent;
+    // Up through pairs of the same operator; for + and ·, only while this
+    // pair is the left input of the next (E264).
+    for (let p = parentAt(code, root); p && p.slot === "args" && opOf(code, p.parent) === op && !(LEFT_ONLY.has(op) && p.index !== 0); p = parentAt(code, root)) root = p.parent;
   }
   const row = rowAt(code, root);
   const at = row ? row.items.indexOf(id) : -1;
@@ -2582,6 +2602,14 @@ export function addItem(code: Code, names: Names, info: Info, row: Row, at: numb
     next = swapIn(code, tail, pair);
     made = { id: pair, kind: "call", fn: head, args: [hole, tail] };
     next.nodes[head] = { id: head, kind: "ref", target: CONS };
+  } else if (LEFT_ONLY.has(row.op!)) {
+    // Kept left-nested (E264): the new item is paired with all that comes
+    // before it, ((a + b) + new) + c, or with the first item, new + a.
+    const before = at === 0 ? row.items[0] : at === 1 ? row.items[0] : at >= row.items.length ? row.root : parentOf(code, row.items[at - 1])!.parent;
+    if (before === row.root && !parentOf(code, row.root)) return { ok: false, reason: "this has nowhere to grow" };
+    next = swapIn(code, before, pair);
+    made = { id: pair, kind: "call", fn: head, args: at === 0 ? [hole, before] : [before, hole] };
+    next.nodes[head] = { id: head, kind: "ref", target: row.op! };
   } else {
     const last = at >= row.items.length;
     const beside = row.items[last ? row.items.length - 1 : at];
@@ -2639,6 +2667,9 @@ export function moveItem(code: Code, names: Names, info: Info, row: Row, at: num
 // hold moves.
 export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from: number, to: number): TEdit {
   if (from === to) return { ok: false, reason: "it's there already" };
+  // + and · here are Float64's, where the order of a sum or product changes
+  // how it rounds (E264): its items stay where they are.
+  if (row.kind === "chain" && LEFT_ONLY.has(row.op!)) return { ok: false, reason: `the order of ${row.op === B.add ? "a sum" : "a product"} changes how a Float64 rounds, so its items stay where they are` };
   const order = [...row.items];
   const [it] = order.splice(from, 1);
   order.splice(to, 0, it);

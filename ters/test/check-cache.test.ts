@@ -86,6 +86,20 @@ test("checking the same program again checks none of its groups", () => {
   assert.equal(cache.misses, misses);
 });
 
+test("insiders made anew for a rewrite keep the groups that aren't them (I264)", () => {
+  // library-reps.ts makes a representation's definitions with new ids each
+  // run and makes them insiders: a group is kept by whether all of its
+  // own are insiders, not by the whole list.
+  const p = loadProgram(join(root, "examples", "raymarch"));
+  const cache = new CheckCache();
+  const insiders = [...(checkOptions.insiders ?? [])];
+  infer(p.code, p.pres.names, undefined, { ...checkOptions, insiders: [...insiders, "made-before"], cache });
+  const { misses } = cache;
+  const again = infer(p.code, p.pres.names, undefined, { ...checkOptions, insiders: [...insiders, "made-now"], cache });
+  assert.equal(cache.misses, misses);
+  assert.deepEqual(seen(again, p.pres.names), seen(infer(p.code, p.pres.names, undefined, checkOptions), p.pres.names));
+});
+
 test("a program on the library's layer checks as the same nodes off it (E253)", () => {
   // On its layer, the check's scans read the library's picks, made once,
   // and look only at the program's own nodes.

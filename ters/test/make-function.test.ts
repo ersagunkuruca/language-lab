@@ -24,7 +24,8 @@ test("a group of one value out becomes a function called in its place", () => {
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
   const text = renderLet(r.code, { ...p.pres, names: r.names }, fall);
-  assert.match(text, /part = \(gravity, time\) => 0\.5 · gravity · time · time/);
+  // fall writes 0.5 · gravity · (time · time), and the view keeps its brackets (I274).
+  assert.match(text, /part = \(gravity, time\) => 0\.5 · gravity · \(time · time\)/);
   assert.match(text, /drop = part\(gravity, time\)/);
   assert.deepEqual(infer(r.code, r.names).errors, []);
 });

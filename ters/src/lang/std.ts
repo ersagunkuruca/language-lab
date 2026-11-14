@@ -1899,23 +1899,31 @@ export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)
 export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
-// Operations where the grouping doesn't change the answer. A chain of one
-// of them, a ++ (b ++ c), is shown as the one call it means, with every
+// Operations where the grouping doesn't change the answer (+ and · only
+// left-nested, I274: on Float64 it does). A chain of one of them, a ++ (b ++ c), is shown as the one call it means, with every
 // operand side by side, however the tree pairs them up: a view, like a
 // list drawn as [x, y] (the program keeps its pairs). `keep` stops at an
 // inner call that has to stay visible on its own (a graph's named dot).
 export const ASSOCIATIVE = new Set<Id>([B.add, B.mul, S.and, S.or, S.concat]);
+// The ones whose chains are their left-nested pairs only: on Float64,
+// (a + b) + c and a + (b + c) round differently (I274, E264).
+export const LEFT_ONLY = new Set<Id>([B.add, B.mul]);
 export function chainOperands(code: Code, id: Id, keep: (id: Id) => boolean = () => false): Id[] | null {
   const head = (n: Node | undefined) => (isCall(n) && n.args.length === 2 ? code.nodes[n.fn] : undefined);
   const f = head(code.nodes[id]);
   if (f?.kind !== "ref" || !ASSOCIATIVE.has(f.target)) return null;
   const op = f.target;
   const out: Id[] = [];
-  const walk = (a: Id) => {
+  // + and · on a Float64 don't associate: (a + b) + c and a + (b + c) round
+  // differently, so only the left-nested pairs, which text reads back as a
+  // + b + c, are one chain; a right-nested pair stays in brackets (I274).
+  const leftOnly = LEFT_ONLY.has(op);
+  const walk = (a: Id, right: boolean) => {
     const g = head(code.nodes[a]);
-    if (a !== id && (g?.kind !== "ref" || g.target !== op || keep(a))) { out.push(a); return; }
-    for (const b of (code.nodes[a] as { args: Id[] }).args) walk(b);
+    if (a !== id && ((leftOnly && right) || g?.kind !== "ref" || g.target !== op || keep(a))) { out.push(a); return; }
+    const [l, r] = (code.nodes[a] as { args: Id[] }).args;
+    walk(l, false); walk(r, true);
   };
-  walk(id);
+  walk(id, false);
   return out.length > 2 ? out : null;
 }
