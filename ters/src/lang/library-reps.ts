@@ -128,12 +128,42 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
 
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
+  let backwards: boolean | undefined;
+  // A solve on lists, or a function on lists handed to a definition that
+  // solves (conjugate's bands, run backwards by inverse).
+  const listed = (t: Type | undefined): boolean => { if (!t) return false; t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || t.args.some(listed) : t.t === "fn" ? [...t.params, t.ret].some(listed) : false; };
+  const runsBackwards = () => {
+    if (backwards !== undefined) return backwards;
+    const reach = [main, ...dependencies(code, main)].filter((d) => code.nodes[d]?.kind === "def");
+    const solves = new Map<Id, boolean>();
+    const solving = (d: Id): boolean => {
+      if (solves.has(d)) return solves.get(d)!;
+      solves.set(d, false);
+      const yes = subtree(code, d).some((x) => { const n = code.nodes[x]; return isUse(n) || (n.kind === "ref" && n.target !== d && code.nodes[n.target]?.kind === "def" && solving(n.target)); });
+      solves.set(d, yes);
+      return yes;
+    };
+    return (backwards = reach.some((d) => subtree(code, d).some((x) => {
+      const n = code.nodes[x];
+      if (isUse(n)) return [...Object.values(n.given), ...Object.values(bindsOf(n)), n.id].some((y) => listed(info.typeOf.get(y)));
+      if (!isCall(n)) return false;
+      const f = code.nodes[n.fn];
+      return f?.kind === "ref" && code.nodes[f.target]?.kind === "def" && solving(f.target)
+        && n.args.some((a) => { const g = code.nodes[a]; return g?.kind === "ref" && code.nodes[g.target]?.kind === "def" && listed(info.typeOf.get(a)); });
+    })));
+  };
   for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
     if (asked.some((r) => r.of === ty) || skip.has(ty)) continue;
     // A hash table only where it is (hostMaps), and only where every map
     // has one holder, so a put changing it in place can't be seen.
-    const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty)
+    // A program that runs something on lists backwards (a solve, inverse)
+    // keeps them off the tree: its jobs are definitions of its own (a
+    // weight-balanced tree's), and a search run backwards through them
+    // never finishes, where an array runs backwards as a list does
+    // (conjugate's bands given to inverse, beside a page whose `styled`
+    // appends in a loop, I292).
+    const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty) && !(r.name === "tree of List" && runsBackwards())
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
