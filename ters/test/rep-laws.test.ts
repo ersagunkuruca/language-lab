@@ -23,7 +23,7 @@ test("Numbers' binary and int Nats agree with Nat through their meaning", () => 
   const { p, info, reps } = numbers();
   const laws = representationLaws(p.code, info, p.pres.names, reps);
   assert.deepEqual(laws.filter((l) => l.failures.length), []);
-  assert.deepEqual(laws.filter((l) => l.rep === "int").map((l) => l.job), ["zero", "succ", "add", "multiply", "integer", "natural", "match", "fold"]);
+  assert.deepEqual(laws.filter((l) => l.rep === "int").map((l) => l.job), ["zero", "succ", "add", "multiply", "integer", "natural", "nat literal", "match", "fold"]);
   assert.ok(laws.every((l) => l.cases > 0));
   assert.ok(laws.find((l) => l.rep === "binary" && l.job === "add")!.cases >= 20);
 });

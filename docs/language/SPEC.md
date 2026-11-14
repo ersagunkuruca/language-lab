@@ -167,7 +167,9 @@ is re + im·i, with Float64 parts. The library adds **Algebraic** (exact roots o
 polynomials), **Fixed** and others as ordinary data types with private
 constructors; their meaning is their definitions. **Nat** (L249) is
 `zero | succ(pred: Nat)`, plain data a program matches and folds on; that
-it may be stored as an Int is representation (§9), not meaning.
+it may be stored as an Int is representation (§9), not meaning. A whole
+literal from 0 where a Nat goes is `natural` of it (L249b); any other
+literal there is a type error.
 
 3.5. **Literals.** A plain literal is some number: `3` is an Int where an
 Int is needed, a Float64 where a Float64 is, and so on. A whole literal

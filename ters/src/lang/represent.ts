@@ -16,8 +16,8 @@
 
 import { children, dependencies, freshId, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
-import { CONS, COST, INT_OPS, JOBS, LIST, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
-import { NUMBER } from "./types.ts";
+import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
+import { INT, NUMBER } from "./types.ts";
 import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
 
 export interface Representation {
@@ -472,6 +472,15 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   };
   const ref = (target: Id) => add({ kind: "ref", target });
   const binder = () => add({ kind: "binder" });
+  // T's Literal's from fraction, when the row does it (Nat's `nat
+  // literal` stored as an Int, L249b): a literal written at T becomes that
+  // job's call, given its top and bottom as Ints.
+  const fromFraction = Object.keys(rep.impl).find((j) => code.defs.some((d) => {
+    const b = code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""];
+    if (!isCall(b) || b.args.length !== 1) return false;
+    const f = code.nodes[b.fn], a = code.nodes[b.args[0]];
+    return f?.kind === "ref" && f.target === LITERAL_V && a?.kind === "ref" && a.target === j;
+  }));
 
   // The representation's own code stays as it is: it's written on R, and
   // `meaning` is written on T.
@@ -540,6 +549,9 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
     const n = nodes[id];
     for (const c of childrenOf(n)) rewrite(c);
     if (n.kind === "ref" && rep.impl[n.target]) nodes[id] = { ...n, target: rep.impl[n.target] };
+    else if (fromFraction && n.kind === "lit" && n.of === t && /^\s*\d+\s*$/.test(String(n.value))) {
+      nodes[id] = { id, kind: "call", fn: ref(rep.impl[fromFraction]), args: [add({ kind: "lit", value: String(n.value).trim().length <= 15 ? Number(n.value) : String(n.value).trim(), of: INT }), add({ kind: "lit", value: 1, of: INT })] };
+    }
     else if (rep.literal && literalOf(n, t)) {
       const { id: _, ...lit } = n;
       nodes[id] = { id, kind: "call", fn: ref(rep.literal), args: [add(lit)] };
