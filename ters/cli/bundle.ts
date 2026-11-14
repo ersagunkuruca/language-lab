@@ -11,6 +11,7 @@
 
 import { build } from "esbuild";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const o = process.argv.indexOf("-o");
 const out = resolve(o >= 0 ? process.argv[o + 1] : join(import.meta.dirname, "..", "..", "ters.mjs"));
@@ -26,7 +27,7 @@ export async function bundleTers(file: string) {
   });
 }
 
-if (import.meta.main) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   await bundleTers(out);
   process.stderr.write(`wrote ${out}\n`);
 }
