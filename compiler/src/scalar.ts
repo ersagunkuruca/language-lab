@@ -111,6 +111,7 @@ import { machineWords } from "./machine-words.ts";
 import { loopRecords } from "./loop-records.ts";
 import { closureArgs } from "./closure-args.ts";
 import { knownRecords } from "./known-records.ts";
+import { defunctionalise } from "./defunc.ts";
 import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -694,6 +695,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // motor, was checked over the whole library each time (C90).
   code = reachedWithShows(code, roots, info);
   if (opts.data) opts = { ...opts, records: true };
+  // A shader's records profile has function values too (C225): closures,
+  // made records by defunc.ts once lowered.
+  const defunc = !opts.data && !!opts.shader && !!opts.records && !envSet("NO_DEFUNC");
+  const closures = !!opts.data || defunc;
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
@@ -948,7 +953,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const freeInside = (x: Type): boolean => unconstrained(x) || (x.t === "con" && x.args.some(freeInside)) || (x.t === "fn" && (x.params.some(freeInside) || freeInside(x.ret)));
   const freed = (x: Type): Type => (unconstrained(x) ? { t: "con", id: NUMBER, args: [] } : x.t === "con" && x.args.some(freeInside) ? { ...x, args: x.args.map(freed) } : x.t === "fn" && freeInside(x) ? { ...x, params: x.params.map(freed), ret: freed(x.ret) } : x);
   function stype(t: Type, inside: Id[] = []): LType | null {
-    if (t.t === "fn" && opts.data) {
+    if (t.t === "fn" && closures) {
       // A function that may not finish, have no answer or abort is fine
       // here (a partial one, giving a status); one with other effects isn't yet.
       const effs = info.subst.resolveRow(t.eff).effs;
@@ -1085,7 +1090,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Why t isn't in the profile, when records are: the first reason found.
   function whyNot(t: Type, inside: Id[] = []): string {
     if (t.t === "fn") {
-      if (!opts.data) return "a function (that needs closures)";
+      if (!closures) return "a function (that needs closures)";
       const bad = [...t.params, t.ret].find((p) => !stype(p, inside));
       return bad ? `a function of ${whyNot(bad, inside)}` : `a function with effects (${info.subst.resolveRow(t.eff).effs.filter((e) => e !== DIVERGE).map(nm).join(", ")})`;
     }
@@ -1300,6 +1305,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (t && isArray(t)) return { k: "call", fn: func(n.target, new Map()), args: [], tail };
         }
+        if (defunc && code.nodes[n.target]?.kind === "def") {
+          const t = stype(zonk(id));
+          if (t && isFn(t)) return named(n.target, id, t);
+        }
         if (opts.data && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
           if (t && isFn(t)) return named(n.target, id, t);
@@ -1391,7 +1400,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (ff) return ff;
         }
         // A function computed or passed in: called through its closure.
-        if (opts.data && (head.kind !== "ref" || env.has(head.target) || inlined.has(head.target) || (code.nodes[head.target]?.kind === "def" && (code.nodes[(code.nodes[head.target] as NodeOf<"def">).body ?? ""]?.kind !== "lambda")))) {
+        if (closures && (head.kind !== "ref" || env.has(head.target) || inlined.has(head.target) || (code.nodes[head.target]?.kind === "def" && (code.nodes[(code.nodes[head.target] as NodeOf<"def">).body ?? ""]?.kind !== "lambda")))) {
           const t = stype(zonk(n.fn));
           if (!t || !isFn(t)) throw new Refused(`calls a function of ${whyNot(zonk(n.fn))}`);
           return { k: "apply", fn: expr(n.fn, env, f, false), t, args: n.args.map((a) => expr(a, env, f, false)), tail, tmp: f.locals.push(t) - 1 };
@@ -2017,7 +2026,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return fold(n, id, env, f, tail);
       }
       case "lambda": {
-        if (!opts.data) throw new Refused("makes a function (that needs closures)");
+        if (!closures) throw new Refused("makes a function (that needs closures)");
         const t = stype(zonk(id));
         if (!t || !isFn(t)) throw new Refused(`makes a function of ${whyNot(zonk(id))}`);
         return lambda(n, t, env, f);
@@ -5668,6 +5677,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   if (opts.data && !funcs.some((f) => setsFuel(f.body))) for (const f of funcs) f.spends = false;
   // A Float64 checked finite once where it can't fail again (C207h).
   if (opts.data && !envSet("NO_FINITE")) finiteChecks(ir);
+  if (defunc) defunctionalise(ir);
   return ir;
 }
 
