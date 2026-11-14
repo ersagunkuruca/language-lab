@@ -451,6 +451,12 @@ export class Cells {
     return n.value as Value;
   }
 
+  // Whether a view (a formula or watcher, or a row it makes) is running
+  // outside any handler's event: what it reads of the world, the clock
+  // on a frame above all, follows from the page as it is, so a page's log
+  // keeps none of it and a replay answers it live (I265).
+  inView(): boolean { return (this.current !== null || this.row !== null) && this.event === null; }
+
   // Look at a cell without becoming its reader (Solid's untrack).
   peek(c: Value): Value {
     const saved = this.current;
