@@ -21,7 +21,10 @@ import { sameValue } from "./model.ts";
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 type Obj = { [k: string]: Json };
 
-export interface Conflict { path: string[]; base: Json | undefined; ours: Json | undefined; theirs: Json | undefined }
+// `lost`: a node's conflict whose kept side nothing reaches in the merged
+// program, so its change is in no definition (I265): one side changed a
+// part the other retyped.
+export interface Conflict { path: string[]; base: Json | undefined; ours: Json | undefined; theirs: Json | undefined; lost?: true }
 
 const isObj = (x: Json | undefined): x is Obj => typeof x === "object" && x !== null && !Array.isArray(x);
 // Whatever order the keys were saved in (a node's are sorted since I240).
@@ -69,6 +72,42 @@ function mergeIds(base: string[], ours: string[], theirs: string[]): string[] {
   return out;
 }
 
+// A program file merged (merge3), with the nodes the merge left reachable
+// from no definition taken out (I265): a node one side changed under a
+// parent whose children the other replaced. Only those that some side
+// reached go; a node no version reaches stays as it was. A conflict on a
+// node taken out is `lost`: the merged program has the other side's text
+// there, which describe says.
+export function mergeFiles(base: unknown, ours: unknown, theirs: unknown): { merged: Json | undefined; conflicts: Conflict[] } {
+  const r = merge3(base, ours, theirs);
+  const m = codeOf(r.merged);
+  if (!m) return r;
+  const live = reached(m), before = [codeOf(base as Json), codeOf(ours as Json), codeOf(theirs as Json)].map((c) => (c ? reached(c) : new Set<string>()));
+  const dead = new Set(Object.keys(m.nodes).filter((id) => !live.has(id) && before.some((b) => b.has(id))));
+  if (!dead.size) return r;
+  for (const id of dead) delete m.nodes[id];
+  for (const c of r.conflicts) {
+    const at = c.path.indexOf("nodes");
+    if (at >= 0 && dead.has(c.path[at + 1])) c.lost = true;
+  }
+  return r;
+}
+
+// The nodes a definition's tree holds, from every definition: its own
+// parts, and the targets they refer to.
+function reached(code: CodeJson): Set<string> {
+  const out = new Set<string>(), stack = [...code.defs];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (out.has(id) || !code.nodes[id]) continue;
+    out.add(id);
+    const n = code.nodes[id];
+    stack.push(...pointsAt(n));
+    for (const k of ["target", "variant"]) if (typeof n[k] === "string") stack.push(n[k] as string);
+  }
+  return out;
+}
+
 // --------------------------------------------------------------- where
 
 interface CodeJson { nodes: Record<string, Obj>; defs: string[] }
@@ -101,22 +140,37 @@ function owners(code: CodeJson | null): Map<string, string> {
   return out;
 }
 
-// Each conflict in words: "`area`: both changed node 3j… (its args)".
-export function describe(conflicts: Conflict[], oursIn: unknown, theirsIn: unknown): string[] {
+// Each conflict in words: "`area`: both changed node 3j… (its args)", with
+// both values where they are plain ("its value: ours 8, theirs 9"). One
+// whose change is lost says so. `texts`, where given, is each side's text
+// of a definition (and the merged one's, shown where a lost change left it
+// other than theirs): shown under the definition's
+// first conflict, so the conflict reads as the code it is about (I265).
+export function describe(conflicts: Conflict[], oursIn: unknown, theirsIn: unknown, texts?: (def: string) => { ours?: string[]; theirs?: string[]; merged?: string[] } | undefined): string[] {
   const ours = oursIn as Json | undefined, theirs = theirsIn as Json | undefined;
   const names = { ...namesOf(theirs), ...namesOf(ours) };
   const own = new Map([...owners(codeOf(theirs)), ...owners(codeOf(ours))]);
   const nm = (id: string) => (names[id] ? `\`${names[id]}\`` : id);
-  return conflicts.map(({ path, ours: o, theirs: t }) => {
+  const plain = (x: Json | undefined) => x === null || ["string", "number", "boolean"].includes(typeof x);
+  // What a ref or an arm points at, by its name where it has one.
+  const val = (field: string, x: Json | undefined) => ((field === "target" || field === "variant") && typeof x === "string" && names[x] ? nm(x) : JSON.stringify(x));
+  const shown = new Set<string>();
+  return conflicts.flatMap(({ path, ours: o, theirs: t, lost }) => {
     const at = path.indexOf("nodes");
     if (at >= 0 && path.length > at + 1) {
       const node = path[at + 1], field = path.slice(at + 2).join(".");
       const d = own.get(node);
-      const what = o === undefined ? "ours removed it and theirs changed it" : t === undefined ? "theirs removed it and ours changed it" : `both changed ${field ? `its ${field}` : "it"}`;
-      return `${d ? `${nm(d)}: ` : ""}node ${node === d ? `${nm(node)} itself` : node}: ${what}`;
+      const what = o === undefined ? "ours removed it and theirs changed it"
+        : t === undefined ? (lost ? "ours changed it and theirs replaced what held it, so the merged program has theirs' text there and ours' change is lost" : "theirs removed it and ours changed it")
+        : `both changed ${field ? `its ${field}` : "it"}${plain(o) && plain(t) ? ` (ours ${val(field, o)}, theirs ${val(field, t)})` : ""}`;
+      const line = `${d ? `${nm(d)}: ` : ""}node ${node === d ? `${nm(node)} itself` : node}: ${what}`;
+      const x = d && !shown.has(d) ? texts?.(d) : undefined;
+      if (d) shown.add(d);
+      const block = (label: string, ls: string[] | undefined) => (ls?.length ? [`  ${label}:`, ...ls.map((l) => `    ${l}`)] : []);
+      return [line, ...(x ? [...block("ours", x.ours), ...block("theirs", x.theirs), ...(lost && JSON.stringify(x.merged) !== JSON.stringify(x.theirs) ? block("merged", x.merged) : [])] : [])];
     }
     const key = path[path.length - 1] ?? "";
-    return `${path.slice(0, -1).concat(names[key] ? nm(key) : key).join(" ")}: both changed it (ours ${JSON.stringify(o)}, theirs ${JSON.stringify(t)})`;
+    return [`${path.slice(0, -1).concat(names[key] ? nm(key) : key).join(" ")}: both changed it (ours ${JSON.stringify(o)}, theirs ${JSON.stringify(t)})`];
   });
 }
 

@@ -1,11 +1,12 @@
 // Program files merged id by id (SHARING.md §6, BACKLOG L113).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, diffLines, merge3 } from "../src/merge-files.ts";
+import { describe, diffLines, merge3, mergeFiles } from "../src/merge-files.ts";
+import { parseSaved, printSaved } from "../src/saved.ts";
 
 // area(w, h) = w · h, as a code.json.
 const base = {
@@ -53,7 +54,7 @@ test("different changes to one definition merge; the same field changed two ways
   const { merged, conflicts } = merge3(base, ours, other);
   assert.equal(conflicts.length, 1);
   assert.equal((merged as typeof base).nodes.f.target, "builtin.add", "ours is kept");
-  assert.deepEqual(describe(conflicts, { names: { area: "area" }, ...ours }, other), ["`area`: node f: both changed its target"]);
+  assert.deepEqual(describe(conflicts, { names: { area: "area" }, ...ours }, other), ['`area`: node f: both changed its target (ours "builtin.add", theirs "builtin.sub")']);
 });
 
 test("names merge on their own; a definition removed on one side goes", () => {
@@ -91,5 +92,53 @@ test("ters diff says what changed by definition; ters merge is git's driver", ()
   try { execFileSync(process.execPath, [lab, "merge", put("base.json", base), c, put("other.json", other), "code.json"], { stdio: "pipe" }); }
   catch (e) { failed = { status: (e as { status: number }).status, stderr: String((e as { stderr: Buffer }).stderr) }; }
   assert.equal(failed?.status, 1);
-  assert.match(failed!.stderr, /1 conflict, ours kept:\n {2}area: node f: both changed its target/);
+  assert.match(failed!.stderr, /1 conflict, ours kept:\n {2}area: node f: both changed its target \(ours "builtin.add", theirs "builtin.sub"\)/);
+});
+
+// I265 (GIT-TRIAL-2026-11-14 §1): one side changes a part, the other
+// retypes what holds it, so every node under it is new. The changed part
+// is then in no definition: it goes, and the conflict says ours' change is
+// lost, with each side's text.
+test("a change under a part the other side retyped is said lost, and the node nothing reaches goes", () => {
+  const ours = clone(base), theirs = clone(base);
+  // ours: area(w, h) = w · w; theirs retyped the call as h + w, all new.
+  ours.nodes.rh.target = "w";
+  delete (theirs.nodes as Record<string, unknown>).c; delete (theirs.nodes as Record<string, unknown>).f; delete (theirs.nodes as Record<string, unknown>).rw; delete (theirs.nodes as Record<string, unknown>).rh;
+  Object.assign(theirs.nodes, { c2: { id: "c2", kind: "call", fn: "f2", args: ["rh2", "rw2"] }, f2: { id: "f2", kind: "ref", target: "builtin.add" }, rh2: { id: "rh2", kind: "ref", target: "h" }, rw2: { id: "rw2", kind: "ref", target: "w" } });
+  (theirs.nodes.lam as { body: string }).body = "c2";
+  const { merged, conflicts } = mergeFiles(base, ours, theirs);
+  const m = merged as typeof base;
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].lost, true);
+  assert.equal((m.nodes as Record<string, unknown>).rh, undefined, "the node nothing reaches is gone");
+  assert.equal(m.nodes.lam.body, "c2");
+  const said = describe(conflicts, { names: { area: "area" }, ...ours }, theirs, () => ({ ours: ["area(w, h) = w · w"], theirs: ["area(w, h) = h + w"], merged: ["area(w, h) = h + w"] }));
+  assert.deepEqual(said, [
+    "`area`: node rh: ours changed it and theirs replaced what held it, so the merged program has theirs' text there and ours' change is lost",
+    "  ours:", "    area(w, h) = w · w",
+    "  theirs:", "    area(w, h) = h + w",
+  ]);
+  // A node no version reaches stays as it was.
+  const stale = { ...clone(base), nodes: { ...clone(base).nodes, old: { id: "old", kind: "lit", value: 3 } } };
+  const kept = mergeFiles(stale, withDef(stale, "one"), withDef(stale, "two")).merged as typeof stale;
+  assert.ok(kept.nodes.old);
+});
+
+test("the merge driver shows each side's text of a definition with a conflict", () => {
+  const dir = mkdtempSync(join(tmpdir(), "merge-text-"));
+  const prog = join(dir, "p");
+  cpSync(join(import.meta.dirname, "..", "examples", "dice"), prog, { recursive: true });
+  const code = parseSaved(readFileSync(join(prog, "code.json"), "utf8")) as unknown as CodeJson;
+  const die = Object.entries(JSON.parse(readFileSync(join(prog, "names.default.json"), "utf8")) as Record<string, string>).find(([, n]) => n === "die")![0];
+  const under = (id: string): string[] => { const n = code.nodes[id]; return n ? [id, ...Object.entries(n).flatMap(([k, v]) => (k === "id" || k === "target" ? [] : typeof v === "string" ? under(v) : Array.isArray(v) ? v.flatMap((x) => (typeof x === "string" ? under(x) : [])) : []))] : []; };
+  const six = under(die).find((x) => code.nodes[x].kind === "lit" && Number(code.nodes[x].value) === 6)!;
+  const ours = clone(code), theirs = clone(code);
+  ours.nodes[six] = { ...ours.nodes[six], value: 8 };
+  theirs.nodes[six] = { ...theirs.nodes[six], value: 9 };
+  const put = (f: string, x: unknown) => { writeFileSync(join(dir, f), printSaved(x)); return join(dir, f); };
+  const o = put("ours.json", ours);
+  const lab = join(import.meta.dirname, "..", "cli", "ters.ts");
+  const r = spawnSync(process.execPath, [lab, "merge", put("base.json", code), o, put("theirs.json", theirs), join(prog, "code.json")], { encoding: "utf8" });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /`die`: node \w+: both changed its value \(ours 8, theirs 9\)\n {4}ours:\n(.*\n)* {6}die\(\) = floor\(random\(\) · 8\) \+ 1\n {4}theirs:\n(.*\n)* {6}die\(\) = floor\(random\(\) · 9\) \+ 1\n/);
 });
