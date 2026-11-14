@@ -114,48 +114,79 @@ const TRIG_FIELD = "std.trig.trig.";
 const unitOf = (n: Node | undefined): Unit | undefined => (n as { unit?: Unit } | undefined)?.unit;
 // A constraint from a field's type names the unit, for the message.
 const FIELD = "field's unit ";
-// The unit a field's type says (`speed: Float64 m/s`, L252), if it says one,
-// or its items' (`heights: List (Float64 m)`, L252d).
-const fieldUnit = (code: Code, field: Id): Unit | undefined => {
-  const f = code.nodes[field];
-  return f?.kind === "field" ? typeUnit(code, f.type) : undefined;
-};
-const typeUnit = (code: Code, t: Id, depth = 0): Unit | undefined => {
-  const n = code.nodes[t];
-  if (n?.kind !== "tref" || depth > 8) return undefined;
-  if (n.unit) return n.unit;
-  return n.args.length === 1 && oneParam(code, n.target) ? typeUnit(code, n.args[0], depth + 1) : undefined;
-};
+// A value's units, by where they sit in its type (L252d, L252e; Kennedy's
+// dimension types over containers): a number's unit is the value's own
+// slot, and a value of a data type with parameters has a slot per
+// parameter, the unit of the numbers of that parameter in it. A slot is a
+// path of parameter numbers, with the zeros it ends in left off, so the
+// first parameter's slot is the value's own: a List (Float64 m) is m, as
+// its items are (L252d); a Map Int (Float64 s) is a plain number at its
+// keys' slot and s at its values' ("1"); a List (Int, Float64 s), its
+// entries, s at "0.1". A slot's term is the value's with the path after it.
+// The slots each program's values may have are these, one parameter deep
+// and a list's items' parts (a map's entries). A flow of a value (a name,
+// a let, a case, a function's answer) says its slots are the other's, but
+// only the slots something says a unit of are said (`close` below): said
+// for every slot, a program's constraints were several times as many, and
+// trek's check took twice as long.
+const SLOTS: number[][] = [[], [1], [2], [0, 1], [0, 2]];
+const SLOT = "\u0002";
+const slotKey = (p: number[]) => p.join(".");
+const KNOWN = new Set(SLOTS.map(slotKey));
+const canon = (p: number[]) => { let n = p.length; while (n && p[n - 1] === 0) n--; return p.slice(0, n); };
+export const slotTerm = (term: string, path: number[] | string) => { const k = typeof path === "string" ? path : slotKey(canon(path)); return k ? term + SLOT + k : term; };
+const baseOf = (term: string): [string, string] => { const i = term.indexOf(SLOT); return i < 0 ? [term, ""] : [term.slice(0, i), term.slice(i)]; };
 
-// A type of one parameter (List a, Optional a) holds numbers of one unit
-// at most, so a value of it has its numbers' unit (L252d, Kennedy's
-// dimension types over containers): cons(x, xs) is x's and xs's, and a
-// case's field typed a, or the type itself, has the scrutinee's. The
-// fields that do, by case: per program, from its types of one parameter.
-const holders = new WeakMap<Code, Map<Id, boolean[]>>();
+// The data types with parameters (not an interface, not an effect), read
+// once per program: for each case, each field's slots that are a
+// parameter's, as (the field's path, the parameter); and each field's
+// units its type writes (`speed: Float64 m/s`, `heights: List (Float64 m)`).
+type Holds = [number[], number][];
+type DataTypes = { fields: Map<Id, Holds>; params: Map<Id, Id[]> };
+const dataTypes = new WeakMap<Code, DataTypes>();
 const typedefOf = (code: Code, def: Id) => { const d = code.nodes[def]; const b = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined; return b?.kind === "typedef" ? b : undefined; };
-const oneParam = (code: Code, def: Id) => typedefOf(code, def)?.params.length === 1;
-function holding(code: Code, variant: Id): boolean[] | undefined {
-  let m = holders.get(code);
-  if (!m) {
-    holders.set(code, (m = new Map()));
-    // (A pick reads the typedef, not the def: a pick's test sees one node.)
-    for (const tid of nodesWhere(code, "a type of one parameter", (n) => n.kind === "typedef" && n.params.length === 1)) {
-      const td = code.nodes[tid] as Extract<Node, { kind: "typedef" }>, p = td.params[0];
-
-      for (const v of td.variants) {
-        const vn = code.nodes[v];
-        if (vn?.kind !== "variant") continue;
-        m.set(v, vn.fields.map((f) => {
-          const ty = code.nodes[(code.nodes[f] as { type?: Id })?.type ?? ""];
-          if (ty?.kind !== "tref") return false;
-          return ty.target === p || ((code.nodes[ty.target] as { body?: Id })?.body === tid && ty.args.length === 1 && (code.nodes[ty.args[0]] as { target?: Id })?.target === p);
-        }));
+const isData = (code: Code, def: Id) => { const td = typedefOf(code, def); return !!td && !td.interface && !td.effect; };
+function typesOf(code: Code): DataTypes {
+  let m = dataTypes.get(code);
+  if (m) return m;
+  dataTypes.set(code, (m = { fields: new Map(), params: new Map() }));
+  // (A pick reads the typedef, not the def: a pick's test sees one node.)
+  for (const tid of nodesWhere(code, "a data type with parameters", (n) => n.kind === "typedef" && n.params.length > 0 && !n.interface && !n.effect)) {
+    const td = code.nodes[tid] as Extract<Node, { kind: "typedef" }>;
+    const walk = (t: Id, path: number[], out: Holds, depth: number) => {
+      const n = code.nodes[t];
+      if (n?.kind !== "tref" || depth > 3) return;
+      const p = td.params.indexOf(n.target);
+      if (p >= 0) out.push([path, p]);
+      else if (isData(code, n.target)) n.args.forEach((a, j) => walk(a, [...path, j], out, depth + 1));
+    };
+    for (const v of td.variants) {
+      const vn = code.nodes[v];
+      if (vn?.kind !== "variant") continue;
+      for (const f of vn.fields) {
+        const fn = code.nodes[f];
+        const out: Holds = [];
+        if (fn?.kind === "field") walk(fn.type, [], out, 0);
+        m.fields.set(f, out);
       }
+      m.params.set(v, vn.fields);
     }
   }
-  return m.get(variant);
+  return m;
 }
+// The units a type writes, by slot: `Float64 m/s` at its own, `Map Int
+// (Float64 s)` at its values'.
+const typeUnits = (code: Code, t: Id, path: number[] = [], out: [string, Unit][] = []): [string, Unit][] => {
+  const n = code.nodes[t];
+  if (n?.kind !== "tref" || path.length > 3) return out;
+  if (n.unit) { const k = slotKey(canon(path)); if (KNOWN.has(k)) out.push([k, n.unit]); return out; }
+  if (isData(code, n.target)) n.args.forEach((a, j) => typeUnits(code, a, [...path, j], out));
+  return out;
+};
+const fieldUnits = (code: Code, field: Id): [string, Unit][] => {
+  const f = code.nodes[field];
+  return f?.kind === "field" ? typeUnits(code, f.type) : [];
+};
 
 // Constraints for one def. Calls to other defs are inlined under a prefix,
 // so a def used twice can take different units each time (it's polymorphic
@@ -165,13 +196,79 @@ function holding(code: Code, variant: Id): boolean[] | undefined {
 // inlined): unfolding it 20 deep was exponential once a def called a
 // recursive group more than once, and froze the editor.
 type Fn = { params: string[]; body: string };
+// Two terms whose slots follow each other's: slot P + s of a is slot Q + s
+// of b, for each slot s (a flow is P = Q = []). Its row for s = [] is said
+// where it is made, the others by `close`.
+type Follows = { a: string; p: number[]; b: string; q: number[]; why: string; node: Id };
+let following: Follows[] | null = null;
 export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id, string> = new Map(), path: Id[] = [], fns: Map<Id, Fn> = new Map()): Constraint[] {
+  // A callee read through adds to its caller's.
+  if (following) return collect(code, defId, prefix, bindings, path, fns, following);
+  const fs: Follows[] = [];
+  following = fs;
+  try { return close(collect(code, defId, prefix, bindings, path, fns, fs), fs, []); } finally { following = null; }
+}
+
+// The rows of slots past a value's own that the constraints come to: from
+// each slot some row names (a field's unit, a summary's), or `seeds`, each
+// Follows says the slot it follows, and so on. Slots no unit reaches say
+// nothing, so they are left out.
+function close(out: Constraint[], fs: Follows[], seeds: string[]): Constraint[] {
+  const by = new Map<string, Follows[]>();
+  for (const f of fs) for (const x of [f.a, f.b]) { let l = by.get(x); if (!l) by.set(x, (l = [])); l.push(f); }
+  const seen = new Set<string>(), todo: string[] = [];
+  const mention = (term: string) => { if (term.includes(SLOT) && !seen.has(term)) { seen.add(term); todo.push(term); } };
+  for (const c of out) for (const [x] of c.terms) mention(x);
+  seeds.forEach(mention);
+  // s, where slot `key` is slot P + s; null where it isn't one.
+  const after = (key: string, p: number[]): number[] | null => {
+    const m = key.split(".").map(Number);
+    return m.length > p.length && p.every((x, i) => m[i] === x) ? m.slice(p.length) : null;
+  };
+  const said = new Set<string>();
+  while (todo.length) {
+    const term = todo.pop()!, [base, slot] = baseOf(term), key = slot.slice(SLOT.length);
+    for (const f of by.get(base) ?? []) {
+      for (const [x, p, y, q] of [[f.a, f.p, f.b, f.q], [f.b, f.q, f.a, f.p]] as const) {
+        if (x !== base) continue;
+        const s = after(key, p);
+        if (!s) continue;
+        const ky = slotKey(canon([...q, ...s]));
+        if (!KNOWN.has(ky)) continue;
+        const [l, r] = x === f.a ? [term, slotTerm(y, ky)] : [slotTerm(y, ky), term];
+        const k = l + "\u0003" + r;
+        if (said.has(k)) continue;
+        said.add(k);
+        out.push({ terms: [[l, 1], [r, -1]], rhs: ZERO, why: f.why, node: f.node });
+        mention(slotTerm(y, ky));
+      }
+    }
+  }
+  return out;
+}
+
+function collect(code: Code, defId: Id, prefix: string, bindings: Map<Id, string>, path: Id[], fns: Map<Id, Fn>, fs: Follows[]): Constraint[] {
   if (path.length > 20 || path.includes(defId)) return [];
   const out: Constraint[] = [];
   const def = get(code, defId, "def");
   if (!def.body) return out;
   const t = (id: string) => bindings.get(id) ?? prefix + id;
-  const same = (a: Id, b: Id, why: string, node: Id) => out.push({ terms: [[t(a), 1], [t(b), -1]], rhs: ZERO, why, node });
+  // Two terms whose values sit in each other's slots: slot P + s of a is
+  // slot Q + s of b, for every slot s. A flow (`same`) is P = Q = [].
+  const terms = (a: string, p: number[], b: string, q: number[], why: string, node: Id) => {
+    const pa = slotKey(canon(p)), pb = slotKey(canon(q));
+    if (KNOWN.has(pa) && KNOWN.has(pb)) out.push({ terms: [[slotTerm(a, pa), 1], [slotTerm(b, pb), -1]], rhs: ZERO, why, node });
+    fs.push({ a, p, b, q, why, node });
+  };
+  const same = (a: Id, b: Id, why: string, node: Id) => terms(t(a), [], t(b), [], why, node);
+  // A value of a data type and one of its fields' values: the field's
+  // slots that are a parameter's are the value's at that parameter.
+  const holds = (value: Id, field: Id, part: Id, why: string, node: Id) => {
+    for (const [q, i] of typesOf(code).fields.get(field) ?? []) terms(t(value), [i], t(part), q, why, node);
+  };
+  const typed = (term: Id, field: Id, node: Id) => {
+    for (const [k, u] of fieldUnits(code, field)) out.push({ terms: [[slotTerm(t(term), k), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node });
+  };
 
   const declare = (id: Id) => {
     const u = unitOf(code.nodes[id]);
@@ -232,13 +329,13 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         if (fn.kind !== "ref") return;
         const callee = code.nodes[fn.target];
         // A list written out, [a, b]: one unit for its items (L252d).
-        if (callee.kind === "builtin" && callee.op === "list.of") { n.args.forEach((a) => same(id, a, "a list's items", id)); return; }
+        if (callee.kind === "builtin" && callee.op === "list.of") { n.args.forEach((a) => terms(t(id), [0], t(a), [], "a list's items", id)); return; }
         // An item of a list, and the answers of a search: the unit of what
         // they're of (L252d).
-        if (callee.kind === "builtin" && callee.op === "oneOf" && n.args[0]) { same(id, n.args[0], "an item of a list", id); return; }
-        if (callee.kind === "builtin" && callee.op === "all" && n.args[0]) { out.push({ terms: [[t(id), 1], [thunk(n.args[0]), -1]], rhs: ZERO, why: "the answers", node: id }); return; }
+        if (callee.kind === "builtin" && callee.op === "oneOf" && n.args[0]) { terms(t(n.args[0]), [0], t(id), [], "an item of a list", id); return; }
+        if (callee.kind === "builtin" && callee.op === "all" && n.args[0]) { terms(t(id), [0], thunk(n.args[0]), [], "the answers", id); return; }
         // first's inputs are thunks: what each gives is its body (L257).
-        if (callee.kind === "builtin" && callee.op === "first") { out.push(...rules("first", (k) => (k === "out" ? t(id) : thunk(n.args[+k])), id, id)); return; }
+        if (callee.kind === "builtin" && callee.op === "first") { for (const k of ["0", "1"]) if (n.args[+k]) terms(thunk(n.args[+k]), [], t(id), [], id, id); return; }
         // An Int is a plain number (a unit's number is never one, L252b),
         // so its operations and its Float64 are plain: length(xs) divides
         // a sum of metres into metres.
@@ -250,21 +347,22 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         // A case made with a field whose type has a unit: the value given
         // has it. A field read: what it gives has it (L252).
         if (callee.kind === "variant") {
-          callee.fields.forEach((f, i) => { const u = fieldUnit(code, f); if (u && n.args[i] !== undefined) out.push({ terms: [[t(n.args[i]), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: n.args[i] }); });
-          holding(code, fn.target)?.forEach((h, i) => { if (h && n.args[i] !== undefined) same(id, n.args[i], "what it holds", id); });
+          callee.fields.forEach((f, i) => { if (n.args[i] === undefined) return; typed(n.args[i], f, n.args[i]); holds(id, f, n.args[i], "what it holds", id); });
           return;
         }
         // A function given as an input, called (L252d): `change(item)` in
         // map is the lambda the caller gave, inputs and answer.
         if (callee.kind === "binder" && fns.has(fn.target)) {
           const f = fns.get(fn.target)!;
-          f.params.forEach((p, i) => { if (n.args[i] !== undefined) out.push({ terms: [[p, 1], [t(n.args[i]), -1]], rhs: ZERO, why: "a function's input", node: id }); });
-          out.push({ terms: [[t(id), 1], [f.body, -1]], rhs: ZERO, why: "a function's answer", node: id });
+          f.params.forEach((p, i) => { if (n.args[i] !== undefined) terms(p, [], t(n.args[i]), [], "a function's input", id); });
+          terms(t(id), [], f.body, [], "a function's answer", id);
           return;
         }
+        // A field read: what it gives has its type's units, and the slots
+        // of the value read (`e.second` of a (Int, Float64 s) is s).
         if (callee.kind === "field") {
-          const u = fieldUnit(code, fn.target);
-          if (u) out.push({ terms: [[t(id), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: id });
+          typed(id, fn.target, id);
+          if (n.args[0] !== undefined) holds(n.args[0], fn.target, id, "a field read", id);
           return;
         }
         if (callee.kind === "def") {
@@ -282,9 +380,9 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
           const arm = code.nodes[a] as Extract<Node, { kind: "arm" }>;
           // A case's fields, taken out: each has its field's unit.
           const v = code.nodes[arm.variant];
-          if (v?.kind === "variant") arm.binds.forEach((b, i) => { const u = v.fields[i] && fieldUnit(code, v.fields[i]); if (u) out.push({ terms: [[t(b), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: b }); });
-          // An item of a list taken out, and its rest: the list's unit (L252d).
-          holding(code, arm.variant)?.forEach((h, i) => { if (h && arm.binds[i]) same(arm.binds[i], n.scrutinee, "what it holds", arm.binds[i]); });
+          // An item of a list taken out, and its rest: the list's unit
+          // (L252d); a tuple's parts, its slots (L252e).
+          if (v?.kind === "variant") arm.binds.forEach((b, i) => { const f = v.fields[i]; if (!b || !f) return; typed(b, f, b); holds(n.scrutinee, f, b, "what it holds", b); });
           // A fold's result for the rest is what the fold gives.
           if (n.kind === "fold") arm.results.forEach((r) => { if (r) same(r, id, "a fold's result", r); });
           visit(arm.body);
@@ -337,7 +435,14 @@ function summaryOf(code: Code, fn: Id): Constraint[] {
       map.set(cb.body, PORT + "out");
     } else if (cdef.body) map.set(cdef.body, PORT + "out");
     for (const id of subtreeIds(code, fn)) read.push([id, code.nodes[id]]);
-    const out = project(cb ? constraints(code, fn, "\u0001/", map, []) : [], (t) => t.startsWith(PORT), fn);
+    // Every slot of every port, so a caller's finds what its own slots
+    // follow here: reverse's answer's parts are its input's.
+    const was = following, fs: Follows[] = [];
+    following = fs;
+    let cs: Constraint[];
+    try { cs = cb ? collect(code, fn, "\u0001/", map, [], new Map(), fs) : []; } finally { following = was; }
+    const seeds = [...map.values()].flatMap((p) => [...KNOWN].filter(Boolean).map((k) => slotTerm(p, k)));
+    const out = project(close(cs, fs, seeds), (t) => t.startsWith(PORT), fn);
     summaries.set(def, { out, read });
     return out;
   } finally {
@@ -407,7 +512,7 @@ function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, pref
   const ports = new Map<string, string>();
   if (cb.kind === "lambda") cb.params.forEach((p) => ports.set(PORT + p, port(p)));
   ports.set(PORT + "out", port("out"));
-  return summaryOf(code, fn).map((c) => ({ ...c, terms: c.terms.map(([t, v]) => [ports.get(t) ?? t, v] as [string, number]) }));
+  return summaryOf(code, fn).map((c) => ({ ...c, terms: c.terms.map(([t, v]) => { const [b, slot] = baseOf(t), p = ports.get(b); return [p === undefined ? t : p + slot, v] as [string, number]; }) }));
 }
 
 // ---------------------------------------------------------------- solving
@@ -582,7 +687,14 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore, quick = false): 
 // definition's units where it calls it.
 // A pick (model.ts nodesWhere), so a program on the library's layer reads
 // the library's once and looks only at its own nodes (E253b).
-const declaresUnit = (code: Code) => nodesWhere(code, "declares a unit", (n) => !!unitOf(n) && !isPublished(n.id)).length > 0;
+// Kept per program: signatureUnits asks for each definition shown, and
+// each scan of trek's nodes was a third of its check.
+const declaring = new WeakMap<Code, boolean>();
+const declaresUnit = (code: Code) => {
+  let d = declaring.get(code);
+  if (d === undefined) declaring.set(code, (d = nodesWhere(code, "declares a unit", (n) => !!unitOf(n) && !isPublished(n.id)).length > 0));
+  return d;
+};
 
 export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore, quick = false): { id: Id; message: string }[] {
   if (!(before ? before.anyUnit : declaresUnit(code))) return [];
@@ -599,6 +711,9 @@ export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: 
 
 // A term's id is a node's, maybe under a callee's prefix ("a/b/id").
 function termName(code: Code, names: Record<Id, string>, term: string): string | undefined {
+  // A slot's term isn't the node's own value (a list's, not its items'
+  // parts), so it isn't named by the node.
+  if (term.includes(SLOT)) return undefined;
   const id = term.slice(term.lastIndexOf("/") + 1);
   const n = code.nodes[id];
   if (names[id]) return names[id];
@@ -633,20 +748,27 @@ function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts
 // library's (the prelude's seconds) took tumble's check from 2 s to over
 // 120 s and froze its page in the editor (#2631). Kept per program and
 // definition, as render.ts asks again on every draw.
-const signatures = new WeakMap<Code, Map<Id, { params: (Unit | undefined)[]; result?: Unit } | null>>();
-export function signatureUnits(code: Code, defId: Id): { params: (Unit | undefined)[]; result?: Unit } | null {
+// Units by slot ("" a number's own, "1" a map's values', L252e).
+export type Slots = Record<string, Unit>;
+export type SignatureUnits = { params: (Unit | undefined)[]; result?: Unit; slots: { params: Slots[]; result: Slots } };
+const signatures = new WeakMap<Code, Map<Id, SignatureUnits | null>>();
+export function signatureUnits(code: Code, defId: Id): SignatureUnits | null {
   let m = signatures.get(code);
   if (!m) signatures.set(code, (m = new Map()));
   if (!m.has(defId)) m.set(defId, declaresUnit(code) ? signatureOf(code, defId) : null);
   return m.get(defId)!;
 }
-function signatureOf(code: Code, defId: Id): { params: (Unit | undefined)[]; result?: Unit } | null {
+function signatureOf(code: Code, defId: Id): SignatureUnits | null {
   const def = code.nodes[defId];
   if (def?.kind !== "def" || !def.body) return null;
-  const inf = infer(code, defId);
+  const cs = constraints(code, defId), inf = infer(code, defId, [], cs);
   if (!inf.ok) return null;
-  const known = (term: Id) => { const u = inf.unit(term); return u && Object.keys(u).length ? u : undefined; };
+  const known = (term: string) => { const u = inf.unit(term); return u && Object.keys(u).length ? u : undefined; };
+  // Only the slots some constraint names can have a unit.
+  const named = new Set(cs.flatMap((c) => c.terms.map(([x]) => x)));
+  const slots = (term: Id): Slots => { const o: Slots = {}; for (const k of KNOWN) { const x = slotTerm(term, k); const u = (!k || named.has(x)) && known(x); if (u) o[k] = u; } return o; };
   const body = code.nodes[def.body];
-  if (body?.kind !== "lambda") return { params: [], result: known(def.body) };
-  return { params: body.params.map(known), result: body.results?.length ? undefined : known(body.body) };
+  if (body?.kind !== "lambda") { const r = slots(def.body); return { params: [], result: r[""], slots: { params: [], result: r } }; }
+  const ps = body.params.map(slots), r: Slots = body.results?.length ? {} : slots(body.body);
+  return { params: ps.map((x) => x[""]), result: r[""], slots: { params: ps, result: r } };
 }

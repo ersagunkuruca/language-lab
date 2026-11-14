@@ -1719,7 +1719,12 @@ angle` is a length, and with `limit = 3.0 s`, `1.0 m + limit` is refused.
 unit, the list's (L252d): `[1.0 m, 2.0 m]`, a field typed
 `List (Float64 m)`, what `map`, `keep` and a match on it give, and its
 `sum` are in metres, and a signature shows `List (Float64 m)`. An Int is
-always a plain number. A Map's values don't carry a unit yet.
+always a plain number. A value of any type with parameters has a unit
+for each (L252e): a `Map Int (Float64 s)` is plain at its keys and in
+seconds at its values, so `put`, `update at`, `value at` and `entries of`
+keep them, and a tuple `(Int, Float64 s)`'s `second` is in seconds. A
+signature shows them where they are known: trek's
+`by speed : (List Leg) -> Map Int (Float64 s)`.
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
