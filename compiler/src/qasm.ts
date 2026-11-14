@@ -11,7 +11,9 @@
 // other such functions, which are inlined. Each Int is `bits` qubits,
 // unsigned, and arithmetic wraps at that width, as a fixed-width word's
 // does; a Bool is one qubit. Recursion has no circuit (a circuit has no
-// loop) and is refused with the reason, as is anything else outside this.
+// loop) unless what it recurs on is known when compiled, where it unrolls
+// as far as it goes (`power(x, 3)`), or a bound is given (C219b, below);
+// anything else outside this is refused with the reason.
 //
 // Each step computes into fresh qubits, all 0 at the start (the
 // ancillas): a xor is two CNOTs into one, an and a Toffoli, a not a CNOT
@@ -30,6 +32,12 @@
 // not as long as its steps, for about twice the gates (Bennett's pebbling
 // at its simplest; Meuli et al., "Reversible pebbling game for quantum
 // memory management", DATE 2019, trade the two more finely).
+//
+// A loop on a value known only when it runs (count down from an input)
+// unrolls to a bound given (`unroll`, C219b): a call that would recur
+// deeper gives 0 instead, and a qubit `deeper` is set on the inputs that
+// would have reached it (the conditions of the ifs around it, all true),
+// so an answer past the bound is never taken for a right one.
 
 import type { CoreIR, SExpr, SFunc } from "./scalar.ts";
 
@@ -47,6 +55,9 @@ class Circuit {
   // order, so a scope knows its own.
   free: number[] = [];
   made: number[] = [];
+  // Where a call past the unroll bound would have run, each a qubit set
+  // on the inputs that reach it (C219b): kept through every scope.
+  cuts: Wire[] = [];
   reuse: boolean;
   constructor(first: number, reuse = true) { this.qubits = first; this.reuse = reuse; }
   fresh(): number {
@@ -59,10 +70,10 @@ class Circuit {
   // gates undone. Where the answer is all it took, nothing is undone.
   scoped(step: () => Val): Val {
     if (!this.reuse) return step();
-    const g0 = this.gates.length, m0 = this.made.length;
+    const g0 = this.gates.length, m0 = this.made.length, k0 = this.cuts.length;
     const v = step();
     const own = new Set(this.made.slice(m0));
-    const kept = new Set(v.filter((w): w is number => typeof w === "number" && own.has(w)));
+    const kept = new Set([...v, ...this.cuts.slice(k0)].filter((w): w is number => typeof w === "number" && own.has(w)));
     if (kept.size === own.size) return v;
     const steps = this.gates.slice(g0);
     // A copy goes to a qubit none of the steps wrote, since undoing them
@@ -79,7 +90,9 @@ class Circuit {
     for (let i = steps.length - 1; i >= 0; i--) this.gates.push(steps[i]);
     for (const q of own) this.free.push(q);
     this.made.splice(m0, this.made.length - m0, ...copies.values());
-    return v.map((w) => (typeof w === "number" && copies.has(w) ? copies.get(w)! : w));
+    const moved = (w: Wire) => (typeof w === "number" && copies.has(w) ? copies.get(w)! : w);
+    for (let i = k0; i < this.cuts.length; i++) this.cuts[i] = moved(this.cuts[i]);
+    return v.map(moved);
   }
   not(a: Wire): Wire {
     if (typeof a === "boolean") return !a;
@@ -143,12 +156,19 @@ class Circuit {
   }
 }
 
-export interface Qasm { text: string; gates: Gate[]; inputs: { name: string; bits: number; at: number }[]; out: { bits: number; at: number }; ancillas: number; qubits: number }
+export interface Qasm { text: string; gates: Gate[]; inputs: { name: string; bits: number; at: number }[]; out: { bits: number; at: number }; deeper?: { at: number }; ancillas: number; qubits: number }
+
+// A call's context: the functions it is inside, and the conditions of the
+// ifs on qubits around it (a wire, and whether it is the else side).
+// A frame keeps how many conditions were around its call.
+interface Context { unroll?: number; width: (t: string) => number; stack: { f: SFunc; path: number }[]; path: { w: number; else: boolean }[] }
 
 // The circuit of `def` (one of ir.funcs, lowered with `shader`), its Ints
 // `bits` wide. Throws with the reason when the function isn't one.
 // `reuse` false: every step's scratch kept to the end, as before C219.
-export function printQasm(ir: CoreIR, def: string, bits: number, paramNames: string[] = [], options: { reuse?: boolean } = {}): Qasm {
+// `unroll`: how many times a function may call itself on a value known
+// only when it runs; the circuit then has a qubit `deeper`.
+export function printQasm(ir: CoreIR, def: string, bits: number, paramNames: string[] = [], options: { reuse?: boolean; unroll?: number } = {}): Qasm {
   const f = ir.funcs.find((g) => g.def === def && !g.inner);
   if (!f) throw new Error(ir.refused.get(def) ?? "isn't among the lowered functions");
   const width = (t: string) => {
@@ -163,27 +183,35 @@ export function printQasm(ir: CoreIR, def: string, bits: number, paramNames: str
     const outBits = width(f.result);
     const out = { bits: outBits, at };
     at += outBits;
+    const deeper = options.unroll !== undefined ? { at: at++ } : undefined;
     const c = new Circuit(at, options.reuse !== false);
     const args: Val[] = placed.map((p) => Array.from({ length: p.bits }, (_, i) => p.at + i));
-    const result = run(ir, f, args, c, bits, 0);
+    const result = run(ir, f, args, c, bits, { unroll: options.unroll, width, stack: [], path: [] });
+    // Whether any input went past the bound.
+    const past = c.cuts.reduce<Wire>((a, w) => c.or(a, w), false);
     const compute = c.gates;
     // Copy the result out, then undo every step.
     const copy: Gate[] = [];
-    result.forEach((w, i) => {
-      if (w === true) copy.push({ g: "x", t: out.at + i });
-      else if (typeof w === "number") copy.push({ g: "cx", c: w, t: out.at + i });
-    });
+    const copied = (w: Wire, t: number) => {
+      if (w === true) copy.push({ g: "x", t });
+      else if (typeof w === "number") copy.push({ g: "cx", c: w, t });
+    };
+    result.forEach((w, i) => copied(w, out.at + i));
+    if (deeper) copied(past, deeper.at);
     const gates = [...compute, ...copy, ...[...compute].reverse()];
     const ancillas = c.qubits - at;
-    return { text: qasmText(placed, out, ancillas, gates), gates, inputs: placed, out, ancillas, qubits: c.qubits };
+    return { text: qasmText(placed, out, deeper, ancillas, gates), gates, inputs: placed, out, deeper, ancillas, qubits: c.qubits };
   } catch (e) {
     if (e instanceof Refused) throw new Error(e.message);
     throw e;
   }
 }
 
-function run(ir: CoreIR, f: SFunc, args: Val[], c: Circuit, bits: number, depth: number): Val {
-  if (depth > 64) throw new Refused(`${f.name} calls itself, and a circuit has no loop`);
+function run(ir: CoreIR, f: SFunc, args: Val[], c: Circuit, bits: number, cx: Context): Val {
+  // On values known when compiled, a recursion ends as it would when run,
+  // or (past this many calls) doesn't.
+  if (cx.stack.length > 1000) throw new Refused(`${f.name} calls itself more than 1000 deep on values known when compiled`);
+  cx = { ...cx, stack: [...cx.stack, { f, path: cx.path.length }] };
   const locals: Val[] = [];
   args.forEach((a, i) => (locals[i] = a));
   const constant = (n: bigint): Val => Array.from({ length: bits }, (_, i) => ((BigInt.asUintN(bits, n) >> BigInt(i)) & 1n) === 1n);
@@ -197,13 +225,30 @@ function run(ir: CoreIR, f: SFunc, args: Val[], c: Circuit, bits: number, depth:
       case "if": {
         const [cond] = ev(e.cond);
         if (typeof cond === "boolean") return ev(cond ? e.then : e.else);
-        const t = ev(e.then), o = ev(e.else);
+        const path = cx.path;
+        cx.path = [...path, { w: cond, else: false }];
+        const t = ev(e.then);
+        cx.path = [...path, { w: cond, else: true }];
+        const o = ev(e.else);
+        cx.path = path;
         return t.map((w, i) => c.mux(cond, w, o[i]));
       }
       case "call": {
         const g = ir.funcs[e.fn];
         const as = e.args.map(ev);
-        return c.scoped(() => run(ir, g, as, c, bits, depth + 1));
+        // A call of a function it is inside, under an if on a qubit taken
+        // since it was first called: where it ends is known only when it
+        // runs. With no such if, it recurs on what is known (power(x, 3)).
+        const frames = cx.stack.filter((h) => h.f === g), deep = frames.length;
+        if (deep && cx.path.length > frames[0].path) {
+          if (cx.unroll === undefined) throw new Refused(`${g.name} calls itself on a value known only when it runs, and a circuit has no loop: give a bound to unroll it to (--unroll n)`);
+          if (deep > cx.unroll) {
+            const reached = cx.path.reduce<Wire>((a, p) => c.and(a, p.else ? c.not(p.w) : p.w), true);
+            c.cuts.push(reached);
+            return Array.from({ length: cx.width(g.result) }, () => false);
+          }
+        }
+        return c.scoped(() => run(ir, g, as, c, bits, cx));
       }
       case "op": {
         const a = e.args.map(ev);
@@ -244,9 +289,10 @@ function run(ir: CoreIR, f: SFunc, args: Val[], c: Circuit, bits: number, depth:
   return ev(f.body);
 }
 
-function qasmText(inputs: { name: string; bits: number; at: number }[], out: { bits: number; at: number }, ancillas: number, gates: Gate[]): string {
+function qasmText(inputs: { name: string; bits: number; at: number }[], out: { bits: number; at: number }, deeper: { at: number } | undefined, ancillas: number, gates: Gate[]): string {
   // Registers by name; a qubit by its register and place.
-  const regs = [...inputs.map((p) => ({ name: p.name.replace(/[^A-Za-z0-9_]/g, "_"), at: p.at, n: p.bits })), { name: "out", at: out.at, n: out.bits }, { name: "anc", at: out.at + out.bits, n: ancillas }];
+  const regs = [...inputs.map((p) => ({ name: p.name.replace(/[^A-Za-z0-9_]/g, "_"), at: p.at, n: p.bits })), { name: "out", at: out.at, n: out.bits },
+    ...(deeper ? [{ name: "deeper", at: deeper.at, n: 1 }] : []), { name: "anc", at: out.at + out.bits + (deeper ? 1 : 0), n: ancillas }];
   const q = (i: number) => { const r = regs.find((x) => i >= x.at && i < x.at + x.n)!; return `${r.name}[${i - r.at}]`; };
   const lines = ["OPENQASM 3.0;", 'include "stdgates.inc";', ...regs.filter((r) => r.n).map((r) => `qubit[${r.n}] ${r.name};`)];
   for (const g of gates) lines.push(g.g === "x" ? `x ${q(g.t)};` : g.g === "cx" ? `cx ${q(g.c)}, ${q(g.t)};` : `ccx ${q(g.a)}, ${q(g.b)}, ${q(g.t)};`);
