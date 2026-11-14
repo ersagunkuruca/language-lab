@@ -6074,11 +6074,290 @@ ${drop}
   // answer is below the smallest normal Float64. Prior art: Clinger, "How
   // to read floating point numbers accurately" (PLDI 1990), the exact
   // big-number reading.
+  // Clinger's fast path first (C223): at most 15 digits and a power of
+  // ten up to 10^22 are both exact Float64s, so one IEEE multiply or
+  // divide rounds their product or quotient once, as the exact reading
+  // would; status 1 when the text isn't so, for the exact reading.
+  "text.readNumber.fast": {
+    params: [["t", "text"]], result: "f64", partial: true,
+    locals: [["n", "i32"], ["i", "i32"], ["c", "i32"], ["neg", "i32"], ["nd", "i32"], ["frac", "i32"], ["e", "i32"], ["eneg", "i32"], ["ed", "i32"], ["w", "i64"], ["x", "f64"], ["p", "f64"]],
+    uses: [],
+    body: `
+      local.get $t
+      array.len
+      local.tee $n
+      i32.eqz
+      if void
+        f64.const 0
+        i32.const 1
+        return
+      end
+      local.get $t
+      i32.const 0
+      array.get_u $bytes
+      local.tee $c
+      i32.const 45
+      i32.eq
+      local.set $neg
+      local.get $c
+      i32.const 45
+      i32.eq
+      local.get $c
+      i32.const 43
+      i32.eq
+      i32.or
+      local.set $i
+      block void
+        loop void
+          local.get $i
+          local.get $n
+          i32.ge_u
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          local.tee $c
+          i32.const 46
+          i32.eq
+          if void
+            local.get $frac
+            local.get $eneg
+            i32.or
+            br_if 2
+            i32.const 1
+            local.set $eneg
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br 1
+          end
+          local.get $c
+          i32.const 48
+          i32.sub
+          local.tee $c
+          i32.const 9
+          i32.gt_u
+          br_if 1
+          local.get $w
+          i64.const 10
+          i64.mul
+          local.get $c
+          i64.extend_i32_u
+          i64.add
+          local.set $w
+          local.get $nd
+          i32.const 1
+          i32.add
+          local.tee $nd
+          i32.const 15
+          i32.gt_u
+          if void
+            f64.const 0
+            i32.const 1
+            return
+          end
+          local.get $frac
+          local.get $eneg
+          i32.add
+          local.set $frac
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          br 0
+        end
+      end
+      local.get $nd
+      i32.eqz
+      if void
+        f64.const 0
+        i32.const 1
+        return
+      end
+      i32.const 0
+      local.set $eneg
+      local.get $i
+      local.get $n
+      i32.lt_u
+      if void
+        local.get $t
+        local.get $i
+        array.get_u $bytes
+        i32.const 32
+        i32.or
+        i32.const 101
+        i32.ne
+        if void
+          f64.const 0
+          i32.const 1
+          return
+        end
+        local.get $i
+        i32.const 1
+        i32.add
+        local.tee $i
+        local.get $n
+        i32.lt_u
+        if void
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          local.tee $c
+          i32.const 45
+          i32.eq
+          local.set $eneg
+          local.get $c
+          i32.const 45
+          i32.eq
+          local.get $c
+          i32.const 43
+          i32.eq
+          i32.or
+          local.get $i
+          i32.add
+          local.set $i
+        end
+        block void
+          loop void
+            local.get $i
+            local.get $n
+            i32.ge_u
+            br_if 1
+            local.get $t
+            local.get $i
+            array.get_u $bytes
+            i32.const 48
+            i32.sub
+            local.tee $c
+            i32.const 9
+            i32.gt_u
+            br_if 1
+            local.get $e
+            i32.const 10
+            i32.mul
+            local.get $c
+            i32.add
+            local.tee $e
+            i32.const 400
+            i32.gt_s
+            if void
+              f64.const 0
+              i32.const 1
+              return
+            end
+            local.get $ed
+            i32.const 1
+            i32.add
+            local.set $ed
+            local.get $i
+            i32.const 1
+            i32.add
+            local.set $i
+            br 0
+          end
+        end
+        local.get $ed
+        i32.eqz
+        if void
+          f64.const 0
+          i32.const 1
+          return
+        end
+      end
+      local.get $i
+      local.get $n
+      i32.ne
+      if void
+        f64.const 0
+        i32.const 1
+        return
+      end
+      i32.const 0
+      local.get $e
+      i32.sub
+      local.get $e
+      local.get $eneg
+      select
+      local.get $frac
+      i32.sub
+      local.tee $e
+      i32.const 22
+      i32.add
+      i32.const 44
+      i32.gt_u
+      if void
+        f64.const 0
+        i32.const 1
+        return
+      end
+      f64.const 1
+      local.set $p
+      i32.const 0
+      local.get $e
+      i32.sub
+      local.get $e
+      local.get $e
+      i32.const 0
+      i32.lt_s
+      select
+      local.set $c
+      block void
+        loop void
+          local.get $c
+          i32.eqz
+          br_if 1
+          local.get $p
+          f64.const 10
+          f64.mul
+          local.set $p
+          local.get $c
+          i32.const 1
+          i32.sub
+          local.set $c
+          br 0
+        end
+      end
+      local.get $w
+      f64.convert_i64_u
+      local.get $p
+      f64.mul
+      local.get $w
+      f64.convert_i64_u
+      local.get $p
+      f64.div
+      local.get $e
+      i32.const 0
+      i32.ge_s
+      select
+      local.set $x
+      local.get $x
+      f64.neg
+      local.get $x
+      local.get $neg
+      local.get $w
+      i64.const 0
+      i64.ne
+      i32.and
+      select
+      i32.const 0`,
+  },
   "text.readNumber": {
     params: [["t", "text"]], result: "f64", partial: true,
-    locals: [["n", "i32"], ["i", "i32"], ["c", "i32"], ["neg", "i32"], ["nd", "i32"], ["frac", "i32"], ["e", "i32"], ["eneg", "i32"], ["ed", "i32"], ["d", "mag"], ["p", "mag"], ["u", "mag"], ["q", "mag"], ["r", "mag"], ["s", "i32"], ["x", "f64"]],
-    uses: ["mag.muladd", "mag.of", "mag.shl", "mag.divrem", "mag.toNumber", "mag.cmp", "mag.at"],
+    locals: [["n", "i32"], ["i", "i32"], ["c", "i32"], ["neg", "i32"], ["nd", "i32"], ["frac", "i32"], ["e", "i32"], ["eneg", "i32"], ["ed", "i32"], ["d", "mag"], ["p", "mag"], ["u", "mag"], ["q", "mag"], ["r", "mag"], ["s", "i32"], ["x", "f64"], ["fs", "i32"], ["fx", "f64"]],
+    uses: ["text.readNumber.fast", "mag.muladd", "mag.of", "mag.shl", "mag.divrem", "mag.toNumber", "mag.cmp", "mag.at"],
     body: `
+      local.get $t
+      call $text.readNumber.fast
+      local.set $fs
+      local.set $fx
+      local.get $fs
+      i32.eqz
+      if void
+        local.get $fx
+        i32.const 0
+        return
+      end
       local.get $t
       array.len
       local.set $n
