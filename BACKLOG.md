@@ -99,7 +99,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C223 | trek through `ters wasi` takes 6.3× the ideal at 40,000 fixes (306 ms against 48.5; `ters native` 3.0×, the core module 5.8×; bench-trek.ts BUILT=1, 2026-11-14 after C222). Profile the WASI build (Node starting is about 35 ms of it) and close the gap where it is the compiler's | GAPS.md round 16 R3, after C222 | P3 | M | |
+| C223 | trek through `ters wasi` takes 6.3× the ideal at 40,000 fixes (306 ms against 48.5; `ters native` 3.0×, the core module 5.8×; bench-trek.ts BUILT=1, 2026-11-14 after C222). Profile the WASI build (Node starting is about 35 ms of it) and close the gap where it is the compiler's. Since C223a (number reading's fast path) a profile has the collector 62 ms of 260, `split` 21 and its list made an array 14: next, a split straight into an array where lists are arrays. trek splits each line twice (`blank` and `words`), which the ideal doesn't | GAPS.md round 16 R3, after C222 | P3 | M | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 
