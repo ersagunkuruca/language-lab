@@ -110,7 +110,6 @@ import { runtime } from "./wasm-rt.ts";
 import { machineWords } from "./machine-words.ts";
 import { loopRecords } from "./loop-records.ts";
 import { closureArgs } from "./closure-args.ts";
-import { knownRecords } from "./known-records.ts";
 import { wideProducts } from "./wide-products.ts";
 
 // A shader (or a ray marcher's loop) may call what might not finish only
@@ -5654,9 +5653,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // shader's records are its own values (vectors, structs) already.
   // A function written where a definition is called, called directly in
   // that definition's own copy (C30 s2c1), on the core IR's JavaScript.
-  // A known record of functions given to a definition, read and called
-  // directly in that definition's own copy (C224, known-records.ts).
-  if (opts.data && !envSet("NO_KNOWN_RECORDS")) knownRecords(ir);
   if (opts.data && (opts.host || opts.closureArgs)) closureArgs(ir);
   if (opts.data) loopRecords(ir);
   if (opts.data && !opts.host) { machineWords(ir); wideProducts(ir); }
