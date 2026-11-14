@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { bundle, bundleHash, keptDir } from "../src/io.ts";
 import type { Code, Id } from "../src/model.ts";
 import { hashes } from "../src/hash.ts";
 import type { Info } from "../src/lang/infer.ts";
@@ -26,6 +27,8 @@ const KEPT = new Set<Id>([CHECK, CHOICE, DIVERGE, ABORT]);
 
 // The evaluator's own build: every source file it is made of.
 export function evaluatorHash(src = join(import.meta.dirname, "../src")): string {
+  // Bundled, the one file is every source (I272).
+  if (bundle && src === join(import.meta.dirname, "../src")) return bundleHash();
   const files = (readdirSync(src, { recursive: true }) as string[]).filter((f) => f.endsWith(".ts") || f.endsWith(".json")).sort();
   return sha(files.map((f) => `${f}\n${readFileSync(join(src, f), "utf8")}`).join("\n"));
 }
@@ -49,7 +52,9 @@ export function resultKeys(code: Code, info: Info, defs: Id[], saved: Record<Id,
 }
 
 export type Kept = Record<string, Omit<TestResult, "def">>;
-export const CHECKS_FILE = join(".lab", "checks.json");
+// Under where ters is run, or for the bundle (I272) the cache folder, so a
+// repository it tests gets no .lab/ of its own.
+export const CHECKS_FILE = bundle ? join(keptDir, "checks.json") : join(".lab", "checks.json");
 
 export function readKept(file = CHECKS_FILE): Kept {
   try { return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {}; } catch { return {}; }

@@ -11,7 +11,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
-import { fileURLToPath } from "node:url";
+import { tersScript } from "../src/io.ts";
 import { Session, LINES } from "./session.ts";
 
 const INSTRUCTIONS = `Ters programs are trees with stable ids, not text. Names are a side table.
@@ -203,7 +203,7 @@ function ters(command: string, args: string[]): string {
   if (r.status !== 0) throw new Error(out || `ters ${command} failed`);
   return out || "ok";
 }
-const LAB = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
+const LAB = tersScript;
 
 export function call(name: string, args: Args): { text: string; error: boolean } {
   const tool = TOOLS.find((t) => t.name === name);

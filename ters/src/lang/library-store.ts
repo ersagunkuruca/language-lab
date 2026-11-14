@@ -16,7 +16,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, wri
 import { dirname, join, resolve } from "node:path";
 import { deserialize, serialize } from "node:v8";
 import type { Code, Id } from "../model.ts";
-import { root } from "../io.ts";
+import { bundle, bundleHash, keptDir, root } from "../io.ts";
 import { keepLibraryChecks, type Info, type LibraryCheck, type LibraryStore, type Options } from "./infer.ts";
 import type { Closed, GroupStore } from "./check-cache.ts";
 import { Subst } from "./types.ts";
@@ -24,7 +24,7 @@ import { LIBRARY } from "./library.ts";
 import { filledLibrary } from "./ports.ts";
 import { keepAcrossRuns, type Keeper } from "./kept.ts";
 
-const DIR = join(root, ".lab");
+const DIR = keptDir;
 // (Tests check with several options, so a few of each are kept.)
 const KEEP = 12;
 
@@ -36,6 +36,8 @@ const KEEP = 12;
 const graphs = new Map<string, string>();
 const checkerHash = () => graphHash(join(root, "src", "lang", "library-store.ts"));
 export function graphHash(entry: string): string {
+  // Bundled, the one file is every source (I272).
+  if (bundle) return bundleHash();
   const had = graphs.get(entry);
   if (had) return had;
   const h = createHash("sha1");
@@ -69,6 +71,7 @@ const codes = new WeakMap<Code, string>();
 let files: string | undefined;
 export const libraryFiles = () => {
   if (files) return files;
+  if (bundle) return (files = bundleHash());
   const dir = join(root, "library"), h = createHash("sha1");
   for (const f of readdirSync(dir).sort()) { const s = statSync(join(dir, f)); h.update(`${f} ${s.size} ${s.mtimeMs}\n`); }
   return (files = h.digest("hex"));

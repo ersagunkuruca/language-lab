@@ -15,6 +15,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, writeFileSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { tersScript } from "../src/io.ts";
 import { parseSaved } from "../src/saved.ts";
 
 export const PROGRAM_FILES = ["code.json", "names.default.json", "comments.json", "signatures.json"];
@@ -130,7 +131,7 @@ export async function gitDiff(args: string[], cwd = process.cwd()): Promise<stri
 // (diff.ters.command) and to merge (merge.ters.driver). .gitattributes
 // names which files; this says what to run, with this checkout's ters.
 export function gitSetup(cwd = process.cwd()): string {
-  const ters = join(dirname(new URL(import.meta.url).pathname), "ters.ts");
+  const ters = tersScript;
   const run = (...a: string[]) => execFileSync("git", a, { cwd, encoding: "utf8" });
   const top = run("rev-parse", "--show-toplevel").trim();
   const node = JSON.stringify(process.execPath), script = JSON.stringify(ters);

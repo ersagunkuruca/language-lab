@@ -1,4 +1,4 @@
-# Written by ters: npm run build-editor. The Pages workflow builds
+# Written by ters: npm run build-editor (and ters.mjs by ters/cli/bundle.ts). The Pages workflow builds
 # them on main; nobody commits them, so they never conflict.
 /index.html
 /tutorial.html
@@ -9,6 +9,7 @@
 /apps/
 /prebuilt/
 /checks.json
+/ters.mjs
 
 # Scratch scripts (REVIEW-2026-10-26.md §4): keep them out of commits.
 *.tmp.ts

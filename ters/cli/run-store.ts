@@ -21,7 +21,7 @@ import { deserialize, serialize } from "node:v8";
 import type { Code, Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import type { Options } from "../src/lang/infer.ts";
-import { root } from "../src/io.ts";
+import { keptDir } from "../src/io.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { graphHash, libraryFiles } from "../src/lang/library-store.ts";
 import type { MainSpec, Printed } from "../../compiler/src/core-js.ts";
@@ -30,7 +30,7 @@ import type { MainSpec, Printed } from "../../compiler/src/core-js.ts";
 // and how it is called, and the names `show` prints cases with.
 export interface KeptRun { printed: Printed; main: number; spec: MainSpec; names: Names }
 
-const DIR = join(root, ".lab", "runs"), KEEP = 40;
+const DIR = join(keptDir, "runs"), KEEP = 40;
 const off = () => !!process.env.LAB_NO_LIBRARY_STORE;
 
 const ids = (xs: Iterable<Id> | undefined) => (xs ? [...xs].sort() : null);
