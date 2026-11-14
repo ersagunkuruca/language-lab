@@ -459,3 +459,18 @@ test("the lockstep page: the recording, sent to B, ends the same", () => {
   assert.equal(counts[0], counts[1]);
   assert.match(counts[0], /^-1480287269 /);
 });
+
+// L261b: one search, all its answers, gone through a board at a time.
+test("the queens page: 92 boards for eight, Next moves along them, a smaller board has fewer", () => {
+  const { root } = open("queens-page");
+  const status = () => root.find("status").textContent;
+  assert.equal(status(), "92 ways to place 8 queens. This is number 1.");
+  assert.equal(root.find("board").textContent.split("♛").length - 1, 8);
+  root.find("next").fire("click");
+  assert.equal(status(), "92 ways to place 8 queens. This is number 2.");
+  root.find("smaller").fire("click");
+  root.find("smaller").fire("click");
+  assert.equal(status(), "4 ways to place 6 queens. This is number 1.");
+  for (let i = 0; i < 6; i++) root.find("next").fire("click");
+  assert.equal(status(), "4 ways to place 6 queens. This is number 4.");
+});

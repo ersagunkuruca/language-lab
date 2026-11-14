@@ -1,0 +1,8 @@
+{"278fcb01": "The fold returns a function of the distance to the row being placed, so each earlier queen is checked at its own distance.",
+"82hu6vii8nte3caoimtg26alcq": "Who this page borrows from, shown on the page (docs/language/CREDITS.md).",
+"9c59ja3mkl0aed6916rmcnmfii": "One row of the board: size squares, a queen on the one at column (counted from 0). size · 1.0 says the size is a Float64, as queens gives it.",
+"a0ba7fdb": "One row at a time: pick any column (one of), keep it only if it's safe (else fail). The handler decides whether that means the first board, all of them, or how many.",
+"dt43mra1gvh6jtpu7shv2ctv8i": "The page's style sheet: the house colours (and their dark versions), and the board's squares, light and dark by row and column.",
+"iu124dohqre79ragksl2587kv7": "A board from queens: one column per row, a row drawn for each.",
+"o5vtiic2iedu7jg7oa98j0gs2h": "The page: a board size (4 to 10) and which of its answers to show. Every answer is found once, by all(queens(size)), when the size changes; Previous and Next only move along them.",
+"program": "Textbook: the eight queens puzzle (Max Bezzel, 1848), a classic backtracking example, as in Niklaus Wirth's \"Program development by stepwise refinement\" (1971).\nInfluence: Choice, where an expression can fail or give many answers, follows Verse (\"The Verse Calculus\", ICFP 2023), with Icon's generators and Prolog's backtracking before it."}
