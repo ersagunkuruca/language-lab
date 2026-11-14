@@ -647,6 +647,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       for (const x of (body as Fn)()) { yield x; return; }
       yield* (otherwise as Fn)();
     },
+    // An action's value, or `shown` while what it asked for hasn't come
+    // (L255): its run is a builtin's call, so a wait there is taken back.
+    [S.whileWaiting]: function* (body, shown) {
+      let got: Value[];
+      try { got = [...(body as Fn)()]; } catch (e) { if (e instanceof Pending) { yield shown; return; } throw e; }
+      yield* got;
+    },
     [S.optional]: function* (body) {
       for (const x of (body as Fn)()) { yield { tag: SOME, fields: [x] }; return; }
       yield { tag: NONE, fields: [] };

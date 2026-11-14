@@ -296,6 +296,7 @@ export const NOTES: Comments = {
   "builtin.io.writeFile": "Writes text to a file, replacing what was there.",
   "builtin.io.appendFile": "Adds text to the end of a file.",
   "builtin.io.fileExists": "Whether there's a file at this path.",
+  "builtin.whileWaiting": "while waiting(action, shown) is the action's value if it has it now, else shown. In a page's view, a fetch that hasn't landed shows shown, and the view runs again with the reply when it lands; where nothing waits (a command line waits for the reply) it is the action's value.",
   "builtin.io.listFolder": "The names of the files in a folder.",
   "builtin.io.readBytes": "A file's bytes as they are, with no decoding: for images, sound and binary formats. text of utf8(read bytes(path)) reads it as text. Aborts if the file can't be read.",
   "builtin.io.writeBytes": "Writes bytes to a file as they are, replacing what was there: write bytes(\"out.bin\", bytes of([0, 255])). Aborts if the file can't be written.",
