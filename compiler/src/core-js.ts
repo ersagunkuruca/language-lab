@@ -640,6 +640,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // A solve a relation's direction answers is that direction (directions.ts,
   // POLAR.md), as the checker reads it: the same nodes, its types (C177).
   const given = info;
+  // The passes below rewrite a checked program and check it again; none
+  // changes a unit, so units aren't checked again (I261: trek's 5.9 s).
+  info = { ...info, options: { ...info.options, units: false } };
   code = reachedImplementing(useDirections(code), roots, info);
   const h = hoistInvariants(code, info, names);
   if (h.hoisted) ({ code, info, names } = h);
