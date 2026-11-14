@@ -28,3 +28,14 @@ test("a field ending in or, and or mod reads as a name, and the word operators s
   assert.match(s.eval("both(spot(3, 2, 1, true))"), /^= true : Bool$/m);
   assert.match(s.eval("either(spot(1, 2, 3, false))"), /^= false : Bool$/m);
 });
+
+// A call of a name that isn't there is refused at once (I259): each field
+// `closest` weighed scanned every node twice, so bounce took 10 s, and the
+// split at each ++ before it multiplied that (58 s after two).
+test("an unknown name is refused at once, after ++s too", () => {
+  const s = new Session(join(import.meta.dirname, "../examples/bounce"));
+  const t0 = performance.now();
+  assert.throws(() => s.eval(`"a" ++ "b" ++ "c" ++ nosuch(1)`), /there's no function named nosuch/);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 5000, `refused after ${Math.round(ms)} ms`);
+});

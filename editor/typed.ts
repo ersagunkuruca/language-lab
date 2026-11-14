@@ -1229,10 +1229,18 @@ function distance(a: string, b: string): number {
 }
 
 // A field of an interface's record is one of its operations (INTERFACES.md).
+// Found once per version of the code: each look scanned every node twice,
+// and a call of an unknown name looks at every field (I259: 10 s on
+// bounce, 58 s after two ++).
+const operationsOf = new WeakMap<Code, Set<Id>>();
 function isOperation(code: Code, id: Id): boolean {
-  if (code.nodes[id]?.kind !== "field") return false;
-  const v = Object.values(code.nodes).find((n) => n.kind === "variant" && n.fields.includes(id));
-  return !!v && Object.values(code.nodes).some((n) => n.kind === "typedef" && n.interface && n.variants.includes(v.id));
+  let ops = operationsOf.get(code);
+  if (!ops) {
+    ops = new Set();
+    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? []) ops.add(f);
+    operationsOf.set(code, ops);
+  }
+  return ops.has(id);
 }
 
 // The condition, the then and the else of `if c then a else b`, split at
