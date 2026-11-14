@@ -165,7 +165,9 @@ so `sin` at a Steady is `steady sin`.
 3.4. **Rational** is an exact fraction, always in lowest terms. **Complex**
 is re + im·i, with Float64 parts. The library adds **Algebraic** (exact roots of
 polynomials), **Fixed** and others as ordinary data types with private
-constructors; their meaning is their definitions.
+constructors; their meaning is their definitions. **Nat** (L249) is
+`zero | succ(pred: Nat)`, plain data a program matches and folds on; that
+it may be stored as an Int is representation (§9), not meaning.
 
 3.5. **Literals.** A plain literal is some number: `3` is an Int where an
 Int is needed, a Float64 where a Float64 is, and so on. A whole literal
@@ -174,7 +176,19 @@ a Float64 or a Rational as LANGUAGE.md "Numbers" says. Numbers of
 different kinds never mix by themselves; conversions are named
 functions.
 
-3.6. `show` on a Float64 writes up to nine decimals, and a nonzero number
+3.6. **Grouping is meaning.** On Float64, `+` and `·` round at each step,
+so `(a + b) + c` and `a + (b + c)` may differ. A program keeps the nesting
+it was written with, and its text shows it: a chain `a + b + c` is the
+left-nested pairs, and a right-nested pair keeps its brackets (I274). An
+editor move that would regroup a Float64 sum or product is refused.
+
+3.7. **Units.** A Float64 may carry a unit in its type (`Float64 m/s`,
+L252): known units only, checked like any type, and part of what a value
+of a type with parameters says (a `Map Int (Float64 s)`'s values, a
+tuple's parts, L252e). A unit never changes an answer: removing every
+unit from a program that checks gives a program with the same answers.
+
+3.8. `show` on a Float64 writes up to nine decimals, and a nonzero number
 smaller than 10⁻⁶ by its shortest digits, never as 0 (L154). Every engine
 must give the same text.
 
@@ -216,6 +230,10 @@ parameters is asked in turn (L219).
 5.1. **Strict, left to right.** Ters is call by value. A call evaluates
 its function and then its inputs, left to right, then runs the body. A
 `let` evaluates its value before its body. Effects happen in that order.
+`and` and `or` are the one exception (L259, decided 2026-11-14): `a and b`
+evaluates b only when a is true, and `a or b` only when a is false. So
+`t > 0 and x / t > 1` is false when t is 0, not no answer, and in a
+search `false and one of(xs) > 1` gives one answer, not one per item.
 
 5.2. **Results are streams.** Every expression gives a **stream of
 answers**, in order. Pure code gives exactly one. `one of(list)` gives
