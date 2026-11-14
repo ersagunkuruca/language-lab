@@ -1,0 +1,35 @@
+# A made-up town of eight stations: homes up the hill, work by the
+# harbour, the station and the market between.
+# station name docks bikes x y   (x and y in km)
+station Hilltop   14  10 0.4 3.1
+station Orchard   12   9 1.6 2.7
+station Parkside  12   7 0.9 2.0
+station Station   20  10 1.8 1.4
+station Market    16   8 1.1 0.9
+station Library   10   5 2.4 0.8
+station Harbour   18   4 1.5 0.2
+station Docks     12   3 2.6 0.1
+# demand from to riders-an-hour (at the busiest hour)
+demand Hilltop  Station  6
+demand Hilltop  Harbour  5
+demand Hilltop  Market   2
+demand Orchard  Station  5
+demand Orchard  Docks    4
+demand Orchard  Library  2
+demand Parkside Harbour  4
+demand Parkside Market   3
+demand Station  Harbour  6
+demand Station  Docks    5
+demand Station  Hilltop  3
+demand Market   Library  2
+demand Market   Parkside 3
+demand Market   Station  2
+demand Library  Market   2
+demand Library  Station  2
+demand Harbour  Hilltop  5
+demand Harbour  Station  4
+demand Harbour  Market   3
+demand Docks    Orchard  4
+demand Docks    Station  4
+# how busy each hour is, from midnight, as a share of the busiest
+profile 0.05 0.02 0.02 0.02 0.05 0.15 0.45 0.9 1.0 0.6 0.4 0.4 0.5 0.45 0.4 0.45 0.7 1.0 0.85 0.55 0.4 0.3 0.2 0.1
