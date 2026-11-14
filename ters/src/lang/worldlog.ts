@@ -52,7 +52,10 @@ const fits = (log: LogEntry[], b: Budget | undefined, e: LogEntry): boolean => {
   log.push({ op: "logFull", args: [b.cap] });
   return false;
 };
-export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean; quiet?: () => boolean; cap?: number; budget?: Budget } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
+// `inView`: a page's views are running outside any handler (cells.ts
+// inView): the clock they read on each frame is the page's own, not
+// logged, and a replay answers it live (I265).
+export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean; quiet?: () => boolean; cap?: number; budget?: Budget; inView?: () => boolean } = {}): { world: World; log: LogEntry[]; random: { state(): number[]; set(s: number[]): void } } {
   const out = { ...world } as Record<string, unknown>;
   // The seeded generator, for a snapshot to keep where it is (I239b).
   // Set to no state, the next draw asks for the seed again.
@@ -75,6 +78,7 @@ export function logged(world: World, log: LogEntry[] = [], o: { seeded?: boolean
       continue;
     }
     if (WRITES.has(op)) { out[op] = (...args: unknown[]) => { push({ op, args, write: true }); return call(...args); }; continue; }
+    if (op === "now" && o.inView) { out[op] = (...args: unknown[]) => { const answer = call(...args); if (!o.inView!()) push({ op, args, answer }); return answer; }; continue; }
     // A background fetch answers later: its arrival is the answer, logged
     // when the program finds it, not the asking.
     if (op === "startFetch") {
@@ -112,7 +116,8 @@ export class Paused extends Error {}
 // the run, saying where. With `until`, it gives that many answers and
 // then pauses: the next answer asked throws Paused, and from then on
 // nothing more is answered or written, so a run shows where it was.
-export function replaying(log: LogEntry[], like: World, until?: number, onPause?: () => void): World {
+// `inView`: as `logged`'s, the clock a view reads is answered live.
+export function replaying(log: LogEntry[], like: World, until?: number, onPause?: () => void, inView?: () => boolean): World {
   let at = 0, given = 0, paused = false;
   const pause = () => { if (!paused) onPause?.(); paused = true; throw new Paused(`paused after ${given} answer${given === 1 ? "" : "s"}`); };
   const next = (op: string, args: unknown[]): LogEntry => {
@@ -142,6 +147,7 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
       if (!seed && log[at]?.op === "randomSeed") seed = seededGenerator(next("randomSeed", []).answer as number);
       return seed ? seed.next() : next(op, []).answer;
     };
+    else if (op === "now" && inView) out[op] = () => (inView() ? (like.now as () => number)() : next(op, []).answer);
     else out[op] = (...args: unknown[]) => { const e = next(op, args); if (e.threw !== undefined) throw new Error(e.threw); return e.answer; };
   }
   // The seed a seeded log kept (I239a), asked again by `logged` when a
