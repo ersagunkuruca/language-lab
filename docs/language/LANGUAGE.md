@@ -800,6 +800,23 @@ while the program runs. An implementation passed as a value and taken
 apart with a match is the dispatch you ask for. Prior art: Haskell's type
 classes (Wadler and Blott, 1989) and Rust's traits, `dyn` on request.
 
+**A value packed with its interface** (L256): to hold values of several
+types in one list, name a type whose case packs any value that has the
+interface:
+
+    type Device = device(it: a) where a has Appliance
+    home = [device(lamp(60.0, 72, 92)), device(heater(2000.0, 20.0, 15.0))]
+    home draw(ds, t) = sum(map(ds, (d) => draw(d, t)))
+
+A Device has Appliance itself, so `draw(d, t)` runs the packed lamp's or
+heater's own draw, with no match, and a new type of appliance changes
+nothing here (examples/household). It is boxing, as Rust's `dyn Appliance`
+and Java's interfaces box: a Device is a record of closures over the value,
+made before anything runs (packs.ts), and each call goes through it. Each of
+the interface's operations takes the packed value first and no other value
+of its type, and gives back one of its type (packed again) or none. Prior
+art: existentials as objects (Pierce, TAPL ch. 24); Läufer 1996.
+
 A number written where a type of the program's own goes is spelled by that
 type's `Literal` (L204b): `literal at quaternion = literal((top, bottom) =>
 quaternion(top / bottom, 0, 0, 0))` makes `2 · i` the quaternion 2i, and

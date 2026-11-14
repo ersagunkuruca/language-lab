@@ -3,8 +3,8 @@
 BACKLOG L40b, from ALGEBRA-TABLES.md "the question". **Steps 1 to 4 are
 built** (L40e to L40h, `test/interfaces.test.ts`, `test/trig.test.ts`,
 `test/dual.test.ts`), and so is writing an implementation in the editor
-(step 5, E137); a value packed with its implementation (step 6) waits for
-a program that needs it. WAYS.md (L96) builds on this: a field may be left
+(step 5, E137); so is a value packed with its implementation (step 6, L256,
+examples/household). WAYS.md (L96) builds on this: a field may be left
 to its ways. Ersagun, 2026-10-27:
 a type's operations should be "a separate thing, because if it is separate
 you can add more interface implementations later, not just + * - /. For
@@ -220,7 +220,19 @@ and a colour keeps the rule. Literals at a type need one more operation,
    interface, with what implements it or an Implement button, which makes
    `trig at wave = trig(□, …)` pinned to `Trig Wave`, so each hole wants
    `(Wave) -> Wave`. An interface's own panel lists its implementations.
-6. **A value packed with its implementation**, when a program needs it.
+6. **A value packed with its implementation. Built** (L256,
+   `test/packing.test.ts`, examples/household). A data type's one case may
+   have a type variable of its own, with what it has: `device(it: a)
+   where a has Appliance` (model.ts `variant.params` and `has`, each the
+   type `Appliance a`; packing.ts). `device(x)` asks x's type for
+   Appliance, and Device has Appliance itself, so `draw(d, t)` on a Device
+   is the packed value's draw. Before anything runs, packs.ts writes
+   Device as a record of closures (`draw: (Int) -> Float64`, `later:
+   (Int) -> Device`, …), `device(x)` as a generic `pack device(x)` that
+   arith.ts copies per type, and `appliance at device` as calls of the
+   closures. An operation must take the a first and no other a, and give
+   back a or no a (Rust's object safety). Writing an implementation of
+   Appliance at Device yourself is an error: it has the packed value's.
 
 ## Prior art
 

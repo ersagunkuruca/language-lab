@@ -605,7 +605,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     out.push(grp(body.variants.map((v) => {
       const vn = node(v) as NodeOf<"variant">;
       const fs = vn.fields.map((f) => [part("fld", [nameOf(f), part("ty", [`: ${typeText((node(f) as NodeOf<"field">).type)}`])], f)]);
-      return { line: [pn("| "), con(v), ...(fs.length ? [pn("("), ...commas(fs), pn(")")] : []), ...(vn.returns ? [kw(" returns "), part("ty", [typeText(vn.returns)])] : []), ...(vn.returns && vn.later ? [kw(", later")] : [])], id: v, cls: "variant" };
+      // What a packing case's own type has (L256): `where a has Appliance`.
+      const has = vn.has?.length ? [kw(" where "), part("ty", [vn.has.map((h) => { const t = node(h) as NodeOf<"tref">; return `${typeText(t.args[0])} has ${nameOf(t.target)}`; }).join(", ")])] : [];
+      return { line: [pn("| "), con(v), ...(fs.length ? [pn("("), ...commas(fs), pn(")")] : []), ...has, ...(vn.returns ? [kw(" returns "), part("ty", [typeText(vn.returns)])] : []), ...(vn.returns && vn.later ? [kw(", later")] : [])], id: v, cls: "variant" };
     })));
     return out;
   }

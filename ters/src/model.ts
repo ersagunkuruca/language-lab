@@ -84,7 +84,11 @@ export type Node =
   // binders its fields and result may name besides its effect's, fresh at
   // each call and rigid in the case that handles it. `await(ticket: Ticket
   // a) → a` has its own a.
-  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true; params?: Id[] }
+  // A data type's case may have its own type variables too, each with the
+  // interfaces it has (`has`, each the type `Appliance a`): the case packs
+  // a value of any type with them, and the data type then has them itself
+  // (L256, INTERFACES.md step 6): `device(it: a) where a has Appliance`.
+  | { id: Id; kind: "variant"; fields: Id[]; returns?: Id; later?: true; private?: true; params?: Id[]; has?: Id[] }
   // An interface's field with results (POLAR.md, L128d3) is typed as a
   // function whose ports are named (`tfun.ports`, below).
   // `same`: another case's field of the same type that this one is (L168,
@@ -327,7 +331,7 @@ export function mapIds(n: Node, f: (id: Id) => Id): Node {
     case "lambda": return { ...n, id: f(n.id), params: n.params.map(f), body: f(n.body), ...(n.results ? { results: n.results.map(f) } : {}) };
     case "def": return { ...n, id: f(n.id), body: n.body === null ? null : f(n.body), ...(n.way ? { way: f(n.way) } : {}) };
     case "typedef": return { ...n, id: f(n.id), params: n.params.map(f), variants: n.variants.map(f), ...(n.row ? { row: n.row.map(f) } : {}) };
-    case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}) };
+    case "variant": return { ...n, id: f(n.id), fields: n.fields.map(f), ...(n.params ? { params: n.params.map(f) } : {}), ...(n.has ? { has: n.has.map(f) } : {}) };
     case "field": return { ...n, id: f(n.id), type: f(n.type), ...(n.same ? { same: f(n.same) } : {}) };
     case "tref": return { ...n, id: f(n.id), target: f(n.target), args: n.args.map(f) };
     case "tfun": return { ...n, id: f(n.id), params: n.params.map(f), result: f(n.result), ...(n.effects ? { effects: n.effects.map(f) } : {}) };
@@ -365,7 +369,7 @@ export const SCHEMA: Schema = {
   builtin: { op: "meaning" },
   hole: {},
   typedef: { params: "child", variants: "child", effect: "meaning", interface: "meaning", unique: "meaning", row: "ref", pure: "meaning" },
-  variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning" },
+  variant: { params: "child", fields: "child", returns: "child", later: "meaning", private: "meaning", has: "child" },
   field: { type: "child", same: "ref" },
   tref: { target: "ref", args: "child", unit: "meaning" },
   tfun: { params: "child", result: "child", effects: "ref", ports: "meaning" },

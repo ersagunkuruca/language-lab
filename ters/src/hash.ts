@@ -78,7 +78,7 @@ function kids(n: Node): Id[] {
       return [n.fn, ...n.args];
     case "lambda": return [...n.params, n.body];
     case "typedef": return [...n.params, ...n.variants];
-    case "variant": return [...(n.params ?? []), ...n.fields, ...(n.returns ? [n.returns] : [])];
+    case "variant": return [...(n.params ?? []), ...(n.has ?? []), ...n.fields, ...(n.returns ? [n.returns] : [])];
     case "field": return [n.type];
     case "tref": return n.args;
     case "tfun": return [...n.params, n.result];
@@ -246,7 +246,8 @@ function canon(code: Code, defId: Id, group: Map<Id, number | null>, memo: Map<I
       case "variant": {
         // An operation's result type, and whether it is answered later or
         // private, are its meaning too (L178a); only when present.
-        const marks = [...(n.returns ? [["returns", go(n.returns)]] : []), ...(n.later ? [["later"]] : []), ...(n.private ? [["private"]] : [])];
+        // What a packing case's own variables have (L256), too.
+        const marks = [...(n.returns ? [["returns", go(n.returns)]] : []), ...(n.later ? [["later"]] : []), ...(n.private ? [["private"]] : []), ...(n.has?.length ? [["has", n.has.map(go)]] : [])];
         return n.params?.length ? ["variant", ["own", n.params.map(go)], n.fields.map(go), ...marks] : ["variant", n.fields.map(go), ...marks];
       }
       // A shared field (L168) says which case's field it is, by position;

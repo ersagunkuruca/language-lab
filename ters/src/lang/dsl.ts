@@ -56,6 +56,18 @@ export class Lang extends Builder {
     return { def, v, op };
   }
 
+  // A data type whose one case packs a value of any type with the
+  // interfaces it has (L256, packing.ts): `device(it: a) where a has
+  // Appliance`, written packing("Device", "device", "it", [appliance]).
+  packing(name: string, kase: string, field: string, has: Id[], param = "a") {
+    const def = this.def(name);
+    const a = this.binder(param);
+    const f = this.named(this.add({ kind: "field", type: this.tref(a) }), field);
+    const v = this.named(this.add({ kind: "variant", fields: [f], params: [a], has: has.map((i) => this.tref(i, this.tref(a))) }), kase);
+    this.code.nodes[def] = { id: def, kind: "def", body: this.add({ kind: "typedef", params: [], variants: [v] }) };
+    return { def, v, f };
+  }
+
   // An effect: a data type whose cases are operations. Each operation
   // lists its inputs and the type it returns, or null for one that never
   // returns (it ends the handled computation, like abort). "later" marks
