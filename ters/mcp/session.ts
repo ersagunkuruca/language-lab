@@ -438,7 +438,10 @@ export class Session {
     const parts = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*\(([^()]*)\)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
     if (parts) return this.fill(code, names, hole, `match ${[parts[3], ...lines.slice(1, next).map((l) => l.trim())].join(" ")}\n  ${parts[1]}(${parts[2]}) →\n${after.split("\n").map((l) => "    " + l).join("\n")}`, def, as);
     const step = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
-    if (!step) return this.bareStep(code, names, hole, lines.slice(0, next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n"), after, def, as);
+    // A case's lines (`nil → 1`, a match's cases written at its own
+    // indent) are the match's to read, not steps.
+    const arm = (l: string) => / → |→$/.test(l.trim().replace(/"(?:[^"\\]|\\.)*"/g, '""'));
+    if (!step) return arm(lines[0]) || arm(lines[next]) ? null : this.bareStep(code, names, hole, lines.slice(0, next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n"), after, def, as);
     // The step's value may go on over deeper lines.
     const value = [step[2], ...lines.slice(1, next).map((l) => l.trim())].join(" ");
     const r = this.fillOne(code, names, hole, `${step[1]} = ${value}; □`, def, as);
