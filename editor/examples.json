@@ -15,6 +15,7 @@
     { "program": "shaders", "label": "Shader: ripples", "folders": ["shaders"] },
     { "program": "raymarch", "label": "Shader: ray marching", "folders": ["raymarch"] },
     { "program": "mandelbrot", "label": "Shader: Mandelbrot set", "folders": ["mandelbrot"] },
+    { "program": "tiles", "label": "Shader: tiles, each picking its shape", "folders": ["tiles"] },
     { "program": "wavetable", "label": "Wavetable: a tone from a table", "folders": ["wavetable"] },
     { "program": "dice", "label": "Page: two dice", "folders": ["dice"], "page": true },
     { "program": "pig", "label": "Page: Pig", "folders": ["pig"], "page": true },

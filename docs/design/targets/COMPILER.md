@@ -492,7 +492,7 @@ backend.
 | numbers, `if`, lets, calls | yes | yes | yes | yes | yes |
 | recursion | yes (stack-limited) | **no**, bounded loops only | yes, tail calls are `return_call` | yes | yes |
 | data (`{tag, fields}`), lists | GC objects | **no**, fixed-size structs and vectors | **no** | WasmGC structs | our own memory management |
-| closures, higher-order code | JS closures | **no**, specialized away | **no** | WasmGC + `call_ref` | structs + function pointers |
+| closures, higher-order code | JS closures | records of which function and its captures, a call an if on which (C225, defunc.ts) | **no** | WasmGC + `call_ref` | structs + function pointers |
 | `Choice` | generators | **no**, except over a constant list | **no** | success continuations | success continuations |
 | effect handlers | a stack of handlers, exceptions | **no** | **no** | handler stack, WASM exceptions | handler stack, return codes |
 | text | JS strings | **no** | **no** | JS strings via imports | our own strings |
