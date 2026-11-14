@@ -10,7 +10,9 @@
 //   - arithmetic: a sum of positives is positive, x · x and |x| are never
 //     negative, eˣ and √ of a positive are positive, and so on;
 //   - a branch: in the `else` of `if x = 0`, x isn't 0; in the `then` of
-//     `if 0 < x`, x is positive (and `and`, `or`, `not` of such tests);
+//     `if 0 < x`, x is positive (and `and`, `or`, `not` of such tests, and
+//     a test written as a definition, `x > 0`, read through its body); what
+//     is tested may be a field read too, `l.took` (L258);
 //   - a type's rule: a Rational's bottom is positive.
 //
 // A product of two nonzero floats can still underflow to 0; a divisor
