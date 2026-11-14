@@ -31,7 +31,7 @@ function program(build: (k: Lang) => void) {
     const v = [...r.call(r.value(def(name)), ...(xs as Value[]))][0] as unknown;
     return typeof v === "object" && v && "tag" in v ? ((v as { tag: string }).tag === TRUE ? 1n : 0n) : BigInt(v as number);
   };
-  const circuit = (name: string, bits: number, options: { reuse?: boolean } = {}) => printQasm(lowerScalar(code, info, names, [def(name)], { shader: true }), def(name), bits, ["a", "b"], options);
+  const circuit = (name: string, bits: number, options: { reuse?: boolean; unroll?: number } = {}) => printQasm(lowerScalar(code, info, names, [def(name)], { shader: true }), def(name), bits, ["a", "b"], options);
   return { evaluate, circuit };
 }
 
@@ -117,7 +117,7 @@ test("what has no circuit is refused with the reason: a Float64, recursion (C210
     k.define(down, k.fn(["a", "b"], (a, b) => k.if(k.call(INT_OPS.less, k.x(a), k.int(1)), k.call(INT_OPS.add, k.x(b), k.int(1)), k.call(down, k.call(INT_OPS.sub, k.x(a), k.int(1)), k.x(b)))));
   });
   assert.throws(() => p.circuit("half", 4), /Float64/);
-  assert.throws(() => p.circuit("down", 4), /calls itself, and a circuit has no loop/);
+  assert.throws(() => p.circuit("down", 4), /down calls itself on a value known only when it runs, and a circuit has no loop: give a bound to unroll it to \(--unroll n\)/);
 });
 
 test("ters qasm prints the circuit, its registers named after the inputs (C210)", () => {
@@ -130,4 +130,42 @@ test("ters qasm prints the circuit, its registers named after the inputs (C210)"
   const r = spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "qasm", dir, "--main", "add4", "--bits", "4"], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(simulateQasm(r.stdout, { x: 9n, y: 12n }).out, 5n);
+  // A loop on an input: refused without a bound, unrolled with one.
+  const down = k.def("down");
+  k.define(down, k.fn(["n", "m"], (n, m) => k.if(k.call(INT_OPS.less, k.x(n), k.int(1)), k.x(m), k.call(down, k.call(INT_OPS.sub, k.x(n), k.int(1)), k.call(INT_OPS.add, k.x(m), k.int(2))))));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const qasm = (...more: string[]) => spawnSync(process.execPath, [join(import.meta.dirname, "../../ters/cli/ters.ts"), "qasm", dir, "--main", "down", "--bits", "3", ...more], { encoding: "utf8" });
+  assert.match(qasm().stderr, /give a bound to unroll it to \(--unroll n\)/);
+  const u = qasm("--unroll", "2");
+  assert.equal(u.status, 0, u.stderr);
+  assert.deepEqual([2n, 5n, 6n].map((n) => simulateQasm(u.stdout, { n, m: 1n })).map((g) => [g.out, g.deeper]), [[5n, 0n], [0n, 1n], [0n, 1n]]);
+});
+
+// A loop on an input unrolls to a bound given (C219b): a call past it
+// gives 0 and sets `deeper` on the inputs that reach it, so every answer
+// is the evaluator's or is marked. A recursion on what is known when
+// compiled (power(x, 3)) unrolls as far as it goes, under an if or not.
+test("a loop on an input unrolls to a bound, a qubit saying where that isn't enough (C219b)", () => {
+  const p = program((k) => {
+    const down = k.def("down");
+    // b + 1 + a, one step at a time.
+    k.define(down, k.fn(["a", "b"], (a, b) => k.if(k.call(INT_OPS.less, k.x(a), k.int(1)), k.call(INT_OPS.add, k.x(b), k.int(1)), k.call(down, k.call(INT_OPS.sub, k.x(a), k.int(1)), k.call(INT_OPS.add, k.x(b), k.int(1))))));
+    const pow = k.def("pow");
+    k.define(pow, k.fn(["x", "n"], (x, n) => k.if(k.call(INT_OPS.less, k.x(n), k.int(1)), k.int(1), k.call(INT_OPS.mul, k.x(x), k.call(pow, k.x(x), k.call(INT_OPS.sub, k.x(n), k.int(1)))))));
+    const cube = k.def("cube");
+    k.define(cube, k.fn(["a", "b"], (a, b) => k.call(INT_OPS.bitAnd, k.if(k.call(INT_OPS.less, k.x(a), k.x(b)), k.call(pow, k.x(a), k.int(3)), k.x(b)), k.int(7))));
+  });
+  const run = (q: ReturnType<typeof p.circuit>, a: number, b: number) => simulateQasm(q.text, { a: BigInt(a), b: BigInt(b) });
+  for (const [unroll, enough] of [[7, 8], [3, 4], [0, 1]]) {
+    const q = p.circuit("down", 3, { unroll });
+    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
+      const got = run(q, a, b);
+      assert.equal(got.deeper, a < enough ? 0n : 1n, `down(${a}, ${b}) unrolled ${unroll}`);
+      if (a < enough) assert.equal(got.out, p.evaluate("down", a, b) & 7n, `down(${a}, ${b}) unrolled ${unroll}`);
+      assert.equal(got.anc, 0n); assert.equal(got.a, BigInt(a)); assert.equal(got.b, BigInt(b));
+    }
+  }
+  assert.equal(agrees(p, "cube", 3).n, 64);
+  assert.equal(p.circuit("cube", 3).deeper, undefined);
 });

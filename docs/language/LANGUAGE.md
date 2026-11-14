@@ -694,7 +694,11 @@ line of `Choice`.
 
 Order: a fold computes the folded values of the children before the parent's
 case runs. That doesn't matter for pure code. For effects it means a fold
-runs bottom-up, so use `for each` when order matters.
+runs bottom-up, so use `for each` when order matters, or fold to a function:
+each case returns a function that calls its children's (queens' `safe`,
+shown as `fold placed from distance = 1`), so the parent's case runs first.
+Results stay strict ([RESEARCH-L254](../reports/RESEARCH-L254-2026-11-13.md): lazy ones would change
+Choice's order and lose the compiled loops).
 
 ## Types
 
@@ -2067,8 +2071,6 @@ back into the group being hashed is named by its position.
   shows its known units (L252); what's missing is writing a unit in a
   pinned signature, with unit variables for a function generic over its
   unit (`(Float64 u) -> Float64 u²`).
-- **Laziness for fold results**, so effects in folds could run top-down.
-  (Lazy *data* now exists: a `Cell` in a field, see "Cells".)
 - **Cells, further.** Async cells (HTTP results) as Solid's resources are
   done: a view that fetches runs again when the reply lands (L59), and
   `while waiting` shows something till then (L255). (Guarded corecursion is done, L16, beside the termination check; so is the

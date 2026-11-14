@@ -119,8 +119,11 @@ simulator of basis states: a 4-bit adder agrees with the evaluator on all
 product and a call. Since C219 an ancilla is shared once it is
 uncomputed: each call and arithmetic step copies its answer out and undoes
 itself at once, so its scratch qubits go to the steps after it (a sum of
-squares on 4 bits, 152 ancillas to 43, for about twice the gates). Not
-done: loops unrolled to a known bound.
+squares on 4 bits, 152 ancillas to 43, for about twice the gates). A
+recursion on values known when compiled (`power(x, 3)`) unrolls as far as
+it goes; one on an input unrolls to a bound given (`ters qasm --unroll n`,
+C219b), a call past it giving 0 and setting a qubit `deeper` on the inputs
+that reach it, so an answer past the bound is never taken for a right one.
 
 **Quantum part: a new layer of the language, not a target.** Ters has a
 close match: `Choice` is already "many answers at once". Give each answer

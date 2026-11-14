@@ -15,7 +15,7 @@ special case, then what lets programs be written in the editor, then
 language, then more targets or speed (WORKFLOW.md "Priority").
 Rows once held back as later goals are open again (Ersagun 2026-11-09):
 a lane takes them when bugs and goal rows are in hand.
-Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256, C219), C220; new rows come from the recurring reviews, QA passes and bigger programs.
+Focus since 2026-11-10 14:49 (Ersagun): finish stable references, free lists and multithreading. Done: C61 and C43 closed, and C58, C60 (with C42, C57, C59 and C200) closed 2026-11-12 as waiting for an example (DONE.md); the mobile rows are closed too. As of 2026-11-13 the open rows are the Inbox's, P7, P8 and the gaps the docs refresh found (L246 to L256), C220; new rows come from the recurring reviews, QA passes and bigger programs.
 Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to be as close to a C/C++ dev doing data oriented design and cache and memory aware as possible. And then if we need Pools and similar stuff to get a last 10 percent of performance that's OK, but the defaults should be our first target." So rows that change what every program gets (layout as columns, arrays written in place, records changed in place, work on every core) go before ones a program must ask for (a Pool type).
 **Size:** S hours · M one PR · L several PRs or a design note first.
 **Status:** ▶ running · ⏸ held · blank = waiting.
@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C219 (qasm), C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| C Compiler and targets | "Compiler lane" | C220 (machine natively slower than in WASI); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
@@ -38,7 +38,6 @@ New items land here until the next triage gives them a lane and a priority.
 |---|---|---|---|
 | I219 | What the full run fails on, on main (2026-11-12; draws fixed in I219a, board, effects and finite in I219b, lang.test's palette sweep, map-tree.test's timing and C42h's names in c-names.test in I219 part, palette in I219c, the editor's shaders ("process is not defined") in I219d, the smoke's first-steps check (it waited for main, but a first visit opens on fall since E235) in I219e, the rest of the smoke (Countdown's solutions read [] once relate's settles spent steps) in I219f, fixed.test's CORDIC and core-js.test's pig in I219 part 2, each file run alone; the nightly hasn't passed since 10-28): on CI resolve-once.test (a kept library resolving typed `List Case several` where it is `List a`), passing here; likely the same cause as CORDIC (a kept resolving read over another library check), fixed by part 2, for the next Nightly to confirm. | I208 | 2026-11-12 |
 | I241 | A trial repository holding one real Ters program, to try the format and `ters diff` in real git use: edits on two branches touching the same definitions, PRs read in GitHub's raw view and with `ters diff`, merges with and without the driver, findings in a dated report. Needs Ersagun to create the repository. After I240 | thread "Decide the saved program format" | 2026-11-13 |
-| I258 | **Bug.** A name ending in `or` or `and` before an operator isn't read from text: `b.anchor + x` is "after .anchor, “+ x” isn't read". editor/typed.ts `typedOut` skips an operator whose left side ends with any operator's symbol, with no word boundary for `or` and `and` (`colour + x`, `band + x`). Editor lane's file | GAPS.md round 16 B1 | 2026-11-13 |
 | I259 | **Bug.** A call of an unknown name is refused after 8.5 s in a 50-definition program, and each `++` before it multiplies that (51 s for two): editor/typed.ts `isOperation` scans every node for each field `closest` weighs (O(n²)), and the operator split retries each operand. Make the refusal instant | GAPS.md round 16 B2 | 2026-11-13 |
 | I260 | The MCP text reader's smaller gaps from round 16: a `match` as a step with steps after it; the message for `0.0 m` where m is a parameter (say m is a name here); `first` on an Optional (the message reads backwards); `not in order(ps)` (suggest `not (in order(ps))`); a `replace` taking 1.5 s at 50 definitions | GAPS.md round 16 M1 | 2026-11-13 |
 | I261 | `ters run` takes 11 s on trek's 400-fix sample, 0.8 s of it running: 5.9 s re-checks units on the represented program (a rewrite changes no units, so skip it), 5.1 s lowers (`firstArms` 2 s) | GAPS.md round 16 R4 | 2026-11-13 |
@@ -149,7 +148,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C219 | `ters qasm`: unroll a loop to a known bound (ancillas reused since C219a) (REVERSIBLE-AND-QUANTUM-2026-11-11.md "Not done") | docs refresh 2026-11-13 (thread "Update all project docs"); REVERSIBLE-AND-QUANTUM-2026-11-11.md | P3 | M | |
 
 ## L: Language and library
 
@@ -191,7 +189,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L254 | Lazy fold results, so the effects in a fold could run top-down (LANGUAGE.md "What's next"). Research first: what it would mean for Choice and for the compiled loops | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | L | |
 
 ### Relations and totality (BACKWARDS.md, MODES.md)
 
