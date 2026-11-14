@@ -12,4 +12,10 @@
 "s7dg67if8rgs61f8m7gds57rs5": "The expression with every operation in parentheses, which shows how it was read.",
 "s8b7ckmq5q5o0lqvstvtb22kh5": "The line's text read as an expression: `read expression` runs the printer backwards (by descent, C110), so it reads exactly what the printer writes. The spaces around the text come off by running `spaced` backwards. A text it can't read is an Abort.",
 "tnt9kdj6jdf7kps6ifi6rsn513": "What carries from one line to the next: the names defined so far (newest first) and how many lines failed.",
-"vmj137u9ibbv0bgd3ngv1sk4on": "One operator on two whole numbers. Division, remainder and power can have no answer (Choice), which becomes an Abort with the reason."}
+"vmj137u9ibbv0bgd3ngv1sk4on": "One operator on two whole numbers. Division, remainder and power can have no answer (Choice), which becomes an Abort with the reason.",
+"3qbsk4jf5dncja0rq2terio7pp": "A name given a value with let, kept for the lines after it.",
+"tftpe9oabaktg5vgcqiqde9dig": "A space, a tab or a carriage return, which separates tokens and is otherwise skipped.",
+"scqqdothflshfj5s8d56mvctc8": "Whether the character is 0 to 9.",
+"8nr4m5fhv3ie3d1pb3hra3v5eb": "Whether the character can be part of a name: a letter or an underscore.",
+"96kviosgbs58frmgc3e7iffs5j": "The tokens after a symbol that must come next; if it doesn't, stops with what was expected and what came instead.",
+"cjjdopbs3fum1fg39na18sfqdm": "The value a name was given, the latest binding first, or a stop saying the name is unknown."}
