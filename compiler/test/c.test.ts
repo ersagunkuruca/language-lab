@@ -237,6 +237,8 @@ test("searches in C: Countdown's solutions, every answer in the evaluator's orde
   sameAndFreed(build(c.lowered), calls, c.want, c.label);
 });
 
+// The numbers example's Nat is std's since L249: integer (was the
+// example's own `number`), add and multiply are std's, still Peano here.
 test("data built and taken apart in C: Peano numbers and binary ones", { skip }, () => {
   const n = inC("numbers");
   const Nat = n.lowered.funcs[n.at("double")].params[0] as DType, Binary = n.lowered.funcs[n.at("meaning")].params[0] as DType;
@@ -245,7 +247,7 @@ test("data built and taken apart in C: Peano numbers and binary ones", { skip },
   const ks = [0, 1, 2, 3, 5];
   const one = (fn: string) => ks.map((k): [number, Value[]] => [n.at(fn), [peano(k)]]);
   const two = (fn: string) => ks.flatMap((k) => ks.slice(0, 3).map((j): [number, Value[]] => [n.at(fn), [peano(k), peano(j)]]));
-  const calls = [...one("double"), ...one("number"), ...one("factorial"), ...one("is even"), ...two("add"), ...two("multiply"), ...two("power"),
+  const calls = [...one("double"), ...one("integer"), ...one("factorial"), ...one("is even"), ...two("add"), ...two("multiply"), ...two("power"),
     ...[0, 1, 6, 100, 300].map((k): [number, Value[]] => [n.at("meaning"), [binary(k)]])];
   sameAndFreed(build(n.lowered), calls, n.want, n.label);
 });
