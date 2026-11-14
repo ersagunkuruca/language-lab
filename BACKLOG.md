@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C223 (trek on WASI 6.3× the ideal); the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
+| C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
@@ -99,7 +99,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C223 | trek through `ters wasi` takes 6.3× the ideal at 40,000 fixes (306 ms against 48.5; `ters native` 3.0×, the core module 5.8×; bench-trek.ts BUILT=1, 2026-11-14 after C222). Profile the WASI build (Node starting is about 35 ms of it) and close the gap where it is the compiler's. Since C223a (number reading's fast path) a profile has the collector 62 ms of 260, `split` 21 and its list made an array 14: next, a split straight into an array where lists are arrays. trek splits each line twice (`blank` and `words`), which the ideal doesn't | GAPS.md round 16 R3, after C222 | P3 | M | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 
