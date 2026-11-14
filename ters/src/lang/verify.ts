@@ -222,6 +222,14 @@ export function verify(code: Code, e: Elaboration, defs: Id[] = code.defs, under
             break;
           }
           if (dp.td.effect || (dp.td.interface && target.kind === "field") || (target.kind === "field" && dp.td.variants.length !== 1)) { skip(dp.td.effect ? "an effect's operation" : dp.td.interface ? `an interface's ${target.kind}` : "a field several cases share"); break; }
+          // A packing case (L256, packing.ts): any value goes in, and the
+          // value taken out, through the field or a match, is the type's.
+          const packing = !dp.td.effect && !dp.td.interface && dp.td.variants.length === 1 && !!(code.nodes[dp.td.variants[0]] as NodeOf<"variant">).params?.length;
+          if (packing) {
+            const want: Type = target.kind === "variant" ? { t: "fn", params: [{ t: "var", v: PARAM - 800 }], ret: dp.self, eff: { effs: [], tail: null } } : { t: "fn", params: [dp.self], ret: dp.self, eff: { effs: [], tail: null } };
+            if (!instance(want, t, (v) => general(new Set())(v) || v === PARAM - 800)) bad(id, "a case or a field is used at an instance of its type");
+            break;
+          }
           let want: Type | null;
           if (target.kind === "variant") { const fs = dp.fields(n.target); want = fs.every(Boolean) ? (fs.length ? { t: "fn", params: fs as Type[], ret: dp.self, eff: { effs: [], tail: null } } : dp.self) : null; }
           else { const i = (code.nodes[dp.td.variants[0]] as NodeOf<"variant">).fields.indexOf(n.target), f = dp.fields(dp.td.variants[0])[i]; want = f ? { t: "fn", params: [dp.self], ret: f, eff: { effs: [], tail: null } } : null; }

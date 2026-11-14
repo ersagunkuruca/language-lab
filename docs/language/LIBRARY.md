@@ -181,13 +181,14 @@ There are six kinds of number. Int is a whole number of any size. Float64 is a f
 
 ## Natural numbers
 
-Nat is the natural numbers as data: zero, or succ(n), one more than n. A program matches and folds on a Nat as on any data, so a definition says what it computes the mathematical way, and the compiler stores each Nat as an Int: zero is 0, succ adds one, a match tests for 0, a fold is a loop, and add and multiply are Int's + and ·. natural and integer go between Nat and Int. A program can write a representation of its own for Nat (REPRESENTATIONS.md), and the compiler weighs it beside these.
+Nat is the natural numbers as data: zero, or succ(n), one more than n. A program matches and folds on a Nat as on any data, so a definition says what it computes the mathematical way, and the compiler stores each Nat as an Int: zero is 0, succ adds one, a match tests for 0, a fold is a loop, and add and multiply are Int's + and ·. natural and integer go between Nat and Int. A number written where a Nat goes is that Nat. An Int matches as data too, by its sign: from(n) is n and minus one minus(n) is −1 − n, each with a Nat n. A program can write a representation of its own for Nat (REPRESENTATIONS.md), and the compiler weighs it beside these.
 
 - **Nat** (type) (numbers module). A natural number, 0, 1, 2 and on: zero, or succ(n), one more than a natural number n. A program matches and folds on it as written; the compiler stores it as an Int, where succ adds one and a fold is a loop, unless a program's own representation is cheaper for what it does.
 - **natural** : `(Int) -> Nat` (numbers module). The Int i as a natural number: succ applied i times to zero, and zero for an i below 0.
 - **integer** : `(Nat) -> Int` (numbers module). The natural number n as an Int: how many succs it has.
 - **add** : `(Nat, Nat) -> Nat` (numbers module). a + b for natural numbers: succ applied to b once for each succ of a. Stored as Ints, it is Int's +.
 - **multiply** : `(Nat, Nat) -> Nat` (numbers module). a × b for natural numbers: b added once for each succ of a. Stored as Ints, it is Int's ·.
+- **Int as data** (type) (numbers module). An Int as data: from(n) is the natural number n, and minus one minus(n) is −1 − n, so every Int is one of the two, once. A match on an Int with these cases splits it by sign and gives a Nat: match d with from(k) → k steps up, minus one minus(k) → succ(k) steps down. A value of it is an Int.
 
 ## True and false, sameness and order
 

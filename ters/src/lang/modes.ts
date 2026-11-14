@@ -834,6 +834,11 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const fn = fnAt(n.fn, ctx);
     const text = `${fn ? (fn.k === "lambda" ? "a function written here" : nm(fn.id)) : "a function"}(${n.args.length ? "…" : ""})`;
     const call: Exec = { k: "call", node: n.id };
+    // An interface's operation isn't a field taken out of its first input:
+    // which implementation runs is only known when it runs (a packed value,
+    // L256, carries its own), so it runs forward and what it gives back isn't smaller.
+    const operation = fn?.k === "field" && !!(nodes[(nodes[owner.get(fn.id)!] as NodeOf<"def">).body!] as NodeOf<"typedef">).interface;
+    if (operation) return sided(text, sides, call, [{ needs: all, gives: [o], answers: ONE }]);
     if (!fn) {
       // A function only known when the program runs.
       return sided(text, [n.fn, ...sides], call, [
