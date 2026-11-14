@@ -21,7 +21,8 @@ import { Lang } from "./dsl.ts";
 import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { intCases, usesIntCases } from "./int-cases.ts";
-import { choose, represent, uses, type Representation } from "./represent.ts";
+import { choose, looped, represent, uses, type Representation } from "./represent.ts";
+import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
 import { splitLists } from "./rep-split.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
@@ -290,7 +291,18 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
 function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[]): (Chosen & { reps: Representation[] }) | null {
   const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
   if (!array) return null;
-  const groups = listGroups(code, main, defs).groups.filter((g) => g.rep === array.name && g.root !== main);
+  const all = listGroups(code, main, defs).groups;
+  // A part that keeps the tree for a job it does in a loop, cheaper there
+  // than as written (examples/buffer's edits, an append and a split a
+  // turn, L248), would do that job as written, n a turn: the tree for the
+  // whole then, its arrays' parts reading the tree in log n.
+  const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!, tree = LIBRARY.reps.find((r) => r.of === LIST && r.name === "tree of List");
+  const cheaper = (j: string) => !!tree && LADDER.indexOf(tree.cost[j] ?? "") >= 0 && LADDER.indexOf(tree.cost[j]) < LADDER.indexOf(spec.cost[j] ?? "n²");
+  // Its own jobs, not those of a part it calls (a table read by position
+  // in a loop of the array part's, C192).
+  const named = (g: (typeof all)[number]) => new Set(g.defs.flatMap((d) => subtree(code, d).flatMap((x) => { const n = code.nodes[x]; return n.kind === "ref" ? [n.target] : []; })));
+  if (tree && all.some((g) => { if (g.rep !== tree.name) return false; const own = named(g); return [...looped(code, g.root, [spec, array, tree])].some((j) => own.has(j) && cheaper(j)); })) return null;
+  const groups = all.filter((g) => g.rep === array.name && g.root !== main);
   const roots = groups.map((g) => g.root);
   // Not one called from a loop of the rest's: its lists would be
   // converted at every turn (machine's `items of words`, once a line).

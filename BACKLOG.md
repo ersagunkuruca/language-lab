@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
-| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L248, L247, L252e (pins); then L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L247, L252e (pins); then L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -191,7 +191,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L248 | Ropes as one more representation of List (`append` and `split` in log n), chosen by the compiler where splits and joins in the middle dominate. Example: examples/buffer, whose edits split and join a list of characters; native, 2,000 edits take 4.3 s on 44k characters, 14.3 s on 176k, and 8,000 edits on 176k take 92 s, length times edits | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | ropes next |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 

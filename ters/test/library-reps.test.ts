@@ -756,10 +756,12 @@ test("a program that changes a list by position in a loop gets trees, and prints
   assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
   assert.deepEqual(before.slice(1, 5), ["80", "[1, 9, 3]", "[1, 2]", "true"]);
   assert.equal(before[5], String((120 * 119) / 2));
-  // On JavaScript its loop's reach takes arrays and the rest keeps its
-  // lists as written, and it prints the same (C93 s3b, rep-split.ts).
+  // On JavaScript too: `at` alone would take arrays (C93 s3b, rep-split.ts),
+  // but the rest appends in a loop (grown), which as written would walk
+  // the list each turn, so the tree is kept for the whole (L248). A part
+  // with arrays beside the rest as written: bytes-array.test's CRC (C192).
   const split = withLibraryRepresentations(code, info, names, main, defs, [], { hostMaps: true });
-  assert.deepEqual(split.chosen, ["List as array of List from at"]);
+  assert.deepEqual(split.chosen, ["List as tree of List"]);
   assert.deepEqual(printed(split.code, split.names, main, split.insiders), before);
 });
 
