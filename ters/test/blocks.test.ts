@@ -180,11 +180,11 @@ test("a match on values shows each arm as its value", async () => {
 });
 
 // An operand with a step before its value is bracketed, the step inside
-// (Ersagun 2026-11-14): Lockstep's `fixed(steps) = position` read as a
+// (Ersagun 2026-11-14): lockstep-text's `fixed(steps) = position` read as a
 // binding in the middle of a ++ chain, and `++ show(steps)` as a line of
 // its own after it.
 test("an operand with steps is bracketed, its steps inside", () => {
-  const p = loadProgram(join(root, "examples", "lockstep"));
+  const p = loadProgram(join(root, "examples", "lockstep-text"));
   const info = infer(p.code, p.pres.names);
   const lines = renderBlocks(p.code, p.pres, info, p.named("main")).split("\n").map((l) => l.trimEnd());
   const at = lines.findIndex((l) => l.trim() === "++ (");

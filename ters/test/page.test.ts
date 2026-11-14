@@ -439,3 +439,23 @@ test("a compiled page with chosen representations is stepped from every snapshot
     (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = raf;
   }
 });
+
+// The first element below (or at) e whose text is exactly t: a button by its label.
+const byText = (e: FakeEl, t: string): FakeEl | null =>
+  e.textContent === t && e.tag === "button" ? e : e.kids.reduce<FakeEl | null>((r, k) => r ?? (k instanceof FakeEl ? byText(k, t) : null), null);
+const click = (root: FakeEl, label: string) => { const b = byText(root, label); assert.ok(b, `a button ${label}`); b.fire("click"); };
+
+// L261a: machine B, given only the presses, ends where machine A did,
+// count of 2⁻³² steps for count.
+test("the lockstep page: the recording, sent to B, ends the same", () => {
+  const { root } = open("lockstep");
+  assert.match(root.textContent, /Nothing yet: it waits for the presses\./);
+  click(root, "Play the recording");
+  click(root, "Send the presses to B");
+  const text = root.textContent;
+  assert.match(text, /The same, to the last of 600 ticks/);
+  const counts = [...text.matchAll(/in steps of 2⁻³²: (-?\d+) and (-?\d+)/g)].map((m) => m.slice(1).join(" "));
+  assert.equal(counts.length, 2);
+  assert.equal(counts[0], counts[1]);
+  assert.match(counts[0], /^-1480287269 /);
+});

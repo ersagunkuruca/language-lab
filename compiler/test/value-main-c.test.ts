@@ -1,5 +1,5 @@
 // A main that is a value, native (ters native): it prints it as ters run
-// does, a Text as it is and anything else shown. lockstep's main is a
+// does, a Text as it is and anything else shown. lockstep-text's main is a
 // Text; native printed nothing before.
 
 import { test } from "node:test";
@@ -15,9 +15,9 @@ import { skip } from "./c-harness.ts";
 const lab = join(import.meta.dirname, "../../ters/cli/ters.ts");
 const run = (dir: string, file: string, args: string[]) => { const r = spawnSync(file, args, { cwd: dir, encoding: "utf8" }); return [r.stdout, r.stderr, r.status] as const; };
 
-test("lockstep's main, a Text, prints natively as ters run prints it", { skip }, () => {
+test("lockstep-text's main, a Text, prints natively as ters run prints it", { skip }, () => {
   const dir = mkdtempSync(join(tmpdir(), "value-main-"));
-  const ex = join(import.meta.dirname, "../../ters/examples/lockstep");
+  const ex = join(import.meta.dirname, "../../ters/examples/lockstep-text");
   const made = run(dir, process.execPath, [lab, "native", ex, "-o", join(dir, "p")]);
   assert.equal(made[2], 0, made[1]);
   const want = run(dir, process.execPath, [lab, "run", ex]);
