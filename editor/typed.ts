@@ -1623,7 +1623,8 @@ export function deleteOne(code: Code, names: Names, info: Info, def: Id, of: Rec
   const at = holder(code, of, def, id);
   const lb = of[at] ? code.nodes[at] as NodeOf<"def"> : null;
   const root = lb?.body ? (code.nodes[lb.body].kind === "lambda" ? (code.nodes[lb.body] as NodeOf<"lambda">).body : lb.body) : null;
-  if (lb && (id === at || id === root)) {
+  // A part that is itself a function is its root too (I286).
+  if (lb && (id === at || id === root || id === lb.body)) {
     const r = dropLoose(code, of, home, at);
     return { ok: true, code: r.code, names, of: r.of, home: r.home, note: "Threw the loose part away. Undo brings it back." };
   }

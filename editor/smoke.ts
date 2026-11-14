@@ -346,6 +346,21 @@ async function stepOrder() {
   if (!(await p.locator(".status[role=status]").innerText()).startsWith("Put a dot")) errors.push(`${where}: a click on a wire of Eight queens' main put no dot on it`);
   else if (before !== 4 || (await count()) !== before) errors.push(`${where}: Eight queens' main numbers ${before} steps, and ${await count()} with a dot on a wire`);
   await p.locator('button[data-act="undo"]').first().click();
+  // count's action taken off its input lies loose where it was, and wires
+  // back in by its frame's end (I286).
+  const W = ".p-graph svg.canvas > g.world";
+  const at = (sel: string) => p.locator(sel).first().evaluate((e) => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  const drag = async (a: { x: number; y: number }, b: { x: number; y: number }) => { await p.mouse.move(a.x, a.y); await p.mouse.down(); await p.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 5 }); await p.mouse.move(b.x, b.y, { steps: 5 }); await p.mouse.up(); };
+  const countIn = `${W} g:has(> text:text-is('count')) circle.inp`;
+  const ci = await at(countIn);
+  await drag(ci, { x: ci.x - 60, y: ci.y + 260 });
+  const end = await at(`${W} .ports circle.outp[data-out]`).catch(() => null);
+  if (!end || Math.hypot(end.x - ci.x, end.y - ci.y) > 200) errors.push(`${where}: count's action, taken off, isn't where it was: ${JSON.stringify(end)} from ${JSON.stringify(ci)}`);
+  else {
+    await drag(end, await at(countIn));
+    const line = (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.includes("solutions for 8"));
+    if (!line?.includes("count(queens(8))")) errors.push(`${where}: count's action doesn't wire back in by its frame's end: ${await p.locator(".status[role=status]").innerText()}`);
+  }
   await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   // A step goes before a step as a plain step, with no name (QA8 M1).
