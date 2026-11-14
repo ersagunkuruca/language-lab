@@ -1757,8 +1757,12 @@ function loosePart(id: Id): Id | undefined {
   const of = doc.loose ?? {};
   if (of[id]) return id;
   return Object.keys(of).find((d) => {
+    // By its root, or by what's inside the function of the variables it
+    // stands in for; a part that is itself a function (an action, `() =>
+    // queens(8)`, set loose from count) is also its root, by its frame's
+    // end (Ersagun 2026-11-14: it couldn't be wired back).
     const b = (node(d) as NodeOf<"def"> | undefined)?.body, n = b ? node(b) : undefined;
-    return (n?.kind === "lambda" ? n.body : b) === id;
+    return b === id || (n?.kind === "lambda" && n.body === id);
   });
 }
 
@@ -1811,7 +1815,11 @@ function graphHooks(info: T.Info) {
       const d = part ? (e.code.nodes[part] as NodeOf<"def">) : undefined;
       const b = d?.body ? e.code.nodes[d.body] : undefined;
       const root = b?.kind === "lambda" && b.params.some((p) => e.home?.[p]) ? b.body : b?.id;
-      void applyT(e, undefined, was && root ? { [root]: was } : undefined);
+      // What it holds keeps its ids, but it's in a new frame when the value
+      // is a function (count's action), which would place it afresh: each
+      // node keeps where it was drawn.
+      const kept = Object.fromEntries(subtree(doc.code, slot).flatMap((id) => { const at = graph?.posOf(id); return at ? [[id, at]] : []; }));
+      void applyT(e, undefined, { ...kept, ...(was && root ? { [root]: was } : {}) });
     },
     // A dot put on a wire by a click sits where you clicked, and nothing
     // else moves (BACKLOG E109).
