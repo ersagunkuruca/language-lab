@@ -1666,7 +1666,11 @@ unit, never an Int (with a variable `m` in scope, `2 m` doesn't read). A
 definition's type shows the units it knows, written or worked out from its
 body: `period : (Float64 m, Float64 m/s²) -[Choice]-> Float64 s`. A number
 whose unit is free stays plain `Float64` there, so a function generic over
-its unit reads as it did.
+its unit reads as it did. A constant has its value's unit wherever it's
+named (L257): with `earth radius = 6371000.0 m`, `2 · earth radius ·
+angle` is a length, and with `limit = 3.0 s`, `1.0 m + limit` is refused.
+`first(x, else d)` is in x's and d's unit, and `sin`, `cos`, `exp`, `log`,
+`asin` and `acos` take and give plain numbers.
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
