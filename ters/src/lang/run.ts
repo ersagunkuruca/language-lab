@@ -1024,12 +1024,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             for (let i = 0; i < count; i++) vs[i] = one[i]!(env);
             return callSearch(f, vs, k);
           };
-          return (env, k) => { if (steps) spendStep(); const f = f0(env); return each(env, 0, new Array<Value>(count), (vs) => callSearch(f, vs, k)); };
+          // A step for each call, once its inputs are chosen (I293).
+          return (env, k) => { const f = f0(env); return each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendStep(); return callSearch(f, vs, k); }); };
         }
-        return (env, k) => {
-          if (steps) spendStep();
-          return search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => callSearch(f, vs, k)));
-        };
+        return (env, k) => search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendStep(); return callSearch(f, vs, k); }));
       }
       case "match": {
         if (handlerOf(n)) return searchingNeeds;
@@ -1471,12 +1469,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if (isUse(n)) return this.parts(givenInOrder(code, n).map((k) => n.given[k]), 0, [], env, n);
           const head = code.nodes[n.fn];
           const target = head.kind === "ref" ? head.target : null;
-          // Each call into a possibly-divergent definition spends fuel, if a
-          // `with fuel` handler is active. Out of fuel means no result.
-          if (target && info.divergent.has(target)) {
-            if (!this.fuel) spendStep();
-            else if (--this.fuel.left < 0) return this.fail();
-          }
           const sc = shortCircuitOf(n);
           if (sc !== null) { this.push({ t: "decide", by: sc, rest: n.args[1], env, next: null }); return this.eval(n.args[0], env); }
           // A lambda written in place (a let, a dot) is entered, not made.
@@ -1510,6 +1502,15 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (isCall(n)) {
         const head = code.nodes[n.fn];
         if (head.kind === "lambda") return this.eval(head.body, bind(env, head.params, vals));
+        // Each call into a possibly-divergent definition spends fuel, if a
+        // `with fuel` handler is active. Out of fuel means no result. Once
+        // its inputs are worked out, so a call made again for each answer
+        // of a choice in them spends each time (I293: countdown's
+        // `results(choices(numbers))`, 326 calls and one step).
+        if (head.kind === "ref" && info.divergent.has(head.target)) {
+          if (!this.fuel) spendStep();
+          else if (--this.fuel.left < 0) return this.fail();
+        }
         return this.apply(vals[0], vals.slice(1));
       }
       this.solve(n, vals, env);
