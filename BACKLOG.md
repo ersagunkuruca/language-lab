@@ -173,7 +173,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L256 | A value packed with its implementation: a list of things of different types sharing an interface, each with its own way. Example to write: a program that keeps values of several types in one list and runs one interface over them | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | L | example to write first |
+| L256 | A value packed with its implementation: a list of things of different types sharing an interface, each with its own way (`List (some Appliance)`), built as a record of closures that captured the value (CLOSURES-INTERFACES-EFFECTS-2026-11-14 §2.3). Example: examples/household, whose `Device` wraps each appliance type in a case and matches on it in device draw, device later and device label | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | L | the feature next |
 | L248 | Ropes as one more representation of List (`append` and `split` in log n). Example to write: a program that splits and joins long lists (an editor buffer) | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
