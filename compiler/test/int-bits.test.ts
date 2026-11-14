@@ -84,10 +84,11 @@ test("Int and, or and xor in C: the evaluator's answers, and every cell freed", 
 });
 
 // Fixed's · is Int's product shifted down (FIXED-POINT.md): with C150b the
-// lockstep example's Fixed arithmetic runs in C, the evaluator's answers.
+// lockstep example's Fixed arithmetic runs in C, the evaluator's answers
+// (lockstep-text: the page's own definitions, Html and cells, aren't lowered to C).
 test("Fixed's arithmetic in C: lockstep's multiply and step, as evaluated", { skip }, async () => {
   const { load } = await import("../src/program.ts");
-  const p = load("lockstep");
+  const p = load("lockstep-text");
   const lowered = lowerScalar(p.code, p.info, p.pres.names, p.own.defs, { data: true });
   assert.deepEqual([...lowered.refused.values()], []);
   assert.deepEqual([...emitC(lowered).refused.values()], []);
