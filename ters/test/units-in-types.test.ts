@@ -130,3 +130,24 @@ test("signatures of a program with no units of its own cost nothing (tumble)", (
   assert.ok(ms < 10000, `tumble's ${defs.length} signatures took ${ms.toFixed(0)} ms`);
   assert.equal(signatureUnits(s.code, defs[0]), null);
 });
+
+// L252d (round 16, trek): a list's numbers have one unit, the list's.
+// Written out, built, taken apart, summed, mapped and kept, and as a
+// field typed List (Float64 m); a signature shows List (Float64 m).
+test("units inside lists are checked and shown", () => {
+  const s = program(["track(heights: List (Float64 m))"]);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  assert.throws(() => fill("wrong sum", ["x"], "sum([1.0 m, 2.0 m]) + 1.0 s"), /m can't meet s/);
+  assert.throws(() => fill("wrong map", ["x"], "sum(map([1.0, 2.0], (y) => y · 1.0 m)) + 1.0 s"), /m can't meet s/);
+  assert.throws(() => fill("wrong field", ["t"], "sum(t.heights) + 1.0 s"), /m can't meet s/);
+  assert.throws(() => fill("wrong made", ["x"], "track([1.0 s])"), /the field's type says m, but this is s/);
+  fill("mean", ["xs"], "sum(xs) / as float64(length(xs)) + 0.0 m");
+  assert.equal(s.typeOf(s.resolve("mean")), "(List (Float64 m)) -[Choice]-> Float64 m");
+  fill("doubled", ["t"], "map(t.heights, (h) => h · 2.0)");
+  assert.equal(s.typeOf(s.resolve("doubled")), "(Body) -> List (Float64 m)");
+  fill("high", ["t"], "keep(t.heights, (h) => h > 1.0 m)");
+  assert.equal(s.typeOf(s.resolve("high")), "(Body) -> List (Float64 m)");
+  fill("top", ["t"], "match t.heights\n  nil → 0.0 m\n  cons(h, more) → h");
+  assert.equal(s.typeOf(s.resolve("top")), "(Body) -> Float64 m");
+  assert.match(s.errors(), /^ok/);
+});

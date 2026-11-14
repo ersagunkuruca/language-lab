@@ -114,11 +114,48 @@ const TRIG_FIELD = "std.trig.trig.";
 const unitOf = (n: Node | undefined): Unit | undefined => (n as { unit?: Unit } | undefined)?.unit;
 // A constraint from a field's type names the unit, for the message.
 const FIELD = "field's unit ";
-// The unit a field's type says (`speed: Float64 m/s`, L252), if it says one.
+// The unit a field's type says (`speed: Float64 m/s`, L252), if it says one,
+// or its items' (`heights: List (Float64 m)`, L252d).
 const fieldUnit = (code: Code, field: Id): Unit | undefined => {
   const f = code.nodes[field];
-  return f?.kind === "field" ? unitOf(code.nodes[f.type]) : undefined;
+  return f?.kind === "field" ? typeUnit(code, f.type) : undefined;
 };
+const typeUnit = (code: Code, t: Id, depth = 0): Unit | undefined => {
+  const n = code.nodes[t];
+  if (n?.kind !== "tref" || depth > 8) return undefined;
+  if (n.unit) return n.unit;
+  return n.args.length === 1 && oneParam(code, n.target) ? typeUnit(code, n.args[0], depth + 1) : undefined;
+};
+
+// A type of one parameter (List a, Optional a) holds numbers of one unit
+// at most, so a value of it has its numbers' unit (L252d, Kennedy's
+// dimension types over containers): cons(x, xs) is x's and xs's, and a
+// case's field typed a, or the type itself, has the scrutinee's. The
+// fields that do, by case: per program, from its types of one parameter.
+const holders = new WeakMap<Code, Map<Id, boolean[]>>();
+const typedefOf = (code: Code, def: Id) => { const d = code.nodes[def]; const b = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined; return b?.kind === "typedef" ? b : undefined; };
+const oneParam = (code: Code, def: Id) => typedefOf(code, def)?.params.length === 1;
+function holding(code: Code, variant: Id): boolean[] | undefined {
+  let m = holders.get(code);
+  if (!m) {
+    holders.set(code, (m = new Map()));
+    // (A pick reads the typedef, not the def: a pick's test sees one node.)
+    for (const tid of nodesWhere(code, "a type of one parameter", (n) => n.kind === "typedef" && n.params.length === 1)) {
+      const td = code.nodes[tid] as Extract<Node, { kind: "typedef" }>, p = td.params[0];
+
+      for (const v of td.variants) {
+        const vn = code.nodes[v];
+        if (vn?.kind !== "variant") continue;
+        m.set(v, vn.fields.map((f) => {
+          const ty = code.nodes[(code.nodes[f] as { type?: Id })?.type ?? ""];
+          if (ty?.kind !== "tref") return false;
+          return ty.target === p || ((code.nodes[ty.target] as { body?: Id })?.body === tid && ty.args.length === 1 && (code.nodes[ty.args[0]] as { target?: Id })?.target === p);
+        }));
+      }
+    }
+  }
+  return m.get(variant);
+}
 
 // Constraints for one def. Calls to other defs are inlined under a prefix,
 // so a def used twice can take different units each time (it's polymorphic
@@ -127,7 +164,8 @@ const fieldUnit = (code: Code, field: Id): Unit | undefined => {
 // through. A recursive call isn't inlined again (`path` holds the defs being
 // inlined): unfolding it 20 deep was exponential once a def called a
 // recursive group more than once, and froze the editor.
-export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id, string> = new Map(), path: Id[] = []): Constraint[] {
+type Fn = { params: string[]; body: string };
+export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id, string> = new Map(), path: Id[] = [], fns: Map<Id, Fn> = new Map()): Constraint[] {
   if (path.length > 20 || path.includes(defId)) return [];
   const out: Constraint[] = [];
   const def = get(code, defId, "def");
@@ -138,6 +176,14 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
   const declare = (id: Id) => {
     const u = unitOf(code.nodes[id]);
     if (u) out.push({ terms: [[t(id), 1]], rhs: toVec(u), why: "declared unit", node: id });
+  };
+  // The terms of a function given as an input: a lambda written there, or
+  // a function this one was given in turn.
+  const fnOf = (a: Id | undefined): Fn | undefined => {
+    const x = a === undefined ? undefined : code.nodes[a];
+    if (x?.kind === "lambda") return { params: x.params.map(t), body: t(x.body) };
+    if (x?.kind === "ref" && fns.has(x.target)) return fns.get(x.target);
+    return undefined;
   };
   const thunk = (a: Id) => { const l = code.nodes[a]; return t(l?.kind === "lambda" && !l.params.length ? l.body : a); };
   const paramsOf = (fn: Id): Id[] => {
@@ -185,8 +231,18 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         }
         if (fn.kind !== "ref") return;
         const callee = code.nodes[fn.target];
+        // A list written out, [a, b]: one unit for its items (L252d).
+        if (callee.kind === "builtin" && callee.op === "list.of") { n.args.forEach((a) => same(id, a, "a list's items", id)); return; }
+        // An item of a list, and the answers of a search: the unit of what
+        // they're of (L252d).
+        if (callee.kind === "builtin" && callee.op === "oneOf" && n.args[0]) { same(id, n.args[0], "an item of a list", id); return; }
+        if (callee.kind === "builtin" && callee.op === "all" && n.args[0]) { out.push({ terms: [[t(id), 1], [thunk(n.args[0]), -1]], rhs: ZERO, why: "the answers", node: id }); return; }
         // first's inputs are thunks: what each gives is its body (L257).
         if (callee.kind === "builtin" && callee.op === "first") { out.push(...rules("first", (k) => (k === "out" ? t(id) : thunk(n.args[+k])), id, id)); return; }
+        // An Int is a plain number (a unit's number is never one, L252b),
+        // so its operations and its Float64 are plain: length(xs) divides
+        // a sum of metres into metres.
+        if (callee.kind === "builtin" && callee.op.startsWith("int.")) { for (const x of [id, ...n.args]) out.push({ terms: [[t(x), 1]], rhs: ZERO, why: "an Int", node: x }); return; }
         if (callee.kind === "builtin") { out.push(...rules(callee.op, port, id, id)); return; }
         // Trig's operations, sin(x) at any type with Trig, are its
         // builtins' at Float64, units and all (L257).
@@ -195,6 +251,15 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         // has it. A field read: what it gives has it (L252).
         if (callee.kind === "variant") {
           callee.fields.forEach((f, i) => { const u = fieldUnit(code, f); if (u && n.args[i] !== undefined) out.push({ terms: [[t(n.args[i]), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: n.args[i] }); });
+          holding(code, fn.target)?.forEach((h, i) => { if (h && n.args[i] !== undefined) same(id, n.args[i], "what it holds", id); });
+          return;
+        }
+        // A function given as an input, called (L252d): `change(item)` in
+        // map is the lambda the caller gave, inputs and answer.
+        if (callee.kind === "binder" && fns.has(fn.target)) {
+          const f = fns.get(fn.target)!;
+          f.params.forEach((p, i) => { if (n.args[i] !== undefined) out.push({ terms: [[p, 1], [t(n.args[i]), -1]], rhs: ZERO, why: "a function's input", node: id }); });
+          out.push({ terms: [[t(id), 1], [f.body, -1]], rhs: ZERO, why: "a function's answer", node: id });
           return;
         }
         if (callee.kind === "field") {
@@ -204,7 +269,10 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
         }
         if (callee.kind === "def") {
           const keys = paramsOf(fn.target);
-          out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, [...path, defId]));
+          // The functions it's given, written out or passed on (L252d).
+          const given = new Map<Id, Fn>();
+          keys.forEach((k, i) => { const f = fnOf(n.args[i]); if (f) given.set(k, f); });
+          out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, [...path, defId], given));
         }
         return;
       }
@@ -215,6 +283,10 @@ export function constraints(code: Code, defId: Id, prefix = "", bindings: Map<Id
           // A case's fields, taken out: each has its field's unit.
           const v = code.nodes[arm.variant];
           if (v?.kind === "variant") arm.binds.forEach((b, i) => { const u = v.fields[i] && fieldUnit(code, v.fields[i]); if (u) out.push({ terms: [[t(b), 1]], rhs: toVec(u), why: FIELD + formatUnit(u), node: b }); });
+          // An item of a list taken out, and its rest: the list's unit (L252d).
+          holding(code, arm.variant)?.forEach((h, i) => { if (h && arm.binds[i]) same(arm.binds[i], n.scrutinee, "what it holds", arm.binds[i]); });
+          // A fold's result for the rest is what the fold gives.
+          if (n.kind === "fold") arm.results.forEach((r) => { if (r) same(r, id, "a fold's result", r); });
           visit(arm.body);
           same(id, arm.body, "a case", id);
         }
@@ -317,19 +389,20 @@ function project(cs: Constraint[], keep: (t: string) => boolean, fn: Id): Constr
   return out;
 }
 
-function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, path: Id[]): Constraint[] {
+function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, path: Id[], given: Map<Id, Fn> = new Map()): Constraint[] {
   const cdef = get(code, fn, "def");
   const cb = cdef.body ? code.nodes[cdef.body] : null;
   if (!cb) return [];
   // A program's own callee is read through, so a message can name the
-  // terms inside it (drift, drop).
-  if (!isPublished(fn)) {
+  // terms inside it (drift, drop). So is a library's given a function
+  // (map, keep): its summary can't say what the function does (L252d).
+  if (!isPublished(fn) || given.size) {
     const map = new Map<Id, string>();
     if (cb.kind === "lambda") {
       cb.params.forEach((p) => map.set(p, port(p)));
       map.set(cb.body, port("out"));
     } else map.set(cdef.body!, port("out"));
-    return constraints(code, fn, prefix, map, path);
+    return constraints(code, fn, prefix, map, path, given);
   }
   const ports = new Map<string, string>();
   if (cb.kind === "lambda") cb.params.forEach((p) => ports.set(PORT + p, port(p)));
