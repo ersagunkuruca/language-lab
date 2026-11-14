@@ -434,7 +434,7 @@ test("the effects example: a declared effect and Abort, each handled; values sho
   assert.equal(showType(info.typeOf.get(p.named("area"))!, p.pres.names), "() -[Ask]-> Float64");
   const out: string[] = [];
   runMain(p.code, info, p.named("main"), { print: (s) => out.push(s) });
-  assert.deepEqual(out, ["360 · can't: nobody to share with"]);
+  assert.deepEqual(out, ["360 = area(), its two asks answered 30 and 12 · share(10, 0): can't: nobody to share with"]);
   const t = trace(p.code, info, p.named("main"), []);
   assert.equal(t.error, undefined);
   const { renderBlocks } = await import("../src/lang/render.ts");
