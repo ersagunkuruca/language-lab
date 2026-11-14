@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| T Testing | "Make testing granular and cheap" | T16e (TESTING.md §8) |
+| T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
 
@@ -239,7 +239,6 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| T16e | The rule in WORKFLOW.md and memory: one command before a merge, trust it | TESTING.md §8 | P1 | S | ▶ |
 
 ## Coordinator and process
 
