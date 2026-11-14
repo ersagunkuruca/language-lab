@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
 | L Language and library | "Language lane" | L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| T Testing | "Replace the slow browser smoke test" | no open row (T15 and I64 closed) |
+| T Testing | "Make testing granular and cheap" | T16b, T16c, T16d, T16e (TESTING.md §8) |
 
 ## Inbox
 
@@ -241,6 +241,10 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| T16b | Select by changed lines: affected.ts reads the test map (branch `test-map`) and runs the tests that ran a changed line or read a changed file; before a merge only a cheapest cover of the changed lines | TESTING.md §8, Ersagun 2026-11-14 | P1 | M | ▶ |
+| T16c | Remember passes and review on a schedule: CI runs a test only when what it ran changed since its entry, or when it is due (1, 2, 4, 7 days, reset by a failure or an edit) | TESTING.md §8 | P1 | M | |
+| T16d | A red finds its culprit: CI bisects a failing file between its last pass and now and names the commit | TESTING.md §8 | P1 | S | |
+| T16e | The rule in WORKFLOW.md and memory: one command before a merge, trust it | TESTING.md §8 | P1 | S | |
 
 ## Coordinator and process
 

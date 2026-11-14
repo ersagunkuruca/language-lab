@@ -11,6 +11,9 @@
 //   npm run affected -- --full     every test file it reaches, the slow ones too
 //   npm run affected -- --time     time every test file, alone, with the per-change
 //                                  sweep slice, and write the slow ones to test/slow.json
+//   npm run affected -- --record <map.json>
+//                                  run each chosen file alone, recording what it ran
+//                                  and read into the test map (test-map.ts, T16)
 //
 // Before a merge only the fast set runs (Ersagun 2026-11-03, T13): of the
 // files a change reaches, those measured under SLOW_CAP seconds
@@ -32,6 +35,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
+import { printMap, readMap, recordOne } from "./test-map.ts";
 
 const top = resolve(import.meta.dirname, "../..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: top, encoding: "utf8" }).trim();
@@ -50,7 +54,8 @@ const listOnly = argv.includes("--list");
 const browser = all || argv.includes("--browser");
 const timing = argv.includes("--time");
 const full = all || timing || argv.includes("--full");
-const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--") && a !== shardArg);
+const recordTo = argv.includes("--record") ? argv[argv.indexOf("--record") + 1] : undefined;
+const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--") && a !== shardArg && a !== recordTo);
 
 const PACKAGES = ["ters", "compiler", "invertible"];
 // The editor has no tests or packages of its own, but its imports count.
@@ -160,6 +165,31 @@ if (timing) {
   const kept = Object.fromEntries(Object.entries(slow).filter(([f]) => !(f in times) && tests.includes(f)));
   writeFileSync(slowPath, JSON.stringify({ cap: SLOW_CAP, measured: new Date().toISOString().slice(0, 10), files: { ...kept, ...files } }, null, 1) + "\n");
   console.log(`${Object.keys(files).length} of ${chosen.length} files take ${SLOW_CAP} s or more: written to test/slow.json`);
+  process.exit(failedFiles ? 1 : 0);
+}
+
+if (recordTo) {
+  // Each file alone, as many at once as there are cores, with coverage on
+  // (test-map.ts); the entries go into the map at recordTo, beside the
+  // ones already there. A failure prints what the file printed.
+  const env = all ? { ...process.env, SWEEP: "all" } : process.env;
+  const at = git("rev-parse", "HEAD");
+  const map = readMap(recordTo);
+  const todo = [...fast];
+  let failedFiles = 0;
+  console.log(`recording ${todo.length} test files into ${recordTo}`);
+  const one = async (): Promise<void> => {
+    const t = todo.shift();
+    if (!t) return;
+    const { entry, output } = await recordOne(top, t, at, env);
+    map.tests[t] = entry;
+    console.log(`  ${entry.passed ? "ok" : "FAILED"}  ${entry.seconds} s  ${t}`);
+    if (!entry.passed) { failedFiles++; console.log(output.split("\n").map((l) => `    ${l}`).join("\n")); }
+    return one();
+  };
+  await Promise.all(Array.from({ length: availableParallelism() }, one));
+  writeFileSync(recordTo, printMap(map));
+  console.log(`${fast.length - failedFiles} of ${fast.length} passed`);
   process.exit(failedFiles ? 1 : 0);
 }
 
