@@ -121,3 +121,22 @@ function block(x: unknown): string {
 
 // A saved file's text, read: either layout, either spelling of a number.
 export const parseSaved = <T = unknown>(text: string): T => readSaved(JSON.parse(text) as T);
+
+// A program file git left with conflict markers (I270): a merge without
+// the program driver, or one it couldn't finish. The line of the first
+// `<<<<<<<`, or null.
+export function conflictMarkersAt(text: string): number | null {
+  const m = /^<{7}(?: |$)/m.exec(text);
+  return m ? text.slice(0, m.index).split("\n").length : null;
+}
+// A program file that can't be read: said as the reason, not a stack.
+export class ProgramFileError extends Error {}
+export const markersMessage = (path: string, line: number) =>
+  `${path} has git conflict markers (the first at line ${line}): resolve them, or merge again by id with the program driver (\`ters git-setup\` sets it up, DIFF.md)`;
+// A program's JSON file read: its conflict markers or its JSON error said
+// with its path.
+export function readJsonFile<T = unknown>(path: string, text: string): T {
+  const at = conflictMarkersAt(text);
+  if (at !== null) throw new ProgramFileError(markersMessage(path, at));
+  try { return JSON.parse(text) as T; } catch (e) { throw new ProgramFileError(`${path} isn't JSON: ${(e as Error).message}`); }
+}
