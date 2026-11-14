@@ -6,7 +6,8 @@ import { resolveRefs, subtree, type Code, type Id, type Node } from "../model.ts
 import type { Presentation } from "../presentation.ts";
 import type { Namer } from "./namer.ts";
 
-export interface R { text: string; prec: number }
+// `glyph`: the infix operator a part is written with, if any.
+export interface R { text: string; prec: number; glyph?: string }
 export const ATOM = 100;
 export const atom = (text: string): R => ({ text, prec: ATOM });
 
@@ -19,8 +20,9 @@ export function callText(pres: Presentation, namer: Namer, fn: Node, args: R[], 
     const p = nota.prec ?? 5;
     const [l, r] = args;
     const lok = l.prec > p || (l.prec === p && nota.assoc !== "right");
-    const rok = r.prec > p || (r.prec === p && nota.assoc !== "left" && nota.assoc !== undefined);
-    return { text: `${paren(l, lok)} ${nota.glyph} ${paren(r, rok)}`, prec: p };
+    // The same operator only: a · (b / c) isn't a · b / c.
+    const rok = r.prec > p || (r.prec === p && nota.assoc !== "left" && nota.assoc !== undefined && r.glyph === nota.glyph);
+    return { text: `${paren(l, lok)} ${nota.glyph} ${paren(r, rok)}`, prec: p, glyph: nota.glyph };
   }
   if (nota?.fixity === "prefix" && args.length === 1) {
     const p = nota.prec ?? 9;

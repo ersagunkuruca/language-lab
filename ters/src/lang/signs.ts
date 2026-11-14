@@ -10,7 +10,9 @@
 //   - arithmetic: a sum of positives is positive, x · x and |x| are never
 //     negative, eˣ and √ of a positive are positive, and so on;
 //   - a branch: in the `else` of `if x = 0`, x isn't 0; in the `then` of
-//     `if 0 < x`, x is positive (and `and`, `or`, `not` of such tests);
+//     `if 0 < x`, x is positive (and `and`, `or`, `not` of such tests, and
+//     a test written as a definition, `x > 0`, read through its body); what
+//     is tested may be a field read too, `l.took` (L258);
 //   - a type's rule: a Rational's bottom is positive.
 //
 // A product of two nonzero floats can still underflow to 0; a divisor
@@ -122,16 +124,21 @@ export function signAnalysis(code: Code) {
     return isCall(cn) && cn.fn === p ? cn.args[pn.params.indexOf(b)] : undefined;
   };
 
-  // What a test being `holds` says about the binder b.
-  const said = (cond: Id, holds: boolean, b: Id, env: Env, depth: number): Signs => {
+  // What a test being `holds` says about the subject: a name, or a value
+  // read the same way (`l.took`, alike above). A test written as a call to
+  // a definition (`d > 0`, `at least`) is read through its body, its
+  // inputs the call's (`given`).
+  const said = (cond: Id, holds: boolean, subject: Id, env: Env, depth: number, given: Map<Id, Id> = new Map()): Signs => {
     const n = code.nodes[cond];
     if (!isCall(n) || depth > 8) return ANY;
-    const f = target(n.fn), [x, y] = n.args;
-    const is = (a: Id | undefined) => a !== undefined && target(a) === b;
-    const go = (c: Id, h: boolean) => said(c, h, b, env, depth + 1);
-    if (f === S.not) return go(x, !holds);
-    if (f === S.and) return holds ? go(x, true) & go(y, true) : go(x, false) | go(y, false);
-    if (f === S.or) return holds ? go(x, true) | go(y, true) : go(x, false) & go(y, false);
+    const f = target(n.fn);
+    const sub = (a: Id): Id => { const t = target(a); return t !== undefined && given.has(t) ? given.get(t)! : a; };
+    const [x, y] = n.args.map(sub);
+    const is = (a: Id | undefined) => a !== undefined && alike(a, subject);
+    const go = (c: Id, h: boolean) => said(c, h, subject, env, depth + 1, given);
+    if (f === S.not) return go(n.args[0], !holds);
+    if (f === S.and) return holds ? go(n.args[0], true) & go(n.args[1], true) : go(n.args[0], false) | go(n.args[1], false);
+    if (f === S.or) return holds ? go(n.args[0], true) | go(n.args[1], true) : go(n.args[0], false) & go(n.args[1], false);
     if (f === S.equal) {
       const c = is(x) ? numLit(y, env) : is(y) ? numLit(x, env) : null;
       if (c === null) return ANY;
@@ -139,26 +146,40 @@ export function signAnalysis(code: Code) {
       return holds ? at : c === 0 ? NONZERO : ANY;
     }
     if (f && (LESS.has(f) || f === INT_OPS.less)) {
-      // x < c: the binder is left; c < x: it is right.
+      // x < c: the subject is left; c < x: it is right.
       if (is(x) && numLit(y, env) !== null) { const c = numLit(y, env)!; return holds ? (c <= 0 ? NEG : ANY) : (c > 0 ? POS : c === 0 ? NONNEG : ANY); }
       if (is(y) && numLit(x, env) !== null) { const c = numLit(x, env)!; return holds ? (c >= 0 ? POS : ANY) : (c < 0 ? NEG : c === 0 ? NEG | ZERO : ANY); }
+      return ANY;
+    }
+    const d = f ? code.nodes[f] : undefined, body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
+    if (body?.kind === "lambda" && body.params.length === n.args.length) {
+      const inner = new Map(body.params.map((p, i) => [p, sub(n.args[i])]));
+      return said(body.body, holds, subject, env, depth + 1, inner);
     }
     return ANY;
   };
 
-  // The branches between `at` and the binder's scope, and what each says.
-  const guarded = (at: Id, b: Id, env: Env): Signs => {
+  // The branches between `at` and the subject's scope (its binder's, when
+  // it is a name), and what each says of the subject.
+  const guarded = (at: Id, subject: Id, env: Env, b?: Id): Signs => {
     let out = ANY, child = at;
     for (let p = parentOf(at); p; child = p, p = parentOf(p)) {
       const n = code.nodes[p];
-      if (n?.kind === "arm" && n.binds.includes(b)) break;
-      if (n?.kind === "lambda" && n.params.includes(b)) break;
+      if (b !== undefined && n?.kind === "arm" && n.binds.includes(b)) break;
+      if (b !== undefined && n?.kind === "lambda" && n.params.includes(b)) break;
       if (n?.kind !== "arm" || n.body !== child) continue;
       const m = parentOf(p), match = m ? code.nodes[m] : undefined;
       if (match?.kind !== "match" || (n.variant !== TRUE && n.variant !== FALSE)) continue;
-      out &= said(match.scrutinee, n.variant === TRUE, b, env, 0);
+      out &= said(match.scrutinee, n.variant === TRUE, subject, env, 0);
     }
     return out;
+  };
+  // A field read, or arithmetic, of values: a subject a test can name.
+  const readOf = (id: Id): boolean => {
+    const n = code.nodes[id];
+    if (!isCall(n)) return false;
+    const f = target(n.fn);
+    return !!f && (code.nodes[f]?.kind === "field" || ADD.has(f) || SUB.has(f) || MUL.has(f) || NEGATE.has(f));
   };
 
   const entered = new Set<Id>();
@@ -173,7 +194,8 @@ export function signAnalysis(code: Code) {
     if (!m) memo.set(env, (m = new Map()));
     const key = `${inside}|${id}`, known = m.get(key);
     if (known !== undefined) return known;
-    const s = ofNode(id, env, depth);
+    let s = ofNode(id, env, depth);
+    if (readOf(id)) s &= guarded(id, id, env);
     m.set(key, s);
     return s;
   };
@@ -193,7 +215,7 @@ export function signAnalysis(code: Code) {
       // A type's rule: a Rational's bottom is positive.
       const p = parentOf(b), pn = p ? code.nodes[p] : undefined;
       if (pn?.kind === "arm" && pn.variant === fractionCase(code)?.variant && pn.binds.indexOf(b) === 1) s = POS;
-      return s & guarded(id, b, env);
+      return s & guarded(id, id, env, b);
     }
     if (n.kind === "match") {
       let s = 0;
