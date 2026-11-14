@@ -579,8 +579,8 @@ async function undoNewDefinition() {
   const p = await browser.newPage();
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: "Insertion sort" }).first().click();
-  await p.locator("[data-def]", { hasText: /^insert$/ }).first().click();
+  await p.locator('[data-set="program"]', { hasText: "Run backwards" }).first().click();
+  await p.locator("[data-def]", { hasText: /^words$/ }).first().click();
   await p.locator(".nav-row", { hasText: "+ New definition" }).click();
   await p.locator('[data-panel="node"]').click();
   await p.locator("#f-def-name").fill("k");
@@ -589,7 +589,7 @@ async function undoNewDefinition() {
   const open = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   if (!/\bk\(x\) =/.test(await open())) errors.push(`${where}: k isn't open after Create: ${(await open()).slice(0, 80)}`);
   await p.locator('button[data-act="undo"]').first().click();
-  if (!/\binsert\(/.test(await open())) errors.push(`${where}: Undo opened ${(await open()).slice(0, 80)}`);
+  if (!/\bwords\(/.test(await open())) errors.push(`${where}: Undo opened ${(await open()).slice(0, 80)}`);
   await p.locator('button[data-act="redo"]').first().click();
   if (!/\bk\(x\) =/.test(await open())) errors.push(`${where}: Redo opened ${(await open()).slice(0, 80)}`);
   await p.close();
@@ -806,11 +806,11 @@ async function whereTold() {
   const p = await browser.newPage();
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: "Insertion sort" }).first().click();
-  await p.locator("[data-def]", { hasText: /^insert$/ }).first().click();
+  await p.locator('[data-set="program"]', { hasText: "Run backwards" }).first().click();
+  await p.locator("[data-def]", { hasText: /^words$/ }).first().click();
   await p.locator('[data-panel="node"]').click();
   const side = (await p.locator(".side").first().innerText()).replace(/\s+/g, " ");
-  if (!side.includes("no: insert takes or gives List") || !side.includes("Told from its type")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Where it runs"), side.indexOf("Where it runs") + 160)}`);
+  if (!side.includes("no: words takes or gives List") || !side.includes("Told from its type")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Where it runs"), side.indexOf("Where it runs") + 160)}`);
   await p.close();
 }
 
