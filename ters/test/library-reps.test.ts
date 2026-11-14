@@ -14,7 +14,7 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COPIED_FROM } from "../src/lang/prelude-ids.ts";
-import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
+import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SET, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
 import { dependencies, subtree, type Id, isCall } from "../src/model.ts";
 
@@ -343,6 +343,32 @@ test("a program that reads a list by position gets arrays, and prints what the d
   // main's answer is the list.
   const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
   assert.equal(showValue(runMain(c.code, info2, main, { print: () => {}, names: c.names }), c.code, c.names), "[9, 8]");
+});
+
+// C227 (GAPS round 17, depot): a record of the program's own type holding
+// a list, changed with `set`, gets arrays too: `set` moves the record, the
+// path and the value about as they are.
+test("a list in a record changed with set gets arrays, and prints what the definition prints (C227)", () => {
+  const k = new Lang(LIBRARY.code);
+  const Town = k.type("Town", [], [["town", [["stations", () => k.tref(LIST, k.tref(NUMBER))], ["hour", () => k.tref(NUMBER)]]]]);
+  const start = k.def("start");
+  k.define(start, k.call(Town.v.town, k.call(L("map"), k.call(S.range, k.lit(100)), k.fn(["i"], (i) => k.call(B.mul, i, k.lit(3)))), k.lit(0)));
+  const later = k.def("later");
+  k.define(later, k.call(SET, Town.f["town.hour"], k.x(start), k.lit(7)));
+  const total = k.def("total");
+  k.define(total, k.fold(k.call(INT_OPS.range, k.int(100)), [
+    { variant: NIL, names: [], body: () => k.call(Town.f["town.hour"], k.x(later)) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "sum"], body: ([i], [, s]) => k.call(B.add, s!, k.call(L("item at"), k.call(Town.f["town.stations"], k.x(later)), i, k.lit(-1))) },
+  ]));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.x(total)))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const c = withLibraryRepresentations(code, info, names, main, [Town.def, start, later, total, main]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), printed(code, names, main));
+  assert.deepEqual(printed(code, names, main), ["14857"]);
 });
 
 // Round 13 (pond) P1: `show decimals` calls the library's `padded

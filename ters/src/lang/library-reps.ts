@@ -23,7 +23,7 @@ import { LIBRARY, TREES } from "./library.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { listGroups } from "./rep-groups.ts";
 import { splitLists } from "./rep-split.ts";
-import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
+import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
 
 // What equal, show and compare see of a value: these, given a stored one,
@@ -723,8 +723,11 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     if (!c) return null;
     if (target in BY_VALUE) { if (program.has(d)) continue; return null; }
     // `fail` makes nothing and `one of` gives one of what it's given: an
-    // array passes as it is (bands' odd sample out, C196).
-    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail;
+    // array passes as it is (bands' odd sample out, C196). `set` copies a
+    // record with one field changed: the record, the path and the value
+    // move about as they are (depot's day, its stations a field of it,
+    // C227).
+    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || target === SET;
     const sig = SIGS[target](new Subst());
     if (sig.t !== "fn") return null;
     const args = c.args.map((a, i) => {
