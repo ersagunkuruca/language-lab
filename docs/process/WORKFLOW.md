@@ -152,33 +152,30 @@ of text; they were these cells logging every finished row).
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
-- Before merging, type-check and run what affected.ts lists for the
-  files you changed: `node ters/test/affected.ts origin/main` (unit
-  tests in all three packages; `--list` says which), not a set picked by
-  hand (I251, REVIEW-2026-11-13 §1: L244 ran its own choice of two files,
-  affected.ts mapped its change to arith.test too, and main was red
-  through about eight merges, hiding a second red). While working, run
-  the file of what you edited by name (`node --test test/….test.ts`); the
-  list is for the merge. It leaves out the files measured at 5 s or more
-  (`ters/test/slow.json`), unless your change edits that test file, and
-  says how many it left (Ersagun 2026-11-03, T13: "Only fast set"). They
-  run after the merge in Check main and in the nightly run; `-- --full`
-  runs them now, for a change you think is risky. Remeasure with
-  `npm run affected -- --time` when the list looks stale (it
-  rewrites slow.json). The browser tests (the editor, shaders, sound, the GPU check)
-  take about ten minutes, so they run once a night, not per change; run
-  them before pushing only when a change is risky for the page, with
-  `npm run affected -- --browser` (set CHROMIUM to a Chromium if Chrome
-  isn't installed). A pull
-  request's CI only type-checks. A merge deploys in about two minutes;
-  "Check main" runs every file the change reaches, the slow ones too,
-  beside the deploy, from the last commit it passed, without the browser tests, and reports without
-  stopping it. After merging, look
-  at Check main for your commit: if it is red, whoever broke main fixes it
-  next. The coordinator watches Check main too and tells the lane whose
-  merge first turned it red (I251). `npm run affected -- --all` runs everything with every sweep in
-  full, as the Nightly workflow does at 03:00 UTC; the coordinator checks
-  its result at the daily triage, and a red nightly is a P0.
+- **Before merging: type-check, then `node ters/test/affected.ts`, and
+  trust what it runs** (TESTING.md §8, T16, Ersagun 2026-11-14). It picks
+  the tests from the test map (what each test ran and read, recorded by
+  CI): the cheapest set that still runs every line your branch changed,
+  usually a few files and under a minute. `--list --why` says which and
+  why. Never pick files by hand, never add `--full` or `--all` "to be
+  safe", and after a fix run it again rather than a bigger set: it runs
+  only what the fix reaches. While working, run the file of what you
+  edited by name (`node --test test/….test.ts`); the command is for the
+  merge. The browser tests (the editor, shaders, sound, the GPU check) run
+  once a night; `-- --browser` runs them now, only for a change risky for
+  the page. A pull request's CI only type-checks.
+- **After merging, CI does the rest.** A merge deploys in about two
+  minutes. "Check main" runs, beside the deploy, every test that ran a line
+  changed since its own last run (`--since-map`), and records what it ran
+  back into the map. The Nightly (03:00 UTC) adds the tests due for review
+  (1, 2, 4, then 7 days of clean runs; a failure or an edit to the test
+  brings it back to daily), so every test still runs weekly and none runs
+  twice on code it passed on. A file that fails names the commit that
+  broke it in the run's summary (`--bisect`). Look at Check main for your
+  commit; if it is red, or a later run names your commit, fixing it is
+  your next job. The coordinator watches Check main and the Nightly (a red
+  nightly is a P0). This rule is settled: when it costs too much or misses
+  too much, tune affected.ts and the map, not the rule.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
 - Squash with the PR's own title and summary only: pass the merge a commit

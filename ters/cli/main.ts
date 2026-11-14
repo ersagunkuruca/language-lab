@@ -38,6 +38,7 @@ import { represented as representedOr, type Program } from "./represented.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
+import { bundle } from "../src/io.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 import { embeddingLaws } from "../src/lang/embed-laws.ts";
@@ -425,6 +426,11 @@ const evalAt = argv.indexOf("--evaluator");
 if (evalAt >= 0) argv.splice(evalAt, 1);
 const world = () => (replay ? replayed(replay) : allow ? allowedOnly(nodeWorld(), allow) : nodeWorld());
 const [command, path, ...rest] = argv;
+// ters as one file (cli/bundle.ts, I272) runs, checks, tests, diffs and
+// merges, and compiles to C and WebAssembly; a JavaScript module or a page
+// bundles the runtime's own sources, which only a checkout has.
+if (bundle && ["compile", "build-web", "build-app"].includes(command))
+  fail(`ters ${command} needs a language-lab checkout (node language-lab/ters/cli/ters.ts ${command} …): it bundles the runtime's sources, which this one-file ters doesn't carry`);
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
 if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }
 // git's diff driver for program files, and the setup that names it (git-diff.ts, DIFF.md "In git").

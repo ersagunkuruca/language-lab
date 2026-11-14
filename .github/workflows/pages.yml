@@ -46,11 +46,12 @@ jobs:
         run: |
           npm ci
           npm run build-editor
+          node cli/bundle.ts -o ../ters.mjs
       - name: Lay out the site like the repository
         run: |
           mkdir _site
           git archive HEAD | tar -x -C _site
-          cp -r index.html learn.html tutorial.html guide.html reactive.html shaders.html apps prebuilt checks.json _site/
+          cp -r index.html learn.html tutorial.html guide.html reactive.html shaders.html apps prebuilt checks.json ters.mjs _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

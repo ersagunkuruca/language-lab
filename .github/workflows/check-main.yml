@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 # Merges that land during a run wait, and only the newest of them runs
@@ -81,7 +81,36 @@ jobs:
           cache-dependency-path: ters/package-lock.json
       - run: npm ci
         working-directory: ters
+      # Each test against its own last run in the test map (T16c): it runs
+      # when a line it ran or a file it read changed since, or it failed
+      # then; one the map hasn't got goes by imports from the base. Each
+      # file alone with coverage on, so what it ran and read goes back into
+      # the map (ters/test/test-map.ts, T16).
       - name: Share ${{ matrix.shard }} of the tests the change reaches
         env:
           SWEEP_AT: ${{ github.run_number }}
-        run: node ters/test/affected.ts ${{ needs.base.outputs.base }} HEAD --full --shard ${{ matrix.shard }}/6
+        run: node ters/test/affected.ts ${{ needs.base.outputs.base }} HEAD --since-map --shard ${{ matrix.shard }}/6 --record map-part.json --bisect
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: map-part-${{ matrix.shard }}
+          path: map-part.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+  # What the shares recorded, red or green, onto the test-map branch.
+  map:
+    needs: check
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: map-part-*
+          path: parts
+      - name: Publish the test map
+        run: node ters/test/publish-map.ts $(find parts -name map-part.json)

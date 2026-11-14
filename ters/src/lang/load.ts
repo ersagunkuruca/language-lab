@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { merge, onLayer, type Code, type Id } from "../model.ts";
 import { layer, type Names, type Presentation, type Style } from "../presentation.ts";
-import { root } from "../io.ts";
+import { STYLES } from "../styles.ts";
 import type { Options } from "./infer.ts";
 import type { Pins } from "./signatures.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "./library.ts";
@@ -69,7 +69,7 @@ export function loadProgram(dir: string, style = "blocks") {
     names: baseNames(...modules.map((m) => m.names), read<Names>(join(dir, "names.default.json"), {})),
     comments: { ...LIBRARY.comments, ...read(join(dir, "comments.json"), {}) },
     hints: read(join(dir, "hints.json"), {}),
-    style: read<Style>(join(root, "styles", `${style}.json`), { view: "blocks", notation: {} }),
+    style: STYLES[style] ?? { view: "blocks", notation: {} },
   };
   // Finding a def by name is a search through a names layer, which is all
   // an entry point is. The program's own definitions first, then the
