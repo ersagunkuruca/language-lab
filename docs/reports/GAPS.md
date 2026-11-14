@@ -3606,6 +3606,19 @@ This is a semantics call for Ersagun.
 A rewrite of representations changes no units, so the second unit
 check could be skipped. `ters check` takes 1.5 s.
 
+*Later (2026-11-14).* I261 skipped the units (5.4 s), and I264a keeps
+the lowered program between runs (a second run takes 1.4 s). One step
+was measured and left: re-checking only the definitions the
+representations' rewrite changed. withLibraryRepresentations checks
+twice, 0.38 s with Map as a tree and 0.44 s with List as an array, and
+reachedFrom's cut takes 0.17 s, out of a 5.5 s first run. The rewrite
+changes 44 of the 96 own definitions and a type (Track), and adds 59
+definitions of its own. So 103 of 155 would still be checked, which
+saves about 0.3 s (5%). It would also need a check layered on the
+program's own check, which is already layered on the library's.
+Checking the Map and List rewrites once, together, would save 0.38 s
+(7%). Both are under 10%, so neither was done.
+
 **M1. Smaller things the MCP's text made harder.**
 - A `match` as a step with more steps after it isn't read ("a case
   reads Case(fields) → value, not □"); trek made a helper.
