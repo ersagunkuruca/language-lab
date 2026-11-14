@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I277 | The orange "Refused: …" note stays on the status line after the next selection and an undo; the next selection could clear it. | QA 11-14b L2 | 2026-11-14 |
 
 ## E: Editor
 

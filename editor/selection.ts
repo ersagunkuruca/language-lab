@@ -142,6 +142,9 @@ export function selection(host: SelectionHost) {
     if (ui.selected === id) { if (toPalette) { ui.pane = "side"; render(); } return; }
     ui.mode = null; ui.query = "";
     ui.selected = id;
+    // A refusal is about what was tried on what was selected: the next
+    // selection moves on from it, so its orange note goes (I277).
+    if (ui.refused) { ui.note = ""; ui.refused = false; }
     if (toPalette) ui.pane = "side";
     // One pane at a time on a touch screen: the Selected panel is in the
     // other pane and there's no hover, so what was tapped and its type go on
