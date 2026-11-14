@@ -28,6 +28,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
+import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
@@ -56,7 +57,7 @@ const { rangeChoices, rangeArrays } = compiles ? await import("../../compiler/sr
 const { parallelColumnMaps } = compiles ? await import("../../compiler/src/par-columns.ts") : ({} as typeof import("../../compiler/src/par-columns.ts"));
 const { intoAsSets, ownedRecords } = compiles ? await import("../../compiler/src/owned-records.ts") : ({} as typeof import("../../compiler/src/owned-records.ts"));
 const { lowerScalar } = compiles ? await import("../../compiler/src/scalar.ts") : ({} as typeof import("../../compiler/src/scalar.ts"));
-const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, runCoreMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
+const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, printedMain, runCoreMain, runPrintedMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
 const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
@@ -584,7 +585,12 @@ function answeredHere(q: Program): Program {
 }
 const loaded = answeredHere(load(path));
 const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
-const p = main && defined < 0 ? represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app") : loaded;
+// A run of a program lowered before reads it back (run-store.ts, I264):
+// lowering is most of a run, and the same program lowers the same way.
+const runKeyed = command === "run" && main && defined < 0 && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
+const kept = runKeyed ? keptRun(runKeyed) : undefined;
+const representedHere = () => represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app");
+const p = main && defined < 0 && !kept ? representedHere() : loaded;
 // A page or app bundles the same file into its script (L69a3).
 const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;
 // The program's page, for `ters build-web` and `ters build-app`, printed
@@ -623,18 +629,28 @@ switch (command) {
     // doesn't, when the program has its own hosts, for a main that is a
     // value (printed as the evaluator shows it), or with --evaluator.
     if (evalAt < 0 && !hosts && !valueMain(p.info, main)) {
-      const ir = lowerCore(p.code, p.info, p.names, [main]);
-      if (!ir.refused.get(main)) {
+      const ir = kept ? undefined : lowerCore(p.code, p.info, p.names, [main]);
+      if (kept || !ir!.refused.get(main)) {
         let wrote = false;
-        const rt = { print: (s: string) => { wrote = true; console.log(s); }, names: p.names, world: world() };
-        try { process.exitCode = runCoreMain(ir, p.names[main] ?? "main", rest, rt as never); break; } catch (e) {
+        const lowered = kept ?? { ...printedMain(ir!, p.names[main] ?? "main"), names: p.names };
+        if (!kept && runKeyed) keepRun(runKeyed, lowered);
+        const rt = { print: (s: string) => { wrote = true; console.log(s); }, names: lowered.names, world: world() };
+        try {
+          // A derivative's printed code needs the check's types (Printed
+          // `checked`), which the lowered program has.
+          process.exitCode = ir && lowered.printed.checked ? runCoreMain(ir, p.names[main] ?? "main", rest, rt as never) : runPrintedMain(lowered, rest, rt as never);
+          break;
+        } catch (e) {
           // A part the printed code doesn't have yet: the evaluator, if
           // nothing was printed. (A world effect done before it is done again.)
           if (!(e instanceof Unsupported) || wrote) throw e;
         }
       }
     }
-    process.exitCode = runProgram(p.code, p.info, main, rest, { print: (s) => console.log(s), names: p.names, world: world(), hosts });
+    {
+      const q = kept ? representedHere() : p;
+      process.exitCode = runProgram(q.code, q.info, main, rest, { print: (s) => console.log(s), names: q.names, world: world(), hosts });
+    }
     break;
   }
   case "compile": {

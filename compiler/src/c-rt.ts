@@ -1329,7 +1329,10 @@ export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // definition named `cell` took `lab_cell`, the runtime's cell type).
 const LIST_SAMPLE: ListNames = { cons: "List_cons", nil: "List_nil", type: 0, tag: 0, head: 0 };
 const words = (text: string) => [...text.matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]);
-export const RESERVED = [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...words(BASE), ...Object.values(FNS).flatMap((f) => words(typeof f.c === "string" ? f.c : f.c(LIST_SAMPLE)))])];
+// Found on first use: the NFC table's text (c-nfc.ts) takes 0.2 s to
+// build, and a run on JavaScript loads this file without printing C (I264).
+let reserved: string[] | undefined;
+export const reservedNames = (): string[] => (reserved ??= [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...words(BASE), ...Object.values(FNS).flatMap((f) => words(typeof f.c === "string" ? f.c : f.c(LIST_SAMPLE)))])]);
 
 // C's keywords and the names its headers declare, which a type's name
 // (printed bare) must not take.

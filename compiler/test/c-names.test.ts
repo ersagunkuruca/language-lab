@@ -8,17 +8,17 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { C_RUNTIME as C_OWN, C_OWN_PREFIXES } from "../src/c.ts";
-import { RESERVED } from "../src/c-rt.ts";
+import { reservedNames } from "../src/c-rt.ts";
 
 const here = import.meta.dirname, ters = join(here, "../../ters/cli/ters.ts");
 
 test("every lab_ name c.ts spells is one a program's names can't take", () => {
   const src = readFileSync(join(here, "../src/c.ts"), "utf8");
-  const taken = (w: string) => RESERVED.includes(w) || C_OWN.includes(w) || C_OWN_PREFIXES.some(([p, any]) => w.startsWith(p) && (any || /^[0-9]/.test(w.slice(p.length))));
+  const taken = (w: string) => reservedNames().includes(w) || C_OWN.includes(w) || C_OWN_PREFIXES.some(([p, any]) => w.startsWith(p) && (any || /^[0-9]/.test(w.slice(p.length))));
   // Spelled whole (lab_closure), or a prefix followed by what's worked out (lab_m${i}).
   const whole = [...src.matchAll(/\blab_([A-Za-z0-9]\w*)(?!\$\{|\w)/g)].map((m) => m[1]).filter((w) => !taken(w) && !/^print_Fish$|^m3$/.test(w));
   assert.deepEqual([...new Set(whole)], []);
-  const prefixes = [...src.matchAll(/\blab_([A-Za-z0-9]\w*)\$\{/g)].map((m) => m[1]).filter((p) => !C_OWN_PREFIXES.some(([q]) => q === p) && !C_OWN.includes(p) && !RESERVED.includes(p) && !C_OWN_PREFIXES.some(([q, any]) => any && p.startsWith(q)));
+  const prefixes = [...src.matchAll(/\blab_([A-Za-z0-9]\w*)\$\{/g)].map((m) => m[1]).filter((p) => !C_OWN_PREFIXES.some(([q]) => q === p) && !C_OWN.includes(p) && !reservedNames().includes(p) && !C_OWN_PREFIXES.some(([q, any]) => any && p.startsWith(q)));
   assert.deepEqual([...new Set(prefixes)], []);
 });
 
