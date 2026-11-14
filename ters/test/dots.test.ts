@@ -93,3 +93,33 @@ test("holes and variables don't take dots", () => {
   const v = under(p.code, d).find((id) => { const n = p.code.nodes[id]; return n.kind === "ref" && p.code.nodes[n.target].kind === "binder"; });
   if (v) assert.equal(addDot(p.code, p.pres.names, info, d, v).ok, false);
 });
+
+// Ersagun 2026-11-14 on Eight queens: a dot put on the wire into count, and
+// that wire taken off, left a dot nothing read, its Remove greyed out, and
+// queens(8) still in main. A dot no wire leaves goes, and its value lies
+// loose; Remove the dot on one does the same.
+test("taking off a dot's last wire sets its value loose, and the dot goes", async () => {
+  const { unwire } = await import("../../editor/typed.ts");
+  const p = load("queens");
+  const info = infer(p.code, p.pres.names);
+  const main = p.named("main");
+  const slot = under(p.code, main).find((id) => { const n = p.code.nodes[id]; return n.kind === "call" && p.code.nodes[n.fn].kind === "ref" && p.pres.names[(p.code.nodes[n.fn] as { target: Id }).target] === "count"; });
+  const into = (p.code.nodes[slot!] as { args: Id[] }).args[0];
+  const dotted = addDot(p.code, p.pres.names, info, main, into);
+  assert.ok(dotted.ok);
+  const dot = dotted.select!;
+  const use = usesOf(dotted.code, dot)[0];
+  const off = unwire(dotted.code, dotted.names, infer(dotted.code, dotted.names), main, {}, {}, use);
+  assert.ok(off.ok, off.ok ? "" : off.reason);
+  assert.equal(off.code.nodes[use].kind, "hole");
+  assert.ok(!isDot(off.code, main, dot), "the dot is gone");
+  const parts = Object.keys(off.of ?? {});
+  assert.equal(parts.length, 1, "its value lies loose");
+  assert.equal(off.of![parts[0]], main);
+  // Remove the dot on a dot no wire leaves sets its value loose too.
+  const zero: Code = { ...dotted.code, nodes: { ...dotted.code.nodes, [use]: { id: use, kind: "hole" } } };
+  const gone = removeDot(zero, dotted.names, infer(zero, dotted.names), main, dot, { of: {}, home: {} });
+  assert.ok(gone.ok && !isDot(gone.code, main, dot) && Object.keys(gone.of ?? {}).length === 1, gone.ok ? "" : gone.reason);
+  // With its one wire, Remove the dot puts the value back on it.
+  assert.ok(removeDot(dotted.code, dotted.names, infer(dotted.code, dotted.names), main, dot).ok);
+});

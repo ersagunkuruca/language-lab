@@ -127,7 +127,7 @@ export function graphMenu(host: GraphMenuHost) {
       rows.push(item("Name it…", "name"));
       rows.push(...stepRows(id));
       if (T.isDot(doc().code, ui.def, id) && inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
-      if (T.isDot(doc().code, ui.def, id)) rows.push(item("Remove the dot", "undot", "Put the value back on its one wire", why(() => T.removeDot(doc().code, doc().names.short, info, ui.def, id))));
+      if (T.isDot(doc().code, ui.def, id)) rows.push(item("Remove the dot", "undot", T.usesOf(doc().code, id).length ? "Put the value back on its one wire" : "No wire leaves it: the dot goes, and its value lies loose", why(() => T.removeDot(doc().code, doc().names.short, info, ui.def, id, { of: doc().loose ?? {}, home: doc().home ?? {} }))));
     } else if ((kind === "node" || kind === "frame") && id) {
       const d = calleeDef(id);
       if (d && d !== ui.def) rows.push(item(`Open ${new Namer(doc().code, typedPres(), d).name(d)}`, "goto"));
@@ -274,7 +274,7 @@ export function graphMenu(host: GraphMenuHost) {
       case "named-none": return allNamed(false);
       case "fold": return toggleFolded(target!);
       case "name": { select(target!); document.getElementById("f-name")?.focus(); return; }
-      case "undot": return void applyT(T.removeDot(doc().code, doc().names.short, info, ui.def, target!));
+      case "undot": return void applyT(T.removeDot(doc().code, doc().names.short, info, ui.def, target!, { of: doc().loose ?? {}, home: doc().home ?? {} }));
       case "goto": { const d = calleeDef(target!); if (d) openDef(d); return; }
       case "inline": return toggleInline(target!);
       case "dot": return void applyT(T.addDot(doc().code, doc().names.short, info, ui.def, target!));
