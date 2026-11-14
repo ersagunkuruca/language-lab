@@ -181,7 +181,7 @@ if (recordTo) {
   const one = async (): Promise<void> => {
     const t = todo.shift();
     if (!t) return;
-    const { entry, output } = await recordOne(top, t, at, env);
+    const { entry, output } = await recordOne(top, t, at, env, !(t in bundles));
     map.tests[t] = entry;
     console.log(`  ${entry.passed ? "ok" : "FAILED"}  ${entry.seconds} s  ${t}`);
     if (!entry.passed) { failedFiles++; console.log(output.split("\n").map((l) => `    ${l}`).join("\n")); }
