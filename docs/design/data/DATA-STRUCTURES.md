@@ -136,7 +136,13 @@ and `compare` on a map through `meaning`, since the tree isn't canonical:
   copies and the cons cells walk, n² both). It is the binary cousin of a
   persistent vector (RRB trees, Bagwell and Rompf, 2012); RRB's 32-wide
   nodes are the same costs in fewer steps, a later step if a program
-  needs the constant.
+  needs the constant. It is a rope too (Boehm, Atkinson and Plass, 1995):
+  `take`, `drop` and `append` are log n, so an editor buffer's edits are
+  (L248, examples/buffer: 8,000 edits on 176k characters in 0.11 s
+  native, 92 s on cons cells). Where one part of a program would have
+  arrays and another's loop carries a list on through a take, a drop or
+  an append's front, the tree is kept for the whole, rather than that
+  part's lists as written.
 
 ## The editor
 

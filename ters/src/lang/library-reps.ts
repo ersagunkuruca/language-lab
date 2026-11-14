@@ -22,6 +22,7 @@ import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { intCases, usesIntCases } from "./int-cases.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
+import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
 import { splitLists } from "./rep-split.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
@@ -285,12 +286,77 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
 }
 
+// A job the tree does in fewer steps than the list as written.
+function cheaperOn(tree: Representation, spec: Representation, j: Id): boolean {
+  const t = LADDER.indexOf(tree.cost[j] ?? "");
+  return t >= 0 && t < LADDER.indexOf(spec.cost[j] ?? "n²");
+}
+
+// Whether one of defs calls itself with a list it was given carried on
+// through a job (its first input, where the list as written pays: a take,
+// a drop, an append's front), there or in a def of defs it hands it to, or
+// folds a list grown through one.
+// machine's `reached` appends a few places before its worklist, which as
+// written is as cheap: the worklist is the append's second input.
+function carriesThroughJob(code: Code, defs: Id[], job: (j: Id) => boolean): boolean {
+  const own = new Set(defs);
+  const params = new Map<Id, Id[]>();
+  for (const d of defs) { const b = code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]; if (b?.kind === "lambda") params.set(d, b.params); }
+  // A let's binder (a lambda called where it's written) stands for its value.
+  const values = new Map<Id, Id>();
+  for (const d of defs) for (const x of subtree(code, d)) {
+    const n = code.nodes[x];
+    if (!isCall(n)) continue;
+    const f = code.nodes[n.fn];
+    if (f?.kind === "lambda") f.params.forEach((q, i) => { if (n.args[i]) values.set(q, n.args[i]); });
+  }
+  const mentions = (e: Id, p: Id, seen = new Set<Id>()): boolean => subtree(code, e).some((x) => {
+    const n = code.nodes[x];
+    if (n.kind !== "ref") return false;
+    if (n.target === p) return true;
+    const v = values.get(n.target);
+    return !!v && !seen.has(n.target) && (seen.add(n.target), mentions(v, p, seen));
+  });
+  const callee = (n: Call): Id | null => { const f = code.nodes[n.fn]; return f?.kind === "ref" ? f.target : null; };
+  // Which inputs of which defs reach a job's first input.
+  const feeds = new Set<string>();
+  const flowsIn = (e: Id, p: Id): boolean => subtree(code, e).some((x) => {
+    const n = code.nodes[x];
+    if (!isCall(n)) return false;
+    const g = callee(n);
+    if (!g) return false;
+    if (job(g)) return !!n.args[0] && mentions(n.args[0], p);
+    return own.has(g) && n.args.some((a, k) => feeds.has(`${g} ${k}`) && mentions(a, p));
+  });
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [d, ps] of params) ps.forEach((p, i) => {
+      if (!feeds.has(`${d} ${i}`) && flowsIn((code.nodes[d] as NodeOf<"def">).body!, p)) { feeds.add(`${d} ${i}`); changed = true; }
+    });
+  }
+  // A self-call's inputs, or a fold's arm's result so far (a list grown
+  // by appending to it, each turn).
+  return defs.some((d) => subtree(code, d).some((x) => {
+    const n = code.nodes[x], ps = params.get(d) ?? [];
+    if (n.kind === "arm") return n.results.some((r) => !!r && flowsIn(n.body, r));
+    return isCall(n) && callee(n) === d && n.args.some((a, i) => !!ps[i] && flowsIn(a, ps[i]));
+  }));
+}
+
 // The program's groups that would take arrays (rep-groups.ts) as seeds of
 // a split: all of them, else each that can be one with those before it.
 function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[]): (Chosen & { reps: Representation[] }) | null {
   const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
   if (!array) return null;
-  const groups = listGroups(code, main, defs).groups.filter((g) => g.rep === array.name && g.root !== main);
+  const all = listGroups(code, main, defs).groups;
+  // A part that keeps the tree, and whose loop carries a list on through
+  // a job the tree does cheaper than the list as written (examples/buffer's
+  // `edited`, whose buffer is taken, dropped and appended each turn, L248):
+  // the tree for the whole, since split off as written that list is walked
+  // every turn, and its arrays' parts read the tree in log n.
+  const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!, tree = LIBRARY.reps.find((r) => r.of === LIST && r.name === "tree of List");
+  if (tree && all.some((g) => g.rep === tree.name && carriesThroughJob(code, g.defs, (j) => cheaperOn(tree, spec, j)))) return null;
+  const groups = all.filter((g) => g.rep === array.name && g.root !== main);
   const roots = groups.map((g) => g.root);
   // Not one called from a loop of the rest's: its lists would be
   // converted at every turn (machine's `items of words`, once a line).
