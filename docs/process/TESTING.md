@@ -1,5 +1,9 @@
 # Testing: fast feedback, only what changed
 
+**Current since 2026-11-14: §8** (tests selected by the lines they ran, a
+cheapest cover before a merge, passes remembered, reviews on a schedule, a
+red names its commit). Sections 1 to 7 are the history that led there.
+
 2026-10-23. A design note, written before changing anything. Ersagun's
 ask: the 10 minutes between a merge and seeing it live breaks the
 iteration loop; test only what changed; don't let tests pin a design we
@@ -463,6 +467,14 @@ top-level lines run in every importer), and the cover was 5 files, 18 s.
 #2666 (and/or in run.ts): 4 files, 9 s. #2664 and #2663: 2 files, 18 s.
 #2662: 3 files, 12 s. The other files that ran the lines run after the
 merge in Check main, where minutes are free (the repository is public).
+
+**Built:** T16a #2668 (and #2672), T16b #2673, T16c #2674, T16d #2675,
+T16e this rule in WORKFLOW.md (#2676). Follow-ups worth measuring once the map is
+full: a top-level line (an import, a `const`) runs in every importer, so
+Check main still reaches most files for a change to the core's top level;
+narrowing that by which names a test's code uses is the next step if Check
+main grows long. The editor's bundled tests go by imports until their
+coverage can be mapped back through a source map.
 
 What we give up: a break that only a test the cover left out would see is
 caught after the merge, and one in a test due in a week, within a week,
