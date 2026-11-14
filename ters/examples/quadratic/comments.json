@@ -1,2 +1,3 @@
 {"0f886080": "{1f090b97}² − 4·{b14e4d79}·{93ea2591}; negative means no real roots",
-"ff10a387": "NaN when {0f886080} is negative"}
+"ff10a387": "NaN when {0f886080} is negative",
+"0ec3f332": "One root of a·x² + b·x + c = 0: the quadratic formula with + before the square root. Switch the names between short (a, b, Δ) and descriptive (leading coefficient, discriminant) to read it either way: the names are a view, not part of the program."}

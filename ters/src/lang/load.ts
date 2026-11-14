@@ -65,8 +65,10 @@ export function loadProgram(dir: string, style = "blocks") {
   // over its modules'.
   const pins = { ...Object.assign({}, ...modules.map((m) => m.pins)), ...read<Pins>(join(dir, "signatures.json"), {}) } as Pins;
   const code = base(modules.length ? merge(...modules.map((m) => m.code), own) : own);
+  // A program with name layers of its own and no default (quadratic: short
+  // and descriptive) reads in its short names, as the editor opens it.
   const pres: Presentation = {
-    names: baseNames(...modules.map((m) => m.names), read<Names>(join(dir, "names.default.json"), {})),
+    names: baseNames(...modules.map((m) => m.names), read<Names>(join(dir, existsSync(join(dir, "names.default.json")) ? "names.default.json" : "names.short.json"), {})),
     comments: { ...LIBRARY.comments, ...read(join(dir, "comments.json"), {}) },
     hints: read(join(dir, "hints.json"), {}),
     style: STYLES[style] ?? { view: "blocks", notation: {} },

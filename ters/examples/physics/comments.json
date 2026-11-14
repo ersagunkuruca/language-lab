@@ -1,6 +1,15 @@
-{"6hpbegvm9ekio82s9259bbshse": "Something thrown down at a speed falls a distance in a time: true when the four agree. It runs in any direction: in Run, tick the ports you know, and untick time to ask when it lands. drift and drop are named values, shown as dots.",
+{"16ficv2io2s3vs9nfbd7aftiha": "rotate backwards: given where a point ends (0, 2) and the turn, it finds where the point started, (2, 0). Nobody wrote the inverse.",
+"3oa5m0e5am8pk4cns28vppi1dm": "And with x = 3? No: the circle only reaches x = 2.",
+"6hpbegvm9ekio82s9259bbshse": "Something thrown down at a speed falls a distance in a time: true when the four agree. It runs in any direction: in Run, tick the ports you know, and untick time to ask when it lands. drift and drop are named values, shown as dots.",
+"6lm5sivulc2dlto7peqtgafe8l": "polar as a check with equals on Float64: π/2 can't be written exactly, so cos(π/2) comes out 6e-17 rather than 0, and this says false. Running polar backwards, as the next two lines do, doesn't have that problem.",
+"9k8bi3clgk1csn8o2bi9jg3p03": "Is there a point with x = 1 on a circle of radius 2 round (0, 0)? for some looks for a y and an angle: yes.",
 "ef2qlgvc9pagd7mbrjga1vti6p": "Two polars sharing a length. The length and angle inside are unknowns of for some, the way wires inside a network were. Give it x′, y′ and the turn and it runs backwards.",
 "f1n9ttn882jm0o9laafiu1fin8": "fall used in one direction, from true: a quadratic in time, so two answers (the negative one is before the throw).",
+"h5dcf088un4k09hhmda0bdl4tu": "fall run backwards for the time: 2 s, and −3.02 s, a moment before the throw that the same curve passes through.",
 "hrscob09cc2u9rbciqghos2sra": "A predicate: true when (x, y) is at this length and angle. x² + y² = length² follows from the other two (hence); it lets the solver find the length from x and y without searching.",
+"j50vt443cat2jole1tta2jjgkc": "A pendulum 1 m long under Earth's gravity swings in about 2 s. Only the inputs carry units; that the answer is in seconds was worked out.",
+"jabh26ietsm6hd10lgu0rt2a6k": "What the definitions above give, a line each. Some run forwards (period), some check a claim (fall, polar), and some run backwards: the same definition asked for an input instead of its answer (landing times, rotate).",
+"k0ljkeu9sjoifkp3hnfgls4l6q": "fall as a check: thrown down at 5 m/s, does a stone fall 29.62 m in 2 s? It does.",
 "program": "Textbook: the quadratic formula and projectile motion.\nPrior art: units as part of the type follow Andrew Kennedy's \"Dimension Types\" (ESOP 1994) and F#'s units of measure.\nPrior art: a predicate that runs in every direction is constraint programming, as in CLP(R) (Jaffar and Lassez, 1987) and Modelica's acausal equations.",
-"s1l0sf006j8lf36reqn46e91sq": "An ordinary function. Only the inputs declare units; the result is inferred to be in seconds."}
+"s1l0sf006j8lf36reqn46e91sq": "An ordinary function. Only the inputs declare units; the result is inferred to be in seconds.",
+"tjdfamu035j5ksg6603drjrlim": "rotate forwards: (1, 0) turned a quarter turn is (0, 1)."}
