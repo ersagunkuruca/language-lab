@@ -200,12 +200,23 @@ else {
   reasons = reach;
   // Tests the map has no entry for (new ones), and test files the change
   // edits, run as they always did.
-  const own = tests.filter((t) => code.includes(t) || (!map.tests[t] && byImports(t)));
-  const exact = [...new Set([...reach.keys(), ...own])].sort();
+  const unmapped = tests.filter((t) => !map.tests[t] && !code.includes(t) && byImports(t));
+  const own = tests.filter((t) => code.includes(t));
+  const exact = [...new Set([...reach.keys(), ...own, ...unmapped])].sort();
   if (full) chosen = exact;
   else {
     const candidates = new Map([...reach].filter(([t]) => secondsOf(t) <= LONG || own.includes(t)));
-    chosen = [...new Set([...cover(candidates, secondsOf), ...own])].sort();
+    // Tests the map hasn't recorded yet (new, or the map still filling):
+    // before a merge only those named for a changed file (checks.ts ->
+    // checks.test.ts, checks-*.test.ts), quickest first, up to two minutes
+    // in all; the rest run after the merge in Check main, which records
+    // them. By imports they were most of the suite for any core change.
+    const stems = new Set(code.filter((f) => /\.(ts|js)$/.test(f) && !/\.test\./.test(f)).map((f) => f.split("/").pop()!.replace(/\.(ts|js)$/, "")));
+    const named = unmapped.filter((t) => { const n = t.split("/").pop()!.replace(/\.test\.(ts|js)$/, ""); return [...stems].some((s) => n === s || n.startsWith(s + "-")); }).sort((a, b) => secondsOf(a) - secondsOf(b));
+    const sample: string[] = [];
+    let budget = 120;
+    for (const t of named) if (secondsOf(t) <= budget) { sample.push(t); budget -= secondsOf(t); }
+    chosen = [...new Set([...cover(candidates, secondsOf), ...own, ...sample])].sort();
     deferred = exact.filter((t) => !chosen.includes(t));
   }
 }
@@ -334,7 +345,7 @@ console.log(all ? `everything, every sweep in full${shard ? `: share ${shard[0]}
 for (const r of runs) console.log(`  ${r.what}`);
 if (!browser && (page || gpu || sound)) console.log("  (the browser tests it reaches run tonight, or now with --browser)");
 if (left.length) console.log(`  (${left.length} slow file${left.length === 1 ? "" : "s"} it reaches run after the merge, in Check main, or now with --full)`);
-if (map && !all && !setup) console.log(`  by the test map: ${chosen.length} file${chosen.length === 1 ? "" : "s"} run${chosen.length === 1 ? "s" : ""} every changed line${deferred.length ? `; ${deferred.length} more that ran them run after the merge, in Check main, or now with --full` : ""}`);
+if (map && !all && !setup) console.log(`  by the test map: ${chosen.length} file${chosen.length === 1 ? "" : "s"} run${chosen.length === 1 ? "s" : ""} every changed line${deferred.length ? `; ${deferred.length} more it reaches (by the map, or by imports for tests not recorded yet) run after the merge, in Check main, or now with --full` : ""}`);
 if (listOnly && argv.includes("--why")) for (const t of chosen) console.log(`    ${t} (${secondsOf(t)} s): ${(reasons.get(t) ?? ["new or edited"]).slice(0, 4).join(", ")}${(reasons.get(t)?.length ?? 0) > 4 ? ", …" : ""}`);
 if (!runs.length) console.log("  nothing to test");
 if (listOnly) process.exit(0);
