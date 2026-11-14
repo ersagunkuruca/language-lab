@@ -1946,13 +1946,30 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
       ev.preventDefault();
       const check = src ? (t: string) => hooks.canUse(src, t) : out ? hooks.canShare(out) : slot ? hooks.canReorder?.(slot) ?? null : null;
       // A value can also go on a list's or a chain's +: a new item, wired to it.
-      const targets = (src || out) && hooks.addFrom ? "[data-slot], [data-add]" : "[data-slot]";
-      connectDrag(root, ev, targets, check && ((t) => (t.hasAttribute("data-add") ? null : check(t.getAttribute("data-slot")!))), (target) => {
+      // A wire drawn from an input goes either way: onto an output, which is
+      // then wired into it, as a drag the other way would (Ersagun
+      // 2026-11-14), or onto another input of the same call (a reorder).
+      const targets = (src || out) && hooks.addFrom ? "[data-slot], [data-add]" : slot ? "[data-slot], [data-out], [data-src]:not(.silent)" : "[data-slot]";
+      const shares = new Map<Id, (slot: Id) => string | null>();
+      const toInput = (t: Element): string | null => {
+        const from = t.getAttribute("data-src"), o = t.getAttribute("data-out");
+        if (from) return hooks.canUse(from, slot!);
+        if (!shares.has(o!)) shares.set(o!, hooks.canShare(o!));
+        return shares.get(o!)!(slot!);
+      };
+      const verdict = (t: Element): string | null =>
+        t.hasAttribute("data-add") ? null
+        : slot && !t.hasAttribute("data-slot") ? toInput(t)
+        : check ? check(t.getAttribute("data-slot")!) : null;
+      connectDrag(root, ev, targets, check || slot ? verdict : null, (target) => {
         const to = target?.getAttribute("data-slot");
         const row = target?.getAttribute("data-add");
+        const fromSrc = target?.getAttribute("data-src"), fromOut = target?.getAttribute("data-out");
         if (row && (src || out)) hooks.addFrom?.(row, (src ?? out)!, !!src);
         else if (src && to) hooks.use(src, to);
         else if (out && to) hooks.share(out, to);
+        else if (slot && !to && fromSrc) hooks.use(fromSrc, slot);
+        else if (slot && !to && fromOut) hooks.share(fromOut, slot);
         else if (slot && !to) hooks.clear(slot);
         else if (slot && to && to !== slot) hooks.reorder?.(slot, to);
       });
