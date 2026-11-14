@@ -2126,6 +2126,7 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 
 | id | item | PR |
 |---|---|---|
+| L261q | Clinic commented: all 146 definitions (1 had a comment), the leftist heap and two-list queue, each event's handling, the report's parts and the checks; the program note and credits kept; code unchanged | this PR |
 | L261o | Board commented: a program note (the columns, quick add, edits as undoable history, the focus timer, the saved file) and a comment on each of its 112 definitions; code unchanged | this PR |
 | L261r | Chapters and calc: their last 5 and 6 definitions commented (chapters' word counts and file names; calc's Binding, character tests, expect and lookup) | this PR |
 | L261n | Sheet commented: a program note (what it reads, errors as values, how to run it) and a comment on each of its 90 definitions, the parser's levels and the cycle finding among them; code unchanged, so GAPS round 7 compares it as written | this PR |
