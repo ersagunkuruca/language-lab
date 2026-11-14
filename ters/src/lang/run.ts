@@ -322,6 +322,9 @@ type Frame = { next: Frame | null } & (
   | { t: "parts"; ids: Id[]; i: number; vals: Value[]; env: Env; n: Call | Use }
   | { t: "match"; n: NodeOf<"match">; env: Env }
   | { t: "fold"; n: NodeOf<"fold">; env: Env }
+  // `and` or `or` with its first input worked out (L259): a value tagged
+  // `by` decides it, else the second input is its value.
+  | { t: "decide"; by: Id; rest: Id; env: Env }
   | { t: "foldChild"; ctx: FoldCtx; d: Data; arm: FoldArm; kids: Kids; results: Done }
   | { t: "fuelExit"; saved: Fuel | null }
   // `seeded`: answers Random's `random()` from its generator.
@@ -532,6 +535,16 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     resolvedAlready(code, info);
   };
   const defs = new Map<Id, Value>();
+  // `and` and `or` work out their second input only when the first doesn't
+  // decide (BACKLOG L259, Ersagun 2026-11-14), as nearly every language
+  // does: `t > 0 and x / t > 1` is false when t is 0, not no answer, and
+  // `false and member(x, xs)` is one false, not one for each member. The
+  // value that decides a call to one of them, or null for another call.
+  // Prior art: McCarthy's conditional `and` and `or` (1960), C's && and ||.
+  const shortCircuitOf = (n: Call): Id | null => {
+    const h = n.args.length === 2 ? code.nodes[n.fn] : undefined;
+    return h?.kind !== "ref" ? null : h.target === S.and ? FALSE : h.target === S.or ? TRUE : null;
+  };
   const one = (x: Value): Iterable<Value> => [x];
   // Closures made by this runner, so the machine can enter them directly
   // instead of calling them as JS functions.
@@ -847,6 +860,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // Made when first run: a node's parts are made as they're reached.
         let args: Direct[] | undefined;
         const argsOf = () => (args ??= n.args.map(compiledOf));
+        // `and` and `or` work out their second input only when the first
+        // doesn't decide (L259, short-circuit.ts).
+        const sc = shortCircuitOf(n);
+        if (sc !== null) return (env) => { const as = argsOf(), x = as[0](env) as Data; return x.tag === sc ? x : as[1](env); };
         if (head.kind === "lambda") {
           let body: Direct | undefined;
           const params = head.params;
@@ -992,6 +1009,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if (i === count) return done(vs.slice());
           return search(argIds[i], env, (v) => { vs[i] = v; return each(env, i + 1, vs, done); });
         };
+        const sc = shortCircuitOf(n);
+        if (sc !== null) return (env, k) => search(argIds[0], env, (x) => ((x as Data).tag === sc ? k(x) : search(argIds[1], env, k)));
         if (head.kind === "lambda") {
           const params = head.params, body = head.body;
           return (env, k) => each(env, 0, new Array<Value>(count), (vs) => search(body, bind(env, params, vs), k));
@@ -1454,6 +1473,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             if (!this.fuel) spendStep();
             else if (--this.fuel.left < 0) return this.fail();
           }
+          const sc = shortCircuitOf(n);
+          if (sc !== null) { this.push({ t: "decide", by: sc, rest: n.args[1], env, next: null }); return this.eval(n.args[0], env); }
           // A lambda written in place (a let, a dot) is entered, not made.
           if (head.kind === "lambda") return this.parts(n.args, 0, [], env, n);
           return this.parts([n.fn, ...n.args], 0, [], env, n);
@@ -1504,6 +1525,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // does: the first recursive field of the value is folded, then the
         // next, then the arm runs with their results. The frames waiting
         // for children are the stack, on the heap.
+        case "decide": return (v as Data).tag === f.by ? this.ret(v) : this.eval(f.rest, f.env);
         case "fold": return this.foldValue({ arms: foldArms(f.n), env: f.env }, v as Data);
         case "foldChild": {
           const results: Done = { v, n: (f.results?.n ?? 0) + 1, up: f.results };

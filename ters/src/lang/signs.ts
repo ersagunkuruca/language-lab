@@ -12,7 +12,8 @@
 //   - a branch: in the `else` of `if x = 0`, x isn't 0; in the `then` of
 //     `if 0 < x`, x is positive (and `and`, `or`, `not` of such tests, and
 //     a test written as a definition, `x > 0`, read through its body); what
-//     is tested may be a field read too, `l.took` (L258);
+//     is tested may be a field read too, `l.took` (L258); `and`'s second
+//     side where the first holds, `or`'s where it doesn't (L259);
 //   - a type's rule: a Rational's bottom is positive.
 //
 // A product of two nonzero floats can still underflow to 0; a divisor
@@ -167,6 +168,13 @@ export function signAnalysis(code: Code) {
       const n = code.nodes[p];
       if (b !== undefined && n?.kind === "arm" && n.binds.includes(b)) break;
       if (b !== undefined && n?.kind === "lambda" && n.params.includes(b)) break;
+      // `a and b`'s b is worked out only where a holds, `a or b`'s where
+      // it doesn't (L259).
+      if (isCall(n) && n.args.length === 2 && n.args[1] === child) {
+        const f = target(n.fn);
+        if (f === S.and || f === S.or) out &= said(n.args[0], f === S.and, subject, env, 0);
+        continue;
+      }
       if (n?.kind !== "arm" || n.body !== child) continue;
       const m = parentOf(p), match = m ? code.nodes[m] : undefined;
       if (match?.kind !== "match" || (n.variant !== TRUE && n.variant !== FALSE)) continue;

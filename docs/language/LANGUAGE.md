@@ -92,9 +92,14 @@ says what to do instead. Overflow (an answer too big to hold) stops the
 program, and no handler catches it, so every engine agrees (L166). The checker drops that `Choice` where it can see
 the input is fine: dividing by a literal or a let that isn't 0, inside `x >
 0`'s true branch (a field read too: `l.length / l.took` inside `if l.took >
-0 s`), the square root of `x · x`. `and` works out both of its sides, so
-`t > 0 and x / t > 1` still divides by 0 when t is; write `if t > 0 then x /
-t > 1 else false`. A page's view (a part, a
+0 s`), the square root of `x · x`, and `and`'s second side (`t > 0 and x /
+t > 1`).
+
+`a and b` works out b only when a is true, and `a or b` only when a is
+false (L259), as in nearly every language. So `t > 0 and x / t > 1` is false
+when t is 0, not no answer. In a search this changes how many answers come
+back: `false and one of(xs) > 1` is one false, not one for each item of xs,
+and `true or …` is one true. A page's view (a part, a
 text, an attribute) with no answer shows nothing there; a handler such as
 a button's handles its own. Several of these do have answers among the
 complex numbers: `complex sqrt(−4)` is 2i and `complex log(−1)` is iπ, and
