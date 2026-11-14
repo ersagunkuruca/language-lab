@@ -1,0 +1,10 @@
+{"0o0qcqdt8kg3hbfjhrk61u9tnt": "Six numbers as the show deals them: two of the large ones (25, 50, 75, 100, never the same one twice) and four small ones.",
+"0pk9apj8gf61405a8otsbi2lt9": "The page's style sheet: the house colours (and their dark versions), the number cards, the target and the list of answers.",
+"3dpnbuk5a4d0n71thfpjrf0fq6": "Who this page borrows from, shown on the page (docs/language/CREDITS.md).",
+"3uv2g4cqm7immnjnmpe33brv88": "A small number, 1 to 10, from the world's randomness.",
+"6a9cj9ldhd5buhbli62kajfare": "The page: six numbers and a target, each in a cell. New round deals fresh ones from the browser's randomness; the arrows move the target. Every change runs the whole search again (about half a million steps for six numbers), under with fuel, which bounds a search that might not end and gives it a budget of its own.",
+"bpr1v32i98ef0gm8ou56via1pl": "One number, drawn as a card.",
+"krcff716uprlab5g3bh5d897eo": "A target from 101 to 999.",
+"prkbt7ilpm6q2fk2tkp8iijes0": "The numbers game from the TV show Countdown: every way to reach the target from some of the numbers with + − × ÷, each number used at most once. The search is Graham Hutton's, from \"The countdown problem\", Journal of Functional Programming 12(6), 2002 (https://www.cs.nott.ac.uk/~pszgmh/countdown.pdf), with his valid that skips answers that only differ by commutativity or by 1. For 765 from 1, 3, 7, 10, 25 and 50 it finds his 49 solutions. Written in the editor with palette picks only.",
+"program": "Adapted: the search is Graham Hutton's, from \"The countdown problem\", Journal of Functional Programming 12(6), 2002: https://www.cs.nott.ac.uk/~pszgmh/countdown.pdf\nTextbook: the numbers round of Countdown, the television game show (Channel 4, 1982), after Des Chiffres et des Lettres.\nOur own: written in the editor by clicks, as the second round of the compiler gaps challenge.",
+"pvscocnkbed5upri2n4hd25l2m": "The answers, shortest written first: those are usually the ones a person finds."}

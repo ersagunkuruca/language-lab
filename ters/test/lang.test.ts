@@ -265,7 +265,7 @@ test("a chain of one associative operator is one call however it nests; others k
   assert.equal(chainOperands(code, "s"), null, "subtraction isn't associative");
   const p = load("effects");
   const text = renderBlocks(p.code, p.pres, infer(p.code, p.pres.names), p.named("main"));
-  assert.match(text, /\n {4}\)\n {4}\+\+ " · "\n {4}\+\+ handle show/);
+  assert.match(text, /\n {4}\)\n {4}\+\+ " = area\(\)[^"\n]*"\n {4}\+\+ handle show/);
 });
 
 test("an if on one line is bracketed when it is an operand of ++", () => {

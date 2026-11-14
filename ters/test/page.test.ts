@@ -496,3 +496,13 @@ test("the markov page: settles quickly, slowly, or has no answer", () => {
   click(root, "Always swaps");
   assert.match(answer(), /^No answer/);
 });
+
+// L261c: the countdown search on the page, the first round's 49 ways. (One
+// search here takes the evaluator about 12 s; the built page, compiled,
+// about 0.4 s a round.)
+test("the countdown page: the answers for the round", () => {
+  const { root } = open("countdown-page");
+  const count = () => root.find("count").textContent;
+  assert.equal(count(), "49 ways to make 765. The 12 shortest:");
+  assert.equal(root.find("answers").textContent.split("= 765").length - 1, 12);
+});
