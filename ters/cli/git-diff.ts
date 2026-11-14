@@ -132,7 +132,7 @@ export async function gitDiff(args: string[], cwd = process.cwd()): Promise<stri
 export function gitSetup(cwd = process.cwd()): string {
   const ters = join(dirname(new URL(import.meta.url).pathname), "ters.ts");
   const run = (...a: string[]) => execFileSync("git", a, { cwd, encoding: "utf8" });
-  run("rev-parse", "--show-toplevel");
+  const top = run("rev-parse", "--show-toplevel").trim();
   const node = JSON.stringify(process.execPath), script = JSON.stringify(ters);
   run("config", "diff.ters.command", `${node} ${script} git-diff`);
   run("config", "merge.ters.name", "Ters program files, id by id");
@@ -143,5 +143,24 @@ export function gitSetup(cwd = process.cwd()): string {
     "  git log -p --ext-diff, git show --ext-diff   the same in history (git log and show need --ext-diff)",
     "  git diff --no-ext-diff                       the JSON itself",
     "  merges                                       id by id (ters merge)",
+    gitAttributes(top),
   ].join("\n");
+}
+
+// .gitattributes naming the program files wherever they are (I269,
+// GIT-TRIAL-2026-11-14 §5): a pattern bound to a folder (`programs/**`)
+// loses both drivers, silently, for a program moved out of it. A program
+// file at a place nothing names is asked about (git check-attr); where
+// either driver is missing there, a pattern for each file by its name
+// alone (`**/code.json`) is added. Says what it did.
+export const ATTRIBUTES = PROGRAM_FILES.map((f) => `**/${f} diff=ters merge=ters`);
+function gitAttributes(top: string): string {
+  const probe = (f: string) => `ters-probe-${process.pid}/somewhere/${f}`;
+  const attrs = execFileSync("git", ["check-attr", "diff", "merge", "--", ...PROGRAM_FILES.map(probe)], { cwd: top, encoding: "utf8" });
+  const missing = PROGRAM_FILES.filter((f) => !["diff", "merge"].every((a) => attrs.includes(`${probe(f)}: ${a}: ters`)));
+  if (!missing.length) return ".gitattributes names program files wherever they are: nothing to add";
+  const file = join(top, ".gitattributes"), had = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const lines = ["# Ters program files, wherever they are (ters git-setup): diffed and merged by id.", ...ATTRIBUTES];
+  writeFileSync(file, `${had}${had && !had.endsWith("\n") ? "\n" : ""}${had ? "\n" : ""}${lines.join("\n")}\n`);
+  return `added to .gitattributes, so a program file anywhere is diffed and merged by id (${missing.join(", ")} had no pattern for anywhere): commit it`;
 }

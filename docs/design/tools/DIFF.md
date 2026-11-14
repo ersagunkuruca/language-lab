@@ -87,10 +87,14 @@ print `ters diff` for program files (E262):
 | `git show --ext-diff REV`, `git log -p --ext-diff` | the same for past commits (show and log need `--ext-diff`) |
 | `git diff --no-ext-diff` | the JSON itself |
 
-`.gitattributes` marks the four program files under `ters/examples` with
-`diff=ters`, and `git-setup` sets this clone's `diff.ters.command` (and the
-merge driver, `merge.ters.driver`, SHARING.md §6) to this checkout's
-`ters.ts`. Other files diff as before.
+`.gitattributes` marks the four program files by their names alone
+(`**/code.json diff=ters merge=ters`), wherever they are. A pattern bound
+to a folder would silently lose both drivers for a program moved out of it
+(I269). `git-setup` sets this clone's `diff.ters.command` (and the merge
+driver, `merge.ters.driver`, SHARING.md §6) to this checkout's `ters.ts`.
+It also asks git (`check-attr`) whether a program file at a place nothing
+names has both drivers, and where it doesn't, adds those four patterns to
+the repository's `.gitattributes`. Other files diff as before.
 
 git calls an external diff driver once per changed file with its two
 versions, never with the files beside it, and a definition's text needs
