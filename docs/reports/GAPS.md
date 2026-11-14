@@ -3647,3 +3647,165 @@ the others:
 3. R1: `drop` (and `take`) as array jobs, then R3, the WASI stack.
 4. L1, once Ersagun says which way.
 5. R4, then R2 with C220.
+
+## Round 17: depot, a day of a bike-share network (2026-11-14)
+
+`compiler/gaps/depot` simulates a day of a bike-share network. Its input is a
+city file: stations (docks, bikes at midnight, where they are), demands
+(riders an hour between two stations) and a profile of how busy each hour is.
+It runs the day as a discrete-event simulation:
+- riders come at random to each station, thinned by the hour's share (Lewis
+  and Shedler, 1979), from a Lehmer generator (Park, Miller and Stockmeyer's
+  48271);
+- a rider takes a bike if there is one, or walks to the closest station with
+  one within 900 m, or goes without;
+- a ride that finds its station full rides on to the closest with a free dock;
+- a truck moves up to 10 bikes from the fullest station to the emptiest every
+  half hour;
+- the time each station stands empty and full is counted, and so are the
+  fares.
+
+It prints the day's totals, a table of the stations, the ride times as bars,
+and each station's bikes hour by hour.
+
+The events are a `Priority queue Float64 Event`. The day's state is one
+record of 14 fields, changed with `set`. The stations' stocks are a
+`Map Int Stock`. Times are in seconds and distances in metres (units, with
+L252e's units in maps and tuples). It was chosen to be larger than trek and
+to try what no round had: a simulation's event queue, records updated with
+`set` (several fields at once), and a random generator written in the
+language. **129 definitions** (14 types, 115 functions and values), against
+trek's 96.
+
+It was written through the MCP, like rounds 12 to 16
+(`gaps-round17/drive.ts` in the project's files): 129 `define`s, 175
+`replace`s, and 14 `as` answers.
+
+Files:
+- `compiler/gaps/depot/`: the program, its README (credits) and the sample
+  `city.txt` (a made-up town of eight stations with two rush hours).
+- `compiler/gaps/depot.ideal.js`: the same by hand. The stations' state is in
+  arrays by station, the events in a binary heap ordered by time and then by
+  when they were planned, and every floating-point step is in the program's
+  order.
+- `compiler/gaps/depot.ts`: the evaluator, the core IR's module and the
+  ideal, in one process, with a generator of made-up cities.
+- `compiler/test/depot.test.ts`: the three print the same and exit the same
+  way on the sample (three hours and seeds), on twelve bad files and
+  arguments, and on a made-up city of 40 stations. `ters wasi` and
+  `ters native` print what `ters run` prints on the sample.
+- `compiler/gaps/bench-depot.ts`: the table below.
+
+**Correctness.** The evaluator, the core IR's module, `ters native`,
+`ters wasi` and the ideal print the same at every size tried, up to 640
+stations. Each of the five agreed the first time.
+
+### Results
+
+```
+stations  way        a day          against the ideal
+10        evaluator    2815 ms        475x
+10        core           12 ms        2.0x
+10        ideal         5.9 ms
+10        native         13 ms        2.3x   (a process, start-up included)
+10        wasi           73 ms         12x   (a process in Node)
+40        evaluator    2325 ms        308x
+40        core           68 ms        9.1x
+40        ideal         7.5 ms
+40        native         75 ms        9.9x   (a process)
+40        wasi          143 ms         19x   (a process in Node)
+160       core         1171 ms         27x
+160       ideal          44 ms
+160       native       1990 ms         46x   (a process)
+160       wasi         1619 ms         37x   (a process in Node)
+640       core        65691 ms        156x
+640       ideal         422 ms
+640       native      87247 ms        207x   (a process)
+640       wasi        81947 ms        194x   (a process in Node)
+```
+
+The command was `BUILT=1 node compiler/gaps/bench-depot.ts 10 40 160`: the
+median of 3 runs after a warm-up, with the evaluator once. For 640 stations
+it was `RUNS=1`. Each made-up city has three demands per station, so the
+riders grow with the stations. The ideal grows about linearly. The compiled
+ways grow about as the square of the stations (D1).
+
+### The gaps, ranked
+
+**D1. The stations stay a linked list read by position, so each lookup
+walks the list (C227).** `station at(c, i)` is `item at(c.stations, i,
+nowhere)`. `closest` calls it twice for each station it looks at, so each
+call walks the list once per station, and `closest` runs for every rider who
+finds no bike and every ride that finds a station full. The truck's round
+and `docks at` do the same. The chooser took a tree for `Map` and left every
+`List` as written: `List Station` is built once (`stations in`) and then
+only read by position, but it is not stored as an array. Measured by hand:
+the compiled module with `station at` reading from an array built once per
+list (a WeakMap in the printed module) prints the same and runs a day of 640
+stations in 3.5 s instead of 63 s (18x), and 160 stations in 0.45 s instead
+of 1.2 s. That leaves it about 8x the ideal at 640 stations. Native and WASI
+lose the same way.
+
+**D2. Checking the units takes most of `ters check`'s 9 s (I278).** Of the
+seconds a check of depot takes, about 3.5 are finding unit conflicts and 3.9
+are working out the units the signatures show. Both solve the same system
+for each definition, because `signatureUnits` solves it again. The systems
+are big because a definition's constraints read every one of the program's
+own callees through, all the way down. `main`'s system has 6,160 rows, and
+`run`, `day`, `simulated`, `run until` and `handled` have 3,600 to 6,100
+each: 41,556 rows over the program. (A library function is read through once,
+as a summary of its ports.) L252e's slots for maps and tuples took the check
+from 7.7 to 9.1 s on depot. trek's got faster, because the signatures now
+learn once per program whether it declares a unit. Each `ters run` checks
+once before it compiles.
+
+**D3. Bug: a local name hides a longer name that ends with it (I279).** In
+`line of(line, n)`, `comment line` (a case of `Line`, with no fields) was
+"nothing is named comment line here". `comment line()` found the case ("is
+Line, not a function"), so the parameter `line` took the last word. depot
+renamed the parameter `text`.
+
+**D4. Bug: a tuple the view prints isn't read back (I280).** The view prints
+`set((s) => (s.bikes, s.rentals), st, (1, 2))`, and `replace` refuses that
+text ("isn't read as a whole"). `(1, 2)` alone is "expected a value". Only
+`tuple(s.bikes, s.rentals)` and `tuple(1, 2)` read. Also, LANGUAGE.md writes
+a path as `(p) ↦ p.home.city`, but `↦` isn't read ("expected a value at 1");
+the text reads `=>`.
+
+**D5. A range made only to be walked once (C228).** `indices(c)` is
+`range(length(c.stations))`. Each `closest` and each of the truck's two
+searches makes that list and walks it once. With D1 fixed by hand, making
+those lists (range and `length` of the stations) is the largest self time
+at 640 stations: 0.67 s of 3.5 s. Building the list could fuse into the
+recursion that walks it (deforestation, Wadler 1990).
+
+**D6. Smaller things, measured or seen, not rows yet.**
+- `first(value at(w.stocks, i), else no stock)` compiles to a `try` around
+  the tree's lookup, so the miss is caught as an exception. `stock at` runs
+  for every event (0.18 s self time at 640 stations, after D1). A lookup
+  that can miss could return a "no answer" value instead of throwing.
+- Each event copies the day's 14-field record two to six times
+  (`scheduled`, `reseeded`, `changed`, `set`). The ideal changes variables
+  in place. Not measured yet; it is the next thing to look at once D1 and D5
+  are done.
+- The evaluator is 300 to 475x the ideal.
+
+**M1. Smaller things the MCP's text made harder.**
+- A parameter named `s` makes `0.0 s` refused, as trek found with `m`.
+  depot renamed the seeds and a station's parameters.
+- Every `set` on a parameter's record needs `as`, since `(s) => s.bikes`
+  doesn't settle the type: 9 of the 14 `as` answers. For `t.to`, the first
+  type the refusal offers is Route, which is wrong for a trip, so the driver
+  had to give `Trip` and `Stock` itself.
+
+**Rows waiting for an example.** depot doesn't need any of the open ones:
+it pins no unit-generic function (L252e's pins), and its one interface
+value is none.
+
+### Next
+
+1. D3 and D4, bugs in the MCP's text reader.
+2. D1: why the chooser keeps `List Station` a linked list (C227).
+3. D2: unit checks that summarise a program's own callees, and that solve
+   each definition's system once (I278).
+4. D5, then the record copies in D6, measured first.
