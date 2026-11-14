@@ -24,7 +24,7 @@ export function bisect(test: string, good: string, bad = "HEAD", timeoutSeconds 
   const wt = join(dir, "wt");
   const { NODE_TEST_CONTEXT: _, ...rest } = process.env;
   const run = (): boolean => {
-    const r = spawnSync("node", ["--test", "--test-reporter=dot", relative(pkg, test)], { cwd: join(wt, pkg), stdio: "ignore", timeout: timeoutSeconds * 1000, env: rest });
+    const r = spawnSync("node", ["--test", "--test-reporter=dot", relative(pkg, test)], { cwd: join(wt, pkg), stdio: "ignore", timeout: Math.round(timeoutSeconds * 1000), env: rest });
     return r.status === 0;
   };
   try {

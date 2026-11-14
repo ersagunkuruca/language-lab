@@ -7,8 +7,34 @@
 // file read, `d` a folder listed, `t` a file or folder copied whole.
 
 import fs from "node:fs";
+import { Session } from "node:inspector";
 import { syncBuiltinESMExports } from "node:module";
 import { join, resolve } from "node:path";
+
+// With TERS_COVERAGE, also which functions ran, by V8's precise coverage
+// at function level (no call counts, no blocks). NODE_V8_COVERAGE's block
+// coverage made evaluator-heavy runs about nine times slower (fingerprint's
+// `ters run` 8 s to 72 s); this costs a few percent. Written at exit in
+// NODE_V8_COVERAGE's format, one file per process.
+const cov = process.env.TERS_COVERAGE;
+if (cov) {
+  try {
+    const session = new Session();
+    session.connect();
+    session.post("Profiler.enable");
+    session.post("Profiler.startPreciseCoverage", { callCount: false, detailed: false });
+    process.on("exit", () => {
+      session.post("Profiler.takePreciseCoverage", (err, res) => {
+        if (err || !res) return;
+        try {
+          fs.mkdirSync(cov, { recursive: true });
+          const result = res.result.filter((s) => s.url.startsWith("file:") && !s.url.includes("/node_modules/"));
+          fs.writeFileSync(join(cov, `coverage-${process.pid}-${Date.now()}.json`), JSON.stringify({ result }));
+        } catch {}
+      });
+    });
+  } catch {}
+}
 
 const out = process.env.TERS_READS;
 const top = process.env.TERS_TOP;
