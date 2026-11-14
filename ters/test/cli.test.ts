@@ -47,11 +47,11 @@ test("wc, run and compiled: counts, totals, options, a missing file, standard in
   }
 });
 
-// A main that is a value (lockstep's is a Text) is printed compiled too,
+// A main that is a value (lockstep-text's is a Text) is printed compiled too,
 // as ters run, wasi and native print it; compiled JavaScript printed
 // nothing (found in a sweep of every example, 2026-11-12).
 test("ters compile prints a main that is a value, as ters run does", () => {
-  const lockstep = join(import.meta.dirname, "../examples/lockstep");
+  const lockstep = join(import.meta.dirname, "../examples/lockstep-text");
   const run = node([lab, "run", lockstep]);
   assert.equal(run.code, 0, run.err);
   assert.match(run.out, /^position .+, velocity .+\n$/);
@@ -76,8 +76,8 @@ test("ters runs and compiles numbers on the representation the chooser picks", (
 });
 
 // A main that is a value, not a function: ters run prints what it is (T7e15).
-test("ters run prints a main that is a value: lockstep's text", () => {
-  const r = node([lab, "run", join(import.meta.dirname, "../examples/lockstep")]);
+test("ters run prints a main that is a value: lockstep-text's text", () => {
+  const r = node([lab, "run", join(import.meta.dirname, "../examples/lockstep-text")]);
   assert.equal(r.code, 0);
   assert.match(r.out, /^position -?\d+\.\d+, velocity -?\d+\.\d+, position in steps of 2⁻³² -?\d+\n$/);
 });

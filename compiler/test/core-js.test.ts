@@ -140,7 +140,7 @@ test("the examples whose main lowers to the core IR say the same in JavaScript p
     if (l.refused.has(main)) { refused.push(`${name}: ${l.refused.get(main)}`); continue; }
     const mt = p.info.typeOf.get(main);
     if (mt && p.info.subst.zonk(mt).t !== "fn") {
-      // A main that is a value (lockstep's Text): the same value.
+      // A main that is a value (lockstep-text's Text): the same value.
       const fi = l.funcs.findIndex((g) => g.name === "main" && !g.inner && !g.budgeted);
       assert.deepEqual(loadCoreJs(l)[fi](), makeRunner(p.code, p.info, { print: () => {}, names: p.pres.names }).value(main), name);
       ran.push(name);
