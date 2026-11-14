@@ -27,6 +27,7 @@ import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, 
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
 import { laterOps } from "./later-ops.ts";
+import { INT_CASES } from "./int-cases-ids.ts";
 import { LITERAL, OPTIONAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -586,7 +587,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const dataType = (def: Id) => {
     const td = typedefOf(def)!;
     const params = new Map(td.params.map((p) => [p, s.fresh()] as const));
-    const self: Type = { t: "con", id: def, args: [...params.values()] };
+    // Int as data's values are Ints (L249b): from(n), minus one minus(n).
+    const self: Type = def === INT_CASES.type && def ? { t: "con", id: INT, args: [] } : { t: "con", id: def, args: [...params.values()] };
     const fields = (variant: Id) => (code.nodes[variant] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
     return { td, params, self, fields };
   };

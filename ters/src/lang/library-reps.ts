@@ -20,6 +20,7 @@ import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
+import { intCases, usesIntCases } from "./int-cases.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { listGroups } from "./rep-groups.ts";
 import { splitLists } from "./rep-split.ts";
@@ -87,6 +88,9 @@ export function endedAsWritten(info: Info, defs: Iterable<Id>): Id[] {
 }
 
 export function withLibraryRepresentations(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[] = [], options: LibraryOptions = {}): Chosen {
+  // A match on an Int's cases is written out on Int before Nat is stored
+  // (int-cases.ts, L249b).
+  if (usesIntCases(code)) ({ code, info, names } = intCases(code, info, names));
   const skip = new Set<Id>();
   for (;;) {
     const r = choiceOf(code, info, names, main, defs, asked, skip, options);

@@ -681,6 +681,14 @@ export function buildNumbers(pre: Module): Module {
   ]));
   const naturalI = natFn("natural (Int)", ["i"], (i) => k.if(k.call(INT_OPS.less, i, k.int(0)), k.int(0), i));
   const integerI = natFn("integer (Int)", ["n"], (n) => n);
+  // Int's own definition as data (L249b, NUMBERS.md stage 1): from(n) is
+  // n, and minus one minus(n) is −1 − n, for a natural number n. A value
+  // of it is an Int (infer.ts, int-cases-ids.ts), so a match on an Int
+  // splits it by sign and hands over a Nat; int-cases.ts writes the match
+  // and the cases out on Int with these two.
+  const IT = k.type("Int as data", [], [["from", [["n", () => k.tref(NT.def)]]], ["minus one minus", [["n", () => k.tref(NT.def)]]]]);
+  const intFrom = natFn("from (Int)", ["n"], (n) => k.call(integer, n));
+  const intMinus = natFn("minus one minus (Int)", ["n"], (n) => k.call(INT_OPS.sub, k.int(-1), k.call(integer, n)));
   // A Nat written as a number, `stepped(f, x, 5)` (L249b): a whole literal
   // from 0 up is natural(top), and stored as an Int it is top. The checker
   // refuses any other literal at Nat.
@@ -699,9 +707,9 @@ export function buildNumbers(pre: Module): Module {
     by(addN, INT_OPS.add, "logarithmic"), by(mulN, INT_OPS.mul, "polylogarithmic"), by(integer, integerI, "constant"), by(natural, naturalI, "constant"), by(natLiteral, natLiteralI, "constant")]);
   const natReps = [unaryRow, intRow];
 
-  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX, NT.def, natural, integer, addN, mulN];
+  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX, NT.def, natural, integer, addN, mulN, IT.def];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral, natLiteral, natLiteralI];
+  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral, natLiteral, natLiteralI, intFrom, intMinus];
   const comments: Record<Id, string> = {
     [RT.def]: "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
     [embedIR]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
@@ -790,10 +798,13 @@ export function buildNumbers(pre: Module): Module {
     [divX]: "a ÷ b for Fixed, rounded down to a step; no answer when b is 0. Not offered: the one divide works on every number but Int; kept so programs saved before still open.",
     [sqrtX]: "√x for Fixed, rounded down to a step, the same bits on every machine; no answer below 0.",
     [NT.def]: "A natural number, 0, 1, 2 and on: zero, or succ(n), one more than a natural number n. A program matches and folds on it as written; the compiler stores it as an Int, where succ adds one and a fold is a loop, unless a program's own representation is cheaper for what it does.",
+    [IT.def]: "An Int as data: from(n) is the natural number n, and minus one minus(n) is −1 − n, so every Int is one of the two, once. A match on an Int with these cases splits it by sign and gives a Nat: match d with from(k) → k steps up, minus one minus(k) → succ(k) steps down. A value of it is an Int.",
     [natural]: "The Int i as a natural number: succ applied i times to zero, and zero for an i below 0.",
     [integer]: "The natural number n as an Int: how many succs it has.",
     [addN]: "a + b for natural numbers: succ applied to b once for each succ of a. Stored as Ints, it is Int's +.",
     [mulN]: "a × b for natural numbers: b added once for each succ of a. Stored as Ints, it is Int's ·.",
+    [intFrom]: "from(n) of Int as data, on an Int: n. A helper of int-cases.ts. Not offered.",
+    [intMinus]: "minus one minus(n) of Int as data, on an Int: −1 − n. A helper of int-cases.ts. Not offered.",
     [zeroI]: "zero, for Nat stored as an Int: 0. A helper of that representation. Not offered.",
     [succI]: "succ, for Nat stored as an Int: one more. A helper of that representation. Not offered.",
     [matchI]: "A match on Nat, done on an Int: 0 is zero, and anything else is succ of one less. A helper of that representation. Not offered.",
