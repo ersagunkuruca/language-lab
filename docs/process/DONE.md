@@ -2089,6 +2089,7 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 
 | id | item | PR |
 |---|---|---|
+| I241 | A trial repository, [ersagunkuruca/ters-trial](https://github.com/ersagunkuruca/ters-trial): dice and pig in the saved format, edited through the MCP's Session on branches that changed the same definitions, merged with and without the driver, a folder moved against an edit, rebased, blamed, and read in GitHub's commit view ([GIT-TRIAL-2026-11-14](../reports/GIT-TRIAL-2026-11-14.md)). Most merges need nothing; rows I265 to I272 for conflicts, moves, retyped ids and installing | this PR |
 | P9 | A second outsider pass that writes programs: four unprimed agents, two in the editor and two through MCP, each wrote and ran a small program from the public docs alone ([OUTSIDER-WRITE-2026-11-13](../reports/reviews/OUTSIDER-WRITE-2026-11-13.md)); all four finished, rows I227 to I235 | this PR |
 | P4 (squash) | Lanes' squash merges carried every commit message of their long-lived branch (REVIEW-2026-11-01b §8): WORKFLOW.md "Merge when green" now says to squash with the PR's own title and summary only (commit_title and commit_message on the merge) | this PR |
 | T13 | Only the fast set before a merge (Ersagun 2026-11-03, "Only fast set"): `npm run affected` leaves out the test files measured at 5 s or more (ters/test/slow.json, written by `-- --time`) unless the change edits that file, and says how many; `--full` runs them; Check main runs with `--full`, the nightly with `--all`. WORKFLOW.md says so | #1357 |
