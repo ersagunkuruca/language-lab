@@ -20,8 +20,17 @@ import type { Id } from "../../ters/src/model.ts";
 import { coreModule, lowerCore } from "../src/core-js.ts";
 
 const here = import.meta.dirname, ters = join(here, "../../ters/cli/ters.ts");
-const run = (args: string[], env: Record<string, string>, cwd?: string): Promise<[string, string, number]> =>
-  new Promise((done) => { execFile(process.execPath, args, { cwd, encoding: "utf8", env: { ...process.env, ...env } }, (e, out, err) => done([out, err, e ? Number(e.code ?? 1) : 0])).stdin?.end(); });
+const run = (args: string[], env: Record<string, string>, cwd?: string, timed = false): Promise<[string, string, number]> =>
+  new Promise((done) => { execFile(process.execPath, args, { cwd, encoding: "utf8", env: unrecorded({ ...process.env, ...env }, timed) }, (e, out, err) => done([out, err, e ? Number(e.code ?? 1) : 0])).stdin?.end(); });
+// A run whose workers depend on how long its units take (WORTH in
+// branches-rt.ts, 20 ms) isn't recorded for the test map: block coverage
+// triples area's bands at 100 (11 to 33 ms), and on a loaded CI share
+// that started workers for bands this small (Check main at #2670).
+function unrecorded(env: NodeJS.ProcessEnv, timed: boolean): NodeJS.ProcessEnv {
+  if (!timed) return env;
+  const { NODE_V8_COVERAGE: _, ...rest } = env;
+  return rest;
+}
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 // A module of a main written here, unbundled: it imports the runtime from
@@ -43,7 +52,7 @@ test("area counts its eight bands on workers, and says what it says in order and
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/area"), "-o", "area.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/area"), "100"], {})]);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone, small] = await Promise.all([run(["area.mjs", "900"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["area.mjs", "900"], { TERS_WORKERS: "0" }, dir), run(["area.mjs", "100"], { TERS_BRANCHES: "say" }, dir)]);
+  const [side, alone, small] = await Promise.all([run(["area.mjs", "900"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["area.mjs", "900"], { TERS_WORKERS: "0" }, dir), run(["area.mjs", "100"], { TERS_BRANCHES: "say" }, dir, true)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-7]\n/);
   // Bands this small stay on the main thread: starting workers would cost more.
@@ -91,7 +100,7 @@ test("mandelbrot-rows draws its rows by one map on workers, the same picture in 
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/mandelbrot-rows"), "-o", "mandelbrot-rows.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/mandelbrot-rows"), "40", "60"], {})]);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone, small] = await Promise.all([run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_WORKERS: "0" }, dir), run(["mandelbrot-rows.mjs", "40", "60"], { TERS_BRANCHES: "say" }, dir)]);
+  const [side, alone, small] = await Promise.all([run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_WORKERS: "0" }, dir), run(["mandelbrot-rows.mjs", "40", "60"], { TERS_BRANCHES: "say" }, dir, true)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/);
   assert.equal(small[0], inEvaluator[0]);
