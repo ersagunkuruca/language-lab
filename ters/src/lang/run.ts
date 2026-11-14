@@ -1097,8 +1097,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // the next one from the newest choice point. A handler pushes a barrier
   // below its body's choice points: `first` cuts back to it, `all` and
   // `count` fail until the search reaches it, and reaching it ends the body.
+  // A run no machine is going around (a call from outside: a page's part,
+  // a test's) is under no `with fuel`: the innermost one the last builtin
+  // call left behind is someone else's, perhaps run out (I295: countdown's
+  // search had no answers after a run its fuel cut off).
   function* run(start: (m: Machine) => void): Generator<Value> {
-    const m = new Machine(ambient);
+    const m = new Machine(depth === 0 ? null : ambient);
     start(m);
     yield* going(m);
   }
