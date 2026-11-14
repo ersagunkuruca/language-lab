@@ -51,6 +51,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E264 | Bug: the editor's chains (typed.ts `rowAt`/`opOf`, the graph's grow-by-one input) still take a right-nested `+` or `·` as one chain, so `a + (b + c)` shows as `a + b + c`, and dragging an item within a chain reorders a Float64 sum, which rounds differently. The ters views keep a right-nested pair apart since I274 (std.ts `chainOperands`); the editor's rows should do the same for `+` and `·` | I274 | P1 | S | open |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 
