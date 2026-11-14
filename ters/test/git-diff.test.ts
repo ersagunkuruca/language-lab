@@ -56,3 +56,23 @@ test("a moved program folder is followed: ters diff --from and git's diff driver
   assert.doesNotMatch(d, /^added /m);
   assert.match(ters("diff", "games", "--from", first), /^moved from programs\/algebra\n(.|\n)*renamed `expression` to `term`/);
 });
+
+// I269 (GIT-TRIAL-2026-11-14 §5): git-setup makes sure a program file
+// anywhere has both drivers, adding `**/code.json` patterns where a
+// folder-bound one (programs/**) would lose them once a program moves.
+test("git-setup adds patterns for program files anywhere, once, and this repository has them", () => {
+  const top = mkdtempSync(join(tmpdir(), "git-attrs-"));
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: top, encoding: "utf8" });
+  git("init", "-q");
+  writeFileSync(join(top, ".gitattributes"), "programs/**/code.json diff=ters merge=ters\n");
+  assert.match(gitSetup(top), /added to \.gitattributes.*code\.json, names\.default\.json, comments\.json, signatures\.json/);
+  const text = readFileSync(join(top, ".gitattributes"), "utf8");
+  assert.ok(text.startsWith("programs/**/code.json diff=ters merge=ters\n\n# Ters program files"), text);
+  for (const f of ["code.json", "names.default.json", "comments.json", "signatures.json"]) assert.ok(text.includes(`**/${f} diff=ters merge=ters\n`));
+  assert.match(git("check-attr", "diff", "merge", "--", "games/dice/code.json"), /diff: ters\n.*merge: ters/);
+  assert.match(gitSetup(top), /nothing to add/);
+  assert.equal(readFileSync(join(top, ".gitattributes"), "utf8"), text);
+  // This repository's own patterns name them anywhere too.
+  const here = (...a: string[]) => execFileSync("git", a, { cwd: import.meta.dirname, encoding: "utf8" });
+  for (const f of ["compiler/gaps/trek/code.json", "somewhere/new/names.default.json"]) assert.match(here("check-attr", "diff", "merge", "--", f), /diff: ters\n.*merge: ters/);
+});

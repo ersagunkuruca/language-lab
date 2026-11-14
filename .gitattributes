@@ -6,7 +6,9 @@ ters/library/*.json merge=ters
 
 # `git diff` on program files shows `ters diff` once a clone runs
 # `node ters/cli/ters.ts git-setup` (DIFF.md "In git"); --no-ext-diff shows the JSON.
-ters/examples/**/code.json diff=ters
-ters/examples/**/names.default.json diff=ters
-ters/examples/**/comments.json diff=ters
-ters/examples/**/signatures.json diff=ters
+# Named by the file alone, so a program anywhere (compiler/gaps, a folder
+# moved) has both drivers (I269); `ters git-setup` adds these where missing.
+**/code.json diff=ters merge=ters
+**/names.default.json diff=ters merge=ters
+**/comments.json diff=ters merge=ters
+**/signatures.json diff=ters merge=ters
