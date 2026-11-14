@@ -46,6 +46,7 @@ updated; their findings are rows in the backlog.
 | [RESEARCH-L24-2026-11-12](reports/RESEARCH-L24-2026-11-12.md) | Costs from folds, laws by fusion and invertible parsing, against the examples; reading back made linear | kept as written |
 | [RESEARCH-L254-2026-11-13](reports/RESEARCH-L254-2026-11-13.md) | Lazy fold results: what they'd change for Choice, Abort and the compiled loops; keep folds strict, top-down by folding to a function | kept as written |
 | [CLOSURES-INTERFACES-EFFECTS-2026-11-14](reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) | Closures and interfaces, data and effects: one typedef with four readings; keep them apart in the language and use the laws (monomorphisation, closure conversion, defunctionalisation, handler fusion) in the compiler | kept as written |
+| [EXAMPLES-TRIAGE-2026-11-14](reports/EXAMPLES-TRIAGE-2026-11-14.md) | Each example in the editor's picker: made a page, commented, or taken out of the picker, with what only it teaches | kept as written |
 | [CREDITS.md](language/CREDITS.md) | Every influence, prior work and adaptation, feature by feature | current |
 | [invertible/README.md](../invertible/README.md) | The relation solver the language's arithmetic runs backwards with | current |
 
