@@ -40,26 +40,29 @@ type From = "worktree" | string | null;
 // against the working tree, HEAD against the index or the working tree, a
 // branch against the working tree, then a commit against its parent (git
 // show, git log -p). Failing that, each side alone.
-function revisions(git: Git, path: string, a: { hex: string; worktree: boolean }, b: { hex: string; worktree: boolean }): [From, From] {
-  const at = (rev: string) => git("rev-parse", "--verify", "--quiet", `${rev}:${path}`)?.trim() ?? null;
-  const holds = (rev: string, hex: string) => { const h = at(rev); return NULL_HEX.test(hex) ? h === null : h !== null && h.startsWith(hex); };
+function revisions(git: Git, path: string, a: { hex: string; worktree: boolean }, b: { hex: string; worktree: boolean }, newPath = path): [From, From] {
+  const at = (rev: string, p: string) => git("rev-parse", "--verify", "--quiet", `${rev}:${p}`)?.trim() ?? null;
+  // The old side's blob at the old path, the new side's at the new.
+  const holdsAt = (p: string) => (rev: string, hex: string) => { const h = at(rev, p); return NULL_HEX.test(hex) ? h === null : h !== null && h.startsWith(hex); };
+  const holdsA = holdsAt(path), holdsB = holdsAt(newPath);
   const refs = (git("for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes", "refs/tags") ?? "").split("\n").filter(Boolean);
-  const commitsOf = (hex: string) => NULL_HEX.test(hex) ? [] : (git("log", "--all", "--format=%H", `--find-object=${hex}`, "--", path) ?? "").split("\n").filter(Boolean);
+  const commitsOf = (hex: string, p: string) => NULL_HEX.test(hex) ? [] : (git("log", "--all", "--format=%H", `--find-object=${hex}`, "--", p) ?? "").split("\n").filter(Boolean);
   if (a.worktree && b.worktree) return ["worktree", "worktree"];
   if (b.worktree) {
-    for (const rev of ["", "HEAD", ...refs]) if (holds(rev, a.hex)) return [rev, "worktree"];
+    for (const rev of ["", "HEAD", ...refs]) if (holdsA(rev, a.hex)) return [rev, "worktree"];
   } else if (!a.worktree) {
-    if (holds("HEAD", a.hex) && holds("", b.hex)) return ["HEAD", ""];
-    for (const c of commitsOf(NULL_HEX.test(b.hex) ? a.hex : b.hex)) if (holds(`${c}^`, a.hex) && holds(c, b.hex)) return [`${c}^`, c];
+    if (holdsA("HEAD", a.hex) && holdsB("", b.hex)) return ["HEAD", ""];
+    for (const c of NULL_HEX.test(b.hex) ? commitsOf(a.hex, path) : commitsOf(b.hex, newPath)) if (holdsA(`${c}^`, a.hex) && holdsB(c, b.hex)) return [`${c}^`, c];
   }
-  const alone = (side: { hex: string; worktree: boolean }): From => {
+  const alone = (side: { hex: string; worktree: boolean }, p: string): From => {
     if (side.worktree) return "worktree";
     if (NULL_HEX.test(side.hex)) return null;
+    const holds = holdsAt(p);
     for (const rev of ["", "HEAD", ...refs]) if (holds(rev, side.hex)) return rev;
-    for (const c of commitsOf(side.hex)) for (const rev of [c, `${c}^`]) if (holds(rev, side.hex)) return rev;
+    for (const c of commitsOf(side.hex, p)) for (const rev of [c, `${c}^`]) if (holds(rev, side.hex)) return rev;
     return null;
   };
-  return [alone(a), alone(b)];
+  return [alone(a, path), alone(b, newPath)];
 }
 
 // One version's folder: the file git gave, and the files beside it from
@@ -79,22 +82,26 @@ function versionFolder(git: Git, top: string, path: string, file: string, from: 
 }
 
 export async function gitDiff(args: string[], cwd = process.cwd()): Promise<string> {
-  const [path, oldFile, oldHex, , newFile, newHex] = args;
+  // A renamed file comes with two more: its new path and how alike the
+  // two are (git(1), GIT_EXTERNAL_DIFF). The old side is read at the old
+  // path, the new at the new (I268).
+  const [path, oldFile, oldHex, , newFile, newHex, , renamed] = args;
+  const newPath = renamed ?? path;
   const git: Git = (...a) => {
     const r = spawnSync("git", a, { cwd, encoding: "utf8", maxBuffer: 1 << 30 });
     return r.status === 0 ? r.stdout : null;
   };
   const top = git("rev-parse", "--show-toplevel")?.trim() ?? cwd;
-  const head = `ters diff a/${path} b/${path}\n`;
+  const head = `ters diff a/${path} b/${newPath}\n`;
   // Something git sends that isn't a program's file: its plain diff.
   const plain = () => {
     const r = spawnSync("git", ["diff", "--no-index", "--no-ext-diff", "--", oldFile, newFile], { cwd, encoding: "utf8", maxBuffer: 1 << 30 });
     return r.stdout;
   };
-  if (!PROGRAM_FILES.includes(basename(path))) return plain();
-  const worktree = (file: string) => file !== "/dev/null" && existsSync(file) && existsSync(join(top, path)) && realpathSync(file) === realpathSync(join(top, path));
-  const [fromA, fromB] = revisions(git, path, { hex: oldHex, worktree: worktree(oldFile) }, { hex: newHex, worktree: worktree(newFile) });
-  const a = versionFolder(git, top, path, oldFile, fromA), b = versionFolder(git, top, path, newFile, fromB);
+  if (!PROGRAM_FILES.includes(basename(newPath))) return plain();
+  const worktree = (file: string, at: string) => file !== "/dev/null" && existsSync(file) && existsSync(join(top, at)) && realpathSync(file) === realpathSync(join(top, at));
+  const [fromA, fromB] = revisions(git, path, { hex: oldHex, worktree: worktree(oldFile, path) }, { hex: newHex, worktree: worktree(newFile, newPath) }, newPath);
+  const a = versionFolder(git, top, path, oldFile, fromA), b = versionFolder(git, top, newPath, newFile, fromB);
   for (const f of PROGRAM_FILES) {
     if (!a.has.has(f) && b.has.has(f) && f !== basename(path) && f !== "code.json") copyFileSync(join(b.dir, f), join(a.dir, f));
     if (!b.has.has(f) && a.has.has(f) && f !== basename(path) && f !== "code.json") copyFileSync(join(a.dir, f), join(b.dir, f));
@@ -104,7 +111,7 @@ export async function gitDiff(args: string[], cwd = process.cwd()): Promise<stri
   // A side file whose program changed too: code.json's diff shows it. The
   // two are compared as values, not text (the saved layout can change alone).
   if (basename(path) !== "code.json" && (codeA !== codeB || (codeA && !sameSaved(join(a.dir, "code.json"), join(b.dir, "code.json")))))
-    return `${head}(shown with ${dirname(path)}/code.json)\n`;
+    return `${head}(shown with ${dirname(newPath)}/code.json)\n`;
   try {
     const { Session } = await import("../mcp/session.ts");
     const { diffPrograms, diffText } = await import("../src/diff.ts");
@@ -112,7 +119,8 @@ export async function gitDiff(args: string[], cwd = process.cwd()): Promise<stri
     const version = (dir: string) => { const v = new Session(dir); return { code: v.code, own: v.own, names: v.allNames, comments: v.comments, info: v.info, style: v.pres().style }; };
     const empty = { code: base({ nodes: {}, defs: [] }), own: [], names: {}, comments: {}, info: null, style: { view: "blocks" as const, notation: {} } };
     const text = diffText(diffPrograms(codeA ? version(a.dir) : empty, codeB ? version(b.dir) : empty));
-    return `${head}${text || "no changes to the program (only its layout or formatting)"}\n`;
+    const moved = newPath !== path ? `moved from ${dirname(path)} to ${dirname(newPath)}\n` : "";
+    return `${head}${moved}${text || (moved ? "no changes to the program" : "no changes to the program (only its layout or formatting)")}\n`;
   } catch (e) {
     return `${head}(ters couldn't read this version: ${(e as Error).message.split("\n")[0]}; git's own diff follows)\n${plain()}`;
   }

@@ -108,6 +108,13 @@ files that hold the same value read "no changes to the program (only its
 layout or formatting)". When a version can't be read, the driver says so
 and prints git's plain diff.
 
+A program folder that moved is followed (I268). `ters diff --from REV`
+pairs each folder with its old place from git's renames (`--name-status
+-M`) and says "moved from …" first. The driver is given a renamed file's
+new path too (GIT_EXTERNAL_DIFF's two extra arguments). It reads each side
+at its own place, heads the diff with both paths, and says a file that only
+moved has no changes to the program.
+
 A merge through the driver says each conflict by definition, with ours'
 and theirs' text of it, and writes ours to the working tree, so nothing
 there marks it afterwards (I265). While the file is unresolved, `ters
