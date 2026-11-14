@@ -15,9 +15,10 @@
 //   npm run affected -- --full     every test file it reaches, the slow ones too
 //   npm run affected -- --time     time every test file, alone, with the per-change
 //                                  sweep slice, and write the slow ones to test/slow.json
-//   npm run affected -- --record <map.json>
+//   npm run affected -- --record <map.json> [--bisect]
 //                                  run each chosen file alone, recording what it ran
-//                                  and read into the test map (test-map.ts, T16)
+//                                  and read into the test map (test-map.ts, T16); with
+//                                  --bisect a file that broke names its commit (T16d)
 //
 // With the test map (branch test-map, test-map.ts and select.ts, T16b), a
 // test runs when it ran a line the change makes different or read a file
@@ -44,12 +45,13 @@
 // and prose and pictures run nothing.
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
 import { printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
 import { changeFrom, cover, haveCommit, reached, reachedTests, type Change } from "./select.ts";
 import { intervalDays, isDue, streakAfter } from "./schedule.ts";
+import { bisect } from "./bisect.ts";
 
 const top = resolve(import.meta.dirname, "../..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: top, encoding: "utf8" }).trim();
@@ -293,6 +295,21 @@ if (recordTo) {
   };
   await Promise.all(Array.from({ length: availableParallelism() }, one));
   writeFileSync(recordTo, printMap(parts));
+  // A file that fails where it passed when it last ran finds the commit
+  // that broke it (T16d, bisect.ts), up to three a run; said in the log and
+  // the run's summary. Files over two minutes are left out: halving over a
+  // day of merges takes four or five runs, within the job's time.
+  if (argv.includes("--bisect")) {
+    const broke = fast.filter((t) => !parts.tests[t]?.passed && before?.tests[t]?.passed && before.tests[t].at !== at && before.tests[t].seconds <= 120).slice(0, 3);
+    for (const t of broke) {
+      const prev = before!.tests[t];
+      console.log(`finding what broke ${t} since ${prev.at.slice(0, 10)} …`);
+      const c = haveCommit(top, prev.at) ? bisect(t, prev.at, at, Math.max(60, 3 * prev.seconds)) : undefined;
+      const line = c ? `${t} first fails at ${c.commit.slice(0, 10)}: ${c.subject} (${c.steps} runs)` : `${t}: no one commit to blame since ${prev.at.slice(0, 10)} (it may be flaky)`;
+      console.log(line);
+      if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- ${line}\n`);
+    }
+  }
   console.log(`${fast.length - failedFiles} of ${fast.length} passed`);
   process.exit(failedFiles ? 1 : 0);
 }
