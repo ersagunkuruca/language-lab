@@ -78,7 +78,8 @@ test("parentheses come from precedence at render time", () => {
   k.define(f, k.lambda(["a", "b", "c"], (a, b, c) =>
     k.call(B.mul, k.call(B.sub, k.call(B.sub, a, b), k.call(B.sub, b, c)), k.call(B.add, a, k.call(B.add, b, c)))));
   const code = merge(prelude, k.code);
-  assert.equal(renderNested(code, pres(k.names, mathStyle), f), "f = (a, b, c) => (a − b − (b − c)) · (a + b + c)");
+  // a + (b + c) keeps its brackets: on Float64 it isn't (a + b) + c (I274).
+  assert.equal(renderNested(code, pres(k.names, mathStyle), f), "f = (a, b, c) => (a − b − (b − c)) · (a + (b + c))");
 });
 
 test("comments and step names are keyed by node, so they survive an edit", () => {
