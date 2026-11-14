@@ -2,7 +2,7 @@
 "0ro04blhcpkbckkbhubeeckr3f": "Every walk between −6 and 6 ends where it should.",
 "14nh74ethfsed08n7b5ippdqg0": "One more: the lowest digit goes up, and an up becomes a down with a carry, as an odometer turns.",
 "21h281p76mpkun8bqhbm8f3ro2": "One more: the lowest digit goes up, and an up becomes a down with a carry, as an odometer turns.",
-"6jmmji6v5c6k42e494ke8e5hv4": "The odometer turned d steps, up when d isn't negative and down when it is.",
+"6jmmji6v5c6k42e494ke8e5hv4": "The odometer turned d steps: from(k), an Int from 0, is k steps up, and minus one minus(k), −1 − k, is k + 1 steps down.",
 "7lul5ta5siu4d7teqekfpqsb5m": "The number the digits stand for.",
 "8195nd5akdmn4u5hv77ca50q38": "Balanced ternary from −13 to 13, read back, and the odometer checked.",
 "944i6qmj65fhbcvc7tgr6br6o2": "A balanced ternary digit: down is −1, level is 0, up is +1.",

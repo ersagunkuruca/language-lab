@@ -169,7 +169,10 @@ constructors; their meaning is their definitions. **Nat** (L249) is
 `zero | succ(pred: Nat)`, plain data a program matches and folds on; that
 it may be stored as an Int is representation (§9), not meaning. A whole
 literal from 0 where a Nat goes is `natural` of it (L249b); any other
-literal there is a type error.
+literal there is a type error. An Int matches as data too (L249b):
+`from(n: Nat)` is n and `minus one minus(n: Nat)` is −1 − n, so a match on
+an Int splits it by sign with a Nat in each case. The cases are meaning; that
+the match is a test `x < 0` is representation.
 
 3.5. **Literals.** A plain literal is some number: `3` is an Int where an
 Int is needed, a Float64 where a Float64 is, and so on. A whole literal

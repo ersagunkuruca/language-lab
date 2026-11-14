@@ -43,6 +43,7 @@ import { jsonByType, usesJsonByType } from "./json-by-type.ts";
 import { setSeveral, usesSetSeveral } from "./set-several.ts";
 import { setThrough, usesSetThrough } from "./set-through.ts";
 import { literalMatch, usesLiteralMatch } from "./literal-match.ts";
+import { intCases, usesIntCases } from "./int-cases.ts";
 import { sharedFields, usesSharedFields } from "./shared-fields.ts";
 import { useDirections } from "./directions.ts";
 
@@ -78,7 +79,7 @@ export const usesGenericArithmetic = (code: Code) => {
 // A plain number literal is some Number (infer.ts), so a program with one
 // may need resolving too; with the types at hand, only when one isn't
 // already a Float64.
-export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesJsonByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesSharedFields(code) || hasRecursiveLet(code) || nodesWhere(code, "plain number", plainNumber).length > 0;
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesJsonByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesIntCases(code) || usesSharedFields(code) || hasRecursiveLet(code) || nodesWhere(code, "plain number", plainNumber).length > 0;
 const plainNumber = (n: Node) => n.kind === "lit" && n.of === undefined && typeof n.value === "number";
 const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plain number", plainNumber).some((id) => {
   const n = code.nodes[id];
@@ -189,6 +190,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   ({ code, info } = insertEmbeddings(code, info));
   ({ code, info, names } = liftLets(code, info, names));
   ({ code, info, names } = literalMatch(code, info, names));
+  ({ code, info, names } = intCases(code, info, names));
   ({ code, info, names } = spreadTuples(code, info, names));
   ({ code, info, names } = resultsAsFunctions(code, info, names));
   ({ code, info, names } = fieldsByType(code, info, names));

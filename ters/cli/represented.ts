@@ -8,6 +8,7 @@ import { choose, jobProblem, represent, type Representation } from "../src/lang/
 import { endedAsWritten, storedRows, withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
+import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
 export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[] }
 
@@ -19,7 +20,11 @@ function fail(message: string): never { throw new Error(message); }
 // table has a row for them (library-reps.ts, C47). The rewrite is checked
 // again, like any program.
 // `sound`: main is a sound played in blocks (library-reps.ts).
-export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolean, tables = false, sound = false): P {
+export function represented<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables = false, sound = false): P {
+  // A match on an Int's cases written out on Int first (int-cases.ts,
+  // L249b): what it gives is a Nat, stored as the chooser picks.
+  const cased = usesIntCases(p00.code) ? intCases(p00.code, p00.info, p00.names) : null;
+  const p0 = cased ? { ...p00, ...cased } : p00;
   const reached = reachedFrom(p0, main);
   // A library type holding lists (std's Pool) the program's own, so its
   // lists are stored as the program's are (own-holders.ts, C58d).

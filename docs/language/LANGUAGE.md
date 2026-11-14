@@ -406,7 +406,11 @@ how. A Nat is written as a number where one goes (L249b): `stepped(f, x,
 5)` is five steps, through Nat's Literal (`natural(5)`), and just 5 when
 it is stored as an Int. Only a whole number from 0 is a Nat (`-1` and
 `2.5` are refused), and a literal something adds to is a Number as
-before, since Nat has no + − ·. Division rounds down, so
+before, since Nat has no + − ·. An Int is data the same way: its cases
+are `from(n: Nat)`, n itself, and `minus one minus(n: Nat)`, −1 − n, so
+`match d { from(k) → …; minus one minus(k) → … }` splits d by sign with
+a Nat k in each case (examples/trits's `walked`), and runs as a test
+`d < 0`. `from(3)` is 3 and `minus one minus(2)` is −3. Division rounds down, so
 `remainder` has the divisor's sign. Run backwards, Int stays whole: `x · 3
 + 1 = 13` gives 4 and `= 12` gives none, whether it is written with Int's
 own operations or the generic ones at an Int literal. The checker plans it

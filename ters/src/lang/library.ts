@@ -13,6 +13,7 @@ import { readSaved } from "../saved.ts";
 import { merge, shapeHooks, type Code, type Id } from "../model.ts";
 import { fillLater, usesGiveTheirPorts } from "./ports.ts";
 import { WHOLE_LITERALS } from "./infer.ts";
+import { INT_CASES } from "./int-cases-ids.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { prelude, preludeNames } from "../prelude.ts";
 import { adopt, library, type Module } from "./modules.ts";
@@ -49,6 +50,7 @@ SMART[RATIO_V] = "fraction or as fraction";
 // std's Nat (L249): zero | succ(pred: Nat), stored as an Int by default.
 export const NAT_TYPE = numbersNode("def", "Nat"), NAT_V = { zero: numbersNode("variant", "zero"), succ: numbersNode("variant", "succ") } as const;
 WHOLE_LITERALS.add(NAT_TYPE);
+Object.assign(INT_CASES, { type: numbersNode("def", "Int as data"), from: numbersNode("variant", "from"), minus: numbersNode("variant", "minus one minus"), fromFn: numbersNode("def", "from (Int)"), minusFn: numbersNode("def", "minus one minus (Int)"), natural: numbersNode("def", "natural") });
 export const MAT_V = { 2: numbersNode("variant", "mat2"), 3: numbersNode("variant", "mat3"), 4: numbersNode("variant", "mat4") } as const;
 export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS];
 export const CORE: Code = merge(prelude, std);
