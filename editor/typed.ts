@@ -1054,7 +1054,10 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
       const op = depth === 0 ? level.find(([sym]) => t.slice(i - sym.length + 1, i + 1) === sym && word(sym)) : undefined;
       if (!op) continue;
       const left = t.slice(0, i - op[0].length + 1).trimEnd();
-      if (!left || OPS.flat().some(([sym]) => left.endsWith(sym))) continue;
+      // A left side ending in an operator (`a * -b`'s `*`) isn't split
+      // here; a word operator only as a word: `b.anchor + x`'s left side
+      // ends in "or", but in a name (I258).
+      if (!left || OPS.flat().some(([sym]) => left.endsWith(sym) && (!/^\p{L}/u.test(sym) || left.length === sym.length || !/[\p{L}\p{N}_'.′]/u.test(left[left.length - sym.length - 1])))) continue;
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       const alts = op[1].filter((id) => code.nodes[id]);
       if (!("error" in a) && !("error" in b) && alts.length) return UNEQUAL.includes(op[0]) ? { op: S.not, args: [{ op: alts[0], args: [a, b], alts }] } : { op: alts[0], args: [a, b], alts };
