@@ -1020,7 +1020,8 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     return list;
   }
   // => binds loosest: (x) => x + 1 is a function of x, not (x) => x, plus 1.
-  const fn = /^\(([^()]*)\)\s*(?:(?:→|->)\s*([^()=]+?)\s*)?=>\s*(\S[\s\S]*)$/.exec(t);
+  // LANGUAGE.md's and the library's (x) ↦ x + 1 is the same (I280).
+  const fn = /^\(([^()]*)\)\s*(?:(?:→|->)\s*([^()=↦]+?)\s*)?(?:=>|↦)\s*(\S[\s\S]*)$/.exec(t);
   if (fn) {
     const list = (x: string) => (x.trim() ? x.split(",").map((w) => w.trim()) : []);
     const words = list(fn[1]), outs = list(fn[2] ?? "");
@@ -1134,6 +1135,13 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     }
   }
   if (t.startsWith("(") && t.endsWith(")")) { const inner = typedOut(t.slice(1, -1), code, names, scope); if (!("error" in inner)) return inner; }
+  // A tuple as the view prints one, (a, b), is tuple(a, b) (I280, GAPS
+  // round 17 D4): its parts written out between one pair of brackets.
+  const together = t.startsWith("(") && closing(t, 0) === t.length - 1 ? topLevel(t.slice(1, -1)) : undefined;
+  if (together && together.length >= 2 && together.length <= TUPLE_MAX) {
+    const parts = together.map((x) => typedOut(x, code, names, scope));
+    return parts.find((x) => "error" in x) ?? { op: tupleVariant(together.length), args: parts as Typed[] };
+  }
   // A call of what a call gives, derivative(f)(x) as the Guide writes it
   // (I250): the last brackets' inputs given to what comes before them,
   // when that ends in brackets of its own.

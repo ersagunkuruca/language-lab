@@ -243,8 +243,8 @@ as `Tuple2` (L139).
 
 **Tuples** (L128a, [PORTS-2026-11-01.md](../design/relations-and-effects/PORTS-2026-11-01.md)):
 a function's inputs together are one value, and so are its results. std
-has `Tuple2` to `Tuple8`, shown `(A, B)`: `tuple(x, y)` makes one and its
-parts are `first`, `second`, …. A tuple of one is its value and of none is
+has `Tuple2` to `Tuple8`, shown `(A, B)`: `(x, y)`, or `tuple(x, y)`, makes
+one (the text reads either, I280) and its parts are `first`, `second`, …. A tuple of one is its value and of none is
 `Unit`, so there is no tuple of one to confuse with its value (Swift's
 SE-0110 problem). A function of two inputs given one `(A, B)` takes it
 apart: `f(p)` is `f(x, y)` when `p` is `tuple(x, y)`, so a function's
