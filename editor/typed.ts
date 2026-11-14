@@ -2654,10 +2654,25 @@ export function removeItem(code: Code, names: Names, info: Info, row: Row, at: n
   return guardTyped(info, collect(next), names, undefined, `Took the ${ordinal(at + 1)} ${itemWord(row)} out.`);
 }
 
+// Why items[from] can't move to `to`, before anything is tried: the
+// panel and the graph's menu grey such a move with this as its reason
+// (I276), and the move refuses with the same words.
+export function whyNotMove(row: Row, from: number, to: number): string | undefined {
+  if (to < 0) return "it's first already";
+  if (to >= row.items.length) return "it's last already";
+  if (from === to) return "it's there already";
+  // + and · here are Float64's, where regrouping a sum or product changes
+  // how it rounds (E264): its items stay where they are, but for the
+  // innermost pair's two, which swap exactly (a + b is b + a in Float64,
+  // so `drift + drop` turns around, and `(a + b) + c` is `(b + a) + c`).
+  if (row.kind === "chain" && LEFT_ONLY.has(row.op!) && !(Math.max(from, to) === 1 && Math.min(from, to) === 0)) return `the order of ${row.op === B.add ? "a sum" : "a product"} changes how a Float64 rounds, so its items stay where they are`;
+  return undefined;
+}
+
 // Swap items[at] with its neighbour `by` away (-1 earlier, 1 later).
 export function moveItem(code: Code, names: Names, info: Info, row: Row, at: number, by: -1 | 1): TEdit {
-  const other = at + by;
-  if (other < 0 || other >= row.items.length) return { ok: false, reason: by < 0 ? "it's first already" : "it's last already" };
+  const other = at + by, why = whyNotMove(row, at, other);
+  if (why) return { ok: false, reason: why };
   const r = moveItemTo(code, names, info, row, at, other);
   return r.ok ? { ...r, note: `Moved it ${by < 0 ? "earlier" : "later"}.` } : r;
 }
@@ -2666,10 +2681,8 @@ export function moveItem(code: Code, names: Names, info: Info, row: Row, at: num
 // Each place in the row keeps its pair (cons or call); only what the pairs
 // hold moves.
 export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from: number, to: number): TEdit {
-  if (from === to) return { ok: false, reason: "it's there already" };
-  // + and · here are Float64's, where the order of a sum or product changes
-  // how it rounds (E264): its items stay where they are.
-  if (row.kind === "chain" && LEFT_ONLY.has(row.op!)) return { ok: false, reason: `the order of ${row.op === B.add ? "a sum" : "a product"} changes how a Float64 rounds, so its items stay where they are` };
+  const why = whyNotMove(row, from, to);
+  if (why) return { ok: false, reason: why };
   const order = [...row.items];
   const [it] = order.splice(from, 1);
   order.splice(to, 0, it);

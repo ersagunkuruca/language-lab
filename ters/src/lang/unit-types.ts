@@ -9,9 +9,11 @@ import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { NUMBER, showType, type Type } from "./types.ts";
 
-// std.ts LIST's id, named here so this file doesn't load the library.
-const LIST_ID = "std.list";
-import { formatUnit, signatureUnits, type Unit } from "../units.ts";
+// std.ts's tuples' ids, named here so this file doesn't load the library.
+const TUPLE = /^std\.tuple\d+$/;
+import { formatUnit, signatureUnits, type Slots } from "../units.ts";
+// A slot's key: the path without the zeros it ends in (units.ts).
+const slotKey = (p: number[]) => { let n = p.length; while (n && p[n - 1] === 0) n--; return p.slice(0, n).join("."); };
 
 export function showTypeWithUnits(code: Code, def: Id, t: Type, names: Names): string {
   const w = withUnits(code, def, t, names);
@@ -22,16 +24,26 @@ export function showTypeWithUnits(code: Code, def: Id, t: Type, names: Names): s
 // where it shows none. `t` is the definition's type, resolved.
 export function withUnits(code: Code, def: Id, t: Type, names: Names): { type: Type; names: Names } | null {
   const units = signatureUnits(code, def);
-  if (!units || (!units.result && !units.params.some(Boolean))) return null;
+  if (!units) return null;
+  const { slots } = units;
+  if (![slots.result, ...slots.params].some((s) => Object.keys(s).length)) return null;
   const shown: Names = { ...names };
-  const at = (x: Type, u: Unit | undefined, inside = false): Type => {
-    // A list's unit is its items' (L252d): List (Float64 m), bracketed as
-    // a type given to another is.
-    if (u && x.t === "con" && x.id === LIST_ID && x.args.length === 1) return { ...x, args: [at(x.args[0], u, true)] };
-    if (!u || x.t !== "con" || x.id !== NUMBER || x.args.length) return x;
-    const id = `${NUMBER} ${formatUnit(u)}${inside ? " (inside)" : ""}`;
-    shown[id] = inside ? `(${names[NUMBER] ?? "Float64"} ${formatUnit(u)})` : `${names[NUMBER] ?? "Float64"} ${formatUnit(u)}`;
-    return { t: "con", id, args: [] };
+  // A number's unit is its slot's; a type's arguments have the slots after
+  // their parameter's (L252d, L252e): List (Float64 m), the list's own;
+  // Map Int (Float64 s), "1"; a tuple's parts, (Int, Float64 s), are
+  // bracketed only as an argument to a named type.
+  const at = (x: Type, s: Slots, path: number[], inside: boolean): Type => {
+    if (x.t !== "con") return x;
+    if (x.id === NUMBER && !x.args.length) {
+      const u = s[slotKey(path)];
+      if (!u) return x;
+      const id = `${NUMBER} ${formatUnit(u)}${inside ? " (inside)" : ""}`;
+      shown[id] = inside ? `(${names[NUMBER] ?? "Float64"} ${formatUnit(u)})` : `${names[NUMBER] ?? "Float64"} ${formatUnit(u)}`;
+      return { t: "con", id, args: [] };
+    }
+    if (!x.args.length || path.length >= 3) return x;
+    const tuple = TUPLE.test(x.id);
+    return { ...x, args: x.args.map((a, j) => at(a, s, [...path, j], !tuple)) };
   };
-  return { type: t.t === "fn" ? { ...t, params: t.params.map((p, i) => at(p, units.params[i])), ret: at(t.ret, units.result) } : at(t, units.result), names: shown };
+  return { type: t.t === "fn" ? { ...t, params: t.params.map((p, i) => at(p, slots.params[i] ?? {}, [], false)), ret: at(t.ret, slots.result, [], false) } : at(t, slots.result, [], false), names: shown };
 }

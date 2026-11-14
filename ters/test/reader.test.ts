@@ -558,8 +558,8 @@ test("a list of call is edited as a row", async () => {
 });
 
 // A + chain is its left-nested pairs (E264): a + (b + c) is two items,
-// an item added stays left-nested, and its items don't move (on Float64
-// the order changes how it rounds).
+// an item added stays left-nested, and its items don't regroup (on Float64
+// that changes how it rounds); the innermost pair swaps, exactly.
 test("a + chain is its left-nested pairs, grows left-nested, and keeps its order", async () => {
   const { Lang } = await import("../src/lang/dsl.ts");
   const { base, baseNames } = await import("../src/lang/load.ts");
@@ -585,9 +585,17 @@ test("a + chain is its left-nested pairs, grows left-nested, and keeps its order
     assert.equal(grown.items.length, 4, `at ${at}`);
     assert.equal(added.code.nodes[grown.items[at]].kind, "hole", `at ${at}`);
   }
-  // builtin.add is Float64's: its items keep their order.
-  const floaty = moveItem(code, names, info, row, 0, 1);
+  // builtin.add is Float64's: its items keep their grouping, so the third
+  // doesn't move; the innermost pair's two swap exactly, a + b being b + a.
+  const floaty = moveItem(code, names, info, row, 2, -1);
   assert.ok(!floaty.ok && /changes how a Float64 rounds/.test(floaty.reason), floaty.ok ? "moved" : floaty.reason);
+  const swapped = moveItem(code, names, info, row, 0, 1);
+  assert.ok(swapped.ok, !swapped.ok ? swapped.reason : "");
+  if (swapped.ok) {
+    const n = swapped.code.nodes[gr] as { args: string[] }, inner = swapped.code.nodes[n.args[0]] as { args: string[] };
+    assert.deepEqual(inner.args, [row.items[1], row.items[0]]);
+    assert.equal(n.args[1], row.items[2]);
+  }
 });
 
 // A fraction typed where a type spelled by its Literal goes is a literal

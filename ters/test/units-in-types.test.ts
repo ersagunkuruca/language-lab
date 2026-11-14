@@ -151,3 +151,23 @@ test("units inside lists are checked and shown", () => {
   assert.equal(s.typeOf(s.resolve("top")), "(Body) -> Float64 m");
   assert.match(s.errors(), /^ok/);
 });
+
+// L252e (round 16, trek's `by speed`): a value of a type with parameters
+// has a unit per parameter. A map's values are checked where they are put
+// and read back, a tuple's parts where it is made and taken apart, and a
+// signature shows Map Int (Float64 s) and (a, Float64 s).
+test("units in a map's values and a tuple's parts are checked and shown", () => {
+  const s = program(["track(times: Map Int (Float64 s), wait: Float64 s)"]);
+  const fill = (name: string, params: string[], text: string, as?: string) => { s.define(name, "function", params); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text, undefined, undefined, as); };
+  assert.throws(() => fill("wrong put", ["ts"], "first(value at(put(ts, 1, 2.0 m), 1), else 0.0 s)"), /s can't meet m|m can't meet s/);
+  assert.throws(() => fill("wrong update", ["ts"], "first(value at(update at(ts, 1, 0.0 s, (d) => d + 1.0 s), 1), else 0.0 m)"), /s can't meet m|m can't meet s/);
+  assert.throws(() => fill("wrong field", ["t"], "first(value at(t.times, 1), else 0.0 m)"), /s can't meet m|m can't meet s/);
+  fill("added", ["t", "k"], "update at(t.times, k, 0.0 s, (d) => d + 1.0 s)");
+  assert.equal(s.typeOf(s.resolve("added")), "(Body, Int) -> Map Int (Float64 s)");
+  fill("timed", ["t"], "entries of(t.times)");
+  assert.equal(s.typeOf(s.resolve("timed")), "(Body) -> List (Int, Float64 s)");
+  fill("time of", ["e", "t"], "e.second + t.wait", "Tuple2");
+  assert.equal(s.typeOf(s.resolve("time of")), "((a, Float64 s), Body) -> Float64 s");
+  assert.throws(() => fill("wrong part", ["t"], "time of(tuple(1, 2.0 m), t)"), /s can't meet m|m can't meet s/);
+  assert.match(s.errors(), /^ok/);
+});

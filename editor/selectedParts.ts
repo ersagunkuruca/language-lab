@@ -61,8 +61,8 @@ export function selectedParts(host: SelectedHost) {
       box.append(h("div", { class: "sub-head" }, `${word(row)[0].toUpperCase() + word(row).slice(1)} ${at + 1} of ${n} in ${of(row)} · code.json`), h("div", { class: "acts" },
         edit("Add one before", `A new ${word(row)} just before this`, { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, row, at), true)),
         edit("Add one after", `A new ${word(row)} just after this`, { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, row, at + 1), true)),
-        edit("Earlier", "Swap it with the one before", at > 0 ? { ok: true } : cant("it's first already"), () => go(T.moveItem(doc().code, doc().names.short, info, row, at, -1))),
-        edit("Later", "Swap it with the one after", at < n - 1 ? { ok: true } : cant("it's last already"), () => go(T.moveItem(doc().code, doc().names.short, info, row, at, 1))),
+        edit("Earlier", "Swap it with the one before", T.whyNotMove(row, at, at - 1) ? cant(T.whyNotMove(row, at, at - 1)!) : { ok: true }, () => go(T.moveItem(doc().code, doc().names.short, info, row, at, -1))),
+        edit("Later", "Swap it with the one after", T.whyNotMove(row, at, at + 1) ? cant(T.whyNotMove(row, at, at + 1)!) : { ok: true }, () => go(T.moveItem(doc().code, doc().names.short, info, row, at, 1))),
         edit("Take it out", `Remove this ${word(row)}; the rest close up`, { ok: true }, () => go(T.removeItem(doc().code, doc().names.short, info, row, at)), "btn danger")));
     }
     if (own) {
