@@ -864,6 +864,15 @@ export function plainValue(v: unknown): unknown {
 export function runCoreMain(ir: CoreIR, name: string, args: string[], rt: Runtime): number {
   return coreMain(ir, name, rt)(args);
 }
+// Main as printed, which is plain data, for a run kept on disk (ters/cli/
+// run-store.ts, I264); runPrintedMain runs it as runCoreMain does.
+export function printedMain(ir: CoreIR, name: string): { printed: Printed; main: number; spec: MainSpec } {
+  const [main, spec] = mainOf(ir, name);
+  return { printed: printed(ir), main, spec };
+}
+export function runPrintedMain(k: { printed: Printed; main: number; spec: MainSpec }, args: string[], rt: Runtime): number {
+  return runCoreFn(loadPrinted(k.printed, rt)[k.main], k.spec, args, rt);
+}
 // Main printed once and run as often as asked (the gaps benchmarks,
 // C137d11), each run on what `rt` holds then: its print and world are read
 // at each use.

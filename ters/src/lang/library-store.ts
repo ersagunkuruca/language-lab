@@ -35,7 +35,7 @@ const KEEP = 12;
 // imports, a few ms.
 const graphs = new Map<string, string>();
 const checkerHash = () => graphHash(join(root, "src", "lang", "library-store.ts"));
-function graphHash(entry: string): string {
+export function graphHash(entry: string): string {
   const had = graphs.get(entry);
   if (had) return had;
   const h = createHash("sha1");
@@ -67,7 +67,7 @@ const codes = new WeakMap<Code, string>();
 // checker's source alone: found by the files' names, sizes and times, not a
 // hash of their 43k nodes written out (70 ms each start).
 let files: string | undefined;
-const libraryFiles = () => {
+export const libraryFiles = () => {
   if (files) return files;
   const dir = join(root, "library"), h = createHash("sha1");
   for (const f of readdirSync(dir).sort()) { const s = statSync(join(dir, f)); h.update(`${f} ${s.size} ${s.mtimeMs}\n`); }
