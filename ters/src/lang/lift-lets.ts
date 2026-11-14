@@ -17,7 +17,7 @@
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { freshId, subtree, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, recursiveLet, type Info } from "./infer.ts";
+import { inferRewritten, recursiveLet, type Info } from "./infer.ts";
 import { OverMap, type Scheme, type Type } from "./types.ts";
 
 // `every`: every let whose value is a function, recursive or not, outer
@@ -118,7 +118,10 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
     }
   }
   const lifted = { nodes, defs };
-  const checked = infer(lifted, out, undefined, info.options);
+  // Checked again where it changed: the lets' definitions and the ones it
+  // made (infer.ts inferRewritten, I264).
+  const changed = Object.keys(nodes).filter((id) => id in code.nodes && nodes[id] !== code.nodes[id]);
+  const checked = inferRewritten(code, lifted, out, info, changed, defs.slice(code.defs.length));
   // A library definition arith.ts resolved (pedal's `smaller`, at Float64)
   // keeps its id, and this check reads that id's type from the library's
   // check, generic, under the body it gave a type: as arith.ts left them.

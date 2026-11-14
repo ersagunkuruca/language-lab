@@ -1462,7 +1462,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // read two ways (Swift's SE-0110 problem).
         if (fr.t === "fn" && args.length === 1 && fr.params.length >= 2 && fr.params.length <= TUPLE_MAX) {
           const whole: Type = { t: "con", id: tupleType(fr.params.length), args: fr.params };
-          try { s.clone().unify(args[0], whole); }
+          try { s.trial().unify(args[0], whole); }
           catch { err(n.args[0], `${callee(n)} takes ${fr.params.length} inputs: given one, it needs ${show(whole)} here, got ${show(args[0])}`); t = fr.ret; break; }
           s.unify(args[0], whole);
           info.spread!.add(id);
@@ -1518,7 +1518,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             // The callee acting itself, or a function it's given that it
             // runs under its Choice?
             const ft = s.resolve(f);
-            const given = ft.t === "fn" ? ft.params.findIndex((p, i) => { const t = s.clone(); try { t.unify(p, args[i]); return false; } catch (x) { return x instanceof WorldError; } }) : -1;
+            const given = ft.t === "fn" ? ft.params.findIndex((p, i) => { const t = s.trial(); try { t.unify(p, args[i]); return false; } catch (x) { return x instanceof WorldError; } }) : -1;
             if (given >= 0) err(n.args[given], `this does ${effName(e)} while a Choice is open (${callee(n)} runs it under one), so it would act on paths that are later abandoned: handle the Choice first and act on its result`);
             else err(id, worldMessage(callee(n), e));
           }
@@ -1549,7 +1549,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
             if (ft.t !== "fn") err(id, `${callee(n)} is ${show(f)}, not a function`);
             else {
               let found = false;
-              ft.params.forEach((p, i) => { try { s.clone().unify(p, args[i]); } catch { found = true; err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
+              ft.params.forEach((p, i) => { try { s.trial().unify(p, args[i]); } catch { found = true; err(n.args[i], `${callee(n)} needs ${show(p)} here, got ${show(args[i])}`); } });
               // Every input fits, so it's the effects: an effect's type
               // argument here differs from the one it has around this call
               // (Yield Int there, Yield Text here).
@@ -1628,7 +1628,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Float64, it's derivative.
   function smoothGradient(n: Call, ft: Type): Type | null {
     const point = at.get(n.id);
-    if (point) { const fr = s.resolve(ft); if (fr.t === "fn" && fr.params.length === 1) { try { s.clone().unify(fr.params[0], point); s.unify(fr.params[0], point); } catch { /* reported at the call */ } } }
+    if (point) { const fr = s.resolve(ft); if (fr.t === "fn" && fr.params.length === 1) { try { s.trial().unify(fr.params[0], point); s.unify(fr.params[0], point); } catch { /* reported at the call */ } } }
     const f = s.zonk(ft);
     if (f.t !== "fn" || f.params.length !== 1) return null;
     const r = f.params[0];
@@ -2125,7 +2125,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const theirs = info.schemes.get(rel);
       // Compared as conditions on their ports, in order (L128d2): each is
       // the function of its own direction.
-      if (sc && theirs) { try { const c = s.clone(); c.unify(asPredicate(instantiate(sc, c), d), asPredicate(instantiate(theirs, c), rel)); } catch { err(d, `${nm(d)} is a direction of ${nm(rel)}, so its ports have ${nm(rel)}'s types: ${show(asPredicate(sc.type, d))} isn't ${show(asPredicate(theirs.type, rel))}`); } }
+      if (sc && theirs) { try { const c = s.trial(); c.unify(asPredicate(instantiate(sc, c), d), asPredicate(instantiate(theirs, c), rel)); } catch { err(d, `${nm(d)} is a direction of ${nm(rel)}, so its ports have ${nm(rel)}'s types: ${show(asPredicate(sc.type, d))} isn't ${show(asPredicate(theirs.type, rel))}`); } }
     }
     // A relation written where it is used (L225e) runs as the definition
     // it is lifted into (results-fn.ts), what it uses from around it given
@@ -2242,7 +2242,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       return x;
     };
     const want = at(of);
-    try { const c = s.clone(); c.unify(want, by); } catch (e) {
+    try { const c = s.trial(); c.unify(want, by); } catch (e) {
       if (!(e instanceof TypeError)) throw e;
       err(n.args[1], `this does ${show(of)}'s job at ${show(r)}, so its type is ${show(want)}, not ${show(by)}`);
     }
