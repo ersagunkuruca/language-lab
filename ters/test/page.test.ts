@@ -474,3 +474,14 @@ test("the queens page: 92 boards for eight, Next moves along them, a smaller boa
   for (let i = 0; i < 6; i++) root.find("next").fire("click");
   assert.equal(status(), "4 ways to place 6 queens. This is number 4.");
 });
+
+// L261d: derivative(f) drawn, and Newton's method from the guess.
+test("the calculus page: f′ at the guess and Newton's root, for each sample", () => {
+  const { root } = open("calculus-page");
+  const values = () => root.find("values").textContent;
+  assert.equal(values(), "cubic: at 1, f = -1, f′ = 2. Newton from here: 1.324717957.");
+  click(root, "sinc");
+  assert.equal(values(), "sinc: at 1, f = 0.841470985, f′ = -0.301168679. Newton from here: 3.141592654.");
+  root.find("right").fire("click");
+  assert.match(values(), /^sinc: at 1\.25, /);
+});
