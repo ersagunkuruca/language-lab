@@ -867,6 +867,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // starts at the left edge, as lines of text do. Lets line up on the
     // right, where their dots are.
     const sequence = steps.every(([b]) => name(b) === "_");
+    // Steps done for their effects are numbered in the order they run,
+    // whatever else the run of lets holds: a dot put on a wire is a let
+    // too, and it took every number away (Ersagun 2026-11-14). The menu's
+    // Do it earlier and later ask the same of each step.
+    const silentSteps = steps.filter(([b]) => name(b) === "_").map(([b]) => b);
+    const numbered = silentSteps.length > 0;
     let y = 0, w = 0, h = 0, right = 0;
     vals.forEach((v, i) => {
       const b = steps[i][0];
@@ -895,11 +901,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         sources.set(b, { item: b, dx: bw, dy: bh / 2 });
         right = Math.max(right, x + bw);
       } else {
-        const r = silent ? (sequence ? 8 : 4) : 6;
-        const t = silent ? (sequence ? `Step ${i + 1} of ${steps.length + 1}, done for its effect; then step ${i + 2}. Right-click the step to do it earlier or later` : "a step done for its effect; nothing reads it") : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
+        const r = silent ? (numbered ? 8 : 4) : 6;
+        const k = silentSteps.indexOf(b) + 1;
+        const t = silent ? `Step ${k} of ${silentSteps.length + 1}, done for its effect; then step ${k + 1}. Right-click the step to do it earlier or later` : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
         item(b, 2 * r, 2 * r, (g) => {
           g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), t));
-          if (silent && sequence) g.append(s("text", { x: r, y: r + 3.5, class: "stepn", "text-anchor": "middle" }, String(i + 1)));
+          if (silent) g.append(s("text", { x: r, y: r + 3.5, class: "stepn", "text-anchor": "middle" }, String(k)));
           if (!silent) g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
         }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false, label: silent ? undefined : { x: r - tw(name(b), 6.8) / 2, y: -16, w: tw(name(b), 6.8), h: 14 } });
         at.set(b, { x, y: py - r });
@@ -921,8 +928,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     if (sequence && steps.length) {
       const unit = (e: End) => ("item" in e ? e.item : "frameOut" in e ? e.frameOut : null);
       chains.push([...vals.map((v) => unit(v.out)), unit(body.out)].filter((u): u is Id => !!u));
+    }
+    if (numbered) {
       const dot = (b: Id): [End, End] => [{ item: b, dx: 8, dy: 16 }, { item: b, dx: 8, dy: 0 }];
-      steps.forEach(([b], i) => then.push([dot(b)[0], i + 1 < steps.length ? dot(steps[i + 1][0])[1] : body.out]));
+      silentSteps.forEach((b, i) => then.push([dot(b)[0], i + 1 < silentSteps.length ? dot(silentSteps[i + 1])[1] : body.out]));
     }
     const bx = sequence ? 0 : right + 26;
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
