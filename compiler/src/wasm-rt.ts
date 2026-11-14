@@ -7221,6 +7221,60 @@ const ARRAYS: Record<string, Omit<RtFn, "name">> = {
       i32.sub
       struct.new $arr`,
   },
+  // count items from from, each clamped to the array (C221): a view on
+  // the same buffer, which then no longer replaces in place.
+  "array.slice": {
+    params: [["a", "array"], ["from", "int"], ["count", "int"]], result: "array", locals: [["n", "i64"]], uses: [],
+    body: `
+      local.get $a
+      struct.get $arr 2
+      i64.extend_i32_u
+      local.set $n
+      ;; from in [0, n], count in [0, n - from]
+      local.get $from
+      i64.const 0
+      local.get $from
+      i64.const 0
+      i64.gt_s
+      select
+      local.tee $from
+      local.get $n
+      local.get $from
+      local.get $n
+      i64.lt_s
+      select
+      local.set $from
+      local.get $count
+      i64.const 0
+      local.get $count
+      i64.const 0
+      i64.gt_s
+      select
+      local.tee $count
+      local.get $n
+      local.get $from
+      i64.sub
+      local.tee $n
+      local.get $count
+      local.get $n
+      i64.lt_s
+      select
+      local.set $count
+      local.get $a
+      struct.get $arr 0
+      i32.const 1
+      struct.set $buf 3
+      local.get $a
+      struct.get $arr 0
+      local.get $a
+      struct.get $arr 1
+      local.get $from
+      i32.wrap_i64
+      i32.add
+      local.get $count
+      i32.wrap_i64
+      struct.new $arr`,
+  },
   // push at the front: into the free slot before the view's start when no
   // other view has taken it, else a copy with room on both sides.
   "array.pushFront": {

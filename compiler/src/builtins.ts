@@ -196,6 +196,8 @@ export const TARGETS: Record<Id, Target> = {
   [ARRAY_OPS.first]: { js: "partial", scalar: ARRAYS },
   [ARRAY_OPS.rest]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.pushFront]: { js: "impl", scalar: ARRAYS },
+  // A slice, for `drop` and `take` (C221): a view on the same buffer.
+  [ARRAY_OPS.slice]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.firstIfAny]: { js: "impl", scalar: ARRAYS },
   [ARRAY_OPS.front]: { js: "impl", scalar: ARRAYS },
   // Replacing an item (C93c): in JS a new version of the buffer (Baker's,

@@ -783,6 +783,11 @@ async function pagePreview() {
   await p.locator("[data-def]", { hasText: /^bars$/ }).first().click();
   if (!(await p.locator(".run output").allInnerTexts()).includes("an Html, drawn below") || !(await p.locator("iframe.html-part").count())) errors.push(`${where}: bars's Html isn't drawn in Run`);
   await p.locator("[data-def]", { hasText: /^main$/ }).click();
+  // A part with a frame handler is only a picture, and stops when it's gone:
+  // spacetime's `charges moving` failed every frame, for good (I263).
+  await p.locator('[data-set="program"]', { hasText: "Page: spacetime" }).click();
+  await p.locator("[data-def]", { hasText: /^charges moving$/ }).first().click();
+  await p.waitForTimeout(1000);
   // What's typed in a page's field is said too (BACKLOG E76).
   await p.locator('[data-set="program"]', { hasText: "Page: unit converter" }).click();
   const field = f.locator("input").first();
