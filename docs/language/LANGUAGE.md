@@ -1670,7 +1670,11 @@ its unit reads as it did. A constant has its value's unit wherever it's
 named (L257): with `earth radius = 6371000.0 m`, `2 · earth radius ·
 angle` is a length, and with `limit = 3.0 s`, `1.0 m + limit` is refused.
 `first(x, else d)` is in x's and d's unit, and `sin`, `cos`, `exp`, `log`,
-`asin` and `acos` take and give plain numbers.
+`asin` and `acos` take and give plain numbers. A list's numbers have one
+unit, the list's (L252d): `[1.0 m, 2.0 m]`, a field typed
+`List (Float64 m)`, what `map`, `keep` and a match on it give, and its
+`sum` are in metres, and a signature shows `List (Float64 m)`. An Int is
+always a plain number. A Map's values don't carry a unit yet.
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
