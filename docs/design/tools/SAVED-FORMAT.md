@@ -124,6 +124,58 @@ reader goes through `readCode`. Today these are:
 that change different nodes merge with git's own line merge, without the
 driver. `ters diff` and the merge driver keep working by id, as before.
 
+
+## I271: two added definitions, merged on GitHub's lines
+
+GitHub's merge button never runs a custom merge driver (GIT-TRIAL-2026-11-14
+§7), so two pull requests that each add a definition are merged there on
+lines alone. Measured on every example (I271): for 1,371 pairs of its own
+definitions, a base without both (and the nodes and names only they reach),
+one branch adding each back, `git merge-file` on code.json and
+names.default.json:
+
+| layout | 3 to 9 definitions | 10 to 29 | 30 or more |
+|---|---|---|---|
+| as saved now (I240) | 100% conflict | 100% | 100% |
+| as now, with `defs` never conflicting (order kept apart) | 93% | 75% | 47% |
+| a definition's nodes kept together, definitions by id | 41% | 16% | 4% |
+
+**`defs` alone isn't the conflict.** Every pair conflicts at the end of
+`defs`, where both append. But with `defs` set aside, the nodes still
+conflict in 65% of pairs and the names file in 35%: nodes are sorted by
+id, so each added definition's 10 to 70 nodes scatter through the file,
+and two branches' nodes often fall between the same two old ones, which
+git calls a conflict however different the lines are. Keeping order apart
+from the list of ids buys little.
+
+**Keeping a definition's nodes together** (code.json as one block per
+definition, sorted by the definition's id, its own nodes inside; the few
+nodes two definitions share in a table after; the order shown as a key on
+each block's first line, so appending touches no old line; names grouped
+the same way) makes two new definitions conflict only when no old
+definition's id sorts between theirs, or one lands last (JSON's commas).
+It would also make GitHub's own diff of a pull request readable, one
+definition's lines together. The model stays a table of nodes: the
+grouping is the printer's and the reader's alone (saved.ts), but it is a
+third format for every file, and a key per definition that saving must
+keep stable.
+
+**What fixes it whatever the layout is the driver**, which merges these
+pairs id by id with no conflict at all. When GitHub says a pull request
+conflicts in program files, `git merge origin/main` in a clone where
+`ters git-setup` was run (with `ters.mjs` anywhere, I272) merges them,
+`ters conflicts` says what is left, and the push makes the button green.
+An Action could do the same on GitHub, merging the base into a
+conflicted pull request's branch with the driver, but a push made with
+the workflow's own token runs no checks, so it would need a token of the
+repository's.
+
+**Decided (Ersagun, 2026-11-14): keep the layout and merge with the
+driver.** Even grouped, 16% to 41% of pairs in programs of the usual size
+still conflict, so the driver is needed anyway, and a third format with
+order keys to keep stable costs more than it saves. `node
+ters/bench/merge-on-lines.ts` measures it again.
+
 ## Steps
 
 1. **I237a.** `ters/src/saved.ts`: `savedCode` and `readCode`, used by every
