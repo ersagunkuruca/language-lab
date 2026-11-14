@@ -116,10 +116,15 @@ export function readRecording(top: string, coverage: string, reads: string): Pic
 // Runs one test file (a path from the top) in its package with coverage and
 // the reads recorder on, and gives its entry, with what the run printed
 // (kept to say why it failed).
-export function recordOne(top: string, test: string, at: string, env: NodeJS.ProcessEnv = process.env): Promise<{ entry: Entry; output: string }> {
+// Without coverage (`coverage: false`) only the reads: the editor's tests
+// evaluate the bundled editor anew on every page, and V8 keeps every such
+// script's counters until the process runs out of memory (editing-3.test,
+// 42 s plain, out of memory at 61 s with coverage). They are found by
+// imports instead (affected.ts `bundles`).
+export function recordOne(top: string, test: string, at: string, env: NodeJS.ProcessEnv = process.env, coverage = true): Promise<{ entry: Entry; output: string }> {
   const pkg = test.split("/")[0];
   const scratch = mkdtempSync(join(tmpdir(), "ters-map-"));
-  const coverage = join(scratch, "coverage"), reads = join(scratch, "reads");
+  const covDir = join(scratch, "coverage"), reads = join(scratch, "reads");
   const preload = `--import=${join(import.meta.dirname, "reads.mjs")}`;
   const start = Date.now();
   // Started from inside a test (test-map.test.ts), node --test would report
@@ -128,14 +133,14 @@ export function recordOne(top: string, test: string, at: string, env: NodeJS.Pro
   return new Promise((done) => {
     const c = spawn("node", ["--test", "--test-reporter=dot", relative(pkg, test)], {
       cwd: join(top, pkg), stdio: ["ignore", "pipe", "pipe"],
-      env: { ...rest, NODE_V8_COVERAGE: coverage, TERS_READS: reads, TERS_TOP: top, NODE_OPTIONS: [env.NODE_OPTIONS, preload].filter(Boolean).join(" ") },
+      env: { ...rest, ...(coverage ? { NODE_V8_COVERAGE: covDir } : {}), TERS_READS: reads, TERS_TOP: top, NODE_OPTIONS: [env.NODE_OPTIONS, preload].filter(Boolean).join(" ") },
     });
     let output = "";
     c.stdout.on("data", (d) => { output += d; });
     c.stderr.on("data", (d) => { output += d; });
     c.on("close", (status) => {
       const seconds = Math.round((Date.now() - start) / 100) / 10;
-      const entry: Entry = { at, ran: new Date(start).toISOString(), passed: status === 0, seconds, ...readRecording(top, coverage, reads) };
+      const entry: Entry = { at, ran: new Date(start).toISOString(), passed: status === 0, seconds, ...readRecording(top, covDir, reads) };
       rmSync(scratch, { recursive: true, force: true });
       done({ entry, output });
     });
