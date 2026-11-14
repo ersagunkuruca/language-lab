@@ -143,10 +143,10 @@ export function graphMenu(host: GraphMenuHost) {
       // Its place in a list, or among a + b + c's inputs.
       const inRow = T.rowOfItem(doc().code, id), own = T.rowAt(doc().code, id);
       if (inRow) {
-        const w = inRow.row.kind === "list" ? "item" : "input", last = inRow.at === inRow.row.items.length - 1;
+        const w = inRow.row.kind === "list" ? "item" : "input";
         rows.push(item(`Add an ${w} after this…`, "row-after", "A new hole just after it, to fill"),
-          item("Move it earlier", "row-earlier", "Swap it with the one before", inRow.at ? undefined : "it's first already"),
-          item("Move it later", "row-later", "Swap it with the one after", last ? "it's last already" : undefined),
+          item("Move it earlier", "row-earlier", "Swap it with the one before", T.whyNotMove(inRow.row, inRow.at, inRow.at - 1)),
+          item("Move it later", "row-later", "Swap it with the one after", T.whyNotMove(inRow.row, inRow.at, inRow.at + 1)),
           item(`Take it out of the ${inRow.row.kind === "list" ? "list" : "call"}`, "row-out", "The rest close up"));
       }
       if (own) rows.push(item(`Add ${own.kind === "list" ? "an item" : "an input"} at the end…`, "row-end", "A new hole at the end, to fill"));
