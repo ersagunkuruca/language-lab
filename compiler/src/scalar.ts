@@ -548,7 +548,10 @@ export function endsAsBefore(before: Info, after: Info): Info {
   return after;
 }
 
-export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[]; bail?: number }
+// `piece`: a part of another function's body, made for its search (the
+// rest of a search, a choice's arm), not a call of its definition, so it
+// takes no step of a page's budget (core-js.ts, I291).
+export interface SFunc { def: Id; name: string; params: LType[]; result: LType; locals: LType[]; body: SExpr; spends: boolean; budgeted: boolean; inner?: boolean; piece?: true; partial?: boolean; multi?: true; answer?: LType; value?: true; binders?: Id[]; bail?: number }
 // `code` and `info` are the program that was lowered: the one given, or
 // a copy with its derivatives generated, where funcs[i].def lives.
 // rounded: definitions with a call worked out when compiled (stage.ts) that
@@ -5054,7 +5057,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   function apart(g: SFunc, name: string, first: LType[], code: SExpr, bound: number[]) {
     const free = freeLocals(code).filter((i) => !bound.includes(i));
     const params = [...first, ...free.map((i) => g.locals[i])];
-    const h: SFunc = { def: g.def, name: `${g.name.replace(/\.(choose|k|join)$/, "")}.${name}`, params, result: "i32", locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+    const h: SFunc = { def: g.def, name: `${g.name.replace(/\.(choose|k|join)$/, "")}.${name}`, params, result: "i32", locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true , piece: true };
     const hi = funcs.push(h) - 1;
     return { h, hi, free, fixed: new Map(free.map((i, j) => [i, first.length + j] as const)), passed: free.map(local) };
   }
@@ -5107,7 +5110,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const code = k.gen(local(v), true);
       const free = freeLocals(code).filter((i) => i !== v);
       const shape = shapes.push({ t: kt, caps: free.map((i) => g.locals[i]) }) - 1;
-      const c: SFunc = { def: g.def, name: `${g.name.replace(/\.(choose|k|join)$/, "")}.k`, params: [kt, t], result: "i32", locals: [kt, t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true };
+      const c: SFunc = { def: g.def, name: `${g.name.replace(/\.(choose|k|join)$/, "")}.k`, params: [kt, t], result: "i32", locals: [kt, t], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true, partial: true , piece: true };
       const ci = funcs.push(c) - 1;
       const fixed = new Map([[v, 1]]);
       const lets = free.map((i, j) => { const l = c.locals.push(g.locals[i]) - 1; fixed.set(i, l); return { i: l, value: { k: "cap", t: kt, shape, i: j } as SExpr }; });
