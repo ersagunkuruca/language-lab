@@ -20,6 +20,6 @@ test("examples/effects, which handles its own Ask, runs natively as ters run run
   const made = run(dir, process.execPath, [lab, "native", ex, "-o", join(dir, "p")]);
   assert.equal(made[2], 0, made[1]);
   const want = run(dir, process.execPath, [lab, "run", ex]);
-  assert.deepEqual(want, ["360 · can't: nobody to share with\n", "", 0]);
+  assert.deepEqual(want, ["360 = area(), its two asks answered 30 and 12 · share(10, 0): can't: nobody to share with\n", "", 0]);
   assert.deepEqual(run(dir, join(dir, "p"), []), want);
 });

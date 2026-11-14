@@ -66,7 +66,7 @@
 "o2sgov6ufc2hu002v634amg63f": {"kind": "match", "arms": ["5u3gm170of5nhqb3757kled88p", "vdu8gkg0ioj6voop7m9rellisv"], "otherwise": null, "scrutinee": "aptun5ona1cg9h87b0h92inest"},
 "oakkfqskoiid0jh5qkl1u3af61": {"kind": "lit", "num": "12"},
 "oe2ba3cssppv6ls1p60d3rule6": {"kind": "call", "args": ["3flegk9fnrbfsb9aknq6774ob5", "g5918cgi7qpdg20tgukv5ojgch"], "fn": "kegipdjjhl3rasmd6ihmg5doel"},
-"ognfrganhatk39rta85h5no8l6": {"kind": "lit", "value": " · "},
+"ognfrganhatk39rta85h5no8l6": {"kind": "lit", "value": " = area(), its two asks answered 30 and 12 · share(10, 0): "},
 "okt0pps5sjh0srddgagtd4j716": {"kind": "lambda", "body": "5hn9qcvdd255l9b8jr2fco6mbf", "params": []},
 "p7ubm97r9s89no83k7uho56r07": {"kind": "lambda", "body": "69httv9dv4bd8ffcdbhblsa89g", "params": []},
 "q48moisqaqq3opkd82hdjnv8mr": {"kind": "call", "args": ["h23hi060jthc47bubh5rd4arbl"], "fn": "mss1p8j8eneaahfbabpd2lohaj"},
