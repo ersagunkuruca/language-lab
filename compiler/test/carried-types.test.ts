@@ -23,8 +23,8 @@ const examples = join(ters, "examples");
 const dir = mkdtempSync(join(tmpdir(), "carried-"));
 
 // Examples with no main compile to nothing to compare (pages of shaders,
-// a library of algebra).
-const NO_MAIN = new Set(["archive", "mandelbrot", "quadratic", "raymarch", "rmold", "shaders"]);
+// tiles among them, and a library of algebra).
+const NO_MAIN = new Set(["archive", "mandelbrot", "quadratic", "raymarch", "rmold", "shaders", "tiles"]);
 // Known to differ, with the same output (none since I207d: bounce's
 // differed while its checks again lost what made `nth` end). When one is
 // added, take it off once it comes out the same.
