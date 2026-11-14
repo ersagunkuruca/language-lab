@@ -64,7 +64,7 @@ export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "fr
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
-export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["chunks_job_", true], ["chunks_work_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
+export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["array_slice_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["chunks_job_", true], ["chunks_work_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
 import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -3896,6 +3896,23 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   if (v->n == 0) return a;
   if (a->rc == 1) { v->s++; v->n--; return a; }
   lab_cell *r = lab__view_a${i}(lab_dup(v->b), v->s + 1, v->n - 1);
+  lab_drop(a);
+  return r;
+}`);
+    // count items from from, each clamped to the array, on the same
+    // buffer (C221); the view itself moves when nobody else holds it.
+    if (has("slice")) out.push(`static lab_cell *lab_array_slice_a${i}(lab_cell *a, lab_int f, lab_int c) {
+  ${V} *v = (${V} *)a;
+  int64_t n = v->n;
+  int64_t from = LAB_IS_SMALL(f) ? LAB_VAL(f) : (LAB_BIG(f)->neg ? 0 : n), count = LAB_IS_SMALL(c) ? LAB_VAL(c) : (LAB_BIG(c)->neg ? 0 : n);
+  lab_int_drop(f); lab_int_drop(c);
+  if (from < 0) from = 0;
+  if (from > n) from = n;
+  if (count < 0) count = 0;
+  if (count > n - from) count = n - from;
+  if (from == 0 && count == n) return a;
+  if (a->rc == 1) { v->s += (uint32_t)from; v->n = (uint32_t)count; return a; }
+  lab_cell *r = lab__view_a${i}(lab_dup(v->b), v->s + (uint32_t)from, (uint32_t)count);
   lab_drop(a);
   return r;
 }`);

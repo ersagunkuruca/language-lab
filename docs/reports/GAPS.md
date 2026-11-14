@@ -3560,7 +3560,10 @@ fold, and the array has no job for it, so each window walks i items
 (f20 in the core module). At a quarter of a big buffer, `restOf` copies
 what's left (the leak guard of I106c), so a walk from the start copies
 too. The ideal indexes the array. If `drop` were a job on an array (a
-view, O(1)), as `item at` is, the module would be linear.
+view, O(1)), as `item at` is, the module would be linear. Built by C221:
+`drop` and `take` are slices on an array (and log n on lists as trees);
+at 40000 fixes the core module is 5.3x the ideal (713x before) and `ters
+native` 2.4x (1271x), now faster than WASI.
 
 **R2. `ters native` is 4 to 7x slower than WASI on the same program
 (perf, C220).** At 4000 fixes, native takes 1052 ms and WASI 152 ms.
