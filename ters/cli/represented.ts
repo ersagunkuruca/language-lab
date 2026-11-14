@@ -37,7 +37,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   // C42e), so the map's list is chosen for as any other: an array, whose
   // map C shares out on its threads.
   const shared = process.env.NO_FOLD_ITEMS ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
-  const pinfo = shared.shared ? infer(shared.code, p.names, undefined, p.options as Parameters<typeof infer>[3]) : p.info;
+  const pinfo = shared.shared ? infer(shared.code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false }) : p.info;
   const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
@@ -67,7 +67,7 @@ export function represented<P extends Program>(p0: P, main: Id, hostMaps: boolea
   // one the checker sees getting smaller, and would spend a step a call
   // (C184: the pedal's following, matching and bands), nor is `is even`
   // through `match Nat′`. library-reps.ts checks its rewrite so too.
-  const info = same ? lib.info! : infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders], ends: endedAsWritten(p.info, p.own) });
+  const info = same ? lib.info! : infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders], ends: endedAsWritten(p.info, p.own), units: false });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
   return { ...p, code, names, info, chosen };
 }
@@ -86,7 +86,8 @@ function reachedFrom<P extends Program>(p: P, main: Id): P {
   if (own.length === p.own.length) return p;
   const gone = new Set(p.own.filter((d) => !own.includes(d)));
   const code = { ...p.code, defs: p.code.defs.filter((d) => !gone.has(d)) };
-  const info = infer(code, p.names, undefined, p.options as Parameters<typeof infer>[3]);
+  // A cut of a checked program: its units were checked whole (I261).
+  const info = infer(code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false });
   // A cut that doesn't check (it shouldn't: nothing kept names what went)
   // is no cut.
   if (info.errors.length > p.info.errors.length) return p;
