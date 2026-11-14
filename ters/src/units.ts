@@ -536,7 +536,19 @@ function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts
 // written or follows from the body, and none where the number is plain or
 // its unit is free (a function generic over its unit shows plain Float64).
 // Null where the units don't agree, which the check reports.
+// A program that writes no unit of its own shows none, as unitProblems
+// checks none there: inferring each definition's units through the
+// library's (the prelude's seconds) took tumble's check from 2 s to over
+// 120 s and froze its page in the editor (#2631). Kept per program and
+// definition, as render.ts asks again on every draw.
+const signatures = new WeakMap<Code, Map<Id, { params: (Unit | undefined)[]; result?: Unit } | null>>();
 export function signatureUnits(code: Code, defId: Id): { params: (Unit | undefined)[]; result?: Unit } | null {
+  let m = signatures.get(code);
+  if (!m) signatures.set(code, (m = new Map()));
+  if (!m.has(defId)) m.set(defId, declaresUnit(code) ? signatureOf(code, defId) : null);
+  return m.get(defId)!;
+}
+function signatureOf(code: Code, defId: Id): { params: (Unit | undefined)[]; result?: Unit } | null {
   const def = code.nodes[defId];
   if (def?.kind !== "def" || !def.body) return null;
   const inf = infer(code, defId);

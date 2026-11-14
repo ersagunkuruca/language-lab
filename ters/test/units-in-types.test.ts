@@ -15,7 +15,8 @@ import { infer } from "../src/lang/infer.ts";
 import { hashDef } from "../src/hash.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { formatUnit, parseUnit } from "../src/units.ts";
+import { formatUnit, parseUnit, signatureUnits } from "../src/units.ts";
+import { isPublished } from "../src/model.ts";
 
 test("a unit reads back as formatUnit writes it", () => {
   for (const s of ["m", "m/s", "m/s²", "N", "1/s", "m²·kg"]) assert.equal(formatUnit(parseUnit(s)!), s);
@@ -115,4 +116,17 @@ test("a constant's unit, first's and the transcendental functions' are checked",
   // A value whose own body disagrees is refused too.
   s.define("mixed", "value", []);
   assert.throws(() => s.replace(/□#(\w+)/.exec(s.view("mixed"))![1], "1.0 m + 1.0 s"), /units don't agree here/);
+});
+
+// A program that writes no unit shows none, and asks nothing of units.ts
+// for it: #2631 inferred every definition's units through the prelude's,
+// and tumble's check went from 2 s to over 120 s, its page frozen.
+test("signatures of a program with no units of its own cost nothing (tumble)", () => {
+  const s = new Session(join(import.meta.dirname, "../examples/tumble"));
+  const defs = s.code.defs.filter((d) => !isPublished(d));
+  const t0 = performance.now();
+  for (const d of defs) s.typeOf(d);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 10000, `tumble's ${defs.length} signatures took ${ms.toFixed(0)} ms`);
+  assert.equal(signatureUnits(s.code, defs[0]), null);
 });
