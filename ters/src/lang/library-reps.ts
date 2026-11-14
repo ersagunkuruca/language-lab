@@ -730,8 +730,12 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     // array passes as it is (bands' odd sample out, C196). `set` copies a
     // record with one field changed: the record, the path and the value
     // move about as they are (depot's day, its stations a field of it,
-    // C227).
-    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || target === SET;
+    // C227). Only on a record whose type the rewrite changes: one kept as
+    // written (`owned`, rep-split.ts) has its lists converted where read,
+    // which would put `array of` inside the path (clinic's desks).
+    const rec = target === SET ? info.typeOf.get(c.args[1]) : undefined, recT = rec && info.subst.zonk(rec);
+    const setPasses = target === SET && recT?.t === "con" && program.has(recT.id) && !owned.has(recT.id);
+    const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || setPasses;
     const sig = SIGS[target](new Subst());
     if (sig.t !== "fn") return null;
     const args = c.args.map((a, i) => {
