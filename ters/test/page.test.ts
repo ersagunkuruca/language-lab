@@ -328,6 +328,52 @@ test("a page stepped to the window's start reads nothing more from the log, and 
   assert.match((back.root as FakeEl).find("status").textContent, /^Rolls: 1;/);
 });
 
+// I265: a view reads the clock on every frame the page draws; the page
+// answers that itself, so it isn't logged, and a step's replay, which
+// gives only the events, meets no clock read it doesn't make (dice in the
+// browser: "the log has now(), the run asked randomSeed()").
+test("the clock a view reads on each frame isn't logged, and a page stepped through a log with frames between its events shows each", async () => {
+  const { lowerCore, corePageScript } = await import("../../compiler/src/core-js.ts");
+  const core = await import("../../compiler/src/core-page-runtime.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const ir = lowerCore(p.code, info, p.pres.names, p.own.defs);
+  let given: unknown[] | null = null;
+  new Function("$core", corePageScript(ir, p.pres.names[main], "$core", ""))({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
+  const [tables, worlds, defs, name, , nodes] = given! as never[];
+  const window = { seconds: 10, keep: 30, clock: () => 0 };
+  const shownIn = (root: FakeEl) => root.find("status").textContent;
+  const frames: (() => void)[] = [];
+  // Three frames, each at a later millisecond (the clock is Date.now).
+  const draw = () => { for (let i = 0; i < 3; i++) { const t0 = Date.now(); while (Date.now() === t0); frames.splice(0).forEach((f) => f()); } };
+  // Interpreted first, then compiled, a few frames drawn after each Roll.
+  const log: import("../src/lang/worldlog.ts").LogEntry[] = [];
+  const first = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: (f) => frames.push(f), doc: fakeDoc(), store: store(), log, window, keepCells: true });
+  draw();
+  (first.root as FakeEl).find("roll").fire("click");
+  draw();
+  const m = core.mountCorePage(tables, worlds, defs, name, "dice", nodes, { doc: fakeDoc(), store: store(), frame: (f) => frames.push(f), log, window, handFrom: first.kept! });
+  first.stop();
+  const after: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    const had = log.length;
+    draw();
+    assert.equal(log.length, had, "a frame's clock reads logged");
+    (m.root as FakeEl).find(i === 1 ? "hundred" : "roll").fire("click");
+    draw();
+    after.push(shownIn(m.root as FakeEl));
+  }
+  m.stop();
+  const errors: unknown[] = [];
+  frames.length = 0;
+  const page = showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", console: { log() {}, error() {} }, frame: (f) => frames.push(f), doc: fakeDoc(), store: store(), log, window, keepCells: true, stopped: (e) => errors.push(e), stepFrom: { firsts: m.kept.map((k) => k.first), snapshots: m.window!.snapshots } });
+  const root = page.root as FakeEl, steps = page.steps!;
+  assert.equal(shownIn(root), after[3]);
+  for (const n of [2, 0, 3, 1]) { steps.to(steps.from() + n + 1); draw(); assert.equal(shownIn(root), after[n], `after ${n}`); }
+  assert.deepEqual(errors, []);
+});
+
 // I252, I255: inside a segment, a snapshot every 10 events, so a step back
 // gives at most 10 again (a page hearing frames has 600 in a segment).
 test("a page's window snapshots every 10 events inside a segment, and steps from them", () => {

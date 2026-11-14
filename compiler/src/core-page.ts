@@ -42,7 +42,7 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   // stopped (I239d): a compiled page's log is for the evaluator to replay
   // from the start, so it is capped rather than kept as a window.
   const cap = budget();
-  const world = recordingWorld(log ? logged(browser, log, { seeded: true, budget: cap }).world : browser);
+  const world = recordingWorld(log ? logged(browser, log, { seeded: true, budget: cap, inView: () => cells.inView() }).world : browser);
   // A handler run that's taken back prints nothing (cells.ts attempt).
   const rt = { print: (line: string) => cells.later(() => console.log(line)), world, cells, hosts: hosts?.answers };
   const fns = defs(coreRuntime(tables, worlds, rt, code, undefined, hosts?.ops));
@@ -69,7 +69,7 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   // capped (I239d).
   const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
   const cap = o.window ? undefined : budget();
-  const logging = o.log ? logged(browser, o.log, { seeded: true, budget: cap, quiet: () => stopped }) : null;
+  const logging = o.log ? logged(browser, o.log, { seeded: true, budget: cap, quiet: () => stopped, inView: () => cells.inView() }) : null;
   const world = logging ? logging.world : browser;
   let made: NonNullable<Cells["kept"]> = [];
   // Where this page's part of the log starts: the interpreted page's comes before.

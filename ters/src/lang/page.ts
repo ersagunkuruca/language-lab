@@ -114,7 +114,7 @@ export function showPage(o: PageOptions): Preview {
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells || (o.log && o.window)) cells.kept = [];
   const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission });
-  const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser) : browser;
+  const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser, undefined, undefined, () => cells.inView()) : browser;
   // While the page is stepped through its log (I239c), the world answers
   // from the log and nothing new is logged: `asking` is which world.
   // A page built to step through a compiled page's log starts stepped:
@@ -124,7 +124,7 @@ export function showPage(o: PageOptions): Preview {
   // The seed too: a step from the run's start draws again from the
   // seed the log has, and a live page from the browser's own draw.
   switched.randomSeed = () => (asking.randomSeed ? asking.randomSeed() : Math.floor(asking.random() * 4294967296));
-  const logging = o.log ? logged(o.window ? switched : answered, o.log, { seeded: true, quiet: () => stepping }) : null;
+  const logging = o.log ? logged(o.window ? switched : answered, o.log, { seeded: true, quiet: () => stepping, inView: () => cells.inView() }) : null;
   const world = recordingWorld(logging ? logging.world : answered);
   // A snapshot: the value of each cell main and the first drawing made,
   // and where the generator is. What later cells hold follows from them.
@@ -207,7 +207,7 @@ function stepper(w: LogWindow<PageSnapshot>, root: Node_, cells: Cells, made: No
       // A handler's failure is taken back on the page (cells.ts attempt),
       // so the replay's own is kept here and said after.
       let wrong: unknown = null;
-      const from = replaying(log.slice(evs[first]?.at ?? log.length).filter((e) => !isEvent(e)), browser) as unknown as Record<string, (...a: unknown[]) => unknown>;
+      const from = replaying(log.slice(evs[first]?.at ?? log.length).filter((e) => !isEvent(e)), browser, undefined, undefined, () => cells.inView()) as unknown as Record<string, (...a: unknown[]) => unknown>;
       set(true, Object.fromEntries(Object.entries(from).map(([op, f]) => [op, typeof f !== "function" ? f : (...a: unknown[]) => { try { return f(...a); } catch (e) { wrong ??= e; throw e; } }])) as unknown as World);
       for (const e of evs.slice(first, n)) {
         if (!replayEvent(root, e.name, e.path, e.given)) throw new WentAnotherWay(`stepping went another way at entry ${e.at + 1}: the page has no ${e.name} handler where the log's event was given`);
