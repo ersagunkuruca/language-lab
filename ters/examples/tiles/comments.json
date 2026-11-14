@@ -1,0 +1,9 @@
+{"1ljogaqolutgrssfde2cb2m8d2": "0, 1 or 2: n's place in a run of three.",
+"1u5bji7c7r1so6r8ga1u9ijloa": "How much red, green and blue, each from 0 to 1.",
+"4vs90vm8qo21c1m2ooctaqohom": "How far v is from 0, either way.",
+"cn9vdpphkurtckmo51bt8e5313": "Which shape a tile has: the kinds go round as time passes.",
+"dr4507eqo0jf07v6kg30nok5t0": "Tile kind 0 is a disc that breathes, 1 a box, 2 a diamond. The answer is a function, chosen as the picture runs: on a GPU it is which shape and its size, and calling it runs that shape (C225).",
+"f6pq2ouunissq52d1no7qike31": "Below 0 inside a square this far from the middle to each side.",
+"giafff9o7tka73kuoo5d96nslf": "The colour at (x, y), from −1 to 1 each way: four tiles a side, each filled where its shape's distance is below 0.",
+"mqusve65io182iq6g14qo45f9a": "Below 0 inside a diamond whose corners are this far from the middle.",
+"rud61elo6tp8phgbnr335ui43j": "Below 0 inside a circle of this radius around the middle of a tile, above outside. A function of where in the tile: each shape is one, and a tile picks its shape as the picture is drawn."}
