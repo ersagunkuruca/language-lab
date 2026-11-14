@@ -415,15 +415,21 @@ type Summary = { out: Constraint[]; read: [Id, Node][] };
 const summaries = new WeakMap<Node, Summary>();
 const PORT = "\u0000";
 let summarising: Set<Id> = new Set();
+const stack: Id[] = [];
+let cuts = 0;
 let reading: [Id, Node][][] = [];
 function summaryOf(code: Code, fn: Id): Constraint[] {
   const def = code.nodes[fn];
   const was = summaries.get(def);
   if (was && was.read.every(([id, n]) => code.nodes[id] === n)) { reading[reading.length - 1]?.push(...was.read); return was.out; }
   // A callee being summarised calls itself: as when inlining, the inner
-  // call adds nothing.
-  if (summarising.has(fn)) return [];
+  // call adds nothing. A summary made while one it calls, not itself, was
+  // cut short so (a group calling each other) isn't kept: it lacks what
+  // that one says, which its own check reads in full.
+  if (summarising.has(fn)) { if (stack[stack.length - 1] !== fn) cuts++; return []; }
   summarising.add(fn);
+  stack.push(fn);
+  const cutsBefore = cuts;
   const read: [Id, Node][] = [];
   reading.push(read);
   try {
@@ -443,10 +449,11 @@ function summaryOf(code: Code, fn: Id): Constraint[] {
     try { cs = cb ? collect(code, fn, "\u0001/", map, [], new Map(), fs) : []; } finally { following = was; }
     const seeds = [...map.values()].flatMap((p) => [...KNOWN].filter(Boolean).map((k) => slotTerm(p, k)));
     const out = project(close(cs, fs, seeds), (t) => t.startsWith(PORT), fn);
-    summaries.set(def, { out, read });
+    if (cuts === cutsBefore) summaries.set(def, { out, read });
     return out;
   } finally {
     summarising.delete(fn);
+    stack.pop();
     reading.pop();
     reading[reading.length - 1]?.push(...read);
   }
@@ -498,10 +505,14 @@ function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, pref
   const cdef = get(code, fn, "def");
   const cb = cdef.body ? code.nodes[cdef.body] : null;
   if (!cb) return [];
-  // A program's own callee is read through, so a message can name the
-  // terms inside it (drift, drop). So is a library's given a function
-  // (map, keep): its summary can't say what the function does (L252d).
-  if (!isPublished(fn) || given.size) {
+  // A callee given a function (map, keep) is read through: its summary
+  // can't say what the function does (L252d). So is the program's own
+  // that the definition calls itself, so a message can name the terms
+  // inside it (drift, drop). Deeper, the program's own are said by their
+  // summaries, their ports' constraints alone, as the library's are: read
+  // through all the way, every definition held its whole call tree, and
+  // depot's main solved 6,160 rows (GAPS round 17 D2, I278).
+  if (given.size || (!isPublished(fn) && path.length <= 1)) {
     const map = new Map<Id, string>();
     if (cb.kind === "lambda") {
       cb.params.forEach((p) => map.set(p, port(p)));
@@ -578,7 +589,7 @@ class System {
 export interface Inference {
   ok: boolean;
   // Constraints that couldn't be satisfied, with the node they came from.
-  conflicts: { why: string; node?: Id; sides?: [string, Unit][]; was?: Unit }[];
+  conflicts: { why: string; node?: Id; sides?: [string, Unit][]; was?: Unit; want?: Unit }[];
   unit: (term: string) => Unit | undefined;
 }
 
@@ -601,7 +612,10 @@ export function infer(code: Code, defId: Id, extra: Constraint[] = [], own?: Con
     // constraint was most of a check of trek's 96 definitions).
     const sides = c.terms.length === 2 ? c.terms.map(([t]) => [t, sys.value(t)] as const).filter((x): x is [string, Unit] => !!x[1]) : [];
     const was = c.terms.length === 1 ? sys.value(c.terms[0][0]) : undefined;
-    conflicts.push({ why: c.why, node: c.node, sides: sides.length === 2 ? sides : undefined, was });
+    // What the one term is said to be: a callee's summary says a port's
+    // unit outright (`time of`'s part is s), with no name to give it.
+    const want = c.terms.length === 1 ? toUnit(c.rhs.map((x) => x / c.terms[0][1])) : undefined;
+    conflicts.push({ why: c.why, node: c.node, sides: sides.length === 2 ? sides : undefined, was, want });
   }
   return { ok: !conflicts.length, conflicts, unit: (term) => sys.value(term) };
 }
@@ -654,16 +668,26 @@ const unworded: Inference["conflicts"] = [{ why: UNWORDED }];
 // see the same constraints for every definition but the one edited: found
 // by them, a few hundred kept (I260: trek's 96 definitions solved again
 // were most of a replace's 1.5 s and more).
-const solvedBy = new Map<string, Inference["conflicts"]>();
-function conflictsOf(code: Code, d: Id): Inference["conflicts"] {
-  const cs = constraints(code, d), k = JSON.stringify(cs.map((c) => [c.terms, c.rhs, c.why, c.node]));
-  const had = solvedBy.get(k);
-  if (had) { solvedBy.delete(k); solvedBy.set(k, had); return had; }
-  const out = infer(code, d, [], cs).conflicts;
-  solvedBy.set(k, out);
-  if (solvedBy.size > 500) solvedBy.delete(solvedBy.keys().next().value!);
-  return out;
+// The signature a definition shows reads the same solved system (I278:
+// solving it again was as long as the check).
+const solvedBy = new Map<string, Inference>();
+const constrained = new WeakMap<Code, Map<Id, Constraint[]>>();
+function constraintsOf(code: Code, d: Id): Constraint[] {
+  let m = constrained.get(code);
+  if (!m) constrained.set(code, (m = new Map()));
+  if (!m.has(d)) m.set(d, constraints(code, d));
+  return m.get(d)!;
 }
+function solved(code: Code, d: Id): { cs: Constraint[]; inf: Inference } {
+  const cs = constraintsOf(code, d), k = JSON.stringify(cs.map((c) => [c.terms, c.rhs, c.why, c.node]));
+  const had = solvedBy.get(k);
+  if (had) { solvedBy.delete(k); solvedBy.set(k, had); return { cs, inf: had }; }
+  const inf = infer(code, d, [], cs);
+  solvedBy.set(k, inf);
+  if (solvedBy.size > 500) solvedBy.delete(solvedBy.keys().next().value!);
+  return { cs, inf };
+}
+const conflictsOf = (code: Code, d: Id): Inference["conflicts"] => solved(code, d).inf.conflicts;
 function conflictsWith(code: Code, d: Id, before?: UnitsBefore, quick = false): Inference["conflicts"] {
   const was = before?.of(d);
   if (!was) return conflictsOf(code, d);
@@ -722,7 +746,7 @@ function termName(code: Code, names: Record<Id, string>, term: string): string |
   return undefined;
 }
 
-function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts"][number], names: Record<Id, string>): string {
+function unitMessage(code: Code, { why, node, sides, was, want }: Inference["conflicts"][number], names: Record<Id, string>): string {
   if (why === "declared unit" && node) {
     const u = unitOf(code.nodes[node]);
     return `declared ${u ? formatUnit(u) : "a unit"}, but the rest ${was ? `makes it ${formatUnit(was)}` : "says otherwise"}`;
@@ -733,6 +757,7 @@ function unitMessage(code: Code, { why, node, sides, was }: Inference["conflicts
     const [[a, ua], [b, ub]] = sides, na = termName(code, names, a), nb = termName(code, names, b);
     return na && nb && na !== nb ? `units don't agree here: ${na} is ${formatUnit(ua)}, ${nb} is ${formatUnit(ub)}` : `units don't agree here: ${formatUnit(ua)} can't meet ${formatUnit(ub)}`;
   }
+  if (was && want) return `units don't agree here: ${formatUnit(was)} can't meet ${formatUnit(want)}`;
   return "units don't agree here";
 }
 
@@ -761,7 +786,7 @@ export function signatureUnits(code: Code, defId: Id): SignatureUnits | null {
 function signatureOf(code: Code, defId: Id): SignatureUnits | null {
   const def = code.nodes[defId];
   if (def?.kind !== "def" || !def.body) return null;
-  const cs = constraints(code, defId), inf = infer(code, defId, [], cs);
+  const { cs, inf } = solved(code, defId);
   if (!inf.ok) return null;
   const known = (term: string) => { const u = inf.unit(term); return u && Object.keys(u).length ? u : undefined; };
   // Only the slots some constraint names can have a unit.
