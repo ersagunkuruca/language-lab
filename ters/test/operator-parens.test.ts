@@ -34,3 +34,20 @@ test("the Nested view keeps them too (I273)", () => {
   const pres = loadProgram(join(root, "examples", "queens")).pres;
   assert.match(renderNested(base(k.code), pres, d), / · \(\S+ \/ \S+\)$/);
 });
+
+// I274: + and · don't associate on Float64, so a + (b + c) isn't printed as
+// a + b + c, which reads back as (a + b) + c. Only the left-nested pairs are
+// one chain; ++, and, or are still one chain whichever way they nest.
+test("a + (b + c) keeps its brackets and reads back right-nested; a + b + c stays one chain (I274)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "chain-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(dir, "names.default.json"), "{}");
+  const s = new Session(dir);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); s.replace(/□#(\w+)/.exec(s.view(name))![1], text); return s.view(name).split("\n").pop()!.replace(/#\w+/g, "").trim(); };
+  assert.equal(fill("r", ["a", "b", "c"], "a + (b + c)"), "r(a, b, c) = a + (b + c)");
+  assert.equal(fill("l", ["a", "b", "c"], "a + b + c"), "l(a, b, c) = a + b + c");
+  assert.equal(fill("m", ["a", "b", "c", "d"], "a · (b · c) · d"), "m(a, b, c, d) = a · (b · c) · d");
+  assert.equal(fill("t", ["a", "b", "c"], "a ++ (b ++ c)"), "t(a, b, c) = a ++ b ++ c");
+  // What r reads back as is r: the same tree printed again the same way.
+  assert.equal(fill("r2", ["a", "b", "c"], s.view("r").split("= ").pop()!.replace(/#\w+/g, "").trim()), "r2(a, b, c) = a + (b + c)");
+});
