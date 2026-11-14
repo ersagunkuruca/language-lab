@@ -19,6 +19,12 @@
 
 let built: string | undefined;
 
+// The `lab_` names nfcC's text defines or uses (c-rt.ts RESERVED), known
+// without building it: the build takes a quarter of a second, which
+// every command importing the C runtime paid at import (C223's profile
+// of `ters run`). c-names.test.ts checks these are its names.
+export const NFC_NAMES = ["_ccc", "_ccc_key", "_ccc_rank", "_compose", "_find32", "_nfc", "_nfc_comp", "_nfc_pair", "_nfd_at", "_nfd_cp", "_nfd_key", "_text_of", "cell", "drop", "oom"];
+
 export function nfcC(): string {
   return (built ??= build());
 }

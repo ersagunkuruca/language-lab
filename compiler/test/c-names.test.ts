@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { C_RUNTIME as C_OWN, C_OWN_PREFIXES } from "../src/c.ts";
 import { RESERVED } from "../src/c-rt.ts";
+import { NFC_NAMES, nfcC } from "../src/c-nfc.ts";
 
 const here = import.meta.dirname, ters = join(here, "../../ters/cli/ters.ts");
 
@@ -20,6 +21,12 @@ test("every lab_ name c.ts spells is one a program's names can't take", () => {
   assert.deepEqual([...new Set(whole)], []);
   const prefixes = [...src.matchAll(/\blab_([A-Za-z0-9]\w*)\$\{/g)].map((m) => m[1]).filter((p) => !C_OWN_PREFIXES.some(([q]) => q === p) && !C_OWN.includes(p) && !RESERVED.includes(p) && !C_OWN_PREFIXES.some(([q, any]) => any && p.startsWith(q)));
   assert.deepEqual([...new Set(prefixes)], []);
+});
+
+// NFC's names are reserved without building its tables at import: the
+// list is its text's names.
+test("the NFC text's lab_ names are the ones c-nfc.ts lists", () => {
+  assert.deepEqual([...new Set([...nfcC().matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]))].sort(), [...NFC_NAMES].sort());
 });
 
 test("divisors with its definitions named cell, closure and shared builds natively and prints what ters run prints", () => {

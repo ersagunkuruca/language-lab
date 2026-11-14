@@ -24,7 +24,7 @@
 // Every function owns its inputs, as the program's own do, and drops them.
 // One with no answer (Choice) sets lab_st to 1 and gives a stand-in.
 
-import { nfcC } from "./c-nfc.ts";
+import { NFC_NAMES, nfcC } from "./c-nfc.ts";
 export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number; record?: string }
 // A runtime function: its C, given the names of the list type it makes or
 // reads, and what it calls.
@@ -1329,7 +1329,8 @@ export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // definition named `cell` took `lab_cell`, the runtime's cell type).
 const LIST_SAMPLE: ListNames = { cons: "List_cons", nil: "List_nil", type: 0, tag: 0, head: 0 };
 const words = (text: string) => [...text.matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]);
-export const RESERVED = [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...words(BASE), ...Object.values(FNS).flatMap((f) => words(typeof f.c === "string" ? f.c : f.c(LIST_SAMPLE)))])];
+// NFC's tables aren't built for it (c-nfc.ts NFC_NAMES).
+export const RESERVED = [...new Set(["int_dup", "int_drop", "int_dec", ...Object.keys(FNS).map((n) => n.replace(/\./g, "_")), ...words(BASE), ...NFC_NAMES, ...Object.entries(FNS).flatMap(([n, f]) => (n === "world.nfc" ? [] : words(typeof f.c === "string" ? f.c : f.c(LIST_SAMPLE))))])];
 
 // C's keywords and the names its headers declare, which a type's name
 // (printed bare) must not take.
