@@ -81,12 +81,15 @@ jobs:
           cache-dependency-path: ters/package-lock.json
       - run: npm ci
         working-directory: ters
-      # Each file alone with coverage on, so what it ran and read goes into
-      # the test map (ters/test/test-map.ts, T16).
+      # Each test against its own last run in the test map (T16c): it runs
+      # when a line it ran or a file it read changed since, or it failed
+      # then; one the map hasn't got goes by imports from the base. Each
+      # file alone with coverage on, so what it ran and read goes back into
+      # the map (ters/test/test-map.ts, T16).
       - name: Share ${{ matrix.shard }} of the tests the change reaches
         env:
           SWEEP_AT: ${{ github.run_number }}
-        run: node ters/test/affected.ts ${{ needs.base.outputs.base }} HEAD --full --shard ${{ matrix.shard }}/6 --record map-part.json
+        run: node ters/test/affected.ts ${{ needs.base.outputs.base }} HEAD --since-map --shard ${{ matrix.shard }}/6 --record map-part.json
       - if: always()
         uses: actions/upload-artifact@v4
         with:

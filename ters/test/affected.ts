@@ -9,6 +9,9 @@
 //   npm run affected -- --browser  the browser tests too, when the change reaches them
 //   npm run affected -- --list     say what would run, run nothing (--why: and why)
 //   npm run affected -- --no-map   select by imports, not by the test map
+//   npm run affected -- --map <file>  a test map from a file, not the branch
+//   npm run affected -- --since-map  each test against its own last run (Check main)
+//   npm run affected -- --due      that, and the reviews due (the Nightly; T16c)
 //   npm run affected -- --full     every test file it reaches, the slow ones too
 //   npm run affected -- --time     time every test file, alone, with the per-change
 //                                  sweep slice, and write the slow ones to test/slow.json
@@ -45,7 +48,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
 import { printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
-import { changeFrom, cover, reachedTests } from "./select.ts";
+import { changeFrom, cover, haveCommit, reached, reachedTests, type Change } from "./select.ts";
+import { intervalDays, isDue, streakAfter } from "./schedule.ts";
 
 const top = resolve(import.meta.dirname, "../..");
 const git = (...args: string[]) => execFileSync("git", args, { cwd: top, encoding: "utf8" }).trim();
@@ -63,9 +67,14 @@ const browserOnly = argv.includes("--browser-only");
 const listOnly = argv.includes("--list");
 const browser = all || argv.includes("--browser");
 const timing = argv.includes("--time");
-const full = all || timing || argv.includes("--full");
+// After a merge (T16c): each test against its own last run in the map, not
+// against a base: it runs when a line it ran or a file it read changed
+// since, or when it failed then. `--due` (the Nightly) also runs the tests
+// whose review is due (schedule.ts) and every test the map hasn't got.
+const sinceMap = argv.includes("--since-map"), due = argv.includes("--due");
+const full = all || timing || sinceMap || due || argv.includes("--full");
 const recordTo = argv.includes("--record") ? argv[argv.indexOf("--record") + 1] : undefined;
-const [base = "origin/main", head] = argv.filter((a) => !a.startsWith("--") && a !== shardArg && a !== recordTo);
+const [base = "origin/main", head] = argv.filter((a, i) => !a.startsWith("--") && a !== shardArg && argv[i - 1] !== "--record" && argv[i - 1] !== "--map");
 
 const PACKAGES = ["ters", "compiler", "invertible"];
 // The editor has no tests or packages of its own, but its imports count.
@@ -121,7 +130,11 @@ const byImports = (t: string) => {
 // The test map (T16b): what each test ran and read, recorded by Check main
 // and the Nightly on the branch test-map. Fetched each time (kept in .lab/
 // for when there is no network); `--no-map` goes by imports alone.
+// `--map <file>` reads a map from a file instead (a map recorded locally
+// with --record).
+const mapFile = argv.includes("--map") ? argv[argv.indexOf("--map") + 1] : undefined;
 function loadMap(): TestMap | undefined {
+  if (mapFile) { const m = readMap(mapFile); return Object.keys(m.tests).length ? m : undefined; }
   const kept = join(top, ".lab", "test-map.json");
   try {
     execFileSync("git", ["fetch", "-q", "--depth=1", "origin", "+refs/heads/test-map:refs/remotes/origin/test-map"], { cwd: top, stdio: "ignore", timeout: 60_000 });
@@ -146,6 +159,28 @@ let chosen: string[];
 let deferred: string[] = [];
 let reasons = new Map<string, string[]>();
 if (all || setup || timing) chosen = tests;
+else if (map && (sinceMap || due)) {
+  const now = new Date();
+  const changes = new Map<string, Change | undefined>();
+  const why = new Map<string, string[]>();
+  for (const t of tests) {
+    const e = map.tests[t];
+    if (!e) { if (due || byImports(t)) why.set(t, ["not in the map"]); continue; }
+    if (!e.passed) { why.set(t, ["failed when it last ran"]); continue; }
+    if (!changes.has(e.at)) changes.set(e.at, haveCommit(top, e.at) ? changeFrom(top, e.at, head ?? "HEAD") : undefined);
+    const ch = changes.get(e.at);
+    if (!ch) { why.set(t, ["its last run's commit is gone"]); continue; }
+    const units = reached(e, ch);
+    if (t in bundles) {
+      const inBundle = closure([t, ...bundles[t]]);
+      units.push(...[...ch.lines.keys()].filter((p) => inBundle.has(p)), ...[...ch.data.keys()].filter((p) => bundles[t].includes(p) || p.startsWith("editor/")));
+    }
+    if (units.length) why.set(t, units);
+    else if (due && isDue(e, now)) why.set(t, [`review: ${intervalDays(e.streak ?? 0)} days since it last ran`]);
+  }
+  chosen = [...why.keys()].sort();
+  reasons = why;
+}
 else if (!map) chosen = tests.filter(byImports);
 else {
   const from = git("merge-base", base, head ?? "HEAD");
@@ -236,9 +271,11 @@ if (recordTo) {
   // Each file alone, as many at once as there are cores, with coverage on
   // (test-map.ts); the entries go into the map at recordTo, beside the
   // ones already there. A failure prints what the file printed.
-  const env = all ? { ...process.env, SWEEP: "all" } : process.env;
+  const env = all || due ? { ...process.env, SWEEP: "all" } : process.env;
   const at = git("rev-parse", "HEAD");
-  const map = readMap(recordTo);
+  const parts = readMap(recordTo);
+  // The last runs, to carry each test's streak on (schedule.ts).
+  const before = map ?? loadMap();
   const todo = [...fast];
   let failedFiles = 0;
   console.log(`recording ${todo.length} test files into ${recordTo}`);
@@ -246,13 +283,16 @@ if (recordTo) {
     const t = todo.shift();
     if (!t) return;
     const { entry, output } = await recordOne(top, t, at, env, !(t in bundles));
-    map.tests[t] = entry;
+    const prev = before?.tests[t];
+    const edited = !!prev && prev.at !== at && (!haveCommit(top, prev.at) || git("diff", "--name-only", prev.at, at, "--", t) !== "");
+    entry.streak = streakAfter(prev, entry.passed, edited);
+    parts.tests[t] = entry;
     console.log(`  ${entry.passed ? "ok" : "FAILED"}  ${entry.seconds} s  ${t}`);
     if (!entry.passed) { failedFiles++; console.log(output.split("\n").map((l) => `    ${l}`).join("\n")); }
     return one();
   };
   await Promise.all(Array.from({ length: availableParallelism() }, one));
-  writeFileSync(recordTo, printMap(map));
+  writeFileSync(recordTo, printMap(parts));
   console.log(`${fast.length - failedFiles} of ${fast.length} passed`);
   process.exit(failedFiles ? 1 : 0);
 }
@@ -282,7 +322,7 @@ if (listOnly && argv.includes("--why")) for (const t of chosen) console.log(`   
 if (!runs.length) console.log("  nothing to test");
 if (listOnly) process.exit(0);
 
-const env = all ? { ...process.env, SWEEP: "all" } : process.env;
+const env = all || due ? { ...process.env, SWEEP: "all" } : process.env;
 let failed = 0;
 for (const r of runs) {
   console.log(`\n== ${r.what}`);

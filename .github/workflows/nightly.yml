@@ -1,5 +1,6 @@
-# Once a night, when main has changed since the last full run: every test,
-# every sweep in full, every definition in the smoke, the GPU check
+# Once a night, when main has changed since the last run: the tests whose
+# code or data changed since they last ran and the ones due for review
+# (T16c), every sweep in full; every definition in the smoke, the GPU check
 # (docs/process/TESTING.md, T5). The runs after each merge test only what
 # the merge reaches and a slice of each sweep; this is where whatever they
 # skipped gets checked. Green moves the `good` tag to what it tested, so
@@ -46,6 +47,8 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -53,10 +56,13 @@ jobs:
           cache-dependency-path: ters/package-lock.json
       - run: npm ci
         working-directory: ters
-      # Each file alone with coverage on, so what it ran and read goes into
-      # the test map (ters/test/test-map.ts, T16).
+      # Not every test (T16c): those whose lines or files changed since they
+      # last ran, those that failed, those not in the test map, and those
+      # whose review is due (1, 2, 4, then 7 days of clean runs;
+      # ters/test/schedule.ts), each sweep in full. Each file alone with
+      # coverage on, so what it ran and read goes into the test map.
       - name: Share ${{ matrix.shard }} of the test files
-        run: node ters/test/affected.ts --all --shard ${{ matrix.shard }}/4 --record map-part.json
+        run: node ters/test/affected.ts --due --shard ${{ matrix.shard }}/4 --record map-part.json
       - if: always()
         uses: actions/upload-artifact@v4
         with:

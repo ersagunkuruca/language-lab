@@ -27,6 +27,8 @@ export interface Entry {
   // When it ran (ISO 8601), and whether it passed.
   ran: string;
   passed: boolean;
+  // Clean runs in a row (schedule.ts): how long until it is reviewed again.
+  streak?: number;
   // Wall seconds, run alone.
   seconds: number;
   // Source file -> the lines it ran, as "a-b,c,d-e" (1-based).
