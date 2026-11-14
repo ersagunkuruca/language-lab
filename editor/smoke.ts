@@ -335,6 +335,18 @@ async function stepOrder() {
   if ((await first()) === was) errors.push(`${where}: Do it earlier on step 2 left ${was} first`);
   await p.locator('button[data-act="undo"]').first().click();
   if ((await first()) !== was) errors.push(`${where}: one Undo doesn't put the order back`);
+  // A dot put on a wire is a let among the steps: the steps keep their
+  // numbers (it took them all away, I281).
+  await p.locator('[data-set="program"]', { hasText: "Eight queens" }).first().click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
+  const count = () => p.locator(".p-graph svg.canvas > g.world text.stepn").count();
+  const before = await count();
+  await p.locator(".p-graph svg.canvas > g.world [data-edge]").nth(3).click({ force: true });
+  if (!(await p.locator(".status[role=status]").innerText()).startsWith("Put a dot")) errors.push(`${where}: a click on a wire of Eight queens' main put no dot on it`);
+  else if (before !== 4 || (await count()) !== before) errors.push(`${where}: Eight queens' main numbers ${before} steps, and ${await count()} with a dot on a wire`);
+  await p.locator('button[data-act="undo"]').first().click();
+  await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
+  await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   // A step goes before a step as a plain step, with no name (QA8 M1).
   // A menu opened by a script counts as a long press: let it settle first.
   await p.waitForTimeout(900);
