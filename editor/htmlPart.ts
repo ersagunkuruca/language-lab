@@ -34,12 +34,20 @@ export function htmlPart(v: Value, name: string): HTMLElement {
     const styles = [PAGE_BASE, ...[...page?.querySelectorAll("style") ?? []].filter((s) => s.id !== "lab-base").map((s) => s.textContent ?? "")];
     d.head.append(...styles.map((css) => Object.assign(d.createElement("style"), { textContent: css })));
     try {
-      d.body.append(mountHtml(v, { cells: new Cells(equal), doc: d as unknown as Doc, call: evaluatorCall }) as unknown as Node);
+      // A picture only: its handlers hear nothing (a frame handler of
+      // spacetime's `charges moving` ran on fresh cells and failed every
+      // frame, I263).
+      d.body.append(mountHtml(v, { cells: new Cells(equal), doc: d as unknown as Doc, call: evaluatorCall, live: () => false }) as unknown as Node);
     } catch (e) {
       note.textContent = `What ${name} gives is a part of a page, and it doesn't draw on its own here (${(e as Error).message}); open main to see it in the page.`;
       frame.hidden = true;
       return;
     }
+    // Once the editor draws again without this frame, the part leaves its
+    // document too: a removed frame's document lives on, and its elements
+    // count as on a page, so their frame loops never ended (I263).
+    const gone = () => { if (frame.isConnected) requestAnimationFrame(gone); else d.body.replaceChildren(); };
+    requestAnimationFrame(gone);
     frame.style.height = `${Math.min(Math.max(Math.ceil(d.documentElement.getBoundingClientRect().height) + 2, 60), Math.round(innerHeight * 0.6))}px`;
   });
   return h("div", { class: "html-part-box" }, frame, note);
