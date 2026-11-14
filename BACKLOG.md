@@ -36,6 +36,11 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| I279 | Bug: a local name hides a longer name that ends with it. In `line of(line, n)`, the case `comment line` isn't found ("nothing is named comment line here"), while `comment line()` finds it. editor/typed.ts's names | GAPS round 17 D3 | 2026-11-14 |
+| I280 | Bug: a tuple the view prints isn't read back. `set((s) => (s.bikes, s.rentals), st, (1, 2))` is refused ("isn't read as a whole"), and `(1, 2)` alone is "expected a value"; only `tuple(…)` reads. Also, LANGUAGE.md's `(p) ↦ p.home.city` isn't read (the text reads `=>`) | GAPS round 17 D4 | 2026-11-14 |
+| C227 | depot's `List Station`, built once and then only read by position (`item at`), stays a linked list, so `closest` and the truck walk it for each station: core 27x the ideal at 160 stations, 156x at 640. Find why the chooser keeps List as written there (it took a tree for Map). An array by hand: 640 stations 63 s → 3.5 s | GAPS round 17 D1 | 2026-11-14 |
+| I278 | Unit checks of a big program: depot's `ters check` takes 9 s, about 7.4 of it units. Each own definition's constraints read every own callee through (main's system has 6,160 rows, 41,556 over the program), and signatureUnits solves each system again after the conflict check. Summarise own callees by their ports as library ones are, and solve each system once | GAPS round 17 D2 | 2026-11-14 |
+| C228 | A range made only to be walked once: depot's `indices(c)`, `range(length(c.stations))`, is made for each `closest` and truck round, and is the largest self time once C227 is done (0.67 of 3.5 s at 640 stations). Fuse the list into the recursion that walks it | GAPS round 17 D5 | 2026-11-14 |
 | I277 | The orange "Refused: …" note stays on the status line after the next selection and an undo; the next selection could clear it. | QA 11-14b L2 | 2026-11-14 |
 | C226 | `steps of E(c)` matched at once: the generated handler and the match made one, so no `Steps` datum is built per operation (case of a known constructor across a handler). Waits for an example whose time is in its steps | [CLOSURES-INTERFACES-EFFECTS-2026-11-14](docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) §3.4 | 2026-11-14 |
 
