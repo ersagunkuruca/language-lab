@@ -3568,7 +3568,9 @@ native` 2.4x (1271x), now faster than WASI.
 **R2. `ters native` is 4 to 7x slower than WASI on the same program
 (perf, C220).** At 4000 fixes, native takes 1052 ms and WASI 152 ms.
 This is C220's machine result again on a second program, with the same
-quadratic walk.
+quadratic walk. Since C221 trek's native run is faster than WASI's (the walk
+was the cause), and since C220 machine's is about as fast as WASI's
+(its counts every step).
 
 **R3. WASI runs out of stack from 10000 fixes (compiler).** `points
 from`, `legs of`, `with heights` and std's `sum` recurse once per item.

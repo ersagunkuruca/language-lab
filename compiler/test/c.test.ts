@@ -395,6 +395,26 @@ test("a record's fields are read before it is given away, so a changed field has
   assert.ok(stored.indexOf("Machine_drop(p0);\n", stored.indexOf("lab_value_of_b(p0, p1)")) < stored.indexOf("lab_replace_at("), stored);
 });
 
+// C220: a record held as a C struct that is taken apart and then no
+// longer needed gives its fields to the locals (no dup now, no drop of the
+// whole after), and a field read before a match for one arm alone is read
+// in that arm: machine's `stepped` takes apart the machine `executed`
+// gave it, and `executed` read every field of the machine before the
+// match on the instruction, for `halt` alone (natively 2 to 3 times
+// WebAssembly's time, the counts every step).
+test("a struct taken apart moves its fields out, and a field read for one arm is read there (C220)", () => {
+  const p = load("../../compiler/gaps/machine"), main = p.named("main");
+  // As ters native has it: the step loop's lists as arrays.
+  const t = represented({ title: "machine", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: [], options: p.options }, main, false, true);
+  const { c } = emitC(lowerScalar(t.code, t.info, t.names, [main], { data: true }), { main });
+  const body = (name: string) => { const at = c.indexOf(`\nMachine lab_${name}`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
+  const stepped = body("stepped");
+  assert.match(stepped, /l\d+ = l3\.f1;/);
+  assert.doesNotMatch(stepped, /dup\(l3\.f|Machine_drop\(l3\)/);
+  const executed = body("executed");
+  assert.doesNotMatch(executed.slice(0, executed.indexOf("switch")), /p1\.f/, "nothing read before the match");
+});
+
 // Round 13 P2: pond's `applied` gives the pond whole to `with school`,
 // which makes the next pond from it and reads every field but the school
 // and the patches: it is given a pond of only those, so the school taken
@@ -404,7 +424,9 @@ test("a record given whole to a function reading only some of its fields is give
   const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
   const at = c.indexOf("\nPond lab_applied", c.indexOf("// applied\n")), body = c.slice(at, c.indexOf("\n}\n", at));
   assert.doesNotMatch(body, /Pond_dup\(p0\)/);
-  assert.match(body, /Pond_drop\(p0\);[^]*lab_replaced_in_pool/);
+  // The school moved out of the pond, which is then gone (C220).
+  assert.match(body, /(l\d+) = p0\.f0;[^]*lab_replaced_in_pool_b\(\1,/);
+  assert.doesNotMatch(body, /Pond_drop\(p0\)/);
   assert.match(body, /\(\(Pond\)\{ \(\(Pool\)\{ \(\(lab_cell \*\)0\)/);
 });
 

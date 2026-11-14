@@ -894,7 +894,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
-  for (const i of kept) funcs[i].body = readFirst(funcs[i], funcs);
+  for (const i of kept) funcs[i].body = sunk(readFirst(funcs[i], funcs));
   // Inputs lent, not given (C94, Perceus's borrowed parameters): a record
   // or cell input the body only reads fields of, or lends on in turn, is
   // neither dup'd by the caller nor dropped by the callee. Such a function
@@ -1914,6 +1914,59 @@ int main(int argc, char **argv) {
       pre.push(`${d}${owned} = ${r};`, `${d}${v} = ${read(owned)};`, `${d}${drop(rt, owned)}`);
       return v;
     }
+    // Lets reading fields of a record held as a C struct (machine's
+    // Machine, taken apart each step) that is no longer needed after
+    // them: the fields move into the locals, with no dup now and no drop
+    // of the struct after, and the fields nobody took are dropped. A
+    // struct's fields hold one count each, so nothing else can hold them
+    // through it (C220: in WebAssembly the GC does it). As takeApart does
+    // for a cell. The body after them, or null.
+    function moved(e: SExpr & { k: "let" }, pre: string[], d: string, after: Set<number>): SExpr | null {
+      if (e.value.k !== "get" || e.value.rec.k !== "local" || e.value.t.mutable) return null;
+      const r = e.value.rec.i, t = e.value.t;
+      if (!isCounted(r) || after.has(r)) return null;
+      const reads: { i: number; f: number }[] = [];
+      let body: SExpr = e;
+      while (body.k === "let" && body.value.k === "get" && body.value.rec.k === "local" && body.value.rec.i === r && body.i !== r && !reads.some((x) => x.i === (body as { i: number }).i || x.f === ((body as { value: { i: number } }).value.i))) {
+        reads.push({ i: body.i, f: body.value.i });
+        body = body.body;
+      }
+      const rest = free(body);
+      if (rest.has(r)) return null;
+      const taken = new Set(reads.map((x) => x.f));
+      pre.push(...reads.map((x) => `${d}${local(x.i)} = ${local(r)}.f${x.f};`));
+      t.fields.forEach((x, j) => { if (!taken.has(j) && counted(x.t)) pre.push(`${d}${drop(x.t, `${local(r)}.f${j}`)}`); });
+      for (const x of reads) if (isCounted(x.i) && !rest.has(x.i) && !after.has(x.i)) pre.push(`${d}${drop(f.locals[x.i], local(x.i))}`);
+      return body;
+    }
+    // The same for a record made of fields of one held as a struct and not
+    // needed after (machine's `stepped`: the next machine made of the one
+    // `executed` gave, a field changed): its fields read are moved into
+    // locals first, the rest dropped, and the new record made of those.
+    function movedOut(es: SExpr[], pre: string[], d: string, after: Set<number>): SExpr[] {
+      const reads = (e: SExpr, r: number): number => (e.k === "get" && e.rec.k === "local" && e.rec.i === r ? 1 : 0) + kids(e).reduce((n, k) => n + reads(k, r), 0);
+      const uses = (e: SExpr, r: number): number => (e.k === "local" && e.i === r ? 1 : 0) + kids(e).reduce((n, k) => n + uses(k, r), 0);
+      const binds = (e: SExpr, r: number): boolean => ((e.k === "let" && e.i === r) || (e.k === "case" && e.s === r)) || kids(e).some((k) => binds(k, r));
+      const rs = new Set<number>();
+      for (const e of es) for (const x of walk(e)) if (x.k === "get" && x.rec.k === "local" && !x.t.mutable) rs.add(x.rec.i);
+      let out = es;
+      for (const r of rs) {
+        const t = f.locals[r];
+        if (!isRecord(t) || t.mutable || !isCounted(r) || after.has(r)) continue;
+        if (out.some((e) => uses(e, r) !== reads(e, r) || binds(e, r))) continue;
+        const into = new Map<number, number>();
+        for (const e of out) for (const x of walk(e)) if (x.k === "get" && x.rec.k === "local" && x.rec.i === r && !into.has(x.i)) {
+          const j = f.locals.push(t.fields[x.i].t) - 1;
+          decls.push(`  ${ty(f.locals[j])} ${local(j)};`);
+          into.set(x.i, j);
+          pre.push(`${d}${local(j)} = ${local(r)}.f${x.i};`);
+        }
+        t.fields.forEach((x, j) => { if (!into.has(j) && counted(x.t)) pre.push(`${d}${drop(x.t, `${local(r)}.f${j}`)}`); });
+        const swap = (x: SExpr): SExpr => (x.k === "get" && x.rec.k === "local" && x.rec.i === r ? { k: "local", i: into.get(x.i)! } : mapKids(x, swap));
+        out = out.map(swap);
+      }
+      return out;
+    }
     // A call as a statement of its own, in order: it may drop what an
     // argument beside it still reads (C runs those in any order).
     function stated(call: string, t: LType, pre: string[], d: string): string {
@@ -2271,6 +2324,8 @@ int main(int argc, char **argv) {
         }
         case "local": return isCounted(e.i) && after.has(e.i) ? dup(f.locals[e.i], local(e.i)) : local(e.i);
         case "let": {
+          const rest = moved(e, pre, d, after);
+          if (rest) return ex(rest, pre, d, after);
           const body = free(e.body);
           pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
           if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
@@ -2282,7 +2337,7 @@ int main(int argc, char **argv) {
           return t;
         }
         case "make": {
-          const xs = args(e.args, pre, d, after);
+          const xs = args(movedOut(e.args, pre, d, after), pre, d, after);
           if (!e.t.mutable) return `((${ty(e.t)}){ ${xs.join(", ") || "0"} })`;
           const v = temp(e.t), n = sname.get(e.t.key)!;
           pre.push(`${d}${v} = lab_new(sizeof(${n}), ${tnum.get(e.t.key)}, 0);`, ...xs.map((x, k) => `${d}((${n} *)${v})->f${k} = ${x};`));
@@ -2493,6 +2548,8 @@ int main(int argc, char **argv) {
         return [...gone, ...block(e, to, d, after)];
       }
       if (e.k === "let") {
+        const rest = moved(e, pre, d, after);
+        if (rest) return [...pre, ...block(rest, to, d, after)];
         const body = free(e.body);
         pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
         if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
@@ -4205,6 +4262,37 @@ function readFirst(f: SFunc, funcs: SFunc[]): SExpr {
     return changed && occurs(out, x) === fieldReads(out, x) ? out : t;
   };
   return tail(go(f.body));
+}
+
+// A field of a record held as a C struct, read into a local before an if
+// or a case and used in one of its ways alone, is read there (machine's
+// `executed`: every field of the machine read before the match on the
+// instruction, for `halt`'s new machine alone, then dropped in every
+// other arm, C220). Read where it's used, it has one holder there, and
+// a record then no longer needed gives its fields up (c.ts `moved`). A
+// field read used nowhere isn't read.
+function sunk(e: SExpr): SExpr {
+  const uses = (x: SExpr, j: number): boolean => (x.k === "local" && x.i === j) || kids(x).some((k) => uses(k, j));
+  const binds = (x: SExpr, j: number): boolean => ((x.k === "let" && x.i === j) || (x.k === "case" && x.s === j)) || kids(x).some((k) => binds(k, j));
+  const reads: (SExpr & { k: "let" })[] = [];
+  let body = e;
+  while (body.k === "let" && body.value.k === "get" && body.value.rec.k === "local" && !body.value.t.mutable) { reads.push(body); body = body.body; }
+  if (!reads.length || (body.k !== "if" && body.k !== "case")) return mapKids(e, sunk);
+  const ways: (SExpr | null)[] = body.k === "if" ? [body.then, body.else] : [...body.arms];
+  const head = body.k === "if" ? body.cond : body.scrut;
+  const stay: (SExpr & { k: "let" })[] = [];
+  const into = ways.map((): (SExpr & { k: "let" })[] => []);
+  for (const r of reads) {
+    const rec = (r.value as { rec: { i: number } }).rec.i;
+    const at = ways.flatMap((w, j) => (w && uses(w, r.i) ? [j] : []));
+    if (uses(head, r.i) || reads.some((o) => o !== r && uses(o.value, r.i)) || (body.k === "case" && body.s === rec)) stay.push(r);
+    else if (!at.length) continue;
+    else if (at.length === 1 && !binds(ways[at[0]]!, rec)) into[at[0]].push(r);
+    else stay.push(r);
+  }
+  const put = (w: SExpr | null, j: number): SExpr | null => (w ? into[j].reduceRight<SExpr>((b, r) => ({ ...r, body: b }), w) : w);
+  const moved: SExpr = body.k === "if" ? { ...body, then: sunk(put(body.then, 0)!), else: sunk(put(body.else, 1)!) } : { ...body, arms: body.arms.map((a, j) => (a ? sunk(put(a, j)!) : a)) };
+  return stay.reduceRight<SExpr>((b, r) => ({ ...r, body: b }), moved);
 }
 
 // The fields of each function's record inputs that it reads (null: all
