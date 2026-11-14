@@ -557,6 +557,39 @@ test("a list of call is edited as a row", async () => {
   if (gone.ok) assert.deepEqual(lits(gone.code), [1, 2]);
 });
 
+// A + chain is its left-nested pairs (E264): a + (b + c) is two items,
+// an item added stays left-nested, and its items don't move (on Float64
+// the order changes how it rounds).
+test("a + chain is its left-nested pairs, grows left-nested, and keeps its order", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { B } = await import("../src/prelude.ts");
+  const { addItem, moveItem, rowAt, rowOfItem } = await import("../../editor/typed.ts");
+  const k = new Lang();
+  const f = k.def("f"), g = k.def("g");
+  let fr = "", gr = "";
+  k.define(f, k.fn(["a", "b", "c"], (a, b, c) => (fr = k.call(B.add, a, k.call(B.add, b, c)))));
+  k.define(g, k.fn(["a", "b", "c"], (a, b, c) => (gr = k.call(B.add, k.call(B.add, a, b), c))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  const right = rowAt(code, fr)!;
+  assert.equal(right.items.length, 2);
+  assert.equal(rowOfItem(code, right.items[1])?.row.root, fr);
+  const row = rowAt(code, gr)!;
+  assert.equal(row.items.length, 3);
+  // Each place an item is added keeps the chain left-nested: one row of four.
+  for (const at of [0, 1, 2, 3]) {
+    const added = addItem(code, names, info, row, at);
+    assert.ok(added.ok, !added.ok ? added.reason : "");
+    if (!added.ok) continue;
+    const grown = rowAt(added.code, rowOfItem(added.code, row.items[0])!.row.root)!;
+    assert.equal(grown.items.length, 4, `at ${at}`);
+    assert.equal(added.code.nodes[grown.items[at]].kind, "hole", `at ${at}`);
+  }
+  // builtin.add is Float64's: its items keep their order.
+  const floaty = moveItem(code, names, info, row, 0, 1);
+  assert.ok(!floaty.ok && /changes how a Float64 rounds/.test(floaty.reason), floaty.ok ? "moved" : floaty.reason);
+});
+
 // A fraction typed where a type spelled by its Literal goes is a literal
 // of that type (E237b): 1/3 where a Fixed goes, not Float64's 1 / 3; and
 // one already there is changed as a fraction. Asked of the library's
