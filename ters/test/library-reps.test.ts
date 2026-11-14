@@ -13,6 +13,7 @@ import { makeRunner, runMain, showValue, type Value } from "../src/lang/run.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
+import { COPIED_FROM } from "../src/lang/prelude-ids.ts";
 import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
 import { dependencies, subtree, type Id, isCall } from "../src/model.ts";
@@ -372,6 +373,11 @@ test("lists as arrays copy a library function that calls one with lists, and a v
   const c = withLibraryRepresentations(code, info, names, main, [xs, summed, total, main]);
   assert.deepEqual(c.chosen, ["List as array of List"]);
   assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
+  // The copies are named by what they copy: the same each time, so a
+  // later run's check finds them kept (I264).
+  const copies = (code: typeof c.code) => code.defs.filter((d) => COPIED_FROM.has(d));
+  assert.ok(copies(c.code).length >= 2);
+  assert.deepEqual(copies(withLibraryRepresentations(code, info, names, main, [xs, summed, total, main]).code), copies(c.code));
 });
 
 // C30d3c: WebAssembly and C take the same choice. `array of List`'s match

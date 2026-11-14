@@ -236,8 +236,14 @@ export class CheckCache {
       const t = info.owner.get(f.target), td = t ? code.nodes[(code.nodes[t] as NodeOf<"def">)?.body ?? ""] : undefined;
       return td?.kind === "typedef" && !!td.interface;
     };
+    // Insiders matter to a group only as whether all of its own are
+    // (infer.ts `current.every(insiders.has)`): a representation's
+    // definitions, which library-reps.ts makes with new ids each run, are
+    // insiders, and naming them all here missed every group of a rewrite
+    // in every later run (I264).
+    const insiders = opts.insiders ? new Set(opts.insiders) : null;
     const globalText = JSON.stringify([
-      layerId(layer), idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
+      layerId(layer), idsText(opts.hidden), !!insiders, idsText(opts.library),
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => defText(code, d)),
       a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => defText(code, d)),
     ]);
@@ -245,7 +251,7 @@ export class CheckCache {
     // The same with every number a text of this process's spelled out.
     const spelled = (n: number) => numberTexts.get(n) ?? "";
     let globalSpelled: string | undefined;
-    const globalOnDisk = () => (globalSpelled ??= JSON.stringify([layer.keptAs, idsText(opts.hidden), idsText(opts.insiders), idsText(opts.library),
+    const globalOnDisk = () => (globalSpelled ??= JSON.stringify([layer.keptAs, idsText(opts.hidden), !!insiders, idsText(opts.library),
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => spelled(defText(code, d))),
       a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => spelled(defText(code, d))),
     ]));
@@ -262,6 +268,7 @@ export class CheckCache {
       const texts = group.map((d) => defText(code, d)), pins = group.map((d) => opts.pins?.[d] ?? null);
       // A group known to end (infer.ts Options `ends`) is checked apart.
       const ended = ends.size && group.every((d) => ends.has(d)) ? ["ends"] : [];
+      if (insiders && group.every((d) => insiders.has(d))) ended.push("insiders");
       // On disk the group's ids too: a kept result names its nodes by id.
       return { key: JSON.stringify([global, texts, pins, seen, ...ended]), stored: onDisk ? () => JSON.stringify([globalOnDisk(), group, texts.map(spelled), pins, seen, ...ended]) : null };
     };
