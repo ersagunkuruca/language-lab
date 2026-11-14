@@ -1642,7 +1642,21 @@ export function deleteOne(code: Code, names: Names, info: Info, def: Id, of: Rec
 
 // Pull a value off its input (rule 5): the input is a hole, the value lies loose.
 export function unwire(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, slot: Id): LooseEdit {
-  if (code.nodes[slot]?.kind === "hole") return { ok: false, reason: "nothing is wired in there" };
+  const cur = code.nodes[slot];
+  if (cur?.kind === "hole") return { ok: false, reason: "nothing is wired in there" };
+  // A wire from a dot taken off: a variable alone is nothing to keep, so
+  // the input is a hole and nothing lies loose for it. A dot no wire leaves
+  // now goes, its value loose; one wire left, the value is back on it.
+  if (cur?.kind === "ref" && isDot(code, def, cur.target) && names[cur.target] !== "_") {
+    const off = guardTyped(info, replace(code, slot, () => ({ kind: "hole" })), names, slot, "Took the wire off: the input is a hole.");
+    if (!off.ok) return off;
+    const left = usesOf(off.code, cur.target).length;
+    if (left === 0 && names[cur.target] === undefined) {
+      const d = dropDot(off.code, off.names, infer(off.code, { ...display, ...off.names }), def, of, home, cur.target, "Took the wire off: the input is a hole. No wire left the dot, so it's gone and its value lies loose.");
+      return d.ok ? { ...d, select: slot } : { ...off, of, home };
+    }
+    return settleDot({ ...off, of, home }, def, cur.target);
+  }
   const at = holder(code, of, def, slot);
   // The value moves out under a new id, so the hole can keep the input's.
   const moved = freshId();
@@ -2401,11 +2415,16 @@ export function setResults(code: Code, names: Names, info: Info, def: Id, result
 }
 
 // The reverse: a dot with one wire out goes back to being a plain wire.
-export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: Id): TEdit {
+export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: Id, loose?: { of: Record<Id, Id>; home: Record<Id, Id> }): LooseEdit {
   const l = lets(code, defId).find((c) => (code.nodes[c.fn] as NodeOf<"lambda">).params.includes(dot));
   if (!l) return { ok: false, reason: "that isn't a dot" };
   const uses = usesOf(code, dot);
-  if (uses.length === 0) return { ok: false, reason: "nothing reads this dot; it is there for what its value does. Clear the value to drop it" };
+  // A dot no wire leaves is a branching point with no branches: it goes,
+  // and its value lies loose, greyed where it was (Ersagun 2026-11-14).
+  // A step done for its effect (`_ = print(…)`) is not a dot to remove.
+  if (uses.length === 0 && names[dot] === "_") return { ok: false, reason: "it is a step done for its effect, not a dot: Delete the step to drop it" };
+  if (uses.length === 0 && !loose) return { ok: false, reason: "no wire leaves this dot" };
+  if (uses.length === 0) return dropDot(code, names, info, defId, loose!.of, loose!.home, dot, "Removed the dot: no wire left it, so its value lies loose.");
   if (uses.length > 1) return { ok: false, reason: `it feeds ${uses.length} places; disconnect all but one first` };
   const lam = code.nodes[l.fn] as NodeOf<"lambda">;
   const i = lam.params.indexOf(dot);
@@ -2418,6 +2437,26 @@ export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: 
   const nn = { ...names };
   delete nn[dot];
   return guardTyped(info, collect(next), nn, value, "Removed the dot: the value is back on its one wire.");
+}
+
+// A dot nothing reads any more goes, and its value is set loose from the
+// definition (drafts.ts): the value keeps its nodes, so the graph greys it
+// where it is.
+function dropDot(code: Code, names: Names, info: Info, defId: Id, of: Record<Id, Id>, home: Record<Id, Id>, dot: Id, note: string): LooseEdit {
+  const l = lets(code, defId).find((c) => (code.nodes[c.fn] as NodeOf<"lambda">).params.includes(dot));
+  if (!l) return { ok: false, reason: "that isn't a dot" };
+  const lam = code.nodes[l.fn] as NodeOf<"lambda">;
+  const i = lam.params.indexOf(dot), value = l.args[i];
+  const scope = scopeAt(code, defId, l.id);
+  let next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  next.nodes[lam.id] = { ...lam, params: lam.params.filter((_, j) => j !== i) };
+  next.nodes[l.id] = { ...l, args: l.args.filter((_, j) => j !== i) };
+  if (lam.params.length === 1) next = swapIn(next, l.id, lam.body);
+  const x = setLoose(next, of, home, of[defId] ?? defId, value, scope);
+  const nn = { ...names };
+  delete nn[dot];
+  const e = guardTyped(info, collect(x.code), inputNames(nn, home, x.home), undefined, note);
+  return e.ok ? { ...e, of: x.of, home: x.home } : e;
 }
 
 // Drag a node's output onto another input: the value gets a dot (or uses

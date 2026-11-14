@@ -1227,10 +1227,10 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   // A dot: a let's binder, the shared output of its value.
   if (n.kind === "binder" && T.isDot(doc.code, ui.def, id)) {
     const k = T.usesOf(doc.code, id).length;
-    const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id);
+    const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id, { of: doc.loose ?? {}, home: doc.home ?? {} });
     out.append(h("div", { class: "sub-head" }, "Dot · code.json"),
-      h("p", { class: "hint" }, `${k === 0 ? "Nothing reads it: it is a step done for its effect." : `Feeds ${k} input${k === 1 ? "" : "s"}.`} Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.`),
-      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? "Put the value back on its one wire" : `Can't: ${r.reason}` }, "Remove the dot")));
+      h("p", { class: "hint" }, `${k === 0 ? (names[id] === "_" ? "Nothing reads it: it is a step done for its effect." : "No wire leaves it: Remove the dot sets its value loose.") : `Feeds ${k} input${k === 1 ? "" : "s"}.`} Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.`),
+      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? (k ? "Put the value back on its one wire" : "The dot goes, and its value lies loose") : `Can't: ${r.reason}` }, "Remove the dot")));
   }
   if (n.kind === "binder" && names[id] !== "_" && !isTypeParam(id)) {
     const on = isNamed(id);
@@ -2583,7 +2583,7 @@ document.addEventListener("click", (e) => {
     if (a === "page-hush") { page.now?.hush?.(); ui.note = "Stopped every sound the page was playing."; return render(); }
     if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
     if (a === "page-log") return saveLog();
-    if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected));
+    if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected, { of: doc.loose ?? {}, home: doc.home ?? {} }));
     return;
   }
   const hit = blocksHit(t);
