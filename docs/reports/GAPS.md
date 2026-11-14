@@ -3809,3 +3809,18 @@ value is none.
 3. D2: unit checks that summarise a program's own callees, and that solve
    each definition's system once (I278).
 4. D5, then the record copies in D6, measured first.
+
+### After the fixes
+
+D3 (I279) and D4 (I280) were fixed in the text reader, and D2 (I278) took
+depot's cold `ters check` from 9.1 s to 2.0 s. D1 (C227, #2696) wasn't the
+chooser's order: the lists were turned down as arrays because `set`, a
+builtin, was given a World holding a list, and the boundary let only
+builtins that pass their value on take a list it couldn't convert. `set`
+gives back the record it's given, of the program's own type, so it passes
+too. Lists are now arrays beside the map's tree. A day, against the ideal:
+
+| stations | core | native | wasi |
+|---|---|---|---|
+| 160 | 4.7x (was 27x) | 6.0x (was 46x) | 5.4x (was 37x) |
+| 640 | 8.5x (was 156x) | 11.9x (was 207x) | 9.0x (was 194x) |

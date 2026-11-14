@@ -42,7 +42,7 @@ export function program(asDefined = false) {
   const main = own.find((d) => p.pres.names[d] === "main")!;
   const plain = { title: "depot", code: p.code, own, names: p.pres.names, info, reps: representationsIn(p.code, info, p.pres.names, own), options: p.options };
   const r = asDefined ? plain : represented(plain, main, true);
-  return { code: r.code, info: r.info, names: r.names, main };
+  return { code: r.code, info: r.info, names: r.names, main, chosen: (r as { chosen?: string[] }).chosen ?? [] };
 }
 
 export async function ways(): Promise<Record<Name, Way>> {
