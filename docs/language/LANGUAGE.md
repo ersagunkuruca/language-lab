@@ -397,7 +397,12 @@ negative `power`, `whole part` of infinity and `read whole number` of
 "007" are `Choice`, not a crash or a NaN. Where the checker sees the
 divisor can't be 0 (a literal, or the `else` of `if d = 0`), there is no
 Choice, as for Float64's `/` (L125b): `remainder(n, 3)` is just an Int, and
-`power(n, 2)` too. Division rounds down, so
+`power(n, 2)` too. std's numbers module also has **`Nat`** (L249), the
+natural numbers as data: `zero | succ(pred: Nat)`, with `add`,
+`multiply`, `natural` (Int → Nat) and `integer` (Nat → Int). A program
+matches and folds on a Nat the Peano way, and `ters run` stores it as an
+Int (zero is 0, succ adds one, a fold loops), with nothing written about
+how. Division rounds down, so
 `remainder` has the divisor's sign. Run backwards, Int stays whole: `x · 3
 + 1 = 13` gives 4 and `= 12` gives none, whether it is written with Int's
 own operations or the generic ones at an Int literal. The checker plans it
@@ -419,6 +424,15 @@ the way, has no single answer, and the checker says so.
 
 All of these run in the evaluator, the compiler (`$int`, `$impl`, `$many`
 in its runtime) and forward in the relational interpreter.
+
+On Float64, `+` and `·` round at each step, so `(a + b) + c` and `a + (b +
+c)` can differ. The text and the views keep how a sum was grouped (I274):
+`a + b + c` is the left-nested pairs, and a right-nested pair keeps its
+brackets, `a + (b + c)`, so it reads back as written. The editor's moves
+inside a Float64 `+` or `·` chain only ever swap the innermost pair, `a +
+b` to `b + a`, which rounds the same; a move that would regroup is greyed
+out with the reason (E264, I276). Int's `+` and `·`, and `++`, `and` and
+`or`, flatten either way, since grouping doesn't change them.
 
 ### Order, and sort
 
@@ -1467,6 +1481,19 @@ node cli/ters.ts check examples/wc                      # errors, and each defin
 `node cli/ters.ts` with no command lists the rest: native and WASI
 programs, pages and phone apps, tests, `diff` and `git-setup`, `mcp`, and
 publishing modules (RUNNING.md has the examples).
+
+Without this repository, `ters` is one file, `ters.mjs`, that the site
+serves (I272). Node 22.18 is all it needs:
+
+```
+curl -LO https://ersagunkuruca.github.io/language-lab/ters.mjs
+node ters.mjs git-setup      # this repository's git diff and merges read program files
+node ters.mjs check myprogram
+```
+
+It runs, checks, tests, diffs, merges and compiles to C and WebAssembly,
+and keeps its cache in `~/.cache/ters`. `ters compile`, `build-web` and
+`build-app` need a checkout, and say so.
 
 `examples/wc` is the proof: a word count written in the language, after
 Unix `wc` (Version 1 AT&T Unix, 1971; the options and layout follow GNU

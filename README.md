@@ -43,6 +43,11 @@ Android or iPhone app drawn with the phone's own views, with no web view
 
 `ters` is Ters's command line, `ters/cli/ters.ts`. After `npm ci` in `ters/`,
 run it as `npm run ters -- <command>` there (or `node cli/ters.ts <command>`).
+Without a clone, `ters` is one file the site serves (Node 22.18 is all it
+needs): `curl -LO https://ersagunkuruca.github.io/language-lab/ters.mjs`,
+then `node ters.mjs <command>`. `node ters.mjs git-setup` in another
+repository makes its `git diff` and merges read program files
+([DIFF.md](docs/design/tools/DIFF.md)).
 `ters` with no command lists every command. The main ones:
 
 - `ters run` runs a saved program's `main`, compiled, or with the
