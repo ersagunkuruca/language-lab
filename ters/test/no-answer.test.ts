@@ -122,6 +122,35 @@ test("a division guarded by `if d > 0` or `if l.took > 0 s` has no Choice (L258)
   assert.equal(s.eval("over(1.0, 0.0)"), "= 0 : Float64");
 });
 
+// What a filter kept, its test holds of (L258b): trek's tobler time maps
+// over `keep(ls, moving)`, and moving says the leg took time and went
+// somewhere (`l.length / l.took ≥ 0.3 m/s` where `l.took > 0 s`).
+test("a function given the items `keep` kept divides by what its test showed isn't 0 (L258b)", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { Session } = await import("../mcp/session.ts");
+  const dir = mkdtempSync(join(tmpdir(), "no-answer-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ defs: [], nodes: {} }));
+  writeFileSync(join(dir, "names.default.json"), "{}");
+  const s = new Session(dir);
+  s.define("Leg", "type", [], "leg(length: Float64 m, took: Float64 s, rise: Float64 m)");
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); s.replace(/□#(\w+)/.exec(s.view(name))![1], text); return s.typeOf(s.resolve(name)); };
+  s.define("slowest", "value");
+  s.replace(/□#(\w+)/.exec(s.view("slowest"))![1], "0.3 m/s");
+  assert.equal(fill("moving", ["l"], "if l.took > 0.0 s then l.length / l.took ≥ slowest else false"), "(Leg) -> Bool");
+  assert.equal(fill("grades", ["ls"], "sum(map(keep(ls, moving), (l) => l.rise / l.length))"), "(List Leg) -> Float64");
+  assert.equal(fill("speeds", ["ls"], "map(keep(ls, moving), (l) => l.length / l.took)"), "(List Leg) -> List (Float64 m/s)");
+  assert.equal(fill("climbing", ["ls"], "map(keep(ls, (l) => l.length > 0.0 m), (l) => l.rise / l.length)"), "(List Leg) -> List Float64");
+  // Trig's exp is positive in a definition generic in its number.
+  fill("speed at", ["slope"], "exp(slope + 0.05)");
+  assert.equal(fill("time at", ["x"], "x / speed at(x)"), "(Float64) -> Float64");
+  // A test of another field shows nothing of the length.
+  assert.equal(fill("timed", ["l"], "l.took > 0.0 s"), "(Leg) -> Bool");
+  assert.equal(fill("wrong", ["ls"], "map(keep(ls, timed), (l) => l.rise / l.length)"), "(List Leg) -[Choice]-> List Float64");
+  assert.equal(s.errors(), "ok");
+});
+
 // `and` and `or` work out their second side only when the first doesn't
 // decide (L259, Ersagun 2026-11-14), on the evaluator's three ways of
 // running code: so a search counts one false, not one per answer of the

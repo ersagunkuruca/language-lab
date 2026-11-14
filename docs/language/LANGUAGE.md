@@ -92,8 +92,11 @@ says what to do instead. Overflow (an answer too big to hold) stops the
 program, and no handler catches it, so every engine agrees (L166). The checker drops that `Choice` where it can see
 the input is fine: dividing by a literal or a let that isn't 0, inside `x >
 0`'s true branch (a field read too: `l.length / l.took` inside `if l.took >
-0 s`), the square root of `x · x`, and `and`'s second side (`t > 0 and x /
-t > 1`).
+0 s`), the square root of `x · x`, `and`'s second side (`t > 0 and x /
+t > 1`), and the items a filter kept (`map(keep(legs, moving), (l) ↦ l.rise
+/ l.length)`, where `moving` says `l.length / l.took ≥ 0.3 m/s` with
+`l.took > 0 s`). What only a caller knows (a list never empty, the legs
+another definition was given) it doesn't carry: that stays a `first`.
 
 `a and b` works out b only when a is true, and `a or b` only when a is
 false (L259), as in nearly every language. So `t > 0 and x / t > 1` is false
