@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I277 | The orange "Refused: …" note stays on the status line after the next selection and an undo; the next selection could clear it. | QA 11-14b L2 | 2026-11-14 |
 | C225 | Defunctionalisation (Reynolds 1972): where every lambda of a function type is known, a function value as a sum of its lambdas' captures and a call as a match, so a shader can run a function picked at run time and WebAssembly and C switch instead of calling indirectly. Waits for an example (a shader picking a distance function per object) | [CLOSURES-INTERFACES-EFFECTS-2026-11-14](docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) §2.4 | 2026-11-14 |
 | C226 | `steps of E(c)` matched at once: the generated handler and the match made one, so no `Steps` datum is built per operation (case of a known constructor across a handler). Waits for an example whose time is in its steps | [CLOSURES-INTERFACES-EFFECTS-2026-11-14](docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) §3.4 | 2026-11-14 |
 

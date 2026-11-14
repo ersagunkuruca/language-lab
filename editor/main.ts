@@ -792,6 +792,7 @@ function travel(from: Doc[], to: Doc[], label: string) {
   const what = [...new Set(changed.map((f) => FILE_WORDS[f] ?? f))];
   const said = what.length > 1 ? `${what.slice(0, -1).join(", ")} and ${what.at(-1)}` : what[0] ?? "nothing";
   ui.note = `${label}: ${said} ${label === "Redid" ? "changed again" : "changed back"}.`;
+  ui.refused = false;
   ui.mode = null;
   save();
   render();
