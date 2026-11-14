@@ -14,8 +14,10 @@ import type { CoreMain } from "../../editor/coreMain.ts";
 import { sendCode } from "../../editor/runCode.ts";
 
 const manifest = JSON.parse(readFileSync(new URL("../../editor/examples.json", import.meta.url), "utf8")) as Manifest;
-function example(program: string) {
-  const m = manifest.programs.find((p) => p.program === program)!;
+// A picker's program, or (folders given) a test program the picker doesn't
+// show, such as markov's text main since its page took its place (L261e).
+function example(program: string, folders?: string[]) {
+  const m = folders ? { folders, run: undefined } : manifest.programs.find((p) => p.program === program)!;
   const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f) as { code: Code; names: Record<string, string> }));
   const code = merge(LIBRARY.code, fs.map((f) => f.code).reduce((a, b) => merge(a, b)));
   const names = { ...LIBRARY.names, ...Object.assign({}, ...fs.map((f) => f.names ?? {})) };
@@ -40,7 +42,7 @@ async function inWorker(ask: unknown): Promise<Record<string, unknown>[]> {
 const printedLines = (said: Record<string, unknown>[]) => said.flatMap((m) => (m.lines as string[] | undefined) ?? []);
 
 test("Run main again from what its first run printed, with no lowering, prints the same", async () => {
-  for (const program of ["sort", "queens"]) {
+  for (const program of ["effects", "queens"]) {
     const { code, names, def, run } = example(program);
     const ask = { code, names, pins: {}, def, title: program, files: [], args: run?.args };
     const first = await inWorker(ask), end = first.at(-1)!;
@@ -111,7 +113,7 @@ test("pond's Run main, opened as the editor opens it, lives its pond", async () 
 // markov (L240): where three chains settle, by settled and settled by,
 // and the one that only swaps has no answer.
 test("markov's Run main shows where each chain settles, or no answer", async () => {
-  const { code, names, pins, files, def, run } = example("markov");
+  const { code, names, pins, files, def, run } = example("markov", ["markov"]);
   const said = await inWorker({ code, names, pins, def, title: "markov", files, args: run?.args });
   const end = said.at(-1)!;
   assert.equal(end.error, undefined, String(end.error));
