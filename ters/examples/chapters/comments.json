@@ -13,4 +13,9 @@
 "h3i3thmfob5ah8qailopi5fcg0": "What the fold over the lines carries, from the end of the file back: the lines not yet under a heading, and the sections already closed.",
 "jvtogc5t6k0hnrum9lvmsn2m5m": "How many times a text is in a list.",
 "lhovdneg3h9c3rmlo4elcj64up": "The index file: a list of the chapters, each a link to its file, with its word count.",
-"m2thu50o4t8agj73h1uq9v6n3k": "Gives each section its number and file name, in order. Plain recursion on the list, so the checker sees it ends."}
+"m2thu50o4t8agj73h1uq9v6n3k": "Gives each section its number and file name, in order. Plain recursion on the list, so the checker sees it ends.",
+"eosepmvo2fnafp3ed1hm1kskjh": "How many words a chapter's lines hold, all together.",
+"83f9gmftmpcjkukt1ba9i62u25": "One character of a chapter's file name: a letter or digit kept in lower case, anything else a hyphen.",
+"611kaivjo85hgok0pvv13e14gt": "A chapter number as two digits, 03 for 3, so the files sort in order.",
+"i2hjnag1qntqlgccmv7hfe9oa8": "The contents line for one chapter: its number, its title linked to its file, and how many words it has.",
+"gj25eh1ndna24odkb3r3677om5": "All the chapters' words added up, for the last line of the contents."}
