@@ -721,7 +721,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
   });
   if (later.expanded.length) {
-    const checked = infer(later.code, later.names);
+    const checked = infer(later.code, later.names, undefined, { units: false });
     if (checked.errors.length <= info.errors.length) {
       ({ code, names } = later);
       info = checked;
@@ -745,13 +745,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const lets = inlineLists(code, info);
   if (lets.inlined) {
     code = lets.code;
-    info = infer(code, names);
+    info = infer(code, names, undefined, { units: false });
   }
   // A fold of a map made one fold (fuse-steps.ts, C207c).
   const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
   if (fusedSteps?.fused) {
     code = fusedSteps.code;
-    info = infer(code, names);
+    info = infer(code, names, undefined, { units: false });
   }
   // A fold's costly work on each item shared out as a map, where a target
   // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares
@@ -759,7 +759,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const sharedItems = opts.host && !opts.shader && !envSet("NO_FOLD_ITEMS") ? shareFoldItems(code, info) : null;
   if (sharedItems?.shared) {
     code = sharedItems.code;
-    info = infer(code, names);
+    info = infer(code, names, undefined, { units: false });
   }
   const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives

@@ -92,7 +92,7 @@ export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id
   const out: Code = { nodes, defs: [...code.defs, ...copies] };
   const outNames: Names = { ...names };
   for (const [from, to] of fresh) { const n = names[from] ?? LIBRARY.names[from]; if (n !== undefined) outNames[to] = n; }
-  const checked = infer(out, outNames, undefined, info.options);
+  const checked = infer(out, outNames, undefined, { ...info.options, units: false });
   if (checked.errors.length > info.errors.length) return null;
   return { code: out, names: outNames, own: [...own, ...copies], info: checked, copied: types.map((d) => names[d] ?? LIBRARY.names[d] ?? d) };
 }

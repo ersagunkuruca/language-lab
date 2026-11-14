@@ -132,7 +132,12 @@ export const implementationOf = (info: Info, iface: Id, t: Type): Id | undefined
 // written: a rewrite changes no answer, so they keep no Diverge, nor do
 // their callers on their account (`is even` on Nat, its recursion through
 // `match Nat′`'s function argument once on Int).
-export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache; bodiesLater?: boolean; firstVar?: number; ends?: Iterable<Id> }
+// `units: false` (I261): units aren't checked: the check of a rewrite of a
+// program whose units were (a representation chosen, a compiler's pass),
+// which changes no unit. Unit errors are the check's only product of
+// units, so nothing else is lost; trek's `ters run` spent 5.9 s of 11 on
+// them.
+export interface Options { pins?: Pins; hidden?: Iterable<Id>; insiders?: Iterable<Id>; library?: Iterable<Id>; cache?: CheckCache; bodiesLater?: boolean; firstVar?: number; ends?: Iterable<Id>; units?: false }
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const ARITH_WHAT = {
@@ -292,9 +297,10 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
   let kept = underChecks.find((c) => c.lib === lib && same(c.opts));
   if (!kept) {
     const names = underAll.names;
-    // A program's `ends` are its own definitions: none of the library's.
-    const { ends: _, ...rest } = opts;
-    const libOpts: Options = insiders ? { ...rest, insiders } : opts.ends ? rest : opts;
+    // A program's `ends` are its own definitions: none of the library's;
+    // and the library's units are checked as the library's.
+    const { ends: _, units: __, ...rest } = opts;
+    const libOpts: Options = insiders ? { ...rest, insiders } : opts.ends || opts.units === false ? rest : opts;
     const check = (kind: LibraryCheck): Info => {
       const opts = libOpts;
       const stored = libraryStore?.load(lib, opts, mine, kind);
@@ -2076,7 +2082,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   // Units are part of a number's type: a conflict is a type error.
   // (Not when the palette checks a filling's units on their own: E103e.)
-  if (!reuse?.noUnits) for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
+  if (!reuse?.noUnits && opts.units !== false) for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
 
   // Definitions with results (RESULTS.md, L95): a predicate whose result
   // ports are named, in order. The direction they declare must be one the
