@@ -456,6 +456,14 @@ each made the full run cheaper or moved it, and none made selection finer:
 - **T16e The rule.** WORKFLOW.md says one command before a merge, and
   trusting it; no hand-picked sets, no full rerun after a fix.
 
+**Measured (T16b, 2026-11-14)** on a map of 165 test files and the last
+five merges. By imports, #2667 (io.ts, library-store.ts) reached 229
+files, 10 to 15 minutes. By the map, 145 files ran a line it changed (its
+top-level lines run in every importer), and the cover was 5 files, 18 s.
+#2666 (and/or in run.ts): 4 files, 9 s. #2664 and #2663: 2 files, 18 s.
+#2662: 3 files, 12 s. The other files that ran the lines run after the
+merge in Check main, where minutes are free (the repository is public).
+
 What we give up: a break that only a test the cover left out would see is
 caught after the merge, and one in a test due in a week, within a week,
 with its culprit named. Ersagun accepted that ("we don't have to catch
