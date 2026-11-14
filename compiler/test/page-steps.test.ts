@@ -39,9 +39,10 @@ test("countdown's search spends about the evaluator's page steps compiled, and n
   assert.equal(js.v, ev.v);
   assert.ok(ev.n > 1000, `${ev.n}`);
   // Every call of `results`: 18,120, as the search written out by hand
-  // makes them. The evaluator counts 17,795, 1.8% fewer (I293).
+  // makes them, the evaluator too since I293 (a call made again for each
+  // choice in its inputs spends each time; it counted 17,795).
   assert.equal(js.n, 18120);
-  assert.ok(Math.abs(js.n - ev.n) <= ev.n / 50, `compiled ${js.n}, evaluator ${ev.n}`);
+  assert.equal(ev.n, 18120);
   const under = steps(() => fn("fueled")(0));
   assert.deepEqual(under, { v: ev.v, n: 0 });
 });
