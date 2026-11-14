@@ -656,7 +656,7 @@ async function looseParts() {
   const after = await text();
   const loose = (t: string) => (t.match(/ loose: /g) ?? []).length;
   if (!after.includes("-- loose, not used yet") || loose(after) < 2) errors.push(`${where}: deleting named(…) didn't leave its inputs loose: ${after.slice(-300)}`);
-  if (!(await p.locator(".p-graph .rg.loose").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
+  if (!(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: the graph doesn't show the loose parts`);
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
   // By the part's own last node's output, as the status says (BACKLOG E120):
   // the faded output furthest right, of a node, not of a lone literal (E122).

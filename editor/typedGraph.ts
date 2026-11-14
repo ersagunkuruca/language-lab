@@ -212,7 +212,11 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   const picked = pickedBy.get(key) ?? new Set<Id>();
   pickedBy.set(key, picked);
   for (const l of hooks.loose ?? []) {
-    const part = build(code, pres, info, l, hooks, true);
+    const part = build(code, pres, info, l, hooks, true, scene.frames.has(defId) ? defId : null);
+    // Below what's drawn so far, the first time it's placed; after that it
+    // stays where it was drawn, as every node does.
+    const bottom = Math.max(0, ...[...scene.items.values()].map((it) => it.auto.y + it.h));
+    for (const it of part.items.values()) it.auto = { x: it.auto.x, y: it.auto.y + bottom + 40 };
     for (const k of ["items", "frames", "sources"] as const) for (const [id, v] of part[k] as Map<Id, never>) (scene[k] as Map<Id, never>).set(id, v);
     scene.wires.push(...part.wires.map((w) => ({ ...w, cls: `${w.cls} faded` })));
     for (const id of part.lit) scene.lit.add(id);
@@ -336,7 +340,7 @@ interface Item {
   name?: string;        // what it is called, for a folded box that holds it
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
-interface Frame { id: Id; parent: Id | null; title: string; cls: string; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
+interface Frame { id: Id; parent: Id | null; title: string; cls: string; wiresIn?: true; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
 // parts: a wire carrying a tuple is drawn bundled, one thick wire with its
 // parts listed on it (E167b, PORTS-2026-11-01.md §5): their names when the
 // function that gave it named its results, else their types.
@@ -384,7 +388,9 @@ function lets(code: Code) {
 // The output End of a bodyless use's i-th produced port, by this key.
 const portKey = (use: Id, i: number) => `${use}.port.${i}`;
 
-function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, loose = false): Scene {
+// `owner`: for a loose part, the frame of the definition it lies loose
+// from, where its nodes are drawn, greyed.
+function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hooks: GraphHooks, loose = false, owner: Id | null = null): Scene {
   const names = pres.names;
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
@@ -395,7 +401,11 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const n = node(id);
     return n?.kind === "ref" && node(n.target)?.kind === "binder" ? n.target : null;
   };
-  const named = (b: Id) => hooks.named.has(b) && name(b) !== "_";
+  // A loose part's inputs stand for variables of its definition: their
+  // uses are get nodes with those names, as it has no frame of its own.
+  const lp = loose ? looseParts(code, defId, hooks.home ?? {}) : null;
+  const looseIns = new Set(lp?.params ?? []);
+  const named = (b: Id) => (hooks.named.has(b) || looseIns.has(b)) && name(b) !== "_";
   // A let's binder holding a use with no body, shown without its dot: the
   // use and its produced ports (L211).
   const fedBy = (b: Id): { use: Id; ports: string[] } | null => {
@@ -425,7 +435,6 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   };
   // A loose part's own result: its output wires the part back in, even
   // when it is a lone pill (a literal has no other output).
-  const lp = loose ? looseParts(code, defId, hooks.home ?? {}) : null;
   const looseTop = lp?.expr;
   const titled = (el: SVGElement, t: string) => { if (t) el.append(s("title", {}, t)); return el; };
 
@@ -1122,7 +1131,27 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return `(${p.inputs.map(bare).join(", ")}) ${effs.length ? `-[${effs.map(name).join(", ")}]->` : "->"} ${p.results.map((r) => `${name(r)}: ${bare(r)}`).join(", ")}`;
   };
   let top: Sub;
-  if (lp) top = region(defId, `loose : ${typeOf(lp.expr)}, not used yet`, lp.params, lp.expr, "loose");
+  // A loose part is drawn where it lay, among its definition's nodes,
+  // greyed, with no frame of its own (Ersagun 2026-11-14: "they already get
+  // grayed out, why change their position at all?").
+  if (lp) {
+    frame = owner; top = lay(lp.expr); frame = null;
+    // A loose function's own frame wires the part back in by its end.
+    const f = frames.get(lp.expr);
+    if (f) { f.wiresIn = true; f.title = `${f.title} · loose, not used yet`; }
+    // What it is, on hover: no frame says it.
+    const it = items.get(lp.expr);
+    if (it) {
+      const draw = it.draw;
+      it.draw = (g) => {
+        draw(g);
+        const el = g.querySelector("rect, circle");
+        const t = el?.querySelector("title");
+        const say = `loose : ${typeOf(lp.expr)}, not used yet. Drag its output onto an empty input to wire it in`;
+        if (t) t.textContent = `${say}\n\n${t.textContent}`; else el?.append(s("title", {}, say));
+      };
+    }
+  }
   else if (body?.kind === "lambda" && declared) top = region(defId, `${name(defId)} : ${resultsType(declared)}`, declared.inputs, body.body, "def", declared.results);
   else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
@@ -1344,7 +1373,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     f.results?.forEach(port(true));
     if (f.out) {
       const o = point({ frameOut: f.id });
-      portG.append(f.cls === "loose"
+      portG.append(f.cls === "loose" || f.wiresIn
         ? (() => { const c = s("circle", { cx: o.x, cy: o.y, r: 5, class: "outp", "data-out": f.id }); c.append(s("title", {}, "Drag onto an empty input to wire this part in")); return c; })()
         : s("circle", { cx: o.x, cy: o.y, r: 4, class: "outp" }));
     }

@@ -283,13 +283,14 @@ async function looseValue() {
   await p.locator('.ctx-menu [data-menu="add"]').click({ timeout: 15000 }).catch(() => errors.push(`${where}: no Add a value on the canvas`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   if (!/-- loose, not used yet loose: □/.test(text)) errors.push(`${where}: the new value isn't a loose part: ${text.slice(-200)}`);
-  if (!(await p.locator(".p-graph .rg.loose").count()) || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part`);
+  // Faded where it lies, with no frame of its own (Ersagun 2026-11-14).
+  if (await p.locator(".p-graph .rg.loose").count() || !(await p.locator(".p-graph .items > g.faded").count())) errors.push(`${where}: it isn't drawn as a faded loose part, without a frame`);
   // Its palette is the side panel's, focused, not a pop-up over the graph
   // repeating it (BACKLOG E125).
   if (await p.locator(".ctx-menu").count()) errors.push(`${where}: a pop-up palette covers the graph`);
   if (!(await p.locator("#f-query").evaluate((e) => e === document.activeElement).catch(() => false))) errors.push(`${where}: the side panel's palette isn't ready to fill it`);
   // It reads as what it is, not as a function named _1 (BACKLOG E124).
-  const titles = await p.locator(".p-graph text.rt").evaluateAll((es) => es.map((e) => e.textContent ?? ""));
+  const titles = await p.locator(".p-graph .items > g.faded title").evaluateAll((es) => es.map((e) => e.textContent ?? ""));
   if (/_1/.test(text) || !titles.some((t) => /^loose : /.test(t))) errors.push(`${where}: the loose part reads as _1: ${JSON.stringify(titles)}`);
   // Its hole takes no effects, and a search for one says why (BACKLOG E123).
   await p.locator("#f-query").fill('print("hi")'); await p.waitForTimeout(400);
