@@ -841,7 +841,7 @@ export class Session {
       if (!r.ok) return r;
       const def = r.code.defs.at(-1)!;
       const td = r.code.nodes[(r.code.nodes[def] as NodeOf<"def">).body!] as NodeOf<"typedef">;
-      if (kase) return this.withFields(r, def, td.variants[0], kase.fields);
+      if (kase) return this.withFields(this.withOwn(r, def, td.variants[0], kase.own), def, td.variants[0], kase.fields);
       if (op?.[2]) {
         const v = r.code.nodes[td.variants[0]] as NodeOf<"variant">;
         const nodes = { ...r.code.nodes };
@@ -854,11 +854,37 @@ export class Session {
     }, (c) => c.defs.at(-1)!);
   }
 
-  // Type text read in this program, with a type's own parameters by name.
+  // A case's own type variables and what each has (L256): `where a has
+  // Appliance`, binders on the case and the types `Appliance a`.
+  private withOwn(r: { ok: true; code: Code; names: Names }, type: Id, variant: Id, own: [string, string[]][]): { ok: true; code: Code; names: Names } {
+    if (!own.length) return r;
+    const nodes = { ...r.code.nodes }, names = { ...r.names };
+    const add = (n: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...n } as NodeOf<"hole">; return id; };
+    const known = typeNames(r.code, baseNames(r.names), r.code.defs.filter((d) => !LIBRARY.code.nodes[d]));
+    const params: Id[] = [], has: Id[] = [];
+    for (const [a, ifaces] of own) {
+      const p = add({ kind: "binder" });
+      names[p] = a;
+      params.push(p);
+      for (const i of ifaces) {
+        const iface = readType(i, known, new Map())(add);
+        const t = nodes[iface] as NodeOf<"tref">;
+        if (t?.kind !== "tref") throw new Error(`${i} isn't an interface`);
+        nodes[iface] = { ...t, args: [add({ kind: "tref", target: p, args: [] })] };
+        has.push(iface);
+      }
+    }
+    nodes[variant] = { ...(nodes[variant] as NodeOf<"variant">), params, has };
+    return { ok: true, code: { nodes, defs: r.code.defs }, names };
+  }
+
+  // Type text read in this program, with a type's own parameters by name,
+  // and its cases' own (L256).
   private typeIn(text: string, code: Code, names: Names, type?: Id): Build {
     const all = baseNames(names);
     const td = type ? code.nodes[(code.nodes[type] as NodeOf<"def">).body ?? ""] : undefined;
-    const params = new Map<string, Id>(td?.kind === "typedef" ? td.params.map((p) => [all[p] ?? "a", p]) : []);
+    const own = td?.kind === "typedef" ? td.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant">).params ?? []) : [];
+    const params = new Map<string, Id>(td?.kind === "typedef" ? [...td.params, ...own].map((p) => [all[p] ?? "a", p]) : []);
     return readType(text, typeNames(code, all, code.defs.filter((d) => !LIBRARY.code.nodes[d])), params);
   }
 

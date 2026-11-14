@@ -28,6 +28,7 @@ import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGra
 import { answerKeys } from "./ports.ts";
 import { laterOps } from "./later-ops.ts";
 import { INT_CASES } from "./int-cases-ids.ts";
+import { packingOf, packingProblem, packs } from "./packing.ts";
 import { LITERAL, OPTIONAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX, tupleType } from "./std.ts";
 import { countedCalls } from "./counting.ts";
 import { ratioParts } from "./int.ts";
@@ -480,6 +481,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // none (a type with no implementation is an error of its own).
   const doneBy = (iface: Id, field: number, t: Type, last: boolean): Id[] | undefined => {
     if (t.t === "con" && t.id.startsWith("pin.")) return [];
+    // A packed value's operation does what the interface lets it (L256).
+    if (t.t === "con" && packs(code, t.id, iface)) return mayDo(iface, field);
     const key = implementationKey(iface, t);
     const d = info.implementations!.get(key) ?? layer?.implementations?.get(key) ?? builtinImplementations().get(key)
       ?? (t.t === "con" ? info.implementations!.get(genericKey(iface, t.id)) ?? layer?.implementations?.get(genericKey(iface, t.id)) : undefined);
@@ -589,7 +592,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const params = new Map(td.params.map((p) => [p, s.fresh()] as const));
     // Int as data's values are Ints (L249b): from(n), minus one minus(n).
     const self: Type = def === INT_CASES.type && def ? { t: "con", id: INT, args: [] } : { t: "con", id: def, args: [...params.values()] };
-    const fields = (variant: Id) => (code.nodes[variant] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
+    // A packing case's own variable (L256) is the type itself in its
+    // field: the value taken out is the packed one, which has what a has.
+    const own = td.effect ? params : new Map([...params, ...td.variants.flatMap((v) => ((code.nodes[v] as NodeOf<"variant">).params ?? []).map((p) => [p, self] as const))]);
+    const fields = (variant: Id) => (code.nodes[variant] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, own));
     return { td, params, self, fields };
   };
 
@@ -656,7 +662,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   s.recordFields = (id, args) => {
     if (id.startsWith(`${RIGID}numbers.`)) return [{ t: "con", id: NUMBER, args: [] }];
     const td = typedefOf(id);
-    if (!td || td.effect || td.variants.length !== 1) return null;
+    if (!td || td.effect || td.variants.length !== 1 || packingOf(code, id)) return null;
     const params = new Map(td.params.map((p, i) => [p, args[i] ?? s.fresh()] as const));
     return (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
   };
@@ -773,6 +779,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const f of (code.nodes[td.variants[0]] as NodeOf<"variant">).fields) {
       if (code.nodes[(code.nodes[f] as NodeOf<"field">).type]?.kind !== "tfun") err(f, `${nm(f)} is an operation of the interface ${nm(def)}, so its type is a function`);
     }
+  }
+  // A case that packs a value with what it has (L256, packing.ts).
+  for (const def of typesSaid) {
+    const p = packingProblem(code, def, nm);
+    if (p) err(p.at, p.message);
   }
 
   // --- definitions, in dependency order
@@ -1226,6 +1237,14 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         if ((t as NodeOf<"variant">).private && insiders && libraryType(def) && !current.every((d) => insiders.has(d)))
           err(id, `${nm(target)} is private to the library, which keeps ${nm(def)}'s rule: build a ${nm(def)} with the library's functions (${SMART[target] ?? "see LIBRARY.md"})`);
         const { self, fields } = dataType(def);
+        // A packing case (L256): its own variable is fresh at each use, and
+        // must have what the case says; the value is then the type's.
+        const pk = packingOf(code, def);
+        if (pk && pk.variant === target) {
+          const a = s.fresh();
+          for (const h of pk.has) s.requireInterface(a, h.iface, id);
+          return { t: "fn", params: [a], ret: self, eff: s.freshRow() };
+        }
         const fs = fields(target);
         return fs.length ? { t: "fn", params: fs, ret: self, eff: s.freshRow() } : self;
       }
@@ -2054,6 +2073,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       const fn = isCall(body) ? code.nodes[body.fn] : null;
       if (fn?.kind !== "ref" || fn.target !== typedefOf(t.id)!.variants[0]) { err(d, `${nm(d)} is an implementation of ${nm(t.id)}, so it is written as the record itself: ${nm(typedefOf(t.id)!.variants[0])}(…) with each operation`); continue; }
       const key = implementationKey(t.id, t.args[0]), other = table.get(key);
+      const on = s.resolve(t.args[0]);
+      if (on.t === "con" && packs(code, on.id, t.id)) { err(d, `${show(on)} has ${nm(t.id)} already, the packed value's own: a packing type's operations are what it packs`); continue; }
       if (other) err(d, `${nm(other)} and ${nm(d)} are both ${show(t)}: a type has one implementation of an interface, so keep one`);
       else table.set(key, d);
       // A field left to its ways needs a way that ends in fields it gives
@@ -2074,6 +2095,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     for (const w of s.wanted) {
       const t = s.zonk(w.t);
       if (table.has(implementationKey(w.iface, t))) continue;
+      // A packing type has what its case packs (L256).
+      if (t.t === "con" && packs(code, t.id, w.iface)) continue;
       // A generic one: its interface's type, instantiated, is this one;
       // what it asks of its variables is now asked of t's arguments (new
       // wanted entries, checked by this same loop). Kept under t's own key,

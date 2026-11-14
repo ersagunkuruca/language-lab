@@ -122,7 +122,20 @@ export function readType(text: string, known: Map<string, Id>, params: Map<strin
 }
 
 // `ball(number: Int, place: Vec)`: a case's name and its fields' types.
-export function readCase(text: string): { name: string; fields: [string, string][] } {
+// A case that packs a value with what it has (L256) ends with what its own
+// type variables have: `device(it: a) where a has Appliance` (and `, b has
+// …` for more, or `a has Appliance and Shown`).
+export function readCase(text: string): { name: string; fields: [string, string][]; own: [string, string[]][] } {
+  const own: [string, string[]][] = [];
+  const w = /\)\s*where\s+(.+)$/s.exec(text.trim());
+  if (w) {
+    text = text.trim().slice(0, w.index + 1);
+    for (const part of w[1].split(",")) {
+      const h = /^\s*(\S+)\s+has\s+(.+?)\s*$/s.exec(part);
+      if (!h) throw new Error(`write what a case's own type has as where a has Interface, not ${part.trim()}`);
+      own.push([h[1], h[2].split(/\s+and\s+/).map((x) => x.trim())]);
+    }
+  }
   const m = /^([^(]+?)\s*(?:\((.*)\))?\s*$/s.exec(text.trim());
   if (!m) throw new Error(`write a case as name(field: Type, …)`);
   const fields: [string, string][] = [];
@@ -143,5 +156,5 @@ export function readCase(text: string): { name: string; fields: [string, string]
       fields.push([p.slice(0, c).trim(), p.slice(c + 1).trim()]);
     }
   }
-  return { name: m[1].trim(), fields };
+  return { name: m[1].trim(), fields, own };
 }

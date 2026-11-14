@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
-| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L256, L248, L247, L252e (pins); then L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L248, L247, L252e (pins); then L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -173,7 +173,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L256 | A value packed with its implementation: a list of things of different types sharing an interface, each with its own way (`List (some Appliance)`), built as a record of closures that captured the value (CLOSURES-INTERFACES-EFFECTS-2026-11-14 §2.3). Example: examples/household, whose `Device` wraps each appliance type in a case and matches on it in device draw, device later and device label | reopened by Ersagun 2026-11-14 ("write programs that need them") | P2 | L | the feature next |
 | L248 | Ropes as one more representation of List (`append` and `split` in log n). Example to write: a program that splits and joins long lists (an editor buffer) | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)

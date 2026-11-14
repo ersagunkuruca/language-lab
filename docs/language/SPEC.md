@@ -230,6 +230,16 @@ parameters (`Arithmetic (Duo a)`); a type with no implementation of its
 own is matched against those by unification, and what they need of their
 parameters is asked in turn (L219).
 
+4.7. **Packing** (L256). A data type's one case may have a type variable of
+its own with the interfaces it has, `device(it: a) where a has Appliance`.
+`device(x)` needs x's type to have Appliance, and the type, Device, then has
+Appliance itself: an operation on a Device is the packed value's own. So a
+`List Device` holds values of different types. Each of the interface's
+operations takes the a first and no other a, and gives back a or no a at
+all, since only the one packed value is at hand. In a match, or through the
+field, the packed value is a Device. Packing is a record of closures over the
+value, made before anything runs; the dispatch is a call through it.
+
 ## 5. Evaluation, and Choice
 
 5.1. **Strict, left to right.** Ters is call by value. A call evaluates

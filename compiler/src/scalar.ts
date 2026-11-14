@@ -1108,8 +1108,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return `${nm(t.id)}, which has a field that isn't a Float64, Bool or record`;
   }
   // Whether a type written in the program mentions `target`.
+  // Through a function field too: a packed value's `later` gives the
+  // packing type itself (L256, packs.ts), so the type is held as data.
   const mentions = (tid: Id, target: Id): boolean => {
     const n = code.nodes[tid];
+    if (n?.kind === "tfun") return n.params.some((p) => mentions(p, target)) || mentions(n.result, target);
     return n?.kind === "tref" && (n.target === target || n.args.some((a) => mentions(a, target)));
   };
   const vars = (t: Type): number[] => (t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [...t.params.flatMap(vars), ...vars(t.ret), ...(t.eff.tail === null ? [] : [t.eff.tail])]);
