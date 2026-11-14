@@ -108,6 +108,14 @@ files that hold the same value read "no changes to the program (only its
 layout or formatting)". When a version can't be read, the driver says so
 and prints git's plain diff.
 
+A merge through the driver says each conflict by definition, with ours'
+and theirs' text of it, and writes ours to the working tree, so nothing
+there marks it afterwards (I265). While the file is unresolved, `ters
+conflicts [program]` says them again (cli/conflicts.ts, I267). It reads
+the base, ours and theirs that git keeps as the file's index stages 1, 2
+and 3, and merges them as the driver did. Once the file is added, it has
+none.
+
 ## In the editor
 
 A **Changes** view (a tab beside Files) compares the program with a base:

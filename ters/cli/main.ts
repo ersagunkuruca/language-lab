@@ -120,6 +120,8 @@ usage:
   ters merge <base> <ours> <theirs> [path]
                                         merge two versions of a program file id by id, into ours; exits 1 with the
                                         conflicts, ours kept (git's merge driver, merge.ters.driver)
+  ters conflicts [program]               what a merge of program files left unresolved, from git's index: each
+                                        conflict by definition, with ours' and theirs' text
   ters git-setup                         this clone's git shows program files with ters diff (git diff, git show
                                         --ext-diff, git log -p --ext-diff) and merges them id by id (DIFF.md)
   ters git-diff <path> <old> <old-hex> <old-mode> <new> <new-hex> <new-mode>
@@ -426,6 +428,13 @@ const [command, path, ...rest] = argv;
 // An MCP server for an LLM to read, change and run programs (mcp/server.ts).
 if (command === "mcp") { (await import("../mcp/server.ts")).serve(path); await new Promise(() => {}); }
 // git's diff driver for program files, and the setup that names it (git-diff.ts, DIFF.md "In git").
+// What an unfinished merge of program files left to resolve, from git's
+// index (conflicts.ts, I267).
+if (command === "conflicts") {
+  const { gitConflicts } = await import("./conflicts.ts");
+  try { process.stdout.write(await gitConflicts(path) + "\n"); } catch (e) { fail((e as Error).message); }
+  process.exit(0);
+}
 if (command === "git-diff" || command === "git-setup") {
   const { gitDiff, gitSetup } = await import("./git-diff.ts");
   process.stdout.write(command === "git-diff" ? await gitDiff([path, ...rest].filter((x): x is string => x !== undefined)) : gitSetup() + "\n");
@@ -433,7 +442,7 @@ if (command === "git-diff" || command === "git-setup") {
 }
 // Program files compared and merged id by id (merge-files.ts, L113).
 if (command === "diff" || command === "merge") {
-  const { describe, diffLines, mergeFiles } = await import("../src/merge-files.ts");
+  const { diffLines } = await import("../src/merge-files.ts");
   const json = (f: string | undefined) => {
     if (!f || !existsSync(f)) return undefined;
     const text = readFileSync(f, "utf8"), marked = conflictMarkersAt(text);
@@ -507,40 +516,15 @@ if (command === "diff" || command === "merge") {
   const [ours, theirs, shown] = rest;
   if (!path || !ours || !theirs) fail("merge needs base, ours and theirs (git passes %O %A %B)");
   const o = json(ours), t = json(theirs);
-  // Nodes the merge left in no definition taken out (I265).
-  const { merged, conflicts } = mergeFiles(json(path), o, t);
+  // Nodes the merge left in no definition taken out (I265), and its
+  // conflicts said by definition with each side's text (conflicts.ts).
+  const { conflictReport } = await import("./conflicts.ts");
+  const r = await conflictReport(json(path), o, t, shown ?? ours, shown ? dirname(resolve(shown)) : undefined);
   // git reads the result from ours' file.
-  writeFileSync(ours, printSaved(merged));
-  if (!conflicts.length) process.exit(0);
-  // Names for the message: a code.json's are beside it.
-  const beside = shown ? join(dirname(shown), "names.default.json") : "";
-  const named = beside && existsSync(beside) ? { names: json(beside), ...(o && typeof o === "object" ? o : {}) } : o;
-  // Each side's text of a definition with a conflict, read as the program
-  // it is with the names beside it (diff.ts viewRows, as ters diff shows a
-  // definition). A version that doesn't load shows no text.
-  const texts = await (async () => {
-    if (!shown || basename(shown) !== "code.json") return undefined;
-    const { Session } = await import("../mcp/session.ts");
-    const { viewRows } = await import("../src/diff.ts");
-    const { mkdtempSync } = await import("node:fs");
-    const { tmpdir } = await import("node:os");
-    const sessions = new Map<string, InstanceType<typeof Session> | null>();
-    const session = (side: string, code: unknown) => {
-      if (!sessions.has(side)) {
-        try {
-          const dir = mkdtempSync(join(tmpdir(), "ters-merge-"));
-          writeFileSync(join(dir, "code.json"), printSaved(code));
-          for (const f of ["names.default.json", "comments.json", "signatures.json"]) { const at = join(dirname(shown), f); if (existsSync(at)) copyFileSync(at, join(dir, f)); }
-          sessions.set(side, new Session(dir));
-        } catch { sessions.set(side, null); }
-      }
-      return sessions.get(side);
-    };
-    const text = (side: string, code: unknown, def: string) => { const s = session(side, code); try { return s && s.code.nodes[def] ? viewRows(s.code, s.pres(), s.info, def).map((r) => r.text) : undefined; } catch { return undefined; } };
-    return (def: string) => ({ ours: text("ours", o, def), theirs: text("theirs", t, def), merged: text("merged", merged, def) });
-  })();
-  const lost = conflicts.some((c) => c.lost);
-  process.stderr.write(`ters: ${shown ?? ours}: ${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"}, ${lost ? "ours kept where it could be" : "ours kept"}:\n${describe(conflicts, named, t, texts).map((l) => `  ${l}\n`).join("")}`);
+  writeFileSync(ours, printSaved(r.merged));
+  if (!r.conflicts.length) process.exit(0);
+  // Said again from git's index until the file is added (I267).
+  process.stderr.write(`ters: ${r.lines.join("\n")}\n  (\`ters conflicts\` says these again until the file is added)\n`);
   process.exit(1);
 }
 // A module from any host, into a program's modules folder (SHARING.md §4,
