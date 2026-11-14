@@ -2126,6 +2126,8 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 
 | id | item | PR |
 |---|---|---|
+| L261n | Sheet commented: a program note (what it reads, errors as values, how to run it) and a comment on each of its 90 definitions, the parser's levels and the cycle finding among them; code unchanged, so GAPS round 7 compares it as written | this PR |
+| L261p | Ledger commented: a program note and a comment on each of its 32 definitions (cents kept whole, the exit codes); code unchanged | this PR |
 | L261m | Shaders in plain words: ray marching's Pga type commented and a program note on what the picture is (a ring and a drop over a checkerboard, sphere tracing, one PGA motor); tiles' program note on why it exists (a function chosen at run time on a GPU, defunctionalised, C225) | this PR |
 | L261l | Run backwards and Effects in plain words: a comment on every definition of Run backwards (the six forwards functions say which line runs them backwards; main says what its answers and fallbacks mean); Effects' main prints what each handler answered (`360 = area(), its two asks answered 30 and 12 · share(10, 0): can't: nobody to share with`) | this PR |
 | L261k | Numbers & physics in plain words: a comment on main and on each printed line (a check, a run forwards, a run backwards, why polar says false on Float64), quadratic's root explained; a program with only short names (quadratic) loads with them, so `ters run` and the MCP read x₊ and Δ rather than ‹?0f88› | this PR |
