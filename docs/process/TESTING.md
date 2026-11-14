@@ -1,5 +1,9 @@
 # Testing: fast feedback, only what changed
 
+**Current since 2026-11-14: §8** (tests selected by the lines they ran, a
+cheapest cover before a merge, passes remembered, reviews on a schedule, a
+red names its commit). Sections 1 to 7 are the history that led there.
+
 2026-10-23. A design note, written before changing anything. Ersagun's
 ask: the 10 minutes between a merge and seeing it live breaks the
 iteration loop; test only what changed; don't let tests pin a design we
@@ -401,3 +405,78 @@ rows T12 to T14 (and L216, L217) the fixes.
 T1 alone gives back most of the 10 minutes. T2 to T4 make the checks
 themselves fast, also for threads before they push. T7 is the interesting
 one and the one that fits the language best.
+
+## 8. 2026-11-14: select by what a test ran (T16)
+
+Ersagun, 2026-11-14: "Why do we keep having the same discussion again and
+again? I don't like to wait so much. I want the testing to be as granular
+as possible. And I don't want to pay for compute (or tokens) where the
+answer is 'YES 1+1 STILL EQUALS 2' … We don't have to catch everything
+right when they break."
+
+**Why it kept coming back.** Four rounds (10-23 this note, 10-29 browser
+tests nightly, 11-03 the fast set, 11-13 all of affected before a merge)
+each made the full run cheaper or moved it, and none made selection finer:
+
+1. A test file is picked by imports, and the graph is flat: 270 of 372
+   test files import `infer.ts` directly, so any change to the core
+   reaches nearly all of them. §1 said on 10-23 that granularity has to
+   come from the data; it was never built. The suite grew from 7
+   CPU-minutes to about 204 (nightly-times.json), and slices, slow.json
+   and shards kept up only for a while.
+2. The rule before a merge swung: picked by hand (11-05), main red through
+   eight merges, all of affected (I251, 11-13), 10 to 15 minutes a merge.
+   Each red pushed toward more, each wait toward less; there was no
+   principled middle.
+3. Nothing remembered a pass: the same test on the same code ran before
+   the merge, after it in Check main, at night, and again after a fix.
+
+**The plan.** The tool decides what runs; lanes don't choose.
+
+- **T16a The test map.** Check main and the Nightly run each test file alone
+  with V8's coverage on (NODE_V8_COVERAGE, blocks, child processes too;
+  about 2% slower) and `test/reads.mjs` preloaded, and record, per test
+  file, the lines it ran and the data files it read (test-map.ts). The
+  map lives on the branch `test-map` (one file, one commit, no history).
+  Prior art: dynamic regression test selection, Ekstazi (Gligoric,
+  Eloussi and Marinov, ISSTA 2015), which tracks files; this tracks lines.
+- **T16b Select by changed lines.** A change reaches a test when the test
+  ran a line it changes (comments, blank lines and type-only edits left
+  out) or read a file it changes. Before a merge, of those, only a
+  cheapest set that still runs every changed line at least once (greedy
+  weighted set cover over the lines, by each file's seconds), so a big
+  end-to-end test stays out when smaller ones run the same lines. Test
+  suite minimisation by set cover is prior art (Harrold, Gupta and Soffa,
+  TOSEM 1993).
+- **T16c Remember passes; review on a schedule.** A test runs again only
+  when a line it ran or a file it read changed since its entry's commit,
+  or when its review is due: each clean run doubles its interval (1, 2, 4,
+  then 7 days), and a failure or an edit to the test resets it to a day.
+  Like spaced repetition (Leitner boxes), applied to tests that keep
+  passing. Every test still runs at least weekly on the code of the day.
+- **T16d A red finds its culprit.** A file that fails in CI is bisected
+  between its last pass and now, by itself, and the run names the commit
+  (and PR) that broke it. That makes catching a break a day late cheap.
+- **T16e The rule.** WORKFLOW.md says one command before a merge, and
+  trusting it; no hand-picked sets, no full rerun after a fix.
+
+**Measured (T16b, 2026-11-14)** on a map of 165 test files and the last
+five merges. By imports, #2667 (io.ts, library-store.ts) reached 229
+files, 10 to 15 minutes. By the map, 145 files ran a line it changed (its
+top-level lines run in every importer), and the cover was 5 files, 18 s.
+#2666 (and/or in run.ts): 4 files, 9 s. #2664 and #2663: 2 files, 18 s.
+#2662: 3 files, 12 s. The other files that ran the lines run after the
+merge in Check main, where minutes are free (the repository is public).
+
+**Built:** T16a #2668 (and #2672), T16b #2673, T16c #2674, T16d #2675,
+T16e this rule in WORKFLOW.md (#2676). Follow-ups worth measuring once the map is
+full: a top-level line (an import, a `const`) runs in every importer, so
+Check main still reaches most files for a change to the core's top level;
+narrowing that by which names a test's code uses is the next step if Check
+main grows long. The editor's bundled tests go by imports until their
+coverage can be mapped back through a source map.
+
+What we give up: a break that only a test the cover left out would see is
+caught after the merge, and one in a test due in a week, within a week,
+with its culprit named. Ersagun accepted that ("we don't have to catch
+everything right when they break").
