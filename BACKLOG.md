@@ -37,7 +37,6 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | I277 | The orange "Refused: …" note stays on the status line after the next selection and an undo; the next selection could clear it. | QA 11-14b L2 | 2026-11-14 |
-| C226 | `steps of E(c)` matched at once: the generated handler and the match made one, so no `Steps` datum is built per operation (case of a known constructor across a handler). Waits for an example whose time is in its steps | [CLOSURES-INTERFACES-EFFECTS-2026-11-14](docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) §3.4 | 2026-11-14 |
 
 ## E: Editor
 
