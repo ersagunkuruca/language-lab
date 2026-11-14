@@ -2667,9 +2667,11 @@ export function moveItem(code: Code, names: Names, info: Info, row: Row, at: num
 // hold moves.
 export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from: number, to: number): TEdit {
   if (from === to) return { ok: false, reason: "it's there already" };
-  // + and · here are Float64's, where the order of a sum or product changes
-  // how it rounds (E264): its items stay where they are.
-  if (row.kind === "chain" && LEFT_ONLY.has(row.op!)) return { ok: false, reason: `the order of ${row.op === B.add ? "a sum" : "a product"} changes how a Float64 rounds, so its items stay where they are` };
+  // + and · here are Float64's, where regrouping a sum or product changes
+  // how it rounds (E264): its items stay where they are, but for the
+  // innermost pair's two, which swap exactly (a + b is b + a in Float64,
+  // so `drift + drop` turns around, and `(a + b) + c` is `(b + a) + c`).
+  if (row.kind === "chain" && LEFT_ONLY.has(row.op!) && !(Math.max(from, to) === 1 && Math.min(from, to) === 0)) return { ok: false, reason: `the order of ${row.op === B.add ? "a sum" : "a product"} changes how a Float64 rounds, so its items stay where they are` };
   const order = [...row.items];
   const [it] = order.splice(from, 1);
   order.splice(to, 0, it);
