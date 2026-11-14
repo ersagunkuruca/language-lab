@@ -803,6 +803,25 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return { ...t, params: t.params.map((p) => put(p, m)), ret: put(t.ret, m), eff };
   };
   const zonk = (id: Id): Type => put(info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 }), at);
+  // Whether working out an expression may do more than compute one value:
+  // a call in it, outside its lambdas, whose type has an effect. One the
+  // checker dropped counts too: `t > 0 and x / t` is answered because the
+  // division is worked out only where t > 0 (L259).
+  const acting = new Map<Id, boolean>();
+  const mayAct = (id: Id): boolean => {
+    let r = acting.get(id);
+    if (r !== undefined) return r;
+    const n = code.nodes[id];
+    if (!n || n.kind === "lambda" || n.kind === "lit" || n.kind === "ref") r = false;
+    else if (isUse(n)) r = true;
+    else if (isCall(n)) {
+      const t = info.typeOf.get(n.fn), ft = t && info.subst.resolve(t);
+      r = !ft || ft.t !== "fn" || info.subst.resolveRow(ft.eff).effs.length > 0 || [n.fn, ...n.args].some(mayAct);
+    } else if (n.kind === "match") r = !!n.name || mayAct(n.scrutinee) || n.arms.some((a) => mayAct((code.nodes[a] as NodeOf<"arm">).body)) || (!!n.otherwise && mayAct(n.otherwise));
+    else r = true;
+    acting.set(id, r);
+    return r;
+  };
   const atNow = () => at;
   const nm = (id: Id) => names[id] ?? id;
   const records = new Map<string, RType>();
@@ -1380,12 +1399,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const args = () => given.get(n.id) ?? n.args.map((a) => expr(a, env, f, false));
         const target = (!tailOps.has(head.target) && !laterOps.has(head.target) && builtinOf.get(head.target)) || head.target;
         // `a and b` works out b only when a is true, `a or b` only when a
-        // is false (L259, as the evaluator does): b may have no answer, or
-        // several, or act. A b that only computes stays an op.
-        if ((target === S.and || target === S.or) && n.args.length === 2 && !given.has(n.id)) {
+        // is false (L259, as the evaluator does): where b may have no
+        // answer, or several, or not finish, or act, it is an if. A b that
+        // only computes gives the same either way and stays an op, which
+        // early-and.ts and the loop finders read (queens' `safe`).
+        if ((target === S.and || target === S.or) && n.args.length === 2 && !given.has(n.id) && mayAct(n.args[1])) {
           const a = expr(n.args[0], env, f, false), b = expr(n.args[1], env, f, tail);
-          const plain = (e: SExpr): boolean => e.k === "bool" || e.k === "num" || e.k === "local" || (e.k === "op" && e.args.every(plain));
-          if (plain(b)) return { k: "op", op: target === S.and ? "and" : "or", args: [a, b] };
           return target === S.and ? { k: "if", cond: a, then: b, else: { k: "bool", v: false }, t: "i32" } : { k: "if", cond: a, then: { k: "bool", v: true }, else: b, t: "i32" };
         }
         if (target === S.equal) {
