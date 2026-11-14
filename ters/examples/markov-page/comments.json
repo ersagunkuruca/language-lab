@@ -1,0 +1,13 @@
+{"28s8gltvam6p3aaqio6nd8sm8s": "The first n chances, a step at a time from now.",
+"35prk0g1vvr84mkvtaauvnb2vb": "One day of weather as chances of sunny, cloudy and rainy: tomorrow's chances from today's. A sunny day stays sunny four times in five; a rainy one stays rainy half the time.",
+"7ds88501prsuc9kmodp1854mqg": "The page's style sheet: the house colours (and their dark versions), the sliders and the chart.",
+"802o7mqiun8c8bihuo9q8mkgar": "Where someone is, in two rooms joined by a door they rarely use (4 times in 1000 from the left, 6 from the right). Each step closes only 1% of the gap to where they settle, so getting there takes thousands of steps.",
+"934lpj4lnav22r480q0qcogvtm": "The page: the two chances to leave, each a cell. The chart and settled's answer are worked out again when either changes.",
+"bbm5hsi426vss5jh1pu5bcju9q": "The chance of being in the left room, step by step (2 px a step), and the level settled found, dashed (none: at 0).",
+"j368b4593h1llf2qqvsceug04s": "A slider for one chance, from 0 to 1 in steps of 0.001, and the chance written beside it.",
+"jhmhvri0rn3uk82kl75vb0i1tc": "A button that sets both chances at once.",
+"junm4e1en0hg49mnmvamueovq8": "A chain that always changes state: the chances only swap, so they never settle unless they start even.",
+"kk2v1kmhrqog3iaf23jmmka4vt": "Who this page borrows from, shown on the page (docs/language/CREDITS.md).",
+"msaqp20lsl08vcc2idc2cg7oit": "Two rooms and a door, as a step from now's chances (left, right) to the next step's: from the left room someone leaves with chance leave left, from the right with leave right. two rooms above is rooms(0.004, 0.006); swap is rooms(1, 1).",
+"ns50os6emhlj2gg69r45tujd8q": "The chances to six places, or \"no answer\" when settled finds none (its Choice fails).",
+"p9c8lsi6mlkmpga94soafpt17r": "Where three Markov chains settle (L239's settled, FIXPOINT.md): the chances of each state in the long run, a step at a time from a first state until a step changes them by under 1e-9. Weather mixes quickly, and settled reads how quickly from its first steps. The two rooms mix slowly, and settled by is told the rate (0.995, a bound on how much a step shrinks the gap), which caps the steps at several thousand before they run. The swap never settles: its steps don't shrink, so there is no answer rather than a run forever."}

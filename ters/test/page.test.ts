@@ -485,3 +485,14 @@ test("the calculus page: f′ at the guess and Newton's root, for each sample", 
   root.find("right").fire("click");
   assert.match(values(), /^sinc: at 1\.25, /);
 });
+
+// L261e: where two rooms settle, slowly, or never.
+test("the markov page: settles quickly, slowly, or has no answer", () => {
+  const { root } = open("markov-page");
+  const answer = () => root.find("answer").textContent;
+  assert.equal(answer(), "Settles at 40% in the left room, 60% in the right.");
+  click(root, "A door rarely used");
+  assert.equal(answer(), "Settles at 60% in the left room, 40% in the right.");
+  click(root, "Always swaps");
+  assert.match(answer(), /^No answer/);
+});
