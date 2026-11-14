@@ -361,6 +361,18 @@ async function stepOrder() {
     const line = (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.includes("solutions for 8"));
     if (!line?.includes("count(queens(8))")) errors.push(`${where}: count's action doesn't wire back in by its frame's end: ${await p.locator(".status[role=status]").innerText()}`);
   }
+  // The wire from a dot, picked and deleted with Backspace, is cut as the
+  // drag cuts it: the dot goes, and the action wires back in (I287).
+  await p.locator(`${W} [data-edge="${await p.locator(countIn).first().getAttribute("data-slot")}"]`).first().click({ force: true });
+  await p.locator(`${W} path.use-hit[data-id="${await p.locator(countIn).first().getAttribute("data-slot")}"]`).first().click({ force: true });
+  await p.keyboard.press("Backspace");
+  const cut = (await p.locator(".p-text .body").innerText()).split("\n");
+  if (cut.some((l) => l.includes("‹•"))) errors.push(`${where}: Backspace on the wire from a dot left the dot: ${await p.locator(".status[role=status]").innerText()}`);
+  else {
+    await drag(await at(`${W} .ports circle.outp[data-out]`), await at(countIn));
+    const line = (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.includes("solutions for 8"));
+    if (!line?.includes("count(queens(8))")) errors.push(`${where}: after Backspace on the wire, count's action doesn't wire back in: ${await p.locator(".status[role=status]").innerText()}`);
+  }
   await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   // A step goes before a step as a plain step, with no name (QA8 M1).

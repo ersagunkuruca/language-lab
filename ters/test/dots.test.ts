@@ -122,4 +122,8 @@ test("taking off a dot's last wire sets its value loose, and the dot goes", asyn
   assert.ok(gone.ok && !isDot(gone.code, main, dot) && Object.keys(gone.of ?? {}).length === 1, gone.ok ? "" : gone.reason);
   // With its one wire, Remove the dot puts the value back on it.
   assert.ok(removeDot(dotted.code, dotted.names, infer(dotted.code, dotted.names), main, dot).ok);
+  // The wire picked and deleted (Backspace) is cut the same way (I287).
+  const { deleteOne } = await import("../../editor/typed.ts");
+  const del = deleteOne(dotted.code, dotted.names, infer(dotted.code, dotted.names), main, {}, {}, use);
+  assert.ok(del.ok && del.code.nodes[use].kind === "hole" && !isDot(del.code, main, dot) && Object.keys(del.of ?? {}).length === 1, del.ok ? "" : del.reason);
 });

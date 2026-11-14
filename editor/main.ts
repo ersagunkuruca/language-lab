@@ -1000,6 +1000,8 @@ function removeSelected() {
   const id = ui.selected;
   if (!info || !id || !node(id) || (doc.code.defs.includes(id) && !doc.loose?.[id])) return;
   const n = node(id);
+  // A picked wire from a dot is cut as a drag off its input cuts it.
+  if (n.kind === "ref" && T.isDot(doc.code, ui.def, n.target)) return cutWire(info, id);
   if (["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) || isUse(n) || doc.loose?.[id]) void applyT(T.deleteOne(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, id));
 }
 
@@ -1766,6 +1768,27 @@ function loosePart(id: Id): Id | undefined {
   });
 }
 
+// What's taken off lies loose where it was drawn (Ersagun 2026-11-14:
+// count jumped away once its wire was cut): it moves out under a new id,
+// so its place goes with it. A drag off an input and Delete on a picked
+// wire both cut this way.
+function cutWire(info: T.Info, slot: Id) {
+  const was = graph?.posOf(slot);
+  const e = T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot);
+  if (!e.ok) return void applyT(e);
+  // The new loose part's root: its body, inside the function of the
+  // variables it stands in for, if it has any.
+  const part = Object.keys(e.of ?? {}).find((d) => !doc.loose?.[d]);
+  const d = part ? (e.code.nodes[part] as NodeOf<"def">) : undefined;
+  const b = d?.body ? e.code.nodes[d.body] : undefined;
+  const root = b?.kind === "lambda" && b.params.some((p) => e.home?.[p]) ? b.body : b?.id;
+  // What it holds keeps its ids, but it's in a new frame when the value
+  // is a function (count's action), which would place it afresh: each
+  // node keeps where it was drawn, and so does a value whose dot goes.
+  const kept = Object.fromEntries([...subtree(doc.code, slot), ...(d?.body ? subtree(e.code, d.body) : [])].flatMap((id) => { const at = graph?.posOf(id); return at ? [[id, at]] : []; }));
+  void applyT(e, undefined, { ...kept, ...(was && root ? { [root]: was } : {}) });
+}
+
 // A drop on an input wires it, and a value already there is set loose.
 const useOver = (info: T.Info, b: Id, slot: Id) =>
   T.over(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot, b, (c, n, i) => T.useVar(c, n, i, ui.def, b, slot));
@@ -1802,25 +1825,7 @@ function graphHooks(info: T.Info) {
     // the wire (two more). The loose part never stops a program (I161).
     canUse: (b: Id, slot: Id) => { const r = T.useVar(doc.code, doc.names.short, info, ui.def, b, slot); return r.ok ? null : r.reason; },
     use: (b: Id, slot: Id) => void applyT(useOver(info, b, slot)),
-    // What's taken off lies loose where it was drawn (Ersagun 2026-11-14:
-    // count jumped away once its wire was cut): it moves out under a new
-    // id, so its place goes with it.
-    clear: (slot: Id) => {
-      const was = graph?.posOf(slot);
-      const e = T.unwire(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, slot);
-      if (!e.ok) return void applyT(e);
-      // The new loose part's root: its body, inside the function of the
-      // variables it stands in for, if it has any.
-      const part = Object.keys(e.of ?? {}).find((d) => !doc.loose?.[d]);
-      const d = part ? (e.code.nodes[part] as NodeOf<"def">) : undefined;
-      const b = d?.body ? e.code.nodes[d.body] : undefined;
-      const root = b?.kind === "lambda" && b.params.some((p) => e.home?.[p]) ? b.body : b?.id;
-      // What it holds keeps its ids, but it's in a new frame when the value
-      // is a function (count's action), which would place it afresh: each
-      // node keeps where it was drawn.
-      const kept = Object.fromEntries(subtree(doc.code, slot).flatMap((id) => { const at = graph?.posOf(id); return at ? [[id, at]] : []; }));
-      void applyT(e, undefined, { ...kept, ...(was && root ? { [root]: was } : {}) });
-    },
+    clear: (slot: Id) => cutWire(info, slot),
     // A dot put on a wire by a click sits where you clicked, and nothing
     // else moves (BACKLOG E109).
     addDot: (slot: Id, at?: { dot: Pos; keep: Record<Id, Pos> }) => {

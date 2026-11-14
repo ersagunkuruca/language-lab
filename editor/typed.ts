@@ -1620,6 +1620,11 @@ const holder = (code: Code, of: Record<Id, Id>, def: Id, id: Id): Id => Object.k
 // hole, and what was wired into it is kept, loose. Deleting a loose part
 // (its root) throws it away.
 export function deleteOne(code: Code, names: Names, info: Info, def: Id, of: Record<Id, Id>, home: Record<Id, Id>, id: Id): LooseEdit {
+  // A wire from a dot, picked and deleted, is cut as a drag off its input
+  // cuts it: a dot no wire leaves goes, its value loose (Ersagun
+  // 2026-11-14: Backspace on the wire left the dot behind).
+  const n = code.nodes[id];
+  if (n?.kind === "ref" && isDot(code, def, n.target) && names[n.target] !== "_") return unwire(code, names, info, def, of, home, id);
   const at = holder(code, of, def, id);
   const lb = of[at] ? code.nodes[at] as NodeOf<"def"> : null;
   const root = lb?.body ? (code.nodes[lb.body].kind === "lambda" ? (code.nodes[lb.body] as NodeOf<"lambda">).body : lb.body) : null;
