@@ -323,6 +323,11 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
 // `layer`: from is a check of other definitions under this program (the
 // library's, L216), which this check reads through to rather than copies:
 // its substitution, and each node's type.
+// Types whose literals are the natural numbers, 0, 1, 2 and on: the
+// library's Nat (library.ts adds it, L249b), so a check refuses `-1` or
+// `0.5` there.
+export const WHOLE_LITERALS = new Set<Id>();
+
 export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean; layer?: boolean }, opts: Options = {}): Info {
   // A program on the library's layer (load.ts base, L217): the check's
   // scans of every node (uses, calls, number literals, each node's parent)
@@ -1277,13 +1282,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         // (2 s, L252): units are checked on the other Numbers.
         if (!n.of && typeof n.value === "number") {
           const v = s.fresh(false, false, "arith") as { t: "var"; v: number };
+          s.literal.add(v.v);
           if (!Number.isInteger(n.value) || (n.unit && Object.keys(n.unit).length)) s.fractional.add(v.v);
           else s.whole.add(v.v);
           t = v;
         } else t = n.of ? { t: "con", id: n.of, args: [] } : str;
         // A literal at Algebraic is a whole number or top/bottom. arith.ts
         // spells it out.
-        if (n.of === ALGEBRAIC_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
+        if (n.of && WHOLE_LITERALS.has(n.of) && !/^\s*\d+\s*$/.test(String(n.value))) err(id, `${nm(n.of)} is a whole number from 0: ${n.value} isn't one`);
+        else if (n.of === ALGEBRAIC_TYPE && !ratioParts(n.value)) err(id, `${JSON.stringify(n.value)} isn't a fraction: write a whole number, or top/bottom with the bottom not 0`);
         // At any other type (Rational too, L207f3), digits as written (a
         // whole number, a decimal, top/bottom), which its Literal or
         // embedding spells out; a bottom of 0 is no number.
@@ -2077,6 +2084,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         catch (e) { if (!(e instanceof TypeError || e instanceof ArithError || e instanceof NumbersError)) throw e; }
         finally { s.site = was; }
       }
+      // A number written where only a literal asks one, at a type with a
+      // Literal and no + − · (Nat, L249b): arith.ts spells it through that.
+      if (w.literal && w.iface === "std.arithmetic" && table.has(implementationKey(LITERAL, t))) continue;
       const of = show({ t: "con", id: w.iface, args: [t] });
       // + − · and < say what a Number is first, as they always have.
       if (w.iface === "std.arithmetic" || w.iface === "std.ordered") {
@@ -2164,6 +2174,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   for (const id of rechecked("number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number")) {
     const n = code.nodes[id] as NodeOf<"lit">;
     const t0 = info.typeOf.get(n.id), t = t0 && s.zonk(t0);
+    // A natural number is written as one: a whole number from 0 (L249b).
+    if (t?.t === "con" && WHOLE_LITERALS.has(t.id) && !(Number.isInteger(n.value) && (n.value as number) >= 0 && !(n.unit && Object.keys(n.unit).length))) {
+      err(n.id, `${show(t)} is a whole number from 0: ${n.value} isn't one`);
+      continue;
+    }
     if (t?.t !== "con" || t.id.startsWith("std.") || t.id.startsWith("type.") || t.id.startsWith("pin.") || !typedefOf(t.id) || implementationOf(info, LITERAL, t)) continue;
     const fields = s.recordFields(t.id, t.args);
     if (fields?.length && fields.every((f) => { const r = s.resolve(f); return r.t === "con" && r.id === NUMBER; })) continue;

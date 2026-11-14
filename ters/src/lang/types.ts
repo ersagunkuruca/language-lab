@@ -202,6 +202,10 @@ export class Subst {
   // Type variables a whole literal gave: left open, they are Int, not
   // Float64 (WHAT-NUMBER-MEANS.md, Haskell's defaulting to Integer).
   whole = new Set<number>();
+  // Type variables only a number literal asks a number of (L249b): one
+  // met with a type that has no + − · but has a Literal (Nat) takes the
+  // literal through it. An operation asking + − · or < of one drops it.
+  literal = new Set<number>();
   // Row tails that may not take a world effect, and rows contained in
   // others (WorldError and Sub above).
   noWorld = new Set<number>();
@@ -210,7 +214,7 @@ export class Subst {
   // (INTERFACES.md), each with the use that asked; and the known types
   // asked for one, checked once every implementation is known (infer).
   needs = new Map<number, Map<Id, Id>>();
-  wanted: { t: Type; iface: Id; at: Id }[] = [];
+  wanted: { t: Type; iface: Id; at: Id; literal?: boolean }[] = [];
   // Uses of an interface's operation that may do something (Ordered's <
   // may not finish, L88): each does what its type's own implementation
   // does, added to the use's row once the type is known (infer's settle).
@@ -239,6 +243,7 @@ export class Subst {
     s.arith = new Map(this.arith);
     s.fractional = new Set(this.fractional);
     s.whole = new Set(this.whole);
+    s.literal = new Set(this.literal);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
     s.needs = new Map([...this.needs].map(([v, m]) => [v, new Map(m)]));
@@ -272,6 +277,7 @@ export class Subst {
     s.arith = new OverMap(this.arith);
     s.fractional = new OverSet(this.fractional);
     s.whole = new OverSet(this.whole);
+    s.literal = new OverSet(this.literal);
     s.noWorld = new Set(this.noWorld);
     s.subs = [...this.subs];
     // Each variable's map is replaced, never changed (requireInterface).
@@ -297,6 +303,7 @@ export class Subst {
     for (const [v, a] of from.arith) this.arith.set(v, a);
     for (const v of from.fractional) this.fractional.add(v);
     for (const v of from.whole) this.whole.add(v);
+    for (const v of from.literal) this.literal.add(v);
     for (const [v, n] of from.needs) this.needs.set(v, n);
     this.joinLists(from);
     this.settle();
@@ -323,9 +330,13 @@ export class Subst {
 
   // Require t to be a number type of this kind. A record of Float64s has
   // + − · and −x part by part, but no <.
-  requireArith(t: Type, kind: Arith): void {
+  requireArith(t: Type, kind: Arith, literal = false): void {
     t = this.resolve(t);
     if (t.t === "var") {
+      // Still a literal's alone when it was one's, or nothing's, and a
+      // literal's asks now (unify, below).
+      if (!literal) this.literal.delete(t.v);
+      else if (!this.arith.has(t.v)) this.literal.add(t.v);
       this.arith.set(t.v, bothKinds(this.arith.get(t.v), kind));
       this.plain.add(t.v);
       return;
@@ -345,7 +356,7 @@ export class Subst {
     if (t.t === "con" && ifaces.every((iface) => this.waits(t.id, iface))) {
       const fields = this.recordFields(t.id, t.args);
       const numeric = kind === "arith" && !!fields?.length && fields.every((f) => { const r = this.resolve(f); return r.t === "var" || (r.t === "con" && r.id === NUMBER); });
-      if (!numeric) { for (const iface of ifaces) this.wanted.push({ t, iface, at: this.site }); return; }
+      if (!numeric) { for (const iface of ifaces) this.wanted.push({ t, iface, at: this.site, ...(literal ? { literal } : {}) }); return; }
     }
     if (kind === "arith" && t.t === "con" && this.recordFields(t.id, t.args)?.length) {
       try { this.requireNumbers(t); } catch (e) { if (e instanceof NumbersError) throw new ArithError(kind); throw e; }
@@ -493,7 +504,7 @@ export class Subst {
       this.types.set(v.v, t);
       if (this.numbers.has(v.v)) this.requireNumbers(t);
       const kind = this.arith.get(v.v);
-      if (kind) this.requireArith(t, kind);
+      if (kind) this.requireArith(t, kind, this.literal.has(v.v));
       if (this.fractional.has(v.v)) this.requireFraction(t);
       if (this.whole.has(v.v) && t.t === "var") this.whole.add(t.v);
       if (this.plain.has(v.v)) this.requirePlain(t);

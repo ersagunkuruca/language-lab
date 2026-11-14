@@ -623,7 +623,7 @@ export function buildNumbers(pre: Module): Module {
   k.define(embedRF, k.call(EMBEDDING_V, k.x(toNum)));
   const embedC = k.def("float64 in complex");
   k.define(embedC, k.call(EMBEDDING_V, k.x(asC)));
-  const impls = [
+  const impls: Id[] = [
     impl("arithmetic at rational", ARITHMETIC_V, [addF, subF, mulF, negF]),
     impl("ordered at rational", ORDERED_V, [lessF]),
     impl("literal at rational", LITERAL_V, [rationalLiteral]),
@@ -681,6 +681,12 @@ export function buildNumbers(pre: Module): Module {
   ]));
   const naturalI = natFn("natural (Int)", ["i"], (i) => k.if(k.call(INT_OPS.less, i, k.int(0)), k.int(0), i));
   const integerI = natFn("integer (Int)", ["n"], (n) => n);
+  // A Nat written as a number, `stepped(f, x, 5)` (L249b): a whole literal
+  // from 0 up is natural(top), and stored as an Int it is top. The checker
+  // refuses any other literal at Nat.
+  const natLiteral = natFn("nat literal", ["top", "bottom"], (t) => k.call(natural, t));
+  const natLiteralI = natFn("nat literal (Int)", ["top", "bottom"], (t) => t);
+  impls.push(impl("literal at nat", LITERAL_V, [natLiteral]));
   // The two rows, written as representations (REPRESENTATIONS.md, L108b),
   // as the trees' are: read back below into the module's rows.
   const cost = (c: string) => k.x(`${COST}.${c}`);
@@ -688,14 +694,14 @@ export function buildNumbers(pre: Module): Module {
   const written = (j: Id, c: string) => k.call(JOBS.asWritten, k.x(j), cost(c));
   const by = (j: Id, d: Id, c: string) => k.call(JOBS.job, k.x(j), k.x(d), cost(c));
   const unaryRow = natRow("unary", null, "linear", [written(zeroN, "constant"), written(succN, "constant"), k.call(JOBS.matchAsWritten, cost("constant")), k.call(JOBS.foldAsWritten, cost("linear")),
-    written(addN, "linear"), written(mulN, "quadratic"), written(integer, "linear"), written(natural, "linear")]);
+    written(addN, "linear"), written(mulN, "quadratic"), written(integer, "linear"), written(natural, "linear"), written(natLiteral, "linear")]);
   const intRow = natRow("int", natural, "logarithmic", [by(zeroN, zeroI, "constant"), by(succN, succI, "constant"), k.call(JOBS.matchBy, k.x(matchI), cost("constant")), k.call(JOBS.foldBy, k.x(foldI), cost("linear")),
-    by(addN, INT_OPS.add, "logarithmic"), by(mulN, INT_OPS.mul, "polylogarithmic"), by(integer, integerI, "constant"), by(natural, naturalI, "constant")]);
+    by(addN, INT_OPS.add, "logarithmic"), by(mulN, INT_OPS.mul, "polylogarithmic"), by(integer, integerI, "constant"), by(natural, naturalI, "constant"), by(natLiteral, natLiteralI, "constant")]);
   const natReps = [unaryRow, intRow];
 
   const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX, NT.def, natural, integer, addN, mulN];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral];
+  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral, natLiteral, natLiteralI];
   const comments: Record<Id, string> = {
     [RT.def]: "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
     [embedIR]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
