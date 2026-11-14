@@ -183,7 +183,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its definitions instead of written by hand. Example to write: a program with a representation of its own whose declared cost is wrong for it | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
+| L247 | Costs worked out, not declared (NUMBERS.md stage 7): a representation's job costs read from its definitions instead of written by hand. Example: examples/waiting, whose line's `front first` declares `behind` constant though it appends at the end; declared alike with `two lists line`, the compiler takes it, and sixteen hours take 19 s native instead of 0.006 s | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | costs worked out next |
 | L252e | Units in a pinned signature (the rest of L252): a pin keeps its definition's units, concrete (`Float64 m`) and related (`(Float64 u) -> Float64 u²`, a unit variable), so an edit that changes them is refused as one that changes the type is. Maps' values and tuples' parts carry their units since L252e's first part. Example to write: a program that pins a unit-generic function (a library of its own, published) | L252d (Language lane B, 2026-11-14); GAPS.md round 16 U1 | P3 | M | example to write first |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
