@@ -1905,6 +1905,9 @@ export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 // list drawn as [x, y] (the program keeps its pairs). `keep` stops at an
 // inner call that has to stay visible on its own (a graph's named dot).
 export const ASSOCIATIVE = new Set<Id>([B.add, B.mul, S.and, S.or, S.concat]);
+// The ones whose chains are their left-nested pairs only: on Float64,
+// (a + b) + c and a + (b + c) round differently (I274, E264).
+export const LEFT_ONLY = new Set<Id>([B.add, B.mul]);
 export function chainOperands(code: Code, id: Id, keep: (id: Id) => boolean = () => false): Id[] | null {
   const head = (n: Node | undefined) => (isCall(n) && n.args.length === 2 ? code.nodes[n.fn] : undefined);
   const f = head(code.nodes[id]);
@@ -1914,7 +1917,7 @@ export function chainOperands(code: Code, id: Id, keep: (id: Id) => boolean = ()
   // + and · on a Float64 don't associate: (a + b) + c and a + (b + c) round
   // differently, so only the left-nested pairs, which text reads back as a
   // + b + c, are one chain; a right-nested pair stays in brackets (I274).
-  const leftOnly = op === B.add || op === B.mul;
+  const leftOnly = LEFT_ONLY.has(op);
   const walk = (a: Id, right: boolean) => {
     const g = head(code.nodes[a]);
     if (a !== id && ((leftOnly && right) || g?.kind !== "ref" || g.target !== op || keep(a))) { out.push(a); return; }

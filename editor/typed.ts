@@ -22,7 +22,7 @@ import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
-import { ARITH, ARITHMETIC, ASSOCIATIVE, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
+import { ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX, tuplePart, tupleVariant } from "../ters/src/lang/std.ts";
 import { INT, NUMBER, STRING, schemeArith, shownIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { parseUnit, type Unit } from "../ters/src/units.ts";
 import { ratioParts, read as readInt } from "../ters/src/lang/int.ts";
@@ -2549,8 +2549,15 @@ export function rowAt(code: Code, root: Id): Row | null {
   const op = opOf(code, root);
   if (!op) return null;
   const items: Id[] = [];
-  const walk = (a: Id) => { if (a !== root && opOf(code, a) !== op) items.push(a); else for (const b of (code.nodes[a] as Call).args) walk(b); };
-  walk(root);
+  // A + or · chain is its left-nested pairs: a + (b + c) is two items, a and
+  // the pair (E264, as the text views since I274).
+  const left = LEFT_ONLY.has(op);
+  const walk = (a: Id, right: boolean) => {
+    if (a !== root && (opOf(code, a) !== op || (left && right))) { items.push(a); return; }
+    const [l, r] = (code.nodes[a] as Call).args;
+    walk(l, false); walk(r, true);
+  };
+  walk(root, false);
   return { kind: "chain", root, op, items, spine: [] };
 }
 
@@ -2566,7 +2573,9 @@ export function rowOfItem(code: Code, id: Id): { row: Row; at: number } | null {
   } else {
     const op = opOf(code, root);
     if (!op) return null;
-    for (let p = parentAt(code, root); p && p.slot === "args" && opOf(code, p.parent) === op; p = parentAt(code, root)) root = p.parent;
+    // Up through pairs of the same operator; for + and ·, only while this
+    // pair is the left input of the next (E264).
+    for (let p = parentAt(code, root); p && p.slot === "args" && opOf(code, p.parent) === op && !(LEFT_ONLY.has(op) && p.index !== 0); p = parentAt(code, root)) root = p.parent;
   }
   const row = rowAt(code, root);
   const at = row ? row.items.indexOf(id) : -1;
@@ -2593,6 +2602,14 @@ export function addItem(code: Code, names: Names, info: Info, row: Row, at: numb
     next = swapIn(code, tail, pair);
     made = { id: pair, kind: "call", fn: head, args: [hole, tail] };
     next.nodes[head] = { id: head, kind: "ref", target: CONS };
+  } else if (LEFT_ONLY.has(row.op!)) {
+    // Kept left-nested (E264): the new item is paired with all that comes
+    // before it, ((a + b) + new) + c, or with the first item, new + a.
+    const before = at === 0 ? row.items[0] : at === 1 ? row.items[0] : at >= row.items.length ? row.root : parentOf(code, row.items[at - 1])!.parent;
+    if (before === row.root && !parentOf(code, row.root)) return { ok: false, reason: "this has nowhere to grow" };
+    next = swapIn(code, before, pair);
+    made = { id: pair, kind: "call", fn: head, args: at === 0 ? [hole, before] : [before, hole] };
+    next.nodes[head] = { id: head, kind: "ref", target: row.op! };
   } else {
     const last = at >= row.items.length;
     const beside = row.items[last ? row.items.length - 1 : at];
@@ -2650,6 +2667,9 @@ export function moveItem(code: Code, names: Names, info: Info, row: Row, at: num
 // hold moves.
 export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from: number, to: number): TEdit {
   if (from === to) return { ok: false, reason: "it's there already" };
+  // + and · here are Float64's, where the order of a sum or product changes
+  // how it rounds (E264): its items stay where they are.
+  if (row.kind === "chain" && LEFT_ONLY.has(row.op!)) return { ok: false, reason: `the order of ${row.op === B.add ? "a sum" : "a product"} changes how a Float64 rounds, so its items stay where they are` };
   const order = [...row.items];
   const [it] = order.splice(from, 1);
   order.splice(to, 0, it);
