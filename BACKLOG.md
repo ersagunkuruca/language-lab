@@ -191,7 +191,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L248 | Ropes as one more representation of List (`append` and `split` in log n). Example to write: a program that splits and joins long lists (an editor buffer) | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | example to write first |
+| L248 | Ropes as one more representation of List (`append` and `split` in log n), chosen by the compiler where splits and joins in the middle dominate. Example: examples/buffer, whose edits split and join a list of characters; native, 2,000 edits take 4.3 s on 44k characters, 14.3 s on 176k, and 8,000 edits on 176k take 92 s, length times edits | reopened by Ersagun 2026-11-14 ("write programs that need them") | P3 | L | ropes next |
 
 ### Effects and concurrency (ANSWERED-LATER.md, EFFECTS-REVIEW-2026-10-24)
 
