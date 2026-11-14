@@ -34,7 +34,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
 // functions a program's lists as arrays reach, C93; not rep-split.ts's, whose
 // copies on a split's side may take a list one way and give it another), by its copy's id: the passes
 // that know a definition by its id (pure-branches.ts) know its copies too.
-// Copies' ids are fresh, so one table serves every program in a process.
+// A copy's id is made from its original's id and what it copies (I264), so
+// one table serves every program in a process.
 export const COPIED_FROM = new Map<string, string>();
 export const originalOf = (id: string): string => COPIED_FROM.get(id) ?? id;
 // And rep-split.ts's, whose copies on a split's side may take a list one

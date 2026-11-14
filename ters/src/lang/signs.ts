@@ -27,13 +27,17 @@
 
 import { children, parentLookup, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
 import { B } from "../prelude.ts";
-import { ARITH, FALSE, INT_OPS, S, TRUE } from "./std.ts";
-import { fractionCase } from "./prelude-ids.ts";
+import { ARITH, FALSE, INT_OPS, S, TRIG_OPS, TRUE } from "./std.ts";
+import { fractionCase, originalOf, PRELUDE_DEFS } from "./prelude-ids.ts";
 
 // A set of signs: which of −, 0, + the value can be.
 export type Signs = number;
 export const NEG = 1, ZERO = 2, POS = 4, ANY = 7;
 const NONZERO = NEG | POS, NONNEG = ZERO | POS;
+const NO_NAMES: ReadonlyMap<Id, Id> = new Map();
+// The prelude's functions that give a function each item of a list, as it
+// is: what a filter before them kept, the function is given.
+const ITEMWISE = new Set<Id>([PRELUDE_DEFS.map, PRELUDE_DEFS["array map"], PRELUDE_DEFS["any pass"], PRELUDE_DEFS["all pass"], PRELUDE_DEFS["first where"], PRELUDE_DEFS.keep]);
 
 // The builtins with no answer at some inputs, and when an input is fine.
 export const PARTIAL: Record<Id, (s: (i: number) => Signs, lit: (i: number) => number | null) => boolean> = {
@@ -88,17 +92,19 @@ export function signAnalysis(code: Code) {
   // Two expressions that are the same value: the same name, or the same
   // field or arithmetic of the same values (rad(x) · rad(x) is a square).
   // Only calls that always give the same answer for the same inputs count.
-  const alike = (x: Id, y: Id, depth = 0): boolean => {
+  // `as`: a name inside a test read through a definition's body, and the
+  // name it stands for here (its input's, or the item a filter kept).
+  const alike = (x: Id, y: Id, depth = 0, as: ReadonlyMap<Id, Id> = NO_NAMES): boolean => {
     if (x === y) return true;
     const a = code.nodes[x], b = code.nodes[y];
     if (!a || !b || depth > 4) return false;
-    if (a.kind === "ref" && b.kind === "ref") return a.target === b.target;
+    if (a.kind === "ref" && b.kind === "ref") return (as.get(a.target) ?? a.target) === (as.get(b.target) ?? b.target);
     if (a.kind === "lit" && b.kind === "lit") return a.value === b.value;
     if (!isCall(a) || !isCall(b) || a.args.length !== b.args.length) return false;
     const f = target(a.fn);
     if (!f || f !== target(b.fn)) return false;
     const pure = code.nodes[f]?.kind === "field" || ADD.has(f) || SUB.has(f) || MUL.has(f) || NEGATE.has(f);
-    return pure && a.args.every((arg, i) => alike(arg, b.args[i], depth + 1));
+    return pure && a.args.every((arg, i) => alike(arg, b.args[i], depth + 1, as));
   };
   // A number known where it's written: a literal, a let or a definition
   // whose value is one, or an input given one.
@@ -129,14 +135,29 @@ export function signAnalysis(code: Code) {
   // read the same way (`l.took`, alike above). A test written as a call to
   // a definition (`d > 0`, `at least`) is read through its body, its
   // inputs the call's (`given`).
-  const said = (cond: Id, holds: boolean, subject: Id, env: Env, depth: number, given: Map<Id, Id> = new Map()): Signs => {
+  const said = (cond: Id, holds: boolean, subject: Id, env: Env, depth: number, given: Map<Id, Id> = new Map(), as: ReadonlyMap<Id, Id> = NO_NAMES): Signs => {
     const n = code.nodes[cond];
-    if (!isCall(n) || depth > 8) return ANY;
+    if (depth > 8) return ANY;
+    const go = (c: Id, h: boolean) => said(c, h, subject, env, depth + 1, given, as);
+    // `if t then a else false` holds where t and a do (moving: `if l.took
+    // > 0 s then l.length / l.took ≥ slowest moving else false`): what
+    // each arm that can give `holds` says, with its test, one or the other.
+    if (n?.kind === "match" && !n.otherwise && n.arms.length === 2) {
+      let out = 0;
+      for (const a of n.arms) {
+        const arm = code.nodes[a] as NodeOf<"arm">;
+        if (arm.variant !== TRUE && arm.variant !== FALSE) return ANY;
+        const k = boolOf(arm.body);
+        if (k === !holds) continue;
+        out |= go(n.scrutinee, arm.variant === TRUE) & (k === holds ? ANY : go(arm.body, holds));
+      }
+      return out;
+    }
+    if (!isCall(n)) return ANY;
     const f = target(n.fn);
     const sub = (a: Id): Id => { const t = target(a); return t !== undefined && given.has(t) ? given.get(t)! : a; };
     const [x, y] = n.args.map(sub);
-    const is = (a: Id | undefined) => a !== undefined && alike(a, subject);
-    const go = (c: Id, h: boolean) => said(c, h, subject, env, depth + 1, given);
+    const is = (a: Id | undefined) => a !== undefined && alike(a, subject, 0, as);
     if (f === S.not) return go(n.args[0], !holds);
     if (f === S.and) return holds ? go(n.args[0], true) & go(n.args[1], true) : go(n.args[0], false) | go(n.args[1], false);
     if (f === S.or) return holds ? go(n.args[0], true) | go(n.args[1], true) : go(n.args[0], false) & go(n.args[1], false);
@@ -150,14 +171,49 @@ export function signAnalysis(code: Code) {
       // x < c: the subject is left; c < x: it is right.
       if (is(x) && numLit(y, env) !== null) { const c = numLit(y, env)!; return holds ? (c <= 0 ? NEG : ANY) : (c > 0 ? POS : c === 0 ? NONNEG : ANY); }
       if (is(y) && numLit(x, env) !== null) { const c = numLit(x, env)!; return holds ? (c >= 0 ? POS : ANY) : (c < 0 ? NEG : c === 0 ? NEG | ZERO : ANY); }
+      // A quotient of the subject by a value of known sign: `l.length /
+      // l.took ≥ 0.3 m/s` where l.took is positive says l.length is.
+      const over = (q: Id, side: (c: number) => Signs): Signs => {
+        const d = code.nodes[q];
+        if (!isCall(d) || target(d.fn) !== B.div || d.args.length !== 2 || !is(d.args[0])) return ANY;
+        const by = of(d.args[1], env), at = side(numLit(q === x ? y : x, env)!);
+        return by === POS ? at : by === NEG ? flip(at) : ANY;
+      };
+      if (numLit(y, env) !== null) return over(x, (c) => (holds ? (c <= 0 ? NEG : ANY) : (c > 0 ? POS : c === 0 ? NONNEG : ANY)));
+      if (numLit(x, env) !== null) return over(y, (c) => (holds ? (c >= 0 ? POS : ANY) : (c < 0 ? NEG : c === 0 ? NEG | ZERO : ANY)));
       return ANY;
     }
     const d = f ? code.nodes[f] : undefined, body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
     if (body?.kind === "lambda" && body.params.length === n.args.length) {
       const inner = new Map(body.params.map((p, i) => [p, sub(n.args[i])]));
-      return said(body.body, holds, subject, env, depth + 1, inner);
+      // Its inputs given by name stand for those names inside it too
+      // (`l.took` inside moving is the l given's).
+      const names = new Map(as);
+      body.params.forEach((p, i) => { const t = target(sub(n.args[i])); if (t !== undefined) names.set(p, as.get(t) ?? t); });
+      return said(body.body, holds, subject, env, depth + 1, inner, names);
     }
     return ANY;
+  };
+  // A test that is `true` or `false` as written.
+  const boolOf = (id: Id): boolean | null => {
+    const n = code.nodes[id];
+    const t = n?.kind === "ref" ? n.target : isCall(n) && !n.args.length ? target(n.fn) : undefined;
+    return t === TRUE ? true : t === FALSE ? false : null;
+  };
+  // The test each item a filter kept passed: `(l) ↦ …` given the items
+  // of `keep(ls, moving)` by map, say, is given only legs that are moving.
+  const kept = (lambda: Id): { test: Id; as: Map<Id, Id> } | null => {
+    const fn = code.nodes[lambda];
+    const at = parentOf(lambda), call = at ? code.nodes[at] : undefined;
+    if (fn?.kind !== "lambda" || fn.params.length !== 1 || !isCall(call) || call.args.length !== 2 || call.args[1] !== lambda) return null;
+    const job = target(call.fn);
+    if (job === undefined || !ITEMWISE.has(originalOf(job))) return null;
+    const from = code.nodes[call.args[0]];
+    if (!isCall(from) || from.args.length !== 2 || originalOf(target(from.fn) ?? "") !== PRELUDE_DEFS.keep) return null;
+    const p = code.nodes[from.args[1]], d = p?.kind === "ref" ? code.nodes[p.target] : p;
+    const test = d?.kind === "def" && d.body ? code.nodes[d.body] : d;
+    if (test?.kind !== "lambda" || test.params.length !== 1) return null;
+    return { test: test.body, as: new Map([[test.params[0], fn.params[0]]]) };
   };
 
   // The branches between `at` and the subject's scope (its binder's, when
@@ -167,6 +223,7 @@ export function signAnalysis(code: Code) {
     for (let p = parentOf(at); p; child = p, p = parentOf(p)) {
       const n = code.nodes[p];
       if (b !== undefined && n?.kind === "arm" && n.binds.includes(b)) break;
+      if (n?.kind === "lambda") { const k = kept(p); if (k) out &= said(k.test, true, subject, env, 0, new Map(), k.as); }
       if (b !== undefined && n?.kind === "lambda" && n.params.includes(b)) break;
       // `a and b`'s b is worked out only where a holds, `a or b`'s where
       // it doesn't (L259).
@@ -246,7 +303,8 @@ export function signAnalysis(code: Code) {
     if (MUL.has(f) || f === INT_OPS.mul) { const s = times(a(0), a(1)); return same ? s & NONNEG : s; }
     if (f === B.div) return times(a(0), a(1) & NONZERO);
     if (f === B.sqrt) return a(0) & POS ? (a(0) & ZERO ? NONNEG : POS) : ZERO;
-    if (f === B.exp) return POS;
+    // Trig's exp too, in a definition generic in its number (tobler speed).
+    if (f === B.exp || f === TRIG_OPS.exp) return POS;
     if (f === B.log && numLit(n.args[0], env) !== null && numLit(n.args[0], env)! > 0) { const v = Math.log(numLit(n.args[0], env)!); return v > 0 ? POS : v < 0 ? NEG : ZERO; }
     if (f === B.pow) return a(0) === POS ? POS : ANY;
     if (f === S.abs || f === INT_OPS.abs) { const s = a(0); return (s & NONZERO ? POS : 0) | (s & ZERO); }
