@@ -267,6 +267,8 @@ test("backwards: main prints what each function run backwards gives", () => {
     "read numbers(\"10 20 30\") = [10 20 30]",
     "read numbers(\"10  20\") = unreadable",
     "square roots of each([4, 9]) = [2 3] [-2 3] [2 -3] [-2 -3]",
+    "missing addend(3, 10) = 7",
+    "split(10, 4) = 7, 3",
     "height on the ray(3π/4, −2) = 2",
     "height on the ray(3π/4, 2) = none",
   ]);
