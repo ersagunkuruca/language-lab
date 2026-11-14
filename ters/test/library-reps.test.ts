@@ -462,6 +462,57 @@ test("a program that reads and replaces items by position gets arrays, and the l
   assert.deepEqual(build(lowered)([0n, 2n, 49n, 50n].map((x) => [i, [x]])), [1004, 2004, 3405, 2].map((value) => ({ value, live: 0 })));
 });
 
+// C221: drop and take on a list stored as an array are slices of its
+// buffer, one step each where the list walks to the position (trek's
+// windows, GAPS.md round 16), with the list's answers past either end,
+// on every engine; C frees every view it made.
+test("drop and take on lists as arrays are slices, with the list's answers past either end, on every engine (C221)", async () => {
+  const { lowerScalar } = await import("../../compiler/src/scalar.ts");
+  const { emitC } = await import("../../compiler/src/c.ts");
+  const { emitWasm, instantiate, toInt } = await import("../../compiler/src/wasm.ts");
+  const k = new Lang(LIBRARY.code);
+  const xs = k.def("xs");
+  k.define(xs, k.call(L("map"), k.call(S.range, k.lit(50)), k.fn(["i"], (i) => k.call(B.mul, i, i))));
+  // The window of n items from i, summed, and its first item; read by
+  // position too, so lists are arrays.
+  const window = k.def("window");
+  k.define(window, k.fn(["i", "n"], (i, n) => k.let("w", k.call(L("take"), k.call(L("drop"), k.x(xs), i), n), (w) =>
+    k.call(B.add, k.call(B.mul, k.call(L("sum"), w), k.lit(1000)), k.call(B.add, k.call(L("length"), w), k.call(L("item at"), w, k.int(0), k.lit(-1)))))));
+  const main = k.def("main");
+  const cases: [number, number][] = [[0, 3], [10, 5], [48, 5], [50, 2], [-3, 2], [7, 0], [7, -2], [0, 60]];
+  k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.list(...cases.map(([i, n]) => k.call(window, k.int(i), k.int(n))))))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  const sq = (i: number) => i * i;
+  const want = cases.map(([i, n]) => { const ys = Array.from({ length: 50 }, (_, j) => sq(j)).slice(Math.max(0, i)).slice(0, Math.max(0, n)); return ys.reduce((a, b) => a + b, 0) * 1000 + ys.length + (ys.length ? ys[0] : -1); });
+  const before = printed(code, names, main);
+  assert.deepEqual(before, [`[${want.join(", ")}]`]);
+  const c = withLibraryRepresentations(code, info, names, main, [xs, window, main]);
+  assert.deepEqual(c.chosen, ["List as array of List"]);
+  assert.deepEqual(printed(c.code, c.names, main, c.insiders), before);
+  const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+  const lowered = lowerScalar(c.code, info2, c.names, [window], { data: true });
+  assert.deepEqual([...lowered.refused.values()], []);
+  const rts = new Set<string>(), seen = new Set<unknown>();
+  const walk = (e: unknown): void => {
+    if (!e || typeof e !== "object" || seen.has(e)) return;
+    seen.add(e);
+    const x = e as { k?: string; fn?: unknown };
+    if (x.k === "rt" && typeof x.fn === "string") rts.add(x.fn.replace(/\.a\d+$/, ""));
+    for (const [key, v] of Object.entries(e)) if (key !== "t" && key !== "bt") walk(v);
+  };
+  lowered.funcs.forEach((g) => walk(g.body));
+  assert.ok(rts.has("array.slice"), `drop and take are slices: ${[...rts].join(", ")}`);
+  assert.deepEqual([...emitC(lowered).refused.values()], []);
+  const w = (await instantiate(emitWasm(lowered))) as unknown as Record<string, (...x: unknown[]) => unknown>;
+  const f = lowered.funcs.find((g) => g.def === window && !g.inner)!;
+  assert.deepEqual(cases.map(([i, n]) => w[f.name](toInt(w as never, BigInt(i)), toInt(w as never, BigInt(n)))), want);
+  const { build, skip } = await import("../../compiler/test/c-harness.ts");
+  if (skip) return;
+  const at = lowered.funcs.indexOf(f);
+  assert.deepEqual(build(lowered)(cases.map(([i, n]) => [at, [BigInt(i), BigInt(n)]])), want.map((value) => ({ value, live: 0 })));
+});
+
 // A Set holds a list as written (its constructor's field), so lists as
 // arrays wait until the Set is stored some other way: chosen first, as a
 // tree, then lists on what that made (C93). The answer is the same.

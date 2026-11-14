@@ -29,11 +29,11 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.ok(rep.byType);
   assert.deepEqual(rep.hidden, { [CONS]: [1] });
   const lib = (n: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!;
-  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [FOLD_OF_ITEMS]: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1" });
+  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [FOLD_OF_ITEMS]: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1", [lib("drop")]: "1", [lib("take")]: "1" });
   // List as written, which the chooser weighs it against (C30d3b).
   const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
   assert.equal(spec.type, LIST);
-  assert.deepEqual(spec.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "n", [lib("append")]: "n", [lib("item at")]: "n", [lib("replace at")]: "n", [lib("map")]: "n" });
+  assert.deepEqual(spec.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "n", [lib("append")]: "n", [lib("item at")]: "n", [lib("replace at")]: "n", [lib("map")]: "n", [lib("drop")]: "n", [lib("take")]: "n" });
 
   const all = merge(LIBRARY.code, TREES.code);
   const k = new Lang(all);

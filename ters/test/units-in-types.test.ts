@@ -15,7 +15,8 @@ import { infer } from "../src/lang/infer.ts";
 import { hashDef } from "../src/hash.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { formatUnit, parseUnit } from "../src/units.ts";
+import { formatUnit, parseUnit, signatureUnits } from "../src/units.ts";
+import { isPublished } from "../src/model.ts";
 
 test("a unit reads back as formatUnit writes it", () => {
   for (const s of ["m", "m/s", "m/s²", "N", "1/s", "m²·kg"]) assert.equal(formatUnit(parseUnit(s)!), s);
@@ -115,4 +116,38 @@ test("a constant's unit, first's and the transcendental functions' are checked",
   // A value whose own body disagrees is refused too.
   s.define("mixed", "value", []);
   assert.throws(() => s.replace(/□#(\w+)/.exec(s.view("mixed"))![1], "1.0 m + 1.0 s"), /units don't agree here/);
+});
+
+// A program that writes no unit shows none, and asks nothing of units.ts
+// for it: #2631 inferred every definition's units through the prelude's,
+// and tumble's check went from 2 s to over 120 s, its page frozen.
+test("signatures of a program with no units of its own cost nothing (tumble)", () => {
+  const s = new Session(join(import.meta.dirname, "../examples/tumble"));
+  const defs = s.code.defs.filter((d) => !isPublished(d));
+  const t0 = performance.now();
+  for (const d of defs) s.typeOf(d);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 10000, `tumble's ${defs.length} signatures took ${ms.toFixed(0)} ms`);
+  assert.equal(signatureUnits(s.code, defs[0]), null);
+});
+
+// L252d (round 16, trek): a list's numbers have one unit, the list's.
+// Written out, built, taken apart, summed, mapped and kept, and as a
+// field typed List (Float64 m); a signature shows List (Float64 m).
+test("units inside lists are checked and shown", () => {
+  const s = program(["track(heights: List (Float64 m))"]);
+  const fill = (name: string, params: string[], text: string) => { s.define(name, "function", params); return s.replace(/□#(\w+)/.exec(s.view(name))![1], text); };
+  assert.throws(() => fill("wrong sum", ["x"], "sum([1.0 m, 2.0 m]) + 1.0 s"), /m can't meet s/);
+  assert.throws(() => fill("wrong map", ["x"], "sum(map([1.0, 2.0], (y) => y · 1.0 m)) + 1.0 s"), /m can't meet s/);
+  assert.throws(() => fill("wrong field", ["t"], "sum(t.heights) + 1.0 s"), /m can't meet s/);
+  assert.throws(() => fill("wrong made", ["x"], "track([1.0 s])"), /the field's type says m, but this is s/);
+  fill("mean", ["xs"], "sum(xs) / as float64(length(xs)) + 0.0 m");
+  assert.equal(s.typeOf(s.resolve("mean")), "(List (Float64 m)) -[Choice]-> Float64 m");
+  fill("doubled", ["t"], "map(t.heights, (h) => h · 2.0)");
+  assert.equal(s.typeOf(s.resolve("doubled")), "(Body) -> List (Float64 m)");
+  fill("high", ["t"], "keep(t.heights, (h) => h > 1.0 m)");
+  assert.equal(s.typeOf(s.resolve("high")), "(Body) -> List (Float64 m)");
+  fill("top", ["t"], "match t.heights\n  nil → 0.0 m\n  cons(h, more) → h");
+  assert.equal(s.typeOf(s.resolve("top")), "(Body) -> Float64 m");
+  assert.match(s.errors(), /^ok/);
 });

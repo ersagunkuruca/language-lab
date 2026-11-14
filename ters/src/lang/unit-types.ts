@@ -8,6 +8,9 @@
 import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { NUMBER, showType, type Type } from "./types.ts";
+
+// std.ts LIST's id, named here so this file doesn't load the library.
+const LIST_ID = "std.list";
 import { formatUnit, signatureUnits, type Unit } from "../units.ts";
 
 export function showTypeWithUnits(code: Code, def: Id, t: Type, names: Names): string {
@@ -21,10 +24,13 @@ export function withUnits(code: Code, def: Id, t: Type, names: Names): { type: T
   const units = signatureUnits(code, def);
   if (!units || (!units.result && !units.params.some(Boolean))) return null;
   const shown: Names = { ...names };
-  const at = (x: Type, u: Unit | undefined): Type => {
+  const at = (x: Type, u: Unit | undefined, inside = false): Type => {
+    // A list's unit is its items' (L252d): List (Float64 m), bracketed as
+    // a type given to another is.
+    if (u && x.t === "con" && x.id === LIST_ID && x.args.length === 1) return { ...x, args: [at(x.args[0], u, true)] };
     if (!u || x.t !== "con" || x.id !== NUMBER || x.args.length) return x;
-    const id = `${NUMBER} ${formatUnit(u)}`;
-    shown[id] = `${names[NUMBER] ?? "Float64"} ${formatUnit(u)}`;
+    const id = `${NUMBER} ${formatUnit(u)}${inside ? " (inside)" : ""}`;
+    shown[id] = inside ? `(${names[NUMBER] ?? "Float64"} ${formatUnit(u)})` : `${names[NUMBER] ?? "Float64"} ${formatUnit(u)}`;
     return { t: "con", id, args: [] };
   };
   return { type: t.t === "fn" ? { ...t, params: t.params.map((p, i) => at(p, units.params[i])), ret: at(t.ret, units.result) } : at(t, units.result), names: shown };

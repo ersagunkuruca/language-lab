@@ -3560,19 +3560,28 @@ fold, and the array has no job for it, so each window walks i items
 (f20 in the core module). At a quarter of a big buffer, `restOf` copies
 what's left (the leak guard of I106c), so a walk from the start copies
 too. The ideal indexes the array. If `drop` were a job on an array (a
-view, O(1)), as `item at` is, the module would be linear.
+view, O(1)), as `item at` is, the module would be linear. Built by C221:
+`drop` and `take` are slices on an array (and log n on lists as trees);
+at 40000 fixes the core module is 5.3x the ideal (713x before) and `ters
+native` 2.4x (1271x), now faster than WASI.
 
 **R2. `ters native` is 4 to 7x slower than WASI on the same program
 (perf, C220).** At 4000 fixes, native takes 1052 ms and WASI 152 ms.
 This is C220's machine result again on a second program, with the same
-quadratic walk.
+quadratic walk. Since C221 trek's native run is faster than WASI's (the walk
+was the cause), and since C220 machine's is about as fast as WASI's
+(its counts every step).
 
 **R3. WASI runs out of stack from 10000 fixes (compiler).** `points
 from`, `legs of`, `with heights` and std's `sum` recurse once per item.
 Node's stack takes 4000 but not 10000. The core module counts its depth
 and goes on from where it was; `ters native` has a bigger stack. With
 C187 waiting for stack switching, WASI needs another way to grow (or a
-deeper stack where the host allows one).
+deeper stack where the host allows one). Built by C222:
+on WebAssembly each such function is a loop, consing and `and` carried
+along (cons-loops.ts) and the rest with its frames on the heap
+(deep-loops.ts); WASI prints the ideal's output at 10000 and 40000 fixes
+(6.3x the ideal's time at 40000).
 
 **L1. A division guarded by a comparison is still a Choice (language).**
 `if d > 0.0 m then x / d` and `l.took > 0.0 s and l.length / l.took`

@@ -154,6 +154,15 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.if(i.less(p, before), k.call(find, l, p, o),
       k.if(i.less(before, p), k.call(find, r, i.sub(p, i.add(before, k.int(1))), o), y))), () => o)));
   const itemAt = def("list tree item at", ["tree", "position", "otherwise"], (t, p, o) => k.call(find, t, p, o));
+  // The first `count` items, and the items after them (C221): down by the
+  // sizes, the sides kept linked on the way back, log n (Adams' split).
+  // A count past either end gives what a list's take and drop give.
+  const take = rec("list tree take");
+  k.define(take, k.fn(["tree", "count"], (t, c) => parts(t, (_, y, l, r) => k.let("before", k.call(size, l), (before) =>
+    k.if(i.less(before, c), k.call(link, l, y, k.call(take, r, i.sub(c, i.add(before, k.int(1))))), k.call(take, l, c))), () => k.x(tip))));
+  const drop = rec("list tree drop");
+  k.define(drop, k.fn(["tree", "count"], (t, c) => parts(t, (_, y, l, r) => k.let("before", k.call(size, l), (before) =>
+    k.if(i.less(before, c), k.call(drop, r, i.sub(c, i.add(before, k.int(1)))), k.call(link, k.call(drop, l, c), y, r))), () => k.x(tip))));
   // A replace keeps every size, so the tree keeps its shape.
   const put = rec("list tree replace");
   k.define(put, k.fn(["tree", "position", "by"], (t, p, by) => parts(t, (s, y, l, r) => k.let("before", k.call(size, l), (before) =>
@@ -183,6 +192,8 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaceAt), cost(k, "logarithmic")),
+    k.call(JOBS.job, k.x(prelude("drop")), k.x(drop), cost(k, "logarithmic")),
+    k.call(JOBS.job, k.x(prelude("take")), k.x(take), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
     k.call(JOBS.equalBy, k.x(equal)), k.call(JOBS.showBy, k.x(show)), k.call(JOBS.compareBy, k.x(compare)),
     k.call(JOBS.storeBy, k.x(store)),

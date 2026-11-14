@@ -47,6 +47,8 @@ const { pageDocument } = compiles ? await import("../src/lang/page.ts") : ({} as
 const { CFLAGS, emitC } = compiles ? await import("../../compiler/src/c.ts") : ({} as typeof import("../../compiler/src/c.ts"));
 const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({} as typeof import("../../compiler/src/wasm.ts"));
 const { mapsInPlaceCounted, ownedArrays } = compiles ? await import("../../compiler/src/owned-arrays.ts") : ({} as typeof import("../../compiler/src/owned-arrays.ts"));
+const { consLoops } = compiles ? await import("../../compiler/src/cons-loops.ts") : ({} as typeof import("../../compiler/src/cons-loops.ts"));
+const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts") : ({} as typeof import("../../compiler/src/deep-loops.ts"));
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
 const { untaggedLoops, untaggedFunctions } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
@@ -306,6 +308,12 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   // On WebAssembly (no counts), a map writes into its array where every
   // array of its type has one holder, as on JavaScript (owned-arrays.ts).
   if (wasm) {
+    // A function going down an array item by item, a loop (C222): its
+    // stack holds some thousands of frames. Consing and `and` carried
+    // along (cons-loops.ts), the rest with its frames on the heap
+    // (deep-loops.ts).
+    if (!process.env.NO_CONS_LOOPS) consLoops(lowered);
+    if (!process.env.NO_DEEP_LOOPS) deepLoops(lowered);
     ownedArrays(lowered, q.code, q.info, q.names, root, true);
     ownedRecords(lowered, q.code, q.info, q.names, root);
     columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
