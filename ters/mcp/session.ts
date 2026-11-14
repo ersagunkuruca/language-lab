@@ -9,6 +9,7 @@
 // id of each block that starts on that line. Ids are shown as the shortest
 // prefix (4 or more characters) no other node of the program shares.
 
+import { keptIds } from "../src/keep-ids.ts";
 import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -685,7 +686,9 @@ export class Session {
       const info = editorInfo(this.code, this.names);
       const holed = T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
-      return this.fill(holed.code, holed.names, target, t, def, as);
+      const r = this.fill(holed.code, holed.names, target, t, def, as);
+      // What reads as it did keeps its ids (keep-ids.ts, I266).
+      return r.ok ? { ok: true as const, ...keptIds(this.code, r.code, r.names, target) } : r;
     }, undefined, !kase);
   }
 
