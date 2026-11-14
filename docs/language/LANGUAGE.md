@@ -1184,7 +1184,12 @@ a builtin called), the handler is taken back and runs again from the start
 with the same event: its writes to cells and files are undone and its
 printing never happens (`attempt` in `src/lang/cells.ts`, software
 transactional memory's retry), so each write still happens once. This is Solid's `createResource` and React's Suspense, built from
-the cells a page already has (`Pending` in `src/lang/cells.ts`). A view's
+the cells a page already has (`Pending` in `src/lang/cells.ts`).
+`while waiting(action, shown)` is Suspense's fallback (L255): the
+action's value if it has it now, else `shown`, so a view can say
+`while waiting(() -> fetch text(url), "Loading…")` and show that until
+the reply lands, then the reply. Where nothing waits (the command line
+waits for the reply) it is the action's value. A view's
 row has no `Abort`, so a view that fetches has to catch it and show
 something; a handler may let it go (the page logs it).
 
@@ -2066,6 +2071,7 @@ back into the group being hashed is named by its position.
   shows its known units (L252); what's missing is writing a unit in a
   pinned signature, with unit variables for a function generic over its
   unit (`(Float64 u) -> Float64 u²`).
-- **Cells, further.** Async cells (HTTP results) as Solid's resources.
-  (Guarded corecursion is done, L16, beside the termination check; so is the
+- **Cells, further.** Async cells (HTTP results) as Solid's resources are
+  done: a view that fetches runs again when the reply lands (L59), and
+  `while waiting` shows something till then (L255). (Guarded corecursion is done, L16, beside the termination check; so is the
   stateful handler form, L16a.)

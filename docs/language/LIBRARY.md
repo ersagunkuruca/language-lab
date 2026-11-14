@@ -663,6 +663,7 @@ A Ticket a is something that will give an a later: a timer, or something the wor
 - **race** : `(List (() -[Diverge, Await, e]-> a)) -[Diverge, Await, e]-> a`. Runs the actions side by side, as together does, and gives the value of the first to finish; the others are dropped where they wait (as JavaScript's Promise.race).
 - **within** : `(Float64, () -[Diverge, Await, e]-> a) -[Diverge, Await, e]-> Optional a`. The action's value as some(value) if it finishes within this many milliseconds, or none if the timer is ready first; the action is then dropped where it waits.
 - **simulated** : `(Float64, () -[Abort, Await, Random, Time, Wait, e]-> a) -[Abort, e]-> a`. Runs the action in a simulated world for tests: its timers, now and wait on a clock that starts at 0 and never really waits, and when several tickets are ready at the same moment, which goes on is picked with a second stream of numbers from the same seed, apart from the action's own Random (seeded by seed), so the same seed gives the same schedule every run, even after the action draws more or fewer numbers; another seed may give another, so an order that goes wrong is a seed to paste into a test (FoundationDB's deterministic simulation).
+- **while waiting** : `(() -[e]-> a, a) -[e]-> a`. while waiting(action, shown) is the action's value if it has it now, else shown. In a page's view, a fetch that hasn't landed shows shown, and the view runs again with the reply when it lands; where nothing waits (a command line waits for the reply) it is the action's value.
 
 ## Cells and pages
 

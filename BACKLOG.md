@@ -189,7 +189,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L255 | Cells holding a value that arrives later, as Solid's resources (a fetch's text as a cell with a loading state). Check first how much L59's page fetch already covers (LANGUAGE.md "Cells, further") | docs refresh 2026-11-13 (thread "Update all project docs"); LANGUAGE.md | P3 | M | |
 
 ### Relations and totality (BACKWARDS.md, MODES.md)
 

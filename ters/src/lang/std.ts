@@ -13,6 +13,7 @@ import { B, impl } from "../prelude.ts";
 import { MASK_TYPES, NAMED_ROWS, ROW_CARRIER, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
+import { Pending } from "./cells.ts";
 import * as A from "./algebraic.ts";
 import * as RL from "./real.ts";
 import { ItemsList } from "./bytes.ts";
@@ -477,6 +478,14 @@ export const S = {
     const a = s.fresh(), e = s.freshRow();
     return fn([num, fn([], a, { effs: [RANDOM], tail: e.tail })], a, e);
   }),
+  // What a view shows while what it asked for hasn't come (L255): the
+  // action's value if it has it now, else `shown`. On a page a fetch that
+  // hasn't landed waits (cells.ts Pending): the view gives `shown`, and
+  // runs again with the reply when it lands, as Solid's and React's
+  // Suspense fallback. Where nothing waits (a command line blocks for the
+  // reply) it is the action's value.
+  whileWaiting: builtin("whileWaiting", "while waiting", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, e), a], a, e); },
+    (body: () => unknown, shown: unknown) => { try { return body(); } catch (e) { if (e instanceof Pending) return shown; throw e; } }),
   // Turns "might not terminate" into "might fail": at most n calls to
   // possibly-divergent definitions, then fail.
   fuel: builtin("fuel", "with fuel", (s) => {
