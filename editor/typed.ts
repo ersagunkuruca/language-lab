@@ -288,7 +288,7 @@ const FOREIGN: [RegExp, string][] = [
   [/\|\|/, "write or"],
   [/(?<![\p{L}\p{N}_')\]])!(?!=)/u, "write not, as in not (x < 1)"],
 ];
-export function readError(text: string, error: string, code: Code, names: Names): string {
+export function readError(text: string, error: string, code: Code, names: Names, scope?: Map<string, Id>): string {
   const bare = text.replace(/"(?:[^"\\]|\\.)*"/g, (m) => " ".repeat(m.length));
   for (const [re, say] of FOREIGN) { const m = re.exec(bare); if (m) return `${m[0]} isn't Ters: ${say}`; }
   const open: string[] = [], pair: Record<string, string> = { ")": "(", "]": "[", "}": "{", "›": "‹" };
@@ -304,6 +304,12 @@ export function readError(text: string, error: string, code: Code, names: Names)
     const whole = parseValue(text, code, names);
     const tok = "error" in whole && whole.error === error ? /^\s*(\S+)/.exec(text.slice(Number(at[1]) - 1))?.[1] : undefined;
     if (tok) return `${error.replace(/ at \d+$/, "")}: “${tok}” isn't read`;
+  }
+  // A number's unit word that names something in scope is that name (L252b),
+  // so `0.0 m` with a parameter m is m after a number (I260).
+  for (const m of bare.matchAll(/(?<![\p{L}\p{N}_'])(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?\s+([^\s()[\],"+\-−·×÷=<>]+)/giu)) {
+    const u = parseUnit(m[1]);
+    if (u && Object.keys(u).length && scope?.has(m[1])) return `in “${m[0].trim()}”, ${m[1]} is the name ${m[1]} here, not a unit: a unit word that names something in scope is that name. Rename that ${m[1]} to write the unit`;
   }
   if (error === "a binder") return `“${text.trim()}” isn't read as a whole: an operator or a word in it isn't Ters's (equality is =; and, or, not; the Guide's “Text you can type” lists what reads)`;
   return error;
@@ -321,7 +327,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
   for (const d of code.defs) if (all[d]) scope.set(all[d], d);
   for (const b of defId ? scopeAt(code, defId, hole) : []) if (all[b]) scope.set(all[b], b);
   const r = typedOut(text, code, all, scope);
-  if ("error" in r) return { ok: false, reason: readError(text, r.error, code, all) };
+  if ("error" in r) return { ok: false, reason: readError(text, r.error, code, all, scope) };
   // A name alone is already in the palette's list.
   if ("ref" in r) return { ok: false, reason: "a name alone is listed already" };
   // A whole number where an Int goes is an Int: 0 in slice's position. And
@@ -1172,6 +1178,11 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
     // An operator expression whose last operand is a call reaches here
     // whole (a + nosuch(b)): the operand's own error says more (E174).
     if (!alts.length && inner) return inner;
+    // `not in order(ps)` when nothing is named `not in order`: not of the
+    // call, as `not (in order(ps))` (I260, round 16's M1). The word joined
+    // the name, as a name's words do.
+    const notted = /^not\s+(\S[\s\S]*)$/.exec(call[1]);
+    if (!alts.length && notted) { const r = typedOut(`not (${notted[1]}(${call[2]}))`, code, names, scope); if (!("error" in r)) return r; }
     if (!alts.length) return { error: `there's no function named ${call[1]}${closest(call[1], [...scope.keys(), ...Object.keys(names).filter((id) => { const k = code.nodes[id]?.kind; return k === "def" || k === "builtin" || k === "variant" || isOperation(code, id); }).map((id) => names[id])], scope)}` };
     return args.find((a) => "error" in a) as { error: string };
   }

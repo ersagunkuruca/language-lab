@@ -431,14 +431,14 @@ export class Session {
     const indent = (l: string) => l.length - l.trimStart().length;
     const top = indent(lines[0]);
     const next = lines.findIndex((l, i) => i > 0 && indent(l) <= top);
-    if (next < 0 || /^match\s/.test(lines[0].trim())) return null;
+    if (next < 0) return null;
     const after = lines.slice(next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n");
     // `tuple(a, b) = e` (M6): a match on e with its one case, the lines
     // after it that case's value.
     const parts = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*\(([^()]*)\)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
     if (parts) return this.fill(code, names, hole, `match ${[parts[3], ...lines.slice(1, next).map((l) => l.trim())].join(" ")}\n  ${parts[1]}(${parts[2]}) →\n${after.split("\n").map((l) => "    " + l).join("\n")}`, def, as);
     const step = /^([\p{L}_][\p{L}\p{N}_' ]*?)\s*=(?![=>])\s*(\S[\s\S]*)$/u.exec(lines[0].trim());
-    if (!step) return null;
+    if (!step) return this.bareStep(code, names, hole, lines.slice(0, next).map((l) => l.slice(Math.min(top, indent(l)))).join("\n"), after, def, as);
     // The step's value may go on over deeper lines.
     const value = [step[2], ...lines.slice(1, next).map((l) => l.trim())].join(" ");
     const r = this.fillOne(code, names, hole, `${step[1]} = ${value}; □`, def, as);
@@ -446,6 +446,26 @@ export class Session {
     const call = r.code.nodes[hole], fn = isCall(call) ? r.code.nodes[call.fn] : undefined;
     if (fn?.kind !== "lambda" || r.code.nodes[fn.body]?.kind !== "hole") return { ok: false, reason: `${step[1]} = ${value} doesn't read as a step` };
     return this.fill(r.code, r.names, fn.body, after, def, as);
+  }
+
+  // A step whose value isn't named, as the view prints one: a print, or a
+  // match over deeper lines with steps after it (I260, round 16's M1),
+  //   match cs
+  //     nil → print("none")
+  //     cons(c, more) → print(c)
+  //   length(cs)
+  // read as `□; □`, the step's lines into the first hole and the lines
+  // after it into the second. A first line that is a match's, a fold's or
+  // a handler's alone is that, when nothing comes after it.
+  private bareStep(code: Code, names: Names, hole: Id, value: string, after: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    const r = this.fillOne(code, names, hole, "□; □", def, as);
+    if (!r.ok) return r;
+    // `a; b` is b in a function of a nothing reads, called on a.
+    const call = r.code.nodes[hole], fn = isCall(call) ? r.code.nodes[call.fn] : undefined;
+    if (!isCall(call) || fn?.kind !== "lambda" || r.code.nodes[call.args[0]]?.kind !== "hole" || r.code.nodes[fn.body]?.kind !== "hole") return { ok: false, reason: `${value.split("\n")[0].trim()} doesn't read as a step` };
+    const first = this.fill(r.code, r.names, call.args[0], value, def, as);
+    if (!first.ok) return first;
+    return this.fill(first.code, first.names, fn.body, after, def, as);
   }
 
   // A fold as the view prints it (I218 M12), a case a line or after `;`s,
