@@ -545,6 +545,11 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           // An if on one line takes in everything after its else, so as an
           // operand it is bracketed: (if c < 0 then "-" else "") ++ …
           const an = node(a);
+          // An operand with steps before its value is bracketed, the steps
+          // inside: they'd read as a binding in the middle of the chain,
+          // and what follows as its own line (Ersagun 2026-11-14 on
+          // Lockstep's `fixed(steps) = position` then `++ show(steps)`).
+          if (hasSteps(a)) return [ln(...lead, pn("(")), grp(lines, 2), ln(pn(")"))];
           return lines.length === 1 && "line" in lines[0] && an.kind === "match" && isBool(an) ? [ln(...lead, pn("("), ...lines[0].line, pn(")"))] : block(a, lead);
         };
         return hold(ops.flatMap((a, i) => one(a, i ? [part("op", [`${nota.glyph} `], n.fn)] : lead)));

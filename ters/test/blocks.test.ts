@@ -178,3 +178,16 @@ test("a match on values shows each arm as its value", async () => {
   const text = renderBlocks(code, pres, info, op);
   assert.match(text, /match name\s+"add" → 1\s+"jump" → 2\s+otherwise → 0/);
 });
+
+// An operand with a step before its value is bracketed, the step inside
+// (Ersagun 2026-11-14): Lockstep's `fixed(steps) = position` read as a
+// binding in the middle of a ++ chain, and `++ show(steps)` as a line of
+// its own after it.
+test("an operand with steps is bracketed, its steps inside", () => {
+  const p = loadProgram(join(root, "examples", "lockstep"));
+  const info = infer(p.code, p.pres.names);
+  const lines = renderBlocks(p.code, p.pres, info, p.named("main")).split("\n").map((l) => l.trimEnd());
+  const at = lines.findIndex((l) => l.trim() === "++ (");
+  assert.ok(at > 0, lines.join("\n"));
+  assert.deepEqual(lines.slice(at + 1, at + 4).map((l) => l.trim()), ["fixed(steps) = position", "show(steps)", ")"], lines.join("\n"));
+});
