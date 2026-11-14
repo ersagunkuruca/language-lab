@@ -102,7 +102,10 @@ export const TARGETS: Record<Id, Target> = {
   [S.optional]: { js: written("handlerEx(): the first answer as some, or none"), scalar: CHOOSES },
   [S.first]: { js: written("handlerEx(): the first answer, or the default"), scalar: written("budget(): first over with fuel is a counted loop") },
   [S.fuel]: { js: written("handlerEx(): calls spend from a budget"), scalar: written("budget(): under first, a counted loop") },
-  [S.seeded]: { js: written("`$seeded` with the generator, as a stream when the body chooses"), scalar: no("randomness is a handler the scalar profile has none of") },
+  // A view's fallback while a fetch is out (L255): std.ts's, which gives
+  // `shown` when the action throws cells.ts Pending.
+  [S.whileWaiting]: { js: "impl", scalar: no("waits on what a page fetches: the scalar profile has no cells or fetches") },
+  [S.seeded]:{ js: written("`$seeded` with the generator, as a stream when the body chooses"), scalar: no("randomness is a handler the scalar profile has none of") },
   [S.valueOf]: { js: "partial", scalar: CHOOSES },
   [S.exists]: { js: written("`$exists`: the relational interpreter, on the module's node table"), scalar: LOOKS },
   [S.derivative]: { js: written("`$derivative`, or the derivative's code when the function is written in place"), scalar: LOOKS },

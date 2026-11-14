@@ -6,14 +6,20 @@ import assert from "node:assert/strict";
 import { runMain } from "../../ters/src/lang/run.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { represent, representationsIn } from "../../ters/src/lang/represent.ts";
+import { storedRows } from "../../ters/src/lang/library-reps.ts";
 import { compiledDefs } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 
 function compiledAs(rep: string) {
   const p = load("numbers");
-  const reps = representationsIn(p.code, p.info, p.pres.names, p.own.defs);
+  // Nat is std's since L249: its rows (unary, int) are the numbers
+  // module's, binary the example's own (ters/test/numbers.test.ts).
+  const reps = storedRows(p.code, p.own.defs, representationsIn(p.code, p.info, p.pres.names, p.own.defs));
   const entries = [p.named("main"), p.named("small")];
-  const code = represent(p.code, entries, reps.find((r) => r.name === rep)!);
+  // The rows' own definitions left out, as cli/represented.ts does: the
+  // library's int row is written on natural, which the rewrite changes.
+  const onto = represent(p.code, entries, reps.find((r) => r.name === rep)!);
+  const code = { ...onto, defs: onto.defs.filter((d) => !reps.some((x) => x.def === d)) };
   const info = infer(code, p.pres.names);
   assert.deepEqual(info.errors, []);
   for (const name of ["small", "main"]) {

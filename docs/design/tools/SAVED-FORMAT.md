@@ -137,4 +137,5 @@ driver. `ters diff` and the merge driver keep working by id, as before.
    layout still read. Test: an unchanged program saved twice is the same
    bytes, and a literal edited changes one line.
 4. **I240b.** Every file rewritten once into the new layout, in its own PR.
-5. **I241.** The trial repository, once Ersagun creates it.
+5. **I241.** The trial repository, ersagunkuruca/ters-trial (built 2026-11-14:
+   [GIT-TRIAL-2026-11-14](../../reports/GIT-TRIAL-2026-11-14.md)).
