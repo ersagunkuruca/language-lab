@@ -161,6 +161,24 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L261a | Lockstep as a page: press left and right to move the cart; a second machine gets only the presses and shows the same state, step count for step count. The `fixed(steps) = position` take-apart goes behind a named helper | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | |
+| L261b | Eight queens as a page: choose n, see the first answer on a board, step through all of them, the count | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | |
+| L261c | Countdown as a page: six numbers and a target to choose, the answers listed | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | |
+| L261d | Calculus as a page: pick a function, plot f and f′, the roots Newton's method finds marked | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | |
+| L261e | Markov chains as a page: sliders for the chances, the long-run shares drawn as they settle (or don't) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | |
+| L261f | Conjugation as a page: a brightness slider with both swatches (linear light and the stored number), the quarter turn about a point drawn | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | |
+| L261g | Remove Insertion sort from the picker (folder stays for its tests) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261h | Remove Relations from the picker; move `sum and difference`/`split` and `missing addend` into Run backwards | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261i | Remove Shader: ripples from the picker (folder stays for the shader tests) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261j | Remove Wavetable from the picker (folder and README stay, C30) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261k | Numbers & physics: plain comments on main's lines, names for the quadratic definitions | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261l | Run backwards and Effects: a comment on each definition, printed lines that say what they show | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261m | Shaders: ray marching's missing comment, tiles' program note | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261n | Sheet: comments (0 of 90) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261o | Board: comments (0 of 112) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261p | Ledger: comments (0 of 32) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261q | Clinic: comments (1 of 146) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
+| L261r | Chapters and calc: the missing comments (5 and 6) | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | S | |
 
 ### Numbers (NUMBERS.md)
 
