@@ -166,7 +166,10 @@ test("a field read is labelled .field, so what's wired into it reads as p.field"
 
 test("a value of a one-case type taken apart is drawn as the let of its fields, then what runs next", () => {
   const labels = labelsOf("countdown", "results");
-  assert.ok(labels.includes("halves(front, back) =") && labels.includes("found(expr, value) ="), labels.join(" | "));
+  // A step with an output per field, each named once, on its port; no
+  // "then" input holding the rest (Ersagun 2026-11-14).
+  assert.ok(labels.includes("halves(…) =") && labels.includes("found(…) ="), labels.join(" | "));
+  assert.ok(["front", "back", "expr", "value"].every((f) => labels.includes(f)) && !labels.includes("then"), labels.join(" | "));
   assert.ok(!labels.includes("match Halves") && !labels.includes("match Found"), labels.join(" | "));
   assert.ok(labelsOf("countdown", "valid").includes("match Op"));
 });

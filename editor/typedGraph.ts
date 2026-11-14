@@ -581,7 +581,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         const own = portsOf(code.nodes, id), rs = own && !own.condition ? own.results : [];
         return region(id, params.length ? paramsTitle(params.map(name)) : "action", params, body, "lam", rs, tupleParts(body, rs.length));
       }
-      case "match": case "fold": return cases(id, n);
+      case "match": return takenApart(code, info, n) && !hooks.tree?.has(id) ? apartStep(id, n) : cases(id, n);
+      case "fold": return cases(id, n);
       case "call": {
         if (node(n.fn).kind === "lambda") return letRegion(n);
         // A fold to a function, applied to its starts: one fold node with
@@ -937,6 +938,39 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
     shift(at, body, bx, by);
     return { w: Math.max(w, bx + body.w), h: Math.max(h, valsH, by + body.h), outX: bx + body.outX, outY: by + body.outY, out: body.out, at };
+  };
+
+  // A value taken apart, `tuple(position, velocity) = simulate(inputs)`,
+  // is a step like a let (Ersagun 2026-11-14: the match node, with its
+  // "then" input holding the rest of the definition, was the language's
+  // insides showing): the value goes into a node with an output per name,
+  // and what follows is drawn after it, using those outputs.
+  const apartStep = (id: Id, n: NodeOf<"match">): Sub => {
+    const arm = node(n.arms[0]) as NodeOf<"arm">;
+    const at = new Map<Id, Pos>();
+    const v = lay(n.scrutinee);
+    shift(at, v, 0, 0);
+    const title = `${name(arm.variant)}(…) =`;
+    const lw = Math.max(0, ...arm.binds.map((b) => tw(name(b), 6.8)));
+    const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30), bh = 30 + arm.binds.length * 20;
+    const portY = (i: number) => 30 + i * 20;
+    item(id, bw, bh, (g) => {
+      g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn letn${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), `${name(arm.variant)}(${arm.binds.map(name).join(", ")}) = …: the value taken apart, a name for each part`));
+      g.append(s("text", { x: bw / 2, y: 19, class: "cl", "text-anchor": "middle" }, title));
+      g.append(titled(s("circle", { cx: 0, cy: 15, r: 5, class: "inp", "data-slot": n.scrutinee }), typeOf(n.scrutinee)));
+      arm.binds.forEach((b, i) => {
+        g.append(s("text", { x: bw - 10, y: portY(i) + 4, class: "portl", "text-anchor": "end" }, name(b)));
+        g.append(titled(s("circle", { cx: bw, cy: portY(i), r: 5, class: `src${sel(b)}`, "data-src": b, "data-id": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it`));
+      });
+    }, { out: { x: bw, y: portY(0) } });
+    const x = v.w + 22, y = Math.max(0, v.outY - 15);
+    at.set(id, { x, y });
+    wires.push({ from: v.out, to: { item: id, dx: 0, dy: 15 }, cls: "", flow: true });
+    arm.binds.forEach((b, i) => sources.set(b, { item: id, dx: bw, dy: portY(i) }));
+    const body = lay(arm.body);
+    const bx = x + bw + 40, by = 0;
+    shift(at, body, bx, by);
+    return { w: bx + body.w, h: Math.max(v.h, y + bh, by + body.h), outX: bx + body.outX, outY: by + body.outY, out: body.out, at };
   };
 
   // if, match and fold are ordinary nodes: the value goes in first, then one
