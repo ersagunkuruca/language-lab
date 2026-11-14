@@ -10,8 +10,9 @@
 // Changes no answer: the item at position k of a rest taken m times is
 // the item at k + m of the array, and its length the array's less m.
 // The core IR's JavaScript only (its arrays are views, std.ts ArrayView);
-// a function inner to another, or with a call that keeps the rest of the
-// search (cps), is left as it is.
+// a function with a call that keeps the rest of the search (cps), or with
+// several answers, is left as it is. A lambda's code is walked too
+// (depot's searches over `indices`, a recursion inside `closest`, C228).
 
 import { isArray, kids, mapKids, mapLocals, type CoreIR, type SExpr, type SFunc } from "./scalar.ts";
 
@@ -22,7 +23,7 @@ export function arrayOffsets(ir: CoreIR): number {
   const count = ir.funcs.length;
   for (let fi = 0; fi < count; fi++) {
     const f = ir.funcs[fi];
-    if (f.inner || f.multi) continue;
+    if (f.multi) continue;
     // Each such input in turn: the function made for one is walked again
     // for the next (matching's dry and wet).
     let at = fi;

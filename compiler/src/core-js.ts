@@ -42,7 +42,7 @@ import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
-import { rangeChoices } from "./range-choices.ts";
+import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
@@ -667,6 +667,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   if (!envSet("NO_RANGE_CHOICES")) rangeChoices(ir, true);
   // And a loop folding a Bool with `and` stopping once it's false (C207m).
   if (!envSet("NO_EARLY_AND")) earlyAnd(ir);
+  // And `array of range x` of Ints filled with no list (C228, as C207v
+  // on WebAssembly): depot's `indices`, made for each search.
+  if (!envSet("NO_RANGE_ARRAYS")) rangeArrays(ir);
   // An array a function walks by its rests, read by position (C196).
   if (!envSet("NO_OFFSETS")) arrayOffsets(ir);
   if (!envSet("NO_SHARE")) shareCalls(ir);
