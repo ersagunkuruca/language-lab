@@ -8,7 +8,14 @@ import { pathToFileURL } from "node:url";
 import { merge, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
-import { parseSaved, printSaved } from "../src/saved.ts";
+import { conflictMarkersAt, markersMessage, parseSaved, printSaved, ProgramFileError } from "../src/saved.ts";
+// A program file that can't be read (git's conflict markers in it, I270)
+// is said as the reason, wherever it is read, not as a stack.
+for (const ev of ["uncaughtException", "unhandledRejection"] as const) process.on(ev, (e: unknown) => {
+  if (e instanceof ProgramFileError) { process.stderr.write(`ters: ${e.message}\n`); process.exit(2); }
+  console.error(e);
+  process.exit(1);
+});
 import { cacheChecks, infer, type Info, type Options } from "../src/lang/infer.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
 import { groupStore } from "../src/lang/library-store.ts";
@@ -427,7 +434,12 @@ if (command === "git-diff" || command === "git-setup") {
 // Program files compared and merged id by id (merge-files.ts, L113).
 if (command === "diff" || command === "merge") {
   const { describe, diffLines, mergeFiles } = await import("../src/merge-files.ts");
-  const json = (f: string | undefined) => { if (!f || !existsSync(f)) return undefined; try { return parseSaved(readFileSync(f, "utf8")); } catch { fail(`${f} isn't JSON`); } };
+  const json = (f: string | undefined) => {
+    if (!f || !existsSync(f)) return undefined;
+    const text = readFileSync(f, "utf8"), marked = conflictMarkersAt(text);
+    if (marked !== null) fail(markersMessage(f, marked));
+    try { return parseSaved(text); } catch { fail(`${f} isn't JSON`); }
+  };
   if (command === "diff") {
     // A program against a git revision (E255b, DIFF.md): `--from REV`, and
     // `--to REV` (else the working tree). With no program, every program

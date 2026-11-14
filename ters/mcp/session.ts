@@ -33,14 +33,14 @@ import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
 import { onTodaysIds, S, SIGS, TRUE } from "../src/lang/std.ts";
-import { printSaved } from "../src/saved.ts";
+import { printSaved, readJsonFile } from "../src/saved.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
 import { readCase, readType, typeNames, type Build } from "./type-text.ts";
 
 // A saved folder read as ters reads it (load.ts): older ids and shapes
 // brought up to today's (std.ts onTodaysIds, I185).
-const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(JSON.parse(readFileSync(path, "utf8"))) : fallback);
+const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(readJsonFile<T>(path, readFileSync(path, "utf8"))) : fallback);
 const STYLE: Style = read(join(root, "styles", "blocks.json"), { view: "blocks", notation: {} });
 // A run that doesn't finish is stopped after this many steps.
 export const STEPS = 20_000_000;

@@ -25,7 +25,7 @@ import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { addToStore, MODULE_FORMAT, needs, pointsAt, upgradeNames, upgradeOwn, verify, type Module, type Moved } from "./lang/modules.ts";
 import { onTodaysIds } from "./lang/std.ts";
-import { printSaved } from "./saved.ts";
+import { conflictMarkersAt, printSaved } from "./saved.ts";
 import type { Pins } from "./lang/signatures.ts";
 import type { Saved } from "./lang/tests.ts";
 import type { Drafts } from "../../editor/drafts.ts";
@@ -84,6 +84,8 @@ const strings = (x: unknown): x is Record<string, string> => isObj(x) && Object.
 export function fromFile(text: string, baseFor: (typed: boolean) => Code): { file: ProgramFile; code: Code } | { error: string } {
   let x: unknown;
   // Ids since renamed read as today's (std.ts RENAMED_IDS).
+  const marked = conflictMarkersAt(text);
+  if (marked !== null) return { error: `it has git conflict markers (the first at line ${marked}): resolve them, or merge again by id with the program driver (\`ters git-setup\` sets it up, DIFF.md)` };
   try { x = onTodaysIds(JSON.parse(text)); } catch { return { error: "it isn't JSON" }; }
   if (!isObj(x) || x.format !== FORMAT) return { error: "it isn't a program saved by this editor" };
   if (x.version !== 1 && x.version !== 2) return { error: `it was saved by a newer version (${String(x.version)})` };
