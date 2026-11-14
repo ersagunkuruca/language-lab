@@ -2215,7 +2215,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const callsOf = new Map<Id, Id[]>();
   for (const id of rechecked("call", (n) => isCall(n))) {
     const f = code.nodes[(code.nodes[id] as Call).fn];
-    if (f?.kind === "ref" && (f.target === FIELDS.mapped || f.target === FIELDS.listed || f.target === JSON_OPS.of || f.target === JSON_OPS.from || f.target === JOBS.job)) (callsOf.get(f.target) ?? callsOf.set(f.target, []).get(f.target)!).push(id);
+    if (f?.kind === "ref" && (f.target === FIELDS.mapped || f.target === FIELDS.listed || f.target === JSON_OPS.of || f.target === JSON_OPS.from || f.target === JOBS.job || f.target === JOBS.asWritten || f.target === JOBS.matchBy || f.target === JOBS.foldBy)) (callsOf.get(f.target) ?? callsOf.set(f.target, []).get(f.target)!).push(id);
   }
   const callsTo = (...ts: Id[]) => ts.flatMap((t) => callsOf.get(t) ?? []);
   // fields mapped and fields listed are written out per type where they are
@@ -2261,6 +2261,16 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     const same = d?.kind === "def" && lam?.kind === "lambda" && dRes?.length === fp.outs.length && lam.params.length - dRes.length === fp.ins.length;
     if (!same) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must name its results the way ${nm(field)} does: ${want}`);
     else if (info.directions?.get(by)?.length) err(impl, `${nm(impl)} gives ${nm(field)} as ${nm(by)}, which must give ${want} with one answer, and it may give several or none`);
+  }
+  // A representation names the definitions that do its jobs: one written
+  // in place (`job(nobody, two lists(nil, nil), constant)`) is no
+  // definition to call instead of the job, so it would be read as none.
+  for (const id of callsTo(JOBS.job, JOBS.asWritten, JOBS.matchBy, JOBS.foldBy)) {
+    const n = code.nodes[id] as Call;
+    const f = code.nodes[n.fn];
+    if (f?.kind !== "ref") continue;
+    const named = f.target === JOBS.job ? n.args.slice(0, 2) : n.args.slice(0, 1);
+    for (const a of named) if (code.nodes[a] && code.nodes[a].kind !== "ref" && code.nodes[a].kind !== "hole") err(a, "a representation's job names a definition: give this one a name of its own and use the name");
   }
   // A representation's job (REPRESENTATIONS.md, L108): `job(of, by, cost)`
   // does t's job `of` at r, so `by` has of's type with r for t.
