@@ -341,6 +341,7 @@ interface Item {
   solid: boolean;       // wires running under it are drawn as tunnels
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
+  ran?: number;         // its place in the order effects run (E265), shown
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
 interface Frame { id: Id; parent: Id | null; title: string; cls: string; wiresIn?: true; binders: Id[]; labels: string[]; results?: Id[]; resultLabels?: string[]; out: End | null; pad: [number, number, number, number]; minH: number; minW: number }
@@ -778,11 +779,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
       const ran = runOrder.get(id);
-      if (ran) {
-        const o = s("g", { class: "effn" });
-        o.append(s("circle", { cx: 0, cy: 0, r: 9 }), s("text", { x: 0, y: 3.5, "text-anchor": "middle" }, String(ran)));
-        g.append(titled(o, `${ran === 1 ? "The first" : `Number ${ran}`} of the calls with effects here to run (${badge}): a call's inputs run left to right, then the call; a function written in place numbers its own from 1, as it runs when it's called (one with no inputs given to a call runs there, and goes on from it)`));
-      }
+      if (ran) g.append(effectBadge(String(ran), `${ran === 1 ? "The first" : `Number ${ran}`} of the calls with effects here to run (${badge}): a call's inputs run left to right, then the call; a function written in place numbers its own from 1, as it runs when it's called (one with no inputs given to a call runs there, and goes on from it)`));
       g.append(s("text", { x: bw / 2, y: portNames ? top + 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
       // Each list's bracket, under its sockets.
@@ -805,7 +802,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         g.append(titled(add, list ? "Add an item at the end" : "Add an input at the end"));
       }
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label });
+    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label, ...(runOrder.has(id) ? { ran: runOrder.get(id) } : {}) });
     const { sub, bx, by } = withArgs(rows.map((r) => r.a), kids, bw, bh, id, portY);
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
@@ -1291,6 +1288,15 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // them, and unfolding finds them where they were. A view: layout.json.
 // (Influence: Houdini's minimized network boxes.)
 
+// An effect's place in the order they run (E265): a number in a ring at
+// a box's top left corner, wider for a range a folded box holds.
+function effectBadge(text: string, why: string): SVGElement {
+  const o = s("g", { class: "effn" }), w = Math.max(18, tw(text, 6.2) + 10);
+  o.append(w > 18 ? s("rect", { x: -9, y: -9, width: w, height: 18, rx: 9 }) : s("circle", { cx: 0, cy: 0, r: 9 }), s("text", { x: w / 2 - 9, y: 3.5, "text-anchor": "middle" }, text));
+  o.append(s("title", {}, why));
+  return o;
+}
+
 const FOLDH = 44;
 // The longest name, and the longest line, a folded box lists.
 const HOLDN = 14, HOLDS = 24;
@@ -1316,6 +1322,17 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     for (const n of names.slice(1)) { if (line.length + n.length + 2 > HOLDS) return `${line}, …`; line += `, ${n}`; }
     return line;
   };
+  // The numbers of the calls with effects it holds (E265, QA 11-15 Q2):
+  // folded, they'd be hidden, so the box says them, `2–5`, or `3, 7` where
+  // others run between.
+  const ran = (f: Id) => {
+    const ns = [...scene.items.values()].filter((it) => it.ran && hider(it.frame) === f).map((it) => it.ran!).sort((a, b) => a - b);
+    const us = [...new Set(ns)];
+    if (!us.length) return "";
+    const runs: string[] = [];
+    for (let i = 0; i < us.length;) { let j = i; while (j + 1 < us.length && us[j + 1] === us[j] + 1) j++; runs.push(j > i ? `${us[i]}–${us[j]}` : `${us[i]}`); i = j + 1; }
+    return runs.join(", ");
+  };
   const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
   for (const it of scene.items.values()) if (!hider(it.frame)) items.set(it.key, it);
@@ -1332,6 +1349,7 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
         s("text", { x: 10, y: 16, class: "rt" }, f.title),
         s("text", { x: 10, y: 34, class: "fold-n" }, holds(f.id)),
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
+        ...(ran(f.id) ? [effectBadge(ran(f.id), `The calls with effects inside run as number ${ran(f.id)} here: unfold it to see which`)] : []),
       ),
     });
   }
