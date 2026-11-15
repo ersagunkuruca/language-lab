@@ -916,13 +916,19 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // holder and are changed in place.
     const made = new Set(walk(f.body).flatMap((e) => (e.k === "make" || e.k === "new" || e.k === "list" ? [e.t.key] : [])));
     const shared = (t: LType) => ((isRecord(t) && !t.mutable && counted(t)) || isData(t)) && !made.has((t as RType).key);
-    // A table only read, as an array is (round 13 P5).
-    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (isArray(t) && same(j)) || (isTable(t) && (!rounds.length || same(j))) ? [j] : [])));
+    // A table only read, as an array is (round 13 P5). Data walked by a
+    // loop, each round going on with the input or a part of it (C241:
+    // scan's tree lookups and list walks), checked below with the rounds.
+    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (rounds.length && isData(t) && shared(t)) || (isArray(t) && same(j)) || (isTable(t) && (!rounds.length || same(j))) ? [j] : [])));
     if (c.size) lent.set(i, c);
   }
   // Whether e uses local j other than as a field's record or a lent input.
+  // A local let to j, or a case's on j, is j under another name (C241):
+  // what it does counts as j's.
   const owns = (e: SExpr, j: number): boolean => {
     if (e.k === "local") return e.i === j;
+    if (e.k === "let" && e.value.k === "local" && e.value.i === j) return owns(e.body, j) || owns(e.body, e.i);
+    if (e.k === "case" && e.scrut.k === "local" && e.scrut.i === j) return e.arms.some((a) => !!a && (owns(a, j) || owns(a, e.s)));
     if ((e.k === "get" || e.k === "field" || e.k === "tag") && e.rec.k === "local" && e.rec.i === j) return false;
     // An array's item or length read from it (C207g, C207r).
     if (e.k === "rt" && /^(array\.(get|length|at)\.a|table\.at\.t)\d+$/.test(e.fn) && e.args[0].k === "local" && e.args[0].i === j) return e.args.slice(1).some((x) => owns(x, j));
@@ -939,9 +945,20 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     if (e.k === "let" && isBox(e.value, j)) return owns(e.body, e.i) || container(e.body, j);
     return isBox(e, j) || kids(e).some((x) => container(x, j));
   };
+  // Each round of a loop goes on, at a lent data input, with one of the
+  // function's lent inputs or a part of one it holds no count of (C241):
+  // the loop's input is set again without a count taken or given back.
+  const roundsLend = (i: number, j: number): boolean => {
+    const f = funcs[i];
+    if (!isData(f.params[j])) return true;
+    const rounds = calls(f.body).filter((x) => x.fn === i && x.tail);
+    if (!rounds.length) return true;
+    const held = borrowed(f.body, lent.get(i)!, owns);
+    return rounds.every((x) => x.args[j].k === "local" && held.has((x.args[j] as { i: number }).i));
+  };
   for (let more = true; more;) {
     more = false;
-    for (const [i, ps] of lent) for (const j of [...ps]) if (owns(funcs[i].body, j) || container(funcs[i].body, j)) { ps.delete(j); more = true; }
+    for (const [i, ps] of lent) for (const j of [...ps]) if (owns(funcs[i].body, j) || container(funcs[i].body, j) || !roundsLend(i, j)) { ps.delete(j); more = true; }
   }
   for (const [i, ps] of [...lent]) if (!ps.size) lent.delete(i);
   const bnames = new Map([...lent.keys()].map((i) => [i, ident(`${names.get(i)}_b`)]));
@@ -1800,9 +1817,19 @@ int main(int argc, char **argv) {
     // Every local is declared once at the top: a let in one branch of an
     // if is still one variable.
     f.locals.forEach((t, j) => { if (j >= f.params.length) decls.push(`  ${ty(t)} ${local(j)};`); });
-    // A lent input isn't this function's to give on or drop.
+    // A lent input isn't this function's to give on or drop, nor is a
+    // local that holds it or a part of it without a count (C241).
     const mine = lent.get(i);
-    const isCounted = (j: number) => counted(f.locals[j]) && !mine?.has(j);
+    const aliases = mine ? borrowed(f.body, mine, owns) : new Set<number>();
+    const isCounted = (j: number) => counted(f.locals[j]) && !aliases.has(j);
+    // A part of a lent input read into such a local: no count taken.
+    const aliased = (e: SExpr & { k: "let" }): string | null => {
+      if (!aliases.has(e.i)) return null;
+      const v = e.value;
+      if (v.k === "field" && v.rec.k === "local" && !isCounted(v.rec.i)) return `((${cname(v.t, v.c)} *)${local(v.rec.i)})->f${v.i}`;
+      if (v.k === "get" && !v.t.mutable && v.rec.k === "local" && !isCounted(v.rec.i)) return `${local(v.rec.i)}.f${v.i}`;
+      return null;
+    };
     // The counted locals e reads before setting them. `cap` reads the
     // closure, input 0.
     const memo = new Map<SExpr, Set<number>>();
@@ -2326,6 +2353,8 @@ int main(int argc, char **argv) {
         case "let": {
           const rest = moved(e, pre, d, after);
           if (rest) return ex(rest, pre, d, after);
+          const raw = aliased(e);
+          if (raw) { pre.push(`${d}${local(e.i)} = ${raw};`); return ex(e.body, pre, d, after); }
           const body = free(e.body);
           pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
           if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
@@ -2550,6 +2579,8 @@ int main(int argc, char **argv) {
       if (e.k === "let") {
         const rest = moved(e, pre, d, after);
         if (rest) return [...pre, ...block(rest, to, d, after)];
+        const raw = aliased(e);
+        if (raw) return [`${d}${local(e.i)} = ${raw};`, ...block(e.body, to, d, after)];
         const body = free(e.body);
         pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
         if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
@@ -4139,6 +4170,23 @@ function walk(e: SExpr): SExpr[] {
   return [e, ...kids(e).flatMap(walk)];
 }
 
+// The locals of a function that hold no count of their own (C241): its
+// lent inputs, a local let to one or a case's on one, and a part of one
+// (a case's field, a record's) read into a local only read or lent on in
+// turn, which the input holds as long as the call lasts.
+function borrowed(body: SExpr, lentIn: Set<number>, owns: (e: SExpr, j: number) => boolean): Set<number> {
+  const out = new Set(lentIn);
+  const go = (e: SExpr) => {
+    if (e.k === "let") {
+      const v = e.value;
+      const from = v.k === "local" ? v.i : (v.k === "field" || (v.k === "get" && !v.t.mutable)) && v.rec.k === "local" ? v.rec.i : -1;
+      if (from >= 0 && out.has(from) && !owns(e.body, e.i)) out.add(e.i);
+    } else if (e.k === "case" && e.scrut.k === "local" && out.has(e.scrut.i) && !e.arms.some((a) => !!a && owns(a, e.s))) out.add(e.s);
+    kids(e).forEach(go);
+  };
+  go(body);
+  return out;
+}
 function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
   return walk(e).filter((x): x is Extract<SExpr, { k: "call" }> => x.k === "call");
 }

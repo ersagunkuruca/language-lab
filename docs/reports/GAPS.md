@@ -4223,3 +4223,16 @@ why wasn't looked at (S8). C237 and C238
 were measured by hand-patching the compiled program, under 2% and about 4%,
 and closed without a pass. What is left is the program's own linear class
 lookup walked on a cons list, the tree reads, and GC.
+
+S8's first point, native no faster than core: its time went to reference
+counts. The walks that only read, the transition tree's lookup and the class
+lookup's list, took each cell apart as they went, a dup of every field and a
+drop of the cell per step: 2 billion `lab_drop` calls at 8000 lines. C241
+(this PR) lends data that a function only walks, through its match and its
+loop, so a lookup takes no counts. Same run, same output:
+
+| Way | After C235-C239 | After C241 |
+|---|---|---|
+| native | 10.8 s, 4.0x | 7.1 s, 2.6x |
+
+(core 8.6 s and wasi 8.7 s in that run, unchanged by C241.)
