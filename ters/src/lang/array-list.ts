@@ -22,7 +22,7 @@
 
 import type { Id } from "../model.ts";
 import type { Lang } from "./dsl.ts";
-import { ARRAY_OPS, COMPARE, CONS, COST, JOBS, NIL, NONE, PAIR_V, REPRESENTATION_V, S, SHOW_ANY, SOME } from "./std.ts";
+import { ARRAY_OPS, COMPARE, CONS, COST, INT_OPS, JOBS, NIL, NONE, PAIR_V, REPRESENTATION_V, S, SHOW_ANY, SOME } from "./std.ts";
 
 // `representations`: the array's row, then List's own (the definition as
 // written, with its costs), which the chooser weighs it against.
@@ -59,7 +59,27 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     ]) },
   ]), [{ variant: PAIR_V, names: ["answer", "array"], body: ([answer]) => answer }]));
   const length = def("array length of", ["array"], (a) => k.call(ARRAY_OPS.length, a));
-  const append = def("array append", ["front", "back"], (a, b) => array(k.call(prelude("append"), items(a), items(b))));
+  // An append writes the shorter one's items onto the other's end, into
+  // its free room when no other array has taken it, so appending onto
+  // what a loop carries (`unpacked(rest, append(out, [b]))`, pack) or a
+  // fold's appends from the back (pack's bits of every token) copy
+  // nothing, where a new array of both copied the whole each time (C234).
+  // Else the longer one is copied once, with room, as a push does.
+  // Folds, so they surely finish: back's items pushed onto front in order
+  // over the positions from the last (a fold's arms run from the back),
+  // and front's onto back from front's last item.
+  const len = (a: Id) => k.call(ARRAY_OPS.length, a);
+  const onBack = def("array append onto back", ["front", "back"], (a, b) => k.fold(k.call(INT_OPS.range, len(b)), [
+    { variant: NIL, names: [], body: () => a },
+    { variant: CONS, names: ["i", "rest"], results: [null, "pushed"], body: ([i], [, r]) => k.call(S.first,
+      k.thunk(() => k.call(ARRAY_OPS.push, r!, k.call(ARRAY_OPS.at, b, k.call(INT_OPS.sub, k.call(INT_OPS.sub, len(b), k.int(1)), i)))),
+      k.thunk(() => r!)) },
+  ]));
+  const onFront = def("array append onto front", ["front", "back"], (a, b) => k.fold(items(a), [
+    { variant: NIL, names: [], body: () => b },
+    { variant: CONS, names: ["item", "rest"], results: [null, "pushed"], body: ([x], [, r]) => k.call(ARRAY_OPS.pushFront, r!, x) },
+  ]));
+  const append = def("array append", ["front", "back"], (a, b) => k.if(k.call(INT_OPS.less, len(a), len(b)), k.call(onFront, a, b), k.call(onBack, a, b)));
   // A map: a fold from the back, each item mapped and pushed into the
   // free slot in front of what the rest made, as the list's map runs
   // `by`: no list made on the way (C196: the pedal's driven band, a block
@@ -100,6 +120,9 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.foldOfItems, cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("length")), k.x(length), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "linear")),
+    // Onto what a loop carries, at its free end: as long as what is added,
+    // which the loop's own items count (C234).
+    k.call(JOBS.carried, k.x(prelude("append")), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaced), cost(k, "constant")),

@@ -35,6 +35,10 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "array length of": "@oq7cmip86uql4l57vvvt6lchaa",
  "list tree of list": "@b553mah4ocs7975ee8hlq561ho",
  "empty tree": "@lk05v4r73jribg05qiim03a90j",
+ // At most so many items, for a count written as a number (represent.ts freshUses, C234).
+ "take": "@3ejt3neud5q32mrols3nn7tu58",
+ // Appends onto what a loop carries, an array's own (C234).
+ "append": "@c9sa21p6t34r9bf9cjcm8h2101",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list

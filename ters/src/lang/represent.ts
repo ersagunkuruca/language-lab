@@ -18,7 +18,7 @@ import { children, dependencies, freshId, subtree, type Code, type Id, type Node
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
-import { COPIED_FROM } from "./prelude-ids.ts";
+import { COPIED_FROM, PRELUDE_DEFS } from "./prelude-ids.ts";
 import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
 
 export interface Representation {
@@ -114,6 +114,7 @@ export function representationsIn(code: Code, info: Info, names: Record<Id, stri
         if (Number.isInteger(at) && at >= 0 && at < ((code.nodes[a[0]] as NodeOf<"variant"> | undefined)?.fields.length ?? 0)) (rep.hidden ??= {})[a[0]] = [...(rep.hidden?.[a[0]] ?? []), at];
         continue;
       }
+      if (kind === JOBS.carried && a[0]) { if (cost) rep.cost[CARRIED + a[0]] = cost; continue; }
       const key = kind === JOBS.job || kind === JOBS.asWritten ? a[0] : kind === JOBS.matchBy || kind === JOBS.matchAsWritten ? "match" : kind === JOBS.foldBy || kind === JOBS.foldAsWritten ? "fold" : kind === JOBS.foldOfItems ? FOLD_OF_ITEMS : null;
       if (!key) continue;
       const by = kind === JOBS.job ? a[1] : kind === JOBS.matchBy || kind === JOBS.foldBy ? a[0] : null;
@@ -172,7 +173,51 @@ function headRefs(code: Code): Set<Id> {
   }
   return r;
 }
-const jobOf = (code: Code, n: NodeOf<"ref">) => (headRefs(code).has(n.id) ? HEAD + n.target : n.target);
+// A job given what a loop carries, its answer carried on in the same
+// place: a parameter of the definition it's in, given to a call of that
+// definition in the same place (`unpacked(rest, append(out, [b]))`,
+// cons-onto.ts's `so far`), or the rest's answer in a fold's arm, as its
+// answer (`flatten`'s `append(x, the rest's answer)`). What it was given
+// is read no more but by the job, so a row that writes at a free end does
+// it in place, where the job as a whole copies (C234). Its own job,
+// `CARRIED` and the job's id, at the cost a row gives it, else the job's.
+// The refs, by node id.
+export const CARRIED = "carried ";
+const carriedRead = new WeakMap<Code, Set<Id>>();
+function carriedRefs(code: Code): Set<Id> {
+  let r = carriedRead.get(code);
+  if (r) return r;
+  carriedRead.set(code, (r = new Set()));
+  // A call of a function given one of `carried`, as x is or through lets.
+  const given = (x: Id, carried: (y: Id) => boolean): Id | null => {
+    const j = code.nodes[x];
+    if (!isCall(j) || !j.args?.length) return null;
+    const f = code.nodes[j.fn];
+    if (f?.kind === "lambda" && f.params.length === j.args.length) return given(f.body, carried);
+    return f?.kind === "ref" && code.nodes[f.target]?.kind === "def" && j.args.some((a) => { const y = code.nodes[a]; return y?.kind === "ref" && carried(y.target); }) ? j.fn : null;
+  };
+  for (const d of Object.values(code.nodes)) {
+    if (d.kind === "arm") {
+      const answers = new Set(d.results?.filter((b): b is Id => !!b) ?? []);
+      const j = answers.size ? given(d.body, (y) => answers.has(y)) : null;
+      if (j) r.add(j);
+      continue;
+    }
+    if (d.kind !== "def" || !d.body) continue;
+    const lam = code.nodes[d.body];
+    if (lam?.kind !== "lambda") continue;
+    for (const x of subtree(code, d.body)) {
+      const c = code.nodes[x];
+      if (!isCall(c) || !c.args) continue;
+      const f = code.nodes[c.fn];
+      if (f?.kind !== "ref" || f.target !== d.id) continue;
+      c.args.forEach((a, k) => { const j = given(a, (y) => y === lam.params[k]); if (j) r!.add(j); });
+    }
+  }
+  return r;
+}
+// Carried only where some row says what that costs (an array's append).
+const jobOf = (code: Code, n: NodeOf<"ref">, costed: Set<string>) => (costed.has(CARRIED + n.target) && carriedRefs(code).has(n.id) ? CARRIED + n.target : headRefs(code).has(n.id) ? HEAD + n.target : n.target);
 
 // Which variant's field each binder of a match arm over T is: once per
 // program and type, as headRefs is (rep-groups.ts asks for every
@@ -200,7 +245,7 @@ export function uses(code: Code, entry: Id, reps: Representation[], absorbed = f
   const walk = (def: Id) => {
     for (const id of subtree(code, def)) {
       const n = code.nodes[id];
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !fresh.has(id)) out.add(jobOf(code, n));
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !fresh.has(id)) out.add(jobOf(code, n, costed));
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
       // A constructor given a field a match took out of another value
       // (`x :: rest` in a cons arm): its own job, since a representation
@@ -271,7 +316,7 @@ export function looped(code: Code, entry: Id, reps: Representation[], opaque: It
     const n = code.nodes[id];
     if (!n) return;
     if (loop) {
-      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !onFresh.has(id)) out.add(jobOf(code, n));
+      if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !onFresh.has(id)) out.add(jobOf(code, n, costed));
       if ((n.kind === "match" || n.kind === "fold") && armsOver(code, n, variants)) out.add(foldJob(code, n, t));
     }
     if (n.kind === "ref" && graph.has(n.target)) visit(n.target, loop);
@@ -288,8 +333,10 @@ export function looped(code: Code, entry: Id, reps: Representation[], opaque: It
   return out;
 }
 
-// A priced function of one list whose steps are at most linear
-// (`length`), given a list a call has just made (`length(keep(…))`, chapters' `words`), or a
+// A priced function of one list whose steps are at most linear (`length`;
+// and `append`, linear in its first input as written and in every row,
+// C234), given there a
+// list a call has just made (`length(keep(…))`, chapters' `words`), or a
 // let has just bound to one (`length(chapters)`), takes no more steps than
 // making it took, which the jobs inside that call count: its order is the
 // making's. So it isn't weighed once per item of a loop it is in (only
@@ -308,6 +355,9 @@ function freshUses(code: Code, defs: Id[], reps: Representation[]): Set<Id> {
     const a = x ? code.nodes[x] : undefined;
     if (!a || !isCall(a)) return false;
     const g = code.nodes[a.fn];
+    // `take(bits, 8)`: at most 8 items, in 8 steps as written (pack's
+    // `packed`, a byte at a time, C234).
+    if (g?.kind === "ref" && g.target === PRELUDE_DEFS.take && code.nodes[a.args[1]]?.kind === "lit") return true;
     return g?.kind === "ref" && code.nodes[g.target]?.kind === "def" && !costed.has(g.target) && !implemented.has(g.target);
   };
   const bound = new Set<Id>(), out = new Set<Id>();
@@ -321,8 +371,9 @@ function freshUses(code: Code, defs: Id[], reps: Representation[]): Set<Id> {
   }
   for (const id of all) {
     const n = code.nodes[id];
-    if (!isCall(n) || n.args?.length !== 1) continue;
+    if (!isCall(n) || !n.args?.length) continue;
     const f = code.nodes[n.fn], a = code.nodes[n.args[0]];
+    if (n.args.length > 1 && !(f?.kind === "ref" && f.target === PRELUDE_DEFS.append)) continue;
     if (f?.kind !== "ref" || variants.has(f.target) || !costed.has(f.target) || !linear(f.target)) continue;
     if (made(n.args[0]) || (a?.kind === "ref" && bound.has(a.target))) out.add(f.id);
   }
@@ -422,7 +473,7 @@ export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (
     const [v, i] = at;
     return r.hidden?.[v]?.includes(i) ? (r.cost.space ?? "n") : (r.cost[v] ?? spec.cost[v]);
   };
-  const own = (r: Representation, j: string): string | undefined => j.startsWith(HEAD) ? (r.heads?.[j.slice(HEAD.length)] ? "log n" : own(r, j.slice(HEAD.length))) : r.cost[j] ?? (j === FOLD_OF_ITEMS ? r.cost.fold : undefined);
+  const own = (r: Representation, j: string): string | undefined => j.startsWith(CARRIED) ? (r.cost[j] ?? own(r, j.slice(CARRIED.length))) : j.startsWith(HEAD) ? (r.heads?.[j.slice(HEAD.length)] ? "log n" : own(r, j.slice(HEAD.length))) : r.cost[j] ?? (j === FOLD_OF_ITEMS ? r.cost.fold : undefined);
   const costs = (r: Representation) => Object.fromEntries([...jobs, "space"].map((j) => [j, own(r, j) ?? onto(r, j) ?? own(spec, j) ?? "?"]));
   const step = (c: string): Cost => (LADDER.includes(c) ? steps(1, c) : NEVER);
   // A job in a loop runs about n times (C63c): one order up, n² at most.

@@ -12,6 +12,11 @@ import { join } from "node:path";
 import { WASI } from "node:wasi";
 import { folder, program, ways } from "../gaps/pack.ts";
 import { skip } from "./c-harness.ts";
+import { consOnto } from "../../ters/src/lang/cons-onto.ts";
+import { PRELUDE_DEFS } from "../../ters/src/lang/prelude-ids.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { CARRIED, uses } from "../../ters/src/lang/represent.ts";
+import { LIST } from "../../ters/src/lang/std.ts";
 
 const w = await ways();
 const all = (args: string[]) => {
@@ -41,7 +46,7 @@ test("pack: no words, a few, and arguments that aren't numbers", () => {
 // list as written, so the bytes, read by position, were linked lists and
 // the program quadratic. Bytes holds only its own lists: they are trees.
 test("pack: what the lists are stored as", () => {
-  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "List as tree of List", "Nat as int"]);
+  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "List as array of List", "Nat as int"]);
 });
 
 test("pack: 800 words, from the core IR and the ideal", () => {
@@ -58,11 +63,26 @@ test("pack: 12800 words, 72 KB, come back the same", () => {
 
 // C232: `prose` and `tokens` cons onto a call of themselves; on the tree's
 // cons, a call, they were recursions as deep as the words, past
-// WebAssembly's stack at 6400 words. Each is a loop now, appending at the
-// back (cons-onto.ts).
+// WebAssembly's stack at 6400 words. On a tree each is a loop, appending
+// at the back (cons-onto.ts). Pack's lists are arrays since C234, so the
+// rewrite is checked on the program as written.
 test("pack: what conses onto a call of itself appends at the back instead", () => {
-  const p = program(), made = new Set(Object.entries(p.names).filter(([d]) => p.code.nodes[d]?.kind === "def").map(([, n]) => n));
+  const p = program(true), c = consOnto(p.code, p.names, p.code.defs, PRELUDE_DEFS.append);
+  const made = new Set(c.made.map((d) => c.names[d]));
   for (const n of ["prose onto", "tokens onto", "decoded onto"]) assert.ok(made.has(n), n);
+});
+
+// C234: an array's append writes the shorter one onto the longer one's
+// free end, so `unpacked`'s appends onto what it carries and `flatten`'s
+// onto the rest's answer copy nothing; the chooser counts them so and
+// takes arrays (the tree was 1.8 times slower at 12800 words).
+test("pack: appends onto what a loop carries are the array's own", () => {
+  const p = program(true), lists = LIBRARY.reps.filter((r) => r.of === LIST);
+  const array = lists.find((r) => r.name === "array of List")!;
+  assert.equal(array.cost[CARRIED + PRELUDE_DEFS.append], "1");
+  const main = p.code.defs.find((d) => p.names[d] === "main")!;
+  assert.ok(uses(p.code, main, lists).includes(CARRIED + PRELUDE_DEFS.append));
+  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "List as array of List", "Nat as int"]);
 });
 
 // The program as `ters wasi` and `ters native` build it, on 6400 words

@@ -126,10 +126,12 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
   const work: CoreIR = { ...ir, funcs };
   const live = reached(work, roots);
 
-  // Maps that may share on workers run in turn.
+  // Maps that may share on workers run in turn: over one of these arrays,
+  // or making one (pack's `code tree`, mapping a map's entries to pairs: the
+  // workers' answer was a plain array where its columns were read, C233).
   const inTurn = (e: SExpr): SExpr => {
     const x = mapKids(e, inTurn);
-    return x.k === "if" && x.cond.k === "rt" && x.cond.fn === "map.worth" && arrayOf(x.cond.args[0]) ? x.else : x;
+    return x.k === "if" && x.cond.k === "rt" && x.cond.fn === "map.worth" && (arrayOf(x.cond.args[0]) || isArray(x.t, a)) ? x.else : x;
   };
   let fnNow: SFunc = funcs[0];
   const arrayOf = (e: SExpr | undefined): boolean =>
