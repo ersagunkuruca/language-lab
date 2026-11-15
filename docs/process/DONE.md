@@ -2133,6 +2133,7 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 | id | item | PR |
 |---|---|---|
 | L261c | Countdown is a page (`countdown-page`): six numbers and a target in cells, New round deals from the browser's randomness, the target moves by one, and every answer is listed, the 12 shortest shown; the search runs compiled in about 0.4 s a round (after I291). The credits are on the page; `countdown` stays the text program | this PR |
+| L261f | Conjugation is a page (`conjugate-page`): a slider for the stored grey with three swatches (as stored, the number doubled, `brighter`: twice the light), the quarter turn about a centre the buttons move, drawn as a flag and its turn, and a sound's bars before and after `multiband` softens its highs. The credits are on the page; `conjugate` stays the text program | this PR |
 | L261h | Relations out of the picker (#2728), and its two lessons moved into Run backwards: `sum and difference` solved by `split` with no Choice (linear elimination), and `missing addend` from `add`, each with its comment and a line of main; the relations folder stays for its tests | this PR |
 | L261q | Clinic commented: all 146 definitions (1 had a comment), the leftist heap and two-list queue, each event's handling, the report's parts and the checks; the program note and credits kept; code unchanged | this PR |
 | L261o | Board commented: a program note (the columns, quick add, edits as undoable history, the focus timer, the saved file) and a comment on each of its 112 definitions; code unchanged | this PR |
