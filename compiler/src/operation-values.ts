@@ -12,6 +12,7 @@ import { freshId, isCall } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { leftToWays } from "../../ters/src/lang/ways.ts";
 
 // The uses rewritten, and the program with them.
 export function operationLambdas(code: Code, info: Info, names: Names): { code: Code; names: Names; made: Id[] } {
@@ -22,7 +23,10 @@ export function operationLambdas(code: Code, info: Info, names: Names): { code: 
   const more: Names = {};
   for (const [id, n] of Object.entries(code.nodes)) {
     // The program's own uses: the library's are its, and checked as it is.
-    if (n.kind !== "ref" || called.has(id) || LIBRARY.code.nodes[id] || code.nodes[n.target]?.kind !== "builtin") continue;
+    // Not `by its ways` (an implementation's field left to its ways, C244):
+    // any type, a function's with Choice in break's toucher, and replaced
+    // by a way before compiling, not called.
+    if (n.kind !== "ref" || called.has(id) || LIBRARY.code.nodes[id] || code.nodes[n.target]?.kind !== "builtin" || leftToWays(code, id)) continue;
     const t0 = info.typeOf.get(id), t = t0 && info.subst.zonk(t0);
     if (t?.t !== "fn" || t.eff.effs.length === 0) continue;
     out ??= { nodes: { ...code.nodes }, defs: [...code.defs] };
