@@ -2811,11 +2811,63 @@ int main(int argc, char **argv) {
     const i = t.index, T = `lab_Table_t${i}`, S = `lab_Store_t${i}`, tn = tnum.get(`table ${t.key}`)!, V = ty(t.value);
     // A key is an Int, a Text, or a record (a tuple) of them (C63k): its
     // parts in order, `leaves`, hashed, compared and ordered one by one.
+    // A part that is data (C243, HASH-KEYS-2026-11-15.md) is walked by its
+    // own three helpers (lab__hd0, lab__ed0, lab__cd0, one each data type
+    // the key reaches): its case, then its fields.
     const kt = t.keyT, int = kt === "int", K = ty(kt);
     // A Float64 key is one nothing fixes: none is ever made.
-    const leaves = (x: LType, at: string): ["int" | "text" | "f64", string][] => (x === "int" || x === "text" || x === "f64" ? [[x, at]] : (x as RType).fields.flatMap((f, j) => leaves(f.t, `${at}.f${j}`)));
+    type Leaf = [string, string];
+    const reached: DType[] = [];
+    const letter = (x: LType): string => {
+      if (x === "int" || x === "text" || x === "f64") return x[0];
+      if (x === "i32") return "b";
+      const d = x as DType;
+      let n = reached.findIndex((y) => y.key === d.key);
+      if (n < 0) { n = reached.push(d) - 1; d.cases.forEach((c) => c.fields.forEach((f) => leaves(f.t, ""))); }
+      return `d${n}`;
+    };
+    const leaves = (x: LType, at: string): Leaf[] => (isRecord(x) ? x.fields.flatMap((f, j) => leaves(f.t, `${at}.f${j}`)) : [[letter(x), at]]);
     const parts = (at: string) => leaves(kt, at);
-    const kinds = new Set(parts("").map(([x]) => x));
+    const kinds = new Set(parts("").map(([x]) => ({ i: "int", t: "text", f: "f64", b: "i32" })[x[0]] ?? "data"));
+    reached.forEach((d) => d.cases.forEach((c) => c.fields.forEach((f) => leaves(f.t, "").forEach(([x]) => kinds.add(({ i: "int", t: "text", f: "f64", b: "i32" })[x[0]] ?? "data")))));
+    // Data's helpers: a case's fields in order, the last one of the same
+    // type gone on to (a list's rest) rather than called, so a long list
+    // is a loop. `step` gives one field's line, `goes` the step to it.
+    const walk = (d: DType, n: number, step: (x: string, at: string) => string, goes: string, end: string) => {
+      const arms = d.cases.map((c, j) => {
+        const C = cname(d, j);
+        const last = c.fields.length - 1, loops = last >= 0 && isData(c.fields[last].t) && (c.fields[last].t as DType).key === d.key;
+        const fs = c.fields.flatMap((f, k) => (loops && k === last ? [] : leaves(f.t, `.f${k}`)));
+        const lines = fs.map(([x, at]) => step(x, `${C}, ${at}`));
+        return lines.length || loops ? `    case ${j}: ${lines.join(" ")}${loops ? ` ${goes.replaceAll("$C", C).replaceAll("$L", `f${last}`)} continue;` : " break;"}` : "";
+      }).filter(Boolean);
+      return `  for (;;) {\n${arms.length ? `    switch (a->tag) {\n${arms.map((x) => `  ${x}`).join("\n")}\n    }\n` : ""}    return ${end};\n  }`;
+    };
+    // A field of a case's cell, its struct C and its path at.
+    const of = (v: string, ca: string) => { const [C, at] = ca.split(", "); return `((${C} *)${v})->${at.slice(1)}`; };
+    const dataHelpers = (cmp: boolean) => reached.flatMap((d, n) => {
+      const h = `static uint64_t lab__hd${n}_t${i}(lab_cell *a) {
+  uint64_t h = 0;
+  for (;;) {
+    h = (h ^ a->tag) * 0x100000001b3u;
+${walk(d, n, (x, ca) => `h = (h ^ lab__h${x}_t${i}(${of("a", ca)})) * 0x100000001b3u;`, "a = (($C *)a)->$L;", "h").split("\n").slice(1).join("\n")}
+}`;
+      const e = `static int lab__ed${n}_t${i}(lab_cell *a, lab_cell *b) {
+  for (;;) {
+    if (a == b) return 1;
+    if (a->tag != b->tag) return 0;
+${walk(d, n, (x, ca) => `if (!lab__e${x}_t${i}(${of("a", ca)}, ${of("b", ca)})) return 0;`, "a = (($C *)a)->$L; b = (($C *)b)->$L;", "1").split("\n").slice(1).join("\n")}
+}`;
+      const c = `static int lab__cd${n}_t${i}(lab_cell *a, lab_cell *b) {
+  int r;
+  for (;;) {
+    if (a == b) return 0;
+    if (a->tag != b->tag) return a->tag < b->tag ? -1 : 1;
+${walk(d, n, (x, ca) => `if ((r = lab__c${x}_t${i}(${of("a", ca)}, ${of("b", ca)}))) return r;`, "a = (($C *)a)->$L; b = (($C *)b)->$L;", "0").split("\n").slice(1).join("\n")}
+}`;
+      return cmp ? [c] : [h, e];
+    });
+    const dataProtos = (cmp: boolean) => reached.flatMap((_, n) => (cmp ? [`static int lab__cd${n}_t${i}(lab_cell *a, lab_cell *b);`] : [`static uint64_t lab__hd${n}_t${i}(lab_cell *a);`, `static int lab__ed${n}_t${i}(lab_cell *a, lab_cell *b);`]));
     const dupK = (x: string) => (counted(kt) ? dup(kt, x) : x), dropK = (x: string) => (counted(kt) ? drop(kt, x) : "");
     const dupV = (x: string) => (counted(t.value) ? dup(t.value, x) : x), dropV = (x: string) => (counted(t.value) ? drop(t.value, x) : "");
     const has = (op: string) => arrayFns.has(`table.${op}.t${i}`);
@@ -2835,16 +2887,18 @@ static inline int lab__ei_t${i}(lab_int a, lab_int b) {
   return h ^ (h >> 32);
 }
 static inline int lab__et_t${i}(lab_cell *a, lab_cell *b) { return LAB_TN(a) == LAB_TN(b) && memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)) == 0; }`] : []), ...(kinds.has("f64") ? [`static inline uint64_t lab__hf_t${i}(double k) { uint64_t h; memcpy(&h, &k, 8); return h * 0x9e3779b97f4a7c15u; }
-static inline int lab__ef_t${i}(double a, double b) { return a == b; }`] : [])];
-    const out = [`// ${t.set ? `Hash set ${i}: ${int ? "Int" : typeof kt === "string" ? kt : "tuple"} items` : `Table ${i}: ${int ? "Int" : typeof kt === "string" ? kt : "tuple"} keys, ${V} values`}.
+static inline int lab__ef_t${i}(double a, double b) { return a == b; }`] : []), ...(kinds.has("i32") ? [`static inline uint64_t lab__hb_t${i}(int32_t k) { return (uint64_t)(uint32_t)k * 0x9e3779b97f4a7c15u; }
+static inline int lab__eb_t${i}(int32_t a, int32_t b) { return a == b; }`] : []), ...dataProtos(false), ...dataHelpers(false)];
+    const kn = int ? "Int" : typeof kt === "string" ? kt : isData(kt) ? "data" : "tuple";
+    const out = [`// ${t.set ? `Hash set ${i}: ${kn} items` : `Table ${i}: ${kn} keys, ${V} values`}.
 ${leafHelpers.join("\n")}
 static inline uint64_t lab__hash_t${i}(${K} k) {
   uint64_t h = 0;
-${parts("k").map(([x, at]) => `  h = (h ^ lab__h${x[0]}_t${i}(${at})) * 0x100000001b3u;`).join("\n")}
+${parts("k").map(([x, at]) => `  h = (h ^ lab__h${x}_t${i}(${at})) * 0x100000001b3u;`).join("\n")}
   return h ^ (h >> 29);
 }
 static inline int lab__eq_t${i}(${K} a, ${K} b) {
-  return ${parts("").map(([x, at]) => `lab__e${x[0]}_t${i}(a${at}, b${at})`).join(" && ")};
+  return ${parts("").map(([x, at]) => `lab__e${x}_t${i}(a${at}, b${at})`).join(" && ")};
 }
 // The slot holding k, or the free one where it would go (a removed one
 // first), with *found saying which. A table of Int keys starts direct
@@ -3011,16 +3065,18 @@ ${kinds.has("int") ? `static inline int lab__ci_t${i}(lab_int a, lab_int b) {
   return p.neg ? lab__cmp(q.d, q.n, p.d, p.n) : lab__cmp(p.d, p.n, q.d, q.n);
 }` : ""}
 ${kinds.has("f64") ? `static inline int lab__cf_t${i}(double a, double b) { return a < b ? -1 : a > b; }` : ""}
+${kinds.has("i32") ? `static inline int lab__cb_t${i}(int32_t a, int32_t b) { return a < b ? -1 : a > b; }` : ""}
 ${kinds.has("text") ? `static inline int lab__ct_t${i}(lab_cell *a, lab_cell *b) {
   uint32_t n = LAB_TN(a) < LAB_TN(b) ? LAB_TN(a) : LAB_TN(b);
   int r = memcmp(LAB_TB(a), LAB_TB(b), n);
   return r ? (r < 0 ? -1 : 1) : LAB_TN(a) < LAB_TN(b) ? -1 : LAB_TN(a) > LAB_TN(b);
 }` : ""}
+${[...dataProtos(true), ...dataHelpers(true)].join("\n")}
 static int lab__cmp_t${i}(const void *x, const void *y) {
   ${K} a = lab__sort_t${i}->ks[*(const uint32_t *)x];
   ${K} b = lab__sort_t${i}->ks[*(const uint32_t *)y];
   int r = 0;
-${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) return r;`).join("\n")}
+${parts("").map(([x, at]) => `  if ((r = lab__c${x}_t${i}(a${at}, b${at}))) return r;`).join("\n")}
   return r;
 }`);
     // Int keys, all small and within 2^32 of each other (a counter's), are
@@ -3071,7 +3127,7 @@ ${parts("").map(([x, at]) => `  if ((r = lab__c${x[0]}_t${i}(a${at}, b${at}))) r
       const cons = cname(d, tag), nil = cname(d, 1 - tag), item = d.cases[tag].fields[head].t;
       // A set's items are its keys, and a map's `keys of`; a map's
       // entries, pairs.
-      const same = (x: LType) => x === kt || (isRecord(x) && isRecord(kt) && x.key === kt.key);
+      const same = (x: LType) => x === kt || (typeof x === "object" && typeof kt === "object" && x.key === kt.key);
       const made = keyList(t, d) ? (same(item) ? dupK("t->ks[ix[j]]") : zero(item))
         : `(${ty(item)}){ ${same((item as RType).fields[0].t) ? dupK("t->ks[ix[j]]") : zero((item as RType).fields[0].t)}, ${dupV("t->vs[ix[j]]")} }`;
       // A key nothing ever fixed (an empty map nothing is put in) is held

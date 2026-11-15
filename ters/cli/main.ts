@@ -284,8 +284,8 @@ function compiledChecks(p: Program, saved: Record<Id, Saved[]>) {
   });
 }
 
-function represented(p: Program, main: Id, hostMaps: boolean, tables = false, sound = false): Program {
-  try { return representedOr(p, main, hostMaps, tables, sound); } catch (e) { fail((e as Error).message); }
+function represented(p: Program, main: Id, hostMaps: boolean, tables = false, sound = false, dataKeys = false): Program {
+  try { return representedOr(p, main, hostMaps, tables, sound, dataKeys); } catch (e) { fail((e as Error).message); }
 }
 
 // The program lowered for C and WebAssembly (ters native, ters wasi):
@@ -308,7 +308,7 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
-  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: true });
+  const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, dataKeys: !wasm, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: true });
   // A map writes into the array it was given (C60 c2): in place where
   // nothing else counts it.
   if (!wasm) {
@@ -641,7 +641,7 @@ const main = command === "run" || command === "compile" || command === "native" 
 // lowering is most of a run, and the same program lowers the same way.
 const runKeyed = command === "run" && main && defined < 0 && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
 const kept = runKeyed ? keptRun(runKeyed) : undefined;
-const representedHere = () => represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app");
+const representedHere = () => represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app", false, command === "native" || command === "build-native-app");
 const p = main && defined < 0 && !kept ? representedHere() : loaded;
 // A page or app bundles the same file into its script (L69a3).
 const pageHost = hostFile && existsSync(hostFile) ? resolve(hostFile) : undefined;

@@ -20,7 +20,8 @@ function fail(message: string): never { throw new Error(message); }
 // table has a row for them (library-reps.ts, C47). The rewrite is checked
 // again, like any program.
 // `sound`: main is a sound played in blocks (library-reps.ts).
-export function represented<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables = false, sound = false): P {
+// `dataKeys`: the target's tables take keys that are data (C's, C243).
+export function represented<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables = false, sound = false, dataKeys = false): P {
   // A match on an Int's cases written out on Int first (int-cases.ts,
   // L249b): what it gives is a Nat, stored as the chooser picks.
   const cased = usesIntCases(p00.code) ? intCases(p00.code, p00.info, p00.names) : null;
@@ -43,7 +44,7 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // map C shares out on its threads.
   const shared = process.env.NO_FOLD_ITEMS ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
   const pinfo = shared.shared ? infer(shared.code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false }) : p.info;
-  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound });
+  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen];
   const rows = storedRows(p.code, p.own, p.reps);
