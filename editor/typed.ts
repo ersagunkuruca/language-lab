@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentOf, portsOf, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -261,9 +261,15 @@ function nearest(code: Code, errors: Info["errors"], at: Id | undefined): Info["
     const inside = new Set(subtree(code, at));
     const hit = errors.find((e) => inside.has(e.id));
     if (hit) return hit;
-    for (let p = parentOf(code, at); p; p = parentOf(code, p.parent)) {
-      const up = errors.find((e) => e.id === p!.parent);
-      if (up) return up;
+    // Up through the parents, looked up once (I304: a parentOf a level,
+    // each a walk over every node, was two thirds of filling scan's steps
+    // through the MCP, where each refused reading asked).
+    const at_ = new Map<Id, Info["errors"][number]>();
+    for (const e of errors) if (!at_.has(e.id)) at_.set(e.id, e);
+    const up = scanningOnLayer(code, () => parentLookup(code));
+    for (let p = up(at); p; p = up(p)) {
+      const e = at_.get(p);
+      if (e) return e;
     }
   }
   return errors.at(-1)!;
