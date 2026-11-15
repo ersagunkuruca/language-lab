@@ -4188,3 +4188,13 @@ about 1 s.
 1. S1 (C235), a correctness gap on every compiled target.
 2. S2 to S4 (C236 to C238), measured after each on the 8000 lines.
 3. S5 (C239), then S6 and S7 (I303, I304) for the MCP.
+
+### After the fixes
+
+C235 (#2767) compiles `for each(lines, print)` on every target. C236 (#2768)
+keeps a record passed on unchanged and also used whole in one piece, and C239
+(#2769) walks a text's codes without a list of one-character texts. At 8000
+lines core went from 12.6 s (5.2x the ideal) to 7.8 s (3.0x). C237 and C238
+were measured by hand-patching the compiled program, under 2% and about 4%,
+and closed without a pass. What is left is the program's own linear class
+lookup walked on a cons list, the tree reads, and GC.
