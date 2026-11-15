@@ -727,7 +727,7 @@ function conflictsWith(code: Code, d: Id, before?: UnitsBefore, quick = false): 
 // Kept per program: signatureUnits asks for each definition shown, and
 // each scan of trek's nodes was a third of its check.
 const declaring = new WeakMap<Code, boolean>();
-const declaresUnit = (code: Code) => {
+export const declaresUnit = (code: Code) => {
   let d = declaring.get(code);
   if (d === undefined) declaring.set(code, (d = nodesWhere(code, "declares a unit", (n) => !!unitOf(n) && !isPublished(n.id)).length > 0));
   return d;
