@@ -4038,6 +4038,11 @@ about a third of the time. `run length`'s `1 + itself` is about a tenth.
 An array of one made from empty with less room measured within the noise.
 The final `equal` walks the items as cons cells.
 
+C250 then took the array of one away: cons-onto adds each item with the
+prelude's `added at end`, an array's push. At 12800 words the core IR is
+5.9x the ideal (was 7.8x), native 3.0x, WASI 277 ms (was 305; 247 before
+C240). WASI's profile is about half garbage collection.
+
 ## Round 19: scan, regular expressions made automata (2026-11-15)
 
 `compiler/gaps/scan` makes up a server log and scans it with 19 regular

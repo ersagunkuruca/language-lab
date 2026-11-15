@@ -570,6 +570,7 @@ A type can be stored as another type, written as one definition (REPRESENTATIONS
 - **match as written** : `(Cost) -> Job a b`. A representation's match, done as t's own, at this cost.
 - **fold as written** : `(Cost) -> Job a b`. A representation's fold, done as t's own, at this cost.
 - **fold of items** : `(Cost) -> Job a b`. A representation's fold whose cases don't read the rest (a sum, a count): done as t's own fold of what the value means, at this cost. A tree that lists its items in n folds that way instead of rebuilding each rest.
+- **carried** : `(a, Cost) -> Job b c`. t's job where its first input is what a call of the definition it's in was given in some place, and its answer is given on in that place (f(rest, append(out, [b]))): done there at this cost, as an array's push at its free end.
 - **store by** : `((a) -> b) -> Job a b`. store by(f): f stores a value of t as r in one go, where building it with r's constructors one at a time would cost more: a list's items as a balanced tree in n steps, or as an array.
 - **equal by** : `((a, a) -> Bool) -> Job b a`. For a representation that isn't one spelling per value (a tree, whose shape depends on the order things went in): how equal sees two of its values, through their meaning.
 - **show by** : `((a) -> Text) -> Job b a`. For a representation that isn't one spelling per value: how show prints one of its values, through its meaning.

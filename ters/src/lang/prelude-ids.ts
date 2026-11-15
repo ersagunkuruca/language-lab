@@ -39,6 +39,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "take": "@3ejt3neud5q32mrols3nn7tu58",
  // Appends onto what a loop carries, an array's own (C234).
  "append": "@c9sa21p6t34r9bf9cjcm8h2101",
+ // One item at the end, what cons-onto.ts adds each item with (C250).
+ "added at end": "@clvlk6m2ke027pdc01b5rs0rqv",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list

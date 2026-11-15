@@ -192,6 +192,8 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
     k.call(JOBS.foldOfItems, cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("length")), k.x(size), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("append")), k.x(append), cost(k, "logarithmic")),
+    // One item at the end: down the right side (C250).
+    k.call(JOBS.job, k.x(prelude("added at end")), k.x(snoc), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaceAt), cost(k, "logarithmic")),
     k.call(JOBS.job, k.x(prelude("drop")), k.x(drop), cost(k, "logarithmic")),
