@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | none queued (C241 answered GAPS round 19 S8's native point) |
+| C Compiler and targets | "Compiler lane" | C243 (scan's remaining gap: maps keyed by lists or sets) |
 | L Language and library | "Language lane" | no open row of its own (pack's speed stopped at 7.8x the ideal compiled, 3x native: the next stages buy under 10%, GAPS round 18); L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -95,6 +95,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C243 | A Map keyed by a list or a set keeps every Map of the program a tree: a hash table is chosen per type for the whole program, and only for Int, Text and tuple keys (library-reps.ts `inPlace`, scalar.ts tables). scan's DFA ids are a `Map (Set Int) Int`, so its moves, a `Map (Int, Int) Int` read 7 million times at 1000 lines, are a weight-balanced tree: 18.6% of native's instructions after C242, about 340 per read where a hash read is some 40 (~16% to gain); core 4% (C238). Hash keys that are data of hashable parts (a derived hash beside the derived equal and compare), in C, WebAssembly and JavaScript | GAPS round 19 | 2 | L | ▶ |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 
