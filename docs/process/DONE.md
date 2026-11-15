@@ -38,6 +38,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I301 | One count of the order at a time (QA 11-15 Q3): with the effects numbered (E265), the step dots keep their dashes but drop their own numbers, which counted the same order another way and disagreed (clinic: the dot after `write file` said 1, the call 4). The overlay off, the steps are numbered as before. Test: effect-order.test.ts | this PR |
 | I300 | An effect's number sits just left of its box's top, not on its top left corner (QA 11-15 Q4): there it covered a title above the box, Effects' signature line (`Unit`) and the header of crew's inner frame (`other`). A folded box's range sits the same way, its right end by the box | #2760 |
 | I299 | A folded frame says the numbers of the calls with effects it holds (QA 11-15 Q2): with the effect order on, crew's `main` folded its `[path]` arm, so read file, plan of and report had no number to show. The box now carries a badge with their range, `1–4`, or `3, 7` where others run between. Test: effect-order.test.ts | #2758 |
 | I298 | A pin's units show wherever its type does (QA 11-15 Q1): the pin row ("Pinned at (Float64 u, Float64 v) -[Choice]-> Float64 u/v"), the note after pinning, the graph's title, and a hole's "needs" and its label in the text (`□Float64 u`). A hole's unit is what the body and the pin say of it (units.ts `holeUnit`, the pin's variables kept free), and a written unit fixes it in an unpinned definition too (`□ + 400.0 m` needs m). Test: pinned-units.test.ts | #2757 |
