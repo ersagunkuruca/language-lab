@@ -4194,7 +4194,17 @@ about 1 s.
 C235 (#2767) compiles `for each(lines, print)` on every target. C236 (#2768)
 keeps a record passed on unchanged and also used whole in one piece, and C239
 (#2769) walks a text's codes without a list of one-character texts. At 8000
-lines core went from 12.6 s (5.2x the ideal) to 7.8 s (3.0x). C237 and C238
+lines, against the same ideal:
+
+| Way | Before | After |
+|---|---|---|
+| core | 12.6 s, 5.2x | 7.7 s, 2.8x |
+| native | 11.2 s, 4.6x | 10.8 s, 4.0x |
+| wasi | 10.1 s, 4.1x | 9.0 s, 3.3x |
+
+(`BUILT=1 node compiler/gaps/bench-scan.ts 8000`; native and wasi are
+processes, start-up included.) Native and wasi gained less than core;
+why wasn't looked at (S8). C237 and C238
 were measured by hand-patching the compiled program, under 2% and about 4%,
 and closed without a pass. What is left is the program's own linear class
 lookup walked on a cons list, the tree reads, and GC.

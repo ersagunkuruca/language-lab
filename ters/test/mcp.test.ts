@@ -521,3 +521,25 @@ test("three shows in a line, `as` inside a match, derivative(f)(x) (I248, I249, 
   text("replace", { at: "slope at", find: "□", text: "first(derivative(f)(x), else 0)" });
   assert.equal(text("eval", { text: "slope at((x) => x * x * x, 2)" }), "= 12 : Float64");
 });
+
+// I303: a match where a value goes, in parentheses or after `else`, reads
+// as a match, and a tuple's size is settled by the fields the text reads.
+test("replace: a match in parentheses or after else, and a tuple by its fields", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "wc");
+  cpSync("examples/wc", dir, { recursive: true });
+  text("open", { path: dir });
+  const define = (name: string, params: string[]) => /□#(\w+)/.exec(text("define", { name, kind: "function", params }))![1];
+  text("replace", { at: define("first two", ["xs"]), text: "match xs\n  nil → 0\n  cons(a, r) → a + (match r; nil → 1; cons(c, s) → c)" });
+  assert.equal(text("eval", { text: "first two([5, 7])" }), "= 12 : a where a is a Number");
+  text("replace", { at: define("first or", ["xs", "b"]), text: "if b then 0 else match xs\n  nil → 1\n  cons(a, r) → a" });
+  assert.equal(text("eval", { text: "first or([5, 7], false)" }), "= 5 : a where a is a Number");
+  text("replace", { at: define("one more", ["xs", "b"]), text: "1 + (if b then 0 else match xs; nil → 1; cons(a, r) → a)" });
+  assert.equal(text("eval", { text: "one more([5, 7], false)" }), "= 6 : a where a is a Number");
+  text("replace", { at: define("heads", ["xs", "ys"]), text: "(match xs; nil → 1; cons(a, r) → a) * (match ys\n    nil → 1\n    cons(a, r) → a)" });
+  assert.equal(text("eval", { text: "heads([5, 7], [3])" }), "= 15 : a where a is a Number");
+  assert.doesNotMatch(text("view", { at: "heads" }), /nested match/);
+  assert.match(text("replace", { at: define("ends", ["p"]), text: "a = p.first\nb = p.third\na + b" }), /ends#\w+ : \(\(a, b, a\)\) -> a/);
+});
