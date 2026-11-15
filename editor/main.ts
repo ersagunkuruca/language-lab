@@ -57,6 +57,7 @@ import { fileModules, fromFile, toFile, upgradeFile, versionOf } from "../ters/s
 import type { Module } from "../ters/src/lang/modules.ts";
 import { flattened, matchRows, sameEverywhere } from "../ters/src/lang/patterns.ts";
 import { showPin, type Pins } from "../ters/src/lang/signatures.ts";
+import { holeWithUnit } from "../ters/src/lang/unit-types.ts";
 import { problemOf } from "../ters/src/lang/problems.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
@@ -1154,7 +1155,9 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))), ...(upBtn ? [h("div", { class: "acts up" }, upBtn)] : []));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
-  if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, typeName(info, hole.expected, names))));
+  // With the unit it needs, a pin's included (QA 11-15 Q1).
+  const withUnit = hole && holeWithUnit(doc.code, ui.def, id, info.subst.zonk(hole.expected), names);
+  if (hole) out.append(h("div", { class: "typeline" }, h("span", {}, "needs"), h("code", {}, withUnit ? typeName(info, withUnit.type, withUnit.names) : typeName(info, hole.expected, names))));
   // A hole in an implementation is one operation at its type: say which,
   // since the hole's type alone doesn't (BACKLOG E153).
   const up = hole ? parentsOf(doc.code).get(id) ?? null : null;

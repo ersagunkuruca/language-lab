@@ -16,7 +16,7 @@ import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } f
 import { answerKeys } from "../ters/src/lang/ports.ts";
 import { LIBRARY, NUMBERS, PRELUDE, TREES } from "../ters/src/lang/library.ts";
 import { B } from "../ters/src/prelude.ts";
-import { pinsOf, type Pins } from "../ters/src/lang/signatures.ts";
+import { pinsOf, showPin, type Pins } from "../ters/src/lang/signatures.ts";
 import { dropLoose, setLoose, wireIn } from "./drafts.ts";
 import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
@@ -2512,7 +2512,7 @@ export function pin(code: Code, info: Info, pins: Pins, def: Id, name: string): 
   if (info.errors.some((e) => subtree(code, def).includes(e.id))) return { ok: false, reason: `${name} has a type error to fix first` };
   const p = pinsOf(info, [def], code);
   if (!p[def]) return { ok: false, reason: `${name} has no type yet` };
-  return { ok: true, pins: { ...pins, ...p }, note: `Pinned ${name} at ${showType(p[def].type, display, schemeArith(p[def]))}: edits inside it must keep that type, and callers see only it.` };
+  return { ok: true, pins: { ...pins, ...p }, note: `Pinned ${name} at ${showPin(p[def], display)}: edits inside it must keep that type, and callers see only it.` };
 }
 
 export function unpin(pins: Pins, def: Id, name: string): PinEdit {

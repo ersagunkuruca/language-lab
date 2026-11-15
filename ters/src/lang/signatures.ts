@@ -20,6 +20,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import type { Code } from "../model.ts";
 import { pinUnitsOf, type PinUnits } from "../units.ts";
+import { showWithPinUnits } from "./unit-types.ts";
 import { CONSOLE, NUMBER, instantiate, schemeArith, schemeNeeds, showType, Subst, TypeError, type Row, type Scheme, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
@@ -77,7 +78,8 @@ export function canonical(sc: Scheme): Pin {
 // A named row's name (HOSTS.md, L58) is kept in a pin for showing it, and
 // isn't part of the signature: the same effects are the same type.
 export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc), (k, v) => (k === "name" ? undefined : v)) : "");
-export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p), [], schemeNeeds(p), p.effectsAt);
+// With the units the pin keeps (L252e), as the signature line shows them.
+export const showPin = (p: Pin, names: Names) => (p.units ? showWithPinUnits(p, p.units, names) : showType(p.type, names, schemeArith(p), [], schemeNeeds(p), p.effectsAt));
 
 // Pin these definitions at the types the checker gives them now, and,
 // given their code, at the units their bodies give them (L252e): each

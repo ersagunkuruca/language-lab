@@ -38,6 +38,7 @@ import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, showIn, showType, type Type } from "../ters/src/lang/types.ts";
+import { holeWithUnit, withUnits } from "../ters/src/lang/unit-types.ts";
 import { connectDrag, follow, infiniteCanvas, moveDrag, s, svgPoint, type Canvas, type Pos } from "./canvas.ts";
 import { litLabel, sigType, typeOf as shownType } from "./typed.ts";
 import { partPort, resultPorts, tuplePlace } from "../ters/src/lang/results.ts";
@@ -397,6 +398,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const node = (id: Id) => code.nodes[id];
   const name = (id: Id) => names[id] ?? (node(id)?.kind === "builtin" ? (node(id) as NodeOf<"builtin">).op : "?");
   const typeOf = (id: Id) => shownType(info, id, names) ?? "";
+  // The definition's own type with the units its signature shows, a pin's
+  // too (L252, QA 11-15 Q1), as the text's signature line shows it.
+  const defType = (id: Id) => {
+    const t = info?.typeOf.get(id), w = t && withUnits(code, id, info!.subst.zonk(t), names);
+    return w ? showIn(w.type, w.names, info!.subst) : typeOf(id);
+  };
   const sel = (id: Id) => (hooks.selected === id ? " sel" : "");
   const errs = new Set((info?.errors ?? []).map((e) => e.id));
   const dotOf = (id: Id): Id | null => {
@@ -561,7 +568,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return at;
   })();
 
-  const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showIn(hi.expected, names, info!.subst) : ""; };
+  const holeType = (id: Id) => {
+    const hi = info?.holes.get(id);
+    if (!hi) return "";
+    const w = holeWithUnit(code, defId, id, info!.subst.zonk(hi.expected), names);
+    return w ? showIn(w.type, w.names, info!.subst) : showIn(hi.expected, names, info!.subst);
+  };
 
   const pill = (id: Id, text: string, cls: string, src?: Id, more?: string): Sub => {
     const w = Math.max(28, tw(text) + 18), h = 24;
@@ -1193,7 +1205,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const ports = portsOf(code.nodes, defId), declared = ports?.condition ? ports : null;
   const resultsType = (p: { inputs: Id[]; results: Id[] }) => {
     const effs = info?.directions?.get(defId), bare = (q: Id) => typeOf(q).split(" where ")[0];
-    if (!effs || ![...p.inputs, ...p.results].every((q) => typeOf(q))) return typeOf(defId);
+    if (!effs || ![...p.inputs, ...p.results].every((q) => typeOf(q))) return defType(defId);
     return `(${p.inputs.map(bare).join(", ")}) ${effs.length ? `-[${effs.map(name).join(", ")}]->` : "->"} ${p.results.map((r) => `${name(r)}: ${bare(r)}`).join(", ")}`;
   };
   let top: Sub;
@@ -1219,7 +1231,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     }
   }
   else if (body?.kind === "lambda" && declared) top = region(defId, `${name(defId)} : ${resultsType(declared)}`, declared.inputs, body.body, "def", declared.results);
-  else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${typeOf(defId)}`, body.params, body.body, "def");
+  else if (body?.kind === "lambda") top = region(defId, `${name(defId)} : ${defType(defId)}`, body.params, body.body, "def");
   else if (body?.kind === "typedef") top = typeFrame(body);
   else if (body) top = lay(def.body!);
   else top = pill(defId, `${name(defId)}: nothing yet`, "lit");
