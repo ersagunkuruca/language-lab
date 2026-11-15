@@ -57,7 +57,12 @@ const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${
 // core IR, and a page with sound plays in the preview.
 const data = text("lab-core-page-runtime", await corePageRuntime()) + text("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
-writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n</head>\n<body>\n${page}</body>\n</html>\n`);
+// page.html is the head's tags and styles, then the body from its first
+// element on. The title and icon go in <head>: Chromium reads an icon link in
+// the body too late and asks for /favicon.ico, which the site doesn't have (I306).
+const bodyAt = page.indexOf("</style>\n") + "</style>\n".length;
+const icon = /<link rel="icon"[^>]*>/.exec(page)?.[0] ?? "";
+writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${page.slice(0, bodyAt)}</head>\n<body>\n${page.slice(bodyAt)}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 // What a fresh page would check of the library first, made in a process
 // of its own (keptChecks.ts, I213).
@@ -73,7 +78,8 @@ console.log(`prebuilt/: ${(await prebuild(manifest, site)).length} pages, pictur
 
 // The tutorial, styled like the editor (same colours and fonts).
 const tokens = page.slice(page.indexOf(":root {"), page.indexOf("* { box-sizing"));
-const fonts = /<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[0] ?? "";
+// The other site pages share the editor's icon and fonts.
+const links = icon + "\n" + (/<link rel="stylesheet" href="https:\/\/fonts[^>]*>/.exec(page)?.[0] ?? "");
 // Links in a doc are relative to its folder (docs/learn/); the pages are at
 // the root.
 const docPage = (md: string, out: string, title: string) => {
@@ -86,7 +92,7 @@ const docPage = (md: string, out: string, title: string) => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
-${fonts}
+${links}
 <style>
 ${tokens}
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-ui); }
@@ -133,7 +139,7 @@ writeFileSync(site + "reactive.html", `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cells: reactivity and values on demand</title>
-${fonts}
+${links}
 <style>
 ${tokens}
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-ui); }
@@ -186,7 +192,7 @@ writeFileSync(site + "shaders.html", `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shaders: Ters on the GPU</title>
-${fonts}
+${links}
 <style>
 ${tokens}
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 var(--font-ui); }
