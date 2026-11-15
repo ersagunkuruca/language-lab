@@ -37,6 +37,7 @@ import { useDirections } from "../../ters/src/lang/directions.ts";
 import { interfaceOps, waysIn } from "../../ters/src/lang/ways.ts";
 import { withInverses } from "./inverses.ts";
 import { withOperationLambdas } from "./operation-values.ts";
+import { withCharacterMaps } from "./character-maps.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
@@ -661,6 +662,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // An operation with an effect given as a value, the lambda calling it
   // (operation-values.ts, C235): `for each(lines, print)`.
   ({ code, info, names } = withOperationLambdas(code, info, names));
+  // A map over a text's characters, a fold over them (character-maps.ts,
+  // C239): one walk over the text, no list of one-character texts.
+  ({ code, info, names } = withCharacterMaps(code, info, names));
   const f = fusedProgram(code, info, names);
   let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
   // A linear function of a linear function, one matrix (linear-calls.ts, L44).

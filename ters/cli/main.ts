@@ -69,6 +69,7 @@ const { lowerScalar } = compiles ? await import("../../compiler/src/scalar.ts") 
 const { FAIL, Unsupported, codeLines, coreCall, coreMap, coreModule, hostOpsOf, loadCoreJs, lowerCore, plainValue, printedMain, runCoreMain, runPrintedMain } = compiles ? await import("../../compiler/src/core-js.ts") : ({} as typeof import("../../compiler/src/core-js.ts"));
 const { withInverses } = compiles ? await import("../../compiler/src/inverses.ts") : ({} as typeof import("../../compiler/src/inverses.ts"));
 const { withOperationLambdas } = compiles ? await import("../../compiler/src/operation-values.ts") : ({} as typeof import("../../compiler/src/operation-values.ts"));
+const { withCharacterMaps } = compiles ? await import("../../compiler/src/character-maps.ts") : ({} as typeof import("../../compiler/src/character-maps.ts"));
 const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
 const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
 const { iosAppFolder } = compiles ? await import("./ios-app.ts") : ({} as typeof import("./ios-app.ts"));
@@ -301,7 +302,9 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 function nativeLowered(main: Id, wasm = false, page = false) {
   const q00 = withInverses(p.code, p.info, p.names);
   // An operation with an effect given as a value, the lambda calling it (C235).
-  const q0 = withOperationLambdas(q00.code, q00.info, q00.names);
+  const q01 = withOperationLambdas(q00.code, q00.info, q00.names);
+  // A map over a text's characters, a fold over them (C239).
+  const q0 = withCharacterMaps(q01.code, q01.info, q01.names);
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
   const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
