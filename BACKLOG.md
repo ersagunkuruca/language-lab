@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | I304 (the MCP, GAPS round 19) |
-| L Language and library | "Language lane" | pack's speed (GAPS round 18), cost by cost, each a C row, until a stage buys under 10% (C233, C234 done); L252f waits on how to write a unit on a generic number type, Ersagun's call |
+| L Language and library | "Language lane" | no open row of its own (pack's speed stopped at 7.8x the ideal compiled, 3x native: the next stages buy under 10%, GAPS round 18); L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 

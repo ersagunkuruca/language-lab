@@ -4032,6 +4032,12 @@ carries is a push there. Against the ideal at 12800 words:
 
 WASI loses some: each item appended is made as an array of one first.
 
+That is where this stops: at 51200 words the core IR is 7.5x the ideal,
+and what is left comes in pieces under 10% each. Garbage collection takes
+about a third of the time. `run length`'s `1 + itself` is about a tenth.
+An array of one made from empty with less room measured within the noise.
+The final `equal` walks the items as cons cells.
+
 ## Round 19: scan, regular expressions made automata (2026-11-15)
 
 `compiler/gaps/scan` makes up a server log and scans it with 19 regular
