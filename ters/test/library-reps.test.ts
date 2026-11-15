@@ -702,13 +702,15 @@ test("a program that conses onto a match's rest keeps List as written, and the c
   assert.ok(!withLibraryRepresentations(code, info, names, main, [xs, bump, main]).chosen.includes("List as array of List"));
 });
 
-// A list with xs appended `times` times, in a loop: on an array each append
-// copies (n), on a tree it's log n.
+// A list with xs put in at position i, for each i below `times`, in a
+// loop: on an array each append copies (n), on a tree it's log n. (Onto the
+// end, `append(so far, xs)`, an array writes in place: C234.)
 function appendedInLoop(k: Lang, xs: Id, times = 4): Id {
   const grown = k.def("grown");
   k.define(grown, k.fold(k.call(INT_OPS.range, k.int(times)), [
     { variant: NIL, names: [], body: () => k.x(xs) },
-    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: (_, [, l]) => k.call(L("append"), l!, k.x(xs)) },
+    { variant: CONS, names: ["i", "rest"], results: [null, "so far"], body: ([i], [, l]) =>
+      k.call(L("append"), k.call(L("take"), l!, i), k.call(L("append"), k.x(xs), k.call(L("drop"), l!, i))) },
   ]));
   return grown;
 }

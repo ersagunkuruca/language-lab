@@ -3997,3 +3997,22 @@ candidates within 32767 bytes. Against the ideal now:
 |---|---|---|---|
 | 3200 | 25x | 16x | 34x |
 | 12800 | 26x | 16x | 25x |
+
+The lists are arrays now (C233, C234). An array's `append` writes the
+shorter list onto the longer one's free end, in place when no other array
+has taken it, where it made a new array of both. The chooser counts an
+append onto what a loop carries (`unpacked(rest, append(out, [b]))`, and
+`flatten`'s `append(x, the rest's answer)` under `flat map`) as the array's
+own job, constant, so it takes arrays over the tree; `item at` is one step
+again. With arrays a map on workers in `code tree` crashed, since its
+columns read the workers' plain array (C233). Against the ideal now:
+
+| words | core | native | wasi |
+|---|---|---|---|
+| 200 | 11x | 5.3x | 34x |
+| 800 | 9.0x | 3.3x | 18x |
+| 3200 | 14x | 3.2x | 12x |
+| 12800 | 17.5x (was 26x) | 2.8x (was 16x) | 7.5x (was 25x) |
+
+The command was `BUILT=1 RUNS=3 node compiler/gaps/bench-pack.ts 200 800
+3200 12800`; native and wasi include starting the process.
