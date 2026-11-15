@@ -42,6 +42,19 @@ test("run returns what main prints, with standard input given", () => {
   assert.match(text("run", { input: "hello world\nfoo\n" }), /2\s+3\s+16\nexit 0/);
 });
 
+// I305: the program's own comment, where credits go, can be set: the
+// editor shows it in the Program tab.
+test("comment: at program sets the program's own comment", async () => {
+  const { cpSync, mkdtempSync, readFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "tumble");
+  cpSync("examples/tumble", dir, { recursive: true });
+  text("open", { path: dir });
+  assert.equal(text("comment", { at: "program", text: "Falling blocks.\nPrior art: someone, 1984." }), "ok");
+  assert.equal(JSON.parse(readFileSync(join(dir, "comments.json"), "utf8")).program, "Falling blocks.\nPrior art: someone, 1984.");
+});
+
 test("edits: each is type-checked, saved, and answered with the changed lines", async () => {
   const { cpSync, mkdtempSync, readFileSync } = await import("node:fs");
   const { join } = await import("node:path");
