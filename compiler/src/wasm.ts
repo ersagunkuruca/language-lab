@@ -460,7 +460,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : /\.c\d+$/.test(n) && f?.types?.[n.replace(/\.c\d+$/, "")] ? caseIndex(f.types[n.replace(/\.c\d+$/, "")] as DType, Number(n.slice(n.lastIndexOf(".c") + 2))) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
@@ -474,6 +474,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (t === "list") return { bytes: typeOf(listOf(f)), text: `(ref null $${structs[baseIndex.get(listOf(f).key)!].name})` };
       if (t === "option") return { bytes: typeOf(optionOf()), text: `(ref null $${structs[baseIndex.get(OPTION_TEXT)!].name})` };
       if (t === "void") throw new Error("nothing isn't a value type");
+      // A type the function names itself (a data type a table's key walks, C243).
+      if (f?.types?.[t] && isRec(f.types[t] as MType)) { const m = f.types[t] as MType; return { bytes: typeOf(m), text: `(ref null $${structs[refIndex(m as RType)].name})` }; }
       if (f?.table !== undefined && TBL[t] !== undefined) { const k = tblIndex.get(f.table)! + TBL[t]; return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       if (t === "key" || t === "value") {
         const m = t === "key" ? lowered.tables[f!.table!].keyT : lowered.tables[f!.table!].value;
@@ -607,7 +609,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       ].join("\n"),
     });
   }
-  const rtType = (f: RtFn, t: VT): MType | null => (t === "table" ? lowered.tables[f.table!] : t === "key" ? lowered.tables[f.table!].keyT : t === "value" ? lowered.tables[f.table!].value : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t === "tstore" || t === "tkeys" || t === "tvals" || t === "tst" || t === "tpath" ? { key: `table.${f.table}.${t}`, name: t, fields: [] } as unknown as RType : t as MType);
+  const rtType = (f: RtFn, t: VT): MType | null => (f.types?.[t] ? f.types[t] as MType : t === "table" ? lowered.tables[f.table!] : t === "key" ? lowered.tables[f.table!].keyT : t === "value" ? lowered.tables[f.table!].value : t === "list" ? listOf(f) : t === "option" ? optionOf() : t === "void" ? null : t === "array" ? arrayOf(f) : t === "item" ? arrayOf(f).item : t === "buf" || t === "items" ? null : t === "tstore" || t === "tkeys" || t === "tvals" || t === "tst" || t === "tpath" ? { key: `table.${f.table}.${t}`, name: t, fields: [] } as unknown as RType : t as MType);
   const rtSig = rts.map((f) => sig(f.params.map(([, t]) => rtType(f, t)!), rtType(f, f.result), f.partial));
   const rtCode = rts.map((f) => assemble(f, resolver(f)));
   const struct = (x: (typeof structs)[number]) => {

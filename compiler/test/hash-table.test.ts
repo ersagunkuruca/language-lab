@@ -350,6 +350,26 @@ test("in C, a map keyed by data (a list, a Set, a case with no fields, a record 
   }
 });
 
+// C243c: the same keys on WebAssembly's tables (wasm-table.ts), each
+// data type walked by its own three functions.
+test("in WebAssembly, a map keyed by data (a list, a Set, a case with no fields, a record holding a list) is its hash table, and prints what the definition prints (C243)", async () => {
+  for (const data of ["list", "set", "light", "held"] as const) {
+    const p = program(300, { data, old: true, remove: true, list: true });
+    const c = chosen(p, false, true, true);
+    assert.deepEqual(c.chosen, ["Map as hash table"], data);
+    const lines = printed(p.code, p.names, p.main).lines;
+    const info = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
+    assert.deepEqual(info.errors.map((e) => e.message), []);
+    const lowered = lowerScalar(c.code, info, c.names, [p.main], { data: true, dataKeys: true });
+    assert.deepEqual([...lowered.refused.values()], [], data);
+    assert.equal(lowered.tables.length, 1, data);
+    const got: string[] = [], m = emitWasm(lowered);
+    assert.match(m.wat, /call \$table\.hd0\.t0/, data);
+    await runWasm(lowered, m, lowered.funcs.find((g) => g.def === p.main && !g.inner)!.name, [], { print: (x) => got.push(x) });
+    assert.deepEqual(got, lines, data);
+  }
+});
+
 // C63j: WebAssembly's own tables (wasm-table.ts), rerooted as
 // JavaScript's: the same programs print the same, old versions too.
 test("in WebAssembly, maps and sets of Ints, and maps keyed by pairs and records, are its hash tables, and print what the definition prints, old versions too (C63j)", async () => {

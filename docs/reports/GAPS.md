@@ -4266,3 +4266,15 @@ all of scan's Maps are hash tables in C:
 unchanged, in that `bench-scan.ts` run.) JavaScript keeps the tree: its
 tables hold a key by its spelling, and spelling a pair of Ints on every
 read made core slower, 8 s to about 14 s, when tried.
+
+C243c does the same for WebAssembly's tables (wasm-table.ts): each data
+type a key reaches is walked by its own three functions, its hash, its
+equal and its compare. There the tree lookup was a fifth of the time, and
+the tables pay more than in C:
+
+| Way | After C243 (C) | After C243c |
+|---|---|---|
+| wasi | 8.2 s | 5.6 s |
+
+(the two modules run in turn under Node's WASI, 8000 lines, same output
+as native's.)

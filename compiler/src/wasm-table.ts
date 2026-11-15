@@ -21,7 +21,7 @@
 // entry, `pkey` an entry's key where it isn't the table's (an empty map
 // nothing is put in), in RtFn.types.
 
-import { isRecord, keyList, mapKids, type CoreIR, type DType, type LType, type RType, type SExpr, type TType } from "./scalar.ts";
+import { isData, isRecord, keyList, mapKids, type CoreIR, type DType, type LType, type RType, type SExpr, type TType } from "./scalar.ts";
 import type { RtFn, VT } from "./wasm-rt.ts";
 
 export const TABLE_RT = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?(?:\.a(\d+))?$/;
@@ -40,16 +40,28 @@ export function keysArrays(ir: CoreIR, e: SExpr): SExpr {
   return { ...x, fn: `table.keys.t${en[2]}.e${en[3]}.a${of[1]}`, args: r0.args };
 }
 
-// The parts of a key in order, each an Int or a Text, and the steps from
-// the key to it (`struct.get $k0 1`).
+// The parts of a key in order, each an Int, a Text or data, and the steps
+// from the key to it (`struct.get $k0 1`).
 // A Float64 key is one nothing fixes (an empty map nothing is put in):
 // none is ever made.
-function leaves(t: LType, types: Record<string, LType>, steps: string[] = []): ["int" | "text" | "f64", string[]][] {
-  if (t === "int" || t === "text" || t === "f64") return [[t, steps]];
+// Data (C243, HASH-KEYS-2026-11-15.md) is a part of its own, `d0`…, its
+// place among the data types the key reaches (`reached`), each walked by
+// its own three functions (table.hd0, table.ed0, table.cd0): its case,
+// then its fields; a Bool in it, `i32`.
+type Kind = "int" | "text" | "f64" | "i32" | `d${number}`;
+function leaves(t: LType, types: Record<string, LType>, datas: DType[], steps: string[] = []): [Kind, string[]][] {
+  if (t === "int" || t === "text" || t === "f64" || t === "i32") return [[t, steps]];
+  if (isData(t)) return [[`d${datas.findIndex((d) => d.key === t.key)}`, steps]];
   const r = t as RType;
   let name = Object.keys(types).find((n) => types[n] === r);
   if (!name) { name = `k${Object.keys(types).length}`; types[name] = r; }
-  return r.fields.flatMap((f, j) => leaves(f.t, types, [...steps, `struct.get $${name} ${j}`]));
+  return r.fields.flatMap((f, j) => leaves(f.t, types, datas, [...steps, `struct.get $${name} ${j}`]));
+}
+// The data types a key reaches, in the order its parts are met.
+function reached(t: LType, out: DType[] = []): DType[] {
+  if (isRecord(t)) t.fields.forEach((f) => reached(f.t, out));
+  else if (isData(t) && !out.some((d) => d.key === t.key)) { out.push(t); t.cases.forEach((c) => c.fields.forEach((f) => reached(f.t, out))); }
+  return out;
 }
 
 // A value of type t nothing reads.
@@ -69,7 +81,28 @@ export function tableRt(name: string, tables: TType[]): RtFn {
   const [, op, ti, ei, ai] = m, i = Number(ti), t = tables[i];
   const fn = (x: string) => `table.${x}.t${i}`;
   const types: Record<string, LType> = {};
-  const ks = leaves(t.keyT, types), kinds = new Set(ks.map(([k]) => k));
+  const datas = reached(t.keyT), kindOf = (k: Kind) => (k[0] === "d" ? "data" : k);
+  const ks = leaves(t.keyT, types, datas), kinds = new Set<string>(ks.map(([k]) => kindOf(k)));
+  // A part's value, on the stack, mixed into $h (FNV-1a's step).
+  const P = ["local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h"];
+  const mix = (kind: Kind): string[] => kind === "int" ? ["local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "ref.test i31", "if i64", "local.get $li", "ref.cast i31", "i31.get_s", "i64.extend_i32_s", "else", "local.get $li", "call $int.small", "end", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", ...P]
+    : kind === "f64" ? ["i64.reinterpret_f64", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", ...P]
+    : kind === "text" ? ["call $text.raw", "local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end"]
+    : kind === "i32" ? P : [`call $${fn(`h${kind}`)}`, ...P];
+  const hashLocals = (ks: Set<string>): [string, VT][] => [["h", "i32"], ...(ks.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(ks.has("int") || ks.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(ks.has("text") ? [["lt", "raw"], ["i", "i32"]] as [string, VT][] : [])];
+  // Two parts' values, on the stack, the same: an Int part the same i31
+  // (or the same Int) without a call; two i31s that differ aren't equal.
+  const intEq = ["local.set $eb", "local.tee $ea", "local.get $eb", "ref.eq", "if i32", "i32.const 1", "else", "local.get $ea", "ref.test i31", "local.get $eb", "ref.test i31", "i32.and", "if i32", "i32.const 0", "else", "local.get $ea", "local.get $eb", "call $int.equal", "end", "end"];
+  const same = (kind: Kind): string[] => (kind === "f64" ? ["f64.eq"] : kind === "i32" ? ["i32.eq"] : kind === "int" ? intEq : kind === "text" ? ["call $text.equal"] : [`call $${fn(`e${kind}`)}`]);
+  // compare's order of two parts, the first loaded by a, the second by
+  // b: −1 or 1 given back where they differ.
+  const order = (kind: Kind, a: string[], b: string[]): string[] => {
+    if (kind[0] === "d") return [...a, ...b, `call $${fn(`c${kind}`)}`, "local.tee $r", "if void", "local.get $r", "return", "end"];
+    const less = kind === "f64" ? "f64.lt" : kind === "i32" ? "i32.lt_s" : `call $${kind}.less`;
+    return [...a, ...b, less, "if void", "i32.const -1", "return", "end", ...b, ...a, less, "if void", "i32.const 1", "return", "end"];
+  };
+  const leafUses = (ks: Set<string>, what: "equal" | "less") => [...ks].filter((k) => k === "int" || k === "text").map((k) => `${k}.${what}`);
+  const dataUses = (c: string) => datas.map((_, n) => fn(`${c}d${n}`));
   const base = { name, table: i, types, native: true as const };
   // st, ks, vs of the store in $m.
   const S = (f: number) => `local.get $m\nstruct.get $tstore ${f}`;
@@ -191,32 +224,50 @@ loop void
   br 0
 end
 end`;
+  // A data type's three walks (C243): hdN its hash, edN whether two are
+  // the same, cdN compare's order: its case, then its fields in order,
+  // going on to a last field of its own type (a list's rest) round the
+  // loop rather than by a call, so a long list is walked in one frame.
+  const walk = /^([hec])d(\d+)$/.exec(op);
+  if (walk) {
+    const d = datas[Number(walk[2])], dt: Record<string, LType> = { kd: d }, w = walk[1];
+    const arms = d.cases.map((c, ci) => {
+      const last = c.fields.length - 1, loops = last >= 0 && isData(c.fields[last].t) && (c.fields[last].t as DType).key === d.key;
+      const at = (j: number) => [`ref.cast $kd.c${ci}`, `struct.get $kd.c${ci} ${j + 1}`];
+      const parts = c.fields.flatMap((f, j) => (loops && j === last ? [] : leaves(f.t, dt, datas, at(j))));
+      const each = parts.flatMap(([kind, steps]) => w === "h" ? ["local.get $a", ...steps, ...mix(kind)]
+        : w === "e" ? ["local.get $a", ...steps, "local.get $b", ...steps, ...same(kind), "i32.eqz", "if void", "i32.const 0", "return", "end"]
+        : order(kind, ["local.get $a", ...steps], ["local.get $b", ...steps]));
+      const on = (x: string) => [`local.get $${x}`, ...at(last), `local.set $${x}`];
+      const next = loops ? [...on("a"), ...(w === "h" ? [] : on("b")), "br 1"] : [];
+      return each.length || loops ? ["local.get $a", "struct.get $kd 0", `i32.const ${ci}`, "i32.eq", "if void", ...each, ...next, "end"] : [];
+    }).flat();
+    const kindsIn = new Set<string>(d.cases.flatMap((c) => c.fields.flatMap((f) => leaves(f.t, { ...dt }, datas).map(([k]) => kindOf(k)))));
+    const head = w === "h" ? ["local.get $a", "struct.get $kd 0", ...P]
+      : ["local.get $a", "local.get $b", "ref.eq", "if void", `i32.const ${w === "e" ? 1 : 0}`, "return", "end",
+        "local.get $a", "struct.get $kd 0", "local.get $b", "struct.get $kd 0", "i32.ne", "if void", ...(w === "e" ? ["i32.const 0"] : ["local.get $a", "struct.get $kd 0", "local.get $b", "struct.get $kd 0", "i32.lt_s", "if i32", "i32.const -1", "else", "i32.const 1", "end"]), "return", "end"];
+    const body = [...(w === "h" ? ["i32.const 0", "local.set $h"] : []), "loop void", ...head, ...arms, "end", w === "h" ? "local.get $h" : w === "e" ? "i32.const 1" : "i32.const 0"];
+    const locals: [string, VT][] = w === "h" ? hashLocals(kindsIn) : w === "e" ? (kindsIn.has("int") ? [["ea", "int"], ["eb", "int"]] : []) : (kindsIn.has("data") ? [["r", "i32"]] : []);
+    const uses = w === "h" ? [...(kindsIn.has("int") ? ["int.small"] : []), ...(kindsIn.has("text") ? ["text.raw"] : []), ...dataUses("h")] : w === "e" ? [...leafUses(kindsIn, "equal"), ...dataUses("e")] : [...leafUses(kindsIn, "less"), ...dataUses("c")];
+    return { ...base, types: dt, params: w === "h" ? [["a", "kd" as VT]] : [["a", "kd" as VT], ["b", "kd" as VT]], result: "i32", locals, uses, body: body.join("\n") };
+  }
   switch (op) {
     case "hash": {
       // FNV-1a over the parts: an Int's bits (a huge one, a constant), a
       // Text's bytes; then mixed, since the slot is its low bits.
       const body = ["i32.const -2128831035", "local.set $h"];
-      for (const [kind, steps] of ks) {
-        body.push("local.get $k", ...steps);
-        if (kind === "int") body.push("local.set $li", "local.get $li", "ref.test $huge", "if i32", "i32.const 40503", "else", "local.get $li", "ref.test i31", "if i64", "local.get $li", "ref.cast i31", "i31.get_s", "i64.extend_i32_s", "else", "local.get $li", "call $int.small", "end", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "end", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
-        else if (kind === "f64") body.push("i64.reinterpret_f64", "local.tee $v", "local.get $v", "i64.const 32", "i64.shr_u", "i64.xor", "i32.wrap_i64", "local.get $h", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h");
-        else body.push("call $text.raw", "local.set $lt", "i32.const 0", "local.set $i", "block void", "loop void", "local.get $i", "local.get $lt", "array.len", "i32.ge_u", "br_if 1", "local.get $h", "local.get $lt", "local.get $i", "array.get_u $bytes", "i32.xor", "i32.const 16777619", "i32.mul", "local.set $h", "local.get $i", "i32.const 1", "i32.add", "local.set $i", "br 0", "end", "end");
-      }
+      for (const [kind, steps] of ks) body.push("local.get $k", ...steps, ...mix(kind));
       body.push("local.get $h", "local.get $h", "i32.const 16", "i32.shr_u", "i32.xor", "i32.const -2048144789", "i32.mul", "local.tee $h", "local.get $h", "i32.const 13", "i32.shr_u", "i32.xor");
-      return { ...base, params: [["k", "key"]], result: "i32", locals: [["h", "i32"], ...(kinds.has("int") ? [["li", "int"]] as [string, VT][] : []), ...(kinds.has("int") || kinds.has("f64") ? [["v", "i64"]] as [string, VT][] : []), ...(kinds.has("text") ? [["lt", "raw"], ["i", "i32"]] as [string, VT][] : [])], uses: [...(kinds.has("int") ? ["int.small"] : []), ...(kinds.has("text") ? ["text.raw"] : [])], body: body.join("\n") };
+      return { ...base, params: [["k", "key"]], result: "i32", locals: hashLocals(kinds), uses: [...(kinds.has("int") ? ["int.small"] : []), ...(kinds.has("text") ? ["text.raw"] : []), ...dataUses("h")], body: body.join("\n") };
     }
     case "eq": {
-      // An Int part: the same i31 (or the same Int) without a call; two
-      // i31s that differ aren't equal.
-      const intEq = ["local.set $eb", "local.tee $ea", "local.get $eb", "ref.eq", "if i32", "i32.const 1", "else", "local.get $ea", "ref.test i31", "local.get $eb", "ref.test i31", "i32.and", "if i32", "i32.const 0", "else", "local.get $ea", "local.get $eb", "call $int.equal", "end", "end"];
-      const body = ks.flatMap(([kind, steps], n) => ["local.get $a", ...steps, "local.get $b", ...steps, ...(kind === "f64" ? ["f64.eq"] : kind === "int" ? intEq : [`call $${kind}.equal`]), ...(n ? ["i32.and"] : [])]);
-      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: kinds.has("int") ? [["ea", "int"], ["eb", "int"]] : [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.equal`), body: body.join("\n") };
+      const body = ks.flatMap(([kind, steps], n) => ["local.get $a", ...steps, "local.get $b", ...steps, ...same(kind), ...(n ? ["i32.and"] : [])]);
+      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: kinds.has("int") ? [["ea", "int"], ["eb", "int"]] : [], uses: [...leafUses(kinds, "equal"), ...dataUses("e")], body: body.join("\n") };
     }
     case "cmp": {
       // compare's order, part by part: −1, 0 or 1.
-      const less = (kind: string) => (kind === "f64" ? "f64.lt" : `call $${kind}.less`);
-      const body = ks.flatMap(([kind, steps]) => ["local.get $a", ...steps, "local.get $b", ...steps, less(kind), "if void", "i32.const -1", "return", "end", "local.get $b", ...steps, "local.get $a", ...steps, less(kind), "if void", "i32.const 1", "return", "end"]);
-      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: [], uses: [...kinds].filter((k) => k !== "f64").map((k) => `${k}.less`), body: [...body, "i32.const 0"].join("\n") };
+      const body = ks.flatMap(([kind, steps]) => order(kind, ["local.get $a", ...steps], ["local.get $b", ...steps]));
+      return { ...base, params: [["a", "key"], ["b", "key"]], result: "i32", locals: kinds.has("data") ? [["r", "i32"]] : [], uses: [...leafUses(kinds, "less"), ...dataUses("c")], body: [...body, "i32.const 0"].join("\n") };
     }
     case "store":
       return { ...base, params: [["cap", "i32"]], result: "tstore", locals: [], uses: [], body: `local.get $cap\narray.new_default $tst\nlocal.get $cap\narray.new_default $tkeys\nlocal.get $cap\narray.new_default $tvals\ni32.const 0\ni32.const 0\ni32.const ${direct ? 1 : 0}\nstruct.new $tstore` };
