@@ -14,7 +14,7 @@ import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, Node, NodeOf } from "../src/model.ts";
-import { collect, freshId, parentOf, portNames, portsOf, subtree, swapIn, isCall, type Call, type NodeData } from "../src/model.ts";
+import { children, collect, freshId, parentLookup, parentOf, portNames, portsOf, scanningOnLayer, subtree, swapIn, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -148,8 +148,16 @@ export class Session {
   // The definition a node belongs to.
   defOf(id: Id): Id | null {
     if (this.code.nodes[id]?.kind === "def") return id;
-    for (const d of this.code.defs) if (subtree(this.code, d).includes(id)) return d;
-    return null;
+    // Up through the parents, looked up once per program (I304: a walk of
+    // every definition's nodes was each edit's).
+    if (!this.code.nodes[id]) return null;
+    const code = this.code;
+    let up = parents.get(code);
+    if (!up) parents.set(code, (up = scanningOnLayer(code, () => parentLookup(code))));
+    const defs = new Set(code.defs);
+    let at: Id | undefined = id;
+    while (at !== undefined && !defs.has(at)) at = up(at);
+    return at ?? null;
   }
 
   pres(): Presentation {
@@ -290,9 +298,10 @@ export class Session {
     const same = share ? sameEverywhere(this.code, r.code, this.info) : { code: r.code, copied: [] as [Id, Id][] };
     const names = { ...r.names };
     for (const [x, y] of same.copied) if (names[x]) names[y] = names[x];
-    // Nothing left unreached is the same program, and its check kept.
-    const reached = collect(same.code);
-    this.code = Object.keys(reached.nodes).length === Object.keys(same.code.nodes).length ? same.code : reached;
+    // What the edit left unreached is dropped: only what it took out of a
+    // node it changed can be (the program before was all reached), so
+    // that is all that is looked at (I304: collect walked every node).
+    this.code = dropUnreached(was.code, same.code);
     this.names = names;
     this.recheck();
     if (this.info.errors.length > errs) {
@@ -309,7 +318,15 @@ export class Session {
     return diff(at === def ? before : [], this.viewLines(at)) || "ok (nothing shown changed)";
   }
   private infoHad(was: { code: Code }, id: Id): boolean { return !!was.code.nodes[id]; }
-  private viewLines(def: Id): string[] { return this.view(def, 99).split("\n"); }
+  // A definition's lines, kept per program: an edit's are the next one's
+  // lines before (I304).
+  private viewLines(def: Id): string[] {
+    let m = viewed.get(this.code);
+    if (!m) viewed.set(this.code, (m = new Map()));
+    let v = m.get(def);
+    if (!v) m.set(def, (v = this.view(def, 99).split("\n")));
+    return v;
+  }
 
   // A part of `at`: itself, or the part inside it that reads as `find`.
   part(at: string, find?: string): Id {
@@ -798,7 +815,9 @@ export class Session {
     const t = text.trim();
     return this.apply(def, () => {
       const info = editorInfo(this.code, this.names);
-      const holed = T.toHole(this.code, this.names, info, target);
+      // A hole is filled as it is (I304: making it a hole again checked
+      // the program once more).
+      const holed = this.code.nodes[target]?.kind === "hole" ? { ok: true as const, code: this.code, names: this.names } : T.toHole(this.code, this.names, info, target);
       if (!holed.ok || t === "□" || t === "?" || t === "") return holed;
       const r = this.fill(holed.code, holed.names, target, t, def, as);
       // What reads as it did keeps its ids (keep-ids.ts, I266).
@@ -1317,6 +1336,30 @@ function dedent(text: string): string {
 const norm = (s: string) => s.replace(/#[0-9a-v]{3,}\b/g, "").replace(/[‹›]/g, "").replace(/·/g, "*").replace(/−/g, "-").replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/\s+/g, " ").trim();
 
 // The editor's own check, which its gestures compare against.
+const parents = new WeakMap<Code, (id: Id) => Id | undefined>();
+const viewed = new WeakMap<Code, Map<Id, string[]>>();
+
+// The program after an edit without the nodes the edit left unreached. The
+// program before was all reached, so a node can be unreached only if it
+// was a child of a node the edit changed or dropped, and isn't a child of
+// one it changed or made; it goes with everything under it.
+function dropUnreached(before: Code, after: Code): Code {
+  if (after.defs.length !== before.defs.length || after.defs.some((d, i) => before.defs[i] !== d)) return collect(after);
+  const was = new Set<Id>(), now = new Set<Id>();
+  for (const id in after.nodes) if (after.nodes[id] !== before.nodes[id]) { for (const c of children(after.nodes[id])) now.add(c); if (before.nodes[id]) for (const c of children(before.nodes[id])) was.add(c); }
+  for (const id in before.nodes) if (!(id in after.nodes)) for (const c of children(before.nodes[id])) was.add(c);
+  // So with a node the edit made that nothing holds (one it made and then
+  // replaced).
+  const defs = new Set(after.defs);
+  const lost = [...was].filter((c) => !now.has(c) && c in after.nodes);
+  for (const id in after.nodes) if (!(id in before.nodes) && !now.has(id) && !defs.has(id) && after.nodes[id].kind !== "builtin") lost.push(id);
+  if (!lost.length) return after;
+  const nodes = { ...after.nodes };
+  const drop = (id: Id) => { const n = nodes[id]; if (!n) return; delete nodes[id]; for (const c of children(n)) if (!now.has(c)) drop(c); };
+  for (const id of lost) drop(id);
+  return { nodes, defs: after.defs };
+}
+
 // A program checked already (the session's own, after each edit) isn't
 // checked again for each filling read on it (I304).
 const checked = new WeakMap<Code, Info>();

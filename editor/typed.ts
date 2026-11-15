@@ -228,10 +228,14 @@ export const infer = (code: Code, names: Names = {}): Info => {
   // infer.ts inferEdited): the definitions it changed, and their users
   // where a type changed. The palette's fillings, the MCP's readings and
   // the program after each edit are each a few nodes from one of these.
-  const from = derived.get(code)?.base;
-  for (const b of recent) {
-    if (b.info.options !== options || (from && b.code !== from)) continue;
-    if (b.code === code) return b.info;
+  const known = checkedAs.get(code);
+  if (known?.options === options) return known;
+  // A program derived from one checked (a filling's) is checked over that
+  // one's check, kept for as long as the program is; any other, over one
+  // of the last few checked.
+  const from = derived.get(code)?.base, base = from && checkedAs.get(from);
+  for (const b of base ? [{ code: from!, info: base }] : from ? [] : recent) {
+    if (b.info.options !== options) continue;
     const r = inferEdited(b.code, code, names, b.info, options);
     if (r) { remember(code, r); return r; }
   }
@@ -241,7 +245,8 @@ export const infer = (code: Code, names: Names = {}): Info => {
 };
 // The programs checked lately, newest first.
 const recent: { code: Code; info: Info }[] = [];
-const remember = (code: Code, info: Info) => { recent.unshift({ code, info }); recent.length = Math.min(recent.length, 3); };
+const checkedAs = new WeakMap<Code, Info>();
+const remember = (code: Code, info: Info) => { checkedAs.set(code, info); recent.unshift({ code, info }); recent.length = Math.min(recent.length, 3); };
 // The options the last check above was given (pins, the library's hidden
 // and private cases), for a check made elsewhere to match (coreMain.ts).
 export const programOptions = () => lastOptions?.options;
