@@ -895,6 +895,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
   for (const i of kept) funcs[i].body = sunk(readFirst(funcs[i], funcs));
+  // A call whose answer is let to a local and given back as it is, at the
+  // end of a function, is a tail call (C242): a tree's lookup going on
+  // into a branch is then a round of a loop, and a call of something
+  // with one answer or none passes its status on as it is.
+  for (const i of kept) funcs[i].body = tailLets(funcs[i].body);
   // Inputs lent, not given (C94, Perceus's borrowed parameters): a record
   // or cell input the body only reads fields of, or lends on in turn, is
   // neither dup'd by the caller nor dropped by the callee. Such a function
@@ -4186,6 +4191,17 @@ function borrowed(body: SExpr, lentIn: Set<number>, owns: (e: SExpr, j: number) 
   };
   go(body);
   return out;
+}
+// `let x = call in x` at the end, as the call alone (C242).
+function tailLets(e: SExpr): SExpr {
+  switch (e.k) {
+    case "let":
+      if (e.body.k === "local" && e.body.i === e.i && (e.value.k === "call" || e.value.k === "apply") && !e.value.cps) return { ...e.value, tail: true };
+      return { ...e, body: tailLets(e.body) };
+    case "if": return { ...e, then: tailLets(e.then), else: tailLets(e.else) };
+    case "case": return { ...e, arms: e.arms.map((a) => (a ? tailLets(a) : a)) };
+    default: return e;
+  }
 }
 function calls(e: SExpr): Extract<SExpr, { k: "call" }>[] {
   return walk(e).filter((x): x is Extract<SExpr, { k: "call" }> => x.k === "call");
