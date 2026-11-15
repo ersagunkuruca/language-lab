@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
-import { pageMain, showPage } from "../src/lang/page.ts";
+import { pageMain, showPage, TooSlow } from "../src/lang/page.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { merge } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
@@ -39,6 +39,27 @@ test("the dice page previews: Roll draws, the clock runs on frames, stop stops i
   assert.equal(tick(), 1);
   page.stop();
   assert.equal(tick(), 0);
+});
+
+// I307: the editor's preview gives the first drawing drawWithin ms. Countdown
+// solves as it draws (6.6 s interpreted in the editor): it stops at once,
+// saying so, and the editor waits for the compiled page. One that draws in
+// time draws as ever, and its later updates have no limit.
+test("a page that doesn't draw within drawWithin stops soon and says it's too slow", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples/countdown-page"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const t = performance.now();
+  assert.throws(() => showPage({ code: p.code, info, names: p.pres.names, main, program: "countdown", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, drawWithin: 50 }),
+    (e) => e instanceof TooSlow && /longer than 0.05 s/.test(e.message));
+  assert.ok(performance.now() - t < 1500, `stopped after ${Math.round(performance.now() - t)} ms`);
+  const d = loadProgram(join(import.meta.dirname, "../examples/dice"));
+  const dinfo = infer(d.code, d.pres.names, undefined, d.options);
+  const page = showPage({ code: d.code, info: dinfo, names: d.pres.names, main: pageMain(d.own.defs, dinfo, d.pres.names)!, program: "dice", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, drawWithin: 5000 });
+  const root = page.root as FakeEl;
+  assert.match(root.find("said").textContent, /Nothing rolled yet/);
+  root.find("hundred").fire("click");
+  assert.match(root.find("status").textContent, /^Rolls: 100;/);
 });
 
 // Pig: one game, run under different handlers. A replay answers Random from

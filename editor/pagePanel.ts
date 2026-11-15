@@ -17,12 +17,15 @@ import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { checkedForRun } from "./coreMain.ts";
-import { PAGE_BASE, corePageFile, hasSound, pageMain, showPage, type Preview } from "../ters/src/lang/page.ts";
+import { PAGE_BASE, corePageFile, hasSound, pageMain, showPage, TooSlow, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { eventsIn, isEvent, type LogEntry, type LogWindow, type PlacedSnapshot } from "../ters/src/lang/worldlog.ts";
 // The page's log kept as a window (I239b): a snapshot every 10 seconds, the
 // last 30 (about five minutes) kept, interpreted or compiled.
 const LOG_WINDOW = { seconds: 10, keep: 30 };
+// How long a page may take to draw interpreted, in ms, before the editor
+// waits for its compiled page instead (I307, page.ts drawWithin).
+const DRAW_WITHIN = 500;
 
 export interface PageHost {
   doc(): Doc;
@@ -135,7 +138,7 @@ export function pagePanels(host: PageHost) {
       leavePage();
       const kept = keptPages.get(doc().program);
       keptPages.delete(doc().program);
-      if (kept?.for === prog()) Object.assign(page, kept, { program: doc().program });
+      if (kept?.for === prog() && kept.now) Object.assign(page, kept, { program: doc().program });
       else { kept?.now?.stop(); startPage(info, main); }
     }
     // Chrome drops every event listener in a frame's document when the frame
@@ -210,8 +213,9 @@ export function pagePanels(host: PageHost) {
   // `stepFrom`, built from the compiled page's snapshots and stepped at
   // the log's last event (I239f), running the code as the compiled page
   // runs it (`run`, I255).
-  function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>, run?: RunCode): Preview {
+  function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>, run?: RunCode, drawWithin?: number): Preview {
     return showPage({
+      drawWithin,
       log: page.log, window: LOG_WINDOW, stepFrom,
       code: run?.code ?? prog(), info: run?.info ?? info, names: run?.names ?? pres().names, main, program: titleOf(doc()),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
@@ -227,15 +231,37 @@ export function pagePanels(host: PageHost) {
     page.status.textContent = "";
     page.log = [];
     page.started = { info, main };
+    // One that takes longer than DRAW_WITHIN to draw interpreted waits
+    // for its compiled page (I307): Countdown solved for 6.6 s on the
+    // editor's thread, which nothing could be clicked in meanwhile. A page
+    // with sound has no compiled page here, so it draws however long.
+    const slow = !hasSound(prog());
     try {
-      page.now = interpreted(info, main);
+      page.now = interpreted(info, main, undefined, undefined, slow ? DRAW_WITHIN : undefined);
       page.root = page.now.root as unknown as globalThis.Node;
     } catch (e) {
-      sayStopped("The page stopped", e);
+      if (!(e instanceof TooSlow)) { sayStopped("The page stopped", e); return; }
+      page.log = [];
+      compilePage(main, true);
+      if (!page.now) page.status.textContent = `Compiling: ${e.message}, so it shows when it's compiled, in a few seconds.`;
       return;
     }
     compilePage(main);
   }
+  // A page that didn't draw interpreted in time, and has no compiled page
+  // after all: drawn interpreted however long it takes, saying why.
+  function interpretAnyway(why: string) {
+    const started = page.started;
+    if (page.now || !started) return;
+    try {
+      page.now = interpreted(started.info, started.main);
+      page.root = page.now.root as unknown as globalThis.Node;
+    } catch (e) { sayStopped("The page stopped", e); return; }
+    page.status.textContent = why;
+    renderSoon();
+  }
+  // After this render, when called while one draws (startPage is).
+  const renderSoon = () => setTimeout(() => render(), 0);
   // A stop said under the page: why, and where when the compiled page
   // knows (C143: its stops carry the node and its definition), as Run's
   // panel offers for main (C143f).
@@ -269,15 +295,21 @@ export function pagePanels(host: PageHost) {
   // evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
   const compiledPages = new WeakMap<Code, CompiledPage | null>(); // null: it didn't compile
   let compiling: Worker | null = null;
-  function compilePage(main: Id) {
+  // `waiting`: nothing interpreted shows, as it drew too slowly.
+  function compilePage(main: Id, waiting = false) {
     compiling?.terminate();
     compiling = null;
     asks++;
     const code = prog();
-    if (!page.now || !corePageRuntimeText()) return;
-    if (page.now.hush || hasSound(code)) { page.status.textContent = "Interpreted: a page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
+    if (!corePageRuntimeText()) return interpretAnyway("Interpreted: this editor has no compiler for pages.");
+    if (!page.now && !waiting) return;
+    if (page.now?.hush || hasSound(code)) { page.status.textContent = "Interpreted: a page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
     const made = compiledPages.get(code);
-    if (made !== undefined) { if (made) swapCompiled(code, made); return; }
+    if (made !== undefined) {
+      if (made) swapCompiled(code, made);
+      else if (!page.now) interpretAnyway("Interpreted, slowly: the page couldn't be compiled.");
+      return;
+    }
     page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds, keeping what you do on it.";
     // A shipped example as shipped was compiled when the site was built
     // (prebuilt.ts, E245): that program, then, and no compiling here.
@@ -389,7 +421,8 @@ export function pagePanels(host: PageHost) {
       compiledPages.set(code, "program" in m ? m : null);
       if (page.for !== code) return;
       if ("program" in m) swapCompiled(code, m);
-      else page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
+      else if (page.now) page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
+      else interpretAnyway(`Interpreted, slowly: the page couldn't be compiled (${m.error}).`);
     };
     w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data);
     w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
@@ -429,6 +462,7 @@ export function pagePanels(host: PageHost) {
     } catch (e) {
       m?.stop();
       compiledPages.set(code, null);
+      if (!page.now) return interpretAnyway(`Interpreted, slowly: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`);
       sayStopped("Interpreted: the compiled page stopped", e);
       return;
     }
@@ -440,6 +474,8 @@ export function pagePanels(host: PageHost) {
     page.now = { root: m.root, cells: null as never, stop: m.stop, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
     page.root = m.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
+    // Nothing shown before (one too slow interpreted): put in the frame.
+    else renderSoon();
     page.status.textContent = "";
     drawSteps();
   }

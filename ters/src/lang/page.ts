@@ -14,7 +14,7 @@ import { browserWorld, type Store } from "./browser.ts";
 import { carried, Cells, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
-import { equal, pageProblem, runMain, type Value, type World } from "./run.ts";
+import { equal, OutOfSteps, pageProblem, runMain, type Value, type World } from "./run.ts";
 import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
@@ -83,6 +83,18 @@ export interface PageOptions {
   // built stepped, at the log's last event, from the nearest snapshot
   // whose cells it can take (cells.ts carried).
   stepFrom?: { firsts: unknown[]; snapshots: Snapshot<PlacedSnapshot>[] };
+  // How long main and the first drawing may take, in ms (I307, the
+  // editor's preview): past it they stop, and showPage throws TooSlow, so
+  // the editor shows the compiled page instead of holding its own thread
+  // while the evaluator draws (Countdown's solve, 6.6 s). Later updates
+  // have no limit.
+  drawWithin?: number;
+}
+
+// A page that didn't draw within its `drawWithin`.
+export class TooSlow extends Error {
+  readonly ms: number;
+  constructor(ms: number) { super(`it takes longer than ${ms / 1000} s to draw interpreted`); this.ms = ms; }
 }
 
 export interface Preview {
@@ -130,10 +142,30 @@ export function showPage(o: PageOptions): Preview {
   // and where the generator is. What later cells hold follows from them.
   let made: NonNullable<Cells["kept"]> = [];
   const window = o.log && o.window && logging ? new LogWindow<PageSnapshot>(o.log, () => ({ cells: made.filter((k) => !cellGone(k.cell)).map((k) => [k.cell, cells.peek(k.cell)]), random: logging.random.state() }), o.window) : undefined;
-  const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world });
-  const sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
-  const value = sound ? sound.page : run();
-  const root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && ((h) => (...a: Parameters<typeof h>) => { if (!stepping) h(...a); })(heardInto(o.log, window)), live: () => !stepping });
+  // Within drawWithin: the clock read every 256 calls of a lambda while
+  // main runs and the page first draws, and past the time each call stops
+  // the part it's in, as a part out of steps stops (html.ts).
+  let end = o.drawWithin === undefined ? Infinity : performance.now() + o.drawWithin, calls = 0, late = false;
+  const entered = o.drawWithin === undefined ? undefined : () => {
+    if (end === Infinity) return;
+    if (!late && (++calls & 255) !== 0) return;
+    if (late || performance.now() > end) { late = true; throw new OutOfSteps(); }
+  };
+  const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world, entered });
+  let sound: ReturnType<typeof soundPlayer> | null = null, root!: Node_;
+  try {
+    sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
+    const value = sound ? sound.page : run();
+    root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && ((h) => (...a: Parameters<typeof h>) => { if (!stepping) h(...a); })(heardInto(o.log, window)), live: () => !stepping });
+  } catch (e) {
+    if (!late) throw e;
+  }
+  end = Infinity;
+  if (late) {
+    stopped = true;
+    sound?.stop();
+    throw new TooSlow(o.drawWithin!);
+  }
   const kept = cells.kept;
   made = kept ?? [];
   cells.kept = null;
