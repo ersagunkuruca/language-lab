@@ -36,7 +36,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| C232 | `ters wasi` overflows the stack on pack at 6400 words since its lists are trees (C229): a recursion on the stored lists goes as deep as the bytes (36k), where native and the core IR's JavaScript (C21's drive) run 12800 | GAPS.md round 18, after the fixes | 2026-11-15 |
+| C232 | `ters wasi` overflows the stack on pack at 6400 words since its lists are trees (C229): `prose`, which builds the document a word a call, `cons(word, prose(…))`, was a loop by tail-modulo-cons (C24) while cons made a cell; as a tree's cons (a job, a call) it is a recursion as deep as the words. The core IR's JavaScript goes on past 1000 calls by its drive (C21), C's stack is big enough; WebAssembly has neither (stack switching, C187). Either a drive for WebAssembly, or a recursion building a stored list by cons written as a loop that builds the list as written and stores it once | GAPS.md round 18, after the fixes | 2026-11-15 |
 
 ## E: Editor
 
