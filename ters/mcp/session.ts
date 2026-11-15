@@ -90,7 +90,12 @@ export class Session {
   recheck() {
     // The editor's gestures check with the same pins (typed.ts infer).
     T.setProgramPins(this.pins);
-    this.info = infer(this.code, this.allNames, undefined, optionsWith(this.pins));
+    // The editor's check, which keeps each definition group's check between
+    // edits (check-cache.ts): an edit checks again what it changed and
+    // what that reaches, not the whole program (I304).
+    // An edit's own check, when it checked just this program, is the one.
+    this.info = T.guardedInfo(this.code, this.pins) ?? T.infer(this.code, { ...LIBRARY.names, ...this.allNames });
+    checked.set(this.code, this.info);
     // Shortest unique prefixes, over the program's own nodes.
     const ids = Object.keys(this.code.nodes).filter((id) => !LIBRARY.code.nodes[id]).sort();
     this.short.clear();
@@ -285,7 +290,9 @@ export class Session {
     const same = share ? sameEverywhere(this.code, r.code, this.info) : { code: r.code, copied: [] as [Id, Id][] };
     const names = { ...r.names };
     for (const [x, y] of same.copied) if (names[x]) names[y] = names[x];
-    this.code = collect(same.code);
+    // Nothing left unreached is the same program, and its check kept.
+    const reached = collect(same.code);
+    this.code = Object.keys(reached.nodes).length === Object.keys(same.code.nodes).length ? same.code : reached;
     this.names = names;
     this.recheck();
     if (this.info.errors.length > errs) {
@@ -1310,7 +1317,10 @@ function dedent(text: string): string {
 const norm = (s: string) => s.replace(/#[0-9a-v]{3,}\b/g, "").replace(/[‹›]/g, "").replace(/·/g, "*").replace(/−/g, "-").replace(/≤/g, "<=").replace(/≥/g, ">=").replace(/\s+/g, " ").trim();
 
 // The editor's own check, which its gestures compare against.
-const editorInfo = (code: Code, names: Names): Info => T.infer(code, { ...LIBRARY.names, ...names });
+// A program checked already (the session's own, after each edit) isn't
+// checked again for each filling read on it (I304).
+const checked = new WeakMap<Code, Info>();
+const editorInfo = (code: Code, names: Names): Info => checked.get(code) ?? T.infer(code, { ...LIBRARY.names, ...names });
 
 // The lines that changed, - before and + after, in order (a longest
 // common subsequence of lines).
