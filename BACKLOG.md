@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I292 | Bug: `ters run` and `build-web` hang (compiled and `--evaluator`) on a page whose main is `div(map(multiband([4.0, 2]), (s) => styled("height: " ++ px(s · 16), classed("out", div(nil)))))`. Without `styled`, or with a literal list in place of the `map`, it renders; the editor's live preview (`showPage`) draws it. Blocks the conjugation page (L261f, driver `/mnt/project-files/examples-l261/conjugate.ts`) | examples triage, L261f | 2026-11-14 |
 | E265 | Where effects happen, and in what order, inside one step (the useful part of a "monads view", Ersagun 2026-11-14): the graph numbers an action's lets as steps with dashed then-lines (do-notation's binds, 2026-10-26), but an effect inside a call's inputs shows no order. In `show(roll(6)) ++ show(roll(6))`, or `say(a) + say(b)` under a handler, nothing says the left one runs first, and Earlier and Later on an input change what is printed or drawn without the graph showing it. An overlay: every call whose row isn't empty marked with its effects, numbered in the order it runs (SPEC §5.1, inputs left to right), the steps' numbering continued into them; a view only, nothing in the tree changes. Not a full monads toggle: binding every effectful call to a name would spell the same tree longer and say nothing the numbers don't | Ersagun's question in thread "Analyze unifying closures, interfaces and effects"; [CLOSURES-INTERFACES-EFFECTS-2026-11-14](docs/reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) | 2026-11-14 |
 
 ## E: Editor
@@ -161,7 +160,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L261f | Conjugation as a page: a brightness slider with both swatches (linear light and the stored number), the quarter turn about a point drawn | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | waits on I292 |
+| L261f | Conjugation as a page: a brightness slider with both swatches (linear light and the stored number), the quarter turn about a point drawn | Ersagun 2026-11-14 20:05, [EXAMPLES-TRIAGE-2026-11-14](docs/reports/EXAMPLES-TRIAGE-2026-11-14.md) | P1 | M | I292 fixed; page next |
 
 ### Numbers (NUMBERS.md)
 

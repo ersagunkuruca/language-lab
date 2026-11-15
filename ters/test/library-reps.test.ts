@@ -717,7 +717,7 @@ function appendedInLoop(k: Lang, xs: Id, times = 4): Id {
 // `tree of List`, where each change is log n (the cons cells walk, the
 // array copies on append: n² both), and prints what the definition prints.
 // Changing by position alone gets arrays (C93c).
-function byPosition(n: number) {
+function byPosition(n: number, backwards = false) {
   const k = new Lang(LIBRARY.code);
   const xs = k.def("xs");
   k.define(xs, k.call(L("map"), k.call(S.range, k.lit(n)), k.fn(["i"], (i) => k.call(B.mul, i, k.lit(0)))));
@@ -742,6 +742,8 @@ function byPosition(n: number) {
     show(k.call(S.equal, k.x(counted), k.call(L("reverse"), k.call(L("reverse"), k.x(counted))))),
     show(k.call(L("sum"), k.x(counted))),
     show(k.call(L("length"), k.x(grown))),
+    // A function on lists run backwards (I292's conjugate).
+    ...(backwards ? [show(k.call(S.first, k.thunk(() => k.call(L("inverse"), k.x(L("reverse")), k.list(k.lit(1), k.lit(2)))), k.thunk(() => k.x(NIL))))] : []),
   )));
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, main, at, defs: [xs, counted, grown, at, main], info: infer(code, names, undefined, checkOptions) };
@@ -763,6 +765,19 @@ test("a program that changes a list by position in a loop gets trees, and prints
   const split = withLibraryRepresentations(code, info, names, main, defs, [], { hostMaps: true });
   assert.deepEqual(split.chosen, ["List as tree of List"]);
   assert.deepEqual(printed(split.code, split.names, main, split.insiders), before);
+});
+
+// A tree's jobs are definitions of its own, and a search run backwards
+// through them never finishes; an array runs backwards as a list does. So
+// a program running something backwards (solve, inverse) keeps its lists
+// off the tree (I292: conjugate's page hung, its bands under inverse).
+test("a program that runs something backwards keeps its lists off the tree (I292)", () => {
+  const { code, names, main, defs, info } = byPosition(40, true);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  for (const hostMaps of [false, true]) {
+    const c = withLibraryRepresentations(code, info, names, main, defs, [], { hostMaps });
+    assert.ok(!c.chosen.some((x) => x.includes("tree of List")), c.chosen.join(", "));
+  }
 });
 
 test("lists as trees lower to WebAssembly and C too, with the evaluator's answers (C45)", async () => {
