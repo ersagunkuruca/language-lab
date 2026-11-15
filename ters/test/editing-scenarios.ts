@@ -611,11 +611,15 @@ async function keptOnReload() {
   const mine = Object.keys(JSON.parse(saved || "{}").docs ?? {}).filter((k) => k.startsWith("mine")).length;
   if (mine !== 3) errors.push(`${where}: ${mine} programs of your own saved, not 3`);
   if (saved.length > 300_000) errors.push(`${where}: the store holds ${saved.length} characters`);
-  const again = openEditor(saved);
+  // The definition open, kept apart, so the page opens on it again (QA 11-15 Q5).
+  const at = open.at(-1)!.window.localStorage.getItem("projectional-editor-v5-open") ?? "";
+  const again = openEditor(saved, at ? { "projectional-editor-v5-open": at } : {});
   open.push(again);
   // The page draws once the checks it kept are read (checkStore.ts).
   for (let t = 0; t < 100 && !again.texts("[data-def]").some((t) => t.trim() === "kept"); t++) await new Promise((r) => setTimeout(r, 50));
   if (!again.texts("[data-def]").some((t) => t.trim() === "kept")) errors.push(`${where}: kept isn't there when the page is opened again`);
+  const shown = again.texts(".blocks-wrap .x.def")[0]?.trim();
+  if (shown !== "kept") errors.push(`${where}: the page opened again on ${shown}, not on kept, the definition that was open`);
 }
 
 // In the graph, an input dropped on another input of the same + moves

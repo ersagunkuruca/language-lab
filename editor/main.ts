@@ -200,6 +200,9 @@ const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, 
 // v5. Since free placement, layout.at holds positions; the offsets older
 // versions kept in layout.positions are ignored.
 const STORE = "projectional-editor-v5";
+// The definition open and its tabs, kept as you move about, apart from the
+// programs (written on every edit only): a reload opens them again (QA 11-15 Q5).
+const OPEN = `${STORE}-open`;
 // A program's own ids: the library's are dotted (`std.map`) or `@`-named.
 const own = (id: Id) => !id.includes(".") && !id.startsWith("@");
 
@@ -270,6 +273,8 @@ let embedTab: "code" | "run" = "code";
 // One document per example program; switching keeps each one's edits.
 let docs: Record<Program, Doc> = {};
 let doc: Doc = EMBED ? initialFor(ASKED.get("program") ?? "numbers") : initial();
+// What was open when the page was left: a reload opens it again (QA 11-15 Q5).
+let reopen: { def: Id; tabs: Id[] } | null = null;
 if (!EMBED) try {
   const saved = JSON.parse(localStorage.getItem(STORE) ?? "null");
   // Programs that have left the picker (the old data-type algebra) are
@@ -281,6 +286,8 @@ if (!EMBED) try {
       .filter(([k, d]) => d && (!isExample(k) || resolves(d.code)))) as Record<Program, Doc>;
     doc = docs[saved.current] ?? (isExample(saved.current) ? initialFor(saved.current) : doc);
   }
+  const open = JSON.parse(localStorage.getItem(OPEN) ?? "null");
+  if (open?.program === doc.program && typeof open.def === "string") reopen = { def: open.def, tabs: Array.isArray(open.tabs) ? open.tabs : [] };
 } catch {}
 // `&code=…`: an embed of a program carried in the link itself (Copy embed
 // link, in the Program panel), drawn once it's unpacked.
@@ -358,6 +365,9 @@ const showcase = () => {
     ?? own.find((d) => !typedef(d)) ?? own[0] ?? doc.code.defs[0];
 };
 const startDef = () => defNamed("main") ?? showcase();
+// A definition the program still has, to open.
+const isOpenable = (d: Id) => doc.code.defs.includes(d) && doc.code.nodes[d]?.kind === "def";
+const reopenedDef = () => (reopen && isOpenable(reopen.def) ? reopen.def : null);
 const startTabs = () => [...new Set([startDef(), showcase()])];
 const noteOf = (d: Doc) => d.comments[PROGRAM] ?? "";
 const titleOf = (d: Doc) => d.title ?? EXAMPLES.find(([k]) => k === d.program)?.[1] ?? "Program";
@@ -377,7 +387,7 @@ const OPENING = TOUCH
 // main, which is the hardest page of it (E235, from the outsider read).
 const firstVisit = (() => { try { return !EMBED && !ASKED.get("program") && !localStorage.getItem("projectional-guide-seen"); } catch { return false; } })();
 const ui: UI = {
-  def: defNamed(ASKED.get("def") ?? "") || (firstVisit ? showcase() : startDef()),
+  def: defNamed(ASKED.get("def") ?? "") || (reopenedDef() ?? (firstVisit ? showcase() : startDef())),
   pane: "graph",
   back: [],
   selected: null,
@@ -396,6 +406,8 @@ const ui: UI = {
   tabs: startTabs(),
   panel: "node",
 };
+// The tabs that were open, those still there, with the open one among them.
+if (!ASKED.get("def") && reopen && ui.def === reopen.def) ui.tabs = [...new Set([...reopen.tabs.filter(isOpenable), ui.def])];
 
 // A link naming a program or a definition that isn't there says so, rather
 // than quietly showing another one.
@@ -2337,6 +2349,7 @@ if (!EMBED && !ui.selected) shownSelected = ui.selected = firstHole();
 function render() {
   if (ui.selected && ui.selected !== shownSelected && ui.panel === "guide") ui.panel = "node";
   shownSelected = ui.selected;
+  if (!EMBED) try { localStorage.setItem(OPEN, JSON.stringify({ program: doc.program, def: ui.def, tabs: ui.tabs })); } catch { /* not kept: a reload opens the start */ }
   try { draw(); revealDrawn(); } catch (e) {
     console.error(e);
     // A right-click menu that can't be built takes only itself away: the
