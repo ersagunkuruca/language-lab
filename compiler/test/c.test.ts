@@ -389,12 +389,32 @@ test("records holding records by value in C: machine builds, and hello says what
 test("a record's fields are read before it is given away, so a changed field has one holder (C94)", () => {
   const p = load("../../compiler/gaps/machine"), main = p.named("main");
   const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
-  const body = (name: string) => { const at = c.indexOf(`\nMachine lab_${name}(`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
+  // The function itself: name_b where its inputs are lent (C241 lends
+  // `stored`'s lists too), the wrapper after it.
+  const body = (name: string) => { const at = c.indexOf(`\nMachine lab_${name}`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
   assert.doesNotMatch(body("stepped"), /Machine_dup\(p1\)/);
   const stored = body("stored");
-  // `value of` only reads the machine: it is lent, not copied (C94's rest).
+  // `value of` only reads the machine: it is lent, not copied (C94's rest),
+  // and the machine is dropped after its last read, before the store.
   assert.doesNotMatch(stored, /Machine_dup\(p0\)/);
-  assert.ok(stored.indexOf("Machine_drop(p0);\n", stored.indexOf("lab_value_of_b(p0, p1)")) < stored.indexOf("lab_replace_at("), stored);
+  const read = /(\w+) = p0;\n\s*\w+ = lab_value_of_b\(\1, p1\)|lab_value_of_b\(p0, p1\)/.exec(stored);
+  assert.ok(read, stored);
+  const machine = read[1] ?? "p0";
+  const store = stored.search(/lab_(array_)?replace_at\(/);
+  assert.ok(stored.indexOf(`Machine_drop(${machine});\n`, read.index) < store && store > 0, stored);
+});
+
+// C241: a list or tree a function only walks is lent, through its match and
+// its loop: each round goes on with a part of it, no count taken or given
+// back. scan's class lookup walks a list of bounds.
+test("a list a loop only walks is lent, and the walk takes no counts (C241)", () => {
+  const p = load("../../compiler/gaps/scan"), main = p.named("main");
+  const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
+  const at = c.indexOf("\nlab_int lab_class_from_at_Int_Int_b(", c.indexOf("// class from at Int, Int\n"));
+  assert.ok(at > 0, "class from is lent its list");
+  const walk = c.slice(at, c.indexOf("\n}\n", at));
+  assert.match(walk, /continue;/);
+  assert.doesNotMatch(walk, /lab_dup\(|lab_drop\(|lab_free\(/);
 });
 
 // C220: a record held as a C struct that is taken apart and then no
