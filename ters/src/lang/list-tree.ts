@@ -175,8 +175,10 @@ export function buildListTree(k: Lang, prelude: (name: string) => Id): ListTree 
   const mapped = rec("list tree map");
   k.define(mapped, k.fn(["tree", "by"], (t, f) => parts(t, (s, y, l, r) => k.let("left done", k.call(mapped, l, f), (ld) =>
     k.let("item done", k.call(f, y), (yd) => k.let("right done", k.call(mapped, r, f), (rd) => k.call(node, yd, s, ld, rd)))), () => k.x(tip))));
-  // Equal, show and compare see the list it stands for.
-  const equal = def("list tree equal", ["a", "b"], (a, b) => k.call(S.equal, k.call(items, a), k.call(items, b)));
+  // Equal, show and compare see the list it stands for. Two of different
+  // sizes differ at once: `bits = nil` in a loop doesn't walk the bits each
+  // turn (pack, GAPS round 18).
+  const equal = def("list tree equal", ["a", "b"], (a, b) => k.if(k.call(S.equal, k.call(size, a), k.call(size, b)), k.call(S.equal, k.call(items, a), k.call(items, b)), k.false));
   const show = def("list tree show", ["tree"], (t) => k.call(SHOW_ANY, k.call(items, t)));
   const compare = def("list tree compare", ["a", "b"], (a, b) => k.call(COMPARE, k.call(items, a), k.call(items, b)));
 

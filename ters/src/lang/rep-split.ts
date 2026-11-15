@@ -334,6 +334,6 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   const boundary = listBoundary(out, typed, aDefs, rep, [], new Set(own.filter(isType)), new Set([...[...asWritten].filter((d) => !aw.has(d)), rep.meaning, rep.store, ...k.code.defs]));
   if (!boundary) return null;
   out = { nodes: { ...out.nodes, ...boundary.nodes }, defs: [...out.defs, ...boundary.made] };
-  out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...k.code.defs, ...bDefs, ...[...asWritten].filter((d) => !aw.has(d)), ...own.filter((d) => isType(d) && !aTypes.has(d))]);
+  out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...boundary.edges, ...k.code.defs, ...bDefs, ...[...asWritten].filter((d) => !aw.has(d)), ...own.filter((d) => isType(d) && !aTypes.has(d))]);
   return { code: out, names: { ...outNames, ...k.names, ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) }, seeds: seedsNow, copies: shared.map(f), types };
 }

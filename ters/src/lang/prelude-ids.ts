@@ -29,6 +29,11 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "table update at": "@2f49k3phcb0lql07k7s8lsddrt",
  "empty table map": "@2ac3041v7ff1m3s6jg9dv2mlr2",
  "tree update at": "@929irhr0bkm4pq3sjm103ee7v9",
+ // A stored list's length, and a tree stored from a list as written (list-tree.ts, array-list.ts):
+ // signs.ts reads them as length and the list (L262 on a rewrite, C229).
+ "list tree size": "@9tr8nkpb80jja1s9st7gis58h7",
+ "array length of": "@oq7cmip86uql4l57vvvt6lchaa",
+ "list tree of list": "@b553mah4ocs7975ee8hlq561ho",
  "empty tree": "@lk05v4r73jribg05qiim03a90j",
 };
 

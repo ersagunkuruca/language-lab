@@ -3948,3 +3948,39 @@ the other way.
 
 1. P1, P2 and P3, in that order, measured after each.
 2. P4 and P5, with the examples they came from.
+
+### After the fixes
+
+P4 was done by the language lane's L262 (#2753): a list written out isn't
+empty, so `word for` lost its guard. L263 was closed, because
+`read whole number` already reads an Int. P1 to P3 (C229 to C231) went in
+one PR, since each needs the others before the program checks with its
+lists stored:
+- C229: Bytes, a library type with no parameters whose fields are plain
+  lists, is passed about as it is. `byte items` and `utf8 of` stay as
+  written and are called as builtins are, and what they do inside isn't
+  weighed by the chooser. The CRC-32 beside Bytes (C192) is now arrays for
+  the whole program, not a split.
+- C230: a tree's and an array's `equal` compare lengths first.
+- C231: a copy of a job is the job, so Nat as an Int replaces the copied
+  `natural` too.
+- With lists as trees, `length(vocabulary)` became the tree's size of a
+  stored literal, so L262's proof was lost and `packing` did Console while
+  a Choice was open. signs.ts now reads the rows' lengths and stores as
+  `length` and the list.
+
+The lists are trees. Packed and back, against the ideal:
+
+| words | core | native | wasi |
+|---|---|---|---|
+| 200 | 5.1x (was 35x) | 5.2x (was 13x) | 26x (was 41x) |
+| 800 | 14x (was 285x) | 7.9x (was 126x) | 26x (was 177x) |
+| 3200 | 41x (was 2649x) | 12.5x (was 1005x) | 38x (was 1390x) |
+| 12800 | 59x | 23x | stack overflow |
+
+The command was `BUILT=1 RUNS=3 node compiler/gaps/bench-pack.ts 200 800
+3200 12800`. It is no longer n², but it still grows faster than the ideal,
+because `item at` on a tree is log n where the ideal's array is one step.
+Under WASI, 6400 words and more now overflow the stack. A recursion on the
+stored lists goes as deep as the bytes (C232). Before, those sizes took
+minutes. Native runs 12800 words.

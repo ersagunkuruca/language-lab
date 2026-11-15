@@ -18,6 +18,7 @@ import { children, dependencies, freshId, subtree, type Code, type Id, type Node
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
+import { COPIED_FROM } from "./prelude-ids.ts";
 import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
 
 export interface Representation {
@@ -493,8 +494,13 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   }
   // Rewrite what the entry reaches, not going inside replaced functions.
   const todo = new Set<Id>();
+  // A job's copy (a library definition the lists' rewrite copied, as it
+  // copies `natural`, which folds a range) is the job too: Nat as an Int
+  // takes `natural` from the copy as from the original (pack, GAPS
+  // round 18).
+  const jobOf = (d: Id): Id | undefined => rep.impl[d] ?? (COPIED_FROM.has(d) ? rep.impl[COPIED_FROM.get(d)!] : undefined);
   const reach = (def: Id) => {
-    if (todo.has(def) || own.has(def) || rep.impl[def]) return;
+    if (todo.has(def) || own.has(def) || jobOf(def)) return;
     todo.add(def);
     for (const d of directRefs(code, def)) reach(d);
     // A holder's every definition goes with it, reached or not, since the
@@ -550,7 +556,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   const rewrite = (id: Id) => {
     const n = nodes[id];
     for (const c of childrenOf(n)) rewrite(c);
-    if (n.kind === "ref" && rep.impl[n.target]) nodes[id] = { ...n, target: rep.impl[n.target] };
+    if (n.kind === "ref" && jobOf(n.target)) nodes[id] = { ...n, target: jobOf(n.target)! };
     else if (fromFraction && n.kind === "lit" && n.of === t && /^\s*\d+\s*$/.test(String(n.value))) {
       nodes[id] = { id, kind: "call", fn: ref(rep.impl[fromFraction]), args: [add({ kind: "lit", value: String(n.value).trim().length <= 15 ? Number(n.value) : String(n.value).trim(), of: INT }), add({ kind: "lit", value: 1, of: INT })] };
     }

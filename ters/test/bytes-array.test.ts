@@ -198,9 +198,10 @@ test("an array of bytes is kept a byte a slot, and stays the same array when cha
 });
 
 // C192: a table read by position in a program that also uses Bytes (a
-// CRC-32 of texts). Bytes holds a List, so the whole program can't have
-// arrays (listBoundary); its parts that want them do, without host maps
-// too (C, WebAssembly, the editor), and print what the program as written does.
+// CRC-32 of texts). Bytes holds a List of its own, never the program's:
+// `byte items` and `utf8 of` stay as written and convert where their lists
+// cross (C229), so the whole program has arrays, without host maps too (C,
+// WebAssembly, the editor), and prints what the program as written does.
 test("a program using Bytes still gets its table as an array, without host maps", () => {
   const k = new Lang(LIBRARY.code);
   const step = k.def("step");
@@ -226,7 +227,7 @@ test("a program using Bytes still gets its table as an array, without host maps"
   const info = infer(code, names, undefined, checkOptions);
   for (const options of [{}, { tables: true }]) {
     const r = withLibraryRepresentations(code, info, names, main, own, [], options);
-    assert.match(r.chosen.join(), /List as array of List from/);
+    assert.deepEqual(r.chosen, ["List as array of List"]);
     assert.deepEqual(printed(r.code, r.names, main, r.insiders), want);
   }
 });
