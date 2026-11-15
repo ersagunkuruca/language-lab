@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C237, C238 and C239 (GAPS round 19); I303 and I304 for the MCP after them |
+| C Compiler and targets | "Compiler lane" | C238 (GAPS round 19); I303 and I304 for the MCP after them |
 | L Language and library | "Language lane" | pack's speed (GAPS round 18), cost by cost, each a C row, until a stage buys under 10% (C233, C234 done); L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -97,9 +97,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C237 | `first(value at(m, k), else d)` is a try around one lookup (GAPS round 19 S3): a `try`, an `R.FAIL` check and a `catch` restoring the depth, once a character in scan. A `first` whose search is a lookup that fails at once has nothing to backtrack: a lookup with a default | GAPS round 19 | P2 | S | |
 | C238 | A map with pair keys, built once and read 14 million times, is a tree with a tuple made per read (GAPS round 19 S4): scan's `Map (Int, Int) Int` of moves. A map only read after it is built could be a hash table (C63), and a tuple key read field by field needn't be allocated; the ideal indexes an Int32Array | GAPS round 19 | P2 | M | |
-| C239 | `map(characters(t), f)` makes a list of one-character texts (GAPS round 19 S5): scan's `codes of`, 21% of its time, splits each line (a surrogate check by regular expression) and reads each item's code as a Choice. Fuse it into one walk over the code points, as C23 fused `characters` with a fold | GAPS round 19 | P3 | S | |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 

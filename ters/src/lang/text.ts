@@ -120,6 +120,10 @@ export function less(a: string, b: string): boolean {
 // A one-character text's number, and back. Other texts, and numbers that
 // aren't characters, have no answer.
 export function code(t: string): Int[] {
+  // One UTF-16 unit, or a pair, without splitting the text (C239: scan's
+  // `codes of`, a code for every character of every line).
+  if (t.length === 1) return [t.charCodeAt(0)];
+  if (t.length === 2) { const h = t.charCodeAt(0), l = t.charCodeAt(1); return h >= 0xd800 && h < 0xdc00 && l >= 0xdc00 && l < 0xe000 ? [t.codePointAt(0)!] : []; }
   const cs = chars(t);
   return cs.length === 1 ? [cs[0].codePointAt(0)!] : [];
 }
