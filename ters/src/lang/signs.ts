@@ -29,8 +29,13 @@
 
 import { children, parentLookup, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
 import { B } from "../prelude.ts";
-import { ARITH, CONS, FALSE, INT_OPS, NIL, S, TRIG_OPS, TRUE } from "./std.ts";
+import { ARITH, ARRAY_OPS, CONS, FALSE, INT_OPS, NIL, S, TRIG_OPS, TRUE } from "./std.ts";
 import { fractionCase, originalOf, PRELUDE_DEFS } from "./prelude-ids.ts";
+
+// A list's length, as written and as a stored list's rows do it; and the
+// rows' ways to store a list as written.
+const LENGTHS = new Set([PRELUDE_DEFS.length, PRELUDE_DEFS["list tree size"], PRELUDE_DEFS["array length of"]]);
+const STORES = new Set([PRELUDE_DEFS["list tree of list"], ARRAY_OPS.of]);
 
 // A set of signs: which of −, 0, + the value can be.
 export type Signs = number;
@@ -316,7 +321,7 @@ export function signAnalysis(code: Code) {
       const z = code.nodes[n.args[0]];
       if (isCall(z) && target(z.fn) === S.zipParts && MUL.has(target(z.args[0]) ?? "") && target(z.args[1]) !== undefined && target(z.args[1]) === target(z.args[2])) return NONNEG;
     }
-    if (originalOf(f) === PRELUDE_DEFS.length && n.args.length === 1) return lengthOf(n.args[0], env);
+    if (LENGTHS.has(originalOf(f)) && n.args.length === 1) return lengthOf(n.args[0], env);
     // A definition's call: its body, its inputs known from here.
     const d = code.nodes[f], body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
     if (body?.kind === "lambda" && body.params.length === n.args.length && !entered.has(f)) {
@@ -341,6 +346,9 @@ export function signAnalysis(code: Code) {
     }
     if (!isCall(n)) return NONNEG;
     const f = target(n.fn);
+    // A list stored as a tree or an array (library-reps.ts): as long as
+    // the list it was stored from.
+    if (STORES.has(f ?? "") && n.args.length === 1) return lengthOf(n.args[0], env, depth + 1);
     return f === S.listOf ? (n.args.length ? POS : ZERO) : f === CONS ? POS : f === NIL ? ZERO : NONNEG;
   };
   const within = <T>(d: Id, f: () => T): T => {

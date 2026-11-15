@@ -37,11 +37,11 @@ test("pack: no words, a few, and arguments that aren't numbers", () => {
   for (const args of [["1"], ["7"], ["2.7"], ["x"]]) assert.match(all(args).out[3], /, the same$/);
 });
 
-// GAPS round 18: the chains are a Map whose values are lists, and that
-// kept every list as written, so the bytes, read by position, are linked
-// lists and the program is quadratic.
+// GAPS round 18 P1 (C229): the bytes come from a Bytes, which kept every
+// list as written, so the bytes, read by position, were linked lists and
+// the program quadratic. Bytes holds only its own lists: they are trees.
 test("pack: what the lists are stored as", () => {
-  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "Nat as int"]);
+  assert.deepEqual(program().chosen, ["Map as weight-balanced tree", "List as tree of List", "Nat as int"]);
 });
 
 test("pack: 800 words, from the core IR and the ideal", () => {

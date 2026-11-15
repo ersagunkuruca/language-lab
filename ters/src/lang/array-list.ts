@@ -82,8 +82,10 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   // it was keeping the change back; the array as it is outside it.
   const replaced = def("array replace at", ["array", "position", "by"], (a, i, x) => k.call(ARRAY_OPS.replaceAt, a, i, x));
   // Equal, show and compare see the list it stands for: an array's own
-  // compare puts shorter arrays first, and show says "array".
-  const equal = def("array equal", ["a", "b"], (a, b) => k.call(S.equal, items(a), items(b)));
+  // compare puts shorter arrays first, and show says "array". Two of
+  // different lengths differ at once: `bits = nil` in a loop doesn't walk
+  // the bits each turn (pack, GAPS round 18).
+  const equal = def("array equal", ["a", "b"], (a, b) => k.if(k.call(S.equal, k.call(length, a), k.call(length, b)), k.call(S.equal, items(a), items(b)), k.false));
   const show = def("array show", ["array"], (a) => k.call(SHOW_ANY, items(a)));
   const compare = def("array compare", ["a", "b"], (a, b) => k.call(COMPARE, items(a), items(b)));
 

@@ -167,7 +167,10 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
-    const tree = choose(code, main, [spec, ...rows], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, asked.flatMap((r) => Object.keys(r.impl))).rep;
+    // What an edge does with its own lists (Bytes' `byte at`, by position)
+    // is no job of theirs: the edge keeps them as written.
+    const edges = ty === LIST ? (() => { const { edge } = listEdges(code, info, new Set(defs), new Set(asked.map((r) => r.of))); return code.defs.filter((d) => edge(d)); })() : [];
+    const tree = choose(code, main, [spec, ...rows], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...edges]).rep;
     if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
     // Lists as trees for the whole, where parts of it would have arrays
     // (machine's step loop): those parts as arrays, the rest as written,
@@ -311,7 +314,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...copied, ...made] };
   // The way back from a builtin's list (listBoundary's `made`) is written
   // on List, and stays so.
-  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? boundary.made : [])];
+  const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : [])];
   const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
 }
@@ -743,7 +746,7 @@ const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // values no list crosses in (rep-split.ts): not looked into, and a value
 // of a library type holding lists (bounce's Algebra) may be passed about,
 // only not taken apart or made, since its lists stay as written.
-export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set(), asWritten?: Set<Id>): { nodes: Record<Id, Node>; reached: Id[]; made: Id[] } | null {
+export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set(), asWritten?: Set<Id>): { nodes: Record<Id, Node>; reached: Id[]; made: Id[]; edges: Id[] } | null {
   const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST), stored = new Set(asked.map((r) => r.of));
   const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
@@ -751,6 +754,8 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   // its fields List while the values in them would be arrays. A type
   // already stored by an asked row (Map as a hash table) holds no list.
   const libraryHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(libraryHolder) : t.t === "fn" ? [...t.params, t.ret].some(libraryHolder) : false; };
+  const { closed, edge } = listEdges(code, info, program, stored);
+  const openHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (!closed(t) && t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(openHolder) : t.t === "fn" ? [...t.params, t.ret].some(openHolder) : false; };
   // What the rewrite reaches (represent.ts), and what it keeps as it is.
   const own = new Set<Id>();
   for (const d of [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
@@ -758,7 +763,7 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   while (todo.length) {
     const d = todo.pop()!;
     // An asked row's meaning is written on its type as written, and stays.
-    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d) || asWritten?.has(d)) continue;
+    if (reached.has(d) || rep.impl[d] || asked.some((r) => r.meaning === d) || asWritten?.has(d) || edge(d)) continue;
     const def = code.nodes[d];
     if (def?.kind !== "def" || (def.body && code.nodes[def.body]?.kind === "typedef")) continue;
     if (own.has(d)) return null;
@@ -810,9 +815,10 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     // array runs backwards as a list does (front and push front, modes.ts).
     if (isUse(n) && [...Object.values(n.given), ...Object.values(bindsOf(n)), n.id].some((x) => { const t = info.typeOf.get(x); return !!t && hasList(t); })) return null;
     const ty = info.typeOf.get(id);
-    if (ty && libraryHolder(ty) && (!asWritten || takesApart(n))) return null;
+    if (ty && libraryHolder(ty) && ((!asWritten && openHolder(ty)) || takesApart(n))) return null;
     const target = n.kind === "ref" ? n.target : null;
-    if (!target || !SIGS[target] || code.nodes[target]?.kind === "def") continue;
+    const edgeOf = target ? edge(target) : null;
+    if (!target || (!edgeOf && (!SIGS[target] || code.nodes[target]?.kind === "def"))) continue;
     const at = info.typeOf.get(id);
     if (!at || !hasList(at)) continue;
     // A builtin with a list in its type: only called, by the rules above.
@@ -832,18 +838,18 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     const rec = target === SET ? info.typeOf.get(c.args[1]) : undefined, recT = rec && info.subst.zonk(rec);
     const setPasses = target === SET && recT?.t === "con" && program.has(recT.id) && !owned.has(recT.id);
     const passes = PASSES_ON.has(target) || target === S.oneOf || target === S.fail || setPasses;
-    const sig = SIGS[target](new Subst());
+    const sig = edgeOf ?? SIGS[target](new Subst());
     if (sig.t !== "fn") return null;
     const args = c.args.map((a, i) => {
       const t = info.typeOf.get(a);
-      if (!t || !hasList(t)) return a;
+      if (!t || !hasList(t) || closed(info.subst.zonk(t))) return a;
       // `list of` takes any number of inputs, each of its one parameter's type (L181).
       return plainList(sig.params[i] ?? sig.params[sig.params.length - 1], t) ? call(rep.meaning!, a) : passes ? a : null;
     });
     if (args.includes(null)) return null;
     const ret = info.typeOf.get(c.id);
     const changed = args.some((a, i) => a !== c.args[i]);
-    if (ret && hasList(ret) && !(passes && !plainList(sig.ret, ret))) {
+    if (ret && hasList(ret) && !closed(info.subst.zonk(ret)) && !(passes && !plainList(sig.ret, ret))) {
       if (!plainList(sig.ret, ret)) return null;
       // The call keeps its id, so its name and comments stay on it.
       const inner = freshId(), of = freshId();
@@ -852,7 +858,41 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
       nodes[c.id] = { id: c.id, kind: "call", fn: of, args: [inner] };
     } else if (changed) nodes[c.id] = { ...c, args: args as Id[] };
   }
-  return { nodes, reached: [...reached], made };
+  return { nodes, reached: [...reached], made, edges: code.defs.filter((d) => edge(d)) };
+}
+
+// A library type with no parameters holding lists of its own (Bytes): it
+// never holds the program's lists, so the program can pass one about as
+// it is, so long as only the library takes it apart, in a definition kept
+// as written. Such a definition is an edge: one between such a type and
+// plain lists (`byte items`, `utf8 of`), called as a builtin is, its lists
+// converted where they cross (pack's bytes, GAPS round 18 P1). `edge`
+// gives its type, or null.
+export function listEdges(code: Code, info: Info, program: Set<Id>, stored: Set<Id> = new Set()) {
+  const inside = holdsType(code, LIST);
+  const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
+  // Its fields are plain lists, or hold none (Bytes' List Int); not a
+  // tree of itself through its lists (Html's children), which a page
+  // builds and takes apart all through the library.
+  const flat = (n: Id): boolean => { const x = code.nodes[n]; return x?.kind === "tref" && x.target !== LIST && !inside(x.target) && x.args.every(flat); };
+  const plainField = (n: Id): boolean => { const x = code.nodes[n]; return x?.kind === "tref" && (x.target === LIST ? x.args.every(flat) : flat(n)); };
+  const closed = (t: Type) => {
+    if (t.t !== "con" || t.args.length || t.id === LIST || program.has(t.id) || stored.has(t.id) || !inside(t.id)) return false;
+    const td = code.nodes[(code.nodes[t.id] as NodeOf<"def"> | undefined)?.body ?? ""];
+    return td?.kind === "typedef" && !td.params.length && td.variants.every((v) => (code.nodes[v] as NodeOf<"variant">).fields.every((f) => plainField((code.nodes[f] as NodeOf<"field">).type)));
+  };
+  const plain = (t: Type) => t.t === "con" && t.id === LIST && !t.args.some(hasList);
+  const edgeType = new Map<Id, Type | null>();
+  const edge = (d: Id): Type | null => {
+    if (edgeType.has(d)) return edgeType.get(d)!;
+    let t = program.has(d) || code.nodes[d]?.kind !== "def" ? undefined : info.typeOf.get(d);
+    t = t && info.subst.zonk(t);
+    const parts = t?.t === "fn" ? [...t.params, t.ret].map((p) => info.subst.zonk(p)) : [];
+    const yes = parts.some(closed) && parts.every((p) => closed(p) || plain(p) || !hasList(p));
+    edgeType.set(d, yes ? t! : null);
+    return yes ? t! : null;
+  };
+  return { closed, edge };
 }
 
 // A builtin whose own type names a stored type with no parameters (Bytes:
