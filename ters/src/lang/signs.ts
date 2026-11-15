@@ -14,7 +14,9 @@
 //     a test written as a definition, `x > 0`, read through its body); what
 //     is tested may be a field read too, `l.took` (L258); `and`'s second
 //     side where the first holds, `or`'s where it doesn't (L259);
-//   - a type's rule: a Rational's bottom is positive.
+//   - a type's rule: a Rational's bottom is positive;
+//   - a list's length is never negative, and one of a list written out
+//     (`[the, a, …]`, a cons) is as long as it reads (L262).
 //
 // A product of two nonzero floats can still underflow to 0; a divisor
 // proved nonzero that underflows has no answer at run time all the same.
@@ -27,7 +29,7 @@
 
 import { children, parentLookup, type Code, type Id, type NodeOf, isUse, isCall } from "../model.ts";
 import { B } from "../prelude.ts";
-import { ARITH, FALSE, INT_OPS, S, TRIG_OPS, TRUE } from "./std.ts";
+import { ARITH, CONS, FALSE, INT_OPS, NIL, S, TRIG_OPS, TRUE } from "./std.ts";
 import { fractionCase, originalOf, PRELUDE_DEFS } from "./prelude-ids.ts";
 
 // A set of signs: which of −, 0, + the value can be.
@@ -314,6 +316,7 @@ export function signAnalysis(code: Code) {
       const z = code.nodes[n.args[0]];
       if (isCall(z) && target(z.fn) === S.zipParts && MUL.has(target(z.args[0]) ?? "") && target(z.args[1]) !== undefined && target(z.args[1]) === target(z.args[2])) return NONNEG;
     }
+    if (originalOf(f) === PRELUDE_DEFS.length && n.args.length === 1) return lengthOf(n.args[0], env);
     // A definition's call: its body, its inputs known from here.
     const d = code.nodes[f], body = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined;
     if (body?.kind === "lambda" && body.params.length === n.args.length && !entered.has(f)) {
@@ -321,6 +324,24 @@ export function signAnalysis(code: Code) {
       return within(f, () => of(body.body, inner, depth + 1));
     }
     return ANY;
+  };
+  // The signs of a list's length: none or some where the list is written
+  // out (`list of`, a cons, nil), through a definition or a let holding
+  // it, and never negative otherwise.
+  const lengthOf = (id: Id, env: Env, depth = 0): Signs => {
+    const n = code.nodes[id];
+    if (!n || depth > 8) return NONNEG;
+    if (n.kind === "ref") {
+      if (n.target === NIL) return ZERO;
+      const t = code.nodes[n.target];
+      if (t?.kind === "def") return t.body ? lengthOf(t.body, NONE, depth + 1) : NONNEG;
+      if (t?.kind !== "binder" || env.has(n.target)) return NONNEG;
+      const v = letValue(n.target);
+      return v ? lengthOf(v, env, depth + 1) : NONNEG;
+    }
+    if (!isCall(n)) return NONNEG;
+    const f = target(n.fn);
+    return f === S.listOf ? (n.args.length ? POS : ZERO) : f === CONS ? POS : f === NIL ? ZERO : NONNEG;
   };
   const within = <T>(d: Id, f: () => T): T => {
     const was = inside;

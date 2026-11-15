@@ -23,6 +23,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "first where": "@v6mnt13ndlbrsgos2r5ntqt875",
  "is letter": "@3ghl6cjivv5vaeuti6ht2gip8a",
  "is digit": "@kns2kgot84jr2lfre0vbl00j9q",
+ // A list's length: never negative, and a list written out is as long as it reads (signs.ts, L262).
+ "length": "@ms3a2v8ka09mr0hqvm9t2d4mq4",
  // The hash table's and the tree's own (map-tree.ts): a fold counting into a Map (C42h, compiler/src/fold-chunks.ts).
  "table update at": "@2f49k3phcb0lql07k7s8lsddrt",
  "empty table map": "@2ac3041v7ff1m3s6jg9dv2mlr2",
