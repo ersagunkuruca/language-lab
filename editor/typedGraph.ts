@@ -1288,11 +1288,14 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // them, and unfolding finds them where they were. A view: layout.json.
 // (Influence: Houdini's minimized network boxes.)
 
-// An effect's place in the order they run (E265): a number in a ring at
-// a box's top left corner, wider for a range a folded box holds.
+// An effect's place in the order they run (E265): a number in a ring just
+// left of a box's top, wider for a range a folded box holds. Beside the
+// box, not on its corner: there it sat on a title above it, a frame's or
+// the signature line (QA 11-15 Q4), and the box's own words start inside.
+// Its inputs come in lower down the same edge.
 function effectBadge(text: string, why: string): SVGElement {
-  const o = s("g", { class: "effn" }), w = Math.max(18, tw(text, 6.2) + 10);
-  o.append(w > 18 ? s("rect", { x: -9, y: -9, width: w, height: 18, rx: 9 }) : s("circle", { cx: 0, cy: 0, r: 9 }), s("text", { x: w / 2 - 9, y: 3.5, "text-anchor": "middle" }, text));
+  const o = s("g", { class: "effn" }), w = Math.max(18, tw(text, 6.2) + 10), x = -4 - w / 2;
+  o.append(w > 18 ? s("rect", { x: x - w / 2, y: 0, width: w, height: 18, rx: 9 }) : s("circle", { cx: x, cy: 9, r: 9 }), s("text", { x, y: 12.5, "text-anchor": "middle" }, text));
   o.append(s("title", {}, why));
   return o;
 }
