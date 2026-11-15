@@ -38,26 +38,33 @@ export function loopRecords(ir: CoreIR): void {
 
 // Is the record in input p made afresh, or passed on as it is, for every
 // next round, read by field somewhere, and never set as a local?
+// A record every round passes on as it is, and that is used whole too (a
+// call given it), stays one (C236, GAPS round 19 S2): split, it would be
+// made again wherever it is used whole, every round, where kept it is made
+// never (scan's Dfa, rebuilt per character to call `dfa next` with it).
 function carried(f: SFunc, fi: number, p: number, t: RType): boolean {
-  let rounds = 0, reads = 0, ok = true;
+  let rounds = 0, reads = 0, ok = true, fresh = false, uses = 0, passed = 0;
   const walk = (e: SExpr) => {
     if (!ok) return;
     if (e.k === "call" && e.fn === fi) {
       rounds++;
       const a = made(e.args[p]).value;
       if (!((a.k === "make" && a.t.key === t.key) || (a.k === "local" && a.i === p))) ok = false;
+      if (a.k === "make") fresh = true;
+      else if (e.args[p].k === "local") passed++;
       // The lets around a record made go before the call, after the
       // inputs before it, which must read nothing that could change.
       if (made(e.args[p]).lets.length && !e.args.slice(0, p).every(plain)) ok = false;
     }
     if (e.k === "get" && e.rec.k === "local" && e.rec.i === p && e.t.key === t.key) reads++;
+    if (e.k === "local" && e.i === p) uses++;
     if ((e.k === "let" && e.i === p) || (e.k === "case" && e.s === p) || ((e.k === "attempt" || e.k === "search") && e.res === p)
       || (e.k === "apply" && e.tmp === p) || (e.k === "list" && (e.item === p || e.acc === p)) || (e.k === "handle" && (e.reason === p || e.save === p || e.frame === p))
       || (e.k === "budget" && (e.save === p || e.res === p))) ok = false;
     kids(e).forEach(walk);
   };
   walk(f.body);
-  return ok && rounds > 0 && reads > 0;
+  return ok && rounds > 0 && reads > 0 && (fresh || uses === reads + passed);
 }
 
 function split(ir: CoreIR, fi: number, p: number, t: RType): void {

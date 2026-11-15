@@ -27,3 +27,17 @@ test("a loop's record goes round as its fields (C68a)", () => {
   assert.equal(makes.length, 1);
   assert.ok(loop.params.length > ir.funcs.find((f) => f.name === "count.fold.characters")!.params.length);
 });
+
+// C236 (GAPS round 19 S2): a record every round passes on as it is, and
+// that is used whole too, stays one. scan's `dfa longest` gives its Dfa to
+// `dfa next` for each character; split into fields, the Dfa was made again
+// for that call every round.
+test("a record a loop passes on unchanged isn't made again each round (C236)", async () => {
+  const { program } = await import("../gaps/scan.ts");
+  const p = program();
+  const ir = lowerCore(p.code, p.info, p.names, [p.main]);
+  const loops = ir.funcs.filter((f) => /^dfa (longest|found from)/.test(f.name));
+  assert.ok(loops.length >= 2, ir.funcs.map((f) => f.name).join(", "));
+  const makes = (e: SExpr): number => (e.k === "make" && e.t.fields.length === 5 ? 1 : 0) + kids(e).reduce((n, x) => n + makes(x), 0);
+  for (const f of loops) assert.equal(makes(f.body), 0, f.name);
+});
