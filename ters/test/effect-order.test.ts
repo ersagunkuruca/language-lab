@@ -10,6 +10,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Session } from "../mcp/session.ts";
+import { subtree } from "../src/model.ts";
 
 class El {
   attrs = new Map<string, string>();
@@ -43,16 +44,17 @@ function program(body: string) {
   return s;
 }
 // Each numbered call, by the order its number gives, as [call's label, n].
-function numbered(s: Session, order = true) {
+function numbered(s: Session, order = true, folded?: Set<string>) {
   const def = s.own.find((d) => s.name(d) === "main")!;
   const svg = typedGraph(s.code, { names: s.allNames, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as never, s.info, def, {
     selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
-    canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), order,
+    canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), order, folded,
   }).root as unknown as El;
   const out: [string, number][] = [];
   for (const g of svg.all().filter((e) => e.getAttribute("class") === "effn")) {
     const box = g.parentElement!, label = box.children.find((c) => c.getAttribute("class") === "cl")?.textContent ?? "";
-    out.push([label, Number(g.all().find((e) => e.tagName === "text")!.textContent)]);
+    const n = g.all().find((e) => e.tagName === "text")!.textContent;
+    out.push([label || box.children.find((c) => c.getAttribute("class") === "rt")?.textContent || "", /^\d+$/.test(n) ? Number(n) : (n as unknown as number)]);
   }
   return out.sort((a, b) => a[1] - b[1]);
 }
@@ -83,4 +85,15 @@ test("a function written in place numbers its own calls from 1, as it runs when 
 test("what a call runs then and there, first's or a handler's thunk, is numbered on", () => {
   const s = program('print(first(show(random()), else "none"))\nprint(show(now()))');
   assert.deepEqual(numbered(s), [["random", 1], ["print", 2], ["now", 3], ["print", 4]]);
+});
+
+// QA 11-15 Q2: folded, a frame hides its calls, so the box says their numbers.
+test("a folded frame says the numbers of the calls with effects inside it", () => {
+  const s = program('print("start")\nfor each([1, 2], (i) => print(show(i) ++ show(random())))');
+  const def = s.own.find((d) => s.name(d) === "main")!;
+  const fn = subtree(s.code, def).find((x) => { const n = s.code.nodes[x]; return n.kind === "lambda" && n.params.length === 1 && s.name(n.params[0]) === "i"; })!;
+  assert.deepEqual(numbered(s).map(([, k]) => k).sort(), [1, 1, 2]);
+  const shut = numbered(s, true, new Set([fn]));
+  // The prints inside are hidden: the box stands for them, 1–2.
+  assert.deepEqual(shut.map(([, k]) => k), [1, "1–2" as unknown as number]);
 });
