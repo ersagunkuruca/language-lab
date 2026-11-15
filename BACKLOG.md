@@ -53,7 +53,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I304 | Filling a long definition through the MCP is slow (GAPS round 19 S7): scan's 146 definitions took 7 minutes, and `scan`, 18 steps, 75 s. I304a (#2773) took scan's 18 steps to 32 s one at a time, 20 s as one text; what is left is about 1 s a step of work over the whole program: the check of each reading (`written` copies every node per reading, then infers), the editor's check per fillValue, and the recheck after. Check only what a step changed (E103's incremental check) | GAPS round 19 | P3 | M | |
+| I304 | Filling a long definition through the MCP is slow (GAPS round 19 S7): scan's 146 definitions took 7 minutes, and `scan`, 18 steps, 75 s. I304a (#2774) took scan's 18 steps to 32 s one at a time, 20 s as one text; what is left is about 1 s a step of work over the whole program: the check of each reading (`written` copies every node per reading, then infers), the editor's check per fillValue, and the recheck after. Check only what a step changed (E103's incremental check) | GAPS round 19 | P3 | M | |
 
 ### Speed of editing
 
