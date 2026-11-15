@@ -67,14 +67,20 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
   // Else the longer one is copied once, with room, as a push does.
   // Folds, so they surely finish: back's items pushed onto front in order
   // over the positions from the last (a fold's arms run from the back),
-  // and front's onto back from front's last item.
+  // one item read with no search (cons-onto.ts's `append(so far, [item])`,
+  // C240), and front's onto back from front's last item.
   const len = (a: Id) => k.call(ARRAY_OPS.length, a);
-  const onBack = def("array append onto back", ["front", "back"], (a, b) => k.fold(k.call(INT_OPS.range, len(b)), [
-    { variant: NIL, names: [], body: () => a },
-    { variant: CONS, names: ["i", "rest"], results: [null, "pushed"], body: ([i], [, r]) => k.call(S.first,
-      k.thunk(() => k.call(ARRAY_OPS.push, r!, k.call(ARRAY_OPS.at, b, k.call(INT_OPS.sub, k.call(INT_OPS.sub, len(b), k.int(1)), i)))),
-      k.thunk(() => r!)) },
-  ]));
+  const onBack = def("array append onto back", ["front", "back"], (a, b) => k.if(k.call(S.equal, len(b), k.int(1)),
+    k.match(k.call(ARRAY_OPS.firstIfAny, b), [
+      { variant: NONE, names: [], body: () => a },
+      { variant: SOME, names: ["item"], body: ([x]) => k.call(ARRAY_OPS.push, a, x) },
+    ]),
+    k.fold(k.call(INT_OPS.range, len(b)), [
+      { variant: NIL, names: [], body: () => a },
+      { variant: CONS, names: ["i", "rest"], results: [null, "pushed"], body: ([i], [, r]) => k.call(S.first,
+        k.thunk(() => k.call(ARRAY_OPS.push, r!, k.call(ARRAY_OPS.at, b, k.call(INT_OPS.sub, k.call(INT_OPS.sub, len(b), k.int(1)), i)))),
+        k.thunk(() => r!)) },
+    ])));
   const onFront = def("array append onto front", ["front", "back"], (a, b) => k.fold(items(a), [
     { variant: NIL, names: [], body: () => b },
     { variant: CONS, names: ["item", "rest"], results: [null, "pushed"], body: ([x], [, r]) => k.call(ARRAY_OPS.pushFront, r!, x) },

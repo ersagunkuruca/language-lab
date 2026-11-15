@@ -21,7 +21,7 @@ import { Lang } from "./dsl.ts";
 import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { intCases, usesIntCases } from "./int-cases.ts";
-import { choose, represent, uses, type Representation } from "./represent.ts";
+import { CARRIED, choose, represent, uses, type Representation } from "./represent.ts";
 import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
 import { consOnto } from "./cons-onto.ts";
@@ -222,10 +222,15 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   let copies: Id[] = [];
   if (boundary) {
     let withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
-    // Where the row's cons is a call and its append cheap (a tree's), a
-    // definition consing onto a call of itself appends at the back
-    // instead, a loop (cons-onto.ts, C232).
-    if ((lists.cost[CONS] ?? "1") !== "1" && cheaperOn(lists, LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!, prelude("append"))) {
+    // Where the row's cons is a call and its append cheap (a tree's), or
+    // its append onto what a loop carries is one step (an array's push at
+    // its free end, C234), a definition consing onto a call of itself
+    // appends at the back instead, a loop (cons-onto.ts, C232). An array's
+    // cons onto a call stayed a recursion as deep as the items, and past
+    // a thousand deep every call under it ran as a generator (pack's
+    // `tokens`, C240).
+    const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
+    if (((lists.cost[CONS] ?? "1") !== "1" && cheaperOn(lists, spec, prelude("append"))) || lists.cost[CARRIED + prelude("append")] === "1") {
       const c = consOnto(withBoundary, names, defs, prelude("append"));
       if (c.made.length) {
         withBoundary = { nodes: { ...withBoundary.nodes, ...c.nodes }, defs: [...withBoundary.defs, ...c.made] };

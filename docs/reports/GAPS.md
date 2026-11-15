@@ -4017,6 +4017,21 @@ columns read the workers' plain array (C233). Against the ideal now:
 
 The command was `BUILT=1 RUNS=3 node compiler/gaps/bench-pack.ts 200 800
 3200 12800`; native and wasi include starting the process.
+
+C240: `tokens`, `prose` and the rest cons onto a call of themselves, and on
+an array that cons stayed a recursion as deep as the items. In the core
+IR's JavaScript every call more than a thousand deep runs as a generator,
+so everything `tokens` called (the run lengths, the chains' tree) ran so.
+cons-onto.ts now applies on arrays too, since an append onto what a loop
+carries is a push there. Against the ideal at 12800 words:
+
+| words | core | native | wasi |
+|---|---|---|---|
+| 3200 | 8.6x (was 14x) | 3.1x | 12.8x |
+| 12800 | 7.8x (was 17.5x) | 3.0x | 9.1x (7.5x before, about 20% slower) |
+
+WASI loses some: each item appended is made as an array of one first.
+
 ## Round 19: scan, regular expressions made automata (2026-11-15)
 
 `compiler/gaps/scan` makes up a server log and scans it with 19 regular

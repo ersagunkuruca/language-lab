@@ -59,7 +59,7 @@ function program() {
   const c = withLibraryRepresentations(code, info, names, run, [bumped, ascending, anyAbove, weighted, run]);
   assert.deepEqual(c.chosen, ["List as array of List"]);
   const info2 = infer(c.code, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
-  return { lower: () => lowerScalar(c.code, info2, c.names, [run], { data: true }), run };
+  return { lower: () => lowerScalar(c.code, info2, c.names, [run], { data: true }), run, names: c.names };
 }
 
 // Σ j(j + 1) for j < n, ascending, an item above n − 2, the item at 3.
@@ -78,7 +78,10 @@ test("lists as arrays a hundred thousand items deep on WebAssembly: consing, and
   assert.equal(plain(5), want(5));
   assert.throws(() => plain(100_000), RangeError);
   const ir = p.lower();
-  assert.equal(consLoops(ir), 3, "bumped, ascending, any above");
+  // bumped conses onto a call of itself: a loop already, appending at
+  // the back of what it carries (cons-onto.ts, C240).
+  assert.ok(Object.values(p.names).includes("bumped onto"));
+  assert.equal(consLoops(ir), 2, "ascending, any above");
   assert.equal(deepLoops(ir), 1, "weighted");
   const looped = await call(ir);
   for (const n of [0, 1, 2, 5, 3000, 100_000]) assert.equal(looped(n), want(n), `n = ${n}`);
