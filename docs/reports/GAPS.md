@@ -16,7 +16,8 @@ and interpreter, on every target), 10 clinic (a simulation, written in
 the editor), 11 crew (workers as fibers), 12 break (written through the
 MCP), 13 pond (stable references, free lists and threads), 14 rota (a
 search written with Choice), 15 fit (gradients of functions chosen at
-run time), 16 trek (a hiking track with units). Each round's gaps are
+run time), 16 trek (a hiking track with units), 17 depot, 18 pack and 19
+scan (regular expressions made automata). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
 C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
@@ -4016,3 +4017,174 @@ columns read the workers' plain array (C233). Against the ideal now:
 
 The command was `BUILT=1 RUNS=3 node compiler/gaps/bench-pack.ts 200 800
 3200 12800`; native and wasi include starting the process.
+## Round 19: scan, regular expressions made automata (2026-11-15)
+
+`compiler/gaps/scan` makes up a server log and scans it with 19 regular
+expressions, each made an automaton three ways:
+- the log is 2000 lines (or as many as asked) drawn by a linear
+  congruential generator from seed 20261115: a time, a level, a host, a
+  user, a private address, a request in quotes, how long it took, a
+  hexadecimal id and a few words;
+- a pattern's text is read by recursive descent (three definitions that
+  call each other, on Nat fuel) into a `Regex`: classes `[...]` and
+  `[^...]` with ranges and escapes, `.`, groups, `|`, `*`, `+`, `?` and
+  `{m}`, `{m,}`, `{m,n}`, with `^` and `$`. It is made simpler, written
+  back as text and read again;
+- Thompson's automaton is built from the end back, as a `Map Int Step`;
+- the characters are cut into classes every edge treats alike, and the
+  subset construction makes a `Dfa`: a `Map (Int, Int) Int` of moves from
+  a state and a class, a `Set Int` of final states;
+- Moore's refinement gives the fewest states, and a breadth-first search
+  over pairs of states checks that it matches the same texts;
+- every line is searched for each rule's leftmost longest match by all
+  three automata, and again from its end by the reversed expression's;
+- the report gives each rule's states and matches, a line with its match
+  marked, the users and hosts seen most, the slowest request, a shortest
+  text each rule matches, and the texts two rules both match whole.
+
+It was chosen to try what no round had: a parser of a small language,
+mutual recursion, an automaton as a map with tuple keys, sets of states
+as keys of a map (`Map (Set Int) Int` in the subset construction), and a
+hot loop of one map lookup per character. **146 definitions** (8 types,
+138 functions and values), against depot's 129 and pack's 40.
+
+It was written through the MCP (`gaps-round19/` in the project's files:
+`head.ts` and `body1.ts` to `body4.ts`, run as one driver). No `replace`
+was refused once the text was right, and eight `as` answers were given
+(`pick`'s List, five tuples' sizes, `compiled of`'s Rule). The text had
+to be changed four ways first (S6).
+
+Files:
+- `compiler/gaps/scan/`: the program and its README (credits).
+- `compiler/gaps/scan.ideal.js`: the same by hand. Expressions are plain
+  objects, the automaton's states parallel arrays, a set of states a
+  sorted array made with a mark per state, a DFA's moves an `Int32Array`
+  indexed by state and class. The class of a code is found as the program
+  finds it, counting the borders at or below it, so the comparison is of
+  what the compiler makes of the same algorithm.
+- `compiler/gaps/scan.ts`: the evaluator, the core IR's module and the
+  ideal, in one process.
+- `compiler/test/scan.test.ts`: the three print the same on 40 lines, on
+  none and one; the core IR and the ideal on 400 lines and on arguments
+  that aren't whole numbers. `ters wasi` and `ters native` print what
+  `ters run` prints on 200 lines.
+- `compiler/gaps/bench-scan.ts`: the table below.
+
+**Correctness.** The evaluator, the core IR's module, `ters native`,
+`ters wasi` and the ideal print the same at every size tried, up to 8000
+lines, once S1 was worked around. Each agreed the first time. Writing the
+ideal found a bug in the program itself, which was fixed before measuring:
+a class printed with a range whose ends were escapes (`[^\t-\r G]`, what
+`[^G\s]` leaves out) didn't read back, since the reader took a range's
+ends only as characters. They may be escapes now, and `\r` is one.
+
+### Results
+
+```
+lines  way        scanned   against the ideal
+200    evaluator  22244 ms   325x
+200    core         309 ms   4.5x
+200    ideal         69 ms
+200    native       312 ms   4.6x   (a process, start-up included)
+200    wasi         283 ms   4.1x   (a process in Node)
+2000   core        2792 ms   3.9x
+2000   ideal        714 ms
+2000   native      2735 ms   3.8x   (a process)
+2000   wasi        1974 ms   2.8x   (a process in Node)
+8000   core       11258 ms   4.1x
+8000   ideal       2729 ms
+8000   native     11177 ms   4.1x   (a process)
+8000   wasi        9597 ms   3.5x   (a process in Node)
+```
+
+The command was `BUILT=1 RUNS=3 node compiler/gaps/bench-scan.ts 200 2000
+8000`. Every way grows linearly, as the ideal does: the gap is a constant
+factor, unlike pack's and depot's. The lists were chosen as written (Map as
+a weight-balanced tree, Nat as an Int), and `ters compile` takes 7.5 s.
+
+Where the core IR's 2.8 s at 2000 lines go (a CPU profile of the run
+alone; shares are inclusive and overlap):
+- `dfa next`, one per character per automaton: 25%. Of that, `class of`
+  is 14%, as in the ideal; the rest is the map lookup (S2 to S4);
+- `codes of`, one per line per rule: 21% (S5);
+- `nfa step`, the automaton itself: 17%, its sets of states sorted lists
+  with `append` (S8);
+- the garbage collector: 13%, most of it the allocations of S2 to S5.
+
+### The gaps, ranked
+
+**S1. A builtin passed as a value isn't compiled (C235).**
+`for each(lines, print)` is refused by the core IR, `ters wasi` and
+`ters native` alike: "main isn't in WebAssembly: calls scan, which uses
+print as a value (functions and data need a heap)". The evaluator runs it.
+`print` is an effect's operation, so the lowering only knows it called.
+Written `(line) => print(line)` it compiles: the compiler could make that
+lambda itself where an operation or builtin is used as a value.
+
+**S2. A record a loop passes on is made again at each call (C236).**
+`dfa longest(d, s, cs, pos, best, at end)` is a loop; the loop keeps the
+five fields of `d` as its own variables, and so each character calls
+`dfa next(new K24(l0, l1, l2, l3, l4), s, c)`, a new `Dfa` record built
+to be read at once. `dfa found from` does the same around it. The loop
+could keep `d` itself as well, since it never changes, or pass the fields
+on to a copy of `dfa next` that takes them.
+
+**S3. A lookup with a default is a try (C237).** `first(value at(d.moves,
+(s, cls)), else -1)` compiles to a `try` around the lookup, a check for
+`R.FAIL` and a `catch` that restores the depth, once per character. A
+`first` whose search is one lookup that fails at once has no backtracking
+to catch: a lookup that returns a default would do.
+
+**S4. A map with pair keys is read through a tree, a tuple made per read
+(C238).** The moves are a `Map (Int, Int) Int`, built once and then read
+14 million times for 2000 lines (counted in the ideal); each read allocates the key `(s, cls)`
+and walks a weight-balanced tree comparing tuples. The ideal indexes an
+`Int32Array` by `s · classes + cls`. A map built once and only read could
+be a hash table (C63's tables), and a tuple key read field by field
+needn't be allocated.
+
+**S5. Codes from a text go through a list of one-character texts (C239).**
+`codes of(t) = map(characters(t), code of)`: `characters` splits the text
+(with a surrogate check by regular expression) into a list of texts, and
+`character code` of each is a `Choice`. The ideal walks the code points.
+`map(characters(t), f)` with `f` reading the code could be fused into one
+walk over the text, as C23 fused `characters` with a fold.
+
+**S6. Text the MCP doesn't read (I303).**
+- A `match` must start a line or a case's body: `(match b …)` inside a
+  case and `if … else match cs …` are "isn't read as a whole", though the
+  view never prints them so (it puts a match on its own line). Each was
+  rewritten: a helper (`class or either`), or the `if` moved into the
+  cases.
+- A field read on a tuple asks its size: `p.first` on a triple asks
+  `as` (Tuple2 or Tuple3), and the first answer the driver gives is
+  Tuple2, which then fails at `p.third`. It took `as: "Tuple3"` for
+  `pair move` and `overlap from`. This is I218c working as designed, but
+  the question could look at the other fields the definition reads.
+- A definition used before it is written needs a hole first (`declare` in
+  the driver): `parse alt`, called by `parse atom`, was "there's no
+  function named parse alt". Writing it with a hole first works.
+
+**S7. Writing a long definition is slow (I304).** The 146 definitions
+took 7 minutes through the MCP, 2.9 s each, and `scan`, with 18 steps, 75
+s: each step's `replace` checks the program again. The check alone is
+about 1 s.
+
+**S8. Smaller things, seen, not rows yet.**
+- `ters native` is no faster than the core IR's JavaScript here (4.1x
+  both at 8000 lines), where on pack it was 1.5 times faster. Its cost wasn't looked at.
+- The automaton's sets of states are sorted lists (`Set Int` isn't chosen
+  as a tree here, rightly for sets of a dozen), and `grown` appends each
+  state's successors to its list of states to visit.
+  The ideal uses a stack and a mark per state.
+- `nfa longest` and `dfa longest` came out generic in their positions
+  (`a where a is a Number`), since nothing but `+ 1` and `−1` fixes them.
+  They are specialized at Int, but the additions still go through
+  `int.add`, which checks for overflow (2.7%).
+- The evaluator is 325x the ideal.
+
+### Next
+
+1. S1 (C235), a correctness gap on every compiled target.
+2. S2 to S4 (C236 to C238), measured after each on the 8000 lines.
+3. S5 (C239), then S6 and S7 (I303, I304) for the MCP.
