@@ -36,6 +36,11 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
+| C229 | Bytes keeps every list as written: a program that reads `byte items(utf8 of(text))` has its lists refused as trees and arrays, since Bytes holds a list the rewrite doesn't change, and the split beside it can't convert a recursive type (a Map's tree of lists). Bytes has no parameters, so it never holds the program's lists: keep the library's definitions between Bytes and plain lists as written, called as builtins are | [GAPS.md](docs/reports/GAPS.md) round 18 P1 | 2026-11-15 |
+| C230 | Equality on a stored list (a tree's, an array's) turns both into cons cells: `bits = nil` once a byte is n² over the bits. Lists of different lengths differ in one step | GAPS.md round 18 P2 | 2026-11-15 |
+| C231 | A library definition the lists' rewrite copies (`natural`, a fold over a range) isn't replaced by another row's job for it (Nat as an Int's constant-time `natural`), which looks for the original's id | GAPS.md round 18 P3 | 2026-11-15 |
+| L262 | `remainder(n, length(vocabulary))`, a literal list of 40, performs Choice: the checker doesn't read that a literal list isn't empty | GAPS.md round 18 P4 | 2026-11-15 |
+| L263 | No reading an Int from text: `read number` gives a Float64, so a count from the arguments is `whole of(first(read number(…), else 2000.0))` | GAPS.md round 18 P5 | 2026-11-15 |
 
 ## E: Editor
 
