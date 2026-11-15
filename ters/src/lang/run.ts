@@ -236,7 +236,8 @@ export const ORDER_VALUES = [ORDER_V.before, ORDER_V.same, ORDER_V.after].map((t
 export const META = Symbol("node");
 const tag = <F extends Fn>(f: F, meta: { lambda: Id; readonly env: Map<Id, Value> } | { prim: Id }): F => Object.assign(f, { [META]: meta });
 
-interface Fuel { left: number }
+// `base`: how many choice points there were when the `with fuel` began.
+interface Fuel { left: number; base?: number }
 
 // A page runs each update (a view, a text, a handler) under a step budget:
 // the same count as `with fuel` (one per call into a definition the checker
@@ -1135,6 +1136,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     eval(id: Id, env: Env) { this.mode = EVAL; this.id = id; this.env = env; }
     ret(v: Value) { this.mode = RET; this.val = v; }
     fail() { this.mode = FAIL; }
+    // Running out of a `with fuel` ends its whole action, with no answer
+    // (SPEC 5.6, I294): the choice points made inside it go, an `all` or
+    // `count` inside it among them, so none gives what it had so far.
+    outOfFuel() {
+      const b = this.fuel?.base;
+      if (b !== undefined && this.cps.length > b) this.cps.length = b;
+      this.fail();
+    }
     push(f: Frame) { f.next = this.k; this.k = f; }
 
     // Call a function value with its arguments, in the current continuation.
@@ -1353,7 +1362,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     handle(h: Id, args: Value[]): void {
       if (h === S.fuel) {
         this.push({ t: "fuelExit", saved: this.fuel, next: null });
-        this.fuel = { left: args[0] as number };
+        this.fuel = { left: args[0] as number, base: this.cps.length };
         return this.apply(args[1], []);
       }
       if (h === S.seeded) {
@@ -1509,7 +1518,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // `results(choices(numbers))`, 326 calls and one step).
         if (head.kind === "ref" && info.divergent.has(head.target)) {
           if (!this.fuel) spendStep();
-          else if (--this.fuel.left < 0) return this.fail();
+          else if (--this.fuel.left < 0) return this.outOfFuel();
         }
         return this.apply(vals[0], vals.slice(1));
       }

@@ -278,9 +278,13 @@ ends.
 
 5.6. **Fuel.** `with fuel(n, action)` runs the action with a budget of n
 **steps**. A step is one call into a definition the checker couldn't
-prove ends (one with `Diverge` in its own type). When the budget runs
-out, there is no answer (`Choice`). So `with fuel` turns `Diverge` into
-`Choice`. Which definitions count is the checker's, so it is part of the
+prove ends (one with `Diverge` in its own type), counted once its
+inputs are worked out, so a call made again for each answer of a choice
+in them counts each time. When the budget runs out, the whole action has
+no answer (`Choice`): a search inside it (an `all`, a `count`) ends with
+it and gives nothing of what it had found, so a search cut short never
+looks finished. Answers the action gave before it ran out stay given.
+So `with fuel` turns `Diverge` into `Choice`. Which definitions count is the checker's, so it is part of the
 meaning (S4, L199): when the checker learns to prove a definition ends,
 calls into it stop counting, and a `with fuel(n, …)` may then find an
 answer where it found none, or a different first one. Such a checker
