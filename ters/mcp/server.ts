@@ -95,7 +95,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "comment",
-    description: "Set (or with empty text, remove) the comment on a node.",
+    description: "Set (or with empty text, remove) the comment on a node, or with at \"program\" the program's own comment (shown in the editor's Program tab).",
     inputSchema: obj({ at: str("id"), text: str("comment") }, ["at", "text"]),
     call: (a) => program().comment(String(a.at), String(a.text)),
   },

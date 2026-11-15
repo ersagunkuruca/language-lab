@@ -739,7 +739,10 @@ export class Session {
   }
 
   comment(at: string, text: string): string {
-    const id = this.resolve(at);
+    // `program` is the program's own comment, a line each, which the
+    // editor shows in the Program tab and above the picture (credits go
+    // there, CREDITS.md "How to credit").
+    const id = at === "program" ? "program" : this.resolve(at);
     const was = { code: this.code, names: this.names, comments: this.comments };
     const comments = { ...this.comments };
     if (text.trim()) comments[id] = text.trim(); else delete comments[id];
