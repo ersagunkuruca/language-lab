@@ -61,6 +61,8 @@ export interface Representation {
   store?: Id;
   // The definition that writes it, for one a program writes (L108).
   def?: Id;
+  // Declared costs its jobs' definitions raised (job-cost.ts, L247).
+  raised?: import("./job-cost.ts").Raised[];
 }
 
 export { LADDER } from "./cost.ts";
