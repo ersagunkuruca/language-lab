@@ -38,12 +38,16 @@ export const NAMED: [string, Unit][] = [
 const SUP: Record<string, string> = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", ".": "·" };
 const sup = (n: number) => (n === 1 ? "" : String(round(n)).split("").map((c) => SUP[c] ?? c).join(""));
 
-export function formatUnit(u: Unit): string {
-  const v = toVec(u);
-  if (v.every((x) => Math.abs(x) < EPS)) return "1";
-  for (const [name, n] of NAMED) if (unitEq(u, n)) return name;
-  const num = BASE.filter((_, i) => v[i] > EPS).map((b) => b + sup(v[BASE.indexOf(b)])).join("·");
-  const den = BASE.filter((_, i) => v[i] < -EPS).map((b) => b + sup(-v[BASE.indexOf(b)])).join("·");
+// A pin's unit variables (L252e, "~0", "~1"…) show as u, v, w, then u₄….
+export function formatUnit(u: Unit | UnitExpr): string {
+  const v = toVec(u as Unit);
+  const vars = Object.entries(u).filter(([k, x]) => k.startsWith("~") && x && Math.abs(x) > EPS) as [string, number][];
+  if (v.every((x) => Math.abs(x) < EPS) && !vars.length) return "1";
+  if (!vars.length) for (const [name, n] of NAMED) if (unitEq(u as Unit, n)) return name;
+  const varName = (k: string) => { const i = Number(k.slice(1)); return i < 3 ? "uvw"[i] : `u${[...String(i + 1)].map((c) => "₀₁₂₃₄₅₆₇₈₉"[+c]).join("")}`; };
+  const parts: [string, number][] = [...BASE.map((b, i) => [b, v[i]] as [string, number]), ...vars.map(([k, x]) => [varName(k), x] as [string, number])];
+  const num = parts.filter(([, x]) => x > EPS).map(([b, x]) => b + sup(x)).join("·");
+  const den = parts.filter(([, x]) => x < -EPS).map(([b, x]) => b + sup(-x)).join("·");
   return den ? `${num || "1"}/${den}` : num;
 }
 
@@ -303,7 +307,7 @@ function collect(code: Code, defId: Id, prefix: string, bindings: Map<Id, string
         if (target.kind === "binder") same(id, n.target, "variable", id);
         // A value named, `earth radius` (L257): what its definition says of
         // its value is said of this use, so 6371000.0 m is a length here.
-        else if (target.kind === "def" && target.body && code.nodes[target.body]?.kind !== "lambda") out.push(...calleeConstraints(code, n.target, (k) => (k === "out" ? t(id) : `${prefix}${id}:${k}`), `${prefix}${id}/`, [...path, defId]));
+        else if (target.kind === "def" && target.body && code.nodes[target.body]?.kind !== "lambda") out.push(...calleeConstraints(code, n.target, (k) => (k === "out" ? t(id) : `${prefix}${id}:${k}`), `${prefix}${id}/`, [...path, defId], undefined, id));
         return;
       }
       case "lambda": n.params.forEach(declare); visit(n.body); return;
@@ -312,7 +316,7 @@ function collect(code: Code, defId: Id, prefix: string, bindings: Map<Id, string
           // A call read sideways: each port is a given expression or a binder.
           Object.values(n.given).forEach(visit);
           const term = (k: string) => (n.given[k] ? t(n.given[k]) : bindsOf(n)[k] ? t(bindsOf(n)[k]) : `${prefix}${id}:${k}`);
-          if (code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.push(...calleeConstraints(code, useTarget(code.nodes, n), term, `${prefix}${id}/`, [...path, defId]));
+          if (code.nodes[useTarget(code.nodes, n)]?.kind === "def") out.push(...calleeConstraints(code, useTarget(code.nodes, n), term, `${prefix}${id}/`, [...path, defId], undefined, id));
           else if (code.nodes[useTarget(code.nodes, n)]?.kind === "builtin") out.push(...rules((code.nodes[useTarget(code.nodes, n)] as { op: string }).op, term, id, id));
           if (isBound(n)) { visit(n.body); same(id, n.body, "solve", id); }
           return;
@@ -370,7 +374,7 @@ function collect(code: Code, defId: Id, prefix: string, bindings: Map<Id, string
           // The functions it's given, written out or passed on (L252d).
           const given = new Map<Id, Fn>();
           keys.forEach((k, i) => { const f = fnOf(n.args[i]); if (f) given.set(k, f); });
-          out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, [...path, defId], given));
+          out.push(...calleeConstraints(code, fn.target, (k) => (k === "out" ? t(id) : t(n.args[keys.indexOf(k)])), `${prefix}${id}/`, [...path, defId], given, id));
         }
         return;
       }
@@ -411,7 +415,7 @@ function collect(code: Code, defId: Id, prefix: string, bindings: Map<Id, string
 // (its body's and, through the summaries it used, its callees'), so a
 // program made from another by a few nodes (each filling the palette
 // tries) finds it again while those nodes are the same.
-type Summary = { out: Constraint[]; read: [Id, Node][] };
+type Summary = { out: Constraint[]; read: [Id, Node][]; pins: string };
 const summaries = new WeakMap<Node, Summary>();
 const PORT = "\u0000";
 let summarising: Set<Id> = new Set();
@@ -421,7 +425,7 @@ let reading: [Id, Node][][] = [];
 function summaryOf(code: Code, fn: Id): Constraint[] {
   const def = code.nodes[fn];
   const was = summaries.get(def);
-  if (was && was.read.every(([id, n]) => code.nodes[id] === n)) { reading[reading.length - 1]?.push(...was.read); return was.out; }
+  if (was && was.pins === pinsKey(code) && was.read.every(([id, n]) => code.nodes[id] === n)) { reading[reading.length - 1]?.push(...was.read); return was.out; }
   // A callee being summarised calls itself: as when inlining, the inner
   // call adds nothing. A summary made while one it calls, not itself, was
   // cut short so (a group calling each other) isn't kept: it lacks what
@@ -449,7 +453,7 @@ function summaryOf(code: Code, fn: Id): Constraint[] {
     try { cs = cb ? collect(code, fn, "\u0001/", map, [], new Map(), fs) : []; } finally { following = was; }
     const seeds = [...map.values()].flatMap((p) => [...KNOWN].filter(Boolean).map((k) => slotTerm(p, k)));
     const out = project(close(cs, fs, seeds), (t) => t.startsWith(PORT), fn);
-    if (cuts === cutsBefore) summaries.set(def, { out, read });
+    if (cuts === cutsBefore) summaries.set(def, { out, read, pins: pinsKey(code) });
     return out;
   } finally {
     summarising.delete(fn);
@@ -501,10 +505,18 @@ function project(cs: Constraint[], keep: (t: string) => boolean, fn: Id): Constr
   return out;
 }
 
-function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, path: Id[], given: Map<Id, Fn> = new Map()): Constraint[] {
+function calleeConstraints(code: Code, fn: Id, port: (k: string) => string, prefix: string, path: Id[], given: Map<Id, Fn> = new Map(), at?: Id): Constraint[] {
   const cdef = get(code, fn, "def");
   const cb = cdef.body ? code.nodes[cdef.body] : null;
   if (!cb) return [];
+  // A pinned callee is said by its pin's units (L252e), whatever its body
+  // says, as its type is: a body may promise more than its pin. Not when
+  // it is given a function, which the pin can't say the units of.
+  const pu = pinUnitsAt(code, fn);
+  if (pu && !given.size) {
+    const ports = cb.kind === "lambda" ? cb.params : [];
+    return fromPin(pu, (i) => port(i === "out" ? "out" : ports[+i] ?? `${i}`), prefix, at ?? fn);
+  }
   // A callee given a function (map, keep) is read through: its summary
   // can't say what the function does (L252d). So is the program's own
   // that the definition calls itself, so a message can name the terms
@@ -644,7 +656,7 @@ export class UnitsBefore {
   // A filling declares no unit, so the program has one just when the one
   // before it does.
   readonly anyUnit: boolean;
-  constructor(code: Code) { this.code = code; this.anyUnit = declaresUnit(code); }
+  constructor(code: Code, pins?: PinsWithUnits) { this.code = code; if (pins) unitPins(code, pins); this.anyUnit = declaresUnit(code); }
   of(d: Id) {
     if (!this.solved.has(d)) {
       const sys = new System(), cs = constraints(this.code, d);
@@ -673,6 +685,7 @@ const unworded: Inference["conflicts"] = [{ why: UNWORDED }];
 const solvedBy = new Map<string, Inference>();
 const constrained = new WeakMap<Code, Map<Id, Constraint[]>>();
 function constraintsOf(code: Code, d: Id): Constraint[] {
+  fresher(code);
   let m = constrained.get(code);
   if (!m) constrained.set(code, (m = new Map()));
   if (!m.has(d)) m.set(d, constraints(code, d));
@@ -720,7 +733,8 @@ const declaresUnit = (code: Code) => {
   return d;
 };
 
-export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore, quick = false): { id: Id; message: string }[] {
+export function unitProblems(code: Code, names: Record<Id, string> = {}, only?: Set<Id>, before?: UnitsBefore, quick = false, pins?: PinsWithUnits): { id: Id; message: string }[] {
+  if (pins) unitPins(code, pins);
   if (!(before ? before.anyUnit : declaresUnit(code))) return [];
   const out: { id: Id; message: string }[] = [];
   for (const d of code.defs) {
@@ -774,13 +788,17 @@ function unitMessage(code: Code, { why, node, sides, was, want }: Inference["con
 // 120 s and froze its page in the editor (#2631). Kept per program and
 // definition, as render.ts asks again on every draw.
 // Units by slot ("" a number's own, "1" a map's values', L252e).
-export type Slots = Record<string, Unit>;
-export type SignatureUnits = { params: (Unit | undefined)[]; result?: Unit; slots: { params: Slots[]; result: Slots } };
+export type Slots = Record<string, UnitExpr>;
+export type SignatureUnits = { params: (UnitExpr | undefined)[]; result?: UnitExpr; slots: { params: Slots[]; result: Slots } };
 const signatures = new WeakMap<Code, Map<Id, SignatureUnits | null>>();
 export function signatureUnits(code: Code, defId: Id): SignatureUnits | null {
+  fresher(code);
   let m = signatures.get(code);
   if (!m) signatures.set(code, (m = new Map()));
-  if (!m.has(defId)) m.set(defId, declaresUnit(code) ? signatureOf(code, defId) : null);
+  // A pinned definition shows its pin's units, unit variables and all
+  // (L252e), in a program with no unit of its own too.
+  const pu = pinUnitsAt(code, defId);
+  if (!m.has(defId)) m.set(defId, pu ? pinSignature(code, defId, pu) : declaresUnit(code) ? signatureOf(code, defId) : null);
   return m.get(defId)!;
 }
 function signatureOf(code: Code, defId: Id): SignatureUnits | null {
@@ -796,4 +814,205 @@ function signatureOf(code: Code, defId: Id): SignatureUnits | null {
   if (body?.kind !== "lambda") { const r = slots(def.body); return { params: [], result: r[""], slots: { params: [], result: r } }; }
   const ps = body.params.map(slots), r: Slots = body.results?.length ? {} : slots(body.body);
   return { params: ps.map((x) => x[""]), result: r[""], slots: { params: ps, result: r } };
+}
+
+// ---------------------------------------------------------------- pins
+
+// A pinned definition's units (L252e): what its pin promises of its
+// inputs' and result's units, so an edit that changes them is refused at
+// the definition, as one that changes its type is, and its callers are
+// checked against the pin, not the body. Keyed by port and slot: "0" its
+// first input, "out" its result, "1.1" the values of a Map given second
+// (a slot as above). Each is a unit in base units and unit variables, a
+// variable's key "~n": rate is {"0": {"~0": 1}, "1": {"~1": 1}, "out":
+// {"~0": 1, "~1": -1}}, shown `(Float64 u, Float64 v) -> Float64 u/v`.
+// Variables are numbered by where they first appear and scaled to whole
+// powers, so equal units are equal JSON: sqrt is (Float64 u²) -> Float64 u.
+// A port it doesn't name is free.
+export type UnitExpr = { [k: string]: number | undefined };
+export type PinUnits = Record<string, UnitExpr>;
+export type PinsWithUnits = Record<Id, { units?: PinUnits } | undefined>;
+const VAR = "~";
+
+// The pins a check of `code` reads (infer.ts gives its options' pins), and
+// the key of their units: a summary or a definition's constraints made
+// with other pinned units are made again.
+const pinned = new WeakMap<Code, { pins: PinsWithUnits; key: string }>();
+export function unitPins(code: Code, pins: PinsWithUnits | undefined) {
+  const had = pinned.get(code);
+  if (had?.pins === pins) return;
+  pinned.set(code, { pins: pins ?? {}, key: pins ? keyOfPins(pins) : "" });
+}
+const pinKeys = new WeakMap<PinsWithUnits, string>();
+function keyOfPins(pins: PinsWithUnits): string {
+  let k = pinKeys.get(pins);
+  if (k === undefined) {
+    const withUnits = Object.entries(pins).filter(([, p]) => p?.units).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    pinKeys.set(pins, (k = withUnits.length ? JSON.stringify(withUnits.map(([d, p]) => [d, p!.units])) : ""));
+  }
+  return k;
+}
+const pinsKey = (code: Code) => pinned.get(code)?.key ?? "";
+const pinUnitsAt = (code: Code, d: Id): PinUnits | undefined => pinned.get(code)?.pins[d]?.units;
+const cachedWith = new WeakMap<Code, string>();
+function fresher(code: Code) {
+  const k = pinsKey(code);
+  if (cachedWith.get(code) === k) return;
+  cachedWith.set(code, k);
+  constrained.delete(code);
+  signatures.delete(code);
+}
+
+const portOf = (key: string): [string, string] => { const i = key.indexOf("."); return i < 0 ? [key, ""] : [key.slice(0, i), key.slice(i + 1)]; };
+// The pin's units said of a call's ports, each variable a term of the
+// call's own (`prefix`), so two calls of rate take two pairs of units.
+function fromPin(pu: PinUnits, port: (i: string) => string, prefix: string, node: Id): Constraint[] {
+  return Object.entries(pu).map(([key, e]) => {
+    const [i, slot] = portOf(key);
+    const terms: [string, number][] = [[slotTerm(port(i), slot), 1]];
+    for (const [k, x] of Object.entries(e)) if (k.startsWith(VAR)) terms.push([prefix + k, -(x ?? 0)]);
+    return { terms, rhs: toVec(e as Unit), why: "the units its pin says", node };
+  });
+}
+
+// What the body says of its ports' units: its summary, with each port
+// named by its place ("0", "out") and slot.
+function bodyUnits(code: Code, d: Id): { cs: Constraint[]; order: string[] } | null {
+  const def = code.nodes[d];
+  if (def?.kind !== "def" || !def.body) return null;
+  const b = code.nodes[def.body];
+  const params = b?.kind === "lambda" ? b.params : [];
+  const place = new Map<string, string>(params.map((p, i) => [PORT + p, `${i}`]));
+  place.set(PORT + "out", "out");
+  const rename = (t: string) => { const [base, slot] = baseOf(t), p = place.get(base); return p === undefined ? null : slot ? `${p}.${slot.slice(SLOT.length)}` : p; };
+  const cs: Constraint[] = [];
+  for (const c of summaryOf(code, d)) {
+    if (!c.terms.length) return null;
+    const terms = c.terms.map(([t, v]) => [rename(t), v] as [string | null, number]);
+    if (terms.some(([t]) => t === null)) continue;
+    cs.push({ ...c, terms: terms as [string, number][] });
+  }
+  const slots = [...KNOWN].sort((a, b) => a.length - b.length || (a < b ? -1 : 1));
+  const order = [...params.map((_, i) => `${i}`), "out"].flatMap((p) => slots.map((s) => (s ? `${p}.${s}` : p)));
+  return { cs, order };
+}
+
+// The constraints `cs` over the ports in `order`, solved for the latest
+// ports in terms of the earliest (Gauss-Jordan, pivoting on the last port
+// a row names), so each port is a unit in the variables of the free ones.
+// Null when they contradict each other.
+function parametrize(cs: Constraint[], order: string[], keep: (key: string) => boolean): PinUnits | null {
+  type Row = { coef: Map<string, number>; rhs: Vec };
+  const cols = [...order, ...new Set(cs.flatMap((c) => c.terms.map(([t]) => t)).filter((t) => !order.includes(t)))];
+  let rows: Row[] = cs.map((c) => { const coef = new Map<string, number>(); for (const [t, v] of c.terms) coef.set(t, (coef.get(t) ?? 0) + v); return { coef, rhs: [...c.rhs] }; });
+  const pivots = new Map<string, Row>();
+  const sub = (r: Row, p: Row, col: string) => {
+    const c = r.coef.get(col);
+    if (!c) return;
+    for (const [k, v] of p.coef) { const nv = (r.coef.get(k) ?? 0) - c * v; if (Math.abs(nv) < EPS) r.coef.delete(k); else r.coef.set(k, nv); }
+    r.rhs = r.rhs.map((x, i) => x - c * p.rhs[i]);
+  };
+  for (const col of [...cols].reverse()) {
+    const r = rows.find((x) => Math.abs(x.coef.get(col) ?? 0) > EPS);
+    if (!r) continue;
+    rows = rows.filter((x) => x !== r);
+    const pv = r.coef.get(col)!;
+    for (const [k, v] of r.coef) r.coef.set(k, v / pv);
+    r.rhs = r.rhs.map((x) => x / pv);
+    for (const o of [...rows, ...pivots.values()]) sub(o, r, col);
+    pivots.set(col, r);
+  }
+  if (rows.some((r) => r.rhs.some((x) => Math.abs(x) > EPS))) return null;
+  // Each port: a pivot's in the free ports, a free one its own variable.
+  const raw = new Map<string, { rhs: Vec; vars: Map<string, number> }>();
+  for (const col of cols) {
+    if (!cols.includes(col) || !keep(col)) continue;
+    const p = pivots.get(col);
+    if (!p) { raw.set(col, { rhs: [...ZERO], vars: new Map([[col, 1]]) }); continue; }
+    const vars = new Map<string, number>();
+    for (const [k, v] of p.coef) if (k !== col) vars.set(k, -v);
+    raw.set(col, { rhs: p.rhs, vars });
+  }
+  // Variables numbered by first appearance, each scaled so its powers are
+  // whole (u² rather than u^½).
+  const num = new Map<string, number>(), scale = new Map<string, number>();
+  for (const { vars } of raw.values()) for (const [k, v] of vars) {
+    if (!num.has(k)) num.set(k, num.size);
+    let s = scale.get(k) ?? 1;
+    for (let d = 1; d <= 12; d++) if (Math.abs(v * s * d - Math.round(v * s * d)) < 1e-6) { s *= d; break; }
+    scale.set(k, s);
+  }
+  const out: PinUnits = {};
+  for (const [col, { rhs, vars }] of raw) {
+    const e: UnitExpr = { ...toUnit(rhs) };
+    for (const [k, v] of vars) { const x = round(v * scale.get(k)!); if (x) e[VAR + num.get(k)] = x; }
+    out[col] = e;
+  }
+  return out;
+}
+
+// The units to pin a definition at: what its body says of its ports, of
+// those `keep` says can be numbers. Undefined when it says nothing.
+export function pinUnitsOf(code: Code, d: Id, keep: (port: string, slot: string) => boolean): PinUnits | undefined {
+  const b = bodyUnits(code, d);
+  if (!b || !b.cs.length) return undefined;
+  // What it says of the ports that can be numbers, the rest (an Int's)
+  // taken out.
+  const kept = (key: string) => { const [p, s] = portOf(key); return keep(p, s); };
+  const cs = project(b.cs, kept, d);
+  const pu = parametrize(cs, b.order, (key) => kept(key) && (!portOf(key)[1] || cs.some((c) => c.terms.some(([t]) => t === key))));
+  return pu && Object.keys(pu).length ? pu : undefined;
+}
+
+// Whether the body keeps the pin's units: everything it says of its ports
+// follows from what the pin says (a body may be more general than its
+// pin). Null when it does; otherwise what the body makes them, to show.
+export function pinUnitsBroken(code: Code, d: Id, pu: PinUnits): PinUnits | null {
+  const b = bodyUnits(code, d);
+  if (!b) return null;
+  const sys = new System();
+  for (const c of fromPin(pu, (i) => i, "", d)) sys.add(c);
+  // What it says of the ports the pin names: of an Int's, nothing.
+  const cs = project(b.cs, (t) => t in pu, d);
+  const kept = cs.every((c) => {
+    const m = new Map<string, number>();
+    for (const [k, v] of c.terms) m.set(k, (m.get(k) ?? 0) + v);
+    const r = sys.reduce(m, c.rhs);
+    return [...r.coef.values()].every((v) => Math.abs(v) < EPS) && r.rhs.every((x) => Math.abs(x) < EPS);
+  });
+  if (kept) return null;
+  return parametrize(cs, b.order, (key) => key in pu) ?? {};
+}
+
+// A pin's units as a signature's slots.
+export function pinSlots(pu: PinUnits, params: number): SignatureUnits["slots"] {
+  const slots = { params: Array.from({ length: params }, (): Slots => ({})), result: {} as Slots };
+  for (const [key, e] of Object.entries(pu)) {
+    const [p, s] = portOf(key);
+    const at = p === "out" ? slots.result : slots.params[+p];
+    if (at && Object.keys(e).length) at[s] = e;
+  }
+  return slots;
+}
+function pinSignature(code: Code, d: Id, pu: PinUnits): SignatureUnits | null {
+  const def = code.nodes[d];
+  const b = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+  const slots = pinSlots(pu, b?.kind === "lambda" ? b.params.length : 0);
+  return { params: slots.params.map((x) => x[""]), result: slots.result[""], slots };
+}
+
+// Whether a new version's pinned units promise no more than the old's
+// (modules.ts upgrade): what it says of its ports, its own variables
+// taken out, follows from what the old one says.
+export function unitsAtLeastAsGeneral(neu: PinUnits | undefined, old: PinUnits | undefined): boolean {
+  if (!neu) return true;
+  const ports = (pu: PinUnits, at: string) => project(fromPin(pu, (i) => i, at, ""), (t) => !t.includes(VAR), "");
+  const sys = new System();
+  if (old) for (const c of ports(old, "old/")) sys.add(c);
+  return ports(neu, "new/").every((c) => {
+    const m = new Map<string, number>();
+    for (const [k, v] of c.terms) m.set(k, (m.get(k) ?? 0) + v);
+    const r = sys.reduce(m, c.rhs);
+    return [...r.coef.values()].every((v) => Math.abs(v) < EPS) && r.rhs.every((x) => Math.abs(x) < EPS);
+  });
 }

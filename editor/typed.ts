@@ -2510,7 +2510,7 @@ export function pin(code: Code, info: Info, pins: Pins, def: Id, name: string): 
   if (isPublished(def)) return { ok: false, reason: `${name} is published, so it's pinned already` };
   if (subtree(code, def).some((x) => code.nodes[x].kind === "hole")) return { ok: false, reason: `${name} has holes: fill them first, so the pin promises the type it will have` };
   if (info.errors.some((e) => subtree(code, def).includes(e.id))) return { ok: false, reason: `${name} has a type error to fix first` };
-  const p = pinsOf(info, [def]);
+  const p = pinsOf(info, [def], code);
   if (!p[def]) return { ok: false, reason: `${name} has no type yet` };
   return { ok: true, pins: { ...pins, ...p }, note: `Pinned ${name} at ${showType(p[def].type, display, schemeArith(p[def]))}: edits inside it must keep that type, and callers see only it.` };
 }

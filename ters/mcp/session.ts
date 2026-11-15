@@ -760,7 +760,7 @@ export class Session {
     const was = { code: this.code, names: this.names, comments: this.comments, pins: this.pins };
     const pins = { ...this.pins };
     if (off) delete pins[def];
-    else { const p = pinsOf(this.info, [def])[def]; if (!p) throw new Error(`${this.name(def)} has no type to pin`); pins[def] = p; }
+    else { const p = pinsOf(this.info, [def], this.code)[def]; if (!p) throw new Error(`${this.name(def)} has no type to pin`); pins[def] = p; }
     const errs = this.info.errors.length;
     this.pins = pins;
     this.recheck();

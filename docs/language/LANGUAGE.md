@@ -1776,7 +1776,12 @@ for each (L252e): a `Map Int (Float64 s)` is plain at its keys and in
 seconds at its values, so `put`, `update at`, `value at` and `entries of`
 keep them, and a tuple `(Int, Float64 s)`'s `second` is in seconds. A
 signature shows them where they are known: trek's
-`by speed : (List Leg) -> Map Int (Float64 s)`.
+`by speed : (List Leg) -> Map Int (Float64 s)`. A pin keeps a
+definition's units with its type (L252e): a unit written down stays, and
+one the body leaves free is a unit variable, `rate : (Float64 u, Float64
+v) -> Float64 u/v`, so an edit making rate `amount · time` is refused at
+rate rather than turning its callers' metres per second into m·s, and
+callers are checked against the pin's units.
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and
@@ -2178,9 +2183,10 @@ back into the group being hashed is named by its position.
   program are done, L55.)
 - **Units written in types.** Units are inferred and checked as part of
   the type, a record's field can be written `Float64 m/s` and a signature
-  shows its known units (L252); what's missing is writing a unit in a
-  pinned signature, with unit variables for a function generic over its
-  unit (`(Float64 u) -> Float64 u²`).
+  shows its known units (L252), and a pin keeps them, with unit variables
+  for a function generic over its unit (`(Float64 u) -> Float64 u²`,
+  L252e); what's missing is showing a unit on a number type that is
+  itself generic (`squared : (a) -> a`, L252f).
 - **Cells, further.** Async cells (HTTP results) as Solid's resources are
   done: a view that fetches runs again when the reply lands (L59), and
   `while waiting` shows something till then (L255). (Guarded corecursion is done, L16, beside the termination check; so is the
