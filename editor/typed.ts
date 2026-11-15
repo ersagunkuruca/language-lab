@@ -6,10 +6,10 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, derived, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
-import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
+import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, inferEdited, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
 import { CheckCache } from "../ters/src/lang/check-cache.ts";
 import { groupStore } from "./checkStore.ts";
 import { isCall, isPublished, isUse, isBound, useTarget, type Call, type Use } from "../ters/src/model.ts";
@@ -223,8 +223,25 @@ export const infer = (code: Code, names: Names = {}): Info => {
   // As load.ts checkOptions: the modules' private cases are theirs to
   // build, a program's own are the program's (L165, E209).
   if (!same) lastOptions = { pins: programPins, own, options: { pins: { ...LIBRARY.pins, ...Object.fromEntries(own) }, hidden: LIBRARY.hidden, insiders: INSIDERS, library: LIBRARY.code.defs, cache: CACHE } };
-  return check(code, names, undefined, lastOptions!.options);
+  const options = lastOptions!.options;
+  // An edit of a program checked lately is checked over that check (I304,
+  // infer.ts inferEdited): the definitions it changed, and their users
+  // where a type changed. The palette's fillings, the MCP's readings and
+  // the program after each edit are each a few nodes from one of these.
+  const from = derived.get(code)?.base;
+  for (const b of recent) {
+    if (b.info.options !== options || (from && b.code !== from)) continue;
+    if (b.code === code) return b.info;
+    const r = inferEdited(b.code, code, names, b.info, options);
+    if (r) { remember(code, r); return r; }
+  }
+  const r = check(code, names, undefined, options);
+  remember(code, r);
+  return r;
 };
+// The programs checked lately, newest first.
+const recent: { code: Code; info: Info }[] = [];
+const remember = (code: Code, info: Info) => { recent.unshift({ code, info }); recent.length = Math.min(recent.length, 3); };
 // The options the last check above was given (pins, the library's hidden
 // and private cases), for a check made elsewhere to match (coreMain.ts).
 export const programOptions = () => lastOptions?.options;
@@ -1404,7 +1421,11 @@ function topLevel(text: string, by = ","): string[] | undefined {
 // value, a fraction where a Rational goes. Found by checking the filling
 // with those places left open, then filling each as its hole expects.
 function written(code: Code, names: Names, info: Info, hole: Id, text: string, typed: Typed, fit: boolean, defId?: Id): TEdit {
-  const nodes = { ...code.nodes };
+  // A copy of the nodes, each written into it noted: the program is then
+  // one derived from `code` by those (model.ts derived), and its check is
+  // made over code's (I304, infer.ts inferEdited).
+  const copy = { ...code.nodes }, touched = new Set<Id>();
+  const nodes = new Proxy(copy, { set: (t, k, v) => { touched.add(k as Id); (t as Record<Id, Node>)[k as Id] = v; return true; } });
   // Each whole number keeps the digits it was typed with (I236), so one
   // past 2⁵³ stays exact as an Int wherever it is: `[12345678901234567891,
   // 2]`. The text's numbers, outside quotes, in order; each whole number
@@ -1486,7 +1507,9 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   };
   tree(typed, hole);
   if (open.size) {
-    const seen = check({ nodes, defs: code.defs }, names, undefined, info.options);
+    const open_ = { nodes: copy, defs: code.defs };
+    derivedFrom(open_, code, new Set(touched), true);
+    const seen = (info.options && inferEdited(code, open_, names, info, info.options)) || check(open_, names, undefined, info.options);
     for (const [id, w] of open) {
       const e = seen.holes.get(id)?.expected;
       // An Int, or a type whose Literal spells its numbers (Rational, …).
@@ -1504,7 +1527,8 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
       else call(B.div, [lit(w.p, undefined), lit(w.q, undefined)], id);
     }
   }
-  const next = { nodes, defs: code.defs };
+  const next = { nodes: copy, defs: code.defs };
+  derivedFrom(next, code, touched, true);
   const after = defId ? nextHole(next, defId, hole) : undefined;
   return guardTyped(info, next, nn, after ?? hole, `Filled with ${text.trim()}.`);
 }

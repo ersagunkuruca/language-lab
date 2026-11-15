@@ -19,7 +19,7 @@ import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call
 import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
-import { constraints as unitConstraints, pinUnitsBroken, unitProblems, UnitsBefore } from "../units.ts";
+import { constraints as unitConstraints, declaresUnit, pinUnitsBroken, unitProblems, UnitsBefore } from "../units.ts";
 import { showWithPinUnits } from "./unit-types.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
@@ -3481,6 +3481,181 @@ function constructorType(code: Code, s: Subst, def: Id, variant: Id): Type {
     return { t: "fn", params: fs, ret: r ? te(r) : s.fresh(), eff: s.freshRow([def]) };
   }
   return fs.length ? { t: "fn", params: fs, ret: self, eff: s.freshRow() } : self;
+}
+
+// An edited program checked over the check of the program it was edited
+// from (I304, E103's incremental check): the definitions holding a node
+// the edit changed are checked again, over that check as a layer, the
+// rest kept; where one's type comes out other than it was, the ones that
+// use it are checked again too, and if theirs change, or the edit made or
+// dropped a definition, changed a type's definition or went further than
+// `most` nodes, null: the whole program is to be checked. Its errors are
+// those kept of the definitions not checked again and those found in the
+// ones that were. A chain of such checks, each over the last, is cut
+// after `deep` (each layer's lookups go through those under it).
+const editedDepth = new WeakMap<Info, number>();
+// The definitions each definition refers to, found once per program and
+// for an edited one only in those it changed: the rest are the program's
+// it was edited from (callsFrom).
+const callsKept = new WeakMap<Code, Map<Id, { calls: Set<Id>; relational: boolean }>>();
+const callsFrom = new WeakMap<Code, { base: Code; changed: Set<Id> }>();
+function callsOf(c: Code, d: Id, defs: Set<Id>): { calls: Set<Id>; relational: boolean } {
+  let m = callsKept.get(c);
+  if (!m) callsKept.set(c, (m = new Map()));
+  let r = m.get(d);
+  if (r) return r;
+  const from = callsFrom.get(c);
+  if (from && !from.changed.has(d)) r = callsOf(from.base, d, defs);
+  else {
+    r = { calls: new Set<Id>(), relational: false };
+    for (const x of subtree(c, d)) {
+      const n = c.nodes[x];
+      if (n?.kind === "ref" && defs.has(n.target)) r.calls.add(n.target);
+      // A solve, or a definition with results: its direction is chosen by
+      // how it is used (directions.ts), so a caller changes its callee.
+      if (n && (isUse(n) || (n.kind === "lambda" && !!n.results?.length))) r.relational = true;
+    }
+  }
+  m.set(d, r);
+  return r;
+}
+const callsIn = (c: Code, d: Id, defs: Set<Id>) => callsOf(c, d, defs).calls;
+export function inferEdited(before: Code, next: Code, names: Names, info: Info, opts: Options, most = 400, deep = 8): Info | null {
+  if (next === before || info.options !== opts) return null;
+  const depth = (editedDepth.get(info) ?? 0) + 1;
+  if (depth > deep) return null;
+  if (next.defs !== before.defs && (next.defs.length !== before.defs.length || next.defs.some((d, i) => before.defs[i] !== d))) return null;
+  // What the edit changed: as the program was derived from the one before
+  // (model.ts derived, a filling written into a copy), else found.
+  const from = derived.get(next);
+  let changed: Set<Id>;
+  if (from) {
+    if (from.base !== before || !from.same || from.changed.size > most) return null;
+    changed = from.changed;
+  } else {
+    changed = new Set<Id>();
+    let made = 0;
+    for (const id in next.nodes) if (next.nodes[id] !== before.nodes[id]) {
+      changed.add(id);
+      if (!(id in before.nodes)) made++;
+      if (changed.size > most) return null;
+    }
+    // A node gone: counted, then found.
+    let gone = Object.keys(before.nodes).length - (Object.keys(next.nodes).length - made);
+    const noneGone = gone === 0;
+    if (gone > 0) for (const id in before.nodes) if (!(id in next.nodes)) { changed.add(id); if (changed.size > most) return null; if (--gone === 0) break; }
+    derivedFrom(next, before, changed, noneGone);
+  }
+  const defs = new Set(next.defs), library = new Set(opts.library ?? []);
+  const up = { before: scanningOnLayer(before, () => parentLookup(before)), next: parentLookup(next) };
+  const defOf = (id: Id): Id | undefined => {
+    const parent = id in next.nodes && !(id in before.nodes) ? up.next : up.before;
+    let at: Id | undefined = id;
+    while (at !== undefined && !defs.has(at)) at = parent(at);
+    return at;
+  };
+  const only = new Set<Id>();
+  for (const id of changed) {
+    const d = defOf(id);
+    if (d === undefined || library.has(d)) return null;
+    const body = (next.nodes[d] as NodeOf<"def"> | undefined)?.body;
+    if (!body || next.nodes[body]?.kind === "typedef" || before.nodes[(before.nodes[d] as NodeOf<"def">).body ?? ""]?.kind === "typedef") return null;
+    only.add(d);
+  }
+  if (!only.size) return null;
+  // Units are found over the whole program, each definition's from the
+  // ones it calls and the ones that call it (track): a program that
+  // declares one is checked whole.
+  callsFrom.set(next, { base: before, changed: only });
+  if (opts.units !== false && declaresUnit(next)) return null;
+  // So are relations' directions, found from how each is used (impact's
+  // gap at): a program with one is checked whole.
+  if (next.defs.some((d) => !library.has(d) && callsOf(next, d, defs).relational)) return null;
+  // A reference to a definition made or dropped where that one reaches
+  // back to the definition holding it makes or breaks a cycle of calls,
+  // and so the groups and what may not end (Diverge): checked whole.
+  const own = (c: Code, id: Id | undefined) => { const n = id === undefined ? undefined : c.nodes[id]; return n?.kind === "ref" && defs.has(n.target) && !library.has(n.target) ? n.target : undefined; };
+  const reachesBack = (c: Code, from: Id, to: Id) => {
+    const seen = new Set<Id>(), stack = [from];
+    while (stack.length) {
+      const d = stack.pop()!;
+      if (d === to) return true;
+      if (seen.has(d) || library.has(d)) continue;
+      seen.add(d);
+      for (const t of callsIn(c, d, defs)) if (!seen.has(t) && !library.has(t)) stack.push(t);
+    }
+    return false;
+  };
+  for (const id of changed) {
+    const was = own(before, id in before.nodes ? id : undefined), now = own(next, id in next.nodes ? id : undefined);
+    if (was === now) continue;
+    const d = defOf(id)!;
+    if (now !== undefined && reachesBack(next, now, d)) return null;
+    if (was !== undefined && reachesBack(before, was, d)) return null;
+  }
+  const check = (ds: Set<Id>) => infer(next, names, { from: info, only: ds, layer: true }, opts);
+  const typeChanged = (q: Info, ds: Iterable<Id>) => [...ds].filter((d) => {
+    const was = info.schemes.get(d), now = q.schemes.get(d);
+    return !was !== !now || (was && now && groupKey(info.subst, [was.type]) !== groupKey(q.subst, [now.type]));
+  });
+  // A type with variables it doesn't quantify shares them with the
+  // definitions around it (one not generalised): what the edit does to
+  // them reaches past its users, so that is checked whole.
+  const shares = (q: Info, ds: Iterable<Id>) => [...ds].some((d) => [info, q].some((i) => {
+    const sc = i.schemes.get(d);
+    if (!sc) return false;
+    const vars = new Set<number>(), rows = new Set<number>();
+    freeVars(sc.type, i.subst, vars, rows);
+    return [...vars].some((v) => !sc.vars.includes(v)) || [...rows].some((r) => !sc.rows.includes(r));
+  }));
+  // So does one whose type it uses: what it does with a variable that type
+  // shares reaches that one's other users (buffer's final, made a value
+  // of List Text by applied).
+  const usedBy = (ds: Iterable<Id>) => new Set([...ds].flatMap((d) => [...callsIn(next, d, defs), ...(before.nodes[d] ? callsIn(before, d, defs) : [])]).filter((t) => !library.has(t)));
+  if (shares(info, usedBy(only))) return null;
+  let quick = check(only);
+  if (shares(quick, only) || shares(quick, usedBy(only))) return null;
+  // The ones that use a changed definition, and those that use them, on
+  // up, are checked again too: what they read of it is more than its type
+  // (an effect a handler around the call takes, physics' main with a hole
+  // in period; what may not end, collatz). Where their types change, the
+  // whole program is.
+  const users = new Set<Id>();
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const d of next.defs) {
+      if (only.has(d) || users.has(d) || library.has(d)) continue;
+      for (const t of callsIn(next, d, defs)) if (only.has(t) || users.has(t)) { users.add(d); grew = true; break; }
+    }
+  }
+  // An implementation of an interface, or what it reaches, is used where
+  // the interface's operation is, at a type, not by name: those uses
+  // aren't found above, so the program is checked whole (impact's body
+  // gap at, household's Appliance).
+  const impls = new Set([...(info.implementations?.values() ?? []), ...(quick.implementations?.values() ?? [])]);
+  if ([...only, ...users].some((d) => impls.has(d))) return null;
+  if (users.size) {
+    quick = check(new Set([...only, ...users]));
+    if (typeChanged(quick, users).length || shares(quick, users) || shares(quick, usedBy(users))) return null;
+    for (const d of users) only.add(d);
+  }
+  // Kept: the errors of the definitions not checked again, and those of
+  // no definition. Found: those in the ones checked again.
+  // Errors elsewhere are kept only when there are none: in a program with
+  // errors, which ones are found depends on the order the groups are
+  // checked in, which an edit can change (buffer's final, defined in terms
+  // of itself, and applied made to use it), so that is checked whole.
+  const kept = info.errors.filter((e) => { const d = e.id in before.nodes ? defOf(e.id) : undefined; return d === undefined || !only.has(d); });
+  if (kept.length) return null;
+  const found = quick.errors.filter((e) => { const d = defOf(e.id); return d !== undefined && only.has(d); });
+  quick.errors = [...kept, ...found];
+  // So with the holes and the lifts through embeddings: each node's, of the
+  // definitions not checked again, is as it was.
+  const keptHere = (id: Id) => { const d = id in before.nodes ? defOf(id) : undefined; return d !== undefined && !only.has(d); };
+  for (const [id, h] of info.holes) if (!quick.holes.has(id) && keptHere(id)) quick.holes.set(id, h);
+  if (info.embedded) for (const [id, e] of info.embedded) if (!quick.embedded?.has(id) && keptHere(id)) (quick.embedded ??= new Map()).set(id, e);
+  editedDepth.set(quick, depth);
+  return quick;
 }
 
 // A program rewritten without changing any definition's type (a step of
