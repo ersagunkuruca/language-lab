@@ -10,7 +10,7 @@
 //   f(p)          = f onto(p, nil)
 //   f onto(p, acc) = acc ++ f(p), case by case:
 //     nil                → acc
-//     cons(x, f(a))      → let item = x in f onto(a, acc ++ [item])
+//     cons(x, f(a))      → let item = x in f onto(a, added at end(acc, item))
 //     f(a)               → f onto(a, acc)
 //
 // The item is worked out before the call's inputs, as it was, so what
@@ -25,8 +25,9 @@ import { CONS, NIL } from "./std.ts";
 export interface ConsOnto { nodes: Record<Id, Node>; made: Id[]; names: Names; copiedFrom: Map<Id, Id> }
 
 // For each of defs that takes it, its rewrite and its copy taking the items
-// so far; `append` is the prelude's.
-export function consOnto(code: Code, names: Names, defs: Id[], append: Id): ConsOnto {
+// so far; `atEnd` is the prelude's `added at end`, append(list, [item]),
+// which an array does as a push (C250).
+export function consOnto(code: Code, names: Names, defs: Id[], atEnd: Id): ConsOnto {
   const out: ConsOnto = { nodes: {}, made: [], names: {}, copiedFrom: new Map() };
   for (const d of defs) {
     const def = code.nodes[d];
@@ -72,8 +73,7 @@ export function consOnto(code: Code, names: Names, defs: Id[], append: Id): Cons
       // cons(x, f(a)): the item first, as a let, then the call.
       const [item, rest] = call.args!, inner = code.nodes[rest] as NodeOf<"call">;
       const b = add({ id: freshId(), kind: "binder" });
-      const one = add({ id: freshId(), kind: "call", fn: ref(CONS), args: [ref(b), ref(NIL)] });
-      const grown = add({ id: freshId(), kind: "call", fn: ref(append), args: [ref(acc), one] });
+      const grown = add({ id: freshId(), kind: "call", fn: ref(atEnd), args: [ref(acc), ref(b)] });
       const next = add({ id: freshId(), kind: "call", fn: ref(onto), args: [...inner.args!.map(f), grown] });
       const let_ = add({ id: freshId(), kind: "lambda", params: [b], body: next });
       out.nodes[f(t)] = { id: f(t), kind: "call", fn: let_, args: [f(item)] };

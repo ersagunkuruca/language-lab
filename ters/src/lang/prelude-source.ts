@@ -35,6 +35,14 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["item", "rest"], results: [null, "rest and back"], body: ([item], [, r]) => k.call(CONS, item, r!) },
   ])));
 
+  // A helper: one item at the end of a list, published with the module,
+  // not offered. A definition consing onto a call of itself becomes a
+  // loop adding each item so (cons-onto.ts, C232); an array pushes it
+  // into its free room, where append(list, [item]) made an array of one
+  // first (C250).
+  const addedAtEnd = k.def("added at end");
+  k.define(addedAtEnd, k.fn(["list", "item"], (xs, x) => k.call(append, xs, k.call(CONS, x, NIL))));
+
   // A helper: published with the module, used by reverse, not offered.
   const onto = k.def("reverse onto");
   k.define(onto, k.fn(["list", "onto"], (xs, acc) => k.match(xs, [
@@ -2251,6 +2259,7 @@ export function buildPrelude(): Module {
     [keep]: "filter, written as a choice: pick any item, fail unless it passes, collect what's left with all.",
     [showNumbers]: "A fold that prints. Run backwards it unfolds, so it parses.",
     [onto]: "A helper of reverse. Published with the module, not offered in the palette.",
+    [addedAtEnd]: "The list with one item more, at its end: append(list, [item]). What a loop consing onto a call of itself adds each item with once the compiler makes it a loop; an array pushes it. Published with the module, not offered in the palette.",
     [inverse]: "The x that f takes to y: f run backwards, for any function value f. Several answers are a Choice, as with solve; a function that acts (prints, writes a cell) is refused when it's run.",
     [curry]: "f, taking its two inputs one at a time: curry(f)(a)(b) is f(a, b). Functions take all their inputs at once; this is for when one at a time is wanted.",
     [uncurry]: "The other way: a function that takes a and gives back a function of b, made into one function of (a, b).",
@@ -2508,9 +2517,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }

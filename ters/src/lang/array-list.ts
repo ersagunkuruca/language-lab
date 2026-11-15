@@ -85,6 +85,9 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     { variant: NIL, names: [], body: () => b },
     { variant: CONS, names: ["item", "rest"], results: [null, "pushed"], body: ([x], [, r]) => k.call(ARRAY_OPS.pushFront, r!, x) },
   ]));
+  // One item at the end (C250): a push, into the free room when no other
+  // array has taken it.
+  const atEnd = def("array added at end", ["array", "item"], (a, x) => k.call(ARRAY_OPS.push, a, x));
   const append = def("array append", ["front", "back"], (a, b) => k.if(k.call(INT_OPS.less, len(a), len(b)), k.call(onFront, a, b), k.call(onBack, a, b)));
   // A map: a fold from the back, each item mapped and pushed into the
   // free slot in front of what the rest made, as the list's map runs
@@ -129,6 +132,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     // Onto what a loop carries, at its free end: as long as what is added,
     // which the loop's own items count (C234).
     k.call(JOBS.carried, k.x(prelude("append")), cost(k, "constant")),
+    k.call(JOBS.job, k.x(prelude("added at end")), k.x(atEnd), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("item at")), k.x(itemAt), cost(k, "constant")),
     k.call(JOBS.job, k.x(prelude("map")), k.x(mapped), cost(k, "linear")),
     k.call(JOBS.job, k.x(prelude("replace at")), k.x(replaced), cost(k, "constant")),
@@ -149,6 +153,7 @@ export function buildArrayList(k: Lang, prelude: (name: string) => Id): ArrayLis
     k.call(JOBS.foldAsWritten, cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("length")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("append")), cost(k, "linear")),
+    k.call(JOBS.asWritten, k.x(prelude("added at end")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("item at")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("map")), cost(k, "linear")),
     k.call(JOBS.asWritten, k.x(prelude("replace at")), cost(k, "linear")),

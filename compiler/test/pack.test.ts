@@ -70,7 +70,7 @@ test("pack: 12800 words, 72 KB, come back the same", () => {
 test("pack: what conses onto a call of itself appends at the back instead", () => {
   const p = program(), made = new Set(Object.entries(p.names).filter(([d]) => p.code.nodes[d]?.kind === "def").map(([, n]) => n));
   for (const n of ["prose onto", "tokens onto", "decoded onto"]) assert.ok(made.has(n), n);
-  const q = program(true), c = consOnto(q.code, q.names, q.code.defs, PRELUDE_DEFS.append);
+  const q = program(true), c = consOnto(q.code, q.names, q.code.defs, PRELUDE_DEFS["added at end"]);
   assert.ok(new Set(c.made.map((d) => c.names[d])).has("tokens onto"));
 });
 

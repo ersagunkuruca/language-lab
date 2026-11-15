@@ -13,7 +13,7 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { COPIED_FROM, originalOf } from "./prelude-ids.ts";
+import { COPIED_FROM, originalOf, PRELUDE_DEFS } from "./prelude-ids.ts";
 import { bindsOf, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
@@ -231,7 +231,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // `tokens`, C240).
     const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
     if (((lists.cost[CONS] ?? "1") !== "1" && cheaperOn(lists, spec, prelude("append"))) || lists.cost[CARRIED + prelude("append")] === "1") {
-      const c = consOnto(withBoundary, names, defs, prelude("append"));
+      const c = consOnto(withBoundary, names, defs, PRELUDE_DEFS["added at end"]);
       if (c.made.length) {
         withBoundary = { nodes: { ...withBoundary.nodes, ...c.nodes }, defs: [...withBoundary.defs, ...c.made] };
         code = { nodes: { ...code.nodes, ...c.nodes }, defs: [...code.defs, ...c.made] };
