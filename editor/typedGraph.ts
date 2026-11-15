@@ -991,7 +991,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         const t = silent ? `Step ${k} of ${silentSteps.length + 1}, done for its effect; then step ${k + 1}. Right-click the step to do it earlier or later` : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
         item(b, 2 * r, 2 * r, (g) => {
           g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), t));
-          if (silent) g.append(s("text", { x: r, y: r + 3.5, class: "stepn", "text-anchor": "middle" }, String(k)));
+          // With the effects numbered (E265), they say the order: a step's
+          // own number beside them was a second count of the same thing,
+          // and the two disagreed (QA 11-15 Q3). The dot and its dashes stay.
+          if (silent && !hooks.order) g.append(s("text", { x: r, y: r + 3.5, class: "stepn", "text-anchor": "middle" }, String(k)));
           if (!silent) g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
         }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false, label: silent ? undefined : { x: r - tw(name(b), 6.8) / 2, y: -16, w: tw(name(b), 6.8), h: 14 } });
         at.set(b, { x, y: py - r });
