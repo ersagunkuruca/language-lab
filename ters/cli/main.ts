@@ -28,7 +28,8 @@ import { evaluatorCall, htmlText } from "../src/lang/html.ts";
 import { showType, STRING } from "../src/lang/types.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { HTML_V, S, SHOW_ANY } from "../src/lang/std.ts";
-import { choose, representationsIn } from "../src/lang/represent.ts";
+import { choose, representationsIn as declaredIn, type Representation } from "../src/lang/represent.ts";
+import { raisedText, withWorkedOutCosts } from "../src/lang/job-cost.ts";
 import { allowedOnly, nodeWorld } from "../src/lang/world.ts";
 import { readLog, replaying, type LogEntry } from "../src/lang/worldlog.ts";
 import { execFileSync } from "node:child_process";
@@ -169,6 +170,12 @@ function fail(message: string): never {
 // Each definition group's check kept on disk (I193i): a program's
 // unchanged definitions aren't checked again by the next command.
 if (!process.env.LAB_NO_LIBRARY_STORE) cacheChecks(new CheckCache(4000, groupStore));
+
+// A program's representations, each job's cost worked out from its
+// definition where that is more than it declares (L247).
+function representationsIn(code: Code, info: Info, names: Names, defs: Id[]): Representation[] {
+  return withWorkedOutCosts(code, info, declaredIn(code, info, names, defs), LIBRARY.reps);
+}
 
 function load(path: string): Program {
   if (!existsSync(path)) fail(`no such program: ${path}`);
@@ -882,6 +889,7 @@ switch (command) {
     // How main stores each type the program writes representations for:
     // the compiler's choice, never the program's (REPRESENTATIONS.md).
     const start = p.own.find((d) => p.names[d] === mainName);
+    for (const r of p.reps) for (const x of r.raised ?? []) console.log(raisedText(r, x, p.names));
     const rows = storedRows(p.code, p.own, p.reps);
     if (start && !p.info.errors.length) for (const of of new Set(rows.map((r) => r.of))) {
       const c = choose(p.code, start, rows.filter((r) => r.of === of));

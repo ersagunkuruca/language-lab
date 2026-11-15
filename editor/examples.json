@@ -8,7 +8,7 @@
     { "program": "calculus-text", "label": "Calculus", "folders": ["calculus"] },
     { "program": "calculus", "label": "Page: calculus, a derivative made from the definition", "folders": ["calculus-page"], "page": true },
     { "program": "backwards", "label": "Run backwards", "folders": ["backwards"], "start": "who was greeted" },
-    { "program": "conjugate", "label": "Conjugation", "folders": ["conjugate"] },
+    { "program": "conjugate", "label": "Page: conjugation", "folders": ["conjugate-page"], "page": true },
     { "program": "markov", "label": "Page: where a Markov chain settles", "folders": ["markov-page"], "page": true },
     { "program": "effects", "label": "Effects", "folders": ["effects"], "start": "main" },
     { "program": "lockstep", "label": "Page: lockstep, two machines and one cart", "folders": ["lockstep"], "page": true },

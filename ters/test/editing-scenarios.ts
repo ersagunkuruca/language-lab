@@ -312,14 +312,14 @@ async function listItems() {
 }
 
 // Cases that say the same thing read once, as the otherwise, and are one
-// row to edit (PATTERNS.md step 4): Conjugation's bands has two cases that
+// row to edit (PATTERNS.md step 4): the conjugation page's bands has two cases that
 // give back nil. Changing the otherwise changes both, in one undo step.
 async function sharedRow() {
   where = "a shared otherwise row";
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: /Conjugation/ }).first().click();
+  await p.locator('[data-set="program"]', { hasText: /conjugation/i }).first().click();
   await p.locator("[data-def]", { hasText: /^bands$/ }).first().click();
   const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   if (!/otherwise → nil/.test(await text())) errors.push(`${where}: bands reads ${await text()}`);
@@ -344,7 +344,7 @@ async function matchDeeper() {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: /Conjugation/ }).first().click();
+  await p.locator('[data-set="program"]', { hasText: /conjugation/i }).first().click();
   await p.locator("[data-def]", { hasText: /^bands$/ }).first().click();
   const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   const more = p.locator(".p-text .body [data-id]", { hasText: /^more\b/ }).first();

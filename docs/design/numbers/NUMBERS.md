@@ -70,8 +70,11 @@ counted.
   the checker (EMBEDDINGS.md).
 
 **Not yet:**
-- Costs are declared by hand on each representation's jobs. Working them
-  out from folds and checking them against measurements is stage 7.
+- Costs are declared by hand on each representation's jobs, and checked
+  against their definitions only from below: a job counts at the most of
+  what it declares and what its definition always takes (L247,
+  job-cost.ts). An upper bound worked out, and checks against
+  measurements, are the rest of stage 7.
 
 ## Short answers
 
@@ -942,7 +945,7 @@ In order. Each stage says when to start it.
 | 4 | **Clifford algebras.** The library in the language; complex, dual, quaternion as named algebras; grade-restricted representations, with quaternions as the rotor representation; division as the product run backwards | **done**: complex (L40), dual (L40g), `clifford table` (L42a), rotors and quaternions (L43a), PGA motors (L42), grades as types (L43, GRADES.md) |
 | 5 | **Infinite data.** ~~Function-typed fields as lazy data~~ `Cell` fields as lazy, remembered data (done, the Cells effect); ~~guarded corecursion in the checker~~ (done, L16); ~~continued fractions with Gosper's arithmetic~~ (done as a program: `+ − × ÷` of two CFs, √n, e, rationals); exact reals as a representation of `Real`, with `Diverge` comparisons | **done**: exact algebraic numbers and `Real`, whose `<` may not finish (EXACT-REALS.md, L88) |
 | 6 | **Tensors.** Contraction + map, the representations above, shape inference on the units machinery | **done**: `Matrix a` of any size (L44d to L44g, MATRICES.md), `Tensor a` with `contracted` (L51, TENSORS-2026-11-03.md) |
-| 7 | **Costs worked out, laws proved.** Cost inference from folds and representation sizes, checked by fitted benchmarks; laws for folds proved by fusion; choice per value flow, with conversion costs | choice per value flow is **done** (C93, on JavaScript); the rest when the declared costs turn out wrong |
+| 7 | **Costs worked out, laws proved.** Cost inference from folds and representation sizes, checked by fitted benchmarks; laws for folds proved by fusion; choice per value flow, with conversion costs | choice per value flow is **done** (C93, on JavaScript); costs worked out from below **done** (L247: a job counts at the most of what it declares and what its definition always takes, so examples/waiting's `front first`, declared constant to join, counts its append); upper bounds, fitted benchmarks and fusion when a program needs them |
 | 8 | **Dual numbers as a second `derivative`**, to test `derive.ts` against | **done** (L40g: `slope by duals` agrees with `derivative`) |
 
 ## What's still rough
