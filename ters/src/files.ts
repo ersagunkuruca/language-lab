@@ -48,7 +48,7 @@ export interface ProgramFile {
   // Where nodes were put (world coordinates, by `def/id`), which bindings
   // are shown as let and get nodes, what you give each definition when you
   // run it backwards, and which calls are shown inline. All views.
-  layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; wired?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[]; size?: Record<string, { w: number; h: number }> };
+  layout: { at?: Record<string, { x: number; y: number }>; named?: Id[]; wired?: Id[]; known: Record<Id, Id[]>; inline?: Id[]; folded?: Id[]; groups?: Record<Id, Id[]>; tree?: Id[]; order?: Id[]; size?: Record<string, { w: number; h: number }> };
   // Inputs per definition, or inputs and accepted answers (tests.ts Saved).
   examples: Record<Id, string[] | Saved[]>;
   needs?: Record<Id, string>;

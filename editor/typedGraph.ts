@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { isCall, isUse, portsOf, useTarget, type Call } from "../ters/src/model.ts";
+import { children, isCall, isUse, ownerOfTypeParts, portsOf, useTarget, type Call } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX, tupleVariant } from "../ters/src/lang/std.ts";
@@ -106,6 +106,8 @@ export interface GraphHooks {
   // Matches drawn as the nested tree they are, not as rows of patterns
   // (PATTERNS.md). A view.
   tree?: Set<Id>;
+  // Each call with effects numbered in the order it runs (E265). A view.
+  order?: boolean;
   fold?: (frame: Id) => void;
   // Tuple wires drawn fanned out, one strand per part, by the value they
   // carry (E167c); and turning one between bundled and fanned. A view.
@@ -495,11 +497,69 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // Choice) whose inputs are known to be fine here has no Choice here
     // (L125b): only the calls that can give no answer say so.
     const answered = info.answered?.has(call.id);
+    // An effect's operation (random(), get state()) does its effect
+    // (E265): its signature is the effect's, not a scheme of its own.
+    const op = !t && node(f.target)?.kind === "variant" ? ownerOfTypeParts(code).get(f.target) : undefined;
+    const td = op ? node((node(op) as NodeOf<"def">).body ?? "") : undefined;
+    if (op && td?.kind === "typedef" && td.effect) return { does: [name(op)] };
     const does = z?.t === "fn" ? z.eff.effs.filter((e) => !(answered && e === CHOICE)).map(name) : [];
     const handles = HANDLES[f.target] ? name(HANDLES[f.target]) : undefined;
     const why = does.includes(name(CHOICE)) ? NO_ANSWER[f.target] : undefined;
     return { does, handles, why };
   };
+
+  // The order a definition's calls with effects run in (E265; SPEC 5.1:
+  // a call's inputs left to right, then the call; a let's value, then
+  // what follows). Each number says what runs before what in one run of
+  // the definition. A function written in place runs when it's called,
+  // maybe many times, so its calls are numbered on their own, from 1 (one
+  // with no inputs given to a call runs inside it, and is numbered on); a
+  // match's cases each go on from what came before, as only one runs.
+  const runOrder = (() => {
+    const at = new Map<Id, number>();
+    if (!hooks.order) return at;
+    const seqs: Id[][] = [];
+    const walk = (id: Id | null | undefined, seq: Id[], seen: Set<Id>): Id[] => {
+      const n = id ? node(id) : undefined;
+      if (!n || seen.has(n.id)) return seq;
+      seen.add(n.id);
+      if (n.kind === "lambda") { const own = walk(n.body, [], seen); if (own.length) seqs.push(own); return seq; }
+      if (n.kind === "match" || n.kind === "fold") {
+        const before = walk(n.scrutinee, seq, seen);
+        let longest = before;
+        for (const a of [...n.arms.map((x) => (node(x) as NodeOf<"arm">).body), ...(n.kind === "match" && n.otherwise ? [n.otherwise] : [])]) {
+          const arm = walk(a, [...before], seen);
+          seqs.push(arm);
+          if (arm.length > longest.length) longest = arm;
+        }
+        // Each case numbered on from the scrutinee; what follows the match
+        // on from the longest.
+        return longest;
+      }
+      if (isUse(n)) {
+        // A call read sideways: what it's given, then it, then its body.
+        for (const a of Object.values(n.given)) seq = walk(a, seq, seen);
+        return n.body ? walk(n.body, seq, seen) : seq;
+      }
+      if (isCall(n)) {
+        const f = node(n.fn);
+        if (f?.kind === "lambda") { for (const a of n.args) seq = walk(a, seq, seen); seen.add(f.id); return walk(f.body, seq, seen); }
+        // A thunk given to a call runs inside it, then and there (first's
+        // `() => read whole number(…)`, a handler's body): numbered on.
+        for (const a of n.args) { const l = node(a); if (l?.kind === "lambda" && !l.params.length && !seen.has(a)) { seen.add(a); seq = walk(l.body, seq, seen); } else seq = walk(a, seq, seen); }
+        if (effectsOf(n).does.length) seq.push(n.id);
+        return seq;
+      }
+      for (const c of children(n)) seq = walk(c, seq, seen);
+      return seq;
+    };
+    const d = node(defId);
+    const top = d?.kind === "def" && d.body ? walk(node(d.body)?.kind === "lambda" ? (node(d.body) as NodeOf<"lambda">).body : d.body, [], new Set()) : [];
+    // A case's calls share numbers with the other cases': each seq is a
+    // path, and a call keeps the first number it was given.
+    for (const q of [top, ...seqs]) q.forEach((c, i) => { if (!at.has(c)) at.set(c, i + 1); });
+    return at;
+  })();
 
   const holeType = (id: Id) => { const hi = info?.holes.get(id); return hi ? showIn(hi.expected, names, info!.subst) : ""; };
 
@@ -705,6 +765,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
+      const ran = runOrder.get(id);
+      if (ran) {
+        const o = s("g", { class: "effn" });
+        o.append(s("circle", { cx: 0, cy: 0, r: 9 }), s("text", { x: 0, y: 3.5, "text-anchor": "middle" }, String(ran)));
+        g.append(titled(o, `${ran === 1 ? "The first" : `Number ${ran}`} of the calls with effects here to run (${badge}): a call's inputs run left to right, then the call; a function written in place numbers its own from 1, as it runs when it's called (one with no inputs given to a call runs there, and goes on from it)`));
+      }
       g.append(s("text", { x: bw / 2, y: portNames ? top + 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
       // Each list's bracket, under its sockets.

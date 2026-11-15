@@ -105,6 +105,9 @@ interface Layout {
   // Tuple wires drawn fanned out, a strand per part (E167c), by the value
   // they carry. A view.
   fanned?: Id[];
+  // Definitions whose calls with effects are numbered in the order they
+  // run (E265). A view.
+  order?: Id[];
   // Nodes made bigger by hand, by `def/id` (BACKLOG I49). Never smaller
   // than what they show. A view.
   size?: Record<string, { w: number; h: number }>;
@@ -1902,6 +1905,7 @@ function graphHooks(info: T.Info) {
     fold: toggleFolded,
     groups: doc.layout.groups,
     tree: new Set(doc.layout.tree ?? []),
+    order: (doc.layout.order ?? []).includes(ui.def),
     fanned: new Set(doc.layout.fanned ?? []),
     fan: (v: Id) => {
       const now = doc.layout.fanned ?? [], on = now.includes(v);
