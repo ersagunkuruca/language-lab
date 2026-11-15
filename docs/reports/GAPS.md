@@ -3824,3 +3824,127 @@ too. Lists are now arrays beside the map's tree. A day, against the ideal:
 |---|---|---|---|
 | 160 | 4.7x (was 27x) | 6.0x (was 46x) | 5.4x (was 37x) |
 | 640 | 8.5x (was 156x) | 11.9x (was 207x) | 9.0x (was 194x) |
+
+## Round 18: pack, LZ77 and Huffman coding (2026-11-15)
+
+`compiler/gaps/pack` makes up a document and packs it the way DEFLATE does at
+heart, then unpacks it and checks that the bytes come back:
+- the document is words drawn from a vocabulary of 40 by a linear
+  congruential generator from seed 2026, with now and then a full stop or a
+  comma;
+- LZ77 (Ziv and Lempel, 1977) finds, at each position, the longest earlier
+  run of 3 to 258 bytes, through hash chains as zlib keeps them: a
+  `Map Int (List Int)` from each three-byte key to its 16 latest positions,
+  the most recent tried first;
+- the tokens' symbols (a byte, or 256 + n − 3 for a copy of n) are counted,
+  and a Huffman tree (1952) is built from a `Priority queue Int Tree`, the
+  two lightest joined first;
+- each token is written as its code, a copy's distance after it in 15 bits,
+  and the bits are packed eight to a byte;
+- the bytes are read back through the tree, the copies made again, and the
+  Adler-32 checksum (RFC 1950) compared with the document's.
+
+It prints four lines: the document's size and checksum, the tokens, the
+packed size, and the checksum of what came back. It was chosen to try what no
+round had: bytes from text (`utf8 of`, `byte items`), bits shifted and
+packed, a map whose values are lists, a priority queue of trees, and a long
+list read by position. **40 definitions** (2 types, 38 functions and values).
+
+It was written through the MCP, like rounds 12 to 17
+(`gaps-round18/drive.ts` in the project's files): 40 `define`s and one `as`
+answer (`copied`'s map, as `List`). No definition was refused.
+
+Files:
+- `compiler/gaps/pack/`: the program and its README (credits).
+- `compiler/gaps/pack.ideal.js`: the same by hand. The bytes are an array,
+  the chains a Map of arrays, the queue a binary heap ordered by weight and
+  then by when each tree was added, so it builds the same tree and prints the
+  same lines.
+- `compiler/gaps/pack.ts`: the evaluator, the core IR's module and the ideal,
+  in one process.
+- `compiler/test/pack.test.ts`: the three print the same on 200 words, on
+  none, a few and arguments that aren't numbers, and the core IR and the
+  ideal on 800 words. `ters wasi` and `ters native` print what `ters run`
+  prints on 300 words.
+- `compiler/gaps/bench-pack.ts`: the table below.
+
+**Correctness.** The evaluator, the core IR's module, `ters native`,
+`ters wasi` and the ideal print the same at every size tried, up to 3200
+words. Each of the five agreed the first time.
+
+### Results
+
+```
+words  way        packed and back   against the ideal
+200    evaluator      976 ms        476x
+200    core            72 ms         35x
+200    ideal          2.1 ms
+200    native          27 ms         13x   (a process, start-up included)
+200    wasi            85 ms         41x   (a process in Node)
+800    evaluator     4153 ms        760x
+800    core          1557 ms        285x
+800    ideal          5.5 ms
+800    native         687 ms        126x   (a process)
+800    wasi           970 ms        177x   (a process in Node)
+3200   core         31816 ms       2649x
+3200   ideal           12 ms
+3200   native       12066 ms       1005x   (a process)
+3200   wasi         16697 ms       1390x   (a process in Node)
+```
+
+The command was `BUILT=1 RUNS=1 EVALUATOR=800 node compiler/gaps/bench-pack.ts
+200 800 3200`. The ideal grows about linearly; the compiled ways grow as the
+square of the words (P1 to P3).
+
+### The gaps, ranked
+
+**P1. Bytes kept every list as written (C229).** `xs = byte items(utf8 of(text))`
+is the only place pack sees a `Bytes`. Bytes is a library type with a list
+inside, so the lists' boundary (library-reps.ts `listBoundary`) refused the
+whole program: a value whose type holds a list the rewrite doesn't change.
+The split beside it (`splitByHolders`) was refused too, because its
+converter can't convert a recursive type (the map's tree of lists, given by
+`packing` to `codes` and `bits of`). So every list is a linked list read by
+position: `key at`, `run length` and `bit at` walk from the front each time.
+But Bytes has no type parameters, so it never holds the program's lists,
+only its own; and the program never takes one apart. Only `byte items` and
+`utf8 of` do, and they could be kept as written and called as a builtin is,
+with their lists converted where they cross.
+
+**P2. Equality on a stored list walks both lists (C230).** `packed` tests
+`bits = nil` once a byte. On a tree or an array, `equal` is the meaning's,
+so each test turns the whole of `bits` back into cons cells: n² over the
+bits even with P1 fixed (about 90% of 3200 words' time). Two lists of
+different lengths differ, and both rows know their length in one step.
+
+**P3. A copy of `natural` misses Nat's own job (C231).** With lists stored,
+`natural` (a fold over `range(i)`) is one of the library definitions the
+lists' rewrite copies, since it has a list in it. Nat as an Int replaces
+`natural` by its constant-time job, but it looks for the original's id, so
+the copy is left and `natural(258)` builds a range of 258 and folds it for
+each candidate `run length` tries: with P1 and P2 fixed, 60% of 6400 words'
+time.
+
+**P4. A remainder by a literal list's length performs Choice (L262).**
+`remainder(n, length(vocabulary))`, `vocabulary` a literal list of 40 words,
+performs Choice, as a remainder by 0 has no answer. The checker doesn't read
+that a literal list isn't empty. `word for` was written with a guard,
+`if w = 0 then "" else …`.
+
+**P5. No reading an Int from text (L263).** `read number` gives a Float64,
+so the count of words from the arguments is
+`whole of(first(read number(…), else 2000.0))`. Ints have `show` but nothing
+the other way.
+
+**P6. Smaller things, seen, not rows yet.**
+- `ters compile` of pack takes 6.7 s for 40 definitions, of which 4.7 s is
+  choosing representations (`represented`): the program is checked again
+  after each row chosen, three times here. depot (129 definitions) takes
+  9.5 s, crew 10.4 s. The check alone is 1.0 s.
+- `copied` needed a guard (`if back < 1 then nil`) for its remainder too.
+- The evaluator is 480 to 760x the ideal.
+
+### Next
+
+1. P1, P2 and P3, in that order, measured after each.
+2. P4 and P5, with the examples they came from.
