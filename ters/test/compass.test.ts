@@ -1,5 +1,6 @@
 // Compass (examples/compass): a circle round a corner through a point where
 // two lines cross passes through that point, wherever the lines are.
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { infer } from "../src/lang/infer.ts";
@@ -9,7 +10,7 @@ import { fromList, makeRunner, toList, type Data, type Value } from "../src/lang
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
 function compass() {
-  const p = loadProgram("examples/compass");
+  const p = loadProgram(join(import.meta.dirname, "../examples/compass"));
   const info = infer(p.code, p.pres.names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names });
@@ -24,7 +25,7 @@ function compass() {
 const near = (a: number[], b: number[], what: string) => assert.ok(a.every((x, i) => Math.abs(x - b[i]) < 1e-9), `${what}: ${a} is not ${b}`);
 
 test("a circle through a point where two lines cross goes through it", () => {
-  const p = loadProgram("examples/compass");
+  const p = loadProgram(join(import.meta.dirname, "../examples/compass"));
   const info = infer(p.code, p.pres.names);
   const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names });
   const fn = (name: string) => (...xs: Value[]) => first(r.call(r.value(p.named(name)), ...xs) as Iterable<Value>)!;

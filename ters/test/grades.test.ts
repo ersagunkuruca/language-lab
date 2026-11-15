@@ -3,6 +3,7 @@
 // hand on Cl(3, 0) and PGA, and against the evaluator: on inputs inside
 // the given masks, a part the mask says is off is always 0.
 
+import { join } from "node:path";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
@@ -87,9 +88,9 @@ test("blade masks in PGA: a product landing on e₀e₀ = 0 drops out", () => {
 });
 
 test("blade masks are never too small: Constructions' functions against the evaluator", () => {
-  const p = loadProgram("examples/constructions");
+  const p = loadProgram(join(import.meta.dirname, "../examples/constructions"));
   const info = infer(p.code, p.pres.names);
-  const own = JSON.parse(readFileSync("examples/constructions/code.json", "utf8")).defs as Id[];
+  const own = p.own.defs;
   const id = (n: string) => own.find((d) => p.pres.names[d] === n)!;
   const point = bladeMask(p.code, info, id("point"))!;
   const words = (n: string, given: (number | null)[] = []) => { const r = bladeMask(p.code, info, id(n), given); return r && describeMask(r.algebra, r.mask); };

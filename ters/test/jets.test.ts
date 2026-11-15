@@ -3,6 +3,7 @@
 // as the definition itself, and its name must still be a definition of
 // the library's, or the host way silently stops.
 
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -25,7 +26,7 @@ test("each host way names one of the library's definitions", () => {
 });
 
 test("table product's host way gives the definition's bits: Spacetime's charge path, Cl(1, 3)", () => {
-  const p = loadProgram("examples/spacetime");
+  const p = loadProgram(join(import.meta.dirname, "../examples/spacetime"));
   const info = infer(p.code, p.pres.names);
   const id = (n: string) => p.code.defs.find((d) => p.pres.names[d] === n)!;
   const path = (libraryHosts: boolean) => {
@@ -37,7 +38,7 @@ test("table product's host way gives the definition's bits: Spacetime's charge p
 });
 
 test("table product's host way gives the definition's bits on random multivectors, and hands back what it doesn't take", () => {
-  const p = loadProgram("examples/constructions");
+  const p = loadProgram(join(import.meta.dirname, "../examples/constructions"));
   const info = infer(p.code, p.pres.names);
   const algebra = p.code.defs.find((d) => p.pres.names[d] === "algebra")!;
   const both = [true, false].map((libraryHosts) => makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts }));
@@ -62,7 +63,7 @@ test("table product's host way gives the definition's bits on random multivector
 });
 
 test("item at, put entry and entries have: their host ways give the definitions' answers, and hand back what they don't take (I195)", () => {
-  const p = loadProgram("examples/agent");
+  const p = loadProgram(join(import.meta.dirname, "../examples/agent"));
   const info = infer(p.code, p.pres.names);
   const both = [true, false].map((libraryHosts) => makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts }));
   const lib = (n: string) => Object.keys(LIBRARY.names).find((d) => LIBRARY.code.defs.includes(d) && LIBRARY.names[d] === n)!;

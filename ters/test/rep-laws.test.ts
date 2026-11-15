@@ -3,6 +3,7 @@
 // by T's own jobs. Numbers' binary and int Nats, and the library's trees,
 // array of List and tree of List, hold; a job swapped for another is caught.
 
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { infer } from "../src/lang/infer.ts";
@@ -13,7 +14,7 @@ import { storedRows } from "../src/lang/library-reps.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
 
 const numbers = () => {
-  const p = loadProgram("examples/numbers");
+  const p = loadProgram(join(import.meta.dirname, "../examples/numbers"));
   const info = infer(p.code, p.pres.names);
   // Its own binary row, and std's unary and int (L249).
   return { p, info, reps: storedRows(p.code, p.own.defs, representationsIn(p.code, info, p.pres.names, p.own.defs)) };
