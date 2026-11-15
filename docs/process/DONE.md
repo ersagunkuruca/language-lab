@@ -18,6 +18,7 @@ superseded.
 
 | id | item | why |
 |---|---|---|
+| C238 (closed) | A map with pair keys read through a tree with a tuple per read (GAPS round 19 S4): measured by hand-patching scan's `dfa next` to read a JS Map keyed by state*4096+class, at 2000 lines: about 4% on a first run, under the 10% rule. A read-only hash map (C63) stays the way if a program needs it | measured 2026-11-15 |
 | C237 (closed) | A lookup with a default compiles to a try around it (GAPS round 19 S3): measured by taking the try out of scan's `dfa next` by hand, about 14 million lookups at 2000 lines: under 2%, within the noise, since V8 optimises a try that doesn't throw. Not worth a pass | measured 2026-11-15 |
 | C200 | tumble's lists stored as the costs choose | Closed 2026-11-12 as waiting for an example (Ersagun's yes): measured not worth building (tumble's board read by position is small). Comes back as a new row when a program needs it |
 | C59 | Flat inline layout for data built once and read (FlatBuffers) | Closed 2026-11-12 as waiting for an example (Ersagun's yes): the design step (FLAT-LAYOUT.md) found no example over 10%; the likely first case is a program's saved file. Comes back as a new row when a program needs it |
