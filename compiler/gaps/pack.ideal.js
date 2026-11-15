@@ -1,6 +1,6 @@
 // pack (GAPS.md round 18) by hand: the same document, the same LZ77 tokens
 // (hash chains of the 16 latest positions by three-byte key, the longest
-// run from the most recent first), the same Huffman tree (the two lightest
+// run from the most recent first, at most 32767 bytes back), the same Huffman tree (the two lightest
 // joined, of equal weights the one added first) and the same bits, so it
 // prints what the program prints. The bytes are an array, the chains a Map
 // of arrays, the queue a binary heap ordered by weight and then by when
@@ -31,7 +31,7 @@ export function tokensOf(xs) {
     for (const j of chains.get(key(i)) ?? []) {
       let r = 0;
       while (r < 258 && (xs[i + r] ?? -1) === (xs[j + r] ?? -2)) r++;
-      if (r > best) { best = r; back = i - j; }
+      if (r > best && i - j <= 32767) { best = r; back = i - j; }
     }
     if (best >= 3) { ts.push([back, best]); for (let r = 0; r < best; r++) remember(i + r); i += best; }
     else { ts.push(xs[i]); remember(i); i++; }

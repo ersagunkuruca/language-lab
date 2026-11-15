@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
-| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane" | no open row of its own (L252f waits on how to write a unit on a generic number type, Ersagun's call); the next bigger program round, or a row the coordinator gives |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| C232 | `ters wasi` overflows the stack on pack at 6400 words since its lists are trees (C229): `prose`, which builds the document a word a call, `cons(word, prose(…))`, was a loop by tail-modulo-cons (C24) while cons made a cell; as a tree's cons (a job, a call) it is a recursion as deep as the words. The core IR's JavaScript goes on past 1000 calls by its drive (C21), C's stack is big enough; WebAssembly has neither (stack switching, C187). Either a drive for WebAssembly, or a recursion building a stored list by cons written as a loop that builds the list as written and stores it once | GAPS.md round 18, after the fixes | 2026-11-15 |
 
 ## E: Editor
 

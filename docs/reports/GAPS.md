@@ -3984,3 +3984,16 @@ because `item at` on a tree is log n where the ideal's array is one step.
 Under WASI, 6400 words and more now overflow the stack. A recursion on the
 stored lists goes as deep as the bytes (C232). Before, those sizes took
 minutes. Native runs 12800 words.
+
+C232 is done too. `prose`, `tokens` and five more definitions cons onto a call
+of themselves. Now they append at the back and call themselves in tail
+position, a loop (cons-onto.ts), so `ters wasi` runs 6400 and 12800 words.
+That size also showed a bug in pack itself: a copy could reach more than
+32767 bytes back, more than its 15 bits can say, so 12800 words came back
+different in every way and in the ideal. `best match` now takes only
+candidates within 32767 bytes. Against the ideal now:
+
+| words | core | native | wasi |
+|---|---|---|---|
+| 3200 | 25x | 16x | 34x |
+| 12800 | 26x | 16x | 25x |

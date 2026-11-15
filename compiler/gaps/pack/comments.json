@@ -12,7 +12,7 @@
 "cjfn19fqicbjkj4v6b18r9f5p7": "A Huffman code tree: a symbol and how often it comes, or two trees joined, with their weights summed.",
 "doae978g7q3g0j6cgaa3rh0cbr": "The n bytes a copy from back bytes before the end makes: when the copy is longer than back, its own first bytes again.",
 "ds3ktcff8o3k0ns8pio9nan6ru": "Adler-32 of the bytes, going on from a and b.",
-"ff6qa4o2bd57ea7atlsivvtp0d": "The longest run from i among the earlier positions given, as (length, how far back), or best when none is longer.",
+"ff6qa4o2bd57ea7atlsivvtp0d": "The longest run from i among the earlier positions given, at most 32767 bytes back (what 15 bits can say), as (length, how far back), or best when none is longer.",
 "fos66l9p8cqifci9ljtdgs660r": "Bit i of the bytes, counting from the first byte's highest.",
 "h90j9ra2bpmhv1elfrvtk5eq3q": "pack [words]: a document of so many words (2000) compressed, LZ77 then Huffman, and back.",
 "hsbm0c940tdacuvour002iskjh": "A token's bits: its symbol's code, and for a copy how far back, in 15 bits.",
