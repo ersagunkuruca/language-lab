@@ -4278,3 +4278,19 @@ the tables pay more than in C:
 
 (the two modules run in turn under Node's WASI, 8000 lines, same output
 as native's.)
+
+Where round 19 stops. Native's instructions at 1000 lines after C243
+(callgrind) leave no stage worth a tenth:
+
+- the program's own class lookup, a linear walk of a cons list, 19%
+  inclusive, 7 points of it `lab_int_add` called for its position (20
+  instructions a call, a small-Int fast path inlined would save under 4%);
+  as an array it is the same walk (C237, under 2%);
+- copying the DFA record in and out of calls, `Dfa_dup` and `Dfa_drop`,
+  7%;
+- allocation (`lab_new`, `lab_fields`, `lab__dead`) about 12%, spread over
+  the NFA's steps.
+
+Core keeps the tree (C243 doesn't pay in JavaScript), and its largest part
+is the same class lookup. The round stops here: core 2.9x, native 2.4x,
+wasi about 2.3x the ideal at 8000 lines.
