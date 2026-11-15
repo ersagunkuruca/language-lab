@@ -24,6 +24,7 @@ import { intCases, usesIntCases } from "./int-cases.ts";
 import { choose, represent, uses, type Representation } from "./represent.ts";
 import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
+import { consOnto } from "./cons-onto.ts";
 import { splitLists } from "./rep-split.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
@@ -210,7 +211,20 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const lists = chosen.find((r) => r.of === LIST), boundary = lists && listBoundary(code, info, defs, lists, asked)!;
   let copies: Id[] = [];
   if (boundary) {
-    const withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
+    let withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
+    // Where the row's cons is a call and its append cheap (a tree's), a
+    // definition consing onto a call of itself appends at the back
+    // instead, a loop (cons-onto.ts, C232).
+    if ((lists.cost[CONS] ?? "1") !== "1" && cheaperOn(lists, LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!, prelude("append"))) {
+      const c = consOnto(withBoundary, names, defs, prelude("append"));
+      if (c.made.length) {
+        withBoundary = { nodes: { ...withBoundary.nodes, ...c.nodes }, defs: [...withBoundary.defs, ...c.made] };
+        code = { nodes: { ...code.nodes, ...c.nodes }, defs: [...code.defs, ...c.made] };
+        names = { ...names, ...c.names };
+        for (const [to, from] of c.copiedFrom) { const t = info.typeOf.get(from); if (t) info.typeOf.set(to, t); }
+        defs = [...defs, ...c.made];
+      }
+    }
     // Only those with a list somewhere in them: one generic in what it is
     // given (conjugate, inverse, applied) the rewrite leaves as it is, and
     // a copy would hide it from what knows it by its id (the compiler's

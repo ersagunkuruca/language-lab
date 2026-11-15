@@ -48,20 +48,38 @@ test("pack: 800 words, from the core IR and the ideal", () => {
   assert.deepEqual(w.core(["800"], {}), w.ideal(["800"], {}));
 });
 
-// The program as `ters wasi` and `ters native` build it.
+// Past 32 KB a copy still reaches at most 32767 bytes back, what its 15
+// bits say: 12800 words came back different before.
+test("pack: 12800 words, 72 KB, come back the same", () => {
+  const r = w.core(["12800"], {});
+  assert.deepEqual(r, w.ideal(["12800"], {}));
+  assert.match(r.out[3], /^Unpacked: 72035 bytes, .*, the same$/);
+});
+
+// C232: `prose` and `tokens` cons onto a call of themselves; on the tree's
+// cons, a call, they were recursions as deep as the words, past
+// WebAssembly's stack at 6400 words. Each is a loop now, appending at the
+// back (cons-onto.ts).
+test("pack: what conses onto a call of itself appends at the back instead", () => {
+  const p = program(), made = new Set(Object.entries(p.names).filter(([d]) => p.code.nodes[d]?.kind === "def").map(([, n]) => n));
+  for (const n of ["prose onto", "tokens onto", "decoded onto"]) assert.ok(made.has(n), n);
+});
+
+// The program as `ters wasi` and `ters native` build it, on 6400 words
+// (WebAssembly's stack, C232).
 test("pack through ters wasi and ters native prints what ters run prints", async () => {
   const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), dir = mkdtempSync(join(tmpdir(), "pack-"));
-  const want = spawnSync(process.execPath, [lab, "run", folder, "300"], { encoding: "utf8" });
+  const want = spawnSync(process.execPath, [lab, "run", folder, "6400"], { encoding: "utf8" });
   assert.equal(want.status, 0, want.stderr);
   const made = spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "p.wasm")], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
-  const wasi = new WASI({ version: "preview1", args: ["p", "300"], stdout: fd, stderr: fd, returnOnExit: true });
+  const wasi = new WASI({ version: "preview1", args: ["p", "6400"], stdout: fd, stderr: fd, returnOnExit: true });
   wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "p.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
   closeSync(fd);
   assert.equal(readFileSync(of, "utf8"), want.stdout, "ters wasi");
   if (skip) return;
   const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "p")], { encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);
-  assert.equal(spawnSync(join(dir, "p"), ["300"], { encoding: "utf8" }).stdout, want.stdout, "ters native");
+  assert.equal(spawnSync(join(dir, "p"), ["6400"], { encoding: "utf8" }).stdout, want.stdout, "ters native");
 });
