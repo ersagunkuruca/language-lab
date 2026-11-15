@@ -63,13 +63,15 @@ test("pack: 12800 words, 72 KB, come back the same", () => {
 
 // C232: `prose` and `tokens` cons onto a call of themselves; on the tree's
 // cons, a call, they were recursions as deep as the words, past
-// WebAssembly's stack at 6400 words. On a tree each is a loop, appending
-// at the back (cons-onto.ts). Pack's lists are arrays since C234, so the
-// rewrite is checked on the program as written.
+// WebAssembly's stack at 6400 words. Each is a loop now, appending at the
+// back (cons-onto.ts), on the arrays too since their append onto what a
+// loop carries is a push (C240): past a thousand deep, every call under
+// `tokens` ran as a generator.
 test("pack: what conses onto a call of itself appends at the back instead", () => {
-  const p = program(true), c = consOnto(p.code, p.names, p.code.defs, PRELUDE_DEFS.append);
-  const made = new Set(c.made.map((d) => c.names[d]));
+  const p = program(), made = new Set(Object.entries(p.names).filter(([d]) => p.code.nodes[d]?.kind === "def").map(([, n]) => n));
   for (const n of ["prose onto", "tokens onto", "decoded onto"]) assert.ok(made.has(n), n);
+  const q = program(true), c = consOnto(q.code, q.names, q.code.defs, PRELUDE_DEFS.append);
+  assert.ok(new Set(c.made.map((d) => c.names[d])).has("tokens onto"));
 });
 
 // C234: an array's append writes the shorter one onto the longer one's
