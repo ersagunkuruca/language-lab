@@ -36,6 +36,7 @@ import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { useDirections } from "../../ters/src/lang/directions.ts";
 import { interfaceOps, waysIn } from "../../ters/src/lang/ways.ts";
 import { withInverses } from "./inverses.ts";
+import { withOperationLambdas } from "./operation-values.ts";
 import { hoistInvariants } from "./hoist.ts";
 import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
@@ -657,6 +658,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Checked with the program's options: a represented program's insiders
   // (library-reps.ts) may call the constructors they stand for.
   ({ code, info, names } = withInverses(code, info, names));
+  // An operation with an effect given as a value, the lambda calling it
+  // (operation-values.ts, C235): `for each(lines, print)`.
+  ({ code, info, names } = withOperationLambdas(code, info, names));
   const f = fusedProgram(code, info, names);
   let ir = lowerScalar(f.code, endsAsBefore(given, f.info), f.names, roots, { data: true, host: true, printed: (c, id) => planOf(c, `solve:${id}`) !== null });
   // A linear function of a linear function, one matrix (linear-calls.ts, L44).

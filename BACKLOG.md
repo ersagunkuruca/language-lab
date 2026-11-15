@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | C235, then C236 to C238 and C239 (GAPS round 19); I303 and I304 for the MCP after them |
+| C Compiler and targets | "Compiler lane" | C236 to C238 and C239 (GAPS round 19); I303 and I304 for the MCP after them |
 | L Language and library | "Language lane" | pack's speed (GAPS round 18), cost by cost, each a C row, until a stage buys under 10% (C233, C234 done); L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -92,7 +92,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C235 | A builtin or an effect's operation passed as a value isn't compiled (GAPS round 19 S1): `for each(lines, print)` is refused by the core IR, `ters wasi` and `ters native` ("uses print as a value (functions and data need a heap)"), where the evaluator runs it. Make the lambda `(x) => print(x)` where one is used as a value | GAPS round 19 | P1 | S | |
 
 ### Speed of compiled code
 
