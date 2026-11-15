@@ -38,6 +38,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| I300 | An effect's number sits just left of its box's top, not on its top left corner (QA 11-15 Q4): there it covered a title above the box, Effects' signature line (`Unit`) and the header of crew's inner frame (`other`). A folded box's range sits the same way, its right end by the box | this PR |
 | I299 | A folded frame says the numbers of the calls with effects it holds (QA 11-15 Q2): with the effect order on, crew's `main` folded its `[path]` arm, so read file, plan of and report had no number to show. The box now carries a badge with their range, `1–4`, or `3, 7` where others run between. Test: effect-order.test.ts | #2758 |
 | I298 | A pin's units show wherever its type does (QA 11-15 Q1): the pin row ("Pinned at (Float64 u, Float64 v) -[Choice]-> Float64 u/v"), the note after pinning, the graph's title, and a hole's "needs" and its label in the text (`□Float64 u`). A hole's unit is what the body and the pin say of it (units.ts `holeUnit`, the pin's variables kept free), and a written unit fixes it in an unpinned definition too (`□ + 400.0 m` needs m). Test: pinned-units.test.ts | #2757 |
 | L262 | A list written out isn't empty: the sign analysis (signs.ts) reads a list's length as never negative, and as positive for a list written out (`[the, a, …]`, a cons), through a definition or a let holding it, so `remainder(n, length(vocabulary))` has no Choice. pack's `word for` drops its guard `if w = 0`. Test: no-answer.test.ts, pack.test.ts | #2753 |
