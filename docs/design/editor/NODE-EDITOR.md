@@ -47,6 +47,18 @@ Sources this draws on, credited per the project's attribution rule:
 - **Free beats automatic, automatic beats nothing.** Positions you set are
   kept exactly. Tidy is a gesture you ask for, not something that runs behind
   your back, so nothing jumps while you work.
+- **The order effects run in is numbered, on request** (E265). An action's
+  steps are numbered dots, but an effect inside a call's inputs showed no
+  order: in `show(area()) ++ show(share(10, 0))` nothing said area is asked
+  first. Right-click the canvas, "Number the effects in the order they run":
+  each call whose row isn't empty (an effect's own operations too, random(),
+  now()) gets a number in the order it runs, a call's inputs left to right
+  and then the call (SPEC 5.1). A thunk given to a call (first's, a
+  handler's) runs there and is numbered on; any other function written in
+  place numbers its own from 1, as it runs when it is called; each case of
+  a match goes on from what came before it. A view (layout.json `order`),
+  not a monads toggle: binding every effectful call to a name would spell
+  the same tree longer and say nothing the numbers don't.
 - **Geometry is plain code.** `graphLayout.ts` has no DOM; it takes boxes and
   polylines and returns positions, crossings and label spots, so it is tested
   like the rest of the language.

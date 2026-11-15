@@ -216,6 +216,8 @@ export function graphMenu(host: GraphMenuHost) {
       const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
       rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
         : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
+      if (inGraph) rows.push((doc().layout.order ?? []).includes(ui.def) ? item("Hide the order effects run in", "order", "Take the numbers off the calls with effects")
+        : item("Number the effects in the order they run", "order", "Each call with an effect gets a number: what runs first, second… A call's inputs run left to right, then the call. A view only"));
       rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports and the call centred on them (the layout's sources are in Credits), folded frames as one box"));
       rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
     }
@@ -277,6 +279,11 @@ export function graphMenu(host: GraphMenuHost) {
       case "undot": return void applyT(T.removeDot(doc().code, doc().names.short, info, ui.def, target!, { of: doc().loose ?? {}, home: doc().home ?? {} }));
       case "goto": { const d = calleeDef(target!); if (d) openDef(d); return; }
       case "inline": return toggleInline(target!);
+      case "order": {
+        const now = doc().layout.order ?? [], on = now.includes(ui.def);
+        return commit({ layout: { ...doc().layout, order: on ? now.filter((d) => d !== ui.def) : [...now, ui.def] } }, ["layout.json"],
+          on ? "The numbers are off. Only the layout changed." : "Each call with an effect is numbered in the order it runs: a call's inputs left to right, then the call. It's a view: the layout changed, the code didn't.");
+      }
       case "dot": return void applyT(T.addDot(doc().code, doc().names.short, info, ui.def, target!));
       case "clear": return void applyT(T.toHole(doc().code, doc().names.short, info, target!));
       case "step-before": {
