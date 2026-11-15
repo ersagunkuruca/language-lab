@@ -721,6 +721,10 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     // After a handler's block, the status on the stack: the one it handles
     // (1: no answer, 2: an abort) stays, any other goes on out to fl.
     const on = (mine: number, d: number, fl: number) => (fl < 0 ? [0x1a] : [0x21, ...u(st), 0x20, ...u(st), 0x20, ...u(st), 0x41, mine, 0x47, 0x0d, ...to(d, fl), 0x1a]);
+    // An attempt's no answer when a with fuel ran out: none out to fl, so
+    // the with fuel gives its otherwise (I294). Outside any, the fuel is
+    // infinite; a with fuel puts back the fuel it was under.
+    const outOfFuel = (d: number, fl: number) => (!fuel || fl < 0 ? [] : [0x23, 0x00, 0x44, ...f64(0), 0x63, 0x04, 0x40, 0x41, 0x01, 0x0c, ...to(d + 1, fl), 0x0b]);
     return function code(e: SExpr, d: number, fl: number): number[] {
     const code1 = (x: SExpr) => code(x, d, fl);
     switch (e.k) {
@@ -842,7 +846,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
           0x20, ...u(st), 0x04, ...typeOf(e.t), ...code(e.otherwise, d + 1, fl), 0x05, ...code(e.ok, d + 1, fl), 0x0b,
         ];
         // block $done (block $none (result i32) body; res = it; ok; br $done) drop; otherwise
-        return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, ...on(1, d + 1, fl), ...code(e.otherwise, d + 1, fl), 0x0b];
+        // With the fuel run out, no answer is no answer out here too: the
+        // whole with fuel has none (SPEC 5.6, I294).
+        return [0x02, ...typeOf(e.t), 0x02, 0x7f, ...code(e.body, d + 2, d + 1), 0x21, ...u(e.res), ...code(e.ok, d + 2, fl), 0x0c, 0x01, 0x0b, ...on(1, d + 1, fl), ...outOfFuel(d + 1, fl), ...code(e.otherwise, d + 1, fl), 0x0b];
       }
       // abort(reason): the reason in its global, then status 2.
       case "abort": return [...code1(e.reason), 0x24, ...u(e.esc ? escapeG : reasonG), ...(fl < 0 ? [0x00] : [0x41, ...s(2 + (e.esc ?? 0)), 0x0c, ...to(d, fl)])];
@@ -1015,6 +1021,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       return [
         `${d}(block (result ${ty(e.t)})`, `${d}  (block (result i32) ;; no answer`, wat(e.body, f, d + "    ", ld + 2, ld + 1), `${d}    local.set ${local(f, e.res)}`, wat(e.ok, f, d + "    ", ld + 2, fl), `${d}    br 1)`,
         ...on(1, d + "  ", ld + 1),
+        ...(fuel && fl >= 0 ? [`${d}  global.get $fuel`, `${d}  f64.const 0`, `${d}  f64.lt`, `${d}  (if (then i32.const 1 br ${to(ld + 2)})) ;; the fuel ran out: none out here too`] : []),
         wat(e.otherwise, f, d + "  ", ld + 1, fl) + ")",
       ].join("\n");
       case "abort": return [w(e.reason), `${d}global.set $${e.esc ? "escape" : "reason"}`, ...(fl < 0 ? [`${d}unreachable ;; an abort, nowhere to go`] : [`${d}i32.const ${2 + (e.esc ?? 0)}`, `${d}br ${to(ld)} ;; aborted`])].join("\n");
