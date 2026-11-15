@@ -61,7 +61,9 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // the garbage collector takes back while blocks are due, so where lists
 // as arrays cost what the definition does, arrays (C196: "pedal is
 // creating cons lists in the audio loop. That's just wrong").
-export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean }
+// `dataKeys`: the target's hash tables take keys that are data (C243,
+// HASH-KEYS-2026-11-15.md): a list, a set as written.
+export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean; dataKeys?: boolean }
 
 // The rows the chooser picks from for each type a program stores: its own
 // representations, and the library's rows for a type stored whole (std's
@@ -153,9 +155,20 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         && n.args.some((a) => { const g = code.nodes[a]; return g?.kind === "ref" && code.nodes[g.target]?.kind === "def" && listed(info.typeOf.get(a)); });
     })));
   };
+  // The types already chosen to be hash tables, which no key can hold.
+  const tabled = () => new Set(chosen.filter((r) => r.oneHolder).map((r) => r.of));
+  // A type in the keys of a hash table chosen already stays as written
+  // (C243): a key is hashed by its one spelling, which a tree or an array
+  // of it isn't.
+  const inTableKeys = (ty: Id) => {
+    const holders = tabled();
+    if (!holders.size) return false;
+    const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" && (t.id === ty || t.args.some(has)); };
+    return defs.some((d) => subtree(code, d).some((id) => { const t0 = info.typeOf.get(id); if (!t0) return false; const t = info.subst.zonk(t0); return t.t === "con" && holders.has(t.id) && !!t.args[0] && has(t.args[0]); }));
+  };
   types: for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
-    if (asked.some((r) => r.of === ty) || skip.has(ty)) continue;
+    if (asked.some((r) => r.of === ty) || skip.has(ty) || inTableKeys(ty)) continue;
     // A hash table only where it is (hostMaps), and only where every map
     // has one holder, so a put changing it in place can't be seen.
     // A program that runs something on lists backwards (a solve, inverse)
@@ -165,8 +178,8 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // (conjugate's bands given to inverse, beside a page whose `styled`
     // appends in a loop, I292).
     const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty) && !(r.name === "tree of List" && runsBackwards())
-      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r))
-        || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r))));
+      && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))
+        || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))));
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     // What an edge does with its own lists (Bytes' `byte at`, by position)
     // is no job of theirs: the edge keeps them as written.
@@ -600,7 +613,7 @@ function asMeanings(k: Lang, code: Code, info: Info, names: Names, chosen: Repre
 // it (C71): every version of a table stays a value (std.ts Table), so a
 // map read again after a change is still right; one holder is what makes
 // each change constant.
-function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation): boolean {
+function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representation, tabled: ReadonlySet<Id> = new Set(), dataKeys = false): boolean {
   for (const id of defs.flatMap((d) => subtree(code, d))) {
     const t0 = info.typeOf.get(id);
     if (!t0) continue;
@@ -611,14 +624,20 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
   // Int, Text, or a tuple of them (C63f, std.ts `spelling`), or a record
   // of the program's own (a type with one case) whose fields are (C63g):
   // with one case its spelling needs no tag. Not a type inside itself.
+  // With `dataKeys` (C243), data of any cases whose fields are, a type
+  // inside itself too (a list), but not this row's type or one already a
+  // hash table, which have no one spelling.
   function hashable(k: Type, within: ReadonlySet<Id> = new Set()): boolean {
     if (k.t === "var") return true;
     if (k.t !== "con") return false;
-    const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t !== "var" && hashable(z, within); };
+    const inner = (a: Type) => { const z = info.subst.zonk(a); return z.t === "var" ? dataKeys : hashable(z, within); };
     if (k.id === INT || k.id === STRING) return true;
     if (/^std\.tuple\d+$/.test(k.id)) return k.args.every(inner);
     const d = code.nodes[k.id], td = d?.kind === "def" && d.body ? code.nodes[d.body] : null;
-    if (td?.kind !== "typedef" || td.effect || td.interface || td.variants.length !== 1 || within.has(k.id)) return false;
+    if (td?.kind !== "typedef" || td.effect || td.interface) return false;
+    if (dataKeys && (k.id === row.of || tabled.has(k.id))) return false;
+    if (within.has(k.id)) return dataKeys;
+    if (td.variants.length !== 1 && !dataKeys) return false;
     const params = new Map(td.params.map((p, i) => [p, k.args[i]] as const));
     const typeOf = (tid: Id): Type | null => {
       const t = code.nodes[tid];
@@ -628,9 +647,10 @@ function inPlace(code: Code, info: Info, main: Id, defs: Id[], row: Representati
       const args = t.args.map(typeOf);
       return args.every((a) => a) ? { t: "con", id: t.target, args: args as Type[] } : null;
     };
-    const fields = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => typeOf((code.nodes[f] as NodeOf<"field">).type));
+    const fields = td.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant">).fields.map((f) => typeOf((code.nodes[f] as NodeOf<"field">).type)));
     const deeper = new Set([...within, k.id]);
-    return fields.length > 0 && fields.every((f) => { if (!f) return false; const z = info.subst.zonk(f); return z.t !== "var" && hashable(z, deeper); });
+    // A type variable is fixed where the definition is used, and checked there.
+    return (fields.length > 0 || dataKeys) && fields.every((f) => { if (!f) return false; const z = info.subst.zonk(f); return z.t === "var" ? dataKeys : hashable(z, deeper); });
   }
 }
 

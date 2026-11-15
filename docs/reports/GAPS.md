@@ -4247,3 +4247,22 @@ loop, so a lookup takes no counts. Same run, same output:
 | native | 10.8 s, 4.0x | 7.1 s, 2.6x |
 
 (core 8.6 s and wasi 8.7 s in that run, unchanged by C241.)
+
+C242 made a call let to a local and given back a tail call in C, so the
+tree lookup going on into a branch is a round of its loop: 7% fewer
+instructions. What was left on native was the reads of the DFA's moves,
+a `Map (Int, Int) Int` kept a tree, 18.6% of the instructions, because
+the same program's other Maps are keyed by a Set and a List, and a hash
+table was chosen only where every Map's key was Ints, Texts and tuples of
+them. C243 (HASH-KEYS-2026-11-15.md) lets C's tables take keys that are
+data, hashed, compared and ordered by their case, then their fields, so
+all of scan's Maps are hash tables in C:
+
+| Way | After C242 | After C243 (C) |
+|---|---|---|
+| native | 7.0 s | 6.0 s, 2.4x |
+
+(the two binaries timed in turn; core 7.2 s, 2.9x, and wasi 8.8 s, 3.6x,
+unchanged, in that `bench-scan.ts` run.) JavaScript keeps the tree: its
+tables hold a key by its spelling, and spelling a pair of Ints on every
+read made core slower, 8 s to about 14 s, when tried.

@@ -95,7 +95,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C243 | A Map keyed by a list or a set keeps every Map of the program a tree: a hash table is chosen per type for the whole program, and only for Int, Text and tuple keys (library-reps.ts `inPlace`, scalar.ts tables). scan's DFA ids are a `Map (Set Int) Int`, so its moves, a `Map (Int, Int) Int` read 7 million times at 1000 lines, are a weight-balanced tree: 18.6% of native's instructions after C242, about 340 per read where a hash read is some 40 (~16% to gain); core 4% (C238). Hash keys that are data of hashable parts (a derived hash beside the derived equal and compare), in C, WebAssembly and JavaScript | GAPS round 19 | 2 | L | ▶ |
+| C243 | A Map keyed by a list or a set keeps every Map of the program a tree: a hash table is chosen per type for the whole program, and only for Int, Text and tuple keys (library-reps.ts `inPlace`, scalar.ts tables). scan's DFA ids are a `Map (Set Int) Int`, so its moves, a `Map (Int, Int) Int` read 7 million times at 1000 lines, are a weight-balanced tree: 18.6% of native's instructions after C242, about 340 per read where a hash read is some 40 (~16% to gain); core 4% (C238). Hash keys that are data of hashable parts (a derived hash beside the derived equal and compare), in C, WebAssembly and JavaScript. C done (C243b: native 7.0 to 6.0 s); left: WebAssembly (C243c, wasm-table.ts `leaves`); JavaScript keeps the tree (spelling a key per read made core slower) | GAPS round 19 | 2 | M | ▶ |
 
 ### Memory and layout (STABLE-REFERENCES.md §3 to §6)
 

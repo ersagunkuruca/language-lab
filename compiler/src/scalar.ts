@@ -230,13 +230,13 @@ export type WType = "int" | "text" | "host";
 // when a job takes or gives one.
 export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
 // std's Table (C63h): Map as a hash table, in C only, for Int and Text
-// keys (c.ts `tableC`). `index`: its place in CoreIR.tables, which its
+// keys (c.ts `tableC`); in C, keys that are data too (`dataKeys`, C243). `index`: its place in CoreIR.tables, which its
 // runtime functions are named by (`table.put.t0`); `entries`: each List
 // of (key, value) pairs `table entries` gives (`table.entries.t0.e1`): a
 // key nothing fixes is held as an Int, its pairs' may be another type.
 // `set`: std's Hash set (C63i), its items the keys, each holding true
 // (a Bool), its entries the List of its items.
-export interface TType { key: string; name: string; keyT: "int" | "text" | "f64" | RType; value: LType; index: number; entries: DType[]; set: boolean }
+export interface TType { key: string; name: string; keyT: "int" | "text" | "f64" | RType | DType; value: LType; index: number; entries: DType[]; set: boolean }
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
@@ -623,7 +623,8 @@ export function reachedFrom(code: Code, roots: Id[]): Code {
 // `hosted`: the program's own effects its host answers where nothing
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
+// `dataKeys`: a table's key may be data (C243, C's tables only).
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -641,7 +642,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
@@ -658,7 +659,7 @@ export function vouched(code: Code, info: Info, names: Names): Info {
   return again;
 }
 
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -997,7 +998,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       const set = t.id === HASH_SET, free = !t.args[0] || unconstrained(t.args[0]);
       const k = free ? "f64" : stype(t.args[0], inside), value = set ? "i32" : t.args[1] && stype(freed(t.args[1]), inside);
       // A tuple or record of Ints and Texts too (C63k), as JavaScript's.
-      const hashable = (x: LType | null): boolean => x === "int" || x === "text" || (!!x && isRecord(x) && !x.mutable && x.fields.length > 0 && x.fields.every((f) => hashable(f.t)));
+      // With `dataKeys` (C243, HASH-KEYS-2026-11-15.md), a Bool, or data
+      // of any cases whose fields are (a List of Ints, a Set as written).
+      const hashable = (x: LType | null, seen = new Set<string>()): boolean => x === "int" || x === "text" || (!!opts.dataKeys && x === "i32")
+        || (!!x && isRecord(x) && !x.mutable && x.fields.length > 0 && x.fields.every((f) => hashable(f.t, seen)))
+        || (!!opts.dataKeys && !!x && isData(x) && (seen.has(x.key) || (seen.add(x.key), x.cases.every((c) => c.fields.every((f) => hashable(f.t, seen))))));
       if (!(free || hashable(k)) || !value) return null;
       const key = `${t.id}<${typeof k === "string" ? k : (k as RType).key}${set ? "" : `,${show(freed(t.args[1]))}`}>`;
       if (tables.has(key)) return tables.get(key)!;
