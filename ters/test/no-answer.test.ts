@@ -11,7 +11,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { HTML_MODULE, LIBRARY } from "../src/lang/library.ts";
 import { equal, makeRunner, runMain, type Value } from "../src/lang/run.ts";
-import { CELL_OPS as C, HTML_V, INT_OPS, S } from "../src/lang/std.ts";
+import { CELL_OPS as C, CONS, HTML_V, INT_OPS, S } from "../src/lang/std.ts";
+import { PRELUDE_DEFS } from "../src/lang/prelude-ids.ts";
 import { showType, NUMBER } from "../src/lang/types.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { evaluatorCall, mountHtml } from "../src/lang/html.ts";
@@ -20,8 +21,7 @@ import { fakeDoc, FakeEl } from "./fakedom.ts";
 
 const f = (k: Lang, x: number) => k.at(NUMBER, x);
 
-function program(build: (k: Lang) => [string, Id][]) {
-  const k = new Lang();
+function program(build: (k: Lang) => [string, Id][], k = new Lang()) {
   const defs = build(k).map(([name, body]) => { const d = k.def(name); k.define(d, body); return [name, d] as const; });
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
@@ -67,6 +67,35 @@ test("Int's quotient, remainder and power by a divisor or exponent shown fine ha
   assert.equal(p.type("by zero"), "(Int) -[Choice]-> Int");
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   assert.deepEqual([...(r.call(r.value(p.d["by three"]), 10) as Iterable<Value>)], [1]);
+});
+
+// pack's word for: remainder(n, length(vocabulary)), vocabulary a list
+// written out, has no Choice (L262).
+test("a list written out isn't empty, so a remainder by its length has no Choice (L262)", () => {
+  const len = PRELUDE_DEFS.length;
+  const p = program((k) => {
+    const words = k.def("words"), none = k.def("none");
+    k.define(words, k.list(k.int(4), k.int(5), k.int(6)));
+    k.define(none, k.list());
+    return [
+      ["by words", k.fn(["n"], (n) => k.call(INT_OPS.remainder, n, k.call(len, k.x(words))))],
+      ["by a let", k.fn(["n"], (n) => k.let("w", k.call(len, k.list(k.int(1))), (w) => k.call(INT_OPS.remainder, n, w)))],
+      ["by more", k.fn(["n", "xs"], (n, xs) => k.call(INT_OPS.remainder, n, k.call(len, k.call(CONS, k.int(1), xs))))],
+      ["by none", k.fn(["n"], (n) => k.call(INT_OPS.remainder, n, k.call(len, k.x(none))))],
+      ["by any", k.fn(["n", "xs"], (n, xs) => k.call(INT_OPS.remainder, n, k.call(len, xs)))],
+      ["guarded", k.fn(["n", "xs"], (n, xs) => k.let("w", k.call(len, xs), (w) => k.if(k.call(S.equal, w, k.int(0)), k.int(0), k.call(INT_OPS.remainder, n, w))))],
+      ["guarded below", k.fn(["n", "xs"], (n, xs) => k.let("w", k.call(len, xs), (w) => k.if(k.call(INT_OPS.less, k.int(0), w), k.call(INT_OPS.remainder, n, w), k.int(0))))],
+    ];
+  }, new Lang(LIBRARY.code));
+  assert.equal(p.type("by words"), "(Int) -> Int");
+  assert.equal(p.type("by a let"), "(Int) -> Int");
+  assert.equal(p.type("by more"), "(Int, List Int) -> Int");
+  assert.equal(p.type("by none"), "(Int) -[Choice]-> Int");
+  assert.equal(p.type("by any"), "(Int, List a) -[Choice]-> Int");
+  assert.equal(p.type("guarded"), "(Int, List a) -> Int");
+  assert.equal(p.type("guarded below"), "(Int, List a) -> Int");
+  const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
+  assert.deepEqual([...(r.call(r.value(p.d["by words"]), 10) as Iterable<Value>)], [1]);
 });
 
 test("a page's view with no answer shows nothing there, and its answer when it has one again", () => {
