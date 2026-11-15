@@ -811,7 +811,7 @@ const node = (id: Id) => doc.code.nodes[id];
 // pin the editor holds (not signatures.json), kept with the saved programs
 // so a reload doesn't drop it unsaid (E179); "Let it loosen" in its Type
 // section, or beside a fill it refuses, drops it.
-let held: Pins = (() => { if (EMBED) return {}; try { return JSON.parse(localStorage.getItem(STORE) ?? "null")?.held ?? {}; } catch { return {}; } })();
+let held: Pins = (() => { if (EMBED) return {}; try { const h: Pins = JSON.parse(localStorage.getItem(STORE) ?? "null")?.held ?? {}; return Object.fromEntries(Object.entries(h).map(([d, { units: _, ...type }]) => [d, type])); } catch { return {}; } })();
 const hasHole = (code: Code, d: Id) => !!code.nodes[d] && subtree(code, d).some((x) => code.nodes[x].kind === "hole");
 function holdType(next: Code): string {
   const d = ui.def, info = typesOf();
@@ -830,7 +830,12 @@ function holdType(next: Code): string {
   try { loose = T.typeOf(T.guardedInfo(next, sigs) ?? T.infer(next, pres().names), d, pres().names); } catch { return ""; }
   const was = T.typeOf(info, d, pres().names);
   if (loose === was) return "";
-  held = { ...held, [d]: p.pins[d] };
+  // Its type only: a held type keeps the type a hole would loosen, not
+  // the units a pin keeps (L252e), which a fill may change as any edit
+  // may (I296: replacing drop by drift in drift − drop · speed was
+  // refused, its speed made plain where the held units said any).
+  const { units: _, ...type } = p.pins[d];
+  held = { ...held, [d]: type };
   return ` ${pres().names[d] ?? "It"} keeps its type, ${was}, while the hole is open.`;
 }
 
