@@ -29,6 +29,8 @@ import { keptAcrossRuns } from "./kept.ts";
 import type { Representation } from "./represent.ts";
 import { atLeastAsGeneral, pinKey, pinsOf, type Pin, type Pins } from "./signatures.ts";
 import { schemeArith, showType, type Type } from "./types.ts";
+import { unitsAtLeastAsGeneral } from "../units.ts";
+import { showWithPinUnits } from "./unit-types.ts";
 
 export const MODULE_FORMAT = "projectional-module";
 
@@ -70,11 +72,14 @@ const hasHole = (code: Code, def: Id) => nodeIds(code, def).some((id) => code.no
 
 // ------------------------------------------------------------------ publish
 
-// Publish `defs` and every draft they depend on. `base` is what's always
+// Publish `defs` and every draft they depend on. With `units`, each pin
+// keeps its definition's units too (L252e): a module of a program's own
+// (publishVersion); the library's modules, whose units nothing pins,
+// leave them to the bodies. `base` is what's always
 // there (builtins, std) and is never republished. Refused while anything to
 // be published has a hole, an error or no body: a published definition is
 // finished, since its hash is its name forever.
-export function publish(code: Code, names: Names, defs: Id[], base: Code): Result<{ code: Code; names: Names; rename: Map<Id, Id>; published: Id[]; pins: Pins }> {
+export function publish(code: Code, names: Names, defs: Id[], base: Code, units = false): Result<{ code: Code; names: Names; rename: Map<Id, Id>; published: Id[]; pins: Pins }> {
   const nm = (d: Id) => names[d] ?? d;
   const drafts = defGroups(code, defs).flat().filter((d) => !isPublished(d) && !base.nodes[d]);
   for (const d of drafts) {
@@ -103,7 +108,7 @@ export function publish(code: Code, names: Names, defs: Id[], base: Code): Resul
   const inside = new Set(published.flatMap((d) => nodeIds(next, d)));
   const bad = info.errors.find((e) => inside.has(e.id));
   if (bad) return { ok: false, reason: `${nm(bad.id)}: ${bad.message}` };
-  return { ok: true, code: next, names: renameKeys(names, rename), rename, published, pins: pinsOf(info, published) };
+  return { ok: true, code: next, names: renameKeys(names, rename), rename, published, pins: pinsOf(info, published, units ? next : undefined) };
 }
 
 // Every node, with the ids in `rename` replaced wherever they appear.
@@ -179,7 +184,7 @@ export function addVersions(kept: Versions, code: Code, defs: Id[]): Versions {
 // `basePins`: the pins of library definitions it uses, which travel with it.
 export function publishVersion(prev: Module | null, title: string, code: Code, names: Names, defs: Id[], base: Code, basePins: Pins = {}, comments: Comments = {}): Result<{ module: Module; added: Id[] }> {
   const all = prev ? merge(code, prev.code) : code;
-  const p = publish(all, names, defs, merge(base, ...(prev ? [prev.code] : [])));
+  const p = publish(all, names, defs, merge(base, ...(prev ? [prev.code] : [])), true);
   if (!p.ok) return p;
   const lineages: Record<Id, Id[]> = Object.fromEntries(Object.entries(prev?.lineages ?? {}).map(([l, vs]) => [l, [...vs]]));
   const added: Id[] = [];
@@ -500,6 +505,8 @@ export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names =
   const a = pins[from] && types.size ? retyped(pins[from], types) : pins[from], b = pins[to];
   if (!a || !b) return { ok: false, reason: "both definitions need pins" };
   if (pinKey(a) !== pinKey(b) && !atLeastAsGeneral(b, a)) return { ok: false, reason: `its type changed from ${showType(a.type, names, schemeArith(a), [], undefined, a.effectsAt)} to ${showType(b.type, names, schemeArith(b), [], undefined, b.effectsAt)}` };
+  // Its units too (L252e): the new may say less of them, never more.
+  if (!unitsAtLeastAsGeneral(b.units, a.units)) return { ok: false, reason: `its units changed from ${showWithPinUnits(a, a.units ?? {}, names)} to ${showWithPinUnits(b, b.units ?? {}, names)}` };
   const old = code.nodes[from], neu = code.nodes[to];
   if (old?.kind !== "def" || neu?.kind !== "def") return { ok: false, reason: "both definitions need to be loaded" };
   const params = (d: Node) => (d.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? (code.nodes[d.body] as { params: Id[] }).params : []);

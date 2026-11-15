@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | the next bigger program's gaps (C187 closed, waiting for browsers' WebAssembly stack switching) |
-| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L252e (pins); then L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
+| L Language and library | "Language lane" | the rows reopened 2026-11-14, each example first: L246 (bug: `ters` help), L250 (check a totality loss); the Inbox's I219 (the Nightly green again) and I239 (tumble running an hour, its log under a fixed size) wait for a lane |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -165,7 +165,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L252e | Units in a pinned signature (the rest of L252): a pin keeps its definition's units, concrete (`Float64 m`) and related (`(Float64 u) -> Float64 u²`, a unit variable), so an edit that changes them is refused as one that changes the type is. Maps' values and tuples' parts carry their units since L252e's first part. Example to write: a program that pins a unit-generic function (a library of its own, published) | L252d (Language lane B, 2026-11-14); GAPS.md round 16 U1 | P3 | M | example to write first |
+| L252f | A unit on a number type that is generic, in a signature: examples/track's `squared : (a) -> a where a is a Number` is pinned at u -> u² (L252e) but shows no unit, and `split = 4.9 s` shows `split : a`, since only Float64 carries one when shown. Needs a way to write it (`a u`?), which is Ersagun's call | L252e (Compiler lane, 2026-11-15) | P3 | S | how to write it first |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 

@@ -16,10 +16,11 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf } from "../model.ts";
-import { conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
+import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
-import { constraints as unitConstraints, unitProblems, UnitsBefore } from "../units.ts";
+import { constraints as unitConstraints, pinUnitsBroken, unitProblems, UnitsBefore } from "../units.ts";
+import { showWithPinUnits } from "./unit-types.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
@@ -329,6 +330,22 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
 // library's Nat (library.ts adds it, L249b), so a check refuses `-1` or
 // `0.5` there.
 export const WHOLE_LITERALS = new Set<Id>();
+
+// A pinned definition keeps its pin's units (L252e) as it keeps its type:
+// an edit that changes them is an error at the definition, and its
+// callers see the pin's (units.ts). In a program with no unit of its own
+// too: the pin is what its callers elsewhere were promised.
+function pinnedUnits(code: Code, names: Names, schemes: Map<Id, Scheme>, pins: Pins | undefined, only?: Set<Id>): { id: Id; message: string }[] {
+  const out: { id: Id; message: string }[] = [];
+  if (!pins) return out;
+  for (const d of code.defs) {
+    const pu = pins[d]?.units, sc = schemes.get(d);
+    if (!pu || !sc || isPublished(d) || (only && !only.has(d)) || !code.nodes[d]) continue;
+    const now = pinUnitsBroken(code, d, pu);
+    if (now) out.push({ id: d, message: `${names[d] ?? d} is pinned to ${showWithPinUnits(sc, pu, names)}, and this makes it ${showWithPinUnits(sc, now, names)}` });
+  }
+  return out;
+}
 
 export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only: Set<Id>; units?: UnitsBefore; noUnits?: boolean; layer?: boolean }, opts: Options = {}): Info {
   // A program on the library's layer (load.ts base, L217): the check's
@@ -2126,7 +2143,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
 
   // Units are part of a number's type: a conflict is a type error.
   // (Not when the palette checks a filling's units on their own: E103e.)
-  if (!reuse?.noUnits && opts.units !== false) for (const u of unitProblems(code, names, reuse?.only, reuse?.units)) err(u.id, u.message);
+  if (!reuse?.noUnits && opts.units !== false) {
+    for (const u of unitProblems(code, names, reuse?.only, reuse?.units, false, opts.pins)) err(u.id, u.message);
+    for (const u of pinnedUnits(code, names, info.schemes, opts.pins, reuse?.only)) err(u.id, u.message);
+  }
 
   // Definitions with results (RESULTS.md, L95): a predicate whose result
   // ports are named, in order. The direction they declare must be one the
@@ -2881,7 +2901,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
     return (last = [f, r.code])[1];
   };
   let before: Problem[] | undefined;
-  const units = new UnitsBefore(code);
+  const units = new UnitsBefore(code, info.options?.pins);
   const recheck = (c: Code) => infer(c, {}, { from: info, only: affected, units }, info.options).errors;
   const baseline = () => (before ??= recheck(code));
   // A filling passes when it brings no error the program didn't have: not
@@ -2939,7 +2959,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // part of a check (BACKLOG E103: fall's holes asked ~1,000 whole checks
   // each, one per thing an offer names).
   const groupTypes = h.group.flatMap((d) => { const sc = info.schemes.get(d); return sc ? [sc.type] : []; });
-  const unitsOf = (c: Code, quick = false) => new Set(unitProblems(c, {}, affected, units, quick).map((u) => u.message));
+  const unitsOf = (c: Code, quick = false) => new Set([...unitProblems(c, {}, affected, units, quick, info.options?.pins), ...pinnedUnits(c, {}, info.schemes, info.options?.pins, affected)].map((u) => u.message));
   let unitsBefore: Set<string> | undefined;
   const noNewUnits = (now: Set<string>) => [...now].every((m) => (unitsBefore ??= unitsOf(code)).has(m));
   // A program with no unit declared has none to break, so the filled

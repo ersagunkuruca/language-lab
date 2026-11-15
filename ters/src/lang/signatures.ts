@@ -18,11 +18,15 @@
 import type { Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { CONSOLE, instantiate, schemeArith, schemeNeeds, showType, Subst, TypeError, type Row, type Scheme, type Type } from "./types.ts";
+import type { Code } from "../model.ts";
+import { pinUnitsOf, type PinUnits } from "../units.ts";
+import { CONSOLE, NUMBER, instantiate, schemeArith, schemeNeeds, showType, Subst, TypeError, type Row, type Scheme, type Type } from "./types.ts";
 
 // A scheme with its variables numbered 0, 1, … by first appearance, rows
 // after them. Equal pins are equal JSON.
-export type Pin = Scheme;
+// A pin also keeps its definition's units (L252e, units.ts PinUnits):
+// what it says of its inputs' and result's units, unit variables and all.
+export type Pin = Scheme & { units?: PinUnits };
 export type Pins = Record<Id, Pin>;
 
 export function canonical(sc: Scheme): Pin {
@@ -75,11 +79,31 @@ export function canonical(sc: Scheme): Pin {
 export const pinKey = (sc: Scheme | undefined) => (sc ? JSON.stringify(canonical(sc), (k, v) => (k === "name" ? undefined : v)) : "");
 export const showPin = (p: Pin, names: Names) => showType(p.type, names, schemeArith(p), [], schemeNeeds(p), p.effectsAt);
 
-// Pin these definitions at the types the checker gives them now.
-export function pinsOf(info: Info, defs: Id[]): Pins {
+// Pin these definitions at the types the checker gives them now, and,
+// given their code, at the units their bodies give them (L252e): each
+// input and the result where it is a number, or may be one (a type
+// variable), and each slot of one inside a List, a Map, a tuple.
+export function pinsOf(info: Info, defs: Id[], code?: Code): Pins {
   const out: Pins = {};
-  for (const d of defs) { const sc = info.schemes.get(d); if (sc) out[d] = canonical(sc); }
+  for (const d of defs) {
+    const sc = info.schemes.get(d);
+    if (!sc) continue;
+    const p: Pin = canonical(sc);
+    const t = info.subst.zonk(sc.type);
+    const at = (port: string): Type | undefined => (t.t === "fn" ? (port === "out" ? t.ret : t.params[+port]) : port === "out" ? t : undefined);
+    const units = code && pinUnitsOf(code, d, (port, slot) => { const x = at(port); return !!x && numberAt(x, slot); });
+    if (units) p.units = units;
+    out[d] = p;
+  }
   return out;
+}
+// Whether a value of type t has a number at slot `slot` (units.ts: a path
+// of parameter numbers, the zeros it ends in left off).
+function numberAt(t: Type, slot: string): boolean {
+  let x = t;
+  for (const j of slot ? slot.split(".").map(Number) : []) { if (x.t !== "con" || !x.args[j]) return false; x = x.args[j]; }
+  while (x.t === "con" && x.args.length) x = x.args[0];
+  return x.t === "var" || (x.t === "con" && x.id === NUMBER);
 }
 
 // A pin's own copy for one run of the checker: its variables renumbered

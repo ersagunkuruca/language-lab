@@ -1,0 +1,67 @@
+{"163sa2b131jnrs548bk3k6t2ce": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"vars": []
+},
+"25m9o33n8itgqjnlm94tf8m07t": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"vars": []
+},
+"7ppan85oaing466p0ddbpli69l": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"units": {"0": {"~0": 1}, "1": {"~1": 1}, "out": {"~0": 1, "~1": -2}},
+"vars": []
+},
+"9nofhuivr49p29f77i13242622": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"vars": []
+},
+"e4543dq2cvid4uvhs3o0esjbf8": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"units": {"0": {"~0": 1}, "1": {"~0": 1}, "out": {"~0": 1}},
+"vars": []
+},
+"gdq6ve11ui7jds3jaked3dk1tv": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"units": {"0": {"~0": 1}, "1": {"~1": 1}, "2": {"~0": 1, "~1": -1}, "out": {"~0": 2, "~1": -1}},
+"vars": []
+},
+"lb2raf6onafg90pl39oeitvaf8": {
+"arith": [0],
+"plain": [0],
+"rows": [1],
+"type": {"t": "fn", "params": [{"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}},
+"vars": [0]
+},
+"odktdcp7khvt1pt661g19g7754": {
+"arith": [0],
+"plain": [0],
+"rows": [1],
+"type": {"t": "fn", "params": [{"t": "var", "v": 0}], "ret": {"t": "var", "v": 0}, "eff": {"effs": [], "tail": 1}},
+"units": {"0": {"~0": 1}, "out": {"~0": 2}},
+"vars": [0]
+},
+"q2sq4vllapj2i3663dr55k5iig": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"vars": []
+},
+"rbqp6tim0mp874irbgtmatscpu": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": [], "tail": 0}},
+"units": {"0": {"~0": 1}, "1": {"~1": 1}, "out": {"~0": 1, "~1": -1}},
+"vars": []
+}}
