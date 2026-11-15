@@ -434,6 +434,7 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | `examples/sort` | Textbook | Insertion sort. Credited in its comment. |
 | `examples/queens` | Textbook | The eight queens puzzle (Max Bezzel, 1848), a classic backtracking example (e.g. Wirth, "Program development by stepwise refinement", 1971). |
 | `examples/calc` | Textbook | A tokenizer and a recursive-descent parser with one function per precedence level. |
+| `compiler/gaps/scan` (GAPS round 19): regular expressions made automata three ways and run over a made-up log | Prior art (the algorithms), our own (the program) | Thompson's construction (Ken Thompson, "Regular expression search algorithm", CACM 11(6), 1968); the subset construction (Michael Rabin and Dana Scott, "Finite automata and their decision problems", IBM Journal 3(2), 1959); Moore's minimization (Edward F. Moore, "Gedanken-experiments on sequential machines", Automata Studies, 1956); leftmost-longest matching as POSIX defines it (IEEE Std 1003.2, 1992). The log's generator is the C standard's example `rand`. Named in the program's comment (the editor's Program tab), at `built`, `dfa of`, `minimized` and `nfa found from`, and in its README. |
 | `examples/raymarch` | Adapted | See Shaders. |
 | `examples/shaders` (ripples) | Our own | Written for this project. |
 | `examples/quadratic`, `physics`, `calculus`, `algebra` | Textbook | The quadratic formula, projectile motion, Newton's method, polar coordinates. The programs around them are ours. |

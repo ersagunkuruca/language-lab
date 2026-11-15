@@ -4,6 +4,11 @@
 // refinement, on arrays and typed arrays with numbered states, so it prints
 // what compiler/gaps/scan prints. The baseline the compiled program is
 // measured against.
+//
+// Prior art: Thompson's construction (Ken Thompson, CACM 11(6), 1968), the
+// subset construction (Rabin and Scott, IBM Journal 3(2), 1959), Moore's
+// minimization (Automata Studies, 1956), leftmost-longest matching as POSIX
+// defines it (IEEE Std 1003.2, 1992). See docs/language/CREDITS.md.
 
 const TOP = 1114111;
 const next = (n) => (Math.imul(n, 1103515245) + 12345) & 0x7fffffff;
