@@ -506,3 +506,19 @@ test("the countdown page: the answers for the round", () => {
   assert.equal(count(), "49 ways to make 765. The 12 shortest:");
   assert.equal(root.find("answers").textContent.split("= 765").length - 1, 12);
 });
+
+// L261f: each change made the plain way and by conjugation, side by side.
+test("the conjugation page: twice the light, a turn about the centre, softer highs", () => {
+  const { root } = open("conjugate-page");
+  assert.match(root.textContent, /As stored0\.5Stored number doubled1brighter: twice the light0\.685/);
+  root.find("grey").type_("20");
+  assert.match(root.textContent, /As stored0\.2Stored number doubled0\.4brighter: twice the light0\.274/);
+  assert.match(root.textContent, /Centre \(2, 1\)/);
+  click(root, "Centre →");
+  click(root, "Centre ↑");
+  assert.match(root.textContent, /Centre \(3, 2\)/);
+  const bars = (kind: string) => root.html().split(`class="${kind}"`).length - 1;
+  assert.deepEqual([bars("in"), bars("out")], [6, 6]);
+  click(root, "New sound");
+  assert.deepEqual([bars("in"), bars("out")], [8, 8]);
+});
