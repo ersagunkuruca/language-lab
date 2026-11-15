@@ -58,6 +58,9 @@ export function programStore(dir: string): Module | null {
 }
 
 export function loadProgram(dir: string, style = "blocks") {
+  // A folder that isn't there is a mistake, not an empty program: read
+  // relative to another working directory, a test found no laws (I297).
+  if (!existsSync(dir)) throw new Error(`no such program folder: ${dir}`);
   const own = read<Code>(join(dir, "code.json"), { nodes: {}, defs: [] });
   const store = programStore(dir);
   const modules = [...programModules(dir), ...(store ? [store] : [])];
