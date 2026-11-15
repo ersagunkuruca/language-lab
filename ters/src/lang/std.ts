@@ -634,6 +634,10 @@ export const JOBS = {
   // A fold whose cases read no rest (a sum, a count), done as t's own fold
   // of the meaning, at this cost (C75).
   foldOfItems: jobOf("representation.foldOfItems", "fold of items", () => []),
+  // t's job given what a call of the definition it's in carries, its
+  // answer carried on in that place (`f(rest, append(out, [b]))`), at this
+  // cost: writing at a free end, where the job as a whole copies (C234).
+  carried: jobOf("representation.carried", "carried", (s) => [s.fresh()]),
   // A representation that isn't one spelling per value (a tree, whose shape
   // depends on the order things went in) says how equal, show and compare
   // see a value of r: through its meaning.

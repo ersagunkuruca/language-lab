@@ -3999,6 +3999,24 @@ candidates within 32767 bytes. Against the ideal now:
 | 3200 | 25x | 16x | 34x |
 | 12800 | 26x | 16x | 25x |
 
+The lists are arrays now (C233, C234). An array's `append` writes the
+shorter list onto the longer one's free end, in place when no other array
+has taken it, where it made a new array of both. The chooser counts an
+append onto what a loop carries (`unpacked(rest, append(out, [b]))`, and
+`flatten`'s `append(x, the rest's answer)` under `flat map`) as the array's
+own job, constant, so it takes arrays over the tree; `item at` is one step
+again. With arrays a map on workers in `code tree` crashed, since its
+columns read the workers' plain array (C233). Against the ideal now:
+
+| words | core | native | wasi |
+|---|---|---|---|
+| 200 | 11x | 5.3x | 34x |
+| 800 | 9.0x | 3.3x | 18x |
+| 3200 | 14x | 3.2x | 12x |
+| 12800 | 17.5x (was 26x) | 2.8x (was 16x) | 7.5x (was 25x) |
+
+The command was `BUILT=1 RUNS=3 node compiler/gaps/bench-pack.ts 200 800
+3200 12800`; native and wasi include starting the process.
 ## Round 19: scan, regular expressions made automata (2026-11-15)
 
 `compiler/gaps/scan` makes up a server log and scans it with 19 regular
@@ -4095,7 +4113,7 @@ alone; shares are inclusive and overlap):
 
 ### The gaps, ranked
 
-**S1. A builtin passed as a value isn't compiled (C233).**
+**S1. A builtin passed as a value isn't compiled (C235).**
 `for each(lines, print)` is refused by the core IR, `ters wasi` and
 `ters native` alike: "main isn't in WebAssembly: calls scan, which uses
 print as a value (functions and data need a heap)". The evaluator runs it.
@@ -4103,7 +4121,7 @@ print as a value (functions and data need a heap)". The evaluator runs it.
 Written `(line) => print(line)` it compiles: the compiler could make that
 lambda itself where an operation or builtin is used as a value.
 
-**S2. A record a loop passes on is made again at each call (C234).**
+**S2. A record a loop passes on is made again at each call (C236).**
 `dfa longest(d, s, cs, pos, best, at end)` is a loop; the loop keeps the
 five fields of `d` as its own variables, and so each character calls
 `dfa next(new K24(l0, l1, l2, l3, l4), s, c)`, a new `Dfa` record built
@@ -4111,21 +4129,21 @@ to be read at once. `dfa found from` does the same around it. The loop
 could keep `d` itself as well, since it never changes, or pass the fields
 on to a copy of `dfa next` that takes them.
 
-**S3. A lookup with a default is a try (C235).** `first(value at(d.moves,
+**S3. A lookup with a default is a try (C237).** `first(value at(d.moves,
 (s, cls)), else -1)` compiles to a `try` around the lookup, a check for
 `R.FAIL` and a `catch` that restores the depth, once per character. A
 `first` whose search is one lookup that fails at once has no backtracking
 to catch: a lookup that returns a default would do.
 
 **S4. A map with pair keys is read through a tree, a tuple made per read
-(C236).** The moves are a `Map (Int, Int) Int`, built once and then read
+(C238).** The moves are a `Map (Int, Int) Int`, built once and then read
 14 million times for 2000 lines (counted in the ideal); each read allocates the key `(s, cls)`
 and walks a weight-balanced tree comparing tuples. The ideal indexes an
 `Int32Array` by `s · classes + cls`. A map built once and only read could
 be a hash table (C63's tables), and a tuple key read field by field
 needn't be allocated.
 
-**S5. Codes from a text go through a list of one-character texts (C237).**
+**S5. Codes from a text go through a list of one-character texts (C239).**
 `codes of(t) = map(characters(t), code of)`: `characters` splits the text
 (with a surrogate check by regular expression) into a list of texts, and
 `character code` of each is a `Choice`. The ideal walks the code points.
@@ -4167,6 +4185,6 @@ about 1 s.
 
 ### Next
 
-1. S1 (C233), a correctness gap on every compiled target.
-2. S2 to S4 (C234 to C236), measured after each on the 8000 lines.
-3. S5 (C237), then S6 and S7 (I303, I304) for the MCP.
+1. S1 (C235), a correctness gap on every compiled target.
+2. S2 to S4 (C236 to C238), measured after each on the 8000 lines.
+3. S5 (C239), then S6 and S7 (I303, I304) for the MCP.

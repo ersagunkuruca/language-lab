@@ -153,7 +153,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         && n.args.some((a) => { const g = code.nodes[a]; return g?.kind === "ref" && code.nodes[g.target]?.kind === "def" && listed(info.typeOf.get(a)); });
     })));
   };
-  for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
+  types: for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
     if (asked.some((r) => r.of === ty) || skip.has(ty)) continue;
     // A hash table only where it is (hostMaps), and only where every map
@@ -171,33 +171,43 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // What an edge does with its own lists (Bytes' `byte at`, by position)
     // is no job of theirs: the edge keeps them as written.
     const edges = ty === LIST ? (() => { const { edge } = listEdges(code, info, new Set(defs), new Set(asked.map((r) => r.of))); return code.defs.filter((d) => edge(d)); })() : [];
-    const tree = choose(code, main, [spec, ...rows], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...edges]).rep;
-    if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue;
-    // Lists as trees for the whole, where parts of it would have arrays
-    // (machine's step loop): those parts as arrays, the rest as written,
-    // converted where a list crosses (rep-split.ts, C93 s3b). Only where
-    // the trees could be had, so a program kept as written stays so; and
-    // where they couldn't for the whole (break's list of lists, which no
-    // boundary turns into arrays), the parts still can (C188). On every
-    // target, host maps or not: a program using Bytes, which holds a
-    // List, has its table as an array in C and WebAssembly too (C192).
-    if (tree.of === LIST && tree.name === "tree of List" && options.split !== false && !chosen.length) {
-      const s = splitByGroups(code, info, names, main, defs);
-      if (s) return s;
+    // The next best where the best can't be had for the whole: arrays
+    // where some list can't be one go to the tree, if it is cheaper than
+    // as written (C45's appends and changes by position, now that an
+    // append onto what a loop carries is the array's own, C234).
+    const left = [...rows];
+    for (;;) {
+      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...edges]).rep;
+      if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue types;
+      // Lists as trees for the whole, where parts of it would have arrays
+      // (machine's step loop): those parts as arrays, the rest as written,
+      // converted where a list crosses (rep-split.ts, C93 s3b). Only where
+      // the trees could be had, so a program kept as written stays so; and
+      // where they couldn't for the whole (break's list of lists, which no
+      // boundary turns into arrays), the parts still can (C188). On every
+      // target, host maps or not: a program using Bytes, which holds a
+      // List, has its table as an array in C and WebAssembly too (C192).
+      if (tree.of === LIST && tree.name === "tree of List" && options.split !== false && !chosen.length) {
+        const s = splitByGroups(code, info, names, main, defs);
+        if (s) return s;
+      }
+      // Lists as arrays (C30d3b): alone, and only where every list the
+      // program reaches can be one (listBoundary); otherwise each of the
+      // program's definitions that never sees a library type holding lists
+      // (a page's Html) takes them, and the rest keep lists as written,
+      // converted where they cross (C196: the pedal's sound beside its page).
+      if (tree.of === LIST && !chosen.length && !listBoundary(withTrees(code, [tree]), info, defs, tree, asked)) {
+        const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
+        if (s) return s;
+        left.splice(left.indexOf(tree), 1);
+        if (tree.name === "array of List" && left.length) continue;
+        continue types;
+      }
+      if (tree.of === LIST && chosen.length) continue types;
+      if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue types;
+      chosen.push(tree);
+      break;
     }
-    // Lists as arrays (C30d3b): alone, and only where every list the
-    // program reaches can be one (listBoundary); otherwise each of the
-    // program's definitions that never sees a library type holding lists
-    // (a page's Html) takes them, and the rest keep lists as written,
-    // converted where they cross (C196: the pedal's sound beside its page).
-    if (tree.of === LIST && !chosen.length && !listBoundary(withTrees(code, [tree]), info, defs, tree, asked)) {
-      const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
-      if (s) return s;
-      continue;
-    }
-    if (tree.of === LIST && chosen.length) continue;
-    if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue;
-    chosen.push(tree);
   }
   if (!chosen.length) return { code, names, chosen: [], insiders: [], reps: [] };
   // The trees' module, which the library leaves out (library.ts): only
