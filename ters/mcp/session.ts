@@ -13,7 +13,7 @@ import { keptIds } from "../src/keep-ids.ts";
 import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import type { Code, Id, NodeOf } from "../src/model.ts";
+import type { Code, Id, Node, NodeOf } from "../src/model.ts";
 import { collect, freshId, parentOf, portNames, portsOf, subtree, swapIn, isCall, type Call, type NodeData } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
@@ -327,6 +327,15 @@ export class Session {
   // as the view prints one (L231): `gap at(body = b, wall = w, gap = 0)`,
   // the ports given by name and the one left out the value.
   private fill(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    // The whole text written, which a question a part of it raises may
+    // look at (a tuple's size, by the fields read on it, I303).
+    if (this.reading !== null) return this.fillIn(code, names, hole, text, def, as);
+    this.reading = text;
+    try { return this.fillIn(code, names, hole, text, def, as); } finally { this.reading = null; }
+  }
+  private reading: string | null = null;
+
+  private fillIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     const steps = this.stepsIn(code, names, hole, text, def, as);
     if (steps) return steps;
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def, as);
@@ -349,6 +358,8 @@ export class Session {
     // the editor's text reader doesn't take it (I183), so it is put in
     // here; the checker says if no way grounds it.
     if (norm(t) === "by its ways") return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: S.byItsWays } }, defs: code.defs } };
+    const nested = this.nestedIn(code, names, hole, t, def, as);
+    if (nested) return nested;
     const r = T.fillValue(code, names, editorInfo(code, names), hole, t, def);
     // A field several types have, read on a value nothing has settled,
     // fits as each (the editor offers each, E186): none is taken silently
@@ -363,7 +374,7 @@ export class Session {
       const want = as?.trim() ? typesIn(as) : [];
       const fits = r.choices.filter((_, i) => { const has = typesIn(labels[i]); return want.every((w) => has.includes(w)); });
       const exact = fits.filter((c) => typesIn(c.label.replace(/^as /, "")).join() === want.join());
-      const pick = want.length ? (exact.length === 1 ? exact[0] : fits.length === 1 ? fits[0] : undefined) : undefined;
+      const pick = want.length ? (exact.length === 1 ? exact[0] : fits.length === 1 ? fits[0] : undefined) : r.choices[this.byFieldsRead(code, names, labels.map(typesIn)) ?? -1];
       if (pick?.edit.ok) return pick.edit;
       return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field or a function more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
     }
@@ -375,6 +386,79 @@ export class Session {
       ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
     if (!near) return r;
     return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
+  }
+
+  // A match where a value goes, not only where a line or a case's body
+  // begins (I303): in parentheses, `a + (match r; nil → 1; cons(c, s) → c)`,
+  // or after `else`, `if b then 0 else match xs` with its cases on the
+  // lines after. The text around is read as a function of each such match
+  // called on a hole, so that each hole is known by its place, `((m1) =>
+  // a + m1)(□)`; the function is then taken away, each hole put where its
+  // name was, and each match read into its hole as text of its own. Null
+  // when the text has no such match.
+  private nestedIn(code: Code, names: Names, hole: Id, t: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } | null {
+    const groups = nestedMatches(t);
+    if (!groups.length) return null;
+    if (groups.length === 1 && !t.slice(0, groups[0].from).trim() && !t.slice(groups[0].to).trim()) return this.fill(code, names, hole, groups[0].text, def, as);
+    const taken = new Set(Object.values(baseNames(names)));
+    const params: string[] = [];
+    for (let i = 1; params.length < groups.length; i++) if (!taken.has(`nested match ${i}`)) params.push(`nested match ${i}`);
+    let around = t;
+    for (let i = groups.length - 1; i >= 0; i--) around = around.slice(0, groups[i].from) + params[i] + around.slice(groups[i].to);
+    // One function a match, each called on its hole: `((m1) => ((m2) =>
+    // m1 * m2)(□))(□)`.
+    const wrapped = params.reduceRight((body, p) => `((${p}) => ${body})(□)`, around.trim());
+    const r = this.fillOne(code, names, hole, wrapped, def, as);
+    if (!r.ok) return r;
+    const nodes = { ...r.code.nodes }, out: Names = { ...r.names };
+    const bound: Id[] = [];
+    for (const _ of groups) {
+      const call = nodes[hole], fn = isCall(call) ? nodes[call.fn] : undefined;
+      if (!isCall(call) || fn?.kind !== "lambda" || fn.params.length !== 1 || call.args.length !== 1) return { ok: false, reason: `${t.trim()} doesn't read with its matches taken out` };
+      bound.push(fn.params[0]);
+      nodes[hole] = { ...nodes[fn.body], id: hole } as Node;
+      for (const x of [fn.body, fn.id, ...call.args]) delete nodes[x];
+    }
+    const inside = subtree({ nodes, defs: r.code.defs }, hole);
+    const slots: Id[] = [];
+    for (const p of bound) {
+      const uses = inside.filter((x) => { const n = nodes[x]; return n?.kind === "ref" && n.target === p; });
+      if (uses.length !== 1) return { ok: false, reason: `${t.trim()} doesn't read with its matches taken out` };
+      nodes[uses[0]] = { id: uses[0], kind: "hole" } as Node;
+      slots.push(uses[0]);
+      delete nodes[p]; delete out[p];
+    }
+    let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: { nodes, defs: r.code.defs }, names: out };
+    for (const [i, g] of groups.entries()) {
+      if (!cur.ok) return cur;
+      cur = this.fill(cur.code, cur.names, slots[i], g.text, def, as);
+    }
+    return cur;
+  }
+
+  // A field's reading asked of a value nothing has settled, settled by the
+  // other fields the text reads (I303): `p.first` read with `p.third` is a
+  // tuple of three, not two. Of tuples that all have them, the fewest
+  // fields, as a tuple's size is its last field read; any other choice
+  // still left open is asked.
+  private byFieldsRead(code: Code, names: Names, types: string[][]): number | undefined {
+    const all = baseNames(names);
+    const read = new Set([...(this.reading ?? "").matchAll(/\.\s*([\p{L}_][\p{L}\p{N}_']*)/gu)].map((m) => m[1].toLowerCase()));
+    const fieldsOf = (type: string): Set<string> | undefined => {
+      const d = code.defs.find((x) => (all[x] ?? "").toLowerCase() === type);
+      const td = d ? code.nodes[(code.nodes[d] as NodeOf<"def">).body!] : undefined;
+      if (td?.kind !== "typedef") return undefined;
+      return new Set(td.variants.flatMap((v) => (code.nodes[v] as NodeOf<"variant">).fields.map((f) => (all[f] ?? "").toLowerCase())));
+    };
+    const sets = types.map((ts) => ts.length === 1 ? fieldsOf(ts[0]) : undefined);
+    if (sets.some((x) => !x)) return undefined;
+    const known = new Set(sets.flatMap((x) => [...x!]));
+    const wanted = [...read].filter((f) => known.has(f));
+    const fit = types.map((_, i) => ({ i })).filter(({ i }) => wanted.every((f) => sets[i]!.has(f)));
+    if (fit.length === 1) return fit[0].i;
+    const size = (i: number) => /^tuple(\d+)$/.exec(types[i][0])?.[1];
+    if (!wanted.length || !fit.length || fit.some(({ i }) => !size(i))) return undefined;
+    return fit.reduce((a, b) => Number(size(b.i)) < Number(size(a.i)) ? b : a).i;
   }
 
   // A function whose body is on the lines after its `=>`, deeper than
@@ -1154,6 +1238,45 @@ function listMatch(on: string, k: number, alive: { names: string[]; body: string
   const field = named !== "_" && longer.every((c) => c.names[k] === named) ? named : `item ${k + 1}`;
   const next = longer.map((c) => ({ names: c.names, body: c.names[k] === field || c.names[k] === "_" ? c.body : `${c.names[k]} = ${field}\n${c.body}` }));
   return `match ${on}\n${nil}\n  cons(${field}, rest ${k + 1}) →\n${block(listMatch(`rest ${k + 1}`, k + 1, next, fallback))}`;
+}
+
+// The matches in a text that are where a value goes (I303): in a
+// bracket that isn't a call's, `(match …)`, or the end of the text after
+// an `else` outside brackets, `else match xs …`; a bracket around an
+// `if … else match …` is one too. Outermost only, in the order written;
+// what is inside one is read with it.
+function nestedMatches(t: string): { from: number; to: number; text: string }[] {
+  const found: { from: number; to: number; text: string }[] = [];
+  const open: number[] = [];
+  let quoted = false;
+  const elseMatch = (s: string): number => {
+    let depth = 0, q = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (q) { if (c === "\\") i++; else if (c === '"') q = false; continue; }
+      if (c === '"') q = true;
+      else if ("([{".includes(c)) depth++;
+      else if (")]}".includes(c)) depth--;
+      else if (!depth && /^else\s+match\s/.test(s.slice(i)) && !/[\p{L}\p{N}_']$/u.test(s.slice(0, i))) return i + /^else\s+/.exec(s.slice(i))![0].length;
+    }
+    return -1;
+  };
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (quoted) { if (c === "\\") i++; else if (c === '"') quoted = false; continue; }
+    if (c === '"') quoted = true;
+    else if (c === "(") open.push(/[\p{L}\p{N}_')\]]\s*$/u.test(t.slice(0, i)) ? -1 : i);
+    else if ("[{".includes(c)) open.push(-1);
+    else if (")]}".includes(c)) {
+      const from = open.pop();
+      if (from === undefined || from < 0 || c !== ")") continue;
+      const inside = t.slice(from + 1, i);
+      if (/^\s*match\s/.test(inside) || elseMatch(inside) >= 0) found.push({ from, to: i + 1, text: inside });
+    }
+  }
+  const tail = elseMatch(t);
+  if (tail >= 0) found.push({ from: tail, to: t.length, text: t.slice(tail) });
+  return found.filter((g) => !found.some((o) => o !== g && o.from <= g.from && g.to <= o.to)).sort((a, b) => a.from - b.from);
 }
 
 // A match's or handler's text: what follows the keyword, and its cases,

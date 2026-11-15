@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | I303 and I304 (the MCP, GAPS round 19) |
+| C Compiler and targets | "Compiler lane" | I304 (the MCP, GAPS round 19) |
 | L Language and library | "Language lane" | pack's speed (GAPS round 18), cost by cost, each a C row, until a stage buys under 10% (C233, C234 done); L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -53,7 +53,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I303 | The MCP reads a `match` only where a line or a case's body begins (GAPS round 19 S6): `(match b …)` inside a case and `if … else match cs …` are "isn't read as a whole". Read a match wherever a value goes, in parentheses or after `else`; and a tuple's size asked of `p.first` could be settled by the other fields the definition reads (`p.third`) | GAPS round 19 | P3 | S | |
 | I304 | Filling a long definition through the MCP is slow (GAPS round 19 S7): scan's 146 definitions took 7 minutes, 2.9 s each, and `scan`, 18 steps, 75 s, since each step's `replace` checks the program again (about 1 s alone). Check only what a step changed (E103's incremental check) | GAPS round 19 | P3 | M | |
 
 ### Speed of editing
