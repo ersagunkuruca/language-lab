@@ -27,7 +27,7 @@ import { partPort } from "./results.ts";
 import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE, tupleVariant } from "./std.ts";
 import { NUMBER, showIn } from "./types.ts";
 import { formatUnit } from "../units.ts";
-import { withUnits } from "./unit-types.ts";
+import { holeWithUnit, withUnits } from "./unit-types.ts";
 
 const SUB = "₀₁₂₃₄₅₆₇₈₉";
 const plain = /^[\p{L}_][\p{L}\p{N}_'′]*$/u;
@@ -236,7 +236,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         const hi = info?.holes.get(id);
         // Beside each hole its type alone: "where a is a number type" said
         // on every hole of □ + □ is noise, and the hover says it in full.
-        return atom(part("hole", ["□", ...(hi ? [{ cls: "ty", pane: true as const, kids: [showIn(hi.expected, names, info!.subst).replace(/ where .*$/s, "")] }] : [])], id));
+        // With the unit it needs, a pin's too (QA 11-15 Q1): □Float64 u.
+        const w = hi && holeWithUnit(code, defId, id, info!.subst.zonk(hi.expected), names);
+        return atom(part("hole", ["□", ...(hi ? [{ cls: "ty", pane: true as const, kids: [(w ? showIn(w.type, w.names, info!.subst) : showIn(hi.expected, names, info!.subst)).replace(/ where .*$/s, "")] }] : [])], id));
       }
       case "ref": {
         const nota = pres.style.notation[n.target];

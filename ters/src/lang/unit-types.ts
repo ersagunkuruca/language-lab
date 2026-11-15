@@ -11,7 +11,7 @@ import { NUMBER, schemeArith, schemeNeeds, showType, type Scheme, type Type } fr
 
 // std.ts's tuples' ids, named here so this file doesn't load the library.
 const TUPLE = /^std\.tuple\d+$/;
-import { formatUnit, pinSlots, signatureUnits, type PinUnits, type SignatureUnits, type Slots } from "../units.ts";
+import { formatUnit, holeUnit, pinSlots, signatureUnits, type PinUnits, type SignatureUnits, type Slots } from "../units.ts";
 // A slot's key: the path without the zeros it ends in (units.ts).
 const slotKey = (p: number[]) => { let n = p.length; while (n && p[n - 1] === 0) n--; return p.slice(0, n).join("."); };
 
@@ -33,6 +33,15 @@ export function withUnits(code: Code, def: Id, t: Type, names: Names): { type: T
 export function showWithPinUnits(sc: Scheme, pu: PinUnits, names: Names): string {
   const t = sc.type, w = withSlots(t, pinSlots(pu, t.t === "fn" ? t.params.length : 0), names);
   return w ? showType(w.type, w.names, schemeArith(sc), [], schemeNeeds(sc), sc.effectsAt) : showType(t, names, schemeArith(sc), [], schemeNeeds(sc), sc.effectsAt);
+}
+
+// A hole's type with the unit it needs (QA 11-15 Q1): `Float64 u` in
+// `rate(d, t) = □ / t` pinned at (Float64 u, Float64 v) -> Float64 u/v.
+// Null where it needs no unit, or one nothing fixes.
+export function holeWithUnit(code: Code, def: Id, hole: Id, t: Type, names: Names): { type: Type; names: Names } | null {
+  if (t.t !== "con" || t.id !== NUMBER || t.args.length) return null;
+  const u = holeUnit(code, def, hole);
+  return u && Object.keys(u).length ? withSlots(t, { params: [], result: { "": u } }, names) : null;
 }
 
 function withSlots(t: Type, slots: SignatureUnits["slots"], names: Names): { type: Type; names: Names } | null {

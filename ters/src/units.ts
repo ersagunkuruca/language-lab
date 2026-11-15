@@ -901,7 +901,7 @@ function bodyUnits(code: Code, d: Id): { cs: Constraint[]; order: string[] } | n
 // ports in terms of the earliest (Gauss-Jordan, pivoting on the last port
 // a row names), so each port is a unit in the variables of the free ones.
 // Null when they contradict each other.
-function parametrize(cs: Constraint[], order: string[], keep: (key: string) => boolean): PinUnits | null {
+function parametrize(cs: Constraint[], order: string[], keep: (key: string) => boolean, asNamed = false): PinUnits | null {
   type Row = { coef: Map<string, number>; rhs: Vec };
   const cols = [...order, ...new Set(cs.flatMap((c) => c.terms.map(([t]) => t)).filter((t) => !order.includes(t)))];
   let rows: Row[] = cs.map((c) => { const coef = new Map<string, number>(); for (const [t, v] of c.terms) coef.set(t, (coef.get(t) ?? 0) + v); return { coef, rhs: [...c.rhs] }; });
@@ -933,6 +933,8 @@ function parametrize(cs: Constraint[], order: string[], keep: (key: string) => b
     for (const [k, v] of p.coef) if (k !== col) vars.set(k, -v);
     raw.set(col, { rhs: p.rhs, vars });
   }
+  // Each in the free columns as they are named (holeUnits).
+  if (asNamed) return Object.fromEntries([...raw].map(([col, { rhs, vars }]) => [col, { ...toUnit(rhs), ...Object.fromEntries([...vars].map(([k, v]) => [k, round(v)])) }]));
   // Variables numbered by first appearance, each scaled so its powers are
   // whole (u² rather than u^½).
   const num = new Map<string, number>(), scale = new Map<string, number>();
@@ -982,6 +984,26 @@ export function pinUnitsBroken(code: Code, d: Id, pu: PinUnits): PinUnits | null
   });
   if (kept) return null;
   return parametrize(cs, b.order, (key) => key in pu) ?? {};
+}
+
+// The unit a hole needs (QA 11-15 Q1): what the definition's body and its
+// pin say of it, `u` where the pin says its input is any unit u. Null
+// where they don't fix it, or say nothing (a program with no unit, and no
+// pin with units).
+export function holeUnit(code: Code, d: Id, hole: Id): UnitExpr | null {
+  const def = code.nodes[d];
+  if (def?.kind !== "def" || !def.body) return null;
+  const b = code.nodes[def.body], pu = pinUnitsAt(code, d);
+  if (!b || (!pu && !declaresUnit(code))) return null;
+  const params = b.kind === "lambda" ? b.params : [], out = b.kind === "lambda" ? b.body : def.body;
+  const cs = [...constraints(code, d), ...(pu ? fromPin(pu, (i) => (i === "out" ? out : params[+i] ?? i), "", d) : [])];
+  if (!cs.some((c) => c.terms.some(([t]) => t === hole))) return null;
+  // Solved with the pin's variables free and the hole last, so it comes
+  // out in them alone, or not at all.
+  const vars = [...new Set(cs.flatMap((c) => c.terms.map(([t]) => t)).filter((t) => t.startsWith(VAR)))];
+  const r = parametrize(cs, [...vars, hole], (key) => key === hole, true)?.[hole];
+  if (!r || Object.keys(r).some((k) => k !== hole && !k.startsWith(VAR) && !(BASE as readonly string[]).includes(k))) return null;
+  return r[hole] ? null : r;
 }
 
 // A pin's units as a signature's slots.

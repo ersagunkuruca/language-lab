@@ -11,12 +11,12 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Session } from "../mcp/session.ts";
 import { publishVersion, upgrade } from "../src/lang/modules.ts";
-import { merge } from "../src/model.ts";
+import { merge, subtree, type NodeOf } from "../src/model.ts";
 import { baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
-import { formatUnit } from "../src/units.ts";
+import { formatUnit, holeUnit } from "../src/units.ts";
 import { showWithPinUnits } from "../src/lang/unit-types.ts";
-import { fresh } from "../src/lang/signatures.ts";
+import { fresh, showPin } from "../src/lang/signatures.ts";
 import { Subst } from "../src/lang/types.ts";
 
 function program() {
@@ -94,4 +94,27 @@ test("a new version that changes the units it promises isn't taken by an upgrade
   assert.match(r.reason, /its units changed from \(Float64 u, Float64 v\) -\[Choice\]-> Float64 u\/v to/);
   // Back the other way too: u·v is no more general than u/v.
   assert.ok(!upgrade(merge(LIBRARY.code, v2.module.code), b, a, v2.module.pins, baseNames(v2.module.names)).ok);
+});
+
+// QA 11-15 Q1: a pin's units show wherever its type does, and a hole in a
+// pinned definition says the unit it needs.
+test("a pin shows its units, and a hole the unit the pin holds it to", () => {
+  const { s, def } = program();
+  def("rate", ["d", "t"], "d / t");
+  def("lap", ["d"], "d + 400.0 m");
+  s.pin("rate");
+  const rate = defNamed(s, "rate");
+  assert.equal(showPin(s.pins[rate], s.allNames), "(Float64 u, Float64 v) -[Choice]-> Float64 u/v");
+  // The use of a definition's first input made a hole.
+  const hole = (name: string) => {
+    const d = defNamed(s, name), fn = s.code.nodes[(s.code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"lambda">;
+    const use = subtree(s.code, fn.body).find((x) => { const n = s.code.nodes[x]; return n.kind === "ref" && n.target === fn.params[0]; })!;
+    s.replace(use, "□");
+    const h = subtree(s.code, d).find((x) => s.code.nodes[x].kind === "hole")!;
+    return holeUnit(s.code, d, h);
+  };
+  // `□ / t` in rate: the pin says its input is any unit u, so the hole needs a u.
+  assert.equal(formatUnit(hole("rate")!), "u");
+  // Unpinned, a written unit fixes it: `□ + 400.0 m` needs metres.
+  assert.equal(formatUnit(hole("lap")!), "m");
 });
