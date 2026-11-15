@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
-| C Compiler and targets | "Compiler lane" | I304 (the MCP, GAPS round 19) |
+| C Compiler and targets | "Compiler lane" | none queued; GAPS round 19 S8 (why `ters native` is no faster than core on scan) is the next to look at |
 | L Language and library | "Language lane" | pack's speed (GAPS round 18), cost by cost, each a C row, until a stage buys under 10% (C233, C234 done); L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -53,7 +53,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| I304 | Filling a long definition through the MCP is slow (GAPS round 19 S7): scan's 146 definitions took 7 minutes, and `scan`, 18 steps, 75 s. I304a (#2774) took scan's 18 steps to 32 s one at a time, I304b (#2775) to 22 s, I304c (#2776, an edit checked over the check before) to 19 s, I304d to 12 s; what is left is about 1 s a step of work over the whole program: the check of each reading (`written` copies every node per reading, then infers, a cached check still ~0.25 s fixed). Check only what a step changed (E103's incremental check) | GAPS round 19 | P3 | M | |
 
 ### Speed of editing
 
