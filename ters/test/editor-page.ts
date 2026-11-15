@@ -67,7 +67,7 @@ const matches = (t: string, want: Text) => typeof want === "string" ? t.includes
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // A fresh editor. `saved` is what an earlier visit left in localStorage.
-export function openEditor(saved?: string) {
+export function openEditor(saved?: string, kept: Record<string, string> = {}) {
   const window = new Window({ url: "http://localhost/index.html", width: 1400, height: 1000, settings: { disableJavaScriptFileLoading: true, disableCSSFileLoading: true } });
   const errors: string[] = [];
   const w = window as unknown as Record<string, unknown> & { HTMLCanvasElement: { prototype: { getContext: unknown } } };
@@ -93,6 +93,7 @@ export function openEditor(saved?: string) {
   Object.defineProperty((svg.SVGGraphicsElement ?? svg.SVGElement)!.prototype, "transform", { configurable: true, get: () => ({ baseVal: { consolidate: () => null } }) });
   window.localStorage.clear();
   if (saved) window.localStorage.setItem("projectional-editor-v5", saved);
+  for (const [k, v] of Object.entries(kept)) window.localStorage.setItem(k, v);
   window.document.body.innerHTML = html;
   window.eval(js);
   const doc = window.document as unknown as Document;
