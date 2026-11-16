@@ -49,7 +49,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { zoneOffset } from "../../ters/src/lang/text.ts";
 import type { HostOps } from "./core-rt.ts";
-import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
+import { fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, mapLocals, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 // columns.ts's ops on an array kept as columns (C60 w2).
@@ -173,7 +173,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     for (const c of x.v) { const b = textBytes(c).length; if (n + b > TEXT_PIECE) { parts.push(""); n = 0; } parts[parts.length - 1] += c; n += b; }
     return parts.map((v): SExpr => ({ k: "text", v })).reduce((a, b) => ({ k: "rt", fn: "text.concat", args: [a, b] }));
   };
-  const funcs = funcs0.map((f) => (longIn(f.body) ? { ...f, body: pieces(f.body) } : f));
+  const funcs = funcs0.map((f) => onlyRead(longIn(f.body) ? { ...f, body: pieces(f.body) } : f));
   // Host functions used, in a fixed order: they take the first indices.
   // A WASI host has no Math: there sin and the rest are V8's fdlibm,
   // compiled to WebAssembly (wasm-math.ts), their tables and stack in
@@ -777,7 +777,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
           }
           return [...code1(e.value), 0x22, ...u(e.i), 0x42, ...sBig(I64_LEAST), 0x51, ...again, ...code1(e.body)];
         }
-        return [...code1(e.value), 0x21, ...u(e.i), ...code1(e.body)];
+        return [...code1(e.value), ...(e.i < 0 ? [0x1a] : [0x21, ...u(e.i)]), ...code1(e.body)];
       case "if": return [...code1(e.cond), 0x04, ...typeOf(e.t), ...code(e.then, d + 1, fl), 0x05, ...code(e.else, d + 1, fl), 0x0b];
       case "call": {
         // A tail call only to a function that gives what this one gives.
@@ -962,7 +962,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       case "local": return `${d}local.get ${local(f, e.i)}`;
       case "let":
         if (stepped(e.value)) return `${w(e.value)}\n${d}local.tee ${local(f, e.i)}\n${d}i64.const ${I64_LEAST}\n${d}i64.eq\n${d}(if (then ${f.params.map((_, j) => `local.get ${local(f, j)} call $i64.box `).join("")}call ${id(funcs[f.bail!])} ${funcs[f.bail!].partial && !f.partial ? "(if (then unreachable)) " : ""}return)) ;; past an i64: as written\n${w(e.body)}`;
-        return `${w(e.value)}\n${d}local.set ${local(f, e.i)}\n${w(e.body)}`;
+        return `${w(e.value)}\n${d}${e.i < 0 ? "drop" : `local.set ${local(f, e.i)}`}\n${w(e.body)}`;
       case "if": return `${w(e.cond)}\n${d}(if (result ${ty(e.t)})\n${d}  (then\n${wat(e.then, f, d + "    ", ld + 1, fl)})\n${d}  (else\n${wat(e.else, f, d + "    ", ld + 1, fl)}))`;
       case "call": {
         const g = funcs[e.fn], tail = e.tail && !!g.partial === !!f.partial;
@@ -1108,6 +1108,25 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
 // A loop's value stepped (C207k, untagged-ints.ts valueLoop): i64's least
 // when it went past an i64.
 const I64_LEAST = -(2n ** 63n);
+// Only the locals something reads (C254): a let nothing reads is its
+// value dropped (local -1), and the locals nothing names are not declared,
+// the rest numbered again after the inputs.
+function onlyRead(f: SFunc): SFunc {
+  const named = new Map<number, number>(), bound = new Map<number, number>();
+  const add = (m: Map<number, number>, i: number) => m.set(i, (m.get(i) ?? 0) + 1);
+  mapLocals(f.body, (i) => (add(named, i), i));
+  const lets = (e: SExpr): void => { if (e.k === "let" && !stepped(e.value)) add(bound, e.i); kids(e).forEach(lets); };
+  lets(f.body);
+  const unread = (i: number) => i >= f.params.length && named.get(i) === bound.get(i);
+  const drop = (e: SExpr): SExpr => { const x = mapKids(e, drop); return x.k === "let" && x.i >= 0 && !stepped(x.value) && unread(x.i) ? { ...x, i: -1 } : x; };
+  const body = drop(f.body), kept = new Map<number, number>(f.params.map((_, j) => [j, j]));
+  mapLocals(body, (i) => (i >= 0 && !kept.has(i) && kept.set(i, -1), i));
+  const order = [...kept.keys()].filter((i) => i >= f.params.length).sort((a, b) => a - b);
+  order.forEach((i, j) => kept.set(i, f.params.length + j));
+  if (order.length === f.locals.length - f.params.length) return body === f.body ? f : { ...f, body };
+  return { ...f, locals: [...f.locals.slice(0, f.params.length), ...order.map((i) => f.locals[i])], body: mapLocals(body, (i) => (i < 0 ? i : kept.get(i)!)) };
+}
+
 const stepped = (e: SExpr) => e.k === "rt" && /^i64\.(addv|subv|mulv|muladdv)$/.test(e.fn);
 const uses = (e: SExpr, op: Op): boolean => (e.k === "op" && e.op === op) || kids(e).some((k) => uses(k, op));
 const mentionsText = (e: SExpr): boolean => e.k === "text" || kids(e).some(mentionsText);

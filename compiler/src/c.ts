@@ -2743,14 +2743,54 @@ int main(int argc, char **argv) {
       : [...spend("  "), ...unread("  "), ...block(f.body, "return", "  ", new Set())];
     // A round that left the small range, as written (C207i).
     if (f.bail !== undefined && body.some((x) => x.includes("goto lab_bail;"))) body.push("lab_bail:", `  return ${names.get(f.bail)}(${f.params.map((t, j) => (t === "i64" ? `LAB_SMALL(p${j})` : `p${j}`)).join(", ")});`);
-    // Only the locals the body uses (the lowering's own for budgets aren't).
-    const words = new Set(body.join("\n").match(/\w+/g)), named = decls.filter((x) => words.has(/(\w+);$/.exec(x)![1]));
+    // Only the locals the body uses (the lowering's own for budgets aren't),
+    // then not those only ever set.
+    const uses = (xs: string[]) => { const words = new Set(body.join("\n").match(/\w+/g)); return xs.filter((x) => words.has(/(\w+);$/.exec(x)![1])); };
+    const named = uses(onlySet(body, uses(decls)));
     const text = [`// ${f.name.replace(/\n/g, " ")}`, `${header(i, !!mine)} {`, ...named, ...body, "}"].join("\n");
     if (!mine) return text;
     // The one the host and closures call: it owns its inputs.
     const ps = f.params.map((_, j) => `p${j}`);
     return [text, `${header(i)} {`, `  ${ty(f.result)} r = ${bnames.get(i)}(${ps.join(", ")});`, ...[...mine].map((j) => `  ${drop(f.params[j], `p${j}`)}`), "  return r;", "}"].join("\n");
   }
+
+  // Locals only ever set (C254, gcc -Wall: set but not used): a setting
+  // worked out only for what it does, or gone when it does nothing. Again
+  // till none is left, as one gone can leave what it read unread.
+  function onlySet(body: string[], decls: string[]): string[] {
+    const names = new Set(decls.map((x) => /(\w+);$/.exec(x)![1]));
+    // Each line's names, counted once (a text constant's line can be
+    // hundreds of KB), and each name's count and lines.
+    const tokens = [...names].every((n) => /^[lt]\d+$/.test(n)) ? /\b[lt]\d+\b/g : /\w+/g;
+    const words = (l: string) => (l.match(tokens) ?? []).filter((w) => names.has(w));
+    const lines = body.map(words), count = new Map<string, number>(), on = new Map<string, number[]>();
+    lines.forEach((ws, j) => { for (const w of ws) { count.set(w, (count.get(w) ?? 0) + 1); on.get(w)?.push(j) ?? on.set(w, [j]); } });
+    // A call (by name or through a closure's code) stays as a statement,
+    // voided where it is inside arithmetic.
+    const call = (x: string) => { if (!/^\w+\(/.test(x)) return false; let depth = 0; for (let j = 0; j < x.length; j++) { if (x[j] === "(") depth++; else if (x[j] === ")" && --depth === 0) return j === x.length - 1; } return false; };
+    // Each name with a count queued once, again when a line it was on goes.
+    const gone = new Set<number>(), work = new Set(count.keys());
+    for (const n of work) {
+      work.delete(n);
+      const at = [...new Set(on.get(n))].filter((j) => !gone.has(j) && lines[j].includes(n));
+      if (at.length === 0 || count.get(n) !== at.length) continue;
+      const set = new RegExp(`^(\\s*)${n} = (.*);$`), sets = at.map((j) => set.exec(body[j]));
+      if (sets.some((m) => !m || /"/.test(m[2]) || lines[at[sets.indexOf(m)]].filter((w) => w === n).length > 1)) continue;
+      at.forEach((j, k) => {
+        const [, d, x] = sets[k]!;
+        for (const w of lines[j]) { count.set(w, count.get(w)! - 1); if (w !== n) work.add(w); }
+        // Pure: names, fields, casts and numbers.
+        if (/^[\w\s().*>{}\-+,]*$/.test(x) && !/[\w)]\s*\(/.test(x)) { gone.add(j); lines[j] = []; return; }
+        body[j] = call(x) ? `${d}${x};` : `${d}(void)(${x});`;
+        lines[j] = words(body[j]);
+        for (const w of lines[j]) count.set(w, count.get(w)! + 1);
+      });
+    }
+    for (const j of [...gone].sort((a, b) => b - a)) body.splice(j, 1);
+    return decls;
+  }
+
+
 
   // The type of e's value.
   function typeOf(e: SExpr, locals: LType[]): LType {
