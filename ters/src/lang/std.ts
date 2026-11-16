@@ -435,7 +435,9 @@ export const S = {
   total: builtin("total", "total", (s) => fn([s.fresh(false, true)], num, s.freshRow())),
   // A record of Float64s' unit parts (BACKLOG L230): one record per field,
   // 1 in that field and 0 in the rest, in field order; a Float64's is [1].
-  // `unit parts(1)` at a multivector type is its basis for clifford algebra.
+  // `unit parts(1)` at a multivector type is its basis, which clifford
+  // algebra takes from its record type (L264). arith.ts writes the list
+  // out where its type is known, so compiled code never calls it.
   unitParts: builtin("unitParts", "unit parts", (s) => { const r = s.fresh(false, true); return fn([r], list(r), s.freshRow()); }),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
@@ -956,7 +958,7 @@ export const SET = builtin("set", "set", (s) => {
 // and its multiplication table, so the prelude's clifford functions don't
 // build one on every call. (clifford outer and inner still build theirs:
 // three tables made eagerly cost relate's checks more than they saved.)
-// `clifford algebra(squares, basis)` makes one.
+// `clifford algebra(squares)` makes one, from the signature alone (L264).
 export const ALGEBRA = typedef("std.algebra", "Algebra", ["a"], [
   ["algebra", [
     ["squares", () => tref(LIST, tref(NUMBER))],

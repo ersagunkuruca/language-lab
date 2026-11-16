@@ -31,7 +31,7 @@ import { B } from "../prelude.ts";
 import { implementationOf, type Info } from "./infer.ts";
 import { keptAcrossRuns } from "./kept.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
-import { ARITH, ARITH_FIELD, EMBEDDING, EMBEDDING_MAP, INT_OPS, LITERAL, LITERAL_V, S } from "./std.ts";
+import { ARITH, ARITH_FIELD, CONS, EMBEDDING, EMBEDDING_MAP, INT_OPS, LIST, LITERAL, LITERAL_V, NIL, S } from "./std.ts";
 import { INT, NUMBER, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
@@ -523,6 +523,10 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
         }
         return;
       }
+      if (isCall(n) && !isUse(n) && n.args.length === 1 && nodes[n.fn]?.kind === "ref" && (nodes[n.fn] as NodeOf<"ref">).target === S.unitParts && unitParts(id, n, env)) {
+        if (nodes[id].kind === "call" && nodes[(nodes[id] as Call).fn]?.kind === "lambda") walk((nodes[id] as Call).args[0], id);
+        return;
+      }
       if (plainNumber(n)) { numberLiteral(n as NodeOf<"lit">, env); return; }
       if (typedLiteral(n)) { literal(n as NodeOf<"lit">); return; }
       const kids: Id[] = [];
@@ -615,6 +619,35 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     const fn = add({ kind: "ref", target: variant }, { t: "fn", params: fields.map(() => num), ret: t, eff: pure });
     nodes[n.id] = { id: n.id, kind: "call", fn, args: fields.map(() => add({ kind: "lit", value: x }, num)) };
     typeOf.set(n.id, t);
+  };
+
+  // unit parts(x) at a type known here (L264): the list it gives, written
+  // out, one record per field with a 1 in its own place ([1] at Float64),
+  // so no target needs the builtin and the compiled code has a list of
+  // constants (the core IR has no unit parts). x is read only for its
+  // type; one that may do something is still done first.
+  const unitParts = (id: Id, n: Call, env: Env): boolean => {
+    const at = typeOf.get(n.args[0]), x = at && close(at, env);
+    if (x?.t !== "con") return false;
+    const variant = x.id === NUMBER ? null : recordVariant(code, x.id);
+    if (x.id !== NUMBER && !variant) return false;
+    const width = variant ? (code.nodes[variant] as NodeOf<"variant">).fields.length : 1;
+    const listT: Type = { t: "con", id: LIST, args: [x] };
+    const unit = (i: number) => variant
+      ? add({ kind: "call", fn: add({ kind: "ref", target: variant }, { t: "fn", params: Array.from({ length: width }, () => num), ret: x, eff: pure }), args: Array.from({ length: width }, (_, j) => add({ kind: "lit", value: i === j ? 1 : 0, of: NUMBER }, num)) }, x)
+      : add({ kind: "lit", value: 1, of: NUMBER }, num);
+    const consT: Type = { t: "fn", params: [x, listT], ret: listT, eff: pure };
+    let list = add({ kind: "ref", target: NIL }, listT);
+    for (let i = width - 1; i >= 0; i--) list = add({ kind: "call", fn: add({ kind: "ref", target: CONS }, consT), args: [unit(i), list] }, listT);
+    const arg = nodes[n.args[0]];
+    if (arg.kind === "lit" || arg.kind === "ref") { nodes[id] = { ...nodes[list], id } as Node; delete nodes[list]; }
+    else {
+      // (x ↦ the list)(x), so what x does still happens.
+      const b = add({ kind: "binder" }, x);
+      nodes[id] = { id, kind: "call", fn: add({ kind: "lambda", params: [b], body: list }, { t: "fn", params: [x], ret: listT, eff: pure }), args: [n.args[0]] };
+    }
+    typeOf.set(id, listT);
+    return true;
   };
 
   // A generic operation at its type: the type's own, or part by part.

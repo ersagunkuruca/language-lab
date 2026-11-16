@@ -1,7 +1,7 @@
 // Calls with data known now, worked out now (C65, Ersagun 2026-10-31:
 // "Clifford tables first"). A call of a definition given data the program
 // writes down, such as an algebra's signature and basis,
-// `clifford sandwich(clifford algebra([1, 1, 1, 0], pga basis), motor,
+// `clifford sandwich(clifford algebra([1, 1, 1, 0]), motor,
 // point)`, is evaluated
 // as far as that data goes: the table is built, the folds over it are
 // unrolled, the matches on it are decided, and what is left is the
@@ -579,8 +579,8 @@ function copyTree(code: Code, names: Names, root: Id, map: Map<Id, Id>, fixed = 
       arm.binds.forEach((b, i) => parts.set(b, { field: variant.fields[i], holder: fixed.get(s.target)! }));
     }
   }
-  // A let of something known now (`table = clifford table(squares,
-  // basis)` with squares and basis fixed) is read where it is used, so a
+  // A let of something known now (`table = clifford table(squares)` with
+  // squares fixed) is read where it is used, so a
   // call given it is given data written down too.
   const known = new Map<Id, Id>();
   for (const id of ids) {

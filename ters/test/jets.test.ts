@@ -27,7 +27,7 @@ test("each host way names one of the library's definitions", () => {
 
 test("table product's host way gives the definition's bits: Spacetime's charge path, Cl(1, 3)", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/spacetime"));
-  const info = infer(p.code, p.pres.names);
+  const info = infer(p.code, p.pres.names, undefined, p.options);
   const id = (n: string) => p.code.defs.find((d) => p.pres.names[d] === n)!;
   const path = (libraryHosts: boolean) => {
     const r = makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts });
@@ -39,7 +39,7 @@ test("table product's host way gives the definition's bits: Spacetime's charge p
 
 test("table product's host way gives the definition's bits on random multivectors, and hands back what it doesn't take", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/constructions"));
-  const info = infer(p.code, p.pres.names);
+  const info = infer(p.code, p.pres.names, undefined, p.options);
   const algebra = p.code.defs.find((d) => p.pres.names[d] === "algebra")!;
   const both = [true, false].map((libraryHosts) => makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts }));
   // std's Algebra: its table is the list of `times` lines.
@@ -64,7 +64,7 @@ test("table product's host way gives the definition's bits on random multivector
 
 test("item at, put entry and entries have: their host ways give the definitions' answers, and hand back what they don't take (I195)", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/agent"));
-  const info = infer(p.code, p.pres.names);
+  const info = infer(p.code, p.pres.names, undefined, p.options);
   const both = [true, false].map((libraryHosts) => makeRunner(p.code, info, { print: () => {}, names: p.pres.names, libraryHosts }));
   const lib = (n: string) => Object.keys(LIBRARY.names).find((d) => LIBRARY.code.defs.includes(d) && LIBRARY.names[d] === n)!;
   const list = (xs: Value[]): Value => xs.reduceRight<Value>((t, x) => ({ tag: "std.list.cons", fields: [x, t] }), { tag: "std.list.nil", fields: [] });

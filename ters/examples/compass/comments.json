@@ -36,7 +36,6 @@
 "q1gbtg357lnsotcbiha26lmcit": "A line as an SVG path. The line ax + by = d is a e₁ + b e₂ + d ∞, so its e₃ and e₄ are both d. The path runs from the point on it nearest the origin, 40 units each way along it (the picture clips the rest).",
 "qegs6o6g8m9gr01oocjmseto0l": "a · b for two vectors, a number: a₁b₁ + a₂b₂ + a₃b₃ − a₄b₄. For two points it is −½ the square of the distance between them.",
 "qq2hneo101qkrb6hl9ck75cg2m": "The squared paper underneath: the axes and a rule every unit.",
-"rbcmu77nfcdf307rfhsfbelvaf": "The basis elements, in clifford algebra's order.",
 "saqut9nvkafle8mico4gejl953": "The point (x, y): x e₁ + y e₂ + ½(x² + y²) ∞ + o, a vector that squares to 0. Written out, its e₃ is ½(x² + y²) − ½ and its e₄ is ½(x² + y²) + ½.",
 "skqhdttil528n8onbraq553u7n": "The tool in hand: what a click on the picture does.",
 "u4v3snk1mrsd79lcag8rinmqnm": "The page: the tools, the paper with the construction on it, and the construction itself in a cell; every change builds it again.",

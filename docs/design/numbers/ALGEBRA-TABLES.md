@@ -106,14 +106,16 @@ and wrong for quaternions.
    (L40d).**
 3. Dual numbers as a table, tested against derive.ts's derivatives (L45).
 4. Quaternions as a table, then `Cl(p, q, r)` (L42, L43). **Built** (L42
-   step 1): the prelude's `clifford table(squares, basis)` builds the
+   step 1): the prelude's `clifford table(squares)` builds the
    table in the language, with blades as lists of Bools, a −1 for each
    swap, and the shared vectors' squares. `[−1, −1]` is the quaternions,
    equal to Hamilton's product; `[−1]` is Complex, `[0]` Dual, `[1]`
    split-complex, `[1, 1, 1]` Cl(3, 0) and `[1, 1, 1, 0]` PGA. A
    quaternion record whose `arithmetic` uses the table gets the one `·`
    (test/clifford.test.ts). `clifford reverse(algebra, x)` is x̃ (since I79 the clifford
-   functions take `clifford algebra(squares, basis)`, its tables built once),
+   functions take `clifford algebra(squares)`, its tables built once; since
+   L264 the signature is its only input, the basis coming from the record
+   type the definition is pinned at, `pga : Algebra Pga`),
    so a rotor R turns a vector v into R · v · R̃; Cl(3, 0)'s rotors
    1, e₂₃, e₁₃, e₁₂ multiply as the quaternions (L43a). Next: a PGA motor in the ray marcher, which
    needs L41's expansion of the fold on the GPU.

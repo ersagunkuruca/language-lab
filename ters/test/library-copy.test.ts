@@ -11,11 +11,12 @@ import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
-import { base, baseNames, checkOptions } from "../src/lang/load.ts";
+import { base, baseNames, optionsWith } from "../src/lang/load.ts";
+import { canonical, type Pins } from "../src/lang/signatures.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { bladeMask } from "../src/lang/grades.ts";
 import { renameCode } from "../src/lang/modules.ts";
-import { SHOW_ANY } from "../src/lang/std.ts";
+import { ALGEBRA, SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { subtree, type Code, type Id } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
@@ -42,14 +43,16 @@ test("the prelude's Clifford definitions copied under new ids check and give the
   const of = (v: Id, ps: number[]) => k.call(v, ...ps.map((p) => k.lit(p)));
   const unit = (v: Id, n: number, i: number) => of(v, Array.from({ length: n }, (_, j) => (j === i ? 1 : 0)));
   const list = (xs: number[]) => k.list(...xs.map((x) => k.lit(x)));
-  const algebra = (f: (name: string) => Id, squares: number[], v: Id, n: number) => k.call(f("clifford algebra"), list(squares), k.list(...Array.from({ length: n }, (_, i) => unit(v, n, i))));
+  const algebra = (f: (name: string) => Id, squares: number[]) => k.call(f("clifford algebra"), list(squares));
   const a3 = of(E3.v.cl3, [1, 2, -1, 0.5, 3, 0, -2, 1]), b3 = of(E3.v.cl3, [0, 1, 1, 0, -1, 2, 0, 0.25]);
   const bivector = of(E3.v.cl3, [0, 0, 0, 0.3, 0, -0.2, 0.4, 0]);
   const pa = of(P.v.pga, Array.from({ length: 16 }, (_, i) => ((i * 7) % 5) - 2)), pb = of(P.v.pga, Array.from({ length: 16 }, (_, i) => ((i * 3) % 4) / 2));
   const names: string[] = [];
+  // Each algebra made from its signature is pinned at its record (L264).
+  const pins: Pins = {};
   for (const [who, f] of [["prelude", lib], ["copy", mine]] as const) {
     const show = (name: string, x: () => Id) => { const d = k.def(`${who} ${name}`); k.define(d, k.call(SHOW_ANY, x())); names.push(`${who} ${name}`); };
-    const cl3 = () => algebra(f, [1, 1, 1], E3.v.cl3, 8), pga = () => algebra(f, [0, 1, 1, 1], P.v.pga, 16);
+    const cl3 = () => algebra(f, [1, 1, 1]), pga = () => algebra(f, [0, 1, 1, 1]);
     show("product", () => k.call(f("clifford product"), cl3(), a3, b3));
     show("sandwich", () => k.call(f("clifford sandwich"), cl3(), k.call(f("clifford exp"), cl3(), bivector), a3));
     show("outer", () => k.call(f("clifford outer"), cl3(), a3, b3));
@@ -61,11 +64,12 @@ test("the prelude's Clifford definitions copied under new ids check and give the
     // Not shown, so the grade reading (L203) sees the multivector.
     const al = k.def(`${who} cl3`);
     k.define(al, cl3());
+    pins[al] = canonical({ vars: [], rows: [], type: { t: "con", id: ALGEBRA, args: [{ t: "con", id: E3.def, args: [] }] } });
     k.define(k.def(`${who} masked`), k.fn(["v", "w"], (v, w) => k.call(f("clifford outer"), k.x(al), k.call(f("clifford grade"), k.x(al), k.int(1), v), k.call(f("clifford grade"), k.x(al), k.int(1), w))));
   }
   const own = base(k.code);
   const code: Code = { nodes: { ...own.nodes, ...copy.nodes }, defs: [...own.defs, ...copy.defs] }, nm = baseNames(k.names);
-  const info = infer(code, nm, undefined, checkOptions);
+  const info = infer(code, nm, undefined, optionsWith(pins));
   assert.deepEqual(info.errors.map((e) => `${nm[e.id] ?? e.id}: ${e.message}`), []);
   const at = (n: string) => code.defs.find((d) => nm[d] === n)!;
   const r = makeRunner(code, info, { print: () => {}, names: nm });
