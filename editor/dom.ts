@@ -41,4 +41,4 @@ export function head(label: Kid | Kid[], o: { tip?: string; file?: string } = {}
   return el;
 }
 // The saved file an edit here changes, code.json written `code`.
-export const fileTag = (f: string) => h("span", { class: "file-tag", title: f === "code" ? "Edits here change the program (code.json)" : f === "layout" ? "Edits here change only how it's drawn (layout.json)" : `Saved in ${f}.json` }, f);
+export const fileTag = (f: string) => h("span", { class: "file-tag", title: f === "code" ? "Edits here change the program (code.json)" : f === "layout" ? "Edits here change only how it's drawn (layout.json)" : f.includes(".") ? `Saved in ${f}` : `Saved in ${f}.json` }, f);

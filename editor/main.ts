@@ -1533,26 +1533,27 @@ function programPanel(): HTMLElement {
     const t = textField("f-title", "Title", "", titleOf(doc));
     t.input.addEventListener("change", () => renameProgram(t.input.value));
     out.append(t.el);
-  } else out.append(h("p", { class: "hint" }, `${titleOf(doc)} is an example. Reset brings it back; Save file makes a copy you can open as your own.`));
+  } else out.append(head(titleOf(doc), { tip: "An example: Reset brings it back; Save file makes a copy you can open as your own." }), h("p", { class: "hint" }, "Example"));
   out.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "new-program" }, "New program"),
     h("button", { class: "btn", type: "button", "data-act": "open-file" }, "Open file…"),
-    h("button", { class: "btn", type: "button", "data-act": "save-file" }, "Save file"),
+    h("button", { class: "btn", type: "button", "data-act": "save-file", title: "One file with the code, names, comments and layout. Every edit is also kept in this browser as you go." }, "Save file"),
     h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: the open definition's blocks and Run" }, "Copy embed link"),
-    mine ? h("button", { class: "btn danger", type: "button", "data-act": "delete-program" }, "Delete") : null),
-    h("p", { class: "hint" }, "Every edit is kept in this browser as you go. A file holds the code, names, comments and layout together."));
+    mine ? h("button", { class: "btn danger", type: "button", "data-act": "delete-program" }, "Delete") : null));
   // The program's comment, as a definition has one: what it is, and whose
   // code or ideas it uses, links as links.
   // The modules it brought from its file, and their newer versions (E254).
   const ms = fileModules(doc);
   if (ms.length) {
     const newer = upgrades();
-    out.append(h("p", { class: "hint" }, `It uses ${(doc.modules ?? []).map((m) => m.title).join(", ") || "only its store"} beyond the library${doc.store ? ", and keeps every version it has used in its store" : ""}. ${newer.length ? `Newer versions: ${newer.join(", ")}.` : "It uses their newest versions."}`),
+    out.append(head("Modules", { tip: `Used beyond the library${doc.store ? "; its store keeps every version it has used" : ""}.` }),
+      h("p", { class: "hint" }, (doc.modules ?? []).map((m) => m.title).join(", ") || "Its store only"),
+      h("p", { class: "hint" }, newer.length ? `Newer: ${newer.join(", ")}` : "Newest versions"),
       ...(newer.length ? [h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "upgrade-modules", title: "Kept only if it still checks and its tests pass" }, "Upgrade"))] : []));
   }
   const shown = noteView(noteOf(doc));
   if (shown) out.append(shown);
-  const ta = h("textarea", { id: "f-program-comment", rows: "4", placeholder: "What this program is. Whose code it adapts or whose idea it follows: who, and a link." }) as HTMLTextAreaElement;
+  const ta = h("textarea", { id: "f-program-comment", rows: "4", placeholder: "What it is; whose code or idea it uses, with a link" }) as HTMLTextAreaElement;
   ta.value = noteOf(doc);
   ta.addEventListener("change", () => { if (ta.value !== noteOf(doc)) setComment(PROGRAM, ta.value); });
   out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", { class: "field-head" }, "Comment", fileTag("comments")), ta));
@@ -1563,8 +1564,7 @@ function programPanel(): HTMLElement {
   if (effects.length) {
     const host = h("textarea", { id: "f-host", rows: "8", readonly: "", spellcheck: "false" }) as HTMLTextAreaElement;
     host.value = hostSkeleton(doc.code, pres().names, effects);
-    out.append(h("label", { class: "field", for: "f-host" }, h("span", {}, "Host · hosts/js.js"), host),
-      h("p", { class: "hint" }, `What this program's own ${effects.length === 1 ? "effect" : "effects"} (${effects.map((e) => pres().names[e] ?? e).join(", ")}) ${effects.length === 1 ? "does" : "do"} outside a handler is answered by hosts/js.js beside the program, when it runs with ters run or is built with ters build-web. The editor keeps no host file: this is the one ters hosts writes, to fill in.`));
+    out.append(h("label", { class: "field", for: "f-host", title: `What this program's own ${effects.length === 1 ? "effect" : "effects"} (${effects.map((e) => pres().names[e] ?? e).join(", ")}) ${effects.length === 1 ? "does" : "do"} outside a handler is answered by hosts/js.js beside the program, when it runs with ters run or is built with ters build-web. The editor keeps no host file: this is the one ters hosts writes, to fill in.` }, h("span", { class: "field-head" }, "Host", fileTag("hosts/js.js")), host));
   }
   return out;
 }
@@ -2256,8 +2256,8 @@ const TYPED_CLASSES: { key: string; title: string; how: string }[] = [
   { key: "-", title: "null / undefined", how: "impossible: there is no null; absence is the Choice effect" },
   { key: "effect", title: "Unhandled effects", how: "checked: effect rows; main can only print" },
   { key: "diverge", title: "Might not terminate", how: "inferred: recursion on a smaller part is total, the rest carries Diverge" },
-  { key: "hole", title: "Holes", how: "allowed while editing; each knows its type" },
-  { key: "runtime", title: "Domain errors", how: "only found by running: ÷ 0 fails in evaluate, √ of a negative is NaN" },
+  { key: "hole", title: "Holes", how: "allowed: while editing, and each knows its type" },
+  { key: "runtime", title: "Domain errors", how: "at run time: ÷ 0 fails in evaluate, √ of a negative is NaN" },
 ];
 
 function typedChecks(namer: Namer, info: T.Info): HTMLElement {
@@ -2274,7 +2274,7 @@ function typedChecks(namer: Namer, info: T.Info): HTMLElement {
     const state = bad ? "bad" : items.length || div ? "gap" : c.key === "runtime" ? "later" : "ok";
     box.append(h("div", { class: `chk ${state}` },
       h("span", { class: "chk-n" }, div ? "∞" : items.length ? String(items.length) : state === "later" ? "…" : "0"),
-      h("span", { class: "chk-t" }, c.title, h("small", {}, div ? "this definition carries Diverge: run it under with fuel" : c.how))));
+      h("span", { class: "chk-t", title: div ? "This definition carries Diverge: run it under with fuel" : c.how }, c.title, h("small", {}, div ? "carries Diverge" : c.how.split(":")[0]))));
     for (const x of items.slice(0, 4)) box.append(h("button", { class: "chk-item", type: "button", "data-act": "goto-node", "data-target": x.id }, `${node(x.id)?.kind === "hole" ? "□" : namer.name(x.id)}: ${x.message}`));
   }
   return box;
@@ -2327,8 +2327,7 @@ function definitionPanel(p: Presentation): HTMLElement | null {
   const d = fn ? definitionOf(doc.code, fn) : null;
   if (!fn || !d) return null;
   return h("div", { class: "define" },
-    h("div", { class: "sub-head" }, `How ${builtinName(p.names, fn, d)} is defined`),
-    h("p", { class: "hint" }, "It's built in: this equation is the whole definition. Give it any of the port sets below and the solver works out the rest."),
+    head(["Definition of ", builtinName(p.names, fn, d)], { tip: "Built in: this equation is the whole definition. Give it any of the port sets below and the solver works out the rest." }),
     ...d.equations.map((e) => h("pre", { class: "eq" }, e)),
     h("ul", { class: "ways" }, ...d.ways.map((w) => h("li", {}, h("span", { class: "given" }, `given ${w.given.join(", ")}`), ...w.steps.map((t) => h("code", {}, t)), w.several ? h("span", { class: "hint" }, " several answers") : null))));
 }
