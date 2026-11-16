@@ -4,10 +4,19 @@
 // page-runtime.ts is for compile.ts's: core-page.ts and the solver.
 
 export { mountCorePage, startCorePage } from "./core-page.ts";
-export { usePlans, useSolver } from "./core-rt.ts";
+export { useFloats, usePlans, useSolver } from "./core-rt.ts";
 // Every builtin, since a page made without a bundler can't pick (C251b).
 import { useBuiltins } from "./core-rt.ts";
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 useBuiltins(STD_IMPL, STD_MANY);
+// And what runs side by side, which one may (C251c).
+import { useBranches } from "./core-rt.ts";
+import { branches } from "./core-branches.ts";
+useBranches(branches);
+// And what plays a sound.
+import { useSound } from "./core-page.ts";
+import { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
+useSound({ recordingWorld, soundPlayer });
 export { plans } from "./plan-rt.js";
+export { floats } from "./core-floats.ts";
 export { solver } from "./core-solve.ts";

@@ -7,14 +7,18 @@ import { equal, type Value } from "../../ters/src/lang/run.ts";
 import { Cells, handOver, nodeOf } from "../../ters/src/lang/cells.ts";
 import { browserWorld, pageStorage, type Store } from "../../ters/src/lang/browser.ts";
 import { mountHtml, type Doc, type Node_ } from "../../ters/src/lang/html.ts";
-import { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
-import { coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
-import { pageWorker } from "./branches-rt.ts";
+import type { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
+import { branchWorkerOfPage, coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
 import type { Hosts } from "../../ters/src/lang/hosts.ts";
 import type { Code } from "../../ters/src/model.ts";
 import { budget, heardInto, logged, LogWindow, type LogEntry, type PlacedSnapshot } from "../../ters/src/lang/worldlog.ts";
 
 type Defs = Record<string, (...xs: unknown[]) => unknown>;
+
+// What plays a page's sound (audio-page.ts), given by a page that has one
+// (C251c, core-js.ts corePageScript): a page without carries none of it.
+let SOUND: { recordingWorld: typeof recordingWorld; soundPlayer: typeof soundPlayer } | undefined;
+export const useSound = (s: NonNullable<typeof SOUND>) => { SOUND = s; };
 
 // `defs` makes the printed functions from the runtime; `main` is the
 // page's, by its printed name; `program` names the page's files in
@@ -27,7 +31,7 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   // functions made, answering the runs it is sent, and no page drawn.
   if (typeof document === "undefined") {
     defs(coreRuntime(tables, worlds, { print: (line: string) => console.log(line) }, code, undefined, hosts?.ops));
-    pageWorker();
+    branchWorkerOfPage();
     return;
   }
   const cells = new Cells(equal);
@@ -42,13 +46,15 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   // stopped (I239d): a compiled page's log is for the evaluator to replay
   // from the start, so it is capped rather than kept as a window.
   const cap = budget();
-  const world = recordingWorld(log ? logged(browser, log, { seeded: true, budget: cap, inView: () => cells.inView() }).world : browser);
+  const plain = log ? logged(browser, log, { seeded: true, budget: cap, inView: () => cells.inView() }).world : browser;
+  if (worklet && !SOUND) throw new Error("this page has a sound but was made without what plays it");
+  const recorded = worklet ? SOUND!.recordingWorld(plain) : null, world = recorded ?? plain;
   // A handler run that's taken back prints nothing (cells.ts attempt).
   const rt = { print: (line: string) => cells.later(() => console.log(line)), world, cells, hosts: hosts?.answers };
   const fns = defs(coreRuntime(tables, worlds, rt, code, undefined, hosts?.ops));
   const doc = document as unknown as Doc & { body: { append(n: Node_): void } };
   const run = () => fns[main]() as Value;
-  const sound = worklet ? soundPlayer(cells, worklet, run, undefined, world) : null;
+  const sound = worklet ? SOUND!.soundPlayer(cells, worklet, run, undefined, recorded!) : null;
   doc.body.append(mountHtml((sound ? sound.page : run()) as never, { cells, doc, call: coreCall, listen: sound?.listen, heard: log && heardInto(log, undefined, cap) }));
 }
 

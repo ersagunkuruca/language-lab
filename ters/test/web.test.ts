@@ -238,3 +238,19 @@ test("a page bundles its hosts/js.js and asks it", async () => {
     assert.match((body.kids[0] as FakeEl).html(), /<p>phone 7<\/p>/);
   }
 });
+
+test("a page that runs nothing side by side carries none of what does, and one that may does (C251c)", async () => {
+  const { webCorePage } = await import("../cli/web.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const built = async (example: string) => {
+    const p = loadProgram(join(import.meta.dirname, "../examples", example));
+    const info = infer(p.code, p.pres.names, undefined, p.options);
+    return webCorePage(example, p.code, info, p.pres.names, p.named("main"));
+  };
+  // A message only branches-rt.ts has.
+  const workers = /a shared table is read only/;
+  assert.doesNotMatch(await built("calculus-page"), workers);
+  // dice's map of its rolls may run on the page's workers.
+  assert.match(await built("dice"), workers);
+});

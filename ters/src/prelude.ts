@@ -38,4 +38,4 @@ export const preludeNames: Names = {
 // (src/lang/relate.ts) uses the inverses; differentiating a function
 // (src/lang/derive.ts) uses the derivatives.
 type Prim = { eval: (...xs: number[]) => number };
-export const impl = Object.fromEntries(ops.map((op) => [op, (FN as unknown as Record<string, Prim>)[op].eval])) as Record<Op, (...xs: number[]) => number>;
+export const impl = /* @__PURE__ */ Object.fromEntries(/* @__PURE__ */ ops.map((op) => [op, (FN as unknown as Record<string, Prim>)[op].eval])) as Record<Op, (...xs: number[]) => number>;
