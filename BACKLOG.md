@@ -86,7 +86,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C252 | One loop rewrite over the list interface (R11 §3, P7's next foundation row): "consing onto a call of itself is a loop" is written once per place a list lives (C232 a tree's lists, C240 arrays, C250 the list of one left behind), and "appends onto what a loop carries" again (C233). Gather them into one rewrite that reads the list through its interface, the representations each giving only their own steps; pack and scan as fast as they are now (measured before and after). Before the next speed round | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §3 | P2 | M | |
 
 ### Bugs and gaps found by programs
 

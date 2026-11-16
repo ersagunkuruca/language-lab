@@ -2,8 +2,9 @@
 // on the way back up (trek's `steepest(ls)`: `it = steepest(more)`, then
 // `steeper(l, …)`) holds a frame of WebAssembly's stack per item, which
 // Node's WASI and wasmtime hold some thousands of (C222, GAPS.md round 16
-// R3). cons-loops.ts makes the shapes whose way back up only conses or
-// ands into loops; this makes the rest: what the way back up needs is
+// R3). cons-onto.ts makes those whose way back up only conses loops
+// before lowering (C252), and cons-loops.ts those that only and; this
+// makes the rest: what the way back up needs is
 // kept on the heap, in a frame of a data type of the pass's own, and two
 // loops run the function, one down (f's own body, each call of itself
 // pushing a frame) and one back up (popping a frame and running what came
