@@ -234,6 +234,5 @@ Not lane work; the coordinator does these or asks Ersagun.
 
 | id | item | source | pri | status |
 |---|---|---|---|---|
-| P10 | Main's red rule (R11 §1): a lane that sees Check main red for more than an hour stops merging until it is green or the failing file has a row a lane is taking; WORKFLOW.md says so beside "fixing it is your next job". Main was red 16 hours on 11-15/16 while 42 PRs merged (resolve-once, fixed by I312 #2819) | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §1 | P1 | |
 | P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805 on 11-03; 3,421 on 11-13), tests reached by a one-line text.ts edit (145/150 + 44/44 on 11-03; 139/219 + 91/125 on 11-13) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
 | P8 | Add a LICENSE (and say what examples and programs written in Ters carry) once Ersagun picks one | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §3 | P3 | postponed (Ersagun 2026-11-10: until people want to use Ters) |

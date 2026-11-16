@@ -185,8 +185,11 @@ of text; they were these cells logging every finished row).
   twice on code it passed on. A file that fails names the commit that
   broke it in the run's summary (`--bisect`). Look at Check main for your
   commit; if it is red, or a later run names your commit, fixing it is
-  your next job. The coordinator watches Check main and the Nightly (a red
-  nightly is a P0). This rule is settled: when it costs too much or misses
+  your next job. Main red for more than an hour stops every lane's merges
+  (P10, REVIEW-2026-11-16 §1: 42 merged through 16 red hours): merge
+  nothing until Check main is green again, or the failing file has a row
+  a lane is taking; a lane's own fix for it merges. The coordinator
+  watches Check main and the Nightly (a red nightly is a P0). This rule is settled: when it costs too much or misses
   too much, tune affected.ts and the map, not the rule.
 - Merge when green; the editor rules (click through the live page, run every
   example's main both ways) still apply after editor merges.
