@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I311 | Opening a program's page holds the editor's thread 1.6 s, 0.8 s of it the editor's own render (render → graphOf, model.ts scanningOnLayer; Countdown's `symbol`, headless Chromium). Editor lane, after the text pass (coordinator 11-16). | I310's profile | 2026-11-16 |
 
 ## E: Editor
 
