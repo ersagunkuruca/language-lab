@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
-| L Language and library | "Language lane" | L265 |
+| L Language and library | "Language lane" | no open row (bugs and QA first) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -153,7 +153,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L265 | `numbers` as written (Peano Nat) runs on the evaluator: today it runs out of memory, and the core IR printer's recursion out of stack, so core-js.test checks it only after `represented` stores its Nat as an Int (`asRun`). A user doesn't meet it (`ters run` stores it the same way), but the evaluator is the reference every target is compared with. R11 §4 measured the evaluator 6 to 10 times slower than compiled JS on deep recursion; take after R11's first three fixes | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §4 | P3 | M | |
 
 ### Bugs and gaps found by programs
 

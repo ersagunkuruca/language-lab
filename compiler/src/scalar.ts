@@ -587,31 +587,8 @@ export const MAX_FUEL = 2 ** 24;
 const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
-// The definitions the roots reach, every type, and the builtins: what
-// the scalar profile and compile (C67) stage and check again (C90).
-// The same, and the Shown implementations `show any` shows through when
-// what the roots reach shows a value (L205, C148). `own`: only those of
-// types not in std (the scalar lowering shows std's own way).
-export function reachedWithShows(code: Code, roots: Id[], info: Info, own = false): Code {
-  const reached = reachedFrom(code, roots);
-  const showns = [...shownImplementations(info)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
-  const shows = showns.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === SHOW_ANY);
-  // And the Ordered implementations a compare orders through (L204h).
-  const ordereds = [...implementationsOf(info, ORDERED)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
-  const compares = ordereds.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === COMPARE);
-  return shows || compares ? reachedFrom(code, [...roots, ...(shows ? showns : []), ...(compares ? ordereds : [])]) : reached;
-}
-export function reachedFrom(code: Code, roots: Id[]): Code {
-  const reach = new Set<Id>();
-  for (const r of roots) { reach.add(r); for (const d of dependencies(code, r)) reach.add(d); }
-  const isType = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
-  const defs = code.defs.filter((d) => reach.has(d) || isType(d));
-  if (defs.length === code.defs.length) return code;
-  const nodes: Code["nodes"] = {};
-  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
-  for (const d of defs) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
-  return { nodes, defs };
-}
+import { reachedFrom, reachedWithShows } from "../../ters/src/lang/reached.ts";
+export { reachedFrom, reachedWithShows };
 
 
 // `shader`: what a shader has without a heap (C66c). An Int is held in 32

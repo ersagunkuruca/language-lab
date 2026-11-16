@@ -35,19 +35,18 @@ import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { useDirections } from "../../ters/src/lang/directions.ts";
-import { interfaceOps, waysIn } from "../../ters/src/lang/ways.ts";
 import { withInverses } from "./inverses.ts";
 import { withOperationLambdas } from "./operation-values.ts";
 import { withCharacterMaps } from "./character-maps.ts";
 import { hoistInvariants } from "./hoist.ts";
-import { dependencies, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
+import { ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { BRANCH_NAMES, BRANCH_WORLDS, branches } from "./core-branches.ts";
@@ -661,36 +660,8 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
 // printer takes: handlers the compiler can see put into the code they
 // handle (handlers.ts, C64b), so a program's own effect answered in place
 // (effects' Ask) needs no handler at run time (C137c17).
-// What the roots reach (reachedWithShows), and the implementations at the
-// types that reaches: arith.ts, Shown and Ordered find those by type, not
-// by a reference, so they're added until nothing more is reached.
-export function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
-  // Each with the types it is at: an Embedding's are its two (int in
-  // float64), kept by the interface's own type around them.
-  const impls = [...(info.implementations ?? [])].map(([key, d]) => {
-    const iface = key.slice(0, key.indexOf("|")), rest = key.slice(iface.length + 1);
-    const ts = rest.startsWith("@") ? [rest.slice(1)] : [...rest.matchAll(/"t":"con","id":"([^"]+)"/g)].map((m) => m[1]).filter((t) => t !== iface);
-    return [ts, d] as const;
-  });
-  // The types the roots use: what they refer to, types included (model.ts
-  // dependencies); the builtin ones (Float64, Int, Text) always.
-  const used = new Set<Id>(), more: Id[] = [], kept = new Set<Id>();
-  const use = (r: Id) => { if (used.has(r)) return; used.add(r); for (const d of dependencies(code, r)) used.add(d); };
-  roots.forEach(use);
-  // The ways of a kept implementation's interface too (WAYS.md): arith.ts
-  // puts one in for a field the implementation leaves `by its ways`, so it
-  // is reached by no reference (examples/impact's `first touch by
-  // advancing`, L120c).
-  const ops = interfaceOps(code), ways = waysIn(code, ops);
-  const ifaceOf = new Map(impls.map(([, d]) => [d, [...(info.implementations ?? [])].find(([, x]) => x === d)![0].split("|")[0]]));
-  for (let grew = true; grew;) {
-    grew = false;
-    for (const [ts, d] of impls) if (!kept.has(d) && ts.every((t) => used.has(t) || t.startsWith("type."))) { kept.add(d); more.push(d); use(d); grew = true; }
-    const ifaces = new Set([...kept].map((d) => ifaceOf.get(d)));
-    for (const [field, ws] of ways) if (ifaces.has(ops.get(field))) for (const w of ws) if (!used.has(w.def)) { more.push(w.def); use(w.def); grew = true; }
-  }
-  return reachedWithShows(code, [...roots, ...more], info);
-}
+import { reachedImplementing } from "../../ters/src/lang/reached.ts";
+export { reachedImplementing };
 
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
   // Work a lambda redoes on every call though nothing in it changes, done

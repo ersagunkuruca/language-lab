@@ -24,10 +24,9 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import type { Id } from "../../ters/src/model.ts";
+import { subtree, type Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { represented } from "../../ters/cli/represented.ts";
-import { representationsIn } from "../../ters/src/lang/represent.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { compiledDefs, emitCoreJs, FAIL, loadCoreJs, loadPrinted, lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { examples, load } from "../src/program.ts";
@@ -75,18 +74,25 @@ function nearer(p: ReturnType<typeof load>): ReturnType<typeof load> {
   const code = { ...p.code, nodes };
   return { ...p, code, info: infer(code, p.pres.names, undefined, p.options) };
 }
-const sized = (name: string): ReturnType<typeof load> => (name === "agent" ? nearer(load(name)) : load(name));
-// numbers counts in Peano Nat as defined: the evaluator runs out of memory
-// and the printer's recursion out of stack. It is checked as `ters run`
-// stores it (cli/represented.ts: Nat as an Int), in both, which is what
-// either runs (I195); each representation's jobs are checked against the
-// type's own by `ters test`.
-const asRun = new Set(["numbers"]);
-const stored = (name: string, p: ReturnType<typeof load>, main: Id): ReturnType<typeof load> => {
-  if (!asRun.has(name)) return p;
-  const r = represented({ title: name, code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: representationsIn(p.code, p.info, p.pres.names, p.own.defs), options: p.options }, main, true);
-  return { ...p, code: r.code, info: r.info, pres: { ...p.pres, names: r.names }, own: { ...p.own, defs: r.code.defs.filter((d) => !LIBRARY.code.nodes[d]) } };
-};
+// numbers counts in Peano Nat as written (L265): 18! as s(s(…z)) is
+// 6.4·10¹⁵ cells, which no run holds, so here main asks for 7! and 2¹²
+// (5040 and 4096 cells deep), the program otherwise as it is, run as
+// written in both. `ters run` stores its Nat as an Int (cli/represented.ts),
+// and `ters test` checks each representation's jobs against Nat's own.
+function smaller(p: ReturnType<typeof load>): ReturnType<typeof load> {
+  const main = p.own.defs.find((d) => p.pres.names[d] === "main")!;
+  const nodes = { ...p.code.nodes };
+  let changed = 0;
+  for (const id of subtree(p.code, main)) {
+    const n = nodes[id] as unknown as { kind: string; value?: unknown };
+    const to = n.kind === "lit" ? ({ 18: 7, 50: 12 } as Record<string, number>)[String(n.value)] : undefined;
+    if (to !== undefined) { nodes[id] = { ...nodes[id], value: to } as never; changed++; }
+  }
+  assert.equal(changed, 2, "numbers' main: 18! and 2^50");
+  const code = { ...p.code, nodes };
+  return { ...p, code, info: infer(code, p.pres.names, undefined, p.options) };
+}
+const sized = (name: string): ReturnType<typeof load> => (name === "agent" ? nearer(load(name)) : name === "numbers" ? smaller(load(name)) : load(name));
 
 // A program saved as the editor saves one.
 function saved(k: Lang): string {
@@ -132,10 +138,9 @@ const spawn = (args: string[], cwd?: string): Promise<[string, string, number]> 
 test("the examples whose main lowers to the core IR say the same in JavaScript printed from it as in the evaluator (C137c4)", () => {
   const ran: string[] = [], refused: string[] = [];
   for (const name of sweep(readdirSync(examples, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort())) {
-    const p0 = sized(name);
-    const main = p0.code.defs.find((d) => p0.pres.names[d] === "main" && p0.own.defs.includes(d));
+    const p = sized(name);
+    const main = p.code.defs.find((d) => p.pres.names[d] === "main" && p.own.defs.includes(d));
     if (!main) continue;
-    const p = stored(name, p0, main);
     const l = lowerCore(p.code, p.info, p.pres.names, p.own.defs);
     if (l.refused.has(main)) { refused.push(`${name}: ${l.refused.get(main)}`); continue; }
     const mt = p.info.typeOf.get(main);
