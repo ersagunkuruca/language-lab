@@ -1,5 +1,6 @@
 // Holes in the compiler found by the reviews (docs/reports/reviews/
-// REVIEW-2026-10-22b.md, then REVIEW-2026-11-02c.md, "R8"), as todo tests:
+// REVIEW-2026-10-22b.md, REVIEW-2026-11-02c.md "R8", then
+// REVIEW-2026-11-16.md "R11"), as todo tests:
 // they run, fail today, and don't fail the suite. When a fix lands,
 // drop the todo and the test guards it.
 
@@ -7,8 +8,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
+import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Aborted, makeRunner } from "../../ters/src/lang/run.ts";
-import { infer } from "../../ters/src/lang/infer.ts";
+import { bodiesTyped, forgetLibraryChecks, infer } from "../../ters/src/lang/infer.ts";
 import { DIVERGE } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
@@ -54,4 +56,27 @@ test("R8 §1 an overflow inside a handler of Abort stops, compiled as evaluated"
   assert.equal(evaluated, "stops: the answer is too big for a Float64 (overflow)");
   const js = compiledDefs(code, info, names, ["caught"]) as Record<string, (a: number, b: number) => unknown>;
   assert.equal(said(() => js.caught(1e300, 1e300)), evaluated);
+});
+
+// ---------------------------------------------------------------- the eleventh review (REVIEW-2026-11-16.md)
+
+// I193g made the check lazy: a program is checked over the library's
+// skeleton, each library definition's type from its pin, no body typed
+// (ters known-holes "R10 §2" guards that). But compiling the program types
+// them all anyway: the passes walk every node of the code, the library's
+// too, and ask its type (fold-items.ts parallelFolds -> pure-branches.ts
+// ownEffects -> info.typeOf.get is the first). So a cold `ters run` of wc
+// still takes about 4.5 s, as on 11-09, and 1.5 s of it is typing library
+// bodies the program never reaches.
+test("R11 §2 compiling a main that prints one text doesn't type the library's bodies", { todo: "the lowering passes ask the type of every library node" }, () => {
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(S.print, k.lit("hi"))));
+  const code = base(k.code), names = baseNames(k.names);
+  forgetLibraryChecks();
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors, []);
+  assert.ok(info.layer && !bodiesTyped(info.layer), "checked without typing the library's bodies");
+  compiledDefs(code, info, names, ["main"]);
+  assert.ok(!bodiesTyped(info.layer), "compiled without typing the library's bodies");
 });
