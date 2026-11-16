@@ -135,7 +135,8 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // runtime and world functions, a try, a throw, a yield.
 const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\(|remk\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
 
-export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: string[] } {
+// `only`: the functions printed (reachedFuncs), the rest left out.
+export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names: string[]; worlds: string[]; parts: string[][]; head: string[] } {
   const names = ir.funcs.map((_, i) => `f${i}`);
   // The partial functions, whose bodies may throw no answer (an attempt's try).
   const partialNames = new Set(names.filter((_, i) => ir.funcs[i].partial));
@@ -217,12 +218,15 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
   const closures = (e: SExpr): void => { if (e.k === "closure") { const s = coded.get(e.t.key) ?? new Set(); coded.set(e.t.key, s.add(e.fn)); } kidsOf(e).forEach(closures); };
   ir.funcs.forEach((f) => closures(f.body));
   const heapCodes = [...deep.keys()].filter((i) => [...coded.values()].some((s) => s.has(i)));
-  const text = ir.funcs.flatMap((f, i) => {
+  const parts = ir.funcs.map((f, i) => {
+    if (only && !only.has(i)) return [];
     if (!deep.has(i)) return [func(f, i, null)];
     const ps = f.params.map((_, j) => `l${j}`).join(", ");
     const plain = func(f, i, null).replace(`function ${names[i]}(`, `function ${names[i]}$b(`);
     return [`function ${names[i]}(${ps}) {\n  if (depth > ${DEPTH}) return R.drive(${gens[i]}(${ps}));\n  depth++;\n  const r = ${names[i]}$b(${ps});\n  depth--;\n  return r;\n}`, plain, func(f, i, deep.get(i)!)];
   });
+  const text = parts.flat();
+  const printed = (i: number) => !only || only.has(i);
   // A mode plan's data as this program's own (C137d23): made with its
   // classes and read by their fields, so the program's loops over what
   // a plan gives see one shape of cons, not two, and reading a field
@@ -241,7 +245,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     const b = builtinOf(n);
     return `const ${v} = R.rt(${JSON.stringify(n)}${b ? `, ${JSON.stringify(b)}` : ""});`;
   });
-  const js = [
+  const head = [
     ...(fuel ? ["let fuel = Infinity;"] : []),
     // Plain calls of functions with a heap copy on JavaScript's stack now.
     "let depth = 0;",
@@ -256,17 +260,20 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     ...(fuel ? ["R.spending(() => --fuel >= 0);"] : []),
     ...rtLines,
     ...worlds.map((_, i) => `const w${i} = R.worlds[${i}];`),
+  ];
+  const js = [
+    ...head,
     ...text,
-    ...heapCodes.map((i) => `${names[i]}.h = ${gens[i]};`),
+    ...heapCodes.filter(printed).map((i) => `${names[i]}.h = ${gens[i]};`),
     // A partial function given out says no answer by throwing, as the
     // evaluator's runtime expects.
     // A call from outside starts at the depth it found, whatever it threw.
-    `return { ${names.map((n, i) => {
+    `return { ${names.flatMap((n, i) => (printed(i) ? [[n, i] as const] : [])).map(([n, i]) => {
       const c = ir.funcs[i].partial ? `R.ck(${n}(...xs))` : `${n}(...xs)`;
       return deep.size ? `${n}: (...xs) => { const d = depth; try { return ${c}; } finally { depth = d; } }` : ir.funcs[i].partial ? `${n}: (...xs) => ${c}` : n;
     }).join(", ")} };`,
   ].join("\n");
-  return { js, names, worlds };
+  return { js, names, worlds, parts, head };
 
   // `cycle`: writing the heap copy, whose calls of these yield.
   function func(f: SFunc, i: number, cycle: Set<number> | null): string {
@@ -790,6 +797,24 @@ function deepFuncs(funcs: SFunc[]): Map<number, Set<number>> {
   return deep;
 }
 
+// The functions the printed `roots` reach: called, made a closure of, or
+// named in any other way in the printed code (a heap copy, a plan), read
+// off the printed text, so nothing that names one is missed. A function
+// put in place where it was called (inline-small.ts), or one nothing calls
+// any more, is left out of a page.
+export function reachedFuncs(ir: CoreIR, roots: number[]): Set<number> {
+  const { parts, head } = emitCoreJs(ir);
+  const named = (text: string) => [...text.matchAll(/(?<![.\w$])f(\d+)(?!\d)/g)].map((m) => Number(m[1])).filter((i) => i < parts.length);
+  const out = new Set<number>(), todo = [...roots, ...head.flatMap(named)];
+  while (todo.length) {
+    const i = todo.pop()!;
+    if (out.has(i)) continue;
+    out.add(i);
+    for (const t of parts[i]) todo.push(...named(t));
+  }
+  return out;
+}
+
 // Does e read local i? Through a local node, or as the record `make`
 // writes into.
 const readsLocal = (e: SExpr, i: number): boolean => (e.k === "local" && e.i === i) || (e.k === "make" && e.into === i) || kidsOf(e).some((x) => readsLocal(x, i));
@@ -1013,8 +1038,8 @@ export function coreMap(ir: CoreIR, hosts = false): { version: 1; functions: Rec
 // evaluator's solver (a module carrying the nodes) or its hosts/js.js.
 // A stop names its definition there but carries no ids: the map has its
 // node and definition by the number it stops with (C143c).
-export function moduleTags(ir: CoreIR, hosts: boolean): { js: string; tags: Record<string, Id> } {
-  const js = emitCoreJs(ir).js.replace(/R\.stop\(([^,()]+), "[^"]*", "[^"]*"(, "(?:[^"\\]|\\.)*")?\)/g, (_, c: string, name = "") => `R.stop(${c}, 0, 0${name})`);
+export function moduleTags(ir: CoreIR, hosts: boolean, only?: Set<number>): { js: string; tags: Record<string, Id> } {
+  const js = emitCoreJs(ir, only).js.replace(/R\.stop\(([^,()]+), "[^"]*", "[^"]*"(, "(?:[^"\\]|\\.)*")?\)/g, (_, c: string, name = "") => `R.stop(${c}, 0, 0${name})`);
   if (hosts || solving(js)) return { js, tags: {} };
   const own = [...new Set([...js.matchAll(/\.prototype\.tag = ("(?:[^"\\]|\\.)*");/g)].map((m) => JSON.parse(m[1]) as string))]
     .filter((t) => !/^(std|builtin|type|effect)\./.test(t));
@@ -1236,8 +1261,10 @@ const wrapped = (from: string, lines: string[]) => (from.startsWith("$") ? ["(()
 export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string, hosts?: Hosts, bare = false): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
-  const { names, worlds } = emitCoreJs(ir);
-  const js0 = bare ? moduleTags(ir, !!hosts || worklet !== undefined).js : emitCoreJs(ir).js;
+  // Only what main reaches.
+  const only = reachedFuncs(ir, [fi]);
+  const { names, worlds, js: all } = emitCoreJs(ir, only);
+  const js0 = bare ? moduleTags(ir, !!hosts || worklet !== undefined, only).js : all;
   // A map on the page's workers (C61 c′): the functions by name, and the
   // page's own script, which each worker runs (core-page.ts).
   const js1 = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
@@ -1264,7 +1291,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
 export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?: Hosts): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);
-  const { js, names, worlds } = emitCoreJs(ir);
+  const { js, names, worlds } = emitCoreJs(ir, reachedFuncs(ir, [fi]));
   const code = codeFor(ir, js);
   return wrapped(sound, [
     using("startCoreSound", sound),
