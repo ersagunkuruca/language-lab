@@ -13,7 +13,8 @@ import { LIBRARY, TREES } from "../src/lang/library.ts";
 import { ARRAY_OPS, CONS, LIST, NIL, S, SHOW_ANY } from "../src/lang/std.ts";
 import { ARRAY } from "../src/lang/types.ts";
 import { merge, type Id } from "../src/model.ts";
-import { FOLD_OF_ITEMS } from "../src/lang/represent.ts";
+import { CARRIED, FOLD_OF_ITEMS } from "../src/lang/represent.ts";
+import { PRELUDE_DEFS } from "../src/lang/prelude-ids.ts";
 import { B } from "../src/prelude.ts";
 
 test("array of List: its row, and its jobs agree with List's through items of array", () => {
@@ -29,11 +30,11 @@ test("array of List: its row, and its jobs agree with List's through items of ar
   assert.ok(rep.byType);
   assert.deepEqual(rep.hidden, { [CONS]: [1] });
   const lib = (n: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === n)!;
-  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [FOLD_OF_ITEMS]: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1", [lib("drop")]: "1", [lib("take")]: "1" });
+  assert.deepEqual(rep.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [FOLD_OF_ITEMS]: "n", [lib("length")]: "1", [lib("append")]: "n", [lib("item at")]: "1", [lib("map")]: "n", [lib("replace at")]: "1", [lib("drop")]: "1", [lib("take")]: "1", [CARRIED + lib("append")]: "1", [PRELUDE_DEFS["added at end"]]: "1" });
   // List as written, which the chooser weighs it against (C30d3b).
   const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
   assert.equal(spec.type, LIST);
-  assert.deepEqual(spec.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "n", [lib("append")]: "n", [lib("item at")]: "n", [lib("replace at")]: "n", [lib("map")]: "n", [lib("drop")]: "n", [lib("take")]: "n" });
+  assert.deepEqual(spec.cost, { space: "n", [NIL]: "1", [CONS]: "1", match: "1", fold: "n", [lib("length")]: "n", [lib("append")]: "n", [lib("item at")]: "n", [lib("replace at")]: "n", [lib("map")]: "n", [lib("drop")]: "n", [lib("take")]: "n", [PRELUDE_DEFS["added at end"]]: "n" });
 
   const all = merge(LIBRARY.code, TREES.code);
   const k = new Lang(all);
