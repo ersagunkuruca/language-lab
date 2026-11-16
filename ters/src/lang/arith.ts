@@ -47,6 +47,7 @@ import { intCases, usesIntCases } from "./int-cases.ts";
 import { packsWritten, usesPacking } from "./packs.ts";
 import { sharedFields, usesSharedFields } from "./shared-fields.ts";
 import { useDirections } from "./directions.ts";
+import { LIBRARY } from "./library.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
@@ -147,7 +148,12 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   let byCost = seeds.get(under);
   if (!byCost) seeds.set(under, (byCost = new Map()));
   if (!byCost.has(costOf)) {
-    const make = () => { const r = scanningOnLayer(lib, () => resolving(lib, under, names, costOf, null, true)); return "layer" in r ? r : null; };
+    // Its copies named by the library's own names, whoever asks first:
+    // they are kept for every program after (and across runs), and a
+    // first caller with no names gave "@… at type.number" to all of them
+    // (resolve-once.test, red on main after arith.test ran first).
+    const own = lib === LIBRARY.code ? LIBRARY.names : names;
+    const make = () => { const r = scanningOnLayer(lib, () => resolving(lib, under, own, costOf, null, true)); return "layer" in r ? r : null; };
     let r: ReturnType<typeof make>;
     if (costOf === NEUTRAL) {
       // The neutral one, every program's, kept between runs (I193o): its
