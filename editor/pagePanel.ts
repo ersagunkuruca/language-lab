@@ -537,7 +537,7 @@ export function pagePanels(host: PageHost) {
       a.href = url;
       a.download = name;
       a.click();
-      ui.note = `Saved the page as ${name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
+      ui.note = `Saved ${name}`;
       render();
     }, (e: unknown) => { tab?.close(); failed(e instanceof Error ? e.message : String(e)); });
   }

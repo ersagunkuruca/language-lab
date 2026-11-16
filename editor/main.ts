@@ -616,7 +616,7 @@ function saveFile() {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   ui.touched = [];
-  ui.note = `Saved ${titleOf(doc)} as ${a.download}: code, names, comments and layout in one file. Open it here again with Open file.`;
+  ui.note = `Saved ${a.download}`;
   render();
 }
 
@@ -680,7 +680,7 @@ function deleteProgram() {
   doc = docs[EXAMPLES[0][0]] ?? initialFor(EXAMPLES[0][0]);
   showProgram();
   deleted = was;
-  ui.note = `Deleted ${gone} from this browser. Undo brings it back.`;
+  ui.note = `Deleted ${gone} · Undo brings it back`;
   render();
 }
 
@@ -689,7 +689,7 @@ function undeleteProgram() {
   if (!d) return;
   docs[d.program] = d;
   switchProgram(d.program);
-  ui.note = `Brought ${titleOf(d)} back.`;
+  ui.note = `Restored ${titleOf(d)}`;
   render();
 }
 
@@ -699,7 +699,7 @@ function renameProgram(title: string) {
   if (!title.trim() || !doc.program.startsWith(MINE)) return;
   doc = { ...doc, title: title.trim() };
   save();
-  ui.note = "Renamed the program.";
+  ui.note = "Renamed";
   render();
 }
 
@@ -719,11 +719,11 @@ function copySelected(cut = false) {
   clip = T.copyOf(doc.code, { ...pres().names, ...doc.names.short }, ui.selected);
   try { localStorage.setItem(CLIP, JSON.stringify(clip)); } catch {}
   if (cut && typesOf()) {
-    if (applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected))) ui.note = "Cut it: copied, and left a hole. Select a hole and paste to put it there.";
+    if (applyT(T.toHole(doc.code, doc.names.short, typesOf()!, ui.selected))) ui.note = "Cut · paste it into a hole";
     return render();
   }
   ui.touched = [];
-  ui.note = "Copied. Select a hole (here or in another definition or program) and paste: Ctrl+V, or Paste in the panel.";
+  ui.note = "Copied · paste it into a hole (Ctrl+V)";
   render();
 }
 
@@ -802,7 +802,7 @@ function scrubLit(id: Id, int: boolean, click: () => void): Scrubber {
       const s = scrubbing;
       scrubbing = null;
       if (!s) return;
-      if (!kept && doc !== s.before) { doc = s.before; undo.length = s.undoAt; ui.note = "Cancelled."; ui.touched = []; if (s.rerun) runTyped(); }
+      if (!kept && doc !== s.before) { doc = s.before; undo.length = s.undoAt; ui.note = "Cancelled"; ui.touched = []; if (s.rerun) runTyped(); }
       else if (s.stale) runTyped();
       save();
       render();
@@ -820,7 +820,7 @@ function cancelPick(): boolean {
   ui.menu = null;
   travel(undo, redo, "Cancelled");
   redo.pop();
-  ui.note = "Cancelled: what was there is back.";
+  ui.note = "Cancelled";
   render();
   return true;
 }
@@ -906,7 +906,7 @@ function heldReason(reason: string): string {
 
 function loosenButton(dname: string): HTMLElement {
   const b = h("button", { class: "btn", type: "button", title: "Let its type follow its body again" }, "Loosen type");
-  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; save(); render(); });
+  b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `Loosened ${dname}'s type`; ui.refused = false; save(); render(); });
   return b;
 }
 
@@ -1011,7 +1011,7 @@ function openDef(d: Id, draw = true) {
   // What was typed was for the hole left behind (E173).
   ui.query = "";
   ui.touched = [];
-  ui.note = `Opened ${new Namer(doc.code, pres(), d).name(d)}. Back returns to where you were.`;
+  ui.note = `Opened ${new Namer(doc.code, pres(), d).name(d)}`;
   graphLater = subtree(doc.code, d).length > GRAPH_LATER;
   if (draw) render();
 }
@@ -2551,7 +2551,7 @@ function draw() {
           ...shown[2]()))),
     status,
     // At phone width one pane at a time, picked here (page.html).
-    h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Run & more"]] as const).map(([k, label]) =>
+    h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Panels"]] as const).map(([k, label]) =>
       h("button", { type: "button", class: k === ui.pane ? "on" : "", "aria-pressed": String(k === ui.pane), "data-pane": k }, label))),
   );
   restore();
@@ -2582,7 +2582,7 @@ document.addEventListener("click", (e) => {
     const all = [...(set.parentElement?.children ?? [])] as HTMLElement[];
     const shut = set.classList.contains("on") && set.parentElement?.classList.contains("cycle") && all.some((b) => b !== set && getComputedStyle(b).display === "none");
     (ui as unknown as Record<string, string>)[k] = shut ? all[(all.indexOf(set) + 1) % all.length].dataset.value! : set.dataset.value!;
-    if (k !== "text") { ui.touched = []; ui.note = k === "layer" ? "Switched names layer. Same code, different words." : "Switched notation. Same code, different symbols and precedence."; }
+    if (k !== "text") { ui.touched = []; ui.note = k === "layer" ? "Names switched · same code" : "Notation switched · same code"; }
     return render();
   }
   // A definition found in another program: open it there.
@@ -2615,10 +2615,10 @@ document.addEventListener("click", (e) => {
     const a = act.dataset.act;
     if (a === "undo") return travel(undo, redo, "Undid");
     if (a === "redo") return travel(redo, undo, "Redid");
-    if (a === "mark-reviewed") { changes.markReviewed(); ui.note = `Marked reviewed: Changes compares ${titleOf(doc)} with this version from now on.`; return render(); }
-    if (a === "forget-reviewed") { changes.forgetReviewed(); ui.note = "Changes compares with the version opened again."; return render(); }
-    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.tabs = startTabs(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Back to the example programs."; save(); return render(); }
-    if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = "Back."; return render(); }
+    if (a === "mark-reviewed") { changes.markReviewed(); ui.note = "Marked reviewed"; return render(); }
+    if (a === "forget-reviewed") { changes.forgetReviewed(); ui.note = "Forgot reviewed"; return render(); }
+    if (a === "reset") { undo.push(doc); doc = initialFor(doc.program); ui.def = startDef(); ui.tabs = startTabs(); ui.back = []; ui.selected = null; ui.touched = files().map((f) => f.name); ui.note = "Reset to the example"; save(); return render(); }
+    if (a === "back") { ui.def = ui.back.pop()!; ui.selected = null; ui.mode = null; ui.note = ""; return render(); }
     if (a === "goto") return openDef(act.dataset.target!);
     if (a === "inline") return toggleInline(act.dataset.target!);
     if (a === "named") return toggleNamed(act.dataset.target!);
@@ -2676,8 +2676,8 @@ document.addEventListener("click", (e) => {
       return runTyped();
     }
     if (a === "t-stop") return stopRun("Stopped.");
-    if (a === "page-restart") { page.for = null; ui.note = "Started the page again: every cell is back to its first value."; return render(); }
-    if (a === "page-hush") { page.now?.hush?.(); ui.note = "Stopped every sound the page was playing."; return render(); }
+    if (a === "page-restart") { page.for = null; ui.note = "Restarted"; return render(); }
+    if (a === "page-hush") { page.now?.hush?.(); ui.note = "Sound stopped"; return render(); }
     if (a === "page-tab" || a === "page-save") return savePage(a === "page-tab");
     if (a === "page-log") return saveLog();
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected, { of: doc.loose ?? {}, home: doc.home ?? {} }));
