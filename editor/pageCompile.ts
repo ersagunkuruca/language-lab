@@ -6,21 +6,33 @@
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
-import { LIBRARY } from "../ters/src/lang/library.ts";
 import { corePageScript, lowerCore } from "../compiler/src/core-js.ts";
+import { hasSound, savedScripts, type SavedScripts } from "../ters/src/lang/page.ts";
 import { setDisplayNames, setProgramPins } from "./typed.ts";
 import { checkedForRun } from "./coreMain.ts";
 
-export type CompiledPage = { program: string; core: true };
+// `saved`: the same page as Open in a tab and Save page give it (page.ts
+// savedScripts), from the same lowering.
+export type CompiledPage = { program: string; core: true; saved: SavedScripts };
 
 export function compilePageProgram(code: Code, names: Names, pins: Pins, main: Id): CompiledPage {
+  const { ir, names: shown } = lowered(code, names, pins, main);
+  return { program: corePageScript(ir, shown[main], "$core", ""), core: true, saved: savedScripts(ir, shown[main], false) };
+}
+// The page as saved alone: a page with sound's, which the preview doesn't
+// compile (pagePanel.ts compilePage), carries its audio thread's script.
+export function compileSavedPage(code: Code, names: Names, pins: Pins, main: Id): SavedScripts {
+  const { ir, names: shown } = lowered(code, names, pins, main);
+  return savedScripts(ir, shown[main], hasSound(code));
+}
+// Only what main reaches, as ters build-web lowers it (C168).
+function lowered(code: Code, names: Names, pins: Pins, main: Id) {
   setDisplayNames(names);
   setProgramPins(pins);
   // Stored as ters build-web stores it (C197): its lists and Maps chosen.
   const r = checkedForRun(code, names, main);
-  const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-  const ir = lowerCore(r.code, r.info, r.names, own);
+  const ir = lowerCore(r.code, r.info, r.names, [main]);
   const why = ir.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
-  return { program: corePageScript(ir, r.names[main], "$core", ""), core: true };
+  return { ir, names: r.names };
 }
