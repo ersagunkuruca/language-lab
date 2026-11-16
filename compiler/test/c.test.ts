@@ -391,7 +391,7 @@ test("a record's fields are read before it is given away, so a changed field has
   const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
   // The function itself: name_b where its inputs are lent (C241 lends
   // `stored`'s lists too), the wrapper after it.
-  const body = (name: string) => { const at = c.indexOf(`\nMachine lab_${name}`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
+  const body = (name: string) => { const at = c.indexOf(`\nstatic Machine lab_${name}`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
   assert.doesNotMatch(body("stepped"), /Machine_dup\(p1\)/);
   const stored = body("stored");
   // `value of` only reads the machine: it is lent, not copied (C94's rest),
@@ -410,7 +410,7 @@ test("a record's fields are read before it is given away, so a changed field has
 test("a list a loop only walks is lent, and the walk takes no counts (C241)", () => {
   const p = load("../../compiler/gaps/scan"), main = p.named("main");
   const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
-  const at = c.indexOf("\nlab_int lab_class_from_at_Int_Int_b(", c.indexOf("// class from at Int, Int\n"));
+  const at = c.indexOf("\nstatic lab_int lab_class_from_at_Int_Int_b(", c.indexOf("// class from at Int, Int\n"));
   assert.ok(at > 0, "class from is lent its list");
   const walk = c.slice(at, c.indexOf("\n}\n", at));
   assert.match(walk, /continue;/);
@@ -429,7 +429,7 @@ test("a struct taken apart moves its fields out, and a field read for one arm is
   // As ters native has it: the step loop's lists as arrays.
   const t = represented({ title: "machine", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: [], options: p.options }, main, false, true);
   const { c } = emitC(lowerScalar(t.code, t.info, t.names, [main], { data: true }), { main });
-  const body = (name: string) => { const at = c.indexOf(`\nMachine lab_${name}`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
+  const body = (name: string) => { const at = c.indexOf(`\nstatic Machine lab_${name}`, c.indexOf(`// ${name}\n`)); return c.slice(at, c.indexOf("\n}\n", at)); };
   const stepped = body("stepped");
   assert.match(stepped, /l\d+ = l3\.f1;/);
   assert.doesNotMatch(stepped, /dup\(l3\.f|Machine_drop\(l3\)/);
@@ -444,7 +444,7 @@ test("a struct taken apart moves its fields out, and a field read for one arm is
 test("a record given whole to a function reading only some of its fields is given those, so the rest are taken with one holder (round 13 P2)", () => {
   const p = load("../../compiler/gaps/pond"), main = p.named("main");
   const { c } = emitC(lowerScalar(p.code, p.info, p.pres.names, [main], { data: true }), { main });
-  const at = c.indexOf("\nPond lab_applied", c.indexOf("// applied\n")), body = c.slice(at, c.indexOf("\n}\n", at));
+  const at = c.indexOf("\nstatic Pond lab_applied", c.indexOf("// applied\n")), body = c.slice(at, c.indexOf("\n}\n", at));
   assert.doesNotMatch(body, /Pond_dup\(p0\)/);
   // The school moved out of the pond, which is then gone (C220).
   assert.match(body, /(l\d+) = p0\.f0;[^]*lab_replaced_in_pool_b\(\1,/);
@@ -463,7 +463,7 @@ test("a table a function only reads is lent, and read without its count changed 
   assert.deepEqual(t.chosen, ["Map as hash table"]);
   const info = infer(t.code, t.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...t.insiders] });
   const { c } = emitC(lowerScalar(t.code, info, t.names, [main], { data: true }), { main });
-  const at = c.indexOf("\ndouble lab_food_at_b(lab_cell * p0, lab_int p1) {"), body = c.slice(at, c.indexOf("\n}\n", at));
+  const at = c.indexOf("\nstatic double lab_food_at_b(lab_cell * p0, lab_int p1) {"), body = c.slice(at, c.indexOf("\n}\n", at));
   assert.ok(at >= 0, "food at is lent");
   assert.doesNotMatch(body, /lab_drop\(p0\)/);
   assert.match(c, /lab_table_atb_t\d+\(p0, /);
@@ -482,7 +482,7 @@ test("with threads, a definition's value is made once and kept uncounted for eve
   const { c } = emitC(lowered, { main });
   assert.match(c, /lab_par/, "the plans are mapped on the threads");
   assert.match(c, new RegExp(`static lab_cell \\*lab_m${offsets}_make\\(void\\) \\{ lab_cell \\*x = lab_offsets\\(\\), \\*z = 0; lab_forever\\(x\\);`));
-  assert.doesNotMatch(c.slice(c.indexOf("\ndouble lab_scent_at_b(")), /= lab_offsets\(\);/);
+  assert.doesNotMatch(c.slice(c.indexOf("\nstatic double lab_scent_at_b(")), /= lab_offsets\(\);/);
 });
 
 test("a function only computing on Ints runs on int64s, and as written past them, with the evaluator's answers (round 13 P4)", { skip }, () => {

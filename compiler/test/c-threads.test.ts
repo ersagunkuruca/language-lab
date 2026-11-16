@@ -399,13 +399,13 @@ test("queens-count natively checks a column by a loop over the queens placed, an
   assert.doesNotMatch(c, /lab_safe_fold_items\(/);
   // C207n: its search runs on the threads (`par:count:search`), and still
   // its columns are known finite and the loop gives false once it is.
-  const loop = /\nint32_t lab_safe_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  const loop = /\nstatic int32_t lab_safe_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
   assert.ok(loop, "the counted loop");
   assert.doesNotMatch(loop[0], /lab_stop/);
   assert.match(loop[0], /\} else \{[^{}]*return 0;/);
   // C207p: its choice of a column counts through the range, no list made.
   assert.match(c, /lab__i64_range_split\(/);
-  const place = /\nint32_t lab_queens_fold_items(?:_b)?\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  const place = /\nstatic int32_t lab_queens_fold_items(?:_b)?\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
   assert.ok(place, "the placement");
   assert.doesNotMatch(place[0], /lab_array_items_a\d+\(/);
   // C207r: the placed columns lent to `safe` and its loop, not counted.
@@ -431,7 +431,7 @@ test("queens-first natively checks a loop's unchanged numbers once, its columns 
   // C207l: the columns are finite and not below zero (made by `range`,
   // pushed back as they are), so the loop's steps check neither an item
   // nor its distance from the column.
-  const loop = /\nint32_t lab_safe_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  const loop = /\nstatic int32_t lab_safe_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
   assert.ok(loop, "the counted loop");
   assert.doesNotMatch(loop[0], /lab_stop/);
   // C207m: and once its answer is false it gives false there and then.
@@ -452,7 +452,7 @@ test("langford natively splits its first by two choices, checks no sum in `free`
   assert.match(c, /lab_par_fjob_\d+/);
   // C207y: `free`'s numbers are counts and range items plus 1, at most
   // 2^1000, so their sums need no check, and its loop stops once false.
-  const loop = /\nint32_t lab_free_at_Float64_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
+  const loop = /\nstatic int32_t lab_free_at_Float64_fold_forward_finite_counted_b\([^)]*\) \{[\s\S]*?\n\}\n/.exec(c);
   assert.ok(loop, "the counted loop");
   assert.doesNotMatch(loop[0], /lab_stop/);
   assert.match(loop[0], /for \(;;\) \{\n\s*if \(p\d+\) \{/);

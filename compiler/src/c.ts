@@ -888,9 +888,13 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     return isRecord(t) ? t.fields.some((x) => mentions(x.t, seen)) : isArray(t) ? mentions(t.item, seen) : isData(t) ? t.cases.some((c) => c.fields.some((x) => mentions(x.t, seen))) : [...(t as FType).params, (t as FType).result].some((x) => mentions(x, seen));
   };
 
+  // Every function the program has is static (C253): nothing outside this
+  // file calls one (a page's host calls the ters_page_ ones, main is
+  // main), so cc puts one called from one place where it is called and
+  // drops what nothing calls.
   const header = (i: number, lending = false) => {
     const f = funcs[i];
-    return `${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
+    return `static ${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
