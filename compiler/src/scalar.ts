@@ -337,6 +337,8 @@ export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
     case "list": return { ...r, item: m(r.item), acc: m(r.acc) };
     case "handle": return { ...r, reason: m(r.reason), save: m(r.save), ...(r.frame !== undefined ? { frame: m(r.frame) } : {}) };
     case "budget": return { ...r, save: m(r.save), res: m(r.res) };
+    case "released": return r.st !== undefined ? { ...r, st: m(r.st) } : r;
+    case "make": return r.into !== undefined ? { ...r, into: m(r.into) } : r;
     default: return r;
   }
 }
