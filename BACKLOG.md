@@ -78,8 +78,7 @@ UI text names things; structure explains them; explanations live in tooltips, wa
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E269 | Run panel, run backwards, page controls and their statuses | UI-TEXT | P1 | M | ▶ |
-| E270 | Palette statuses, graph menus (items as short commands, explanations in their tooltips) and the canvas hint line | UI-TEXT | P1 | M | |
+| E270 | Palette statuses, graph menus (items as short commands, explanations in their tooltips) and the canvas hint line | UI-TEXT | P1 | M | ▶ |
 | E271 | Top bar, program list and phone panes | UI-TEXT | P1 | S | |
 
 ### Plain words for newcomers ([OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md))
