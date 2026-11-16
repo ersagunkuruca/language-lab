@@ -50,12 +50,12 @@ const CHECKS_KEY = JSON.stringify(checksKey.digest("hex").slice(0, 16));
 // The worker Run uses (editor/runWorker.ts), as text the editor starts. It
 // reads the checks the page kept, under the same name.
 const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { CHECKS_KEY } });
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CHECKS_KEY } });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CORE_PAGE_PLAIN_RUNTIME: '""', CORE_WORKLET_PLAIN_RUNTIME: '""', CHECKS_KEY } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
 // The core IR's page and audio runtimes (E244): Save page prints from the
 // core IR, and a page with sound plays in the preview.
-const data = text("lab-core-page-runtime", await corePageRuntime()) + text("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
+const data = text("lab-core-page-runtime", await corePageRuntime()) + text("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
 // page.html is the head's tags and styles, then the body from its first
 // element on. The title and icon go in <head>: Chromium reads an icon link in
