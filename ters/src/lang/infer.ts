@@ -251,8 +251,8 @@ export const codeChecked = (layer: Info): Code | undefined => checkedCode.get(la
 // The bodies a library check has typed (for the tests, and the editor's
 // first look backwards).
 const typedOf = new WeakMap<Info, ReadonlySet<Id>>();
-export const typedBodies = (layer: Info): number => typedOf.get(layer)?.size ?? 0;
-export const bodiesTyped = (layer: Info) => typedBodies(layer) > 0;
+export const typedBodies = (layer: Info): ReadonlySet<Id> => typedOf.get(layer) ?? new Set();
+export const bodiesTyped = (layer: Info) => typedBodies(layer).size > 0;
 // What the library's bodies' checks found of their variables, all of them
 // (bodyFacts, once every body is typed), and joined into a check of the
 // library that may not have typed them (joinBodyFacts): arith.ts keeps the

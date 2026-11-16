@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I314 | Compiling a program on the library (core-js compiledDefs, `lowerCore` of a program not cut to its main) resolves the whole library, which types every library body: uses.ts withBodies fills the library's uses after the check, so the program is on the filled library while its check is the library's as written, and arith.ts seedFor (now saying so: infer.ts codeChecked) doesn't use the kept resolving. Give the filled library a kept resolving of its own, or fill before the check. compiler known-holes "R11 §2" is open on it. | I313 | 2026-11-16 |
 | I311 | Opening a program's page holds the editor's thread 1.6 s, 0.8 s of it the editor's own render (render → graphOf, model.ts scanningOnLayer; Countdown's `symbol`, headless Chromium). Editor lane, after the text pass (coordinator 11-16). | I310's profile | 2026-11-16 |
 
 ## E: Editor

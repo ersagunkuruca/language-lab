@@ -70,10 +70,10 @@ test("a library body's types are the same whatever was typed first", () => {
 test("asking a node of one library body types that body only", () => {
   const layer = onLibrary().layer!;
   assert.ok(layer.typeOf.get(inside(pinned[10])));
-  assert.equal(typedBodies(layer), 1);
+  assert.equal(typedBodies(layer).size, 1);
   assert.ok(layer.typeOf.get(inside(pinned[20])));
-  assert.equal(typedBodies(layer), 2);
+  assert.equal(typedBodies(layer).size, 2);
   // Asked for all of a fact, every body is typed.
   assert.equal(typeof layer.typeOf.size, "number");
-  assert.equal(typedBodies(layer), pinned.length);
+  assert.equal(typedBodies(layer).size, pinned.length);
 });

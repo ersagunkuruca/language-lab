@@ -664,7 +664,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
 // What the roots reach (reachedWithShows), and the implementations at the
 // types that reaches: arith.ts, Shown and Ordered find those by type, not
 // by a reference, so they're added until nothing more is reached.
-function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
+export function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
   // Each with the types it is at: an Embedding's are its two (int in
   // float64), kept by the interface's own type around them.
   const impls = [...(info.implementations ?? [])].map(([key, d]) => {

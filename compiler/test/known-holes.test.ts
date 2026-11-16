@@ -10,11 +10,11 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Aborted, makeRunner } from "../../ters/src/lang/run.ts";
-import { bodiesTyped, forgetLibraryChecks, infer } from "../../ters/src/lang/infer.ts";
+import { bodiesTyped, forgetLibraryChecks, infer, typedBodies } from "../../ters/src/lang/infer.ts";
 import { DIVERGE } from "../../ters/src/lang/types.ts";
 import { B } from "../../ters/src/prelude.ts";
 import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
-import { Aborted as CoreAborted, Stopped, compiledDefs } from "../src/core-js.ts";
+import { Aborted as CoreAborted, Stopped, compiledDefs, reachedImplementing } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
 
@@ -66,13 +66,11 @@ test("R8 §1 an overflow inside a handler of Abort stops, compiled as evaluated"
 // all anyway: the passes walked every node of the code, the library's too,
 // and the first ask about any library node checked the whole library.
 // I313 types a body when one of its nodes is asked for, and keeps the
-// passes from asking for every one: a cold `ters run wc` (the library's
-// check kept, the run not) went from 3.7 s to 2.2 s. What is left (I314):
-// a program on the library has its uses filled after it is checked
-// (uses.ts withBodies), so it is on the library filled while its check is
-// still the library's as written, and arith.ts doesn't use the library's
-// kept resolving for it: the whole library is resolved, every body typed.
-test("R11 §2 compiling a main that prints one text doesn't type the library's bodies", { todo: "I314: arith.ts resolves the whole library for a program whose uses were filled" }, () => {
+// passes from asking for every one (a cold `ters run wc` 3.7 → 2.0 s). The
+// lowering is given what main reaches with the implementations it may
+// resolve to (core-js.ts reachedImplementing), and types only those bodies
+// (I314: 21 of 760 here).
+test("R11 §2 compiling a main that prints one text types only the library bodies it reaches", () => {
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.lit("hi"))));
@@ -82,5 +80,8 @@ test("R11 §2 compiling a main that prints one text doesn't type the library's b
   assert.deepEqual(info.errors, []);
   assert.ok(info.layer && !bodiesTyped(info.layer), "checked without typing the library's bodies");
   compiledDefs(code, info, names, ["main"]);
-  assert.ok(!bodiesTyped(info.layer), "compiled without typing the library's bodies");
+  const reached = new Set(reachedImplementing(code, [main], info).defs);
+  const typed = [...typedBodies(info.layer)];
+  assert.ok(typed.length > 0);
+  assert.deepEqual(typed.filter((d) => !reached.has(d)).map((d) => names[d] ?? d), []);
 });
