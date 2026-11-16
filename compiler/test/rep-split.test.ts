@@ -20,6 +20,9 @@ test("machine split: the step loop on arrays, the rest as written, the evaluator
   const s = splitLists(p.code, p.info, p.pres.names, own, main, [named("run of"), named("traced")], rep);
   assert.ok(s, "split");
   assert.deepEqual(s.types.map((t) => p.pres.names[t]), ["Machine"]);
+  // `traced` conses onto a call of itself: on the arrays' side a loop
+  // before lowering, as with one representation (C252).
+  assert.ok(Object.values(s.names).includes("traced onto"));
   const info = infer(s.code, s.names, undefined, p.options);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const world = (files: Record<string, string>, out: string[]): World => ({

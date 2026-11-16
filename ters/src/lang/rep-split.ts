@@ -25,7 +25,7 @@ import { SPLIT_COPIED_FROM, originalOf } from "./prelude-ids.ts";
 import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { BY_VALUE, listBoundary, withTrees } from "./library-reps.ts";
+import { BY_VALUE, listBoundary, loopsOnto, withTrees } from "./library-reps.ts";
 import { represent, type Representation } from "./represent.ts";
 import { Lang } from "./dsl.ts";
 import { LIBRARY } from "./library.ts";
@@ -328,6 +328,15 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   // The copy of the program's nodes made above takes the rest in place: a
   // copy of 50,000 nodes each time was a tenth of clinic's check (I203).
   let out: Code = { nodes: Object.assign(nodes, k.code.nodes), defs: [...code.defs, ...shared.map(f), ...k.code.defs] };
+  // A definition consing onto a call of itself, a loop on the seeds' side
+  // as it is with one representation (library-reps.ts loopsOnto, C252).
+  let loopNames: Names = {};
+  const loops = loopsOnto(out, info, outNames, aDefs, rep, (to, from) => origin.set(to, origin.get(from) ?? from));
+  if (loops) {
+    out = { nodes: Object.assign(out.nodes, loops.nodes), defs: [...out.defs, ...loops.made] };
+    loopNames = loops.names;
+    aDefs.push(...loops.made);
+  }
   // Builtins on lists the seeds' side calls: given its lists as written
   // and theirs stored, as with one representation (library-reps.ts).
   const types = [...aTypes];
@@ -335,5 +344,5 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   if (!boundary) return null;
   out = { nodes: { ...out.nodes, ...boundary.nodes }, defs: [...out.defs, ...boundary.made] };
   out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...boundary.edges, ...k.code.defs, ...bDefs, ...[...asWritten].filter((d) => !aw.has(d)), ...own.filter((d) => isType(d) && !aTypes.has(d))]);
-  return { code: out, names: { ...outNames, ...k.names, ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) }, seeds: seedsNow, copies: shared.map(f), types };
+  return { code: out, names: { ...outNames, ...loopNames, ...k.names, ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) }, seeds: seedsNow, copies: shared.map(f), types };
 }

@@ -1,8 +1,9 @@
 // C222: functions going down a list stored as an array item by item, not
 // in tail position, are loops on WebAssembly, whose stack holds some
 // thousands of frames (trek at 10,000 fixes, GAPS.md round 16 R3):
-// building a list from the front (`cons(x, f(more))`) and `x and
-// f(more)` carry what they have so far (cons-loops.ts); anything else
+// building a list from the front (`cons(x, f(more))`) carries the items
+// so far (cons-onto.ts, before lowering, C252), `x and f(more)` the
+// conjunction so far (cons-loops.ts); anything else
 // worked out on the way back up keeps its frames on the heap
 // (deep-loops.ts). A hundred thousand items deep, with the answers the
 // functions give as written.

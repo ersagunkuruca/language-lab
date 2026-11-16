@@ -24,7 +24,7 @@ import { intCases, usesIntCases } from "./int-cases.ts";
 import { CARRIED, choose, represent, uses, type Representation } from "./represent.ts";
 import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
-import { consOnto } from "./cons-onto.ts";
+import { consOnto, type ConsOnto } from "./cons-onto.ts";
 import { splitLists } from "./rep-split.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
@@ -235,23 +235,12 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   let copies: Id[] = [];
   if (boundary) {
     let withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
-    // Where the row's cons is a call and its append cheap (a tree's), or
-    // its append onto what a loop carries is one step (an array's push at
-    // its free end, C234), a definition consing onto a call of itself
-    // appends at the back instead, a loop (cons-onto.ts, C232). An array's
-    // cons onto a call stayed a recursion as deep as the items, and past
-    // a thousand deep every call under it ran as a generator (pack's
-    // `tokens`, C240).
-    const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
-    if (((lists.cost[CONS] ?? "1") !== "1" && cheaperOn(lists, spec, prelude("append"))) || lists.cost[CARRIED + prelude("append")] === "1") {
-      const c = consOnto(withBoundary, names, defs, PRELUDE_DEFS["added at end"]);
-      if (c.made.length) {
-        withBoundary = { nodes: { ...withBoundary.nodes, ...c.nodes }, defs: [...withBoundary.defs, ...c.made] };
-        code = { nodes: { ...code.nodes, ...c.nodes }, defs: [...code.defs, ...c.made] };
-        names = { ...names, ...c.names };
-        for (const [to, from] of c.copiedFrom) { const t = info.typeOf.get(from); if (t) info.typeOf.set(to, t); }
-        defs = [...defs, ...c.made];
-      }
+    const c = loopsOnto(withBoundary, info, names, defs, lists);
+    if (c) {
+      withBoundary = { nodes: { ...withBoundary.nodes, ...c.nodes }, defs: [...withBoundary.defs, ...c.made] };
+      code = { nodes: { ...code.nodes, ...c.nodes }, defs: [...code.defs, ...c.made] };
+      names = { ...names, ...c.names };
+      defs = [...defs, ...c.made];
     }
     // Only those with a list somewhere in them: one generic in what it is
     // given (conjugate, inverse, applied) the rewrite leaves as it is, and
@@ -289,6 +278,14 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     code = { nodes, defs: [...code.defs, ...boundary.made, ...library.map(f)] };
     names = { ...names, ...Object.fromEntries(library.map((d) => [f(d), names[d] ?? LIBRARY.names[d] ?? d])), ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) };
     copies = library.map(f);
+    // The library's copies too (zipped, numbered): typed as their originals.
+    const back = new Map([...fresh].map(([a, b]) => [b, a]));
+    const lc = loopsOnto(code, info, names, copies, lists, (to, from) => { const t = info.typeOf.get(back.get(from) ?? from); if (t) info.typeOf.set(to, t); });
+    if (lc) {
+      code = { nodes: { ...code.nodes, ...lc.nodes }, defs: [...code.defs, ...lc.made] };
+      names = { ...names, ...lc.names };
+      copies = [...copies, ...lc.made];
+    }
   }
   // equal, show and compare on a stored value: the row's own, through its
   // meaning; on a value with one inside, given that value as meanings.
@@ -359,6 +356,24 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : [])];
   const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
   return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
+}
+
+// A definition consing onto a call of itself appends at the back instead,
+// a loop (cons-onto.ts), where lists are stored as `rep` and that pays:
+// its cons is a call and its append cheap (a tree's, C232), or its
+// append onto what a loop carries is one step (an array's push at its
+// free end, C234, C240). The one place this is decided for every way a
+// list is stored, the whole program's (here) or one side of a split
+// (rep-split.ts), so no target makes such a loop again (C252). Each copy
+// gets its original's type (`info.typeOf` set, or `typed` told). Null
+// where nothing is rewritten.
+export function loopsOnto(code: Code, info: Info, names: Names, defs: Id[], rep: Representation, typed?: (copy: Id, from: Id) => void): ConsOnto | null {
+  const spec = LIBRARY.reps.find((r) => r.of === LIST && r.canonical)!;
+  if (!(((rep.cost[CONS] ?? "1") !== "1" && cheaperOn(rep, spec, prelude("append"))) || rep.cost[CARRIED + prelude("append")] === "1")) return null;
+  const c = consOnto(code, names, defs, PRELUDE_DEFS["added at end"]);
+  if (!c.made.length) return null;
+  for (const [to, from] of c.copiedFrom) { if (typed) typed(to, from); else { const t = info.typeOf.get(from); if (t) info.typeOf.set(to, t); } }
+  return c;
 }
 
 // A job the tree does in fewer steps than the list as written.
