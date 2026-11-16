@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E266 to E271, lean UI text (taken by the thread "Make editor UI text lean"), one PR each |
+| E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -70,14 +70,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-
-### Lean UI text ([UI-TEXT](docs/design/editor/UI-TEXT.md), Ersagun 2026-11-16)
-
-UI text names things; structure explains them; explanations live in tooltips, warnings and help. One area per row, one PR each. The example pages, the Guide and Learn are exempt.
-
-| id | item | source | pri | size | status |
-|---|---|---|---|---|---|
-| E271 | Top bar, program list and phone panes | UI-TEXT | P1 | S | ▶ |
 
 ### Plain words for newcomers ([OUTSIDER-READ-2026-11-03](docs/reports/reviews/OUTSIDER-READ-2026-11-03.md))
 

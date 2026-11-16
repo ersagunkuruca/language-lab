@@ -76,5 +76,8 @@ inflated words, no "not just X but Y", no stacked hedges, no em dashes.
 
 ## Rows
 
-The pass over the editor is E266 to E271 in BACKLOG.md, one area per row,
-one PR each.
+The first pass over the editor was E266 to E271 (#2806, #2808, #2810, #2813,
+#2815 and E271's PR; DONE.md), one area per row. `head()` and `fileTag()` in
+editor/dom.ts are the section head every panel uses. New UI text follows the
+`ui-text` skill; a QA pass that finds a sentence where a name belongs files
+it as an E row.
