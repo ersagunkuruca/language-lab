@@ -1781,7 +1781,9 @@ definition's units with its type (L252e): a unit written down stays, and
 one the body leaves free is a unit variable, `rate : (Float64 u, Float64
 v) -> Float64 u/v`, so an edit making rate `amount · time` is refused at
 rate rather than turning its callers' metres per second into m·s, and
-callers are checked against the pin's units.
+callers are checked against the pin's units. A generic number shows its
+unit after its letter, as Float64 does (L252f): track's `squared : (a u) ->
+a u²`, and `split : a s` for `split = 4.9 s`.
 
 **Where the ideas come from.** Reading a constraint network as a predicate
 and running it in any direction is constraint logic programming: Jaffar and

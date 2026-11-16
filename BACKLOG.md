@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
-| L Language and library | "Language lane" | L252f waits on how to write a unit on a generic number type, Ersagun's call |
+| L Language and library | "Language lane" | L264b, then L265 |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -167,7 +167,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L252f | A unit on a number type that is generic, in a signature: examples/track's `squared : (a) -> a where a is a Number` is pinned at u -> u² (L252e) but shows no unit, and `split = 4.9 s` shows `split : a`, since only Float64 carries one when shown. Needs a way to write it (`a u`?), which is Ersagun's call | L252e (Compiler lane, 2026-11-15) | P3 | S | how to write it first |
 | L264b | The numbers module's `mat2/3/4 table` build their matrix-unit tables from rows of unit records written out (a 4 × 4's is a 16 × 16 identity in rows), the pattern L264 took out of the Clifford algebras. `matrix table(size)` could take the basis from unit parts as clifford table does, but then the tables are generic in their record, and a library module's pins must equal its inferred types (modules.ts), so they can't be narrowed to Mat4 as a program's algebra is. Needs either library pins that may promise less, or the tables built inside each Mat's own definitions; check the staged matrix products (L44, linear-calls.ts) stay as fast. signature-only.test.ts then also reads lists of rows | L264 (2026-11-16) | P3 | S | |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)

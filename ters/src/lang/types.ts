@@ -664,6 +664,9 @@ const LETTERS = "abcdefghijklmnopqrstuvwxyz";
 // `dots`: when one row variable is shown, it reads … rather than e (E261,
 // CONFUSING item 7); with several, they keep their names, e and e2, so
 // which is which can be told.
+// A type variable shown with a unit (unit-types.ts): the unit's text after
+// this, the variable its one argument.
+export const UNIT_ON = "unit on ";
 export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arith>, links: readonly [number, number][] = [], needs?: ReadonlyMap<number, Iterable<Id>>, uses: readonly SchemeEffectsAt[] = [], dots = false): string {
   const varNames = new Map<number, string>();
   const tailCount = new Map<number, number>();
@@ -699,6 +702,9 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
       return varNames.get(t.v)!;
     }
     if (t.t === "con") {
+      // A number type that is a variable, with its unit after it (L252f,
+      // Ersagun 11-16): `a u`, `a s`, as `Float64 m/s` (unit-types.ts).
+      if (t.id.startsWith(UNIT_ON) && t.args.length === 1) return `${go(t.args[0], true)} ${t.id.slice(UNIT_ON.length)}`;
       if (!t.args.length) return name(t.id);
       // A tuple (L128): its parts side by side.
       if (/^std\.tuple\d$/.test(t.id)) return `(${t.args.map((a) => go(a, false)).join(", ")})`;
