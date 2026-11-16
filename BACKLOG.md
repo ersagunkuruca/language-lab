@@ -169,6 +169,7 @@ all of these.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L252f | A unit on a number type that is generic, in a signature: examples/track's `squared : (a) -> a where a is a Number` is pinned at u -> u² (L252e) but shows no unit, and `split = 4.9 s` shows `split : a`, since only Float64 carries one when shown. Needs a way to write it (`a u`?), which is Ersagun's call | L252e (Compiler lane, 2026-11-15) | P3 | S | how to write it first |
+| L264b | The numbers module's `mat2/3/4 table` build their matrix-unit tables from rows of unit records written out (a 4 × 4's is a 16 × 16 identity in rows), the pattern L264 took out of the Clifford algebras. `matrix table(size)` could take the basis from unit parts as clifford table does, but then the tables are generic in their record, and a library module's pins must equal its inferred types (modules.ts), so they can't be narrowed to Mat4 as a program's algebra is. Needs either library pins that may promise less, or the tables built inside each Mat's own definitions; check the staged matrix products (L44, linear-calls.ts) stay as fast. signature-only.test.ts then also reads lists of rows | L264 (2026-11-16) | P3 | S | |
 
 ### Data and representations (DATA-STRUCTURES.md, REPRESENTATIONS.md)
 
