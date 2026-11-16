@@ -38,6 +38,7 @@ import { edit, fileTag, h, head, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
 import { navigatorPanel } from "./navigator.ts";
 import { runPanel } from "./runPanel.ts";
+import { scrubbable, type Scrubber } from "./scrub.ts";
 import { seeds } from "./seeds.ts";
 import { backwards } from "./backwards.ts";
 import { selectedParts } from "./selectedParts.ts";
@@ -539,6 +540,7 @@ const UNSAVED = "Not kept in this browser: its storage is full. Save file keeps 
 
 function save() {
   docs[doc.program] = doc;
+  if (scrubbing) return;
   if (EMBED) return;
   // An example as shipped isn't kept: it opens from the page again (I160:
   // opening every example one after another filled the store, 5 MB).
@@ -770,6 +772,43 @@ function applyT(e: T.LooseEdit, then?: () => void, place?: Record<Id, Pos>, pins
   const pinned = pins ? { signatures: { ...doc.signatures, ...pins } } : {};
   commit({ code: e.code, names: { short: kept(e.names), descriptive: kept(doc.names.descriptive) }, ...loose, ...placed, ...pinned }, ["code.json", "names.short.json", ...(e.of ? ["drafts.json"] : []), ...(place || layout ? ["layout.json"] : []), ...(pins ? ["signatures.json"] : [])], e.note + note);
   return true;
+}
+
+// A number literal's drag (scrub.ts, E272): every value on the way is an
+// edit from where it began, so the drag is one step to undo; the browser
+// keeps the program once, at the end. A Run of the open definition on
+// show runs again as the value changes, the next as soon as the last ends.
+let scrubbing: { before: Doc; undoAt: number; info: T.Info; rerun: boolean; stale: boolean; last: Doc } | null = null;
+function scrubLit(id: Id, int: boolean, click: () => void): Scrubber {
+  return {
+    int,
+    value: () => { const n = doc.code.nodes[id]; return n?.kind === "lit" && typeof n.value === "number" ? n.value : null; },
+    set(v) {
+      const info = scrubbing?.info ?? typesOf();
+      if (!info) return false;
+      if (scrubbing) { doc = scrubbing.before; undo.length = scrubbing.undoAt; }
+      else {
+        const o = ui.output;
+        scrubbing = { before: doc, undoAt: undo.length, info, rerun: !!o && o.def === ui.def && !o.running && !o.answers && !o.paused && !readsInput(), stale: false, last: doc };
+      }
+      const ok = applyT(T.setLit(doc.code, doc.names.short, info, id, String(v)));
+      // Refused: the last value it took stays.
+      if (!ok) { if (scrubbing.last !== scrubbing.before) { doc = scrubbing.last; undo.push(scrubbing.before); render(); } return false; }
+      scrubbing.last = doc;
+      if (scrubbing.rerun) { if (ui.output?.running) scrubbing.stale = true; else { scrubbing.stale = false; runTyped(); } }
+      return true;
+    },
+    end(kept) {
+      const s = scrubbing;
+      scrubbing = null;
+      if (!s) return;
+      if (!kept && doc !== s.before) { doc = s.before; undo.length = s.undoAt; ui.note = "Cancelled."; ui.touched = []; if (s.rerun) runTyped(); }
+      else if (s.stale) runTyped();
+      save();
+      render();
+    },
+    click,
+  };
 }
 
 // Escape while Replace with…, Change the function or Wrap in… waits for
@@ -1307,7 +1346,17 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       commit();
       toProgram();
     });
-    out.append(h("label", { class: "field", for: "f-lit" }, h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Float64" : "Text"} · code.json`), input));
+    const kind = h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Float64" : "Text"} · code.json`);
+    // A number scrubs: drag sideways on it or its head (scrub.ts, E272).
+    if (typeof n.value === "number") {
+      const settled = info.typeOf.get(id) && info.subst.resolve(info.typeOf.get(id)!);
+      const int = n.of === INT || (settled?.t === "con" && settled.id === INT);
+      const s = scrubLit(id, int, () => { input.focus(); input.select(); });
+      scrubbable(input, s);
+      scrubbable(kind, s);
+      kind.title = input.title = "Drag sideways to change it. Shift: coarser, Alt: finer, Esc: put back.";
+    }
+    out.append(h("label", { class: "field", for: "f-lit" }, kind, input));
   }
 
   const isExprNode = ["lit", "ref", "call", "lambda", "match", "fold"].includes(n.kind) && !isUse(n) && !doc.code.defs.includes(id);

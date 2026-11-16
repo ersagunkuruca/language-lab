@@ -65,6 +65,7 @@ not a sentence in the panel.
 | a relation's other solving directions | Directions | Other directions |
 | which saved file an edit changes | a small `code` / `layout` tag on the head | "· code.json" after the head |
 | an empty slot in the program | hole | gap, blank |
+| dragging a number to change it | scrub (tooltip: "Drag sideways to change it") | slide, drag-edit |
 | a value lying beside a definition, not wired in | loose part | draft, orphan |
 
 ## Writing longer text
