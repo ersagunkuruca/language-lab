@@ -373,5 +373,12 @@ export function soundFile(runtime: Runtime, code0: Code, info0: Info, names0: Na
 }
 
 // Does the program play sound (a `listen` attribute anywhere)?
-export const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen);
+// Once per version of the code: it reads every node, the library's too
+// (50 ms in the editor), and opening a page asks it twice (I311).
+const sounds = new WeakMap<Code, boolean>();
+export const hasSound = (code: Code): boolean => {
+  let r = sounds.get(code);
+  if (r === undefined) sounds.set(code, (r = Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen)));
+  return r;
+};
 

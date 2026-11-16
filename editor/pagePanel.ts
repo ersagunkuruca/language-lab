@@ -13,7 +13,7 @@ import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
 import type { Cells } from "../ters/src/lang/cells.ts";
-import { prebuilt, prebuiltKey } from "./prebuilt.ts";
+import { prebuilt, prebuiltHas, prebuiltIndex, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
 import { checkedForRun } from "./coreMain.ts";
 import { PAGE_BASE, hasSound, pageMain, pageRuntime, savedPageFile, showPage, TooSlow, type Preview, type SavedScripts } from "../ters/src/lang/page.ts";
@@ -50,6 +50,9 @@ export interface PageHost {
 
 export function pagePanels(host: PageHost) {
   const { doc, prog, pres, ownDefs, typesOf, render, ui, errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins } = host;
+  // The prebuilt index read now, so opening a shipped page knows at once
+  // whether its compiled page is there (startPage, I311).
+  void prebuiltIndex();
   // A program with a colour, or a red, green and blue, of (x, y, time) is a
   // picture (editor/picture.ts): drawn live on the GPU above Run, and drawn
   // again after every edit. When the compiler can't take it to the GPU, its
@@ -239,6 +242,15 @@ export function pagePanels(host: PageHost) {
     // editor's thread, which nothing could be clicked in meanwhile. A page
     // with sound has no compiled page here, so it draws however long.
     const slow = !hasSound(prog());
+    // A shipped example's page was compiled when the site was built
+    // (prebuilt.ts): it shows once it's read, and isn't drawn interpreted
+    // first (I311: Countdown's took 0.4 s of the editor's thread on
+    // opening, to be replaced a moment later).
+    if (slow && corePageRuntimeText() && prebuiltHas(prebuiltKey("page", prog(), { main }, pins()))) {
+      compilePage(main, true);
+      if (!page.now) page.status.title = "", page.status.textContent = "Loading…";
+      return;
+    }
     try {
       page.now = interpreted(info, main, undefined, undefined, slow ? drawWithin() : undefined);
       page.root = page.now.root as unknown as globalThis.Node;

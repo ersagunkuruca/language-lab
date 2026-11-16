@@ -22,6 +22,12 @@ let index: Promise<Set<string>> | null = null;
 const fromDisk = typeof location === "object" && location.protocol === "file:";
 const keys = (): Promise<Set<string>> => (index ??= fromDisk ? Promise.resolve(new Set<string>()) : fetch("prebuilt/index.json").then((r) => (r.ok ? r.json() : [])).then((ks: string[]) => new Set(ks), () => new Set()));
 
+// Whether the build made something for this key, once the index is in
+// (asked for as the editor starts, prebuiltIndex); undefined before.
+let known: Set<string> | null = null;
+export const prebuiltIndex = (): Promise<Set<string>> => keys().then((ks) => (known = ks));
+export const prebuiltHas = (key: string): boolean | undefined => (known ? known.has(key) : undefined);
+
 // What the build made for this key, or null.
 export async function prebuilt<T>(key: string): Promise<T | null> {
   try {
