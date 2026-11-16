@@ -50,7 +50,7 @@ import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
-import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
+import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, useBuiltins, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
@@ -95,6 +95,8 @@ export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntim
 // one (scalar.ts RT and ARRAY_RT, read backwards), told to the runtime
 // with whether it gives a Bool (wasm-rt.ts's signature), so the runtime
 // needn't know scalar.ts (C149).
+// Code printed and run here (loadCoreJs) may call any builtin.
+useBuiltins(STD_IMPL, STD_MANY);
 const BUILTIN = new Map<string, Id>([...Object.entries(RT), ...Object.entries(ARRAY_RT), [ARRAY_OPS.replaceAt, "array.replaceAt"]].map(([id, n]) => [n, id]));
 function builtinOf(name: string): BuiltinOf | undefined {
   // An owned replace (C93 s4) is the replace's builtin, written in place.
@@ -917,6 +919,7 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
     ...solverFor(code, runtime, js),
+    ...builtinsFor(js, runtime),
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     // With TERS_LOG set, the world's answers are logged to that file
@@ -1157,6 +1160,29 @@ const solverFor = (code: string, beside: string, js: string) => {
   return [...plans, `import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
 };
 
+// The builtins a printed script calls, given to its runtime (C251b,
+// core-rt.ts useBuiltins): each imported by name from std-run.ts or
+// std-run-many.ts, so a bundled page or module carries those only; a
+// prebuilt runtime's global (`$core`) carries every one and has given
+// them all (core-page-runtime.ts). Read off the script: every builtin's id it names, as a call
+// (R.rt's), a host's, a mode plan's or a closure's.
+const builtinsFor = (js: string, beside: string): string[] => {
+  if (beside.startsWith("$")) return [];
+  const ids = [...new Set(js.match(/builtin\.[A-Za-z0-9.]+/g) ?? [])].sort();
+  const one = ids.filter((id) => STD_IMPL[id]), many = ids.filter((id) => STD_MANY[id]);
+  if (!one.length && !many.length) return [];
+  const lang = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, `../../ters/src/lang/${f}`));
+  const name = (id: string) => id.slice("builtin.".length).replace(/\./g, "$");
+  const imports = (ids: Id[], from: string, at: number) => ids.length ? [`import { ${ids.map((id, i) => `${name(id)} as $b${at + i}`).join(", ")} } from ${lang(from)};`] : [];
+  const table = (ids: Id[], at: number) => `{ ${ids.map((id, i) => `${JSON.stringify(id)}: $b${at + i}`).join(", ")} }`;
+  return [
+    `import { useBuiltins as $useBuiltins } from ${JSON.stringify(beside.replace(/[^/]*$/, "core-rt.ts"))};`,
+    ...imports(one, "std-run.ts", 0),
+    ...imports(many, "std-run-many.ts", one.length),
+    `$useBuiltins(${table(one, 0)}, ${table(many, one.length)});`,
+  ];
+};
+
 // What a script takes from its runtime: imported from the file a bundler
 // takes in, or from a prebuilt runtime's global ($core, C137d6).
 const using = (names: string, from: string) => (from.startsWith("$") ? `const { ${names} } = ${from};` : `import { ${names} } from ${JSON.stringify(from)};`);
@@ -1186,6 +1212,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   return wrapped(page, [
     using("startCorePage", page),
     ...solverFor(code, page, js),
+    ...builtinsFor(js, page),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
@@ -1206,6 +1233,7 @@ export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?:
   return wrapped(sound, [
     using("startCoreSound", sound),
     ...solverFor(code, sound, js),
+    ...builtinsFor(js, sound),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCoreSound(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,

@@ -132,6 +132,9 @@ for (const way of ["ters build-web", "Save page"]) test(`the dice app (${way}): 
   assert.ok(html.length < 300_000, `${html.length} characters`);
   // Nor std.ts (C251a): no builtin's name, no library node's id.
   assert.doesNotMatch(html, /round to Float32|std\.list\.cons\.head/);
+  // Built with a bundler, only the builtins it calls (C251b): not the
+  // generic + − ·, which a program never calls unresolved.
+  if (way === "ters build-web") assert.doesNotMatch(html, /must be resolved to its type's own operation/);
   const body = new FakeEl("body");
   let frames: (() => void)[] = [];
   let time = 1_000_000;

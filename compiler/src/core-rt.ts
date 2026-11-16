@@ -5,9 +5,9 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { ARRAY_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
-import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
+import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
@@ -25,6 +25,14 @@ import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
 import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker, mapAway, searchAway, chooseSplit, rangeSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
 import { impl } from "../../ters/src/prelude.ts";
+
+// The builtins a printed program calls, by id (C251b): what std-run.ts
+// runs, given by the program's script, which imports only the ones it
+// names (core-js.ts builtinsFor), or by all of them (std-impl.ts) where
+// the compiler runs code itself or a prebuilt runtime carries them all.
+type Builtin = (...xs: any[]) => any;
+const BUILTINS: { one: Record<Id, Builtin>; many: Record<Id, (...xs: any[]) => any[]> } = { one: {}, many: {} };
+export const useBuiltins = (one: Record<Id, Builtin>, many: Record<Id, (...xs: any[]) => any[]>) => { Object.assign(BUILTINS.one, one); Object.assign(BUILTINS.many, many); };
 
 export class Unsupported extends Error {}
 // `node` and `def`: where in the program it stopped (C143), when the
@@ -107,21 +115,20 @@ const TABLE = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
 export interface TableSpec { set: boolean; keys?: boolean[]; direct?: true }
 function tableFn(op: string, t: TableSpec, e?: number): (...xs: unknown[]) => unknown {
   const bool = (v: unknown) => (v as { tag: Id }).tag === TRUE;
-  const impl = (id: Id) => STD_IMPL[id] as (...xs: unknown[]) => unknown;
   switch (op) {
-    case "empty": return t.direct ? directTable : () => impl(TABLE_OPS.empty)();
-    case "put": return (m, k, v) => impl(TABLE_OPS.put)(m, k, v);
-    case "remove": return (m, k) => impl(TABLE_OPS.remove)(m, k);
+    case "empty": return t.direct ? directTable : () => table$empty();
+    case "put": return (m, k, v) => table$put(m as Table, k, v);
+    case "remove": return (m, k) => table$remove(m as Table, k);
     // Where every table has one holder (owned-tables.ts): changed in place.
     case "putOwned": return (m, k, v) => tablePutOwned(m as Table, k, v);
     case "removeOwned": return (m, k) => tableRemoveOwned(m as Table, k);
-    case "has": return (m, k) => bool(impl(TABLE_OPS.has)(m, k));
-    case "size": return (m) => impl(TABLE_OPS.size)(m);
+    case "has": return (m, k) => bool(table$has(m as Table, k));
+    case "size": return (m) => table$size(m as Table);
     case "at": return (m, k) => { const v = (t.direct ? directRead : tableRead)(m as Table, k, FAIL); if (v === FAIL) throw FAIL; return v; };
     // The same, no answer given back as FAIL, not thrown: printed where
     // the caller checks it (core-js.ts, C59).
     case "atv": return t.direct ? (m, k) => directRead(m as Table, k, FAIL) : (m, k) => tableRead(m as Table, k, FAIL);
-    case "entries": return t.set ? (m) => impl(HASH_SET_OPS.items)(m) : t.keys?.[e ?? -1] ? (m) => impl(TABLE_OPS.keys)(m) : (m) => impl(TABLE_OPS.entries)(m);
+    case "entries": return t.set ? (m) => hashset$items(m as Table) : t.keys?.[e ?? -1] ? (m) => table$keys(m as Table) : (m) => table$entries(m as Table);
   }
   return () => { throw new Unsupported(`table.${op}`); };
 }
@@ -313,7 +320,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   const base = name.replace(/\.a\d+$/, "");
   if (OWN[base]) return OWN[base] as (...xs: unknown[]) => unknown;
   const id = builtin?.[0];
-  const one = id ? STD_IMPL[id] : undefined, many = id ? STD_MANY[id] : undefined;
+  const one = id ? BUILTINS.one[id] : undefined, many = id ? BUILTINS.many[id] : undefined;
   if (!one && !many) return () => { throw new Unsupported(name); };
   const out = builtin![1] ? (v: unknown) => (typeof v === "object" && v !== null && "tag" in v ? (v as { tag: Id }).tag === TRUE : v) : (v: unknown) => v;
   // array.get's place is an i32; array.at's an Int.
@@ -333,7 +340,7 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
   const out = bool ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : (v: unknown) => v;
   const cell = cells?.[id];
   if (cell) return (...xs) => { const v = cell(...(xs.map(inn) as Value[])); if (v === undefined) throw FAIL; return out(v); };
-  const one = STD_IMPL[id], many = STD_MANY[id];
+  const one = BUILTINS.one[id], many = BUILTINS.many[id];
   if (one) return (...xs) => out(one(...xs.map(inn)));
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
   return () => { throw new Unsupported(name); };
@@ -416,14 +423,14 @@ const forwardBuiltin = (id: Id) => {
   // An array's first item read in place, no list of answers made (C196:
   // a push run backwards).
   if (id === ARRAY_OPS.first) return (a: unknown) => { const v = arrayView(a as Parameters<typeof arrayView>[0]); return v.n > 0 ? v.buf.items[v.start] : NO_ANSWER; };
-  const one = STD_IMPL[id], many = STD_MANY[id];
+  const one = BUILTINS.one[id], many = BUILTINS.many[id];
   if (one) return (...xs: unknown[]) => one(...(xs as Value[]));
   if (many) return (...xs: unknown[]) => { const r = many(...(xs as Value[])); return r.length ? r[0] : NO_ANSWER; };
   return () => { throw new Unsupported(id); };
 };
 export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<unknown>, forwards: Id[], consts: unknown[], all: boolean | "one", none: string) => {
   // A builtin called as itself comes by its id (core-js.ts printSolve).
-  const ks = consts.map((c) => (c && typeof c === "object" && "$builtin" in c ? STD_IMPL[(c as { $builtin: Id }).$builtin] : c));
+  const ks = consts.map((c) => (c && typeof c === "object" && "$builtin" in c ? BUILTINS.one[(c as { $builtin: Id }).$builtin] : c));
   const solve = make(NO_ANSWER, equal, { add: I.add, sub: I.sub, neg: I.neg }, forwards.map(forwardBuiltin), ks) as ((...xs: unknown[]) => Iterable<unknown>) & { one?: (...xs: unknown[]) => unknown; wrap?: boolean };
   if (all === "one" && solve.one) { const { one, wrap } = solve; return (...xs: unknown[]) => { const r = one(...xs.map(inn)); if (r === NO_ANSWER) throw FAIL; return wrap ? [r] : r; }; }
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
@@ -559,7 +566,7 @@ export const RUNTIME = {
     if (src) Object.assign(c, { [META]: "prim" in src ? src : { lambda: src.lambda, env: new Map(src.binders.map((b, j) => [b, src.bools.includes(j) ? { tag: caps[j] ? TRUE : FALSE, fields: [] } : caps[j]])) } });
     return c;
   },
-  show: STD_IMPL[S.show],
+  show: showFloat,
 };
 
 // The world's operations (scalar.ts WORLD_OPS) over the evaluator's
