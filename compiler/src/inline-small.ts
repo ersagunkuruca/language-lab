@@ -50,3 +50,68 @@ export function inlineSmall(ir: CoreIR): number {
   });
   return changed;
 }
+
+// Calls put in place for the printed JavaScript (Ersagun 2026-11-16: "why
+// so many functions where we could inline lots of function calls and get
+// rid of the stack burden?"): a function called from one place only,
+// whatever it does, after every other pass, so the code doesn't grow (the
+// function is no longer printed, core-js.ts reachedFuncs). Its inputs
+// become lets of the caller, in order, so what it does is done as before,
+// in the same order. Not a function whose call is itself something
+// counted or kept: one that may not finish (each call takes a step from
+// a page's budget), spends fuel, has no answer (partial), gives several,
+// is a definition's value worked out once, reads a closure's captures, or
+// can stop and go on later (handlers, waits, the rest of a search); nor one
+// that reaches itself. Rounds until nothing more is put in place.
+// Small functions called from several places stay calls: put in each
+// place they made the pages bigger (dice 29.5 to 31.0 KB, spacetime 165 to
+// 179 KB) and no run faster, as V8 puts a small function in place itself
+// once it's called often (countdown, collatz, divisors, queens, 11 runs:
+// the same times within 1-6%, either way).
+export function inlineCalls(ir: CoreIR, divergent: (i: number) => boolean): number {
+  const reach = ir.funcs.map(() => new Set<number>());
+  const direct = (e: SExpr, out: Set<number>) => { if (e.k === "call" || e.k === "closure") out.add(e.fn); if (e.k === "closure" && e.d !== undefined) out.add(e.d); kids(e).forEach((k) => direct(k, out)); };
+  ir.funcs.forEach((f, i) => direct(f.body, reach[i]));
+  for (let grew = true; grew; ) { grew = false; for (const r of reach) for (const j of [...r]) for (const k of reach[j]) if (!r.has(k)) { r.add(k); grew = true; } }
+  const plain = (e: SExpr): boolean => {
+    switch (e.k) {
+      case "cap": case "handle": case "released": case "budget": case "search": case "choose": case "fail": return false;
+      case "attempt": if (e.resumes) return false; break;
+      case "world": if (e.suspends || e.cps) return false; break;
+      case "call": case "apply": if (e.cps) return false; break;
+    }
+    return kids(e).every(plain);
+  };
+  const can = ir.funcs.map((g, i) => !g.inner && !g.partial && !g.spends && !g.budgeted && !g.multi && !g.piece && !g.value && g.bail === undefined && !divergent(i) && !reach[i].has(i) && plain(g.body));
+  // Tail calls inside a body put where its call wasn't one aren't any more.
+  const untail = (e: SExpr): SExpr => { const r = mapKids(e, untail); return (r.k === "call" || r.k === "apply") && r.tail ? { ...r, tail: false } : r; };
+  let changed = 0;
+  for (let round = 0; round < 8; round++) {
+    const sites = new Map<number, number>();
+    const count = (e: SExpr) => { if (e.k === "call") sites.set(e.fn, (sites.get(e.fn) ?? 0) + 1); if (e.k === "closure") sites.set(e.fn, Infinity); kids(e).forEach(count); };
+    ir.funcs.forEach((f) => count(f.body));
+    const before = changed;
+    ir.funcs.forEach((f, fi) => {
+      if (f.inner || stops(f.body)) return;
+      const put = (e: SExpr): SExpr => {
+        const r = mapKids(e, put);
+        if (r.k !== "call" || r.cps || r.fn === fi || !can[r.fn] || reach[r.fn].has(fi)) return r;
+        const g = ir.funcs[r.fn];
+        if (sites.get(r.fn) !== 1) return r;
+        const at = g.locals.map((t) => f.locals.push(t) - 1);
+        changed++;
+        const body = mapLocals(r.tail ? g.body : untail(g.body), (i) => at[i]);
+        return r.args.reduceRight<SExpr>((b, value, j) => ({ k: "let", i: at[j], value, body: b }), body);
+      };
+      const was = changed;
+      const body = put(f.body);
+      if (changed > was) {
+        f.body = body;
+        f.body = tidied(f, fi).body;
+        for (const j of [...reach[fi]]) for (const k of reach[j]) reach[fi].add(k);
+      }
+    });
+    if (changed === before) break;
+  }
+  return changed;
+}

@@ -20,7 +20,7 @@
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
 import { shareCalls } from "./share-calls.ts";
-import { inlineSmall } from "./inline-small.ts";
+import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
@@ -133,6 +133,8 @@ const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "fl
 // What in printed code may throw no answer (R.FAIL) rather than give it:
 // anything of the runtime's but its stop, step and mod, the program's
 // runtime and world functions, a try, a throw, a yield.
+// A literal as printed (ex): a number, an Int, a Bool, a text.
+const LITERAL = /^(?:\(?-?(?:[\d.]+(?:e[+-]?\d+)?n?|Infinity|NaN)\)?|true|false|"(?:[^"\\]|\\.)*")$/;
 const THROWS = /\bR\.(?!FAIL\b|stop\(|step\(|mod\(|remk\()|\brt\d+\(|\bw\d+\(|\btry\b|\bthrow\b|\byield\b/;
 
 // `only`: the functions printed (reachedFuncs), the rest left out.
@@ -332,7 +334,26 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // (so computing it first changes no order).
     function inputs(args: SExpr[], out: string[], d: string): string[] {
       const atomic = (a: SExpr) => ["local", "num", "int", "text", "bool", "cap"].includes(a.k);
-      return args.map((a, j) => (args.slice(0, j).every(atomic) ? slot(a, out, d) : ex(a, out, d)));
+      return exs(args, out, d, (a, own, j) => (args.slice(0, j).every(atomic) ? slot(a, own, d) : ex(a, own, d)));
+    }
+    // y, worked out after the statements `own`, comes out different: it
+    // calls something (which may do something, or read what they did), or
+    // reads a local they set.
+    const moved = (y: string, own: string[]) => !LITERAL.test(y) && (/[\w$]\(|\byield\b/.test(y) || [...new Set(y.match(/(?<![.\w$])[lpt]\d+(?![\w$])/g))].some((v) => own.some((l) => new RegExp(`(?<![.\\w$])${v} =(?!=)`).test(l))));
+    // Inputs left to right. One that needs statements first (a let, an if,
+    // a call put in place there) has them run after the inputs before it
+    // are worked out: those that aren't literals are held in temps first,
+    // so a call among them (a random draw, say) isn't moved after the
+    // statements, nor a local read after they set it.
+    function exs(args: SExpr[], pre: string[], d: string, one = (a: SExpr, own: string[], _j: number) => ex(a, own, d)): string[] {
+      const xs: string[] = [];
+      args.forEach((a, j) => {
+        const own: string[] = [], x = one(a, own, j);
+        if (own.length) xs.forEach((y, k) => { if (moved(y, own)) { const t = temp(); pre.push(`${d}const ${t} = ${y};`); xs[k] = t; } });
+        pre.push(...own);
+        xs.push(x);
+      });
+      return xs;
     }
     function slot(e: SExpr, out: string[], d: string): string {
       const partial = (e.k === "call" && ir.funcs[e.fn].partial) || (e.k === "apply" && e.t.partial);
@@ -355,7 +376,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         case "local": return local(e.i);
         case "zero": if (e.none) return "R.fail()"; return zero(e.t, made);
         case "op": {
-          const xs = e.args.map((a) => ex(a, pre, d));
+          const xs = exs(e.args, pre, d);
           if (INFIX[e.op]) return `(${xs[0]} ${INFIX[e.op]} ${xs[1]})`;
           if (e.op === "neg") return `(-${xs[0]})`;
           if (e.op === "not") return `(!${xs[0]})`;
@@ -380,7 +401,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         case "call": {
           // Its inputs computed first: a call's own statements must not
           // come between them.
-          const xs = e.args.map((a) => ex(a, pre, d));
+          const xs = exs(e.args, pre, d);
           const c = call(e.fn, xs);
           return ir.funcs[e.fn].partial ? `R.ck(${c})` : c;
         }
@@ -394,7 +415,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
             const writes = xs.flatMap((x, i) => (e.same?.includes(i) ? [] : [`${y}.f${i} = ${x}`]));
             return `(${y} instanceof ${k} ? (${[...writes, y].join(", ")}) : ${fresh})`;
           }
-          const v = made(e.t.variant, e.args.map((a) => ex(a, pre, d))); return constant(e) ? constName(v) : v;
+          const v = made(e.t.variant, exs(e.args, pre, d)); return constant(e) ? constName(v) : v;
         }
         case "get": return read(ex(e.rec, pre, d), e.i, pre, d);
         case "new": {
@@ -404,7 +425,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
             return `(${a}.push(${x}), ${a})`;
           }
           noted(e.t.cases[e.c].variant, e.c);
-          const v = made(e.t.cases[e.c].variant, e.args.map((a) => ex(a, pre, d)));
+          const v = made(e.t.cases[e.c].variant, exs(e.args, pre, d));
           return constant(e) ? constName(v) : v;
         }
         // A written list (L181b): its items in order, made into conses from the last.
@@ -435,7 +456,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         }
         case "cap": return `l0.caps[${e.i}]`;
         case "apply": {
-          const c = ex(e.fn, pre, d), xs = e.args.map((a) => ex(a, pre, d));
+          const [c, ...xs] = exs([e.fn, ...e.args], pre, d);
           pre.push(`${d}${local(e.tmp)} = ${c};`);
           if (cycle && ap(e.t, []).startsWith("(yield")) return e.t.partial ? `R.ck(${ap(e.t, [local(e.tmp), ...xs])})` : ap(e.t, [local(e.tmp), ...xs]);
           return e.t.partial ? `R.ck(R.ap(${[local(e.tmp), ...xs].join(", ")}))` : `${local(e.tmp)}(${xs.join(", ")})`;
@@ -449,7 +470,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           return t;
         }
         case "rt": {
-          const xs = e.args.map((a) => ex(a, pre, d));
+          const xs = exs(e.args, pre, d);
           // The fuel is this module's own (C137c21).
           if (e.fn === "fuel.get") return fuel ? "fuel" : "Infinity";
           // One of an answer's values (core-rt.ts pick), read where it is used.
@@ -484,7 +505,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           { const m = /^table\.at(\.t\d+(?:\.e\d+)?)$/.exec(e.fn); if (m && onFail) { const t = temp(); pre.push(`${d}const ${t} = ${rvName(`table.atv${m[1]}`)}(${xs.join(", ")});`, `${d}if (${t} === R.FAIL) ${onFail}`); return t; } }
           return `${rtName(e.fn)}(${xs.join(", ")})`;
         }
-        case "world": { const xs = e.args.map((a) => ex(a, pre, d)); return `${worldName(e.op)}(${xs.join(", ")})`; }
+        case "world": { const xs = exs(e.args, pre, d); return `${worldName(e.op)}(${xs.join(", ")})`; }
         // No answer leaves the way a partial call's FAIL does (onFail),
         // without a throw; thrown only where it must be (C137d12: calc's
         // parser spent 41% of its time throwing it).
@@ -731,6 +752,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Arrays of records whose loops read and write them field by field, as
   // an array per field (columns.ts, C60).
   if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+  // Then calls put in place for the printed code: a function called from
+  // one place, or a small one, whatever it does (inline-small.ts).
+  if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
