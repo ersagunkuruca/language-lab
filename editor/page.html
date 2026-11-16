@@ -291,7 +291,12 @@ body.resizing { user-select: none; }
 .field span, .sub-head { font-size: 12px; color: var(--muted); }
 .type-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .type-args:not(:empty) { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 6px; border-left: 2px solid var(--line); }
-.sub-head { margin-top: 6px; }
+.sub-head { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-weight: 600; color: var(--fg); }
+.sub-head .slink { font-weight: 600; }
+.sub-head .tip { border: 0; background: none; padding: 0; color: var(--muted); font-size: 12px; cursor: help; }
+.field-head { display: flex; align-items: baseline; gap: 6px; }
+.field-head .file-tag, .sub-head .file-tag { margin-left: auto; font: 400 11px var(--font-code); color: var(--muted); }
+.sub-head .tip-note { flex: 1 1 100%; margin: 2px 0 0; font-weight: 400; color: var(--muted); font-size: 13px; }
 input, textarea { width: 100%; padding: 6px 10px; border: 0; border-radius: 8px; background: var(--canvas); color: var(--fg); font-size: 13px; }
 textarea { resize: vertical; }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -310,6 +315,7 @@ a.btn { color: inherit; text-decoration: none; font: inherit; }
 select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; background: var(--canvas); color: var(--fg); font-size: 13px; }
 .structure { display: flex; flex-direction: column; gap: 6px; }
 .srow { display: flex; align-items: center; gap: 4px; }
+.srow .key { white-space: nowrap; }
 .slink { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 3px 6px; border-radius: 6px; cursor: pointer; font-family: var(--font-code); font-size: 13px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slink:hover { background: var(--canvas); }
 .picker { display: flex; flex-direction: column; gap: 6px; }

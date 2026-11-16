@@ -34,7 +34,7 @@ import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, type Pos } from "./canvas.ts";
-import { edit, h, type Kid } from "./dom.ts";
+import { edit, fileTag, h, head, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
 import { navigatorPanel } from "./navigator.ts";
 import { runPanel } from "./runPanel.ts";
@@ -1202,7 +1202,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     input.addEventListener("change", () => rename(id, input.value));
     // Enter saves (the change) and goes back to the program.
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
-    out.append(h("label", { class: "field", for: "f-name" }, h("span", {}, `Name · names.${nameLayer(id)}.json`), input));
+    out.append(h("label", { class: "field", for: "f-name" }, h("span", { class: "field-head" }, "Name", fileTag(`names.${nameLayer(id)}`)), input));
     // Next to the definition it embeds, as well as in the Program tab.
     if (n.kind === "def" && id === ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: this definition's graph, blocks and Run" }, "Copy embed link")));
   }
@@ -1378,7 +1378,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     });
     if (back !== raw) setComment(id, back);
   });
-  out.append(h("label", { class: "field", for: "f-comment" }, h("span", {}, "Comment · comments.json"), ta));
+  out.append(h("label", { class: "field", for: "f-comment" }, h("span", { class: "field-head" }, "Comment", fileTag("comments")), ta));
   return out;
 }
 
@@ -1452,16 +1452,16 @@ function pinRow(info: T.Info, dname: string) {
   const pinned = pins[ui.def];
   if (!pinned && held[ui.def]) {
     return h("div", { class: "pin-row" },
-      h("div", { class: "sub-head" }, `Type of ${dname}`),
-      h("p", { class: "hint" }, `Kept at ${showPin(held[ui.def], pres().names)} while it has a hole, so clearing a node doesn't loosen it. Fills must keep it.`),
+      head("Type", { tip: "Kept while it has a hole, so clearing a node doesn't loosen it. Fills must keep it." }),
+      h("p", { class: "hint" }, `Kept · ${showPin(held[ui.def], pres().names)}`),
       h("div", { class: "acts" }, loosenButton(dname)));
   }
   const r = pinned ? T.unpin(pins, ui.def, dname) : T.pin(doc.code, info, pins, ui.def, dname);
   const run = () => { if (r.ok) commit({ signatures: r.pins }, ["signatures.json"], r.note); };
   return h("div", { class: "pin-row" },
-    h("div", { class: "sub-head" }, `Type of ${dname} · signatures.json`),
-    h("p", { class: "hint" }, pinned ? `Pinned at ${showPin(pinned, pres().names)}: edits inside must keep it, and callers see only it.` : "Not pinned: its type is whatever its body makes it. Pin it to make that type a promise."),
-    h("div", { class: "acts" }, edit(pinned ? "Unpin" : "Pin this type", pinned ? "Let the type follow the body again" : "Freeze the type it has now", r, run)));
+    head("Type", { file: "signatures", tip: pinned ? "Pinned: edits inside must keep it, and callers see only it." : "Not pinned: its type is whatever its body makes it. Pinning makes that type a promise." }),
+    h("p", { class: "hint" }, pinned ? `Pinned · ${showPin(pinned, pres().names)}` : "Not pinned"),
+    h("div", { class: "acts" }, edit(pinned ? "Unpin" : "Pin", pinned ? "Let the type follow the body again" : "Freeze the type it has now", r, run)));
 }
 
 
@@ -1508,7 +1508,7 @@ function programPanel(): HTMLElement {
   const ta = h("textarea", { id: "f-program-comment", rows: "4", placeholder: "What this program is. Whose code it adapts or whose idea it follows: who, and a link." }) as HTMLTextAreaElement;
   ta.value = noteOf(doc);
   ta.addEventListener("change", () => { if (ta.value !== noteOf(doc)) setComment(PROGRAM, ta.value); });
-  out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", {}, "Comment · comments.json"), ta));
+  out.append(h("label", { class: "field", for: "f-program-comment" }, h("span", { class: "field-head" }, "Comment", fileTag("comments")), ta));
   // The program's own effects are answered by a host file outside a
   // handler (FOREIGN.md, L69c): what it gives, read-only, as ters hosts
   // writes it.

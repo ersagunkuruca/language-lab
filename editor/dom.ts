@@ -23,3 +23,22 @@ export function edit(label: string, title: string, r: { ok: true } | { ok: false
   if (r.ok) b.addEventListener("click", run);
   return b;
 }
+
+// A section head (UI-TEXT.md): a name, the saved file its edits change as a
+// small tag, and what it means behind an ⓘ: its tooltip, and a click (or a
+// tap, or Enter) shows it under the head. The panel names things; the ⓘ
+// explains them.
+export function head(label: Kid | Kid[], o: { tip?: string; file?: string } = {}) {
+  const el = h("div", { class: "sub-head" }, ...(Array.isArray(label) ? label : [label]));
+  if (o.tip) {
+    const note = h("p", { class: "tip-note", hidden: true }, o.tip);
+    const b = h("button", { class: "tip", type: "button", title: o.tip, "aria-label": "What this is", "aria-expanded": "false" }, "ⓘ");
+    b.addEventListener("click", () => { note.hidden = !note.hidden; b.setAttribute("aria-expanded", String(!note.hidden)); });
+    el.append(b);
+    if (o.file) el.append(fileTag(o.file));
+    el.append(note);
+  } else if (o.file) el.append(fileTag(o.file));
+  return el;
+}
+// The saved file an edit here changes, code.json written `code`.
+export const fileTag = (f: string) => h("span", { class: "file-tag", title: f === "code" ? "Edits here change the program (code.json)" : f === "layout" ? "Edits here change only how it's drawn (layout.json)" : `Saved in ${f}.json` }, f);
