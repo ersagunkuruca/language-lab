@@ -22,7 +22,8 @@ import type { Info } from "../ters/src/lang/infer.ts";
 import { FILES, NETWORK } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
-import { compilePageProgram } from "./pageCompile.ts";
+import { compilePageProgram, compileSavedPage, type CompiledPage } from "./pageCompile.ts";
+import type { SavedScripts } from "../ters/src/lang/page.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
@@ -42,10 +43,12 @@ export type WarmAsk = { warm: true; code: SentCode; names: Names; pins: Pins; de
 // args: main takes the command line's words, as `ters run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts corePageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
-export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id };
+// `saved`: only the page as Open in a tab gives it (pageCompile.ts
+// compileSavedPage), a page with sound's too.
+export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id; saved?: true };
 // Printed from the core IR (core-js.ts corePageScript), the script
 // calling $core.startCorePage (E244).
-export type CompileSays = { program: string; core: true } | { error: string };
+export type CompileSays = CompiledPage | { saved: SavedScripts } | { error: string };
 // Where the program's own definitions can run (whereRuns.ts, L22a): the
 // ones a shader can't hold, and the ones WebAssembly and C can't, each
 // with the compiler's reason.
@@ -138,10 +141,10 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     }
   }
   if ("compilePage" in e.data) {
-    const { code, names, pins, main } = e.data;
+    const { code, names, pins, main, saved } = e.data;
     try {
       // From the core IR, as Save page does.
-      return post(compilePageProgram(code, names, pins, main));
+      return post(saved ? { saved: compileSavedPage(code, names, pins, main) } : compilePageProgram(code, names, pins, main));
     } catch (err) {
       return post({ error: (err as Error).message });
     }

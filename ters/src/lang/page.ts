@@ -326,9 +326,23 @@ export function corePageFile(title: string, runtime: Runtime, code: Code, info: 
   const ir = lowerCore(code, info, names, [main]);
   const why = ir.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
-  const sound = worklet && hasSound(code) ? coreWorkletFile(worklet, ir, names[main]) : undefined;
-  const script = corePageScript(ir, names[main], "$core", title, sound, undefined, true);
-  return pageShell(title, pageRuntime(runtime, script), script);
+  return savedPageFile(title, savedScripts(ir, names[main], !!worklet && hasSound(code)), runtime, worklet);
+}
+// The same page's scripts made before its title and its audio thread's
+// runtime are known: the editor's worker and the site's build make them
+// (pageCompile.ts, prebuild.ts), and Open in a tab only fills them in, so
+// it compiles nothing on the editor's thread (bounce took 8 s there).
+// `sound`: the audio thread's script, a page with sound's.
+export type SavedScripts = { script: string; sound?: string };
+const TITLE_SLOT = "\u0000the page's title\u0000", WORKLET_SLOT = "\u0000the page's worklet\u0000";
+export function savedScripts(ir: CoreIR, name: string, sound: boolean): SavedScripts {
+  const script = corePageScript(ir, name, "$core", TITLE_SLOT, sound ? WORKLET_SLOT : undefined, undefined, true);
+  return sound ? { script, sound: coreSoundScript(ir, name, "$core") } : { script };
+}
+export function savedPageFile(title: string, s: SavedScripts, runtime: Runtime, worklet?: Runtime): string {
+  const sound = s.sound !== undefined && worklet ? `${pageRuntime(worklet, s.sound)}\n${s.sound}` : undefined;
+  const script = s.script.replace(JSON.stringify(TITLE_SLOT), () => JSON.stringify(title)).replace(JSON.stringify(WORKLET_SLOT), () => (sound === undefined ? "undefined" : JSON.stringify(sound)));
+  return pageShell(title, pageRuntime(runtime, s.script), script);
 }
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.
 export const coreWorkletFile = (runtime: Runtime, ir: CoreIR, name: string): string => {

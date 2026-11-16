@@ -16,7 +16,7 @@ import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
 import { checkedForRun } from "./coreMain.ts";
-import { PAGE_BASE, corePageFile, hasSound, pageMain, pageRuntime, showPage, TooSlow, type Preview } from "../ters/src/lang/page.ts";
+import { PAGE_BASE, hasSound, pageMain, pageRuntime, savedPageFile, showPage, TooSlow, type Preview, type SavedScripts } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { eventsIn, isEvent, type LogEntry, type LogWindow, type PlacedSnapshot } from "../ters/src/lang/worldlog.ts";
 // The page's log kept as a window (I239b): a snapshot every 10 seconds, the
@@ -294,10 +294,15 @@ export function pagePanels(host: PageHost) {
   // evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
   const compiledPages = new WeakMap<Code, CompiledPage | null>(); // null: it didn't compile
   let compiling: Worker | null = null;
+  // That compile's program, which Open in a tab waits for (savedFor),
+  // settled when it ends either way.
+  let inFlight: { code: Code; done: Promise<void>; settle(): void } | null = null;
+  const settle = () => { const f = inFlight; inFlight = null; f?.settle(); };
   // `waiting`: nothing interpreted shows, as it drew too slowly.
   function compilePage(main: Id, waiting = false) {
     compiling?.terminate();
     compiling = null;
+    settle();
     asks++;
     const code = prog();
     if (!corePageRuntimeText()) return interpretAnyway("Interpreted: this editor has no compiler for pages.");
@@ -317,6 +322,7 @@ export function pagePanels(host: PageHost) {
       if (asked !== asks) return;
       if (!got) return compileHere(code, main);
       compiledPages.set(code, got);
+      if (got.saved) savedPages.set(code, got.saved);
       if (page.for === code) swapCompiled(code, got);
     });
   }
@@ -413,17 +419,21 @@ export function pagePanels(host: PageHost) {
   }
   function compileHere(code: Code, main: Id) {
     const w = (compiling = newWorker());
-    const done = (m: CompileSays) => {
+    let ended = () => {};
+    inFlight = { code, done: new Promise<void>((ok) => { ended = ok; }), settle: () => ended() };
+    const done = (m: CompiledPage | { error: string }) => {
       w.terminate();
       if (compiling !== w) return;
       compiling = null;
       compiledPages.set(code, "program" in m ? m : null);
+      if ("program" in m) savedPages.set(code, m.saved);
+      settle();
       if (page.for !== code) return;
       if ("program" in m) swapCompiled(code, m);
       else if (page.now) page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
       else interpretAnyway(`Interpreted, slowly: the page couldn't be compiled (${m.error}).`);
     };
-    w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data);
+    w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data as CompiledPage | { error: string });
     w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
     const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: pins(), main };
     w.postMessage(ask);
@@ -480,36 +490,50 @@ export function pagePanels(host: PageHost) {
   }
 
   // The page compiled, saved or opened in a tab: printed from the core IR
-  // (page.ts corePageFile, E244), as ters build-web does. Throws with why
-  // when main doesn't lower there.
-  function pageHtml(): { html: string; name: string } | null {
-    const info = typesOf();
-    const main = info && pageMain(ownDefs(), info, pres().names);
-    if (!info || !main) return null;
-    const title = titleOf(doc()), name = `${slug(title)}.html`;
-    if (!corePageRuntimeText()) throw new Error("this editor has no core IR runtime");
-    // Stored as ters build-web stores it (C197): its lists and Maps chosen.
-    // Only what main reaches, and the solver only if it solves.
-    const r = runCode(prog(), main);
-    return { html: corePageFile(title, corePageRuntimes(), r.code, r.info, r.names, main, coreWorkletRuntimes()), name };
+  // (page.ts savedPageFile, E244), as ters build-web does, only what main
+  // reaches. Made off the editor's thread: by the preview's compile, which
+  // makes it too, by the site's build for a shipped example, or else by a
+  // worker now. Filling it in takes no time.
+  const savedPages = new WeakMap<Code, SavedScripts>();
+  function savedFor(code: Code, main: Id): Promise<SavedScripts> {
+    const kept = savedPages.get(code) ?? compiledPages.get(code)?.saved;
+    if (kept) return Promise.resolve(kept);
+    // The preview's compile of this same code, under way: its page.
+    if (inFlight?.code === code) return inFlight.done.then(() => savedFor(code, main));
+    return prebuilt<SavedScripts>(prebuiltKey("saved", code, { main }, pins())).then((got) => got ?? new Promise<SavedScripts>((ok, fail) => {
+      const w = newWorker();
+      w.onmessage = (e: MessageEvent<CompileSays>) => { w.terminate(); if ("saved" in e.data) ok(e.data.saved); else fail(new Error("error" in e.data ? e.data.error : "the compiler gave no page")); };
+      w.onerror = (e) => { e.preventDefault(); w.terminate(); fail(new Error(e.message || "the compiler failed")); };
+      const ask: CompileAsk = { compilePage: true, saved: true, code, names: pres().names, pins: pins(), main };
+      w.postMessage(ask);
+    })).then((made) => { savedPages.set(code, made); return made; });
   }
 
   function savePage(open: boolean) {
-    let made;
-    try { made = pageHtml(); } catch (e) { ui.note = `The page couldn't be compiled: ${(e as Error).message}.`; ui.refused = true; render(); return; }
-    if (!made) return;
-    const url = URL.createObjectURL(new Blob([made.html], { type: "text/html" }));
-    if (open) {
-      window.open(url, "_blank");
-    } else {
+    const info = typesOf();
+    const main = info && pageMain(ownDefs(), info, pres().names);
+    if (!info || !main) return;
+    const failed = (why: string) => { ui.note = `The page couldn't be compiled: ${why}.`; ui.refused = true; render(); };
+    if (!corePageRuntimeText()) return failed("this editor has no core IR runtime");
+    const code = prog(), title = titleOf(doc()), name = `${slug(title)}.html`;
+    // The tab opened now, while the click allows it: one opened when the
+    // page is ready may be taken for a popup and blocked.
+    const tab = open ? window.open("", "_blank") : null;
+    if (tab) { tab.document.title = `${title}: compiling`; tab.document.body.textContent = `Compiling ${title}…`; }
+    void savedFor(code, main).then((made) => {
+      const url = URL.createObjectURL(new Blob([savedPageFile(title, made, corePageRuntimes(), coreWorkletRuntimes())], { type: "text/html" }));
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      if (open) {
+        if (tab && !tab.closed) tab.location.href = url; else window.open(url, "_blank");
+        return;
+      }
       const a = document.createElement("a");
       a.href = url;
-      a.download = made.name;
+      a.download = name;
       a.click();
-      ui.note = `Saved the page as ${made.name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
+      ui.note = `Saved the page as ${name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
       render();
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }, (e: unknown) => { tab?.close(); failed(e instanceof Error ? e.message : String(e)); });
   }
   // The run's log, saved (C172e): what the page was given and what the
   // world answered it, for a replay to give it again.
