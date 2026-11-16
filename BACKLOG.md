@@ -87,6 +87,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C252 | One loop rewrite over the list interface (R11 §3, P7's next foundation row): "consing onto a call of itself is a loop" is written once per place a list lives (C232 a tree's lists, C240 arrays, C250 the list of one left behind), and "appends onto what a loop carries" again (C233). Gather them into one rewrite that reads the list through its interface, the representations each giving only their own steps; pack and scan as fast as they are now (measured before and after). Before the next speed round | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §3 | P2 | M | |
 
 ### Bugs and gaps found by programs
 
@@ -151,6 +152,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L265 | `numbers` as written (Peano Nat) runs on the evaluator: today it runs out of memory, and the core IR printer's recursion out of stack, so core-js.test checks it only after `represented` stores its Nat as an Int (`asRun`). A user doesn't meet it (`ters run` stores it the same way), but the evaluator is the reference every target is compared with. R11 §4 measured the evaluator 6 to 10 times slower than compiled JS on deep recursion; take after R11's first three fixes | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §4 | P3 | M | |
 
 ### Bugs and gaps found by programs
 
@@ -236,5 +238,6 @@ Not lane work; the coordinator does these or asks Ersagun.
 
 | id | item | source | pri | status |
 |---|---|---|---|---|
+| P10 | Main's red rule (R11 §1): a lane that sees Check main red for more than an hour stops merging until it is green or the failing file has a row a lane is taking; WORKFLOW.md says so beside "fixing it is your next job". Main was red 16 hours on 11-15/16 while 42 PRs merged (resolve-once, fixed by I312 #2819) | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §1 | P1 | |
 | P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805 on 11-03; 3,421 on 11-13), tests reached by a one-line text.ts edit (145/150 + 44/44 on 11-03; 139/219 + 91/125 on 11-13) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
 | P8 | Add a LICENSE (and say what examples and programs written in Ters carry) once Ersagun picks one | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §3 | P3 | postponed (Ersagun 2026-11-10: until people want to use Ters) |
