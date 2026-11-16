@@ -113,78 +113,78 @@ export function graphMenu(host: GraphMenuHost) {
       const earlier = Top.moveStep(doc().code, doc().names.short, v, -1), later = Top.moveStep(doc().code, doc().names.short, v, 1);
       const isStep = (r: Top.Top) => r.ok || !/isn't a step/.test(r.reason);
       if (!isStep(earlier) || body?.kind !== "lambda" || body.params.length) return [];
-      return [item("Do it earlier", "step-earlier", "Swap it with the step before", earlier.ok ? undefined : earlier.reason), item("Do it later", "step-later", "Swap it with the step after", later.ok ? undefined : later.reason)];
+      return [item("Step earlier", "step-earlier", "Swap it with the step before", earlier.ok ? undefined : earlier.reason), item("Step later", "step-later", "Swap it with the step after", later.ok ? undefined : later.reason)];
     };
     if (kind === "hole" && id) {
       rows.push(fillPalette(id, info, names, "m-query"));
     } else if (kind === "space") {
-      rows.push(inGraph ? item("Add a value here…", "add", "A new loose value (a hole to fill) here: fill it, then drag its output onto an input")
-        : item("Add a value at the start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", why(() => T.addStep(doc().code, doc().names.short, info, ui.def))));
+      rows.push(inGraph ? item("Add value…", "add", "A new loose value (a hole to fill) here: fill it, then drag its output onto an input")
+        : item("Add value at start…", "add", "A new named value (a hole to fill) as the definition's first step: fill it, then use it by name", why(() => T.addStep(doc().code, doc().names.short, info, ui.def))));
     } else if (kind === "binder" && id) {
       const on = isNamed(id);
       rows.push(head(names[id] ?? "a value"));
       if (names[id] !== "_" && inGraph) rows.push(item(on ? "Show as wires" : "Show as let and get nodes", "named", on ? "Wires from here to every use" : "A let node here and a small get node at every use, instead of long wires"));
-      rows.push(item("Name it…", "name"));
+      rows.push(item("Rename…", "name"));
       rows.push(...stepRows(id));
       if (T.isDot(doc().code, ui.def, id) && inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "A picked dot drags to move, not to wire (alt-drag does the same)"));
-      if (T.isDot(doc().code, ui.def, id)) rows.push(item("Remove the dot", "undot", T.usesOf(doc().code, id).length ? "Put the value back on its one wire" : "No wire leaves it: the dot goes, and its value lies loose", why(() => T.removeDot(doc().code, doc().names.short, info, ui.def, id, { of: doc().loose ?? {}, home: doc().home ?? {} }))));
+      if (T.isDot(doc().code, ui.def, id)) rows.push(item("Remove dot", "undot", T.usesOf(doc().code, id).length ? "Put the value back on its one wire" : "No wire leaves it: the dot goes, and its value lies loose", why(() => T.removeDot(doc().code, doc().names.short, info, ui.def, id, { of: doc().loose ?? {}, home: doc().home ?? {} }))));
     } else if ((kind === "node" || kind === "frame") && id) {
       const d = calleeDef(id);
       if (d && d !== ui.def) rows.push(item(`Open ${new Namer(doc().code, typedPres(), d).name(d)}`, "goto"));
       const code = view()?.code ?? doc().code;
-      if (kind === "frame") rows.push(graphFolded().has(id) ? item("Unfold", "fold", "Show what it holds again") : item("Fold into one box", "fold", "Hide what it holds; its wires in and out stay"));
+      if (kind === "frame") rows.push(graphFolded().has(id) ? item("Unfold", "fold", "Show what it holds again") : item("Fold", "fold", "Hide what it holds; its wires in and out stay"));
       if (inlinable(code, id)) rows.push(item((doc().layout.inline ?? []).includes(id) ? "Collapse" : "Show inline", "inline", "Draw the call as the definition's body, in place. A view only."));
-      if (kind === "node") rows.push(item("Put a dot on its wire", "dot", "Share this value: a dot you can wire to other inputs", why(() => T.addDot(doc().code, doc().names.short, info, ui.def, id))));
+      if (kind === "node") rows.push(item("Add dot", "dot", "Share this value: a dot you can wire to other inputs", why(() => T.addDot(doc().code, doc().names.short, info, ui.def, id))));
       // A step of an action gets a step before it, not a value (QA8 M1).
       // So does a function's whole body that is one action (E190).
       const oneAction = kind === "node" && !stepRows(id).length && T.addActionStep(doc().code, doc().names.short, info, id).ok;
-      if (kind === "node" && (stepRows(id).length || oneAction)) rows.push(item("Add a step before this…", "step-before", "A new step (a hole to fill) just before this one, done before it", why(() => T.addActionStep(doc().code, doc().names.short, info, stepAt(id)))));
-      else if (kind === "node") rows.push(item("Add a value before this…", "add-before", "A new named value (a hole to fill), put before this so that this, and everything after it here, can use it. Inside a case of a match, it goes at the start of that case", why(() => T.addStep(doc().code, doc().names.short, info, ui.def, id))));
+      if (kind === "node" && (stepRows(id).length || oneAction)) rows.push(item("Add step before…", "step-before", "A new step (a hole to fill) just before this one, done before it", why(() => T.addActionStep(doc().code, doc().names.short, info, stepAt(id)))));
+      else if (kind === "node") rows.push(item("Add value before…", "add-before", "A new named value (a hole to fill), put before this so that this, and everything after it here, can use it. Inside a case of a match, it goes at the start of that case", why(() => T.addStep(doc().code, doc().names.short, info, ui.def, id))));
       // Its place in a list, or among a + b + c's inputs.
       const inRow = T.rowOfItem(doc().code, id), own = T.rowAt(doc().code, id);
       if (inRow) {
         const w = inRow.row.kind === "list" ? "item" : "input";
         rows.push(item(`Add an ${w} after this…`, "row-after", "A new hole just after it, to fill"),
-          item("Move it earlier", "row-earlier", "Swap it with the one before", T.whyNotMove(inRow.row, inRow.at, inRow.at - 1)),
-          item("Move it later", "row-later", "Swap it with the one after", T.whyNotMove(inRow.row, inRow.at, inRow.at + 1)),
+          item("Move earlier", "row-earlier", "Swap it with the one before", T.whyNotMove(inRow.row, inRow.at, inRow.at - 1)),
+          item("Move later", "row-later", "Swap it with the one after", T.whyNotMove(inRow.row, inRow.at, inRow.at + 1)),
           item(`Take it out of the ${inRow.row.kind === "list" ? "list" : "call"}`, "row-out", "The rest close up"));
       }
       if (own) rows.push(item(`Add ${own.kind === "list" ? "an item" : "an input"} at the end…`, "row-end", "A new hole at the end, to fill"));
       if (doc().code.nodes[id] && doc().code.nodes[id].kind !== "hole" && !doc().code.defs.includes(id)) rows.push(item("Replace with…", "replace", "Pick what goes here instead, from the palette"));
       // In the graph a wrap is a node put on the wire out of this one; in the
       // text it reads as wrapping (Ersagun 2026-10-28).
-      if (wrappable(id)) rows.push(inGraph ? item("Insert a node after it…", "wrap", "Pick a call from the palette: this node's value goes into one of its inputs, and its result goes on to wherever this node's value went")
+      if (wrappable(id)) rows.push(inGraph ? item("Insert after…", "wrap", "Pick a call from the palette: this node's value goes into one of its inputs, and its result goes on to wherever this node's value went")
         : item("Wrap in…", "wrap", "Put it inside a call or a function from the palette: it becomes one of its inputs"));
-      if (doc().code.nodes[id] && doc().code.nodes[id].kind !== "hole") rows.push(item("Clear it (leave a hole)", "clear", "A hole of the same type stays in its place"));
-      if (doc().code.nodes[id] && doc().code.nodes[id].kind !== "hole") rows.push(item("Delete it", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
+      if (doc().code.nodes[id] && doc().code.nodes[id].kind !== "hole") rows.push(item("Clear", "clear", "A hole of the same type stays in its place"));
+      if (doc().code.nodes[id] && doc().code.nodes[id].kind !== "hole") rows.push(item("Delete", "delete", "Only this node: a hole stays in its place, and what's wired into it is kept, loose"));
       const n = doc().code.nodes[id];
-      if (isCall(n) && doc().code.nodes[n.fn].kind !== "lambda") rows.push(item("Change the function…", "swap", "Keep its inputs and pick another function that takes them"));
+      if (isCall(n) && doc().code.nodes[n.fn].kind !== "lambda") rows.push(item("Swap function…", "swap", "Keep its inputs and pick another function that takes them"));
       // Turn a call around (E168): an input swaps sides with the result.
       const turn = isCall(n) ? T.turnable(doc().code, id) : null;
       const pName = (p: Id) => names[p] ?? "it";
       // Only the inputs that can stand for the result (I129).
       if (turn) turn.params.forEach((p, k) => T.turnMismatch(doc().code, names, info, id, k) || rows.push(item(`Work out ${pName(p)} from the result`, `turn-${k}`, `Turn it around: what goes into ${pName(p)} becomes the result given, and the node gives ${pName(p)} instead. Changes the code; Undo puts it back`, why(() => T.turnAround(doc().code, doc().names.short, info, id, k)))));
-      if (isUse(n)) rows.push(item("Use it forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc().code, doc().names.short, info, id))));
+      if (isUse(n)) rows.push(item("Use forwards", "turn-back", "The call again: the result given goes back into the input it works out", why(() => T.turnBack(doc().code, doc().names.short, info, id))));
       if (kind === "node") rows.push(...stepRows(id));
       // Cases that share this value, read once as the otherwise: each can
       // have its own (BACKLOG I117); an edit here is otherwise made in all.
       if (kind === "node") for (const [i, c] of T.sharedCases(doc().code, doc().names.short, info, id).slice(0, 8).entries())
         rows.push(item(`Give ${c.label} its own body`, `own-case-${i}`, `Only ${c.label}: a hole to fill there, the other cases keep this value`));
       if (kind === "node" && T.simplify(doc().code, doc().names.short, info, id)?.ok) rows.push(item("Simplify", "simplify", "The same meaning, written shorter: one list instead of append"));
-      if (kind === "frame") rows.push(item("Tidy what's inside", "tidy-frame", "Space out the nodes in this frame"));
+      if (kind === "frame") rows.push(item("Tidy inside", "tidy-frame", "Space out the nodes in this frame"));
       if (kind === "node" && n?.kind === "match" && (doc().layout.tree ?? []).includes(id)) rows.push(item("Draw as rows of patterns", "tree", "One row per case, however deep: [date, account, cents, memo], as the text reads it"));
       else if (kind === "node" && n?.kind === "match" && flattened(matchRows(doc().code, info, n))) rows.push(item("Draw as nested matches", "tree", "The decision tree as it is stored: one match per level, to see the order it decides in"));
       // Any function inside a definition can become one in the side menu
       // (E164, Ersagun 2026-11-01).
       if (kind === "frame" && n?.kind === "lambda" && (doc().code.nodes[ui.def] as { body?: Id } | undefined)?.body !== id)
-        rows.push(item("Make it a definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc().code, doc().names.short, info, ui.def, id))));
+        rows.push(item("Make definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc().code, doc().names.short, info, ui.def, id))));
       if (kind === "frame" && doc().layout.groups?.[id]) {
         const members = doc().layout.groups![id];
-        rows.push(item("Make it a function", "group-fn", "A function, part, of what comes in, called right here: name it, fold it, reuse it. Changes the code; Undo puts it back", why(() => T.makeFunction(doc().code, doc().names.short, info, ui.def, members))));
-        rows.push(item("Make it a definition", "group-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc().code, doc().names.short, info, ui.def, members))));
+        rows.push(item("Make function", "group-fn", "A function, part, of what comes in, called right here: name it, fold it, reuse it. Changes the code; Undo puts it back", why(() => T.makeFunction(doc().code, doc().names.short, info, ui.def, members))));
+        rows.push(item("Make definition", "group-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc().code, doc().names.short, info, ui.def, members))));
         rows.push(item("Ungroup", "ungroup", "Take the frame away: what it holds stays where it is"));
       }
-      if (inGraph) rows.push(item("Back to the automatic place", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
+      if (inGraph) rows.push(item("Reset position", "reset-one", picked.length > 1 ? "Forget where the picked nodes were dragged: back where Tidy everything puts them" : "Forget where it was dragged: back where Tidy everything puts it"));
       if (inGraph) rows.push(item(picked.includes(id) ? "Unpick" : "Pick", "pick", "Add it to the picked nodes (shift-click does the same): picked nodes move, tidy and become a function together. A plain click only selects it, to show it in the side panel"));
     }
     // The Blocks pane has no picking: a part made a function or a
@@ -194,10 +194,10 @@ export function graphMenu(host: GraphMenuHost) {
     if (kind === "node" && !inGraph && id) {
       const members = partCalls(id);
       if (members.length) rows.push(h("div", { class: "ctx-sep" }),
-        item("Make it a function", "part-fn", "This part and everything in it become a function of the values it takes in, called right here. Changes the code; Undo puts it back", why(() => T.makeFunction(doc().code, doc().names.short, info, ui.def, members))),
-        item("Make it a definition", "part-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc().code, doc().names.short, info, ui.def, members))));
+        item("Make function", "part-fn", "This part and everything in it become a function of the values it takes in, called right here. Changes the code; Undo puts it back", why(() => T.makeFunction(doc().code, doc().names.short, info, ui.def, members))),
+        item("Make definition", "part-def", "The same function, as a definition of its own in the side menu, called right here. Changes the code; Undo puts it back", why(() => T.definitionFrom(doc().code, doc().names.short, info, ui.def, members))));
       if (doc().code.nodes[id]?.kind === "lambda" && (doc().code.nodes[ui.def] as { body?: Id } | undefined)?.body !== id)
-        rows.push(item("Make it a definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc().code, doc().names.short, info, ui.def, id))));
+        rows.push(item("Make definition", "lambda-def", "This function as a definition of its own, in the side menu: what it uses from around it becomes its first inputs. Changes the code; Undo puts it back", why(() => T.liftToDefinition(doc().code, doc().names.short, info, ui.def, id))));
     }
     if (kind !== "hole" && inGraph) {
       rows.push(h("div", { class: "ctx-sep" }));
@@ -209,15 +209,15 @@ export function graphMenu(host: GraphMenuHost) {
       // picked nodes, the group, or just this node (Ersagun 2026-10-27).
       const set = id ? fnSet(id, picked) : null;
       if (set && kind !== "frame") {
-        rows.push(item("Make it a function", "picked-fn", `${set.what} (shift-click to pick more) become a function of the values they take in, called right here; then you can name it and use it elsewhere. Changes the code; Undo puts it back`, why(() => T.makeFunction(doc().code, doc().names.short, info, ui.def, set.members))));
-        rows.push(item("Make it a definition", "picked-def", `${set.what}: a function as above, but a definition of its own in the side menu, called right here. Changes the code; Undo puts it back`, why(() => T.definitionFrom(doc().code, doc().names.short, info, ui.def, set.members))));
-        if (!set.group) rows.push(item("Group into one box", "group-picked", `${set.what} (shift-click to pick more): drawn as one closed box that lists what it holds. Only the drawing changes; open or ungroup it from its menu`, groupable(set.members)));
+        rows.push(item("Make function", "picked-fn", `${set.what} (shift-click to pick more) become a function of the values they take in, called right here; then you can name it and use it elsewhere. Changes the code; Undo puts it back`, why(() => T.makeFunction(doc().code, doc().names.short, info, ui.def, set.members))));
+        rows.push(item("Make definition", "picked-def", `${set.what}: a function as above, but a definition of its own in the side menu, called right here. Changes the code; Undo puts it back`, why(() => T.definitionFrom(doc().code, doc().names.short, info, ui.def, set.members))));
+        if (!set.group) rows.push(item("Group", "group-picked", `${set.what} (shift-click to pick more): drawn as one closed box that lists what it holds. Only the drawing changes; open or ungroup it from its menu`, groupable(set.members)));
       }
       const bs = bindersOf(ui.def), allOn = bs.length > 0 && bs.every(isNamed);
-      rows.push(allOn ? item("Show every value as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
-        : item("Show every value as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
-      if (inGraph) rows.push((doc().layout.order ?? []).includes(ui.def) ? item("Hide the order effects run in", "order", "Take the numbers off the calls with effects")
-        : item("Number the effects in the order they run", "order", "Each call with an effect gets a number: what runs first, second… A call's inputs run left to right, then the call. A view only"));
+      rows.push(allOn ? item("All as wires", "named-none", "Wires from each let to every use, instead of let and get nodes")
+        : item("All as let and get nodes", "named-all", "A let node where each value is bound and a small get node at each use: no long wires", bs.length ? undefined : "it has no values to show"));
+      if (inGraph) rows.push((doc().layout.order ?? []).includes(ui.def) ? item("Hide effect order", "order", "Take the numbers off the calls with effects")
+        : item("Number effects", "order", "Each call with an effect gets a number: what runs first, second… A call's inputs run left to right, then the call. A view only"));
       rows.push(item("Tidy everything", "tidy-all", "Lay it all out afresh, the same every time: columns from the inputs to the result, each call's inputs in the order of its ports and the call centred on them (the layout's sources are in Credits), folded frames as one box"));
       rows.push(item("Fit", "fit", "Zoom so the whole definition shows"));
     }

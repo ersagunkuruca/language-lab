@@ -561,7 +561,7 @@ function overloaded(t: Typed, names: Names): string[] {
 }
 
 // Why a function named in full doesn't go where a call's function goes
-// (Change the function…): what the checker says, a unit that doesn't
+// (Swap function…): what the checker says, a unit that doesn't
 // match, say, rather than nothing (BACKLOG E126). Null when it fits, or
 // isn't a name.
 export function whyNotHere(code: Code, names: Names, info: Info, hole: Id, text: string): string | null {
@@ -1485,7 +1485,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
     if ("ref" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "ref", target: t.ref }; return id; }
     if ("hole" in t) { const id = place ?? freshId(); nodes[id] = { id, kind: "hole" }; return id; }
     if ("let" in t) {
-      // name = value; rest: a step, as Add a value before this makes one.
+      // name = value; rest: a step, as Add value before makes one.
       const lam = freshId();
       nodes[t.let.id] = { id: t.let.id, kind: "binder" };
       nn[t.let.id] = t.let.name;
@@ -2962,7 +2962,7 @@ export function putInside(code: Code, names: Names, info: Info, def: Id): TEdit 
   delete nodes[def];
   delete nn[def];
   const next: Code = { nodes, defs: code.defs.filter((x) => x !== def) };
-  return guardTyped(info, next, nn, host, `Put ${nn[b]} inside ${names[host] ?? display[host] ?? "the definition using it"}, as a let around its body: Make it a definition takes it out again.`);
+  return guardTyped(info, next, nn, host, `Put ${nn[b]} inside ${names[host] ?? display[host] ?? "the definition using it"}, as a let around its body: Make definition takes it out again.`);
 }
 
 
@@ -3068,7 +3068,7 @@ export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id
   return r.ok ? { ...r, def } : r;
 }
 
-// Picked nodes made a definition: Make it a function, then that function
+// Picked nodes made a definition: Make function, then that function
 // made a definition (E164).
 export function definitionFrom(code: Code, names: Names, info: Info, defId: Id, members: Id[]): TEdit & { def?: Id } {
   const r = makeFunction(code, names, info, defId, members);
