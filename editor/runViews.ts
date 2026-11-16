@@ -13,9 +13,12 @@ import { MAP_V, SET_V } from "../ters/src/lang/std.ts";
 import { runTests, savedFrom, type TestResult } from "../ters/src/lang/tests.ts";
 import type * as T from "./typed.ts";
 import type { Doc } from "./main.ts";
+import type { Runtime } from "../ters/src/lang/page.ts";
 
 declare const CORE_PAGE_RUNTIME: string; // cli/web.ts corePageRuntime, put in by a test's build
 declare const CORE_WORKLET_RUNTIME: string; // cli/web.ts coreWorkletRuntime: a page with sound plays (AUDIO.md)
+declare const CORE_PAGE_PLAIN_RUNTIME: string; // the same two without the solver (corePageRuntime(true))
+declare const CORE_WORKLET_PLAIN_RUNTIME: string;
 declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by editor/build.ts
 // esbuild's define writes the text at every use, so each runtime is used
 // once, here (E204): three uses of the worker carried its 3 MB three times.
@@ -29,6 +32,11 @@ function runtimeText(id: string) { return document.getElementById(id)?.textConte
 // coreWorkletRuntime, E244); "" means none here.
 export function corePageRuntimeText() { return runtimeText("lab-core-page-runtime") || CORE_PAGE_RUNTIME; }
 export function coreWorkletRuntimeText() { return runtimeText("lab-core-worklet-runtime") || CORE_WORKLET_RUNTIME; }
+// Each with its build without the solver beside it (page.ts Runtime): a
+// page that solves nothing is given that one, 160 KB, not 750.
+export function corePageRuntimes(): Runtime { return both(corePageRuntimeText(), runtimeText("lab-core-page-plain-runtime") || CORE_PAGE_PLAIN_RUNTIME); }
+export function coreWorkletRuntimes(): Runtime { return both(coreWorkletRuntimeText(), runtimeText("lab-core-worklet-plain-runtime") || CORE_WORKLET_PLAIN_RUNTIME); }
+const both = (solving: string, plain: string): Runtime => (solving && plain ? { solving, plain } : solving);
 
 // Where a read of a text run backwards stopped (L70c): its line, marked
 // at the place, and what was looked for there.

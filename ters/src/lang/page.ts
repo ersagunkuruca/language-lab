@@ -15,7 +15,7 @@ import { carried, Cells, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
 import { equal, OutOfSteps, pageProblem, runMain, type Value, type World } from "./run.ts";
-import { corePageScript, coreSoundScript, lowerCore } from "../../../compiler/src/core-js.ts";
+import { corePageScript, coreSoundScript, lowerCore, scriptSolves } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
 import { LIBRARY } from "./library.ts";
@@ -50,7 +50,7 @@ export interface PageOptions {
   // coreWorkletRuntime (cli/web.ts) prebuilt: given it, a page with sound
   // plays in the preview (AUDIO.md, "Playing a sound from the editor"),
   // main run again on the audio thread from the core IR.
-  worklet?: string;
+  worklet?: Runtime;
   // Where recordings are read from, when not beside the page (the editor's: apps/).
   recordings?: string;
   // How the page fetches (a test's; by default the browser's).
@@ -308,25 +308,39 @@ ${body ? `${body}\n` : ""}${scripts.map((js) => `<script>${js.replace(/<\/script
 `;
 }
 
+// A prebuilt runtime (cli/web.ts corePageRuntimes, coreWorkletRuntimes):
+// with the evaluator's solver, and without it, `plain`, for a script that
+// solves nothing. A page made without a bundler can't leave out what it
+// doesn't use, as ters build-web's does, so the solver and the library's
+// nodes and names it reads (590 KB) come only with a page that solves.
+// One text: that one, whatever the script.
+export type Runtime = string | { solving: string; plain: string };
+export const pageRuntime = (r: Runtime, script: string): string => (typeof r === "string" ? r : scriptSolves(script) ? r.solving : r.plain);
+
 // The page printed from the core IR (C137d6), made without a bundler, in
 // a browser (the editor's Save page): `runtime` is cli/web.ts corePageRuntime
 // prebuilt, and a page with sound gives `worklet`, coreWorkletRuntime.
+// Only what main reaches is lowered, as ters build-web lowers it (C168).
 // Throws when main isn't compiled through the core IR, with why.
-export function corePageFile(title: string, runtime: string, code: Code, info: Info, names: Names, own: Id[], main: Id, worklet?: string): string {
-  const ir = lowerCore(code, info, names, own);
+export function corePageFile(title: string, runtime: Runtime, code: Code, info: Info, names: Names, main: Id, worklet?: Runtime): string {
+  const ir = lowerCore(code, info, names, [main]);
   const why = ir.refused.get(main);
   if (why) throw new Error(`${names[main] ?? "main"} isn't compiled through the core IR: it ${why}`);
   const sound = worklet && hasSound(code) ? coreWorkletFile(worklet, ir, names[main]) : undefined;
-  return pageShell(title, runtime, corePageScript(ir, names[main], "$core", title, sound, undefined, true));
+  const script = corePageScript(ir, names[main], "$core", title, sound, undefined, true);
+  return pageShell(title, pageRuntime(runtime, script), script);
 }
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.
-export const coreWorkletFile = (runtime: string, ir: CoreIR, name: string): string => `${runtime}\n${coreSoundScript(ir, name, "$core")}`;
+export const coreWorkletFile = (runtime: Runtime, ir: CoreIR, name: string): string => {
+  const script = coreSoundScript(ir, name, "$core");
+  return `${pageRuntime(runtime, script)}\n${script}`;
+};
 // The same for the preview's page (showPage), or why main isn't compiled
 // through the core IR.
 // Its lists stored as `ters build-web` stores them (C197): a page splits,
 // its sound's lists arrays beside the page's Html lists as written (C196).
 // The page itself still runs as written, here, while it is edited.
-export function soundFile(runtime: string, code0: Code, info0: Info, names0: Names, main: Id): string {
+export function soundFile(runtime: Runtime, code0: Code, info0: Info, names0: Names, main: Id): string {
   const c = withLibraryRepresentations(code0, info0, names0, main, code0.defs.filter((d) => !LIBRARY.code.nodes[d]), [], { hostMaps: true });
   const stored = c.chosen.length && c.info && !c.info.errors.length;
   const [code, info, names] = stored ? [c.code, c.info!, c.names] : [code0, info0, names0];

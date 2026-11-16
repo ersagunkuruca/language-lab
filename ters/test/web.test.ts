@@ -112,10 +112,12 @@ test("the converter app: typing in any field moves the others, and text with no 
 // world, a hundred seeded rolls that are the same every time, and a status
 // line that reads the clock, so it runs again each frame.
 // Both ways of making the page: `ters build-web`'s bundle, and the editor's
-// "Save page" (page.ts corePageFile: the whole runtime prebuilt, then the
+// "Save page" (page.ts corePageFile: the runtime prebuilt, then the
 // program printed from the core IR as a plain script), which has two scripts.
+// Dice solves nothing, so its saved page has the runtime without the
+// solver, and of the program only what main reaches.
 for (const way of ["ters build-web", "Save page"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
-  const { webCorePage, corePageRuntime } = await import("../cli/web.ts");
+  const { webCorePage, corePageRuntimes } = await import("../cli/web.ts");
   const { corePageFile } = await import("../src/lang/page.ts");
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
@@ -123,9 +125,12 @@ for (const way of ["ters build-web", "Save page"]) test(`the dice app (${way}): 
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.deepEqual(info.errors, []);
   const html = way === "ters build-web" ? await webCorePage("Dice", p.code, info, p.pres.names, p.named("main"))
-    : corePageFile("Dice", await corePageRuntime(), p.code, info, p.pres.names, [p.named("main")], p.named("main"));
+    : corePageFile("Dice", await corePageRuntimes(), p.code, info, p.pres.names, p.named("main"));
   // nothing is loaded from anywhere: inline scripts only
   assert.doesNotMatch(html, /<script src|<link /);
+  // Not the library's nodes and names the solver reads: 0.8 MB before.
+  assert.ok(html.length < 300_000, `${html.length} characters`);
+  assert.doesNotMatch(html, /"builtin\.less"/);
   const body = new FakeEl("body");
   let frames: (() => void)[] = [];
   let time = 1_000_000;

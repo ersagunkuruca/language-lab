@@ -8,16 +8,15 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import type { Doc, Program, UI } from "./main.ts";
 import { h } from "./dom.ts";
-import { corePageRuntimeText, coreWorkletRuntimeText, newWorker } from "./runViews.ts";
+import { corePageRuntimes, corePageRuntimeText, coreWorkletRuntimes, newWorker } from "./runViews.ts";
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
 import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
-import { LIBRARY } from "../ters/src/lang/library.ts";
 import { checkedForRun } from "./coreMain.ts";
-import { PAGE_BASE, corePageFile, hasSound, pageMain, showPage, TooSlow, type Preview } from "../ters/src/lang/page.ts";
+import { PAGE_BASE, corePageFile, hasSound, pageMain, pageRuntime, showPage, TooSlow, type Preview } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
 import { eventsIn, isEvent, type LogEntry, type LogWindow, type PlacedSnapshot } from "../ters/src/lang/worldlog.ts";
 // The page's log kept as a window (I239b): a snapshot every 10 seconds, the
@@ -218,7 +217,7 @@ export function pagePanels(host: PageHost) {
       drawWithin,
       log: page.log, window: LOG_WINDOW, stepFrom,
       code: run?.code ?? prog(), info: run?.info ?? info, names: run?.names ?? pres().names, main, program: titleOf(doc()),
-      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimeText(), recordings: "apps/",
+      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimes(), recordings: "apps/",
       frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
     });
   }
@@ -453,7 +452,7 @@ export function pagePanels(host: PageHost) {
     let m;
     try {
       const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: page.now?.kept ?? undefined };
-      const core = new Function(`${corePageRuntimeText()}\nreturn $core;`)() as Core & Record<string, unknown>;
+      const core = new Function(`${pageRuntime(corePageRuntimes(), made.program)}\nreturn $core;`)() as Core & Record<string, unknown>;
       let given: unknown[] | null = null;
       new Function("$core", made.program)({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
       if (!given) throw new Error("the core IR's script started no page");
@@ -488,12 +487,11 @@ export function pagePanels(host: PageHost) {
     const main = info && pageMain(ownDefs(), info, pres().names);
     if (!info || !main) return null;
     const title = titleOf(doc()), name = `${slug(title)}.html`;
-    const core = corePageRuntimeText();
-    if (!core) throw new Error("this editor has no core IR runtime");
+    if (!corePageRuntimeText()) throw new Error("this editor has no core IR runtime");
     // Stored as ters build-web stores it (C197): its lists and Maps chosen.
+    // Only what main reaches, and the solver only if it solves.
     const r = runCode(prog(), main);
-    const own = r.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-    return { html: corePageFile(title, core, r.code, r.info, r.names, own, main, coreWorkletRuntimeText()), name };
+    return { html: corePageFile(title, corePageRuntimes(), r.code, r.info, r.names, main, coreWorkletRuntimes()), name };
   }
 
   function savePage(open: boolean) {

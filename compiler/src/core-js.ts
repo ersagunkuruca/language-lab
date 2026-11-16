@@ -1015,6 +1015,9 @@ export function codeLines(printed: string, written: string): Record<string, [num
 // As a string parsed once, which is smaller and quicker to load than
 // the same object written out.
 const solving = (js: string) => /R\.rt\("(solve|exists"|derive:)/.test(js);
+// Does a printed script call the evaluator's solver? A page that doesn't
+// is given a runtime without it (cli/web.ts, page.ts pageRuntime).
+export const scriptSolves = solving;
 // The runtime calls that look inside a function given them, by name: the
 // evaluator's solver, and `set` and `path` taking a field's function.
 const LOOKS_INSIDE = /^(solve:|solveOne:|solveAll:|exists$|derive:|host:builtin\.set\b|host:builtin\.cells\.path\b)/;

@@ -8,7 +8,7 @@ import type { Names } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
 import { pageShell } from "../src/lang/page.ts";
 import { HTML_V } from "../src/lang/std.ts";
-import { corePageScript, coreSoundScript, hostOpsOf, lowerCore } from "../../compiler/src/core-js.ts";
+import { corePageScript, coreSoundScript, hostOpsOf, lowerCore, scriptSolves } from "../../compiler/src/core-js.ts";
 
 const here = import.meta.dirname;
 const esbuild = () => import("esbuild").catch(() => { throw new Error("a page needs esbuild to bundle it (npm install in ters/)"); });
@@ -71,29 +71,39 @@ export async function coreSoundWorklet(lowered: ReturnType<typeof lowerCore>, na
 // left out, each export a function saying so, so the page is about 75 KB,
 // not 3.3 MB (the prelude's and trees' JSON, through arith.ts).
 // (The same test as core-js.ts's codeFor, which carries the nodes then.)
-const carriesProgram = (script: string) => /R\.rt\("(solve|exists"|derive:)/.test(script);
+const carriesProgram = scriptSolves;
 const SOLVER = /[\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)\.ts$/;
-const withoutSolver = {
+// A prebuilt runtime has no script to leave out what it doesn't use, so
+// its plain build leaves out core-solve.ts too, which it exports.
+const SOLVER_RUNTIME = /([\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)|[\\/]compiler[\\/]src[\\/]core-solve)\.ts$/;
+const withoutSolver = stubbing(SOLVER);
+function stubbing(filter: RegExp) { return {
   name: "without the solver",
   setup(b: { onLoad(o: { filter: RegExp }, f: (a: { path: string }) => { contents: string; loader: "js" }): void }) {
-    b.onLoad({ filter: SOLVER }, (a) => {
+    b.onLoad({ filter }, (a) => {
       const text = readFileSync(a.path, "utf8");
       const names = [...text.matchAll(/^export (?:function\*?|const|let|class) (\w+)/gm), ...[...text.matchAll(/^export \{([^}]*)\}/gm)].flatMap((m) => m[1].split(",").map((x) => [, x.trim().split(/\s+as\s+/).pop()!] as const))].map((m) => m[1]);
       return { contents: names.map((n) => `export function ${n}() { throw new Error("this page was made without the solver"); }`).join("\n"), loader: "js" };
     });
   },
-};
+}; }
 
 // Pages printed from the core IR made without a bundler (C137d6): core-page.ts and
 // the solver as one script that sets `$core` (page.ts corePageFile), and
 // the audio thread's (page.ts coreWorkletFile).
-export async function corePageRuntime(): Promise<string> { return prebuilt("../../compiler/src/core-page-runtime.ts", "$core"); }
-export async function coreWorkletRuntime(): Promise<string> { return prebuilt("../../compiler/src/core-worklet-runtime.ts", "$core"); }
-async function prebuilt(entry: string, globalName: string): Promise<string> {
+// `plain`: without the solver, for a page that solves nothing (page.ts
+// pageRuntime): 160 KB, not 750, the library's nodes and names left out.
+export async function corePageRuntime(plain = false): Promise<string> { return prebuilt("../../compiler/src/core-page-runtime.ts", "$core", plain); }
+export async function coreWorkletRuntime(plain = false): Promise<string> { return prebuilt("../../compiler/src/core-worklet-runtime.ts", "$core", plain); }
+// Both builds of each, as page.ts's Runtime.
+export async function corePageRuntimes(): Promise<{ solving: string; plain: string }> { return { solving: await corePageRuntime(), plain: await corePageRuntime(true) }; }
+export async function coreWorkletRuntimes(): Promise<{ solving: string; plain: string }> { return { solving: await coreWorkletRuntime(), plain: await coreWorkletRuntime(true) }; }
+async function prebuilt(entry: string, globalName: string, plain: boolean): Promise<string> {
   const { build } = await esbuild();
   const out = await build({
     entryPoints: [join(here, entry)],
     bundle: true, platform: "browser", format: "iife", globalName, target: "es2022", minify: true, write: false, logLevel: "warning",
+    plugins: plain ? [stubbing(SOLVER_RUNTIME)] : [],
   });
   return out.outputFiles[0].text;
 }

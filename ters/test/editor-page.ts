@@ -18,7 +18,7 @@ const editor = new URL("../../editor/", import.meta.url).pathname;
 const bundle = await build({
   entryPoints: [editor + "main.ts"], bundle: true, format: "iife", target: "es2022", write: false,
   plugins: [examplesPlugin(JSON.parse(readFileSync(editor + "examples.json", "utf8")))],
-  define: { CORE_PAGE_RUNTIME: JSON.stringify(await corePageRuntime()), RUN_WORKER: '""', CORE_WORKLET_RUNTIME: JSON.stringify(await coreWorkletRuntime()), CHECKS_KEY: '"test"' },
+  define: { CORE_PAGE_RUNTIME: JSON.stringify(await corePageRuntime()), RUN_WORKER: '""', CORE_WORKLET_RUNTIME: JSON.stringify(await coreWorkletRuntime()), CORE_PAGE_PLAIN_RUNTIME: JSON.stringify(await corePageRuntime(true)), CORE_WORKLET_PLAIN_RUNTIME: JSON.stringify(await coreWorkletRuntime(true)), CHECKS_KEY: '"test"' },
 });
 
 // The checks a page keeps in the browser (editor/checkStore.ts), kept here

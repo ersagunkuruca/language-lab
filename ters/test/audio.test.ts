@@ -18,7 +18,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { audioProblem, playBlocks } from "../src/lang/audio.ts";
 import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
-import { corePageRuntime, coreSoundWorklet, coreWorkletRuntime, webCorePage } from "../cli/web.ts";
+import { corePageRuntimes, coreSoundWorklet, coreWorkletRuntimes, webCorePage } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { emitCoreJs, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, soundFile } from "../src/lang/page.ts";
@@ -210,9 +210,9 @@ test("a core IR page and worklet made without a bundler play and draw what the b
     return [...out[0]];
   };
   const ir = lowerCore(p.code, p.info, p.names, [page]);
-  const worklet = await coreWorkletRuntime();
+  const worklet = await coreWorkletRuntimes();
   assert.deepEqual(play(coreWorkletFile(worklet, ir, p.names[page])), play(await coreSoundWorklet(ir, p.names[page])));
-  const file = corePageFile("Pedal", await corePageRuntime(), p.code, p.info, p.names, [page], page, worklet);
+  const file = corePageFile("Pedal", await corePageRuntimes(), p.code, p.info, p.names, page, worklet);
   assert.equal(drawn(file), drawn(await webCorePage("Pedal", p.code, p.info, p.names, page)));
 });
 
