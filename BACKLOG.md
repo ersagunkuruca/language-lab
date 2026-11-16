@@ -36,7 +36,8 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I310 | Page: countdown numbers → `symbol` freezes the page 1.2 s on opening (1.7 s to open), the slowest in the walk. | QA 11-16 L2 | 2026-11-16 |
+| I310 | Page: countdown numbers → `symbol` freezes the page 1.2 s on opening (1.7 s to open), the slowest in the walk. It's the editor's seeds run (seeds.ts): mainCalls drains the warm run's pieces at once, and one view's call ran 1.16 s, timed only where a lambda is entered. Left: seeds.ts passes its deadline to withSteps (run.ts, I310a). Language lane, in a slot between the text pass's PRs. | QA 11-16 L2 | 2026-11-16 |
+| I311 | Opening a program's page holds the editor's thread 1.6 s, 0.8 s of it the editor's own render (render → graphOf, model.ts scanningOnLayer; Countdown's `symbol`, headless Chromium). Editor lane, after the text pass (coordinator 11-16). | I310's profile | 2026-11-16 |
 
 ## E: Editor
 
