@@ -51,6 +51,7 @@ import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsO
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
 import { CELLS, CHOICE, DIVERGE, INT, NETWORK, Subst, WORLD, type Type } from "./types.ts";
+import { reachedImplementing } from "./reached.ts";
 
 export interface Data { tag: Id; fields: Value[] }
 export type Fn = (...args: Value[]) => Iterable<Value>;
@@ -1865,7 +1866,24 @@ export function valueMain(info: Info, def: Id): boolean {
 // Int or a Float64), or anything else for 0. An Abort that nothing handles
 // prints its reason to standard error and exits with 1. A main that is a
 // value prints it (valueMain).
+// Run on what main reaches (reached.ts, L265), as the compiler lowers it:
+// resolving the whole program typed every library body when a step before
+// it (an embedding put in) left the library's kept resolving unusable,
+// about 4 s for numbers. Once per program, check and main, so a program
+// run many times keeps its resolving (resolvedFor).
+const reachedRuns = new WeakMap<Code, WeakMap<Info, Map<Id, Code>>>();
+function reachedRun(code: Code, info: Info, def: Id): Code {
+  let byInfo = reachedRuns.get(code);
+  if (!byInfo) reachedRuns.set(code, (byInfo = new WeakMap()));
+  let byDef = byInfo.get(info);
+  if (!byDef) byInfo.set(info, (byDef = new Map()));
+  let r = byDef.get(def);
+  if (!r) byDef.set(def, (r = reachedImplementing(code, [def], info)));
+  return r;
+}
+
 export function runProgram(code: Code, info: Info, def: Id, args: string[], rt: Runtime): number {
+  code = reachedRun(code, info, def);
   const t = info.typeOf.get(def);
   if (t && t.t !== "fn") {
     const problem = typeError(code, info, def, rt.names ?? {});
