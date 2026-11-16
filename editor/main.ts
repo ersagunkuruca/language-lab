@@ -2018,7 +2018,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // then its result and the values on its wires show.
   const value = !!z && z.t !== "fn";
   const body = defBody(ui.def);
-  if (!body || body.kind === "typedef") return h("p", { class: "hint" }, body?.kind === "typedef" && body.interface ? "An interface doesn't run; each implementation says how its type does the operations, and functions call them." : body?.kind === "typedef" && body.effect ? "An effect doesn't run; functions perform its operations, and a handler answers them." : "A data type doesn't run; its constructors are called from functions.");
+  if (!body || body.kind === "typedef") return h("p", { class: "hint", title: body?.kind === "typedef" && body.interface ? "Each implementation says how its type does the operations, and functions call them" : body?.kind === "typedef" && body.effect ? "Functions perform its operations, and a handler answers them" : "Its constructors are called from functions" }, body?.kind === "typedef" && body.interface ? "Interface · doesn't run" : body?.kind === "typedef" && body.effect ? "Effect · doesn't run" : "Data type · doesn't run");
   // A test (its row has Check) runs as ters test runs it: on its saved
   // inputs, then on small values, and a failing expect shows here with the
   // inputs it failed on (T7d).
@@ -2033,29 +2033,29 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // A page's main is the page: it is running above, and printing what it
   // gives back would only show the page's insides.
   if (action && !errorsIn(info) && !holesIn(info) && pageMain(ownDefs(), info, pres().names) === ui.def) {
-    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} is the page above: it runs there, and Restart runs it again from the start.`));
+    box.append(h("p", { class: "hint", title: "It runs as the page above; Restart runs it again from the start" }, "Runs as the page"));
   } else if (needs.length) {
     const effs = needs.map((e) => pres().names[e] ?? e).join(" and ");
     // The program's own effect is the host's to answer outside a handler
     // (FOREIGN.md, L69c), and the editor has no host file.
     const own = needs.filter((e) => ownEffects().includes(e));
-    if (own.length === needs.length) box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} needs its host: it performs ${effs}, this program's own effect, which hosts/js.js beside the program answers when it runs with ters run. The editor has no host file, so it doesn't run here; the Program tab shows what one gives. Or call it inside `, h("code", {}, `handle ${effs}`), "."));
-    else box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, and nothing here answers it. To run it, call it inside `, h("code", {}, `handle ${effs}`), "."));
+    if (own.length === needs.length) box.append(h("p", { class: "status-line warn", title: `It performs ${effs}, this program's own effect, which hosts/js.js beside the program answers when it runs with ters run. The editor has no host file, so it doesn't run here; the Program tab shows what one gives.` }, `Needs a host for ${effs} · or call it in `, h("code", {}, `handle ${effs}`)));
+    else box.append(h("p", { class: "status-line warn", title: `It performs ${effs}, and nothing here answers it` }, `Unhandled ${effs} · call it in `, h("code", {}, `handle ${effs}`)));
   } else if (choice) {
-    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} may give no answer, or more than one (Choice), so it doesn't run as it is. To run it, say which you want: call it inside `,
-      h("code", {}, "first(…, else …)"), ", ", h("code", {}, "all"), ", ", h("code", {}, "count"), " or ", h("code", {}, "optional"), "."));
+    box.append(h("p", { class: "status-line warn", title: "It may give no answer, or more than one, so it doesn't run as it is: say which you want" }, "Choice · call it in ",
+      h("code", {}, "first(…, else …)"), ", ", h("code", {}, "all"), ", ", h("code", {}, "count"), " or ", h("code", {}, "optional")));
   } else if (action || value && ui.def === defNamed("main") || z?.t === "fn" && z.params.length === 1 && runGiven()) {
     // main runs whatever it is: a value's Run gives the value. One that
     // reads the command line runs on the example's own arguments (E212).
     const going = ui.output?.def === ui.def && ui.output.running;
     const given = action || value ? null : runGiven();
     const label = [namer.name(ui.def), ...given?.args ?? []].join(" ");
-    if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox(), h("p", { class: "hint" }, `What ${namer.name(ui.def)} reads as standard input, as ters run reads what is piped to it.`));
+    if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox());
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
     // The files only where it brings some (pond's words are numbers).
     const brought = Object.keys(given?.files ?? {});
-    if (given) box.append(h("p", { class: "hint" }, `As ters run gives it: ${given.args.join(", ")}.${brought.length ? ` ${brought.join(", ")} ${brought.length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.` : ""}`));
+    if (given) box.append(h("p", { class: "hint", title: `As ters run gives it.${brought.length ? ` ${brought.join(", ")} ${brought.length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.` : ""}` }, `Arguments · ${given.args.join(", ")}${brought.length ? ` · files ${brought.join(", ")}` : ""}`));
     if (ui.output?.def === ui.def) {
       // What it prints is read out as it comes (a log), and a failure at once.
       box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
@@ -2065,15 +2065,15 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       const at = ui.output.at;
       if (at && doc.code.nodes[at.def]) box.append(h("button", { class: "btn", type: "button", "data-act": "goto-stop", "data-def": at.def, "data-target": at.node }, at.def === ui.def ? "Show where it stopped" : `Show where it stopped, in ${namer.name(at.def)}`));
       if (ui.output.profile) box.append(profileView(namer, ui.output.profile, doc.code, pick));
-      if (ui.output.paused !== undefined) box.append(h("p", { class: "hint", role: "status" }, `Paused after answer ${ui.output.paused} of ${ui.output.answers?.filter((e) => !e.write).length ?? 0}: what it printed by then. Step on, or Run again with these answers for the rest.`));
+      if (ui.output.paused !== undefined) box.append(h("p", { class: "hint", role: "status", title: "What it printed by then. Step on, or Run again with these answers for the rest." }, `Paused · answer ${ui.output.paused} of ${ui.output.answers?.filter((e) => !e.write).length ?? 0}`));
       if (ui.output.answers?.some((e) => !e.write)) box.append(answersView(ui.output.answers, ui.output.replayed, ui.output.paused));
-      if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and ters compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Ran compiled."));
+      if (ui.output.compiled) box.append(h("p", { class: "hint", title: "main compiled to JavaScript, as Open in a tab and ters compile do: the same output, much faster than the evaluator, but with no record of where the run went" }, "Compiled"));
     }
   } else if (z?.t === "fn" && z.eff.effs.some((e) => WORLD.includes(e))) {
     // Run backwards is a search, and a search would touch the world once
     // per guess: say so, instead of a panel that can only fail.
     const effs = z.eff.effs.filter((e) => WORLD.includes(e)).map((e) => pres().names[e] ?? e).join(" and ");
-    box.append(h("p", { class: "hint" }, `${namer.name(ui.def)} performs ${effs}, which can't be undone, so it doesn't run backwards: it runs forwards where it's called.`));
+    box.append(h("p", { class: "hint", title: `It performs ${effs}, which can't be undone: it runs forwards where it's called` }, `Forwards only · performs ${effs}`));
   } else if (z?.t === "fn") box.append(backwardsPanel(namer, info));
   // Values on the wires: a function shows them for the values above; an
   // action, once you ask (it may take a while, and its printing is left out).
@@ -2082,25 +2082,24 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   if ((action || value) && !needs.length) box.append(h("div", { class: "acts" },
     h("button", { class: "btn", type: "button", "data-act": "t-values", title: "Run it and show what every node made, printing left out" }, ex ? "Update values" : "Show values"),
     ex ? h("button", { class: "btn", type: "button", "data-act": "t-novalues" }, "Hide values") : null));
-  else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint" }, ex ? "The graph shows what every node makes of these values. They're saved in examples.json, not in the code."
-    : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code."));
+  else if (z?.t === "fn" && !EMBED) box.append(h("p", { class: "hint", title: ex ? "The graph shows what every node makes of these values, kept in examples.json, not in the code" : "The graph shows what every node makes of these values. Change one to keep values of your own, in examples.json, not in the code" }, ex ? "Values · examples.json" : "Values · starting ones"));
   // A step at a time (E232d), once there are values to step through.
   const bar = tr && !tr.error ? stepBar(info, tr) : null;
   if (bar) box.append(bar);
   // An Html, drawn as the page draws it (I256).
   if (tr?.result !== undefined && (action || value) && givesHtml(info, ui.def)) box.append(htmlPart(tr.result, namer.name(ui.def)));
-  else if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "Its first answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
+  else if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "First answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
   // Nor the graph's own time limit (E207): Run main runs it in full. Nor
   // standard input, which a page hasn't (calc's main reads it, E211).
   if (tr?.error) box.append(tr.error.message === "reached a hole"
-    ? h("p", { class: "hint" }, "Values show once the holes on their way are filled.")
-    : !givenOf(ui.def) || LIMIT.test(tr.error.message) || /the graph waits|has no standard input/.test(tr.error.message) ? h("p", { class: "hint" }, `No values on the wires: ${tr.error.message}.`)
+    ? h("p", { class: "hint", title: "Values show once the holes on their way are filled" }, "No values · holes on the way")
+    : !givenOf(ui.def) || LIMIT.test(tr.error.message) || /the graph waits|has no standard input/.test(tr.error.message) ? h("p", { class: "hint" }, `No values · ${tr.error.message}`)
     // The evaluator's own depth, not the program's fault (I219: pond's
     // start patches, seeded over every cell): Run main runs it compiled.
-    : tr.error.message === LEFT_TO_WAYS ? h("p", { class: "hint" }, `No values on the wires: ${LEFT_TO_WAYS}.`)
-    : /Maximum call stack|too much recursion/i.test(tr.error.message) ? h("p", { class: "hint" }, "No values on the wires: it goes deeper than the graph's evaluator does; Run main runs it in full.")
+    : tr.error.message === LEFT_TO_WAYS ? h("p", { class: "hint" }, `No values · ${LEFT_TO_WAYS}`)
+    : /Maximum call stack|too much recursion/i.test(tr.error.message) ? h("p", { class: "hint", title: "It goes deeper than the graph's evaluator does; Run main runs it in full" }, "No values · too deep for the graph")
     : h("p", { class: "status-line bad" }, `Values stopped: ${tr.error.message}.`));
   return box;
 }

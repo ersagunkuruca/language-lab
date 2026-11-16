@@ -87,7 +87,7 @@ export function answersView(all: LogEntry[], replayed = false, paused?: number):
       paused < log.length ? h("button", { class: "btn mini", type: "button", "data-act": "t-replay-to", "data-at": String(paused + 1) }, "step on →") : null) : null,
     log.length > 200 ? h("p", { class: "hint" }, `and ${log.length - 200} more`) : null,
     h("p", { class: "acts" }, h("button", { class: "btn mini", type: "button", "data-act": "t-replay", title: "Run main again, given these same answers instead of asking the world: it does the same, or, after an edit, says where it went another way" }, "Run again with these answers"),
-      replayed ? h("span", { class: "hint" }, " This run was answered from the log.") : null));
+      replayed ? h("span", { class: "hint", title: "This run was answered from the log" }, " Replayed") : null));
 }
 
 // A value as the Run panel shows it. A map or a set is a table, a row per
@@ -116,11 +116,11 @@ export function lawPanel(info: T.Info, box: HTMLElement, at: { code: Code; names
     m.set(key, r);
   }
   const cases = `${r.cases} case${r.cases === 1 ? "" : "s"}`;
-  box.append(h("p", { class: "hint" }, "A test: it performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as ters test runs it."));
+  box.append(h("p", { class: "hint", title: "It performs Check. It runs on its saved inputs, then on small values of each input's type, smallest first, as ters test runs it." }, "Test"));
   if (r.error) box.append(h("p", { class: "status-line bad" }, `The test stopped: ${r.error}.`));
-  else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Every expect held, in ${cases}.`));
+  else if (!r.failures.length) box.append(h("p", { class: "status-line accepted" }, `✓ Passed · ${cases}`));
   else {
-    box.append(h("p", { class: "status-line bad" }, `${r.failures.length} of ${cases} failed. The first is the smallest.`));
+    box.append(h("p", { class: "status-line bad" }, `Failed · ${r.failures.length} of ${cases}, smallest first`));
     box.append(h("ul", { class: "law-failures" }, ...r.failures.slice(0, 5).map((f) => h("li", {}, `${f.inputs.join(", ") || "no inputs"}: ${f.what.join("; ")}`))));
   }
   return box;
