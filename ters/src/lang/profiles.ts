@@ -43,10 +43,11 @@ export function gpuRefusals(code: Code, info: Info, names: Names, defs: Id[]): M
   for (const d of defs) {
     const t = typeOf(d);
     if (!t || t.t !== "fn") continue;
-    const why = [...t.params, t.ret].map((p) => notHeld(code, names, p)).find((x) => x);
-    if (why) { own.set(d, `takes or gives ${why}`); continue; }
+    // Its effects first, as the lowering tells them (scalar.ts).
     const effs = gpuEffects(code, subst.resolveRow(t.eff).effs);
-    if (effs.length) own.set(d, `has effects (${effs.map((e) => names[e] ?? e).join(", ")})`);
+    if (effs.length) { own.set(d, `has effects (${effs.map((e) => names[e] ?? e).join(", ")})`); continue; }
+    const why = [...t.params, t.ret].map((p) => notHeld(code, names, p)).find((x) => x);
+    if (why) own.set(d, `takes or gives ${why}`);
   }
   return own;
 }
