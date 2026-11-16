@@ -679,7 +679,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // Case and graphemes with no host to ask run the cases module (L214e5).
-  if (!opts.host) ({ code, info, names } = tableText(code, info, names));
+  if (!opts.host) ({ code, info, names } = tableText(code, info, names, roots));
   // A named handler handles a copy of its effect of its own (L213b).
   ({ code, info, names } = unnameHandlers(code, info, names));
   // The generic + resolved to each type's own operation first

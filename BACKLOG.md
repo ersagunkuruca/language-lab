@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I308 | The Definition tab's "Where it runs · the compiler's answer" says "Finding out where it can run…" for 6 to 8 s each time a program is opened (Numbers & physics `period` 8.4 s, machine `word at` 8.4 s, Effects `main` 5.8 s); a second definition of the same program answers at once. The panel looks stuck. | QA 11-16 M1 | 2026-11-16 |
 | I310 | Page: countdown numbers → `symbol` freezes the page 1.2 s on opening (1.7 s to open), the slowest in the walk. | QA 11-16 L2 | 2026-11-16 |
 
 ## E: Editor
