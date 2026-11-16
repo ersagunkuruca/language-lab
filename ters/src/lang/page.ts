@@ -335,13 +335,21 @@ export function corePageFile(title: string, runtime: Runtime, code: Code, info: 
 // `sound`: the audio thread's script, a page with sound's.
 export type SavedScripts = { script: string; sound?: string };
 const TITLE_SLOT = "\u0000the page's title\u0000", WORKLET_SLOT = "\u0000the page's worklet\u0000";
+// Without the printer's indentation, which a saved page needn't carry
+// (C251d: conjugate's 164 → 90 KB): no line of a printed script is in
+// a string, since every text is printed as JSON. The site's build
+// minifies those of its examples further (editor/prebuild.ts).
 export function savedScripts(ir: CoreIR, name: string, sound: boolean): SavedScripts {
-  const script = corePageScript(ir, name, "$core", TITLE_SLOT, sound ? WORKLET_SLOT : undefined, undefined, true);
-  return sound ? { script, sound: coreSoundScript(ir, name, "$core") } : { script };
+  const script = unindented(corePageScript(ir, name, "$core", TITLE_SLOT, sound ? WORKLET_SLOT : undefined, undefined, true));
+  return sound ? { script, sound: unindented(coreSoundScript(ir, name, "$core")) } : { script };
 }
+const unindented = (js: string) => js.replace(/^[ \t]+/gm, "");
+// A slot filled in, as printed or as a minifier writes it ("\0" for
+// "\u0000", editor/prebuild.ts).
+const filled = (js: string, slot: string, by: () => string) => js.replace(JSON.stringify(slot), by).replace(JSON.stringify(slot).replaceAll("\\u0000", "\\0"), by);
 export function savedPageFile(title: string, s: SavedScripts, runtime: Runtime, worklet?: Runtime): string {
   const sound = s.sound !== undefined && worklet ? `${pageRuntime(worklet, s.sound)}\n${s.sound}` : undefined;
-  const script = s.script.replace(JSON.stringify(TITLE_SLOT), () => JSON.stringify(title)).replace(JSON.stringify(WORKLET_SLOT), () => (sound === undefined ? "undefined" : JSON.stringify(sound)));
+  const script = filled(filled(s.script, TITLE_SLOT, () => JSON.stringify(title)), WORKLET_SLOT, () => (sound === undefined ? "undefined" : JSON.stringify(sound)));
   return pageShell(title, pageRuntime(runtime, s.script), script);
 }
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.

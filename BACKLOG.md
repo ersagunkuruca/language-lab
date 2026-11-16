@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | E266 to E271, lean UI text (taken by the thread "Make editor UI text lean"), one PR each |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
-| L Language and library | "Language lane" | C251d (pages carry only the std they call); L252f waits on how to write a unit on a generic number type, Ersagun's call |
+| L Language and library | "Language lane" | L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -147,7 +147,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C251 | A page carries only the std it calls (Ersagun 2026-11-15: pages ship the whole std). Done: C251a split std.ts, C251b a bundled page imports only the builtins it calls, C251c side-by-side code, sound and mode plans' operations only where used. Left: **C251d** the editor's saved page scripts are minified (conjugation's is 170 KB) | coordinator 2026-11-16, from #2789/#2790 (memory page-tab-size-2026-11-16) | P1 | L | ▶ |
 
 ### Someday
 
