@@ -6,7 +6,7 @@
 // implementation gives, before anything runs.
 
 import { children, fieldWayOf, nodesWhere, type Code, type Id, type NodeOf, isUse, useTarget } from "../model.ts";
-import { S } from "./std.ts";
+import { S } from "./std-ids.ts";
 import { add, less, possible, steps, type Cost } from "./cost.ts";
 
 // The operations of the program's interfaces (INTERFACES.md): each field

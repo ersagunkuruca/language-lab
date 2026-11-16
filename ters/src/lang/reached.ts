@@ -10,7 +10,7 @@ import { dependencies, subtree, type Code, type Id } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { implementationsOf, shownImplementations } from "./std-values.ts";
 import { interfaceOps, waysIn } from "./ways.ts";
-import { COMPARE, ORDERED, SHOW_ANY } from "./std.ts";
+import { COMPARE, ORDERED, SHOW_ANY } from "./std-ids.ts";
 
 // What the roots reach (reachedWithShows), and the implementations at the
 // types that reaches: arith.ts, Shown and Ordered find those by type, not
