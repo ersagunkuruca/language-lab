@@ -62,13 +62,17 @@ test("R8 §1 an overflow inside a handler of Abort stops, compiled as evaluated"
 
 // I193g made the check lazy: a program is checked over the library's
 // skeleton, each library definition's type from its pin, no body typed
-// (ters known-holes "R10 §2" guards that). But compiling the program types
-// them all anyway: the passes walk every node of the code, the library's
-// too, and ask its type (fold-items.ts parallelFolds -> pure-branches.ts
-// ownEffects -> info.typeOf.get is the first). So a cold `ters run` of wc
-// still takes about 4.5 s, as on 11-09, and 1.5 s of it is typing library
-// bodies the program never reaches.
-test("R11 §2 compiling a main that prints one text doesn't type the library's bodies", { todo: "the lowering passes ask the type of every library node" }, () => {
+// (ters known-holes "R10 §2" guards that). Compiling the program typed them
+// all anyway: the passes walked every node of the code, the library's too,
+// and the first ask about any library node checked the whole library.
+// I313 types a body when one of its nodes is asked for, and keeps the
+// passes from asking for every one: a cold `ters run wc` (the library's
+// check kept, the run not) went from 3.7 s to 2.2 s. What is left (I314):
+// a program on the library has its uses filled after it is checked
+// (uses.ts withBodies), so it is on the library filled while its check is
+// still the library's as written, and arith.ts doesn't use the library's
+// kept resolving for it: the whole library is resolved, every body typed.
+test("R11 §2 compiling a main that prints one text doesn't type the library's bodies", { todo: "I314: arith.ts resolves the whole library for a program whose uses were filled" }, () => {
   const k = new Lang(LIBRARY.code);
   const main = k.def("main");
   k.define(main, k.thunk(() => k.call(S.print, k.lit("hi"))));

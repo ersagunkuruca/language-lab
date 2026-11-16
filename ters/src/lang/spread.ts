@@ -14,14 +14,21 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
+import { OverMap, OverSet } from "./types.ts";
 import { tuplePart, tupleVariant } from "./std-values.ts";
 
 // A node without its id, kind by kind.
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 
-export function spreadTuples(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const calls = [...(info.spread ?? [])].filter((id) => isCall(code.nodes[id]));
-  const reshaped = [...(info.reshape ?? [])].filter(([id]) => code.nodes[id]);
+// The calls marked are asked of the check node by node: a program cut to
+// what its main reaches is checked over the library, and reading all the
+// library's marks would type every body of it (I313). `own`: only the
+// program's own, not those of the check it is on (the library's, which
+// has none when its resolving is kept: arith.ts).
+export function spreadTuples(code: Code, info: Info, names: Names, own = false): { code: Code; info: Info; names: Names } {
+  const ids = own && info.spread instanceof OverSet ? [...info.spread.own()] : Object.keys(code.nodes).filter((id) => info.spread?.has(id));
+  const calls = ids.filter((id) => isCall(code.nodes[id]));
+  const reshaped = own && info.reshape instanceof OverMap ? [...info.reshape.own()].filter(([id]) => code.nodes[id]) : Object.keys(code.nodes).flatMap((id) => { const r = info.reshape?.get(id); return r ? [[id, r] as const] : []; });
   if (!calls.length && !reshaped.length) return { code, info, names };
   const nodes: Record<Id, Node> = { ...code.nodes };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };

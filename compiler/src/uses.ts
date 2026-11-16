@@ -14,7 +14,7 @@ import { isUse } from "../../ters/src/model.ts";
 import { OverMap, type Type } from "../../ters/src/lang/types.ts";
 import { tupleType } from "../../ters/src/lang/std-values.ts";
 import type { Names } from "../../ters/src/presentation.ts";
-import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { codeChecked, infer, type Info } from "../../ters/src/lang/infer.ts";
 import { filled } from "../../ters/src/lang/ports.ts";
 
 export const bindsOf = (n: Use): Record<string, Id> => n.binds ?? {};
@@ -45,22 +45,26 @@ const checkAgain = () => typeof process !== "undefined" && !!process.env?.TERS_R
 // refs each produced port's type, the part of the tuple it gave, and the
 // tuple's constructor a pure function of them. Null when a filled use's
 // type isn't that tuple (the program is checked again).
+// The library's own uses (filled once, ports.ts fillOnce) are given their
+// types when one of their nodes' is first asked for: asking now would type
+// the body of each library definition with one (I313), reached or not.
 function carried(code: Code, out: Code, info: Info): Info | null {
-  const typeOf = new OverMap(info.typeOf);
-  for (const id in out.nodes) {
-    const was = code.nodes[id], n = out.nodes[id];
-    if (n === was || !isUse(n) || !was || !isUse(was) || was.body !== undefined || n.body === undefined) continue;
+  const typeOf = new LaterTypes(info.typeOf);
+  // The library the program was checked on.
+  const lib = info.layer && codeChecked(info.layer);
+  // The use's nodes' types, or false when its type isn't the tuple.
+  const give = (id: Id, n: Use): boolean => {
     const t = info.typeOf.get(id);
-    if (!t) return null;
+    if (!t) return false;
     const binds = Object.values(n.binds ?? {});
     let parts: Type[];
     if (binds.length === 1) parts = [t];
     else {
       const r = info.subst.resolve(t);
-      if (r.t !== "con" || r.id !== tupleType(binds.length) || r.args.length !== binds.length) return null;
+      if (r.t !== "con" || r.id !== tupleType(binds.length) || r.args.length !== binds.length) return false;
       parts = r.args;
-      typeOf.set(n.body, t);
-      typeOf.set((out.nodes[n.body] as Call).fn, { t: "fn", params: parts, ret: t, eff: { effs: [], tail: null } });
+      typeOf.set(n.body!, t);
+      typeOf.set((out.nodes[n.body!] as Call).fn, { t: "fn", params: parts, ret: t, eff: { effs: [], tail: null } });
     }
     binds.forEach((b, i) => {
       typeOf.set(b, parts[i]);
@@ -68,6 +72,15 @@ function carried(code: Code, out: Code, info: Info): Info | null {
       if (out.nodes[ref]?.kind !== "ref") throw new Error(`no ${ref}`);
       typeOf.set(ref, parts[i]);
     });
+    return true;
+  };
+  for (const id in out.nodes) {
+    const was = code.nodes[id], n = out.nodes[id];
+    if (n === was || !isUse(n) || !was || !isUse(was) || was.body !== undefined || n.body === undefined) continue;
+    if (!lib || !(id in lib.nodes)) { if (!give(id, n)) return null; continue; }
+    const binds = Object.values(n.binds ?? {});
+    const made = [...binds, ...binds.map((_, i) => `${id}.part.${Object.keys(n.binds!)[i]}`), ...(binds.length === 1 ? [] : [n.body, (out.nodes[n.body] as Call).fn])];
+    typeOf.later(made, () => { if (!give(id, n)) throw new Error(`the library's use ${id} doesn't give the tuple of its ports' types`); });
   }
   // Only the implementations the program holds, as a check of it finds
   // them: a check given of more code (the library's, before the program was
@@ -75,4 +88,14 @@ function carried(code: Code, out: Code, info: Info): Info | null {
   // resolve a literal to (order.test's fractions).
   const implementations = info.implementations && new Map([...info.implementations].filter(([, d]) => d in out.nodes));
   return { ...info, typeOf, ...(implementations ? { implementations } : {}) };
+}
+
+// The types of a check, with some given when first asked for (carried).
+class LaterTypes extends OverMap<Id, Type> {
+  private pending = new Map<Id, () => void>();
+  later(ids: Id[], give: () => void) { let done = false; const once = () => { if (done) return; done = true; give(); }; for (const id of ids) this.pending.set(id, once); }
+  private ready(k: Id) { const f = this.pending.get(k); if (f) { this.pending.delete(k); f(); } }
+  override get(k: Id) { this.ready(k); return super.get(k); }
+  override has(k: Id) { this.ready(k); return super.has(k); }
+  override *entries(): MapIterator<[Id, Type]> { for (const k of [...this.pending.keys()]) this.ready(k); yield* super.entries(); }
 }

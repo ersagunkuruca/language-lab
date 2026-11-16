@@ -163,6 +163,8 @@ export class OverMap<K, V> extends Map<K, V> {
 export class OverSet<K> extends Set<K> {
   private under: ReadonlySet<K>;
   constructor(under: ReadonlySet<K>) { super(); this.under = under; }
+  // What this one added, without what it reads through to.
+  own(): SetIterator<K> { return super.values(); }
   override has(k: K) { return super.has(k) || this.under.has(k); }
   override get size() { let n = this.under.size; for (const k of super.values()) if (!this.under.has(k)) n++; return n; }
   override *values(): SetIterator<K> { yield* super.values(); for (const k of this.under) if (!super.has(k)) yield k; }
@@ -294,8 +296,9 @@ export class Subst {
   // What another substitution knows joins this one, its variables none of
   // this one's (a library's bodies typed later, infer.ts libraryLater):
   // its bindings read through by every trial, and its lists, which a trial
-  // copies, given to each trial made already too.
-  join(from: Subst): void {
+  // copies, given to each trial made already too. `last`: no join comes
+  // after this one.
+  join(from: Subst, last = true): void {
     for (const [v, t] of from.types) this.types.set(v, t);
     for (const [v, r] of from.rows) this.rows.set(v, r);
     for (const v of from.plain) this.plain.add(v);
@@ -306,7 +309,7 @@ export class Subst {
     for (const v of from.literal) this.literal.add(v);
     for (const [v, n] of from.needs) this.needs.set(v, n);
     this.joinLists(from);
-    this.settle();
+    if (last) this.settle();
   }
   // No join comes after: what was kept for one goes.
   private settle(): void {
