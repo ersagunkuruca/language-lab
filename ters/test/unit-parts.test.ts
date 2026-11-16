@@ -1,6 +1,6 @@
 // unit parts (BACKLOG L230): a record of Float64s' basis, one record per
-// field with a 1 in its own place, so clifford algebra needs only the
-// signature: `clifford algebra([1, 1, 1, 0], unit parts(1))`.
+// field with a 1 in its own place, which is how clifford algebra needs only
+// the signature (L264): `clifford algebra([1, 1, 1, 0])`.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

@@ -47,7 +47,6 @@
 "jmpk8n79m28b247jllumi6325a": "The coupled search as it goes: the states still to look at, by their estimate of the whole time; the cells of place and velocity already looked at; and how many states it has looked at.",
 "jqkstnoipbf85gcm5ci2r89cr0": "How fast drag slows the agent, a second: thrust as hard as it can and drag stops it speeding up at `top speed`, so drag is acceleration ÷ top speed.",
 "kanmgkrpj9f6jglr9p0llhvma1": "The pillar itself, 1 by 3 m. The mesh's hole is the pillar grown by the agent's radius on every side, so the agent's middle may go anywhere on the mesh (as Recast builds its meshes): its corners are where the agent's middle turns.",
-"ks04cus0ht9qgj1lrs825dnqhp": "The 8 basis blades, in clifford table's order.",
 "ksqidt153q9ubeg23cd148msct": "A multivector of Cl(2, 1), the plane and time: e1 and e2 square to 1 (the floor), e0 to −1 (time, measured in metres at the speed cap c). 8 parts in clifford table's order: a number, three vectors, three bivectors (e1e2 a turn of the floor, e01 and e02 boosts), the pseudoscalar.",
 "kveel3a1s4u4sssuuf542n1agh": "The triangles from start to t, followed back through the one each was reached from.",
 "kvnnqtipnhe61tb49591ib57s6": "The fastest the agent goes, in metres a second.",

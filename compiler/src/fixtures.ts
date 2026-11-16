@@ -2,10 +2,11 @@
 
 import { STOPS } from "./stops.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
-import { base, baseNames, checkOptions } from "../../ters/src/lang/load.ts";
+import { base, baseNames, checkOptions, optionsWith } from "../../ters/src/lang/load.ts";
+import { canonical } from "../../ters/src/lang/signatures.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ABORT_OP, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
+import { ABORT_OP, ALGEBRA, ARITH, ARRAY_OPS, CASE_NAME, CELL_OPS, RANDOM_OP, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, LIST, NIL, NONE, PAIR_V, S, SECOND, SET, SHOW_ANY, SOME, TEXT_OPS, TRUE } from "../../ters/src/lang/std.ts";
 // S as the pga fixture names it is its Space type.
 const STD = S;
 import { INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
@@ -786,9 +787,8 @@ export function pga() {
   const M = k.type("Pga", [], [["pga", Array.from({ length: size }, (_, i) => [`p${i}`, num] as [string, () => Id])]]);
   const of = (...ps: Id[]) => k.call(M.v.pga, ...ps);
   const at = (parts: Record<number, number>) => of(...Array.from({ length: size }, (_, i) => k.lit(parts[i] ?? 0)));
-  const basis = def("pga basis", () => k.list(...Array.from({ length: size }, (_, i) => at({ [i]: 1 }))));
   const squares = () => k.list(...[1, 1, 1, 0].map((x) => k.lit(x)));
-  const algebra = def("pga", () => k.call(lib("clifford algebra"), squares(), k.x(basis)));
+  const algebra = def("pga", () => k.call(lib("clifford algebra"), squares()));
   const call = (f: string, ...xs: Id[]) => k.call(lib(f), k.x(algebra), ...xs);
   const mul = (a: Id, b: Id) => call("clifford product", a, b);
   const P = k.type("Point", [], [["point", ["x", "y", "z", "w"].map((p) => [p, num] as [string, () => Id])]]);
@@ -841,7 +841,9 @@ export function pga() {
     k.call(B.sub, k.call(B.sqrt, k.call(B.add, sq(k.call(coord("x"), m)), k.call(B.add, sq(k.call(coord("y"), m)), sq(k.call(coord("z"), m))))), k.lit(1)))));
   const ballNormal = def("ball normal", () => k.fn(["p"], (p) => k.call(k.call(STD.gradient, k.fn(["q"], (q) => k.call(ball, q))), p)));
   const code = base(k.code), names = baseNames(k.names);
-  return { code, names, info: infer(code, names, undefined, checkOptions), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN, moveNBudget, movedAnyBudget, movedCarried, moveCarried }, ball: { ball, ballNormal } };
+  // The algebra is made from its signature and pinned at Pga (L264).
+  const pins = { [algebra]: canonical({ vars: [], rows: [], type: { t: "con", id: ALGEBRA, args: [{ t: "con", id: M.def, args: [] }] } }) };
+  return { code, names, info: infer(code, names, undefined, optionsWith(pins)), pga: M.v.pga, point: P.v.point, defs: { product, moveBy, moveFixed, movePoint, moveGiven, totalGiven }, times: { movedN, moveN, moveNBudget, movedAnyBudget, movedCarried, moveCarried }, ball: { ball, ballNormal } };
 }
 
 // Int held in 32 bits, for shaders (C66c): + − × negate abs, less, as

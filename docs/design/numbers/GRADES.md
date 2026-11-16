@@ -38,7 +38,7 @@ abstract interpretation over a finite lattice, not a linear system.
 
 ## The idea: a blade mask per value, inferred
 
-For an algebra known before running (`clifford algebra(squares, basis)`
+For an algebra known before running (`clifford algebra(squares)`
 on literals, which stage.ts already evaluates, C65), each value of the
 algebra's type gets a **blade mask**: the set of blades its part can be
 nonzero on. There are 2ⁿ blades, so for the algebras the demos use

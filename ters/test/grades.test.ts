@@ -29,9 +29,11 @@ function algebra(squares: number[]) {
   const M = k.type("Multivector", [], [["multivector", Array.from({ length: n }, (_, i) => [`p${i}`, () => k.tref(NUMBER)] as [string, () => Id])]]);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const at = (parts: Record<number, number | Id>) => k.call(M.v.multivector, ...Array.from({ length: n }, (_, i) => (typeof parts[i] === "string" ? parts[i] as Id : k.lit((parts[i] as number) ?? 0))));
-  const basis = def("basis", () => k.list(...Array.from({ length: n }, (_, i) => at({ [i]: 1 }))));
-  const al = def("algebra", () => k.call(lib("clifford algebra"), k.list(...squares.map((x) => k.lit(x))), k.x(basis)));
+  const al = def("algebra", () => k.call(lib("clifford algebra"), k.list(...squares.map((x) => k.lit(x)))));
   const call = (f: string, ...xs: Id[]) => k.call(lib(`clifford ${f}`), k.x(al), ...xs);
+  // Made from its signature alone, the algebra's record type is the one
+  // it is used at (L264).
+  def("one squared", () => call("product", at({ 0: 1 }), at({ 0: 1 })));
   return { k, M, def, at, call, done: () => { const code = base(k.code), names = { ...baseNames(), ...k.names }; return { code, names, info: infer(code, names) }; } };
 }
 
@@ -50,7 +52,9 @@ test("blade masks in Cl(3, 0): vectors, products, rotors and the sandwich", () =
     reflected: def("reflected", () => k.fn(["x"], (x) => call("reflect", vec(k.lit(1), x, k.lit(0)), at({ 3: x, 0: x })))),
     grade: def("grade 2", () => k.fn(["x"], (x) => call("grade", k.lit(2), call("product", vec(x, x, x), vec(x, k.lit(1), x))))),
     sum: def("sum", () => k.fn(["x"], (x) => k.call(ARITH.add, vec(x, x, x), at({ 7: x })))),
-    given: def("given", () => k.fn(["v", "w"], (v, w) => call("outer", v, w))),
+    // At the algebra's record (+ its zero), not generic: the algebra comes
+    // from its signature alone, so a function of nothing else is (L264).
+    given: def("given", () => k.fn(["v", "w"], (v, w) => call("outer", k.call(ARITH.add, v, at({})), w))),
     part: def("with part", () => k.fn(["x"], (x) => call("with part", vec(x, x, x), k.list(k.lit(2), k.lit(1)), k.lit(3)))),
   };
   const { code, names, info } = a.done();
@@ -89,7 +93,8 @@ test("blade masks in PGA: a product landing on e₀e₀ = 0 drops out", () => {
 
 test("blade masks are never too small: Constructions' functions against the evaluator", () => {
   const p = loadProgram(join(import.meta.dirname, "../examples/constructions"));
-  const info = infer(p.code, p.pres.names);
+  // With its pins: the algebra's record type is its pin (L264).
+  const info = infer(p.code, p.pres.names, undefined, p.options);
   const own = p.own.defs;
   const id = (n: string) => own.find((d) => p.pres.names[d] === n)!;
   const point = bladeMask(p.code, info, id("point"))!;
@@ -226,7 +231,7 @@ test("the mask tables worked out from the blades are what running each operation
     assert.deepEqual(info.errors.map((e) => e.message), []);
     const alg = [...algebrasOf(code, info).values()][0];
     const r = makeRunner(code, info, { print: () => {} });
-    const al = r.value(alg.def);
+    const al = alg.value;
     const basis = [...Array(alg.parts).keys()].map((i) => {
       const fields = Array.from({ length: alg.parts }, (_, j) => (j === i ? 1 : 0));
       return { tag: alg.variant, fields } as unknown as Value;
@@ -327,8 +332,8 @@ test("an algebra made by the program's own function is found by its type", () =>
   const M = k.type("Multivector", [], [["multivector", Array.from({ length: 4 }, (_, i) => [`p${i}`, () => k.tref(NUMBER)] as [string, () => Id])]]);
   const def = (name: string, body: () => Id) => { const d = k.def(name); k.define(d, body()); return d; };
   const at = (parts: Record<number, number | Id>) => k.call(M.v.multivector, ...Array.from({ length: 4 }, (_, i) => (typeof parts[i] === "string" ? parts[i] as Id : k.lit((parts[i] as number) ?? 0))));
-  const made = def("made", () => k.fn(["squares", "basis"], (sq, es) => k.call(lib("clifford algebra"), sq, es)));
-  const al = def("plane", () => k.call(made, k.list(k.lit(1), k.lit(1)), k.list(...Array.from({ length: 4 }, (_, i) => at({ [i]: 1 })))));
+  const made = def("made", () => k.fn(["squares"], (sq) => k.call(lib("clifford algebra"), sq)));
+  const al = def("plane", () => k.call(made, k.list(k.lit(1), k.lit(1))));
   // Parts: 1, e1, e2, e12. Two vectors' product: a scalar and a bivector.
   const product = def("product", () => k.fn(["x", "y"], (x, y) => k.call(lib("clifford product"), k.x(al), at({ 1: x, 2: y }), at({ 1: y, 2: x }))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);

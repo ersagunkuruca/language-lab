@@ -349,8 +349,7 @@ export function buildPrelude(): Module {
   // Clifford algebras (ALGEBRA-TABLES.md, BACKLOG L42): the table of the
   // algebra whose basis vectors square to `squares` (1, −1 or 0 each, so
   // Cl(p, q, r) is p ones, q minus ones and r zeros), for a record type
-  // whose basis elements are `basis`, in the blade order 1, e₁, e₂, e₁e₂,
-  // e₃, e₁e₃, … . A blade is which basis vectors it has, a list of Bools.
+  // whose parts are the blades in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, … . A blade is which basis vectors it has, a list of Bools.
   // e_A · e_B is ± the blade with the vectors in one and not both, its sign
   // a −1 for each swap putting them in order and the square of each vector
   // they share. The standard construction (as in ganja.js; Dorst, Fontijne
@@ -413,7 +412,11 @@ export function buildPrelude(): Module {
     ]) },
   ])));
   const cliffordTable = k.def("clifford table");
-  k.define(cliffordTable, k.fn(["squares", "basis"], (sq, es) => k.let("pairs", k.call(pairUp, k.call(bladesOf, sq), es), (ps) =>
+  // The basis comes from the record type alone (L264): unit parts of a 1
+  // at that type, one record per part, so a program gives only the
+  // signature and never writes the identity out.
+  const basisOf = () => k.call(S.unitParts, k.lit(1));
+  k.define(cliffordTable, k.fn(["squares"], (sq) => k.let("basis", basisOf(), (es) => k.let("pairs", k.call(pairUp, k.call(bladesOf, sq), es), (ps) =>
     k.fold(ps, [
       { variant: NIL, names: [], body: () => NIL },
       { variant: CONS, names: ["left", "rest"], results: [null, "the rest's lines"], body: ([l], [, r]) => k.match(l, [
@@ -426,7 +429,7 @@ export function buildPrelude(): Module {
           ]) },
         ]) },
       ]) },
-    ]))));
+    ])))));
 
   // The reverse of x, x̃: each blade's vectors in the opposite order, which
   // is (−1)^(g(g−1)/2) for a blade of g vectors, the blade's square when
@@ -438,10 +441,11 @@ export function buildPrelude(): Module {
   type Parts = { squares: Id; basis: Id; blades: Id; table: Id };
   const parts = (al: Id, body: (p: Parts) => Id) => k.match(al, [{ variant: ALGEBRA_V, names: ["squares", "basis", "blades", "table"],
     body: ([squares, basis, blades, table]) => body({ squares, basis, blades, table }) }]);
-  // The algebra of a signature and basis, its table built once: what the
-  // clifford functions below take (BACKLOG I79).
+  // The algebra of a signature, its table built once: what the clifford
+  // functions below take (BACKLOG I79). Its basis is the record type's
+  // (L264), so the signature is all a program gives.
   const cliffordAlgebra = k.def("clifford algebra");
-  k.define(cliffordAlgebra, k.fn(["squares", "basis"], (sq, es) => k.call(ALGEBRA_V, sq, es, k.call(pairUp, k.call(bladesOf, sq), es), k.call(cliffordTable, sq, es))));
+  k.define(cliffordAlgebra, k.fn(["squares"], (sq) => k.let("basis", basisOf(), (es) => k.call(ALGEBRA_V, sq, es, k.call(pairUp, k.call(bladesOf, sq), es), k.call(cliffordTable, sq)))));
   const cliffordReverse = k.def("clifford reverse");
   k.define(cliffordReverse, k.fn(["algebra", "x"], (al, x) => parts(al, ({ squares: sq, blades }) => k.let("ones", k.fold(sq, [
     { variant: NIL, names: [], body: () => NIL },
@@ -2499,8 +2503,8 @@ export function buildPrelude(): Module {
     [cliffordPart]: "x's part on a blade named by its vectors, numbered from 1 in the order of the algebra's squares: clifford part(algebra, x, [1, 2]) reads e₁₂. In projective geometric algebra ([1, 1, 1, 0]) e₀ is vector 4. Another order flips the sign once per swap ([2, 1] reads −e₁₂), and a vector named twice reads 0.",
     [cliffordWithPart]: "x with its part on a blade, named by its vectors as clifford part names it, set to `value`, the other parts kept: clifford with part(algebra, zero, [1, 2], 2) is 2e₁₂. Several calls build a multivector by blade.",
     [cliffordProduct]: "a · b, the geometric product in the algebra (clifford algebra makes one): table product with the algebra's table.",
-    [cliffordAlgebra]: "A Clifford algebra, built once: its basis vectors square to `squares` (1, −1 or 0 each) and `basis` is your record type's basis elements, in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition: pga = clifford algebra([1, 1, 1, 0], basis).",
-    [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and `basis` is your record type's basis elements in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1], …) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
+    [cliffordAlgebra]: "A Clifford algebra from its signature, built once: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and your record type's parts are its blades in clifford table's order. It holds the multiplication table, so clifford sandwich, reflect, exp and the others take it and don't build a table on every call. Make it once, as a definition with its type: pga : Algebra Pga = clifford algebra([1, 1, 1, 0]).",
+    [cliffordTable]: "The multiplication table of a Clifford algebra, for table product: its basis vectors square to `squares` (1, −1 or 0 each; Cl(p, q, r) is p ones, q minus ones, r zeros), and your record type's parts are its blades in the order 1, e₁, e₂, e₁e₂, e₃, e₁e₃, e₂e₃, e₁e₂e₃, … . clifford table([−1]) is the complex numbers, [0] the dual numbers, [1] the split-complex ones, [−1, −1] the quaternions (i = e₁, j = e₂, k = e₁e₂), [1, 1, 1] Cl(3, 0) and [1, 1, 1, 0] projective geometric algebra (ALGEBRA-TABLES.md).",
     ...Object.fromEntries(divisions.map((d) => [d, "How this number type divides (Division): its own divide. Found by its type, so not offered: divide is."])),
     ...Object.fromEntries(showns.map((d) => [d, "How this number type shows (Shown): `show any` uses it. Found by its type, so not offered."])),
     ...Object.fromEntries(bitses.map((d) => [d, "This type's and, or, xor and shifts (Bits). Found by its type, so not offered: bits and, bits or, bits xor, shifted up and shifted down are."])),

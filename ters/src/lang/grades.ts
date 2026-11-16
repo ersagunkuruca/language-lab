@@ -1,7 +1,7 @@
 // Which parts of a multivector can be nonzero (GRADES.md, BACKLOG L43b).
 //
 // For an algebra the program writes down (a definition with no inputs
-// whose value is `clifford algebra(squares, basis)`), each multivector a
+// whose value is `clifford algebra(squares)`), each multivector a
 // function makes gets a blade mask: bit i set when its part i may be
 // nonzero. The reading is an abstract evaluation, as linear.ts reads a
 // matrix: literals and records built by position give their mask
@@ -36,7 +36,7 @@
 import { children as childIds, dependencies, fieldWayOf, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, isUse } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
-import { makeRunner, type Value } from "./run.ts";
+import { makeRunner, resolvedFor, type Value } from "./run.ts";
 import { ALGEBRA, ALGEBRA_V, ARITH, CONS, LIST, NIL, S, SET as S_SET, TABLE_ENTRY, TRUE, writtenItems } from "./std.ts";
 import { B } from "../prelude.ts";
 import { hashes } from "../hash.ts";
@@ -167,7 +167,23 @@ export function algebrasOf(code: Code, info: Info): Map<Id, Algebra> {
     const t0 = info.typeOf.get(d), t = t0 && info.subst.zonk(t0);
     if (!body || body.kind === "lambda" || body.kind === "typedef" || t?.t !== "con" || t.id !== ALGEBRA) continue;
     try {
-      const al = r.value(d) as { tag: Id; fields: Value[] };
+      // One made from its signature alone, clifford algebra([1, 1, 1]),
+      // is generic in its record type (L264): read the one copy arith.ts
+      // makes of it at the record type the program uses it at. Used at
+      // two record types, it is left unread (a mask is never too small).
+      let made = d;
+      if (t.args[0]?.t !== "con") {
+        const res = resolvedFor(code, info, undefined);
+        const copies = res.code.defs.filter((c) => {
+          const copied = res.code.nodes[c] as NodeOf<"def"> | undefined;
+          if (c === d || !copied?.body || res.info.copyOf?.get(copied.body) !== def.body) return false;
+          const ct = res.info.typeOf.get(c), z = ct && res.info.subst.zonk(ct), x = z?.t === "con" ? z.args[0] : undefined;
+          return x?.t === "con" && x.id !== NUMBER;
+        });
+        if (copies.length !== 1) continue;
+        made = copies[0];
+      }
+      const al = r.value(made) as { tag: Id; fields: Value[] };
       if (al?.tag !== ALGEBRA_V) continue;
       const pairs = listOf(al.fields[2]).map((p) => (p as { tag: Id; fields: Value[] }).fields);
       const elements = pairs.map(([, e]) => e as { tag: Id; fields: number[] });
@@ -326,6 +342,8 @@ function makeReader(code: Code, info: Info, mistakes?: Map<Id, string>, hooks: H
   const ran = new Map<Id, Value | undefined>();
   const valueOf = (d: Id): Value | undefined => {
     if (ran.has(d)) return ran.get(d);
+    // An algebra generic in its record type (L264) is its copy's value.
+    if (algebras.has(d)) return algebras.get(d)!.value;
     let v: Value | undefined;
     const def = nodes[d] as NodeOf<"def"> | undefined, t = info.typeOf.get(d), z = t && info.subst.zonk(t);
     if (def?.kind === "def" && def.body && nodes[def.body]?.kind !== "lambda" && z?.t === "con") {

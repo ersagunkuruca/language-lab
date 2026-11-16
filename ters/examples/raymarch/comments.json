@@ -6,6 +6,7 @@
 "9llh56o35attq62halcqgona2f": "The colour of the surface at p. The normal, the direction the surface faces, is the gradient of the scene: how fast scene changes along x, along y and along z, as one Vec. gradient reads it off scene itself (for the GPU, before the shader is compiled), so it is exact and follows any edit to scene, instead of being estimated by sampling nearby points (computing normals from the distance's gradient is standard practice; differentiating the program before compiling it for the GPU is what Enzyme does).",
 "@2cffeb22vf6lq91e33uel1np1h": "The smaller of a and b.",
 "@7oqrouv1btl6kt56s12kr7t7k0": "The larger of a and b.",
+"ar5gjgpcvsb698s5mt95m9iofk": "A value of projective geometric algebra: one number for each of its sixteen parts (s, the vectors e₁ e₂ e₃ e₀, and their products). pga below says how two of them multiply; a point, a turn and a move are each one of these.",
 "eshm7a5ef1erjshv7d9jd6ugnt": "The colour of the sky looking in a direction this steep: paler at the horizon.",
 "g7bf60oa8upqsibuj4ph3tgjtf": "0 or 1 in a checkerboard of half-unit squares on the floor under p.",
 "g8qua82584vidupaamhpqb6r4r": "How far along the ray from origin in direction the first surface is. Sphere tracing, John C. Hart's method (\"Sphere tracing: a geometric method for the antialiased ray tracing of implicit surfaces\", The Visual Computer, 1996): the scene says how far is surely empty, so step that far and ask again. Stops on a surface, past 20, or after 120 steps. A loop on the GPU, since the call to itself is its last step.",
@@ -19,5 +20,4 @@
 "t8p8dbn9irpk3eesbn2pdf12c7": "The nearer of two shapes, with the seam between them rounded off so they melt together. This is Inigo Quilez's polynomial smooth minimum, from https://iquilezles.org/articles/smin/.",
 "tl6hjc48ha6qc4hdmncad2augp": "How far p is from a ball of this radius around the origin. Negative inside.",
 "uisquodkfrkoo9l79dsb8jbfnq": "A point or a direction in space. The vectors module's operations (plus, minus, scale, dot, unit, …) work on it, and on a GPU it is a vec3f.",
-"urv9eu7810qd4sqjvlricdqtso": "How far p is from a ring (a torus) lying flat around the origin. The formula is Inigo Quilez's torus, from https://iquilezles.org/articles/distfunctions/.",
-"ar5gjgpcvsb698s5mt95m9iofk": "A value of projective geometric algebra: one number for each of its sixteen parts (s, the vectors e₁ e₂ e₃ e₀, and their products). pga below says how two of them multiply; a point, a turn and a move are each one of these."}
+"urv9eu7810qd4sqjvlricdqtso": "How far p is from a ring (a torus) lying flat around the origin. The formula is Inigo Quilez's torus, from https://iquilezles.org/articles/distfunctions/."}

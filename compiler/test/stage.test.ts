@@ -207,5 +207,7 @@ test("a staged program's carried types verify (I203)", () => {
   const own = s.code.defs.filter((d) => !(d in p.code.nodes) || open.includes(d));
   const v = verify(s.code, elaborate(s.code, s.info, own), own);
   assert.deepEqual(v.problems, []);
-  assert.ok(v.checked > 200, `${v.checked} nodes`);
+  // About 50 since the algebra takes only its signature (L264): its 16-line
+  // basis, 270 nodes of literals, was most of what was checked.
+  assert.ok(v.checked > 40, `${v.checked} nodes`);
 });
