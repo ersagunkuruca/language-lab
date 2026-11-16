@@ -417,6 +417,8 @@ Proposed in [STABLE-REFERENCES.md](../design/data/STABLE-REFERENCES.md) (BACKLOG
 | Right-click search at the pointer, tidy, frames | Influence | Blender (Shift-A, Node Wrangler), Unreal, Houdini (Tab, network boxes). Full list with links in NODE-EDITOR.md. |
 | Known visual-programming pitfalls | Influence | M. Burnett et al., "Scaling Up Visual Programming Languages", IEEE Computer, 1995, and the sources in NODE-EDITOR.md. |
 | Visual design (Design E, neutral colours) | Our own | Designed in the project. Fonts: Red Hat Display and DM Mono (SIL Open Font License, via Google Fonts). |
+| The `unslop` skill (`.claude/skills/unslop/`), the list of AI writing patterns Claude checks its prose against | Adapted (copied unchanged) | Lauren Tan, `unslop` in noodle (https://github.com/poteto/noodle, `.agents/skills/unslop/SKILL.md`, commit 82d2921), MIT License, kept with it in `.claude/skills/unslop/LICENSE`. Named in docs/design/editor/UI-TEXT.md. |
+| UI text names things and structure explains them; explanations only in tooltips, warnings and help (`.claude/skills/ui-text/`, UI-TEXT.md) | Ersagun's idea | Prior art: the usual guidance of interface writing guides, for example Apple's Human Interface Guidelines ("Writing") and Microsoft's Writing Style Guide on UI text, which ask for short labels and put help in tooltips. |
 
 ## Testing
 
