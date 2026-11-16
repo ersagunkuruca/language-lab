@@ -50,7 +50,9 @@ import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, reachedWithShows, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
-import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, useBuiltins, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
+import { BRANCH_NAMES, BRANCH_WORLDS, branches } from "./core-branches.ts";
+import { floats } from "./core-floats.ts";
+import { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreRuntime, runCoreFn, useBranches, useBuiltins, useFloats, type BuiltinOf, type HostOps, type MainSpec, type TableSpec } from "./core-rt.ts";
 // The runtime is core-rt.ts's; these are here too, for the tests and
 // tools that print and run in one.
 // The solver too, for the programs run here that solve (core-solve.ts).
@@ -95,8 +97,11 @@ export { Aborted, FAIL, OUT, RUNTIME, Stopped, Unsupported, coreCall, coreRuntim
 // one (scalar.ts RT and ARRAY_RT, read backwards), told to the runtime
 // with whether it gives a Bool (wasm-rt.ts's signature), so the runtime
 // needn't know scalar.ts (C149).
-// Code printed and run here (loadCoreJs) may call any builtin.
+// Code printed and run here (loadCoreJs) may call any builtin, and run
+// side by side.
 useBuiltins(STD_IMPL, STD_MANY);
+useBranches(branches);
+useFloats(floats);
 const BUILTIN = new Map<string, Id>([...Object.entries(RT), ...Object.entries(ARRAY_RT), [ARRAY_OPS.replaceAt, "array.replaceAt"]].map(([id, n]) => [n, id]));
 function builtinOf(name: string): BuiltinOf | undefined {
   // An owned replace (C93 s4) is the replace's builtin, written in place.
@@ -1004,7 +1009,9 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
   return [
     `import { coreRuntime, runCoreFn } from ${JSON.stringify(runtime)};`,
     ...solverFor(code, runtime, js),
+    ...floatsFor(js, runtime),
     ...builtinsFor(js, runtime),
+    ...branchesFor(js, worlds, runtime),
     `import { nodeWorld } from ${JSON.stringify(world)};`,
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     // With TERS_LOG set, the world's answers are logged to that file
@@ -1245,6 +1252,14 @@ const solverFor = (code: string, beside: string, js: string) => {
   return [...plans, `import { useSolver } from ${at("core-rt.ts")};`, `import { solver } from ${at("core-solve.ts")};`, "useSolver(solver);"];
 };
 
+// The Float64 operations a mode plan runs forward (core-floats.ts,
+// C251c), given to the runtime by a script that has one.
+const floatsFor = (js: string, beside: string): string[] => {
+  if (!js.includes("R.moded(")) return [];
+  if (beside.startsWith("$")) return [`${beside}.useFloats(${beside}.floats);`];
+  const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
+  return [`import { useFloats as $useFloats } from ${at("core-rt.ts")};`, `import { floats as $floats } from ${at("core-floats.ts")};`, "$useFloats($floats);"];
+};
 // The builtins a printed script calls, given to its runtime (C251b,
 // core-rt.ts useBuiltins): each imported by name from std-run.ts or
 // std-run-many.ts, so a bundled page or module carries those only; a
@@ -1266,6 +1281,19 @@ const builtinsFor = (js: string, beside: string): string[] => {
     ...imports(many, "std-run-many.ts", one.length),
     `$useBuiltins(${table(one, 0)}, ${table(many, one.length)});`,
   ];
+};
+
+// What runs side by side (core-branches.ts, C251c), given to the runtime
+// by a script that does: one naming any of its runtime names or world
+// operations. A prebuilt runtime's global has given it (core-page-
+// runtime.ts).
+const branchesFor = (js: string, worlds: string[], beside: string): string[] => {
+  if (beside.startsWith("$")) return [];
+  const names = new Set(BRANCH_NAMES);
+  const used = worlds.some((w) => BRANCH_WORLDS.includes(w)) || [...js.matchAll(/R\.rt\("([^"]*)"/g)].some((m) => names.has(m[1]));
+  if (!used) return [];
+  const at = (f: string) => JSON.stringify(beside.replace(/[^/]*$/, f));
+  return [`import { useBranches as $useBranches } from ${at("core-rt.ts")};`, `import { branches as $branches } from ${at("core-branches.ts")};`, "$useBranches($branches);"];
 };
 
 // What a script takes from its runtime: imported from the file a bundler
@@ -1299,7 +1327,11 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   return wrapped(page, [
     using("startCorePage", page),
     ...solverFor(code, page, js),
+    ...floatsFor(js, page),
     ...builtinsFor(js, page),
+    ...branchesFor(js, worlds, page),
+    // What plays its sound, where it has one (C251c).
+    ...(worklet === undefined || page.startsWith("$") ? [] : [`import { useSound as $useSound } from ${JSON.stringify(page)};`, `import { recordingWorld as $recordingWorld, soundPlayer as $soundPlayer } from ${JSON.stringify(page.replace(/[^/]*$/, "../../ters/src/lang/audio-page.ts"))};`, "$useSound({ recordingWorld: $recordingWorld, soundPlayer: $soundPlayer });"]),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCorePage(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,
@@ -1320,7 +1352,9 @@ export function coreSoundScript(ir: CoreIR, name: string, sound: string, hosts?:
   return wrapped(sound, [
     using("startCoreSound", sound),
     ...solverFor(code, sound, js),
+    ...floatsFor(js, sound),
     ...builtinsFor(js, sound),
+    ...branchesFor(js, worlds, sound),
     ...(hosts ? [`import $hostAnswers from ${JSON.stringify(hosts.file)};`] : []),
     `startCoreSound(${JSON.stringify(tableSpecs(ir))}, ${JSON.stringify(worlds)}, (R) => {`,
     js,

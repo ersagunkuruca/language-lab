@@ -44,8 +44,8 @@ test("the compiled module's map names each function's node and each stop's (C143
   assert.match(js.join("\n"), /function f0\(/);
   // Each printed function's lines in the module as written (C143e): it
   // starts on its first and ends on its last, and every function has them,
-  // by its printed name though the bundler renamed f1 (the runtime has one).
-  assert.doesNotMatch(js[lines.f1[0] - 1], /function f1\(/);
+  // by its printed name, which the bundler may have renamed where the
+  // runtime has one the same.
   for (const n of Object.keys(m.functions)) {
     const [a, b] = lines[n] ?? assert.fail(`no lines for ${n}`);
     assert.match(js[a - 1], /^\s*function\*? ?[\w$]+\(/);

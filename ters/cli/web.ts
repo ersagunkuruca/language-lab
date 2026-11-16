@@ -74,7 +74,10 @@ export async function coreSoundWorklet(lowered: ReturnType<typeof lowerCore>, na
 const carriesProgram = scriptSolves;
 const SOLVER = /[\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)\.ts$/;
 // A prebuilt runtime has no script to leave out what it doesn't use, so
-// its plain build leaves out core-solve.ts too, which it exports.
+// its plain build leaves out core-solve.ts too, which it exports. It
+// keeps plan-rt.js and core-floats.ts, which a page that solves nothing
+// may run (a third build for those would put another runtime in the
+// editor).
 const SOLVER_RUNTIME = /([\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)|[\\/]compiler[\\/]src[\\/]core-solve)\.ts$/;
 const withoutSolver = stubbing(SOLVER);
 function stubbing(filter: RegExp) { return {
