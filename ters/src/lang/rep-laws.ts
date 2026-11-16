@@ -25,7 +25,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import type { Representation } from "./represent.ts";
 import { equal, makeRunner, showValue, type Value } from "./run.ts";
-import { Table } from "./std.ts";
+import { Table } from "./table.ts";
 import { smallValues } from "./tests.ts";
 import type { Type } from "./types.ts";
 

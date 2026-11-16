@@ -14,7 +14,7 @@ import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
-import { HTML_V } from "./std.ts";
+import { HTML_V } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
 
 export interface Node_ { textContent: string | null }

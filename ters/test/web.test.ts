@@ -130,7 +130,8 @@ for (const way of ["ters build-web", "Save page"]) test(`the dice app (${way}): 
   assert.doesNotMatch(html, /<script src|<link /);
   // Not the library's nodes and names the solver reads: 0.8 MB before.
   assert.ok(html.length < 300_000, `${html.length} characters`);
-  assert.doesNotMatch(html, /"builtin\.less"/);
+  // Nor std.ts (C251a): no builtin's name, no library node's id.
+  assert.doesNotMatch(html, /round to Float32|std\.list\.cons\.head/);
   const body = new FakeEl("body");
   let frames: (() => void)[] = [];
   let time = 1_000_000;

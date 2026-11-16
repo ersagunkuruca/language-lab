@@ -18,7 +18,7 @@
 
 import type { Code, Id } from "../model.ts";
 import { isUse } from "../model.ts";
-import { FALSE, TRUE } from "./std.ts";
+import { FALSE, TRUE } from "./std-ids.ts";
 
 // The first characters: single characters, or the classes "digit" and
 // "letter", "test:p" for a character the program's own test p passes,

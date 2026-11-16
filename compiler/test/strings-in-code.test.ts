@@ -7,7 +7,8 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { runMain } from "../../ters/src/lang/run.ts";
-import { ARITH, SHOW_ANY, tupleVariant } from "../../ters/src/lang/std.ts";
+import { ARITH, SHOW_ANY } from "../../ters/src/lang/std.ts";
+import { tupleVariant } from "../../ters/src/lang/std-values.ts";
 import { compiledDefs } from "../src/core-js.ts";
 
 

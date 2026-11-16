@@ -39,7 +39,8 @@ import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
 import { countedCalls } from "./counting.ts";
-import { ARRAY_OPS, INT_OPS, S, SET, STD_IMPL, STD_MANY, TEXT_OPS } from "./std.ts";
+import { ARRAY_OPS, INT_OPS, S, SET, TEXT_OPS } from "./std.ts";
+import { STD_IMPL, STD_MANY } from "./std-impl.ts";
 import { filled } from "./ports.ts";
 import { spineTerminates } from "./spine.ts";
 

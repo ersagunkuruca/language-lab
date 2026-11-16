@@ -15,7 +15,8 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { renderBlocks } from "../src/lang/render.ts";
 import { runMain } from "../src/lang/run.ts";
-import { SHOW_ANY, tuplePart } from "../src/lang/std.ts";
+import { SHOW_ANY } from "../src/lang/std.ts";
+import { tuplePart } from "../src/lang/std-values.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 

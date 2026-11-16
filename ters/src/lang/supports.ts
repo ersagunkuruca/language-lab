@@ -20,7 +20,7 @@
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import type { Info } from "./infer.ts";
-import { FALSE, S, TRUE } from "./std.ts";
+import { FALSE, S, TRUE } from "./std-ids.ts";
 import type { Type } from "./types.ts";
 import { ownOperations, effectOfOperation, pureEffect, hostCName, type Hosts } from "./hosts.ts";
 

@@ -187,7 +187,7 @@ test("an action handed to a handler is a frame titled action, not () =>", () => 
 // it, with no dot for the let.
 test("a use with no body has an output per produced port, wired to what reads each", async () => {
   const { answerKeys } = await import("../src/lang/ports.ts");
-  const { tuplePart } = await import("../src/lang/std.ts");
+  const { tuplePart } = await import("../src/lang/std-values.ts");
   const l = loadProgram(join(root, "examples", "backwards"));
   const nodes = l.code.nodes;
   const moved: { def: Id; use: Id; dot: Id; ports: number; readers: [Id, number][] }[] = [];

@@ -61,7 +61,9 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, tupleType, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { tupleType } from "../../ters/src/lang/std-values.ts";
+import { shownImplementations, implementationsOf } from "../../ters/src/lang/std-values.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
 import { fieldShapes } from "../../ters/src/lang/nested.ts";
 import { solvesOnce } from "../../ters/src/lang/run.ts";
@@ -92,7 +94,8 @@ import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
 import { WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
-import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW, STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW } from "../../ters/src/lang/std.ts";
+import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
 // (run.ts cellOps), `path` aside: it looks inside its function.
 // The effects a page's views and handlers may have (std.ts PAGE_VIEW,

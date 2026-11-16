@@ -12,7 +12,7 @@ import { renderBlocks } from "../src/lang/render.ts";
 import { renderNested } from "../src/render/nested.ts";
 import { renderLet } from "../src/render/letseq.ts";
 import { root } from "../src/io.ts";
-import { tupleVariant } from "../src/lang/std.ts";
+import { tupleVariant } from "../src/lang/std-values.ts";
 
 test("a tuple reads as (1, \"a\") in Blocks, Nested and Steps", () => {
   const k = new Lang(LIBRARY.code);

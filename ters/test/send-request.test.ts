@@ -16,7 +16,8 @@ import { runMain } from "../src/lang/run.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { REQUEST_V, RESPONSE_V } from "../src/lang/network.ts";
-import { IO, S, SHOW_ANY, tupleVariant } from "../src/lang/std.ts";
+import { IO, S, SHOW_ANY } from "../src/lang/std.ts";
+import { tupleVariant } from "../src/lang/std-values.ts";
 import { NETWORK } from "../src/lang/types.ts";
 
 

@@ -12,7 +12,7 @@ import { listens } from "./audio.ts";
 import { PROCESSOR, type Answers, type Write } from "./sound-thread.ts";
 import type { El } from "./html.ts";
 import type { Data, Value, World } from "./run.ts";
-import { HTML_V } from "./std.ts";
+import { HTML_V } from "./std-ids.ts";
 
 // The page's world, answering as it did, and while `keep` holds a record,
 // writing each random number and clock reading into it: main runs again on

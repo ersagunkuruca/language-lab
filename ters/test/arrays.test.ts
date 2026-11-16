@@ -51,7 +51,8 @@ test("Array: built, pushed, read by position and turned back into a list, evalua
 // push front, rest and push are constant, and two arrays sharing a buffer
 // never see each other's items.
 test("the evaluator's arrays share one two-ended buffer: a hundred thousand pushes at the front are quick, shared views stay apart (C30d3a)", async () => {
-  const { STD_IMPL, STD_MANY, ArrayView } = await import("../src/lang/std.ts");
+  const { STD_IMPL, STD_MANY } = await import("../src/lang/std-impl.ts");
+  const { ArrayView } = await import("../src/lang/array-view.ts");
   const front = STD_IMPL[ARRAY_OPS.pushFront], back = STD_IMPL[ARRAY_OPS.push], rest = STD_IMPL[ARRAY_OPS.rest];
   const first = STD_MANY[ARRAY_OPS.first], at = STD_MANY[ARRAY_OPS.at], length = STD_IMPL[ARRAY_OPS.length];
   const t0 = performance.now();

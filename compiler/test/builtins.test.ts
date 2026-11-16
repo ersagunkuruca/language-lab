@@ -9,7 +9,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CELL_OPS, FIELDS, JSON_OPS, S, SET, SIGS, STD_IMPL, STD_MANY, stdNames } from "../../ters/src/lang/std.ts";
+import { CELL_OPS, FIELDS, JSON_OPS, S, SET, SIGS, stdNames } from "../../ters/src/lang/std.ts";
+import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";

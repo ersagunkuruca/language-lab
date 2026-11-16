@@ -8,7 +8,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList } from "./run.ts";
-import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST } from "./std.ts";
+import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST } from "./std-ids.ts";
 import { NUMBER, type Type } from "./types.ts";
 
 // The browser's render quantum (Web Audio API, AudioWorklet): the block a

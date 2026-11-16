@@ -7,7 +7,7 @@ import type { Code } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { showerFor, showValue, type Value } from "../ters/src/lang/run.ts";
-import { shownImplementations } from "../ters/src/lang/std.ts";
+import { shownImplementations } from "../ters/src/lang/std-values.ts";
 
 type Shower = (v: Value, asNumber?: boolean) => string;
 const kept = new WeakMap<Info, { code: Code; names: Names; show: Shower }>();

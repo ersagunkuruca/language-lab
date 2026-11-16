@@ -4,7 +4,7 @@
 // prelude): a printed program imports this only when it solves, and the
 // program hands core-rt.ts these (useSolver).
 
-import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std.ts";
+import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 import { META, equal, makeRunner, resolvedFor, solveAnswers, type Value } from "../../ters/src/lang/run.ts";
 import type { Runtime } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
