@@ -1,13 +1,14 @@
 // A definition's type with the units its signature shows (L252, known
 // units only): `period : (Float64 m, Float64 m/s²) -[Choice]-> Float64 s`.
-// A plain or unit-generic number stays `Float64`. The checker's types
+// A plain or unit-generic number stays `Float64`; a number type that is a
+// variable shows its unit after it, `a u` (L252f). The checker's types
 // carry no units (units.ts checks them beside it), so they are put in for
 // showing: each Float64 input or result with a known unit is shown as a
 // type named `Float64 m/s`.
 
 import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { NUMBER, schemeArith, schemeNeeds, showType, type Scheme, type Type } from "./types.ts";
+import { NUMBER, schemeArith, schemeNeeds, showType, UNIT_ON, type Scheme, type Type } from "./types.ts";
 
 // std.ts's tuples' ids, named here so this file doesn't load the library.
 const TUPLE = /^std\.tuple\d+$/;
@@ -39,7 +40,7 @@ export function showWithPinUnits(sc: Scheme, pu: PinUnits, names: Names): string
 // `rate(d, t) = □ / t` pinned at (Float64 u, Float64 v) -> Float64 u/v.
 // Null where it needs no unit, or one nothing fixes.
 export function holeWithUnit(code: Code, def: Id, hole: Id, t: Type, names: Names): { type: Type; names: Names } | null {
-  if (t.t !== "con" || t.id !== NUMBER || t.args.length) return null;
+  if (t.t !== "var" && (t.t !== "con" || t.id !== NUMBER || t.args.length)) return null;
   const u = holeUnit(code, def, hole);
   return u && Object.keys(u).length ? withSlots(t, { params: [], result: { "": u } }, names) : null;
 }
@@ -52,6 +53,9 @@ function withSlots(t: Type, slots: SignatureUnits["slots"], names: Names): { typ
   // Map Int (Float64 s), "1"; a tuple's parts, (Int, Float64 s), are
   // bracketed only as an argument to a named type.
   const at = (x: Type, s: Slots, path: number[], inside: boolean): Type => {
+    // A number type that is generic shows its unit after it (L252f):
+    // `squared : (a u) -> a u²`, `split : a s`.
+    if (x.t === "var") { const u = s[slotKey(path)]; return u && Object.keys(u).length ? { t: "con", id: `${UNIT_ON}${formatUnit(u)}`, args: [x] } : x; }
     if (x.t !== "con") return x;
     if (x.id === NUMBER && !x.args.length) {
       const u = s[slotKey(path)];

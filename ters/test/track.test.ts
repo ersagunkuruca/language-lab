@@ -7,6 +7,8 @@
 // (Float64 u, Float64 v) -> Float64 u/v, so an edit making it
 // `amount · time`, which keeps (Float64, Float64) -> Float64, is refused
 // at rate, rather than taken with its callers becoming m·s far away.
+// A number type that is generic shows its unit after it (L252f): squared
+// is (a u) -> a u², split a s.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -27,7 +29,7 @@ test("track: a sprint from two times, evaluated and compiled, its units through 
   assert.equal(node([lab, "compile", track, "-o", compiled]).code, 0);
   assert.deepEqual(node([compiled]), { code: 0, err: "", out: run.out });
   const check = node([lab, "check", track]).out;
-  for (const line of ["mean : (Float64 u, Float64 u) -> Float64 u", "rate : (Float64 u, Float64 v) -> Float64 u/v", "accel for : (Float64 u, Float64 v) -> Float64 u/v²", "drive : Float64 m/s²", "opening : Float64 m/s", "first second : Float64 m"]) assert.ok(check.split("\n").includes(line), line);
+  for (const line of ["mean : (Float64 u, Float64 u) -> Float64 u", "rate : (Float64 u, Float64 v) -> Float64 u/v", "accel for : (Float64 u, Float64 v) -> Float64 u/v²", "drive : Float64 m/s²", "opening : Float64 m/s", "first second : Float64 m", "squared : (a u) -> a u²", "split : a s"]) assert.ok(check.split("\n").includes(line), line);
 });
 
 test("track: an edit changing a pinned function's units is refused at the function (L252e)", async () => {

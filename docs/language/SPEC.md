@@ -192,7 +192,9 @@ L252): known units only, checked like any type, and part of what a value
 of a type with parameters says (a `Map Int (Float64 s)`'s values, a
 tuple's parts, L252e). A pinned signature keeps its units, a unit the
 body leaves free as a unit variable (`(Float64 u, Float64 v) -> Float64
-u/v`), and callers are checked against them. A unit never changes an answer: removing every
+u/v`), and callers are checked against them. A number type that is a
+variable carries its unit after it, as Float64 does (L252f): `squared :
+(a u) -> a u²`, `split : a s`. A unit never changes an answer: removing every
 unit from a program that checks gives a program with the same answers.
 
 3.8. `show` on a Float64 writes up to nine decimals, and a nonzero number
