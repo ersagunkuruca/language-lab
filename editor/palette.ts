@@ -8,7 +8,7 @@ import type { Names } from "../ters/src/presentation.ts";
 import { showIn, type Type } from "../ters/src/lang/types.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import * as T from "./typed.ts";
-import { h } from "./dom.ts";
+import { h, head as sectionHead } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
 
 // With what its type variables stand for: add is (a, a) -> a where a is a
@@ -303,11 +303,11 @@ export function palette(host: PaletteHost) {
       if (value) runValue(); else if (shown[0]) run(shown[0]);
     });
     const list = h("div", { class: "opts palette", id: `${field}-list`, role: "group", "aria-label": "What fits here" });
-    if (later) list.append(h("p", { class: "hint" }, "Finding what fits…"));
+    if (later) list.append(h("p", { class: "hint", role: "status" }, "Checking…"));
     if (value?.choices) {
       // A field several types have, on a value nothing has settled: which
       // type's is meant is asked, not picked (E186).
-      list.append(h("div", { class: "pal-g" }, "the value typed, read as"), h("p", { class: "hint" }, "More than one type has these fields, and nothing here says which: pick one."));
+      list.append(h("div", { class: "pal-g" }, "the value typed, read as"), h("p", { class: "hint", title: "More than one type has these fields, and nothing here says which" }, "Which type?"));
       for (const c of value.choices) {
         const b = h("button", { class: "opt", type: "button" }, h("span", { class: "opt-l" }, ui.query.trim()), h("span", { class: "opt-d" }, c.label));
         b.addEventListener("click", () => { ui.query = ""; applyT(c.edit); });
@@ -325,7 +325,7 @@ export function palette(host: PaletteHost) {
       b.addEventListener("click", () => run(x));
       list.append(b);
     }
-    if (shown.length > cap) list.append(h("p", { class: "hint" }, `${shown.length - cap} more: type to search them.`));
+    if (shown.length > cap) list.append(h("p", { class: "hint", title: "Type to search them" }, `${shown.length - cap} more`));
     const whyKey = `why ${hole} ${ui.query}`, whyRead = () => T.whyNotHere(doc().code, doc().names.short, info, hole, ui.query);
     const why = !later && !shown.length && !value && q ? (pending ? peekCached<string | null>(info, whyKey) : cachedTyped(info, whyKey, whyRead)) ?? pureHole(info, hole) : "";
     // What's typed is refused because its type has no implementation of an
@@ -342,9 +342,9 @@ export function palette(host: PaletteHost) {
       const missing = /^there's no function named (.+?)(?:;|$)/.exec(typed.reason)?.[1];
       list.prepend(h("p", { class: "hint refused" }, `${ui.query.trim()} doesn't fit here: ${reason}.`), ...(loosen ? [loosen] : []), ...(missing ? [h("div", { class: "acts" }, makeNamed(info, missing))] : []));
     }
-    else if (!shown.length && !value && later) list.append(h("p", { class: "hint" }, "Working out what fits here…"));
-    else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint" }, "Reading what's typed…"));
-    else if (!shown.length && !value) list.append(h("p", { class: "hint" }, `Nothing that fits matches. ${why || "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1."}`));
+    else if (!shown.length && !value && later) list.append(h("p", { class: "hint", role: "status" }, "Checking…"));
+    else if (!shown.length && !value && pending && q) list.append(h("p", { class: "hint", role: "status" }, "Reading…"));
+    else if (!shown.length && !value) list.append(h("p", { class: "hint", title: "Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1" }, why ? `No match · ${why}` : "No match"));
     // By keyboard (E231d): Down from the search goes into the list, Up and
     // Down move through it, Home and End to its ends, and Up from its first
     // row back to the search.
@@ -360,7 +360,7 @@ export function palette(host: PaletteHost) {
       if (e.key === "ArrowUp" && at === 0) return input.focus();
       opts[e.key === "Home" ? 0 : e.key === "End" ? opts.length - 1 : Math.min(opts.length - 1, Math.max(0, at + (e.key === "ArrowDown" ? 1 : -1)))].focus();
     });
-    return h("div", {}, h("div", { class: "sub-head" }, "Fill · only what type-checks here"), picker);
+    return h("div", {}, sectionHead("Fill", { tip: "Only what type-checks here. Values and arithmetic can be typed too: 3, \"text\", [1, 2], x * 2, (x) => x + 1." }), picker);
   }
 
   // Typed text in the palette, read once (E173): per program, hole, text
