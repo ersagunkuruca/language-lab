@@ -254,6 +254,8 @@ export class OutOfSteps extends Error {
 }
 export const PAGE_STEPS = 1_000_000;
 let page: Fuel | null = null;
+// The evaluator's machine steps, counted to ask a page's deadline (I310).
+let machineTicks = 0;
 // Compiled code's count of deep calls (compiler/src/runtime.js, $rec):
 // put back after each update, which may have been cut off midway.
 export const depth = { d: 0 };
@@ -1430,6 +1432,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
     going(): Value | typeof DONE {
       while (true) {
+        // A page's deadline, where no step is spent (I310: a view of
+        // Countdown's searched for 1.2 s through definitions that end).
+        if ((++machineTicks & 4095) === 0 && page?.over?.()) throw new OutOfSteps();
         if (this.mode === EVAL) this.step();
         else if (this.mode === RET) {
           const f = this.k;
