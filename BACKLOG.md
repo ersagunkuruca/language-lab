@@ -78,7 +78,6 @@ UI text names things; structure explains them; explanations live in tooltips, wa
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E266 | Definition tab: heads as names ("Build targets", "Inputs", "Ways chosen"), the file as a small tag instead of "· code.json", grey hint paragraphs into an ⓘ tooltip on the head, statuses a word ("Checking…") | UI-TEXT | P1 | M | ▶ |
 | E267 | Selected tab: heads (Results, Directions, Dot, Display, Pattern, Values), button labels a verb and an object, hints into tooltips | UI-TEXT | P1 | M | |
 | E268 | Program, Checks, Files and Changes tabs: the same | UI-TEXT | P1 | M | |
 | E269 | Run panel, run backwards, page controls and their statuses | UI-TEXT | P1 | M | |

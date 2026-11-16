@@ -198,7 +198,7 @@ async function implementInterface() {
   await p.locator("#f-def-case").fill("half");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator("#f-new-op").fill("twice");
-  await p.locator("button", { hasText: "Add the operation" }).click();
+  await p.locator("button", { hasText: "Add operation" }).click();
   const iface = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   // It reads as its operations, not as the record that holds them (BACKLOG E151).
   if (!/interface Halving a half : \(a\) -> a twice : \(a\) -> a/.test(iface) || /\bhalving\(/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
@@ -517,10 +517,10 @@ async function sharedField() {
   await p.locator("#f-def-case").fill("jump");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator("#f-new-case").fill("call");
-  await p.locator("button", { hasText: "Add the case" }).click();
+  await p.locator("button", { hasText: "Add case" }).click();
   await p.locator(".slink", { hasText: /^jump/ }).first().click();
   await p.locator("#f-new-field").fill("to");
-  await p.locator("button", { hasText: "Add the field" }).click();
+  await p.locator("button", { hasText: "Add field" }).click();
   await p.locator(".p-text .body *", { hasText: /^call$/ }).last().click({ timeout: 2000 }).catch(() => errors.push(`${where}: no way back to the case call`));
   await p.locator("button", { hasText: "to, as jump's" }).click({ timeout: 3000 }).catch(() => errors.push(`${where}: call's panel doesn't offer jump's to`));
   if (!/the same one/.test(await p.locator(".status").innerText())) errors.push(`${where}: adding it said ${await p.locator(".status").innerText()}`);
@@ -803,7 +803,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-// Where it runs, told from its type at once (L22b): with no worker to
+// Build targets, told from its type at once (L22b): with no worker to
 // lower it, a definition taking a List is still told it can't be a shader.
 async function whereTold() {
   where = "where it runs, told from its type";
@@ -814,7 +814,7 @@ async function whereTold() {
   await p.locator("[data-def]", { hasText: /^words$/ }).first().click();
   await p.locator('[data-panel="node"]').click();
   const side = (await p.locator(".side").first().innerText()).replace(/\s+/g, " ");
-  if (!side.includes("no: words takes or gives List") || !side.includes("Told from its type")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Where it runs"), side.indexOf("Where it runs") + 160)}`);
+  if (!side.includes("no: words takes or gives List") || !side.includes("Checking the rest")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Build targets"), side.indexOf("Build targets") + 160)}`);
   await p.close();
 }
 

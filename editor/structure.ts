@@ -13,7 +13,7 @@ import { implementationKey } from "../ters/src/lang/infer.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
 import * as T from "./typed.ts";
-import { edit, h, type Kid } from "./dom.ts";
+import { edit, h, head, type Kid } from "./dom.ts";
 import { typeName } from "./palette.ts";
 import type { Doc, UI } from "./main.ts";
 import type { Where } from "./whereRuns.ts";
@@ -150,7 +150,7 @@ export function structure(host: StructureHost) {
   // button to write how.
   function interfacesOfType(info: T.Info, names: Names): HTMLElement {
     const type: Type = { t: "con", id: ui.def, args: [] }, dname = names[ui.def] ?? "this type";
-    const out = h("div", {}, h("div", { class: "sub-head" }, `Interfaces ${dname} implements · code.json`));
+    const out = h("div", {}, head("Interfaces", { file: "code", tip: `An interface is a set of operations, like Trig's sin and cos. Implementing one for ${dname} defines each operation at ${dname}; the operation then works on a ${dname} wherever it's used.` }));
     for (const iface of T.interfaces(doc().code)) {
       const d = info.implementations?.get(implementationKey(iface, type));
       // Worked out when clicked, not on every draw: one per interface cost a
@@ -159,23 +159,21 @@ export function structure(host: StructureHost) {
       go?.addEventListener("click", () => implementFor(T.implement(doc().code, doc().names.short, info, iface, type)));
       out.append(row(d ? pick(d, names[iface] ?? iface, `by ${names[d] ?? d}`) : h("span", {}, names[iface] ?? iface), go));
     }
-    out.append(h("p", { class: "hint" }, `An interface is a set of operations, like Trig's sin and cos. Implementing one for ${dname} is a definition of what each operation does at ${dname}; then the operation works on a ${dname} wherever it's used.`));
     return out;
   }
 
   function implementationsPanel(info: T.Info, names: Names): HTMLElement {
     const iface = ui.def, dname = names[iface] ?? "this interface";
-    const out = h("div", {}, h("div", { class: "sub-head" }, `Implementations of ${dname} · code.json`));
+    const out = h("div", {}, head("Implementations", { file: "code", tip: `How a type does ${dname}: a definition of its record at that type, a hole for each operation. Uses of ${dname}'s operations at that type then call it directly.` }));
     const have = [...(info.implementations ?? new Map<string, Id>())].filter(([k]) => k.startsWith(`${iface}|`)).map(([, d]) => d);
-    if (!have.length) out.append(h("p", { class: "hint" }, "None yet."));
+    if (!have.length) out.append(h("p", { class: "hint" }, "None"));
     for (const d of have) out.append(row(pick(d, names[d] ?? d, T.typeOf(info, d, names) ?? "")));
     const types = T.implementable(doc().code, info, iface);
     if (!types.length) return out;
     const sel = h("select", { id: "f-implement" }, ...types.map((t, i) => h("option", { value: String(i) }, typeName(info, t, names)))) as HTMLSelectElement;
     const go = h("button", { class: "btn", type: "button" }, "Implement");
     go.addEventListener("click", () => implementFor(T.implement(doc().code, doc().names.short, info, iface, types[+sel.value])));
-    out.append(h("label", { class: "field", for: "f-implement" }, h("span", {}, "For the type"), sel), h("div", { class: "acts" }, go),
-      h("p", { class: "hint" }, `How a type does ${dname}: a definition of its record at that type, with a hole for each operation. Uses of ${dname}'s operations at that type then call it directly.`));
+    out.append(h("label", { class: "field", for: "f-implement" }, h("span", {}, "Type"), sel), h("div", { class: "acts" }, go));
     return out;
   }
 
@@ -208,27 +206,26 @@ export function structure(host: StructureHost) {
       // An interface's operations are its record's fields, each a function
       // of its type a (INTERFACES.md).
       const variant = body.variants[0], a = body.params[0];
-      out.append(h("div", { class: "sub-head" }, `Operations of ${dname} · code.json`));
+      out.append(head("Operations", { file: "code", tip: `Every implementation of ${dname} gets a hole for a new operation.` }));
       for (const f of get(code, variant, "variant").fields) {
         const r = Top.removeField(code, sh, variant, f);
-        out.append(row(pick(f, names[f] ?? "operation", typeText(get(code, f, "field").type, names)), edit("×", "Remove this operation", r, () => runTop(info, r), "btn mini")));
+        out.append(row(pick(f, names[f] ?? "operation", typeText(get(code, f, "field").type, names)), edit("×", "Remove operation", r, () => runTop(info, r), "btn mini")));
       }
       const c = textField("f-new-op", "New operation", "its name");
       const { takes, gives } = operationPickers(a, names);
-      const add = h("button", { class: "btn", type: "button" }, "Add the operation");
+      const add = h("button", { class: "btn", type: "button" }, "Add operation");
       add.addEventListener("click", () => runTop(info, Top.addOperation(code, sh, ui.def, c.input.value, +takes.value, gives.value === a ? null : gives.value)));
       c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
-      out.append(c.el, h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives), h("div", { class: "acts" }, add),
-        h("p", { class: "hint" }, `Every implementation of ${dname} gets a hole for a new operation.`), implementationsPanel(info, names));
+      out.append(c.el, h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives), h("div", { class: "acts" }, add), implementationsPanel(info, names));
     } else if (sel === ui.def && body?.kind === "typedef") {
       // How it's stored, when the program writes representations for it:
       // the compiler's choice for what main does, shown and never asked for
       // (REPRESENTATIONS.md; Ersagun 2026-10-30: "I want the compiler to choose").
       const st = T.storedAs(code, info, names, ownDefs(), ui.def, defNamed("main") ?? null);
-      if (st) out.append(h("p", { class: "hint stored" }, `Stored as ${st.rep} when main runs: the compiler's choice, the cheapest for the jobs main uses (${st.jobs.map((j) => names[j] ?? j).join(", ")}).`));
+      if (st) out.append(head("Stored as", { tip: `The compiler's choice when main runs: the cheapest for the jobs main uses (${st.jobs.map((j) => names[j] ?? j).join(", ")}).` }), h("p", { class: "hint stored" }, st.rep));
       // `unique` (model.ts): kept apart from a type of the same shape when
       // hashed. Shown, not set here: it is written in text (E209).
-      if (body.unique) out.append(h("p", { class: "hint" }, `Unique as “${body.unique}”: kept apart from any other type of the same shape when the program is hashed, as Unison's unique type is.`));
+      if (body.unique) out.append(row(h("span", { title: "Kept apart from any other type of the same shape when the program is hashed, as Unison's unique type is" }, "Unique"), h("span", { class: "opt-d" }, ` “${body.unique}”`)));
       // An effect is a data type whose cases are operations: the same panel,
       // in its words.
       const w = words(ui.def);
@@ -237,17 +234,18 @@ export function structure(host: StructureHost) {
       if (w.effect && !body.row) {
         const cb = h("input", { id: "f-pure", type: "checkbox", checked: !!body.pure }) as HTMLInputElement;
         cb.addEventListener("change", () => runTop(info, Top.setPure(code, sh, ui.def, cb.checked)));
-        out.append(h("label", { class: "field check", for: "f-pure" }, cb, h("span", {}, "Pure")),
-          h("p", { class: "hint" }, body.pure ? `Its operations are in no row: the program's host answers them (hosts/js.js), on your word that each is a function of its inputs, as a hash or a parser is. A test may still answer them with a match.` : `Tick it only if every operation is a function of its inputs that the host answers (a hash, a parser): it then leaves every row. Never the clock, files, the network or randomness.`));
+        out.append(h("label", { class: "field check", for: "f-pure", title: body.pure ? "Its operations are in no row: the program's host answers them (hosts/js.js), on your word that each is a function of its inputs, as a hash or a parser is. A test may still answer them with a match." : "Only if every operation is a function of its inputs that the host answers (a hash, a parser): it then leaves every row. Never the clock, files, the network or randomness." }, cb, h("span", {}, "Pure")));
       }
-      out.append(h("div", { class: "sub-head" }, `${cap(w.cases)} of ${dname} · code.json`));
+      out.append(head(cap(w.cases), { file: "code", tip: body.effect
+        ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
+        : "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields." }));
       for (const v of body.variants) {
         const fs = get(code, v, "variant").fields;
         out.append(row(pick(v, names[v] ?? w.case, fs.length ? `(${fs.map((f) => names[f] ?? w.field).join(", ")})` : ""),
-          edit("×", `Remove this ${w.case}`, { ok: true }, () => runTop(info, Top.removeCase(code, sh, ui.def, v)), "btn mini")));
+          edit("×", `Remove ${w.case}`, { ok: true }, () => runTop(info, Top.removeCase(code, sh, ui.def, v)), "btn mini")));
       }
       const c = textField("f-new-case", `New ${w.case}`, "its name");
-      const add = h("button", { class: "btn", type: "button" }, `Add the ${w.case}`);
+      const add = h("button", { class: "btn", type: "button" }, `Add ${w.case}`);
       // The type stays selected, so the next case is typed straight after
       // (E183); select a case to give it fields.
       add.addEventListener("click", () => {
@@ -258,9 +256,7 @@ export function structure(host: StructureHost) {
         (document.getElementById("f-new-case") as HTMLInputElement | null)?.focus();
       });
       c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
-      out.append(h("p", { class: "hint" }, body.effect
-        ? "Calling an operation performs it; a match on the computation that performs it handles it, one case per operation, and every such match gets a case for a new one. Select an operation to give it inputs and say what it gives back."
-        : "Every match and fold over this type gets an arm for a new case, with a hole to fill. Select a case to give it fields."), c.el, h("div", { class: "acts" }, add));
+      out.append(c.el, h("div", { class: "acts" }, add));
       // The steps of an effect (L229): a derived type and handler, made once.
       if (body.effect) {
         const r = Top.makeSteps(code, sh, ui.def);
@@ -270,8 +266,8 @@ export function structure(host: StructureHost) {
     } else if (sel === ui.def && isPublished(ui.def)) {
       // A published definition is read-only; copying it in is how you change it.
       const r = T.copyIntoProgram(code, sh, info, ui.def, dname);
-      out.append(h("div", { class: "sub-head" }, `${dname} is published`),
-        h("p", { class: "hint" }, `It's named by its content (${ui.def.slice(0, 9)}…), so it can't change. Copy it into this program to edit your own version; this program's calls switch to the copy.`),
+      out.append(head("Published", { tip: "Named by its content, so it can't change. Copy it into this program to edit your own version; this program's calls switch to the copy." }),
+        h("p", { class: "hint" }, `${ui.def.slice(0, 9)}…`),
         h("div", { class: "acts" }, edit("Copy into my program", "A copy of your own, used by this program", r, () => { if (r.ok) { ui.def = r.select!; ui.back = []; applyT(r); } })));
       return out;
     } else if (sel === ui.def) {
@@ -284,81 +280,79 @@ export function structure(host: StructureHost) {
         const iface = info.owner.get(way);
         const ci = h("input", { id: "f-way-cost", type: "number", min: "0", step: "1", value: cost == null ? "" : String(cost), placeholder: "1", autocomplete: "off" }) as HTMLInputElement;
         ci.addEventListener("change", () => runTop(info, Top.setWay(code, sh, ui.def, { cost: ci.value.trim() === "" ? null : Number(ci.value) })));
-        out.append(h("div", { class: "sub-head" }, "A way of ", pick(way, names[way] ?? "an operation"), iface ? " in " : "", iface ? pick(iface, names[iface] ?? "its interface") : "", " · code.json"),
-          h("label", { class: "field", for: "f-way-cost" }, h("span", {}, "Cost"), ci),
-          h("p", { class: "hint" }, `What it costs besides what it uses (the usual is 1): the compiler takes the cheapest way that ends in what an implementation gives.`),
-          h("div", { class: "acts" }, edit("Make it ordinary", `No longer a way of ${names[way] ?? "the operation"}: a definition like any other`, { ok: true }, () => runTop(info, Top.setWay(code, sh, ui.def, null)))));
+        out.append(head(["Way of ", pick(way, names[way] ?? "an operation"), iface ? " · " : "", iface ? pick(iface, names[iface] ?? "its interface") : ""], { file: "code" }),
+          h("label", { class: "field", for: "f-way-cost", title: "What it costs besides what it uses (the usual is 1): the compiler takes the cheapest way that ends in what an implementation gives" }, h("span", {}, "Cost"), ci),
+          h("div", { class: "acts" }, edit("Make ordinary", `No longer a way of ${names[way] ?? "the operation"}: a definition like any other`, { ok: true }, () => runTop(info, Top.setWay(code, sh, ui.def, null)))));
       }
       // An implementation: how each operation is worked out, the
       // compiler's pick, shown and never asked for (WAYS.md step 5, L96;
       // Ersagun 2026-10-30: "I want the compiler to choose").
       const picks = T.waysOfImplementation(code, ui.def);
       if (picks?.some((p) => !p.given || p.way)) {
-        out.append(h("div", { class: "sub-head" }, "How each operation is worked out · the compiler's pick"));
+        out.append(head("Ways chosen", { tip: "The compiler's pick: the cheapest way that ends in what this implementation gives. An operation left to its ways is worked out from the others, and a way can beat one written here when it costs less." }));
         for (const p of picks) out.append(row(pick(p.field, names[p.field] ?? "operation",
-          p.missing ? "left to its ways, and none ends in what it gives" : p.way ? `by ${names[p.way] ?? "a way"}${p.given ? ", cheaper than as written" : ""}` : "as written")));
-        out.append(h("p", { class: "hint" }, "The cheapest way that ends in what this implementation gives: an operation left to its ways is worked out from the others, and a way can beat one written here when it costs less."));
+          p.missing ? "missing: no way ends in what it gives" : p.way ? `by ${names[p.way] ?? "a way"}${p.given ? " (cheaper than written)" : ""}` : "as written")));
       }
       // Where it can run, the compiler's answer (L22a, REVIEW-2026-10-22b
       // §5): a profile is told, never asked for, as an effect is.
       const where = whereRuns(ui.def);
-      out.append(h("div", { class: "sub-head" }, "Where it runs · the compiler's answer"));
+      out.append(head("Build targets", { tip: "Where the compiler can build it. The evaluator and compiled JavaScript run everything. A GPU shader holds numbers, Bools and records of them, and nothing that may not finish; WebAssembly and C hold data on a heap too." }));
       if (where === undefined) {
         // Told from types at once (L22b, profiles.ts), while the compiler
         // works out its own answer: a definition that takes or gives what a
         // shader can't hold, or calls one, can't run on the GPU.
         const told = gpuRefusals(code, info, names, ownDefs()).get(ui.def);
-        if (told) out.append(row(h("span", {}, "A shader, on the GPU"), h("span", { class: "opt-d" }, ` no: ${dname} ${told}`)));
-        out.append(h("p", { class: "hint" }, told ? "Told from its type. Finding out the rest…" : "Finding out where it can run…"));
+        if (told) out.append(row(h("span", { class: "key" }, "GPU shader"), h("span", { class: "opt-d" }, ` no: ${dname} ${told}`)));
+        out.append(h("p", { class: "hint", role: "status", title: told ? "The GPU answer is read off its type; the compiler is checking the rest" : undefined }, told ? "Checking the rest…" : "Checking…"));
       }
-      else if (where === "failed") out.append(h("p", { class: "hint" }, "The compiler couldn't say where it runs."));
+      else if (where === "failed") out.append(h("p", { class: "hint", title: "The compiler stopped before it could say" }, "Unknown"));
       else {
         const said = (why: string | null) => (why === null ? "yes" : `no: ${dname} ${why}`);
-        out.append(row(h("span", {}, "A shader, on the GPU"), h("span", { class: "opt-d" }, ` ${said(where.gpu)}`)),
-          row(h("span", {}, "WebAssembly and C"), h("span", { class: "opt-d" }, ` ${said(where.native)}`)),
-          h("p", { class: "hint" }, "The evaluator and compiled JavaScript run everything. A shader holds numbers, Bools and records of them, and nothing that may not finish; WebAssembly and C hold data on a heap too."));
+        out.append(row(h("span", { class: "key" }, "GPU shader"), h("span", { class: "opt-d" }, ` ${said(where.gpu)}`)),
+          row(h("span", { class: "key" }, "WebAssembly, C"), h("span", { class: "opt-d" }, ` ${said(where.native)}`)),
+          row(h("span", { class: "key" }, "JavaScript"), h("span", { class: "opt-d" }, " yes")));
       }
       const params = body?.kind === "lambda" ? body.params : [];
-      out.append(h("div", { class: "sub-head" }, `Inputs of ${dname} · code.json`));
+      out.append(head("Inputs", { file: "code", tip: params.length ? "Every call gets a hole for a new input, so none is missing an argument." : body?.kind === "lambda" ? "None, so it's an action: run where it's called, each time." : "None, so it's a value: computed once. Adding an input makes it a function." }));
       if (!params.length) {
-        out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None: it's an action, run where it's called, each time." : "None: it's a value, computed once. Adding an input makes it a function."));
+        out.append(h("p", { class: "hint" }, body?.kind === "lambda" ? "None · action" : "None · value"));
         // One into the other (E181): symbols() everywhere becomes symbols.
         if (body && body.kind !== "typedef" && !(body.kind === "lambda" && body.results?.length)) {
-          const turn = h("button", { class: "btn", type: "button" }, body.kind === "lambda" ? "Make it a value" : "Make it an action");
+          const turn = h("button", { class: "btn", type: "button" }, body.kind === "lambda" ? "Make value" : "Make action");
           turn.title = body.kind === "lambda" ? `Computed once; its calls ${dname}() read ${dname}` : `Run where it's called; its reads call ${dname}()`;
           turn.addEventListener("click", () => runTop(info, Top.toggleValue(code, sh, ui.def)));
           out.append(h("div", { class: "acts" }, turn));
         }
       }
       params.forEach((p) => out.append(paramRow(info, names, p)));
-      const c = textField("f-new-input", "New input", "its name");
-      const add = h("button", { class: "btn", type: "button" }, "Add the input");
+      const c = textField("f-new-input", "New input", "name");
+      const add = h("button", { class: "btn", type: "button" }, "Add input");
       add.addEventListener("click", () => runTop(info, Top.addParameter(code, sh, ui.def, c.input.value)));
       c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
-      out.append(c.el, h("div", { class: "acts" }, add), h("p", { class: "hint" }, "Every call gets a hole for a new input, so none is missing an argument."));
+      out.append(c.el, h("div", { class: "acts" }, add));
     } else if (n?.kind === "binder" && body?.kind === "lambda" && body.params.includes(sel)) {
-      out.append(h("div", { class: "sub-head" }, `Input of ${dname} · code.json`), paramRow(info, names, sel));
+      out.append(head(["Input of ", pick(ui.def, dname)], { file: "code" }), paramRow(info, names, sel));
       return out;
     } else if (innerLambda(sel)) {
       const lam = innerLambda(sel)!;
-      out.append(h("div", { class: "sub-head" }, "Inputs of this function · code.json"));
-      if (!lam.params.length) out.append(h("p", { class: "hint" }, "None."));
+      out.append(head("Inputs", { file: "code", tip: "What it's passed to has to take the new inputs, or the edit is refused." }));
+      if (!lam.params.length) out.append(h("p", { class: "hint" }, "None"));
       lam.params.forEach((p) => out.append(paramRow(info, names, p, lam.id)));
-      const c = textField("f-new-input", "New input", "its name");
-      const add = h("button", { class: "btn", type: "button" }, "Add the input");
+      const c = textField("f-new-input", "New input", "name");
+      const add = h("button", { class: "btn", type: "button" }, "Add input");
       add.addEventListener("click", () => runTop(info, Top.addParameter(code, sh, lam.id, c.input.value)));
       c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
-      out.append(c.el, h("div", { class: "acts" }, add), h("p", { class: "hint" }, "What it's passed to has to take the new inputs, or the edit is refused."));
+      out.append(c.el, h("div", { class: "acts" }, add));
       return out;
     } else if (n?.kind === "binder" && innerLambda(inputOf(sel))) {
-      out.append(h("div", { class: "sub-head" }, "Input of a function · code.json"), paramRow(info, names, sel, inputOf(sel)!));
+      out.append(head("Input", { file: "code" }), paramRow(info, names, sel, inputOf(sel)!));
       return out;
     } else if (n?.kind === "variant") {
       const type = info.owner.get(sel)!;
       const w = words(type);
-      out.append(h("div", { class: "sub-head" }, `${cap(w.fields)} of ${names[sel] ?? `this ${w.case}`} · code.json`));
+      out.append(head(cap(w.fields), { file: "code", tip: w.effect ? "Every call of it gets a hole for a new input, and every case that handles it a name." : "Every place that makes this case gets a hole for a new field, and every arm for it a name." }));
       const fs = n.fields;
-      if (!fs.length) out.append(h("p", { class: "hint" }, w.effect ? "None: performing it takes nothing." : "None: it's a constant."));
+      if (!fs.length) out.append(h("p", { class: "hint" }, w.effect ? "None" : "None · constant"));
       // A field several cases share (L168): which others have it (E227).
       const td = node((node(type) as NodeOf<"def">).body!) as NodeOf<"typedef">;
       const rootOf = (f: Id) => (node(f) as NodeOf<"field">).same ?? f;
@@ -367,11 +361,11 @@ export function structure(host: StructureHost) {
         const others = w.effect ? [] : sharers(f);
         out.append(row(pick(f, names[f] ?? w.field, typeText(get(code, f, "field").type, names)),
           others.length ? h("span", { class: "chip", title: `The same field: .${names[f] ?? w.field} reads and sets it on any of these cases` }, `also in ${others.map((v) => names[v] ?? v).join(", ")}`) : null,
-          edit("×", `Remove this ${w.field}`, Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
+          edit("×", `Remove ${w.field}`, Top.removeField(code, sh, sel, f), () => runTop(info, Top.removeField(code, sh, sel, f)), "btn mini")));
       }
       const c = textField("f-new-field", `New ${w.field}`, "its name");
       const t = typePicker("f-new-field-type", type, names, null, () => {}, undefined, w.effect ? sel : undefined);
-      const add = h("button", { class: "btn", type: "button" }, `Add the ${w.field}`);
+      const add = h("button", { class: "btn", type: "button" }, `Add ${w.field}`);
       add.addEventListener("click", () => { const sp = t.spec(); if (sp) runTop(info, Top.addField(code, sh, type, sel, c.input.value, sp)); });
       // Or another case's field, the same one (L168, E227): one not here yet,
       // that isn't itself another's.
@@ -383,9 +377,8 @@ export function structure(host: StructureHost) {
         const shared: Top.Top = r.ok ? (() => { const made = (r.code.nodes[sel] as NodeOf<"variant">).fields.at(-1)!; return { ...r, code: { ...r.code, nodes: { ...r.code.nodes, [made]: { ...(r.code.nodes[made] as NodeOf<"field">), same: f } } }, note: `${r.note} It is ${names[v] ?? v}'s ${names[f] ?? "field"}, the same one: .${names[f] ?? "field"} reads it on either case.` }; })() : r;
         return edit(`${names[f] ?? "field"}, as ${names[v] ?? v}'s`, `The same field as ${names[v] ?? v}'s ${names[f] ?? "field"} (${typeText(get(code, f, "field").type, names)})`, shared, () => runTop(info, shared));
       });
-      out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Holding"), t.el), h("div", { class: "acts" }, add),
-        same.length ? h("div", { class: "acts" }, h("span", { class: "hint" }, "Or another case's, the same field:"), ...same) : "",
-        h("p", { class: "hint" }, w.effect ? "Every call of it gets a hole for a new input, and every case that handles it a name." : "Every place that makes this case gets a hole for a new field, and every arm for it a name."));
+      out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Type"), t.el), h("div", { class: "acts" }, add),
+        same.length ? h("div", { class: "acts" }, h("span", { class: "hint", title: "Another case's field, the same one: reading it works on either case" }, "Shared:"), ...same) : "");
       if (w.effect) {
         // What the handler answers it with: the value the call gives back.
         const now = n.returns ? typeText(n.returns, names) : null;
@@ -393,14 +386,12 @@ export function structure(host: StructureHost) {
           const sp = r.spec();
           if (sp || (r.el.querySelector("select") as HTMLSelectElement).value === "none") runTop(info, Top.setReturns(code, sh, sel, sp));
         }, "nothing: it never returns", sel);
-        out.append(h("label", { class: "field", for: "f-returns" }, h("span", {}, "Gives back"), r.el),
-          h("p", { class: "hint" }, now ? `A call of ${names[sel] ?? "it"} is worth the ${now} its handler answers with.` : `Like abort: performing ${names[sel] ?? "it"} ends what performs it, and the handler's case gives the result instead.`));
+        out.append(h("label", { class: "field", for: "f-returns", title: now ? `A call of ${names[sel] ?? "it"} is worth the ${now} its handler answers with` : `Like abort: performing ${names[sel] ?? "it"} ends what performs it, and the handler's case gives the result instead` }, h("span", {}, "Gives back"), r.el));
         // Answered later (ANSWERED-LATER.md): the case gets the rest too.
         if (n.returns) {
           const cb = h("input", { id: "f-later", type: "checkbox", checked: !!n.later }) as HTMLInputElement;
           cb.addEventListener("change", () => runTop(info, Top.setLater(code, sh, sel, cb.checked)));
-          out.append(h("label", { class: "field check", for: "f-later" }, cb, h("span", {}, "Answered later")),
-            h("p", { class: "hint" }, n.later ? `Its handler's case also gets the rest of the computation, written ${names[sel] ?? "it"}(…) with rest: it may resume it once, now or later, or drop it. A generator's yield, a page's fetch.` : "Tick it to let the handler answer later: its case also gets the rest of the computation, to resume once, now or later, or drop."));
+          out.append(h("label", { class: "field check", for: "f-later", title: `Its handler's case also gets the rest of the computation, written ${names[sel] ?? "it"}(…) with rest, to resume once, now or later, or drop. A generator's yield, a page's fetch.` }, cb, h("span", {}, "Answered later")));
         }
       }
       // Private (L79, E209): the program that declares the type builds it;
@@ -408,12 +399,11 @@ export function structure(host: StructureHost) {
       if (!w.effect && !(defBody(type) as NodeOf<"typedef"> | null)?.interface) {
         const cb = h("input", { id: "f-private", type: "checkbox", checked: !!n.private }) as HTMLInputElement;
         cb.addEventListener("change", () => runTop(info, Top.setPrivate(code, sh, sel, cb.checked)));
-        out.append(h("label", { class: "field check", for: "f-private" }, cb, h("span", {}, "Private")),
-          h("p", { class: "hint" }, n.private ? `Only this program builds a ${names[sel] ?? "case"}: a program that uses ${names[type] ?? "the type"} builds one with this program's functions, so they can keep a rule (a sorted list, a checked range).` : `Tick it to let only this program build a ${names[sel] ?? "case"}, so its functions can keep a rule; others still read and match it.`));
+        out.append(h("label", { class: "field check", for: "f-private", title: `Only this program builds a ${names[sel] ?? "case"}: a program that uses ${names[type] ?? "the type"} builds one with this program's functions, so they can keep a rule (a sorted list, a checked range). Others still read and match it.` }, cb, h("span", {}, "Private")));
       }
       // An operation's own type, fresh at each call (`await : Ticket a → a`).
       if (w.effect) out.append(typeParams(info, names, type, n.params ?? [], "operation", sel));
-      out.append(h("div", { class: "acts" }, edit(`Remove this ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
+      out.append(h("div", { class: "acts" }, edit(`Remove ${w.case}`, `Remove this ${w.case} from the ${w.effect ? "effect" : "type"}`, Top.removeCase(code, sh, type, sel), () => runTop(info, Top.removeCase(code, sh, type, sel), () => { ui.selected = null; }), "btn danger")));
       return out;
     } else if (n?.kind === "field" && (defBody(info.owner.get(sel) ?? "") as { interface?: true } | null)?.interface) {
       // An interface's operation: what it takes and gives (BACKLOG E142).
@@ -424,19 +414,18 @@ export function structure(host: StructureHost) {
       const change = h("button", { class: "btn", type: "button" }, "Change");
       change.addEventListener("click", () => runTop(info, Top.setOperation(code, sh, iface, sel, +takes.value, gives.value === a ? null : gives.value)));
       const variant = td.variants[0];
-      out.append(h("div", { class: "sub-head" }, "Operation of ", pick(iface, names[iface] ?? "the interface"), " · code.json"),
+      out.append(head(["Operation of ", pick(iface, names[iface] ?? "the interface")], { file: "code", tip: "An implementation's part for it becomes a hole when what it takes or gives changes." }),
         h("label", { class: "field", for: "f-op-takes" }, h("span", {}, "Takes"), takes), h("label", { class: "field", for: "f-op-gives" }, h("span", {}, "Gives"), gives),
-        h("div", { class: "acts" }, change, edit("Remove this operation", `Remove it from ${names[iface] ?? "the interface"}`, Top.removeField(code, sh, variant, sel), () => runTop(info, Top.removeField(code, sh, variant, sel), () => { ui.selected = iface; }), "btn danger")),
-        h("p", { class: "hint" }, "An implementation's part for it becomes a hole when what it takes or gives changes."));
+        h("div", { class: "acts" }, change, edit("Remove operation", `Remove it from ${names[iface] ?? "the interface"}`, Top.removeField(code, sh, variant, sel), () => runTop(info, Top.removeField(code, sh, variant, sel), () => { ui.selected = iface; }), "btn danger")));
       // Its ways (WAYS.md, E210): definitions that compute it from the
       // interface's other operations, so an implementation can leave it to
       // them; the compiler picks the cheapest that ends in what's given.
       const op = names[sel] ?? "it", ways = code.defs.filter((d) => (code.nodes[d] as NodeOf<"def">).way === sel);
-      out.append(h("div", { class: "sub-head" }, `Ways of ${op} · code.json`));
-      if (!ways.length) out.append(h("p", { class: "hint" }, `None: each implementation gives ${op}. A way computes it from ${names[iface] ?? "the interface"}'s other operations, so an implementation can leave it to its ways.`));
+      out.append(head("Ways", { file: "code", tip: `A way computes ${op} from ${names[iface] ?? "the interface"}'s other operations, so an implementation can leave it to its ways.` }));
+      if (!ways.length) out.append(h("p", { class: "hint" }, "None"));
       for (const d of ways) { const cost = (code.nodes[d] as NodeOf<"def">).cost; out.append(row(pick(d, names[d] ?? "a way", cost != null ? `cost ${cost}` : ""))); }
       const wc = textField("f-new-way", "New way", "its name, or one is made");
-      const addWay = h("button", { class: "btn", type: "button" }, "Add a way");
+      const addWay = h("button", { class: "btn", type: "button" }, "Add way");
       addWay.addEventListener("click", () => runTop(info, Top.addWay(code, sh, iface, sel, wc.input.value), (r) => { ui.back = [ui.def]; ui.def = r.select; ui.selected = null; }));
       wc.input.addEventListener("keydown", (e) => { if (e.key === "Enter") addWay.click(); });
       out.append(wc.el, h("div", { class: "acts" }, addWay));
@@ -446,9 +435,9 @@ export function structure(host: StructureHost) {
       const type = info.owner.get(sel)!;
       const t = typePicker("f-field-type", type, names, n.type, () => { const sp = t.spec(); if (sp) runTop(info, Top.setFieldType(code, sh, sel, sp)); });
       const w = words(type);
-      out.append(h("div", { class: "sub-head" }, `${cap(w.field)} of `, pick(variant.id, names[variant.id] ?? `a ${w.case}`), " · code.json"),
-        h("label", { class: "field", for: "f-field-type" }, h("span", {}, "Holding"), t.el),
-        h("div", { class: "acts" }, edit(`Remove this ${w.field}`, `Remove it from the ${w.case}`, Top.removeField(code, sh, variant.id, sel), () => runTop(info, Top.removeField(code, sh, variant.id, sel), () => { ui.selected = variant.id; }), "btn danger")));
+      out.append(head([`${cap(w.field)} of `, pick(variant.id, names[variant.id] ?? `a ${w.case}`)], { file: "code" }),
+        h("label", { class: "field", for: "f-field-type" }, h("span", {}, "Type"), t.el),
+        h("div", { class: "acts" }, edit(`Remove ${w.field}`, `Remove it from the ${w.case}`, Top.removeField(code, sh, variant.id, sel), () => runTop(info, Top.removeField(code, sh, variant.id, sel), () => { ui.selected = variant.id; }), "btn danger")));
       return out;
     } else return null;
 
@@ -473,15 +462,15 @@ export function structure(host: StructureHost) {
   function typeParams(info: T.Info, names: Names, type: Id, params: Id[], what: "type" | "effect" | "operation", variant?: Id): HTMLElement {
     const code = doc().code, sh = doc().names.short;
     const whose = names[variant ?? type] ?? `this ${what}`;
-    const out = h("div", {}, h("div", { class: "sub-head" }, `Type parameters of ${whose} · code.json`));
-    if (!params.length) out.append(h("p", { class: "hint" }, what === "operation" ? "None: its inputs and what it gives back use the effect's types." : `None: ${whose} holds the same types wherever it's used. A type parameter makes it generic, like List a.`));
+    const out = h("div", {}, head("Type parameters", { file: "code", tip: what === "operation" ? "Fresh at each call. With none, its inputs and what it gives back use the effect's types." : `A type parameter makes ${whose} generic, like List a. With none, it holds the same types wherever it's used.` }));
+    if (!params.length) out.append(h("p", { class: "hint" }, "None"));
     for (const p of params) {
       const r = Top.removeTypeParameter(code, sh, type, p);
-      out.append(row(pick(p, names[p] ?? "a"), edit("×", "Remove this type parameter", r, () => runTop(info, r), "btn mini")));
+      out.append(row(pick(p, names[p] ?? "a"), edit("×", "Remove type parameter", r, () => runTop(info, r), "btn mini")));
     }
     const id = variant ? "f-new-op-param" : "f-new-type-param";
     const c = textField(id, "New type parameter", "a lower-case name, or a, b, … if empty");
-    const add = h("button", { class: "btn", type: "button" }, "Add the type parameter");
+    const add = h("button", { class: "btn", type: "button" }, "Add type parameter");
     add.addEventListener("click", () => runTop(info, Top.addTypeParameter(code, sh, type, c.input.value, variant)));
     c.input.addEventListener("keydown", (e) => { if (e.key === "Enter") add.click(); });
     out.append(c.el, h("div", { class: "acts" }, add));
@@ -496,7 +485,7 @@ export function structure(host: StructureHost) {
       edit("↑", "Move earlier", mv(-1), () => runTop(info, mv(-1)), "btn mini"),
       edit("↓", "Move later", mv(1), () => runTop(info, mv(1)), "btn mini"),
       // A used input can go too: its uses become holes, to fill or clear.
-      edit("×", T.usesOf(code, p).length ? "Remove this input: where it's used becomes a hole" : "Remove this input", rm, () => runTop(info, rm, (r) => { ui.selected = r.select !== of ? r.select : of === ui.def ? null : of; }), "btn mini"));
+      edit("×", T.usesOf(code, p).length ? "Remove input: where it's used becomes a hole" : "Remove input", rm, () => runTop(info, rm, (r) => { ui.selected = r.select !== of ? r.select : of === ui.def ? null : of; }), "btn mini"));
   }
 
   // A function written inside a body, (x) => …, passed to map or keep say:
@@ -516,9 +505,9 @@ export function structure(host: StructureHost) {
 
   // + New: a function (with its inputs), a value, or a data type.
   function newDefinitionForm(info: T.Info): HTMLElement {
-    const name = textField("f-def-name", "Name", "what to call it");
+    const name = textField("f-def-name", "Name", "");
     const kind = ui.newKind;
-    const extra = kind === "function" ? textField("f-def-inputs", "Inputs", "names, separated by commas (none for an action)")
+    const extra = kind === "function" ? textField("f-def-inputs", "Inputs", "a, b, … (none: an action)")
       : kind === "type" ? textField("f-def-case", "First case", "a name, e.g. circle")
       : kind === "effect" ? textField("f-def-case", "First operation", "a name, e.g. ask")
       : kind === "interface" ? textField("f-def-case", "First operation", "a name, e.g. sin") : null;
@@ -541,13 +530,12 @@ export function structure(host: StructureHost) {
     });
     for (const f of [name, extra]) f?.input.addEventListener("keydown", (e) => { if (e.key === "Enter") go.click(); });
     return h("div", { class: "insp" },
-      h("div", { class: "sub-head" }, "New definition · code.json"),
+      head("New definition", { file: "code", tip: kind === "function" ? "Function: takes inputs and gives back a value; with no inputs it's an action you can run."
+        : kind === "value" ? "Value: one value, computed once."
+        : kind === "type" ? "Data type: cases, each with fields, like an enum whose cases carry data."
+        : kind === "interface" ? "Interface: operations a type can have, like Trig's sin and cos, written once for any type a; each type that implements it says what they do there."
+        : "Effect: operations a computation can ask for. Calling one performs it; whoever runs the computation answers it with a match, one case per operation." }),
       seg("new-kind", kind, [["function", "Function"], ["value", "Value"], ["type", "Data type"], ["effect", "Effect"], ["interface", "Interface"]]),
-      h("p", { class: "hint" }, kind === "function" ? "Takes inputs and gives back a value; with no inputs it's an action you can run."
-        : kind === "value" ? "One value, computed once."
-        : kind === "type" ? "Cases, each with fields: like an enum whose cases carry data."
-        : kind === "interface" ? "Operations a type can have, like Trig's sin and cos: written once for any type a, and each type that implements it says what they do there. Uses resolve to that type's definitions before running."
-        : "Operations a computation can ask for, like a data type whose cases are requests. Calling one performs it; whoever runs the computation answers it with a match, one case per operation."),
       name.el, extra?.el ?? null,
       h("div", { class: "acts" }, go, h("button", { class: "btn", type: "button", "data-act": "new-def" }, "Cancel")));
   }
