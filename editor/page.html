@@ -554,6 +554,9 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph path.then.head { stroke-dasharray: none; }
 .tgraph .reroute.sel { stroke: var(--accent); stroke-width: 3; }
 .tgraph .dotl { fill: var(--dot); font: 600 11.5px var(--font-ui); pointer-events: none; }
+.scrub { cursor: ew-resize; touch-action: pan-y; }
+input.scrub:focus { cursor: text; touch-action: auto; }
+html.scrubbing, html.scrubbing * { cursor: ew-resize !important; user-select: none; }
 .field textarea.lit-text { font: 12px var(--font-code); white-space: pre; overflow: auto; resize: vertical; }
 /* Labels that sit on the canvas keep a halo of it, so a wire under one doesn't cross it out. */
 .tgraph .dotl, .tgraph .halo { paint-order: stroke; stroke: var(--canvas); stroke-width: 4px; stroke-linejoin: round; }

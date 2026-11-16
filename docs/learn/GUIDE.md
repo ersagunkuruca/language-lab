@@ -118,7 +118,9 @@ write(rolls, append(‹a hundred rolls›(7), read(rolls)))
 `write(rolls, …)` changes it. Section 8 says more.
 
 1. Click the `7`. The inspector says **Literal**, which means a value
-   written out, of type `Float64`.
+   written out, of type `Float64`. Drag sideways on its field to change
+   the number (Shift for bigger steps, Alt for smaller, Esc to put it
+   back); a click edits the text.
 2. Press **Delete**. The `7` becomes a hole, `□Float64`, and the palette
    opens.
 3. Type `die` in the palette's search and click `die()`.
