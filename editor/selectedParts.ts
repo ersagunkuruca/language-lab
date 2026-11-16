@@ -10,7 +10,7 @@ import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../ters/src/un
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { sameAs, type Same } from "../ters/src/lang/modules.ts";
 import * as T from "./typed.ts";
-import { edit, h } from "./dom.ts";
+import { edit, h, head } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
 
 // Does the program's own code give any node a unit? The library's don't
@@ -58,16 +58,16 @@ export function selectedParts(host: SelectedHost) {
     if (inRow) {
       const { row, at } = inRow, n = row.items.length;
       const cant = (why: string) => ({ ok: false as const, reason: why });
-      box.append(h("div", { class: "sub-head" }, `${word(row)[0].toUpperCase() + word(row).slice(1)} ${at + 1} of ${n} in ${of(row)} · code.json`), h("div", { class: "acts" },
-        edit("Add one before", `A new ${word(row)} just before this`, { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, row, at), true)),
-        edit("Add one after", `A new ${word(row)} just after this`, { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, row, at + 1), true)),
+      box.append(head(`${word(row)[0].toUpperCase() + word(row).slice(1)} ${at + 1} of ${n} · ${of(row)}`, { file: "code" }), h("div", { class: "acts" },
+        edit("Add before", `A new ${word(row)} just before this`, { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, row, at), true)),
+        edit("Add after", `A new ${word(row)} just after this`, { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, row, at + 1), true)),
         edit("Earlier", "Swap it with the one before", T.whyNotMove(row, at, at - 1) ? cant(T.whyNotMove(row, at, at - 1)!) : { ok: true }, () => go(T.moveItem(doc().code, doc().names.short, info, row, at, -1))),
         edit("Later", "Swap it with the one after", T.whyNotMove(row, at, at + 1) ? cant(T.whyNotMove(row, at, at + 1)!) : { ok: true }, () => go(T.moveItem(doc().code, doc().names.short, info, row, at, 1))),
-        edit("Take it out", `Remove this ${word(row)}; the rest close up`, { ok: true }, () => go(T.removeItem(doc().code, doc().names.short, info, row, at)), "btn danger")));
+        edit("Remove", `Remove this ${word(row)}; the rest close up`, { ok: true }, () => go(T.removeItem(doc().code, doc().names.short, info, row, at)), "btn danger")));
     }
     if (own) {
-      if (!inRow) box.append(h("div", { class: "sub-head" }, `${own.kind === "list" ? `A list of ${own.items.length}` : `${own.items.length} inputs of ${of(own)}`} · code.json`));
-      box.append(h("div", { class: "acts" }, edit(`Add ${own.kind === "list" ? "an item" : "an input"} at the end`, "A new hole at the end, to fill", { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, own, own.items.length), true))));
+      if (!inRow) box.append(head(own.kind === "list" ? `List of ${own.items.length}` : `${own.items.length} inputs · ${of(own)}`, { file: "code" }));
+      box.append(h("div", { class: "acts" }, edit(own.kind === "list" ? "Add item" : "Add input", "A new hole at the end, to fill", { ok: true }, () => go(T.addItem(doc().code, doc().names.short, info, own, own.items.length), true))));
     }
     return box;
   }
@@ -92,8 +92,8 @@ export function selectedParts(host: SelectedHost) {
     const usesUnits = !!declared || declaresUnits(doc().code);
     const u = usesUnits ? (() => { try { return unitInfer(doc().code, ui.def).unit(id); } catch { return undefined; } })() : undefined;
     if (!usesUnits && !declarable) return null;
-    const box = h(usesUnits ? "div" : "details", usesUnits ? {} : { class: "alts units" }, usesUnits ? h("div", { class: "sub-head" }, "Unit · part of its type") : h("summary", {}, "Give it a unit (m, s, kg…)"),
-      h("p", { class: "hint" }, declared ? `Declared ${formatUnit(declared)}.` : u ? `Inferred ${formatUnit(u)} from what it's connected to.` : n.kind === "lit" ? "A plain number." : "Free: nothing pins it down yet, so it fits anywhere."));
+    const box = h(usesUnits ? "div" : "details", usesUnits ? {} : { class: "alts units" }, usesUnits ? head("Unit", { tip: "Part of its type: everything connected to it has to agree." }) : h("summary", {}, "Unit (m, s, kg…)"),
+      h("p", { class: "hint", title: declared ? undefined : u ? "Inferred from what it's connected to" : n.kind === "lit" ? undefined : "Nothing pins it down yet, so it fits anywhere" }, declared ? `Declared · ${formatUnit(declared)}` : u ? `Inferred · ${formatUnit(u)}` : n.kind === "lit" ? "None" : "Free"));
     if (!declarable) return box;
     const chips = h("div", { class: "chips", role: "group", "aria-label": "Unit" });
     for (const [label, unit] of UNIT_CHIPS) {

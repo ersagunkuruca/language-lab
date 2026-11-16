@@ -901,11 +901,11 @@ function heldReason(reason: string): string {
   const effects = (t: string) => new Set([...t.matchAll(/-\[([^\]]*)\]->/g)].flatMap((x) => x[1].split(", ")).filter((e) => /^[A-Z]/.test(e)));
   const had = effects(m[2]), added = [...effects(m[3])].filter((e) => !had.has(e));
   const why = added.length ? `: it would do ${added.join(" and ")} where ${name} doesn't` : "";
-  return `${name} keeps its type, ${m[2]}, while it has a hole, and this would make it ${m[3]}${why}. To allow it, Let it loosen (beside the palette) so its type follows its body, or make the change where ${name} is used`;
+  return `${name} keeps its type, ${m[2]}, while it has a hole, and this would make it ${m[3]}${why}. To allow it, Loosen type (beside the palette) so its type follows its body, or make the change where ${name} is used`;
 }
 
 function loosenButton(dname: string): HTMLElement {
-  const b = h("button", { class: "btn", type: "button" }, "Let it loosen");
+  const b = h("button", { class: "btn", type: "button", title: "Let its type follow its body again" }, "Loosen type");
   b.addEventListener("click", () => { const { [ui.def]: _, ...rest } = held; held = rest; ui.note = `${dname}'s type follows its body again.`; ui.refused = false; save(); render(); });
   return b;
 }
@@ -1187,13 +1187,13 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const shownFrom = view?.from.get(id);
   if (shownFrom && id.includes("~")) {
     const call = id.split("~").at(-1)!;
-    return h("div", { class: "insp" }, h("p", { class: "hint" }, `Shown inline from ${namer.name(shownFrom)}. This is a view: to change it, open the definition.`),
+    return h("div", { class: "insp" }, head(["Inline view of ", namer.name(shownFrom)], { tip: "A view only: to change it, open the definition." }),
       h("div", { class: "acts" },
         h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": shownFrom }, `Open ${namer.name(shownFrom)}`),
         inlinable(view!.code, id) ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": id }, (doc.layout.inline ?? []).includes(id) ? "Collapse" : "Show inline") : null,
-        h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call }, "Collapse the call")));
+        h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call }, "Collapse call")));
   }
-  if (!node(id)) return h("div", { class: "empty" }, "Nothing selected. Click anything in the blocks; a hole (□) opens a palette of what fits.");
+  if (!node(id)) return h("div", { class: "empty", title: "Click anything in the graph or the blocks; a hole (□) opens a palette of what fits" }, "Nothing selected");
   const n = node(id);
   const names = p.names;
   const out = h("div", { class: "insp" });
@@ -1202,7 +1202,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   // What this part is in, a whole a + b around its b, one step out
   // (E183b): Alt+↑ does the same.
   const outer = enclosing(id);
-  const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ what it's in") : null;
+  const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ Outer") : null;
   out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))), ...(upBtn ? [h("div", { class: "acts up" }, upBtn)] : []));
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
@@ -1215,7 +1215,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const upn = up?.slot === "args" ? node(up.parent) : null;
   const ops = isCall(upn) ? implementationOps(doc.code, upn.fn) : null;
   const at = ops ? /^(\S+) (.+)$/.exec(T.typeOf(info, up!.parent, names) ?? "") : null;
-  if (ops && at && up?.index !== undefined) out.append(h("p", { class: "hint" }, `This is ${names[ops[up.index]] ?? "an operation"} at ${at[2]}: what ${at[1]}'s ${names[ops[up.index]] ?? "operation"} does for a ${at[2]}. Write it as a function, or pick one that fits.`));
+  if (ops && at && up?.index !== undefined) out.append(h("div", { class: "typeline", title: `What ${at[1]}'s ${names[ops[up.index]] ?? "operation"} does for a ${at[2]}: write it as a function, or pick one that fits` }, h("span", {}, "for"), h("code", {}, `${names[ops[up.index]] ?? "operation"} at ${at[2]}`)));
   else if (t) out.append(h("div", { class: "typeline" }, h("span", {}, "type"), h("code", {}, t)));
   // Which of a shared name's meanings a call took (E223).
   const took = T.tookType(doc.code, info, names, id);
@@ -1254,8 +1254,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     // Its ports as model.ts portsOf reads them (L225c), in either stored form.
     const ports = portsOf(doc.code.nodes, id), rs = ports?.condition ? ports.results : [];
     const all = ports?.condition ? [...ports.inputs, ...ports.results] : fnBody.params;
-    out.append(h("div", { class: "sub-head" }, "Results · code.json"),
-      h("p", { class: "hint" }, rs.length ? `Gives ${rs.map((r) => names[r] ?? r).join(", ")} from the other ports. Click a port to make it an input or a result.` : "A true or false of its ports. Make some of them results, and it reads as a function that gives them: x, y = polar(length, angle)."),
+    out.append(head("Results", { file: "code", tip: rs.length ? `Gives ${rs.map((r) => names[r] ?? r).join(", ")} from the other ports. Click a port to make it an input or a result.` : "A true or false of its ports. Make some of them results, and it reads as a function that gives them: x, y = polar(length, angle)." }),
       h("div", { class: "acts" }, ...all.map((q) => {
         const on = rs.includes(q);
         const b = h("button", { class: `btn${on ? " on" : ""}`, type: "button", "aria-pressed": String(on), title: on ? "A result: click to make it an input" : "An input: click to make it a result" }, `${on ? "→ " : ""}${names[q] ?? q}`);
@@ -1271,36 +1270,35 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
         const cb = h("input", { type: "checkbox", id: `f-dir-${i}`, checked: want.has(i) }) as HTMLInputElement;
         return { cb, el: h("label", { class: "field check", for: `f-dir-${i}` }, cb, h("span", {}, names[q] ?? `port ${i + 1}`)) };
       });
-      const go = h("button", { class: "btn", type: "button" }, "Add a direction");
+      const go = h("button", { class: "btn", type: "button" }, "Add direction");
       go.addEventListener("click", () => runTop(info, Top.addDirection(doc.code, doc.names.short, id, ticks.flatMap((t, i) => (t.cb.checked ? [i] : [])), ""), (r) => { ui.back = [ui.def]; ui.def = r.select; ui.selected = null; }));
-      out.append(h("div", { class: "sub-head" }, "Other directions · code.json"),
-        h("p", { class: "hint" }, dirs.length ? "Each gives other ports from the rest; a solve given those uses it instead of searching." : `None: a solve of ${names[id] ?? "it"} given its results searches. A direction says how to work out other ports from the rest, as unpolar does for polar.`),
+      out.append(head("Directions", { file: "code", tip: `A direction works out other ports from the rest, as unpolar does for polar; a solve given those uses it instead of searching. With none, a solve of ${names[id] ?? "it"} given its results searches.` }),
+        dirs.length ? "" : h("p", { class: "hint" }, "None"),
         ...dirs.map((d) => row(pick(d, names[d] ?? "a direction", `gives ${(portsOf(doc.code.nodes, d)?.results ?? []).map((r) => names[r] ?? "?").join(", ")}`))),
-        h("p", { class: "hint" }, "The ports a new direction gives:"), ...ticks.map((t) => t.el), h("div", { class: "acts" }, go));
+        h("div", { class: "field-head" }, "New direction gives"), ...ticks.map((t) => t.el), h("div", { class: "acts" }, go));
     }
   }
   // A direction of a relation (E210b): which, and back to ordinary.
   const rel = directionOf(doc.code.nodes, id);
   if (n.kind === "def" && rel) {
     const r = Top.dropDirection(doc.code, doc.names.short, id);
-    out.append(h("div", { class: "sub-head" }, "A direction of ", pick(rel, names[rel] ?? "a relation"), " · code.json"),
-      h("p", { class: "hint" }, `The same ports as ${names[rel] ?? "it"}, in the same order: a solve of it given this one's inputs calls this instead of searching. They must agree; the law tests check it.`),
-      h("div", { class: "acts" }, edit("Make it ordinary", "No longer a direction: a definition like any other, with its results", r, () => runTop(info, r))));
+    out.append(head(["Direction of ", pick(rel, names[rel] ?? "a relation")], { file: "code", tip: `The same ports as ${names[rel] ?? "it"}, in the same order: a solve of it given this one's inputs calls this instead of searching. They must agree; the law tests check it.` }),
+      h("div", { class: "acts" }, edit("Make ordinary", "No longer a direction: a definition like any other, with its results", r, () => runTop(info, r))));
   }
 
   // A dot: a let's binder, the shared output of its value.
   if (n.kind === "binder" && T.isDot(doc.code, ui.def, id)) {
     const k = T.usesOf(doc.code, id).length;
     const r = T.removeDot(doc.code, doc.names.short, info, ui.def, id, { of: doc.loose ?? {}, home: doc.home ?? {} });
-    out.append(h("div", { class: "sub-head" }, "Dot · code.json"),
-      h("p", { class: "hint" }, `${k === 0 ? (names[id] === "_" ? "Nothing reads it: it is a step done for its effect." : "No wire leaves it: Remove the dot sets its value loose.") : `Feeds ${k} input${k === 1 ? "" : "s"}.`} Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.`),
-      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? (k ? "Put the value back on its one wire" : "The dot goes, and its value lies loose") : `Can't: ${r.reason}` }, "Remove the dot")));
+    out.append(head("Dot", { file: "code", tip: `Drag from the dot in the graph to any input it can reach to share it there. A name is optional${doc.names.short[id] === undefined ? `; without one it shows as ${names[id]}` : ""}.` }),
+      h("p", { class: "hint", title: k === 0 ? (names[id] === "_" ? "Nothing reads it: a step done for its effect" : "No wire leaves it: Remove dot sets its value loose") : undefined }, k === 0 ? (names[id] === "_" ? "Unread · a step" : "Unused") : `Feeds ${k} input${k === 1 ? "" : "s"}`),
+      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "t-undot", disabled: !r.ok, title: r.ok ? (k ? "Put the value back on its one wire" : "The dot goes, and its value lies loose") : `Can't: ${r.reason}` }, "Remove dot")));
   }
   if (n.kind === "binder" && names[id] !== "_" && !isTypeParam(id)) {
     const on = isNamed(id);
-    out.append(h("div", { class: "sub-head" }, "Shown as · layout.json"),
-      h("p", { class: "hint" }, on ? "A let node, and a get node next to every use: no long wires." : "Wires from where it's bound to every use."),
-      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "named", "data-target": id }, on ? "Show as wires" : "Show as let and get nodes")));
+    out.append(head("Drawn as", { file: "layout" }),
+      h("p", { class: "hint" }, on ? "Let and get nodes" : "Wires"),
+      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "named", "data-target": id, title: on ? "Wires from where it's bound to every use" : "A let node, and a get node next to every use: no long wires" }, on ? "Show as wires" : "Show as let and get nodes")));
   }
 
   // Nested patterns: a case's field opens into its type's cases, and a
@@ -1310,19 +1308,19 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const join = joinable ? T.joinCases(doc.code, doc.names.short, info, joinable) : null;
   if (caseField || join?.ok) {
     const deeper = caseField ? T.matchDeeper(doc.code, doc.names.short, info, id) : null;
-    out.append(h("div", { class: "sub-head" }, "Pattern · code.json"), h("div", { class: "acts" },
+    out.append(head("Pattern", { file: "code" }), h("div", { class: "acts" },
       deeper ? edit("Match deeper", `Open ${names[id] ?? "it"} into its cases, each row a copy of this one`, deeper, () => applyT(deeper)) : null,
       join?.ok ? edit("Join cases", "Its cases all give the same value: put that value back in their place", join, () => applyT(join)) : null));
   }
   // A match on values (L164c) takes another value's arm, before the
   // otherwise: its value a literal of the examined type to change (E225).
   const byValue = joinable ? valueArmAdded(joinable) : null;
-  if (byValue) out.append(h("div", { class: "sub-head" }, "Values · code.json"), h("div", { class: "acts" },
-    edit("Add a value", "Another value's case, before the otherwise: its value and its body to fill", byValue, () => applyT(byValue))));
-  if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Ctrl+V" }, "Paste the copy here")));
+  if (byValue) out.append(head("Values", { file: "code" }), h("div", { class: "acts" },
+    edit("Add value", "Another value's case, before the otherwise: its value and its body to fill", byValue, () => applyT(byValue))));
+  if (hole && clip) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "paste", title: "Put the copy here (Ctrl+V)" }, "Paste")));
   if (hole && held[ui.def] && !doc.signatures?.[ui.def]) {
     const dname = pres().names[ui.def] ?? "This definition";
-    out.append(h("div", { class: "acts held" }, h("p", { class: "hint" }, `${dname} keeps its type, ${showPin(held[ui.def], pres().names)}, while it has a hole, so only what keeps it is offered. For something that changes it, let it loosen first.`), loosenButton(dname)));
+    out.append(h("div", { class: "acts held" }, h("p", { class: "hint", title: `${dname} keeps its type while it has a hole, so only what keeps it is offered. For something that changes it, loosen it first.` }, `Type kept · ${showPin(held[ui.def], pres().names)}`), loosenButton(dname)));
   }
   if (hole) out.append(rowSection(info, id) ?? "", fillPalette(id, info, names));
 
@@ -1346,7 +1344,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
       commit();
       toProgram();
     });
-    const kind = h("span", {}, `${n.of === INT ? "Int" : typeof n.value === "number" ? "Float64" : "Text"} · code.json`);
+    const kind = h("span", { class: "field-head" }, n.of === INT ? "Int" : typeof n.value === "number" ? "Float64" : "Text", fileTag("code"));
     // A number scrubs: drag sideways on it or its head (scrub.ts, E272).
     if (typeof n.value === "number") {
       const settled = info.typeOf.get(id) && info.subst.resolve(info.typeOf.get(id)!);
@@ -1368,20 +1366,20 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     const open = T.scopeAt(doc.code, ui.def, id).filter((b) => T.untyped(info, b));
     const kinds = open.length ? [...new Set([...ownDefs().filter((d) => { const b = defBody(d); return b?.kind === "typedef" && !b.effect && !b.interface; }), ...[CONS, TRUE, SOME].map((v) => info.owner.get(v)).filter((x): x is Id => !!x)])] : [];
     const guessed = open.flatMap((b) => kinds.map((k) => ({ b, k })));
-    out.append(h("div", { class: "sub-head" }, "Change meaning · code.json"), h("div", { class: "acts" },
+    out.append(head("Edit", { file: "code" }), h("div", { class: "acts" },
       h("button", { class: "btn", type: "button", "data-act": "copy", title: "Ctrl+C; Ctrl+X cuts" }, "Copy"),
       h("button", { class: "btn", type: "button", "data-act": "t-replace", title: "Pick what goes here instead, from the palette" }, "Replace with…"),
       wrappable(id) ? h("button", { class: "btn", type: "button", "data-act": "t-wrap", title: "Put it inside a call or a function from the palette: it becomes one of its inputs" }, "Wrap in…") : null,
-      h("button", { class: "btn danger", type: "button", "data-act": "t-clear" }, "Clear to a hole"),
-      isCall(n) && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Change the function…") : null,
+      h("button", { class: "btn danger", type: "button", "data-act": "t-clear", title: "Leave a hole in its place" }, "Clear"),
+      isCall(n) && doc.code.nodes[n.fn].kind !== "lambda" ? h("button", { class: "btn", type: "button", "data-act": "t-swap", title: "Keep its inputs and pick another function that takes them" }, "Swap function…") : null,
       splittable.length || guessed.length ? h("button", { class: `btn${ui.mode === "split" ? " on" : ""}`, type: "button", "data-act": "split" }, "Split by cases…") : null));
     // A step of an action (print this, then that): its place in the order.
     const earlier = Top.moveStep(doc.code, doc.names.short, id, -1), later = Top.moveStep(doc.code, doc.names.short, id, 1);
     const isStep = (r: Top.Top) => r.ok || !/isn't a step/.test(r.reason);
     const body = defBody(ui.def);
-    if (isStep(earlier) && body?.kind === "lambda" && !body.params.length) out.append(h("div", { class: "sub-head" }, "Order of steps · code.json"), h("div", { class: "acts" },
-      edit("Do it earlier", "Swap it with the step before", earlier, () => runTop(info, earlier)),
-      edit("Do it later", "Swap it with the step after", later, () => runTop(info, later))));
+    if (isStep(earlier) && body?.kind === "lambda" && !body.params.length) out.append(head("Step order", { file: "code" }), h("div", { class: "acts" },
+      edit("Step earlier", "Swap it with the step before", earlier, () => runTop(info, earlier)),
+      edit("Step later", "Swap it with the step after", later, () => runTop(info, later))));
     const row = rowSection(info, id);
     if (row) out.append(row);
     if (ui.mode === "split") {
@@ -1401,7 +1399,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
         if (r.ok) btn.addEventListener("click", () => applyT(r));
         list.append(btn);
       }
-      out.append(h("p", { class: "hint" }, "Replaces this with a match on the variable you pick: one arm per case of its type, each starting as a copy of what's here."), list);
+      out.append(head("Split on", { tip: "Replaces this with a match on the variable you pick: one arm per case of its type, each starting as a copy of what's here." }), list);
     }
   }
 
