@@ -5,7 +5,10 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, STD_IMPL, STD_MANY, TABLE_OPS, directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, TICKET_V, TRUE, type Table } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, CONS, FALSE, HASH_SET_OPS, LOCALE_V, NIL, NONE, S, SOME, TABLE_OPS, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
+import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
+import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";

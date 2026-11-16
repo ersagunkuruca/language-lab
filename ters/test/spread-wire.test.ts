@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
-import { ARITH, tupleVariant } from "../src/lang/std.ts";
+import { ARITH } from "../src/lang/std.ts";
+import { tupleVariant } from "../src/lang/std-values.ts";
 import type { NodeOf, Call } from "../src/model.ts";
 import { useVar } from "../../editor/typed.ts";
 

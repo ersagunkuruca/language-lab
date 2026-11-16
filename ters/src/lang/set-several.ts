@@ -23,7 +23,8 @@ import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { fieldPaths } from "./records.ts";
-import { SET, tuplePart } from "./std.ts";
+import { SET } from "./std.ts";
+import { tuplePart } from "./std-values.ts";
 
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 

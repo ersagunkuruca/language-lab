@@ -8,7 +8,7 @@
 
 import type { Code, Id, NodeData } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
-import { tupleType } from "../src/lang/std.ts";
+import { tupleType } from "../src/lang/std-values.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { parseUnit } from "../src/units.ts";
 

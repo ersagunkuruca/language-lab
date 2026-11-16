@@ -15,7 +15,8 @@ import type { Bound, Code, Id, Node, NodeOf } from "../model.ts";
 import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
-import { TRUE, tupleVariant } from "./std.ts";
+import { TRUE } from "./std.ts";
+import { tupleVariant } from "./std-values.ts";
 
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 

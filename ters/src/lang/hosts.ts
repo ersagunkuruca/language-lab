@@ -21,7 +21,7 @@
 import type { Code, Id, NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { isInt, norm } from "./int.ts";
-import { ABORT_OP, BOOL, CHECK_OP, CONS, FALSE, HTML, HTML_V, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std.ts";
+import { ABORT_OP, BOOL, CHECK_OP, CONS, FALSE, HTML, HTML_V, LIST, NIL, TRUE, UNIT, UNIT_V } from "./std-ids.ts";
 import { INT, NUMBER, STRING } from "./types.ts";
 import type { Value as RunValue } from "./run.ts";
 

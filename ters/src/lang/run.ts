@@ -36,8 +36,12 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std.ts";
-import { SIGS, ArrayView, FILE_OPS, KEPT_FILES, tupleVariant, floatText, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, shownImplementations, implementationsOf, ORDERED, CASE_NAME, SOME, STD_IMPL, STD_MANY, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std.ts";
+import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std-ids.ts";
+import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
+import { tupleVariant } from "./std-values.ts";
+import { ArrayView } from "./array-view.ts";
+import { floatText, shownImplementations, implementationsOf } from "./std-values.ts";
+import { STD_IMPL, STD_MANY } from "./std-impl.ts";
 import { intLit } from "./int.ts";
 import { answeredEffects, jsHostHas, supported } from "./supports.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, pureEffect, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
@@ -744,10 +748,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // and diverging: one that gives no value or several stops the run), and
   // the library's host ways, which are pure.
   const pureFns = new Set<Fn>(), pureJets = new WeakSet<Fn>();
-  for (const [id, f] of Object.entries(builtins)) {
-    const t = SIGS[id]?.(new Subst());
-    if (t?.t === "fn" && t.eff.effs.every((e) => e === CHOICE || e === DIVERGE) && !HANDLED.has(f) && !worldOps.has(f)) pureFns.add(f);
-  }
+  const computeOnly = new Set(COMPUTE_ONLY);
+  for (const [id, f] of Object.entries(builtins)) if (computeOnly.has(id) && !HANDLED.has(f) && !worldOps.has(f)) pureFns.add(f);
   const statically = new Map<Id, boolean>();
   // Whether a lambda's type says it does something besides compute.
   const acts = (n: NodeOf<"lambda">): boolean => {

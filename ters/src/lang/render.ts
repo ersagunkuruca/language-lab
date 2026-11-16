@@ -24,7 +24,8 @@ import { matchRows, patternWith, sharedOtherwise, type Pat } from "./patterns.ts
 import { paramName } from "./refactor.ts";
 import { implementationOps, isOperation } from "./records.ts";
 import { partPort } from "./results.ts";
-import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE, tupleVariant } from "./std.ts";
+import { chainOperands, CONS, FALSE, MAP as MAP_TYPE, NIL, PAIR_V, S, SET_TYPE, TRUE } from "./std.ts";
+import { tupleVariant } from "./std-values.ts";
 import { NUMBER, showIn } from "./types.ts";
 import { formatUnit } from "../units.ts";
 import { holeWithUnit, withUnits } from "./unit-types.ts";

@@ -29,7 +29,8 @@ import type { Names } from "../presentation.ts";
 import { preludeDef } from "./arith.ts";
 import { infer, type Info } from "./infer.ts";
 import { readPaths } from "./records.ts";
-import { SET, tuplePart, tupleVariant } from "./std.ts";
+import { SET } from "./std.ts";
+import { tuplePart, tupleVariant } from "./std-values.ts";
 
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 

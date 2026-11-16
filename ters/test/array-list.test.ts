@@ -99,7 +99,8 @@ test("a definition over lists stored as arrays runs backwards, with one answer",
 // into one of its own, once: matching the same view again gives the same
 // rest, and the items are the same all the way down.
 test("rests of a big array let its buffer go once little is left, and a view's rest is made once", async () => {
-  const { STD_IMPL, arrayOf, ArrayView } = await import("../src/lang/std.ts");
+  const { STD_IMPL } = await import("../src/lang/std-impl.ts");
+  const { arrayOf, ArrayView } = await import("../src/lang/array-view.ts");
   const rest = STD_IMPL[ARRAY_OPS.rest] as (a: unknown) => InstanceType<typeof ArrayView>;
   const n = 100_000;
   let v = arrayOf(Array.from({ length: n }, (_, i) => i));

@@ -27,7 +27,8 @@
 import type { Code, Id } from "../model.ts";
 import { isUse } from "../model.ts";
 import { Lang } from "./dsl.ts";
-import { CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE, tupleVariant } from "./std.ts";
+import { CONS, FALSE, INT_OPS, NIL, NONE, S, SOME, TEXT_OPS, TRUE } from "./std.ts";
+import { tupleVariant } from "./std-values.ts";
 import { firstSets } from "./first-sets.ts";
 import { descentReader, infixesOf, Unsupported } from "./descent.ts";
 import { INT } from "./types.ts";

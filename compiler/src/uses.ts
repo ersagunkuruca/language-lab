@@ -12,7 +12,7 @@
 import type { Call, Code, Id, Use } from "../../ters/src/model.ts";
 import { isUse } from "../../ters/src/model.ts";
 import { OverMap, type Type } from "../../ters/src/lang/types.ts";
-import { tupleType } from "../../ters/src/lang/std.ts";
+import { tupleType } from "../../ters/src/lang/std-values.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { filled } from "../../ters/src/lang/ports.ts";

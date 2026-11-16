@@ -5,7 +5,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CONS, DirectMap, STD_IMPL, Table, TABLE_OPS } from "../src/lang/std.ts";
+import { CONS, TABLE_OPS } from "../src/lang/std.ts";
+import { DirectMap, Table } from "../src/lang/table.ts";
+import { STD_IMPL } from "../src/lang/std-impl.ts";
 
 const put = STD_IMPL[TABLE_OPS.put] as (t: Table, k: unknown, v: unknown) => Table;
 const remove = STD_IMPL[TABLE_OPS.remove] as (t: Table, k: unknown) => Table;

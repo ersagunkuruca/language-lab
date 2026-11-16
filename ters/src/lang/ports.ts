@@ -5,8 +5,8 @@
 
 import type { Code, Id, Node, Use } from "../model.ts";
 import { derived, derivedFrom, fieldPorts, isBound, onLayer, useTarget } from "../model.ts";
-import { SIGS, TUPLE_MAX, tupleVariant, tuplePart } from "./std.ts";
-import { Subst } from "./types.ts";
+import { BUILTIN_INPUTS, TUPLE_MAX } from "./std-ids.ts";
+import { tupleVariant, tuplePart } from "./std-values.ts";
 import { forgetSpine } from "./spine.ts";
 
 // The binders naming the result ports of the function an expression is: a
@@ -52,8 +52,8 @@ export function usePorts(code: Code, n: { fn: Id }): string[] | null {
     const fp = fieldPorts(code.nodes, t);
     return fp ? [...fp.ins, ...fp.outs].map(String) : null;
   }
-  const sig = SIGS[target]?.(new Subst());
-  return sig?.t === "fn" ? [...sig.params.map((_, i) => String(i)), "out"] : null;
+  const inputs = BUILTIN_INPUTS[target];
+  return inputs === undefined ? null : [...Array.from({ length: inputs }, (_, i) => String(i)), "out"];
 }
 
 // The ports a use answers (L211d): its binders', in order, or with no

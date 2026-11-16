@@ -14,7 +14,7 @@ import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { freshId, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
-import { tuplePart, tupleVariant } from "./std.ts";
+import { tuplePart, tupleVariant } from "./std-values.ts";
 
 // A node without its id, kind by kind.
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;

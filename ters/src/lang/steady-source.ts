@@ -51,7 +51,8 @@ import { merge, type Id } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ARITHMETIC_V, DIVISION_V, FALSE, INT_OPS, LITERAL_V, ORDERED_V, S, SHOWN_V, std, TRIG_V, TRUE, tupleVariant } from "./std.ts";
+import { ARITHMETIC_V, DIVISION_V, FALSE, INT_OPS, LITERAL_V, ORDERED_V, S, SHOWN_V, std, TRIG_V, TRUE } from "./std.ts";
+import { tupleVariant } from "./std-values.ts";
 import { NUMBER } from "./types.ts";
 
 // The double whose high word is `hi` and low word 0.

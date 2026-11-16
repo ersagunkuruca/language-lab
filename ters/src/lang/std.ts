@@ -4,19 +4,14 @@
 // refer to it, exactly like prelude.ts.
 
 import { discharge } from "./ledger.ts";
+import { PART_NAMES, tupleType } from "./std-values.ts";
 import type { Code, Id, Node, NodeOf } from "../model.ts";
 import { isCall, toTodaysShape } from "../model.ts";
 import { readSaved } from "../saved.ts";
 import moved0 from "../../library/moved.json" with { type: "json" };
 import type { Names } from "../presentation.ts";
 import { B, impl } from "../prelude.ts";
-import { MASK_TYPES, NAMED_ROWS, ROW_CARRIER, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, type Row, type Subst, type Type } from "./types.ts";
-import * as I from "./int.ts";
-import * as T from "./text.ts";
-import { Pending } from "./cells.ts";
-import * as A from "./algebraic.ts";
-import * as RL from "./real.ts";
-import { ItemsList } from "./bytes.ts";
+import { MASK_TYPES, NAMED_ROWS, ROW_CARRIER, ARRAY, TABLE, HASH_SET, CELL, PATH, JOB, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NETWORK, NUMBER, STRING, Subst, type Row, type Type } from "./types.ts";
 
 const nodes: Node[] = [];
 const node = (n: Node) => (nodes.push(n), n.id);
@@ -334,33 +329,19 @@ const optional = (a: Type): Type => ({ t: "con", id: OPTIONAL, args: [a] });
 const fn = (params: Type[], ret: Type, eff: { effs: Id[]; tail: number | null }): Type => ({ t: "fn", params, ret, eff });
 
 export const SIGS: Record<Id, Sig> = {};
-export const STD_IMPL: Record<Id, (...xs: any[]) => any> = {};
-// Builtins with Choice: every answer, as an array (none, one or several).
-export const STD_MANY: Record<Id, (...xs: any[]) => any[]> = {};
 
-function builtin(op: string, name: string, sig: Sig, f?: (...xs: any[]) => any) {
+// What each builtin runs is std-run.ts's (C251), by the same op.
+function builtin(op: string, name: string, sig: Sig) {
   const id = `builtin.${op}`;
   named(node({ id, kind: "builtin", op }), name);
   SIGS[id] = sig;
-  if (f) STD_IMPL[id] = f;
   return id;
 }
 // A partial builtin: Choice with no answer or one, never more (the compiler
 // relies on it: compiler/src/compile.ts `$partial`, GAPS.md G24).
-function choice(op: string, name: string, params: Type[], ret: Type, f: (...xs: any[]) => any[]) {
+function choice(op: string, name: string, params: Type[], ret: Type) {
   const id = builtin(op, name, (s) => fn(params, ret, s.freshRow([CHOICE])));
-  STD_MANY[id] = f;
   return id;
-}
-
-const truth = (b: boolean) => ({ tag: b ? "std.bool.true" : "std.bool.false", fields: [] });
-// Lists as std builds them, for builtins that take or give one.
-const listOf = (xs: unknown[]) => xs.reduceRight<object>((tail, x) => ({ tag: "std.list.cons", fields: [x, tail] }), { tag: "std.list.nil", fields: [] });
-function itemsOf(l: { tag: Id; fields: unknown[] }): unknown[] {
-  if (l instanceof ItemsList) return l.items();
-  const out: unknown[] = [];
-  for (let d = l; d.tag === "std.list.cons"; d = d.fields[1] as typeof l) out.push(d.fields[0]);
-  return out;
 }
 
 // The numeric builtins from prelude.ts get types here; their code stays there.
@@ -384,7 +365,7 @@ export const S = {
   // so a thousand items are one node's inputs, not a thousand nested
   // `cons` calls. Its type is written for one item; the checker gives a
   // call with n inputs n of them (infer.ts).
-  listOf: builtin("list.of", "list of", (s) => { const a = s.fresh(); return fn([a], list(a), s.freshRow()); }, (...xs: unknown[]) => listOf(xs)),
+  listOf: builtin("list.of", "list of", (s) => { const a = s.fresh(); return fn([a], list(a), s.freshRow()); }),
   // A stop with a reason (SPEC §8.4, L51c): no handler catches it, as an
   // overflow. For a rule that a pure operation can't keep any other way, as
   // + on tensors of different shapes. Haskell's `error`. run.ts runs it.
@@ -397,14 +378,14 @@ export const S = {
   and: builtin("and", "and", pure([bool, bool], bool)),
   or: builtin("or", "or", pure([bool, bool], bool)),
   not: builtin("not", "not", pure([bool], bool)),
-  abs: builtin("abs", "abs", pure([num], num), Math.abs),
-  floor: builtin("floor", "floor", pure([num], num), Math.floor),
+  abs: builtin("abs", "abs", pure([num], num)),
+  floor: builtin("floor", "floor", pure([num], num)),
   // The nearest binary32 value (ties to even): what a GPU holds. The job
   // of every Float64 operation in the Float32 representation (NUMBERS.md).
-  float32: builtin("float32", "round to Float32", pure([num], num), Math.fround),
-  mod: builtin("mod", "mod", (s) => fn([num, num], num, s.freshRow([CHOICE])), (a: number, b: number) => ((a % b) + b) % b),
-  concat: builtin("concat", "join text", pure([str, str], str), (a: string, b: string) => a + b),
-  show: builtin("show", "show", pure([num], str), (x: number) => floatText(x)),
+  float32: builtin("float32", "round to Float32", pure([num], num)),
+  mod: builtin("mod", "mod", (s) => fn([num, num], num, s.freshRow([CHOICE]))),
+  concat: builtin("concat", "join text", pure([str, str], str)),
+  show: builtin("show", "show", pure([num], str)),
   range: builtin("range", "range", pure([num], list(num))),
   // Choice: a computation that may have no answer, one, or many (Verse-ish).
   oneOf: builtin("oneOf", "one of", (s) => { const a = s.fresh(); return fn([list(a)], a, s.freshRow([CHOICE])); }),
@@ -484,8 +465,7 @@ export const S = {
   // runs again with the reply when it lands, as Solid's and React's
   // Suspense fallback. Where nothing waits (a command line blocks for the
   // reply) it is the action's value.
-  whileWaiting: builtin("whileWaiting", "while waiting", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, e), a], a, e); },
-    (body: () => unknown, shown: unknown) => { try { return body(); } catch (e) { if (e instanceof Pending) return shown; throw e; } }),
+  whileWaiting: builtin("whileWaiting", "while waiting", (s) => { const a = s.fresh(), e = s.freshRow(); return fn([fn([], a, e), a], a, e); }),
   // Turns "might not terminate" into "might fail": at most n calls to
   // possibly-divergent definitions, then fail.
   fuel: builtin("fuel", "with fuel", (s) => {
@@ -494,7 +474,6 @@ export const S = {
   }),
 };
 
-STD_MANY[S.valueOf] = (o: { tag: Id; fields: unknown[] }) => (o.tag === SOME ? [o.fields[0]] : []);
 
 // The world: the console, files. Their implementations are the runtime's
 // (run.ts `World`), which is the only handler world effects have. Those
@@ -612,12 +591,12 @@ for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as Node
 const jobOf = (op: string, name: string, given: (s: Subst) => Type[]) => builtin(op, name, (s) => {
   const t = s.fresh(), r = s.fresh();
   return fn([...given(s), costType], jobType(t, r), s.freshRow());
-}, (...xs: unknown[]) => ({ tag: `builtin.${op}`, fields: xs }));
+});
 function sameJob(op: string, name: string, given: (r: Type, s: Subst) => Type[]) {
   return builtin(op, name, (s) => {
     const t = s.fresh(), r = s.fresh();
     return fn(given(r, s), jobType(t, r), s.freshRow());
-  }, (...xs: unknown[]) => ({ tag: `builtin.${op}`, fields: xs }));
+  });
 }
 export const JOBS = {
   // t's job (a constructor or a function on t) done at r by `by`.
@@ -644,7 +623,7 @@ export const JOBS = {
   // How a value of t is stored as r at once, in one go rather than by
   // its constructors one at a time (C76): a list's items as a balanced
   // tree, or an array.
-  storeBy: builtin("representation.storeBy", "store by", (s) => { const t = s.fresh(), r = s.fresh(); return fn([fn([t], r, s.freshRow())], jobType(t, r), s.freshRow()); }, (...xs: unknown[]) => ({ tag: "builtin.representation.storeBy", fields: xs })),
+  storeBy: builtin("representation.storeBy", "store by", (s) => { const t = s.fresh(), r = s.fresh(); return fn([fn([t], r, s.freshRow())], jobType(t, r), s.freshRow()); }),
   equalBy: sameJob("representation.equalBy", "equal by", (r) => [fn([r, r], bool, { effs: [], tail: null })]),
   showBy: sameJob("representation.showBy", "show by", (r) => [fn([r], str, { effs: [], tail: null })]),
   compareBy: sameJob("representation.compareBy", "compare by", (r) => [fn([r, r], { t: "con", id: ORDER, args: [] }, { effs: [], tail: null })]),
@@ -726,36 +705,29 @@ discharge("formula, each", [DIVERGE], "a formula runs when it's read, so read ha
 // whose types fit. Division and powers can have no answer, so they're
 // Choice rather than a crash or a NaN.
 export const INT_OPS = {
-  add: builtin("int.add", "add", pure([int, int], int), I.add),
-  sub: builtin("int.sub", "subtract", pure([int, int], int), I.sub),
-  mul: builtin("int.mul", "multiply", pure([int, int], int), I.mul),
-  neg: builtin("int.neg", "negate", pure([int], int), I.neg),
-  abs: builtin("int.abs", "abs", pure([int], int), I.abs),
-  shiftDown: builtin("int.shiftDown", "shifted down", pure([int, int], int), I.shiftDown),
-  bitAnd: builtin("int.bitAnd", "int bits and", pure([int, int], int), I.bitAnd),
-  bitOr: builtin("int.bitOr", "int bits or", pure([int, int], int), I.bitOr),
-  bitXor: builtin("int.bitXor", "int bits xor", pure([int, int], int), I.bitXor),
-  less: builtin("int.less", "less than", pure([int, int], bool), (a: I.Int, b: I.Int) => truth(I.less(a, b))),
-  quotient: choice("int.quotient", "quotient", [int, int], int, I.quotient),
-  remainder: choice("int.remainder", "remainder", [int, int], int, I.remainder),
-  power: choice("int.power", "power", [int, int], int, I.power),
+  add: builtin("int.add", "add", pure([int, int], int)),
+  sub: builtin("int.sub", "subtract", pure([int, int], int)),
+  mul: builtin("int.mul", "multiply", pure([int, int], int)),
+  neg: builtin("int.neg", "negate", pure([int], int)),
+  abs: builtin("int.abs", "abs", pure([int], int)),
+  shiftDown: builtin("int.shiftDown", "shifted down", pure([int, int], int)),
+  bitAnd: builtin("int.bitAnd", "int bits and", pure([int, int], int)),
+  bitOr: builtin("int.bitOr", "int bits or", pure([int, int], int)),
+  bitXor: builtin("int.bitXor", "int bits xor", pure([int, int], int)),
+  less: builtin("int.less", "less than", pure([int, int], bool)),
+  quotient: choice("int.quotient", "quotient", [int, int], int),
+  remainder: choice("int.remainder", "remainder", [int, int], int),
+  power: choice("int.power", "power", [int, int], int),
   // Both divided by their greatest common divisor, the bottom made positive:
   // a fraction's one spelling. Total: (n, 0) gives (±1, 0) and (0, 0) stays.
-  lowestTerms: builtin("int.lowestTerms", "lowest terms", pure([int, int], { t: "con", id: PAIR, args: [int, int] }), (a: I.Int, b: I.Int) => {
-    const [t, u] = I.lowestTerms(a, b);
-    return { tag: PAIR_V, fields: [t, u] };
-  }),
-  show: builtin("int.show", "show", pure([int], str), I.show),
-  read: choice("int.read", "read whole number", [str], int, I.read),
-  toNumber: builtin("int.toNumber", "as float64", pure([int], num), I.toNumber),
-  wholePart: choice("int.wholePart", "whole part", [num], int, I.wholePart),
+  lowestTerms: builtin("int.lowestTerms", "lowest terms", pure([int, int], { t: "con", id: PAIR, args: [int, int] })),
+  show: builtin("int.show", "show", pure([int], str)),
+  read: choice("int.read", "read whole number", [str], int),
+  toNumber: builtin("int.toNumber", "as float64", pure([int], num)),
+  wholePart: choice("int.wholePart", "whole part", [num], int),
   // 0, 1, …, n − 1. A list of a billion items is a billion cells, so this
   // is for sizes that fit in memory, like everything else.
-  range: builtin("int.range", "range", pure([int], list(int)), (n: I.Int) => {
-    let l: object = { tag: "std.list.nil", fields: [] };
-    for (let i = Number(n) - 1; i >= 0; i--) l = { tag: "std.list.cons", fields: [i, l] };
-    return l;
-  }),
+  range: builtin("int.range", "range", pure([int], list(int))),
 };
 
 // One + for every number type (NUMBERS.md, "One `+` for every number
@@ -764,12 +736,11 @@ export const INT_OPS = {
 // resolved to the type's own operation before anything runs it
 // (src/lang/arith.ts), so they have no implementation of their own: the
 // one here says so if a caller forgot to resolve.
-const unresolved = (name: string) => () => { throw new Error(`the generic ${name} must be resolved to its type's own operation first (arith.ts)`); };
 const generic = (op: string, name: string, arity: 1 | 2, kind: "arith" | "less" = "arith") =>
   builtin(`arith.${op}`, name, (s) => {
     const a = s.fresh(false, false, kind);
     return fn(arity === 1 ? [a] : [a, a], kind === "less" ? bool : a, s.freshRow());
-  }, unresolved(name));
+  });
 export const ARITH = {
   add: generic("add", "add", 2),
   sub: generic("sub", "subtract", 2),
@@ -786,42 +757,34 @@ export const ARITH_FIELD: Record<Id, { iface: Id; field: Id }> = {
   [ARITH.less]: { iface: ORDERED, field: `${ORDERED_V}.less` },
 };
 
-// A Float64 as show writes it (BACKLOG L154, Ersagun 2026-11-02): to 9
-// decimals, so a sum's last-bit noise doesn't show (0.1 + 0.2 is 0.3);
-// but a nonzero number smaller than 10⁻⁶ in size, which 9 decimals would
-// turn into 0 or one digit, gets the shortest text that reads back to it
-// exactly (JavaScript's own, 1e-12), as Steele and White's and Ryū's
-// shortest round trip.
-export const floatText = (x: number): string =>
-  Number.isInteger(x) ? String(x) : x !== 0 && Math.abs(x) < 1e-6 ? String(x) : String(Math.round(x * 1e9) / 1e9);
 
 // Text at real sizes (src/lang/text.ts). Positions count characters.
 export const TEXT_OPS = {
-  length: builtin("text.length", "length", pure([str], int), T.length),
-  slice: builtin("text.slice", "slice", pure([str, int, int], str), T.slice),
-  characters: builtin("text.characters", "characters", pure([str], list(str)), (t: string) => listOf(T.characters(t))),
-  split: builtin("text.split", "split", pure([str, str], list(str)), (t: string, by: string) => new ItemsList(T.split(t, by), 0)),
-  joinAll: builtin("text.joinAll", "join all", pure([list(str), str], str), (l: { tag: Id; fields: unknown[] }, by: string) => T.joinAll(itemsOf(l) as string[], by)),
-  find: choice("text.find", "find", [str, str], int, T.find),
-  less: builtin("text.less", "comes before", pure([str, str], bool), (a: string, b: string) => truth(T.less(a, b))),
-  code: choice("text.code", "character code", [str], int, T.code),
-  fromCode: choice("text.fromCode", "character", [int], str, T.fromCode),
-  readNumber: choice("text.readNumber", "read number", [str], num, T.readNumber),
+  length: builtin("text.length", "length", pure([str], int)),
+  slice: builtin("text.slice", "slice", pure([str, int, int], str)),
+  characters: builtin("text.characters", "characters", pure([str], list(str))),
+  split: builtin("text.split", "split", pure([str, str], list(str))),
+  joinAll: builtin("text.joinAll", "join all", pure([list(str), str], str)),
+  find: choice("text.find", "find", [str, str], int),
+  less: builtin("text.less", "comes before", pure([str, str], bool)),
+  code: choice("text.code", "character code", [str], int),
+  fromCode: choice("text.fromCode", "character", [int], str),
+  readNumber: choice("text.readNumber", "read number", [str], num),
   // NFC (L214a): text from the world already is; text built from pieces
   // may not be ("e" ++ "\u0301").
-  normalized: builtin("text.normalized", "normalized", pure([str], str), (t: string) => t.normalize("NFC")),
+  normalized: builtin("text.normalized", "normalized", pure([str], str)),
   // What a reader sees as characters (L214c, TEXT-2026-11-03.md §3):
   // `characters` and `length` stay code points, which slicing counts.
-  graphemes: builtin("text.graphemes", "graphemes", pure([str], list(str)), (t: string) => listOf(T.graphemes(t))),
-  graphemeCount: builtin("text.graphemeCount", "grapheme count", pure([str], int), T.graphemeCount),
+  graphemes: builtin("text.graphemes", "graphemes", pure([str], list(str))),
+  graphemeCount: builtin("text.graphemeCount", "grapheme count", pure([str], int)),
   // Case in a language (L214b, TEXT-2026-11-03.md §2): the same text in
   // the same Locale gives the same answer, so they are pure.
-  uppercase: builtin("text.uppercase", "uppercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.uppercase(t, l.fields[0] as string)),
+  uppercase: builtin("text.uppercase", "uppercase", pure([str, { t: "con", id: "std.locale", args: [] }], str)),
   // People's order for text in a language (L214d, §4): the Unicode
   // Collation Algorithm with CLDR's rules for it. compare and < don't
   // change.
-  collate: builtin("text.collate", "collate", pure([str, str, { t: "con", id: "std.locale", args: [] }], { t: "con", id: "std.order", args: [] }), (a: string, b: string, l: { fields: unknown[] }) => ({ tag: [ORDER_V.before, ORDER_V.same, ORDER_V.after][T.collate(a, b, l.fields[0] as string) + 1], fields: [] })),
-  lowercase: builtin("text.lowercase", "lowercase", pure([str, { t: "con", id: "std.locale", args: [] }], str), (t: string, l: { fields: unknown[] }) => T.lowercase(t, l.fields[0] as string)),
+  collate: builtin("text.collate", "collate", pure([str, str, { t: "con", id: "std.locale", args: [] }], { t: "con", id: "std.order", args: [] })),
+  lowercase: builtin("text.lowercase", "lowercase", pure([str, { t: "con", id: "std.locale", args: [] }], str)),
 };
 
 // Time zones by name (L188c2, d2): how far a zone's clocks are ahead of
@@ -829,521 +792,57 @@ export const TEXT_OPS = {
 // IANA one, as Intl reads it); no answer for a zone it doesn't know. Pure:
 // the same zone at the same instant gives the same offset.
 export const ZONE_OPS = {
-  offset: choice("time.zoneOffset", "zone offset", [str, { t: "con", id: "std.instant", args: [] }], num, (zone: string, i: { fields: unknown[] }) => T.zoneOffset(zone, i.fields[0] as number)),
+  offset: choice("time.zoneOffset", "zone offset", [str, { t: "con", id: "std.instant", args: [] }], num),
 };
 
-// Arrays (BACKLOG C30d, REPRESENTATIONS.md step 5): a list's items side by
-// side, so an item is read by its position in constant time. An array is
-// a view, a start and a length, on a buffer with free room at both ends,
-// so adding an item at either end, and taking the array after the first
-// item, are amortised constant, and a view's items are never copied to
-// make another view. Adding writes into the free slot just past the
-// view's end (or just before its start) when no other view has taken it,
-// as the buffer keeps its lowest and highest used slots, and copies the
-// view's items into a new buffer otherwise, so every array still never
-// changes. The evaluator and compiled JS (compiler/src/runtime.js) share
-// these. Ersagun's design, a two-ended array list from one of his Unity C#
-// projects; prior art: deques as ring buffers, gap buffers, Go's slices,
-// which share their backing array the same way at one end, and arrays as
-// a list's representation, as Clojure's vectors and Haskell's Data.Vector
-// stand for sequences. `items of array` is the meaning (Array a → List a).
-//
-// `fields` is the { tag, fields: [n, item₀, …] } value equal, compare and
-// show walk, the count first so they tell [1] from [1, 2] and order
-// shorter arrays first; it is made once, when first read.
-//
-// An item replaced (C93c) is written into the buffer too, so a replace is
-// constant: the views on the buffer as it was point at a version that
-// records the change instead, the slot and what it held, and reading one
-// of those first undoes the changes back to it, as a Map's hash table
-// does (Table below: Baker's shallow binding, "Shallow binding makes
-// functional arrays fast", 1991). A list kept by one holder only reads
-// its newest version, so each replace stays constant.
 export const ARRAY_TAG = "std.array";
-type Buffer = { items: unknown[]; lo: number; hi: number };
-// The newest version holds the buffer; an older one, the change from the
-// version after it: `slot` held `old`.
-// `shared`: another view was made on this version's buffer (a rest, a
-// push into its room), so it is never written in place (replaceOwned).
-type Version = { cur: Buffer | null; next: Version | null; slot: number; old: unknown; shared?: true };
-const versionOf = (b: Buffer): Version => ({ cur: b, next: null, slot: 0, old: undefined });
-function rerootArray(t: Version) {
-  if (t.cur) return;
-  const path: Version[] = [];
-  let x = t;
-  while (!x.cur) { path.push(x); x = x.next!; }
-  for (let i = path.length - 1; i >= 0; i--) {
-    const y = path[i], b = x.cur!, was = b.items[y.slot];
-    b.items[y.slot] = y.old;
-    y.cur = b; y.next = null;
-    x.cur = null; x.next = y; x.slot = y.slot; x.old = was;
-    x = y;
-  }
-}
-export class ArrayView {
-  // Fields set in the constructor only, in one order, and the tag on the
-  // prototype, as the core IR's own records are (C93: a replace makes a
-  // view, so its shape is on machine's every step).
-  declare readonly tag: typeof ARRAY_TAG;
-  declare readonly ver: Version;
-  declare readonly start: number;
-  declare readonly n: number;
-  declare private f: unknown[] | null;
-  // Its rest, when that was copied out of a much bigger buffer (I106c).
-  declare rest: ArrayView | null;
-  constructor(ver: Version, start: number, n: number) { this.ver = ver; this.start = start; this.n = n; this.f = null; this.rest = null; }
-  // The buffer as this view's version has it.
-  get buf(): Buffer { if (!this.ver.cur) rerootArray(this.ver); return this.ver.cur!; }
-  get fields(): unknown[] { return (this.f ??= [this.n, ...this.buf.items.slice(this.start, this.start + this.n)]); }
-  toJSON() { return { tag: this.tag, fields: this.fields }; }
-}
-(ArrayView.prototype as { tag: string }).tag = ARRAY_TAG;
-type ArrayValue = ArrayView | { tag: Id; fields: unknown[] };
-// A buffer holding xs[from, to) in its middle, with room for as many
-// again on each side.
-export const arrayOf = (xs: unknown[], from = 0, to = xs.length): ArrayView => {
-  const n = to - from, room = Math.max(4, n), items = new Array(n + 2 * room).fill(undefined);
-  for (let i = 0; i < n; i++) items[room + i] = xs[from + i];
-  return new ArrayView(versionOf({ items, lo: room, hi: room + n }), room, n);
-};
-// An array made of a list (`array of`): a byte a slot (a Uint8Array, with
-// no room at its ends) while every item is an Int from 0 to 255, as the
-// byte array bytes-array.ts picks is (L189f1); otherwise as arrayOf. A
-// push or an item that isn't a byte copies or widens it (pushBack,
-// replaceIn), so it is the same array either way.
-const isByte = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 255 && !Object.is(x, -0);
-const byteArray = (b: Uint8Array): ArrayView => new ArrayView(versionOf({ items: b as unknown as unknown[], lo: 0, hi: b.length }), 0, b.length);
-export const arrayOfItems = (l: { tag: Id; fields: unknown[] }): ArrayView => {
-  if (l instanceof ItemsList && l.b instanceof Uint8Array) return byteArray(l.b.slice(l.i));
-  // A list over a whole JS array (a table's keys) is read in place.
-  const xs = l instanceof ItemsList && l.i === 0 && Array.isArray(l.b) ? l.b : itemsOf(l);
-  return xs.length >= 16 && xs.every(isByte) ? byteArray(Uint8Array.from(xs as number[])) : arrayOf(xs);
-};
-// `array of range(n)`, filled with no list made (the core IR's
-// JavaScript, range-choices.ts rangeArrays, C228): what arrayOfItems
-// makes of that list, a byte a slot from 16 to 256 items.
-export const rangeArray = (n: number): ArrayView => {
-  const k = Math.max(0, n);
-  if (k >= 16 && k <= 256) { const b = new Uint8Array(k); for (let i = 0; i < k; i++) b[i] = i; return byteArray(b); }
-  // No room at its ends: a push copies it, as onto a byte array.
-  const xs = new Array<number>(k);
-  for (let i = 0; i < k; i++) xs[i] = i;
-  return new ArrayView(versionOf({ items: xs, lo: 0, hi: k }), 0, k);
-};
-// Either kind of array value: a view, or { tag, fields } made elsewhere
-// (a value read back from JSON).
-export const arrayView = (a: ArrayValue): ArrayView => (a instanceof ArrayView ? a : arrayOf(a.fields, 1));
-const pushBack = (a: ArrayValue, x: unknown): ArrayView => {
-  const v = arrayView(a), b = v.buf, end = v.start + v.n;
-  if (end === b.hi && end < b.items.length) { b.items[end] = x; b.hi++; v.ver.shared = true; return new ArrayView(v.ver, v.start, v.n + 1); }
-  const w = arrayOf(b.items, v.start, end);
-  w.buf.items[w.start + w.n] = x; w.buf.hi++;
-  return new ArrayView(w.ver, w.start, w.n + 1);
-};
-const pushFront = (a: ArrayValue, x: unknown): ArrayView => {
-  const v = arrayView(a), b = v.buf;
-  if (v.start === b.lo && v.start > 0) { b.items[v.start - 1] = x; b.lo--; v.ver.shared = true; return new ArrayView(v.ver, v.start - 1, v.n + 1); }
-  // Copied with its room in front, where the pushes are going: twice as
-  // many again, and 16 from empty, so an array built item by item from
-  // the back (a block of samples) is copied a few times, not at 4, 8, 16….
-  const n = v.n, room = Math.max(16, 2 * n), items = new Array(room + n + 4).fill(undefined);
-  for (let i = 0; i < n; i++) items[room + i] = b.items[v.start + i];
-  items[room - 1] = x;
-  return new ArrayView(versionOf({ items, lo: room - 1, hi: room + n }), room - 1, n + 1);
-};
-// pushFront on a view nobody else holds (C196, compiler/src/
-// owned-pushes.ts): its start moved back into the free slot in front, no
-// new view made. The plain push where it is empty (the empty array is
-// shared) or has no room there.
-export const pushFrontOwned = (a: ArrayValue, x: unknown): ArrayView => {
-  if (!(a instanceof ArrayView) || a.n === 0 || a.rest) return pushFront(a, x);
-  const b = a.ver.cur;
-  if (!b || a.start !== b.lo || a.start === 0) return pushFront(a, x);
-  b.items[a.start - 1] = x; b.lo--;
-  const v = a as unknown as { start: number; n: number; f: unknown };
-  v.start--; v.n++; v.f = null;
-  return a;
-};
-// A rest is a view on the same buffer, so a list taken apart item by item
-// would keep its whole first buffer however little is left (Go's slices
-// leak so, I106c). Where what's left is under a quarter of a big buffer,
-// the rest is copied into one of its own instead: n items copied once
-// after at least 3n rests, so still constant per rest, and kept on the
-// view, so matching the same view again copies nothing.
-const restOf = (a: ArrayValue): ArrayView => {
-  const v = arrayView(a);
-  if (v.n === 0) return v;
-  if (v.rest) return v.rest;
-  const size = v.ver.cur ? v.ver.cur.items.length : v.buf.items.length;
-  if (size > 256 && (v.n - 1) * 4 < size) return (v.rest = arrayOf(v.buf.items, v.start + 1, v.start + v.n));
-  v.ver.shared = true;
-  return new ArrayView(v.ver, v.start + 1, v.n - 1);
-};
-// `count` items from position `from`, each clamped to the array, as a
-// view on the same buffer (C221): `drop` and `take` of a list stored as
-// an array, in one step where the list's walk `from` items. A few items
-// (under 64) of a big buffer are copied out, so a window doesn't keep a
-// whole track alive (as a rest, I106c); more stay a view, since copying
-// them would make a drop as long as the list (trek's windows, C221).
-const sliceOf = (a: ArrayValue, from: I.Int, count: I.Int): ArrayView => {
-  const v = arrayView(a), n = v.n;
-  const f = Math.max(0, Math.min(n, Number(from))), c = Math.max(0, Math.min(n - f, Number(count)));
-  if (f === 0 && c === n) return v;
-  const size = v.ver.cur ? v.ver.cur.items.length : v.buf.items.length;
-  if (size > 256 && c < 64) return arrayOf(v.buf.items, v.start + f, v.start + f + c);
-  v.ver.shared = true;
-  return new ArrayView(v.ver, v.start + f, c);
-};
-// The item at position i replaced by x (C93c), or the array as it is
-// outside it, as `replace at` on a list: written into the buffer, and the
-// version given becomes the change back.
-const replaceIn = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
-  const v = a instanceof ArrayView ? a : arrayView(a), k = typeof i === "number" ? i : Number(i);
-  if (!(k >= 0 && k < v.n && Math.floor(k) === k)) return v;
-  const t = v.ver;
-  if (!t.cur) rerootArray(t);
-  const b = t.cur!, slot = v.start + k, items = b.items;
-  // Views on the older version may reroot through this one.
-  const newest: Version = t.shared ? { cur: b, next: null, slot: 0, old: undefined, shared: true } : { cur: b, next: null, slot: 0, old: undefined };
-  t.cur = null; t.next = newest; t.slot = slot; t.old = items[slot];
-  if (items instanceof Uint8Array && !isByte(x)) b.items = Array.from(items);
-  b.items[slot] = x;
-  return new ArrayView(newest, v.start, v.n);
-};
-// replaceIn where nobody else holds the array (C93 s4): one-holder.ts found
-// every array of its item type has one holder, so the view given is read
-// no more and its slot is written in place; unless another view shares the
-// buffer (a rest, a push into its room), when it is replaceIn.
-export const replaceOwned = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
-  const v = a instanceof ArrayView ? a : arrayView(a), t = v.ver;
-  if (t.shared || !t.cur || v.rest) return replaceIn(a, i, x);
-  const k = typeof i === "number" ? i : Number(i);
-  if (!(k >= 0 && k < v.n && Math.floor(k) === k)) return v;
-  const b = t.cur;
-  if (b.items instanceof Uint8Array && !isByte(x)) b.items = Array.from(b.items);
-  b.items[v.start + k] = x;
-  return v;
-};
-const itemsIn = (a: ArrayValue): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n); };
 const arrayOf_ = (a: Type): Type => ({ t: "con", id: ARRAY, args: [a] });
 const ofItem = (make: (a: Type, s: Subst) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a, s); return fn(ps, r, s.freshRow(effects)); };
 const arrayItem = builtin("array.at", "item at", ofItem((a) => [[arrayOf_(a), int], a], [CHOICE]));
-STD_MANY[arrayItem] = (arr: ArrayValue, i: I.Int) => { const v = arrayView(arr), k = Number(i); return Number.isInteger(k) && k >= 0 && k < v.n ? [v.buf.items[v.start + k]] : []; };
 // The two ends (C30d): the first item (none of an empty array), the array
 // after it (empty of an empty array) and an item added at the front.
 const arrayFirst = builtin("array.first", "first of array", ofItem((a) => [[arrayOf_(a)], a], [CHOICE]));
-STD_MANY[arrayFirst] = (arr: ArrayValue) => { const v = arrayView(arr); return v.n > 0 ? [v.buf.items[v.start]] : []; };
-let EMPTY_ARRAY: ArrayView | undefined;
 export const ARRAY_OPS = {
   // One empty array for all (C196: a solve's every step made its own):
   // it has no items to read, and a push onto it writes into its room once,
   // then copies, as onto any array whose room another took.
-  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)]), () => (EMPTY_ARRAY ??= arrayOf([]))),
-  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)]), (l: { tag: Id; fields: unknown[] }) => arrayOfItems(l)),
+  empty: builtin("array.empty", "empty array", ofItem((a) => [[], arrayOf_(a)])),
+  of: builtin("array.of", "array of", ofItem((a) => [[list(a)], arrayOf_(a)])),
   // A list read from a copy of the items as it is walked (L189e3).
-  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)]), (arr: ArrayValue) => new ItemsList(itemsIn(arr), 0)),
-  length: builtin("array.length", "array length", ofItem((a) => [[arrayOf_(a)], int]), (arr: ArrayValue) => arrayView(arr).n),
+  items: builtin("array.items", "items of array", ofItem((a) => [[arrayOf_(a)], list(a)])),
+  length: builtin("array.length", "array length", ofItem((a) => [[arrayOf_(a)], int])),
   at: arrayItem,
-  push: builtin("array.push", "push", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushBack),
+  push: builtin("array.push", "push", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)])),
   first: arrayFirst,
-  rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf_(a)], arrayOf_(a)]), restOf),
-  pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)]), pushFront),
-  slice: builtin("array.slice", "slice of array", ofItem((a) => [[arrayOf_(a), int, int], arrayOf_(a)]), sliceOf),
-  replaceAt: builtin("array.replaceAt", "replace in array", ofItem((a) => [[arrayOf_(a), int, a], arrayOf_(a)]), replaceIn),
+  rest: builtin("array.rest", "rest of array", ofItem((a) => [[arrayOf_(a)], arrayOf_(a)])),
+  pushFront: builtin("array.pushFront", "push front", ofItem((a) => [[arrayOf_(a), a], arrayOf_(a)])),
+  slice: builtin("array.slice", "slice of array", ofItem((a) => [[arrayOf_(a), int, int], arrayOf_(a)])),
+  replaceAt: builtin("array.replaceAt", "replace in array", ofItem((a) => [[arrayOf_(a), int, a], arrayOf_(a)])),
   // The first item as an Option, without Choice: `array of List`'s match
   // (array-list.ts, C30d3b) reads it this way, so the evaluator runs a
   // match on an array without a search around it.
-  firstIfAny: builtin("array.firstIfAny", "first of array if any", ofItem((a) => [[arrayOf_(a)], optional(a)]), (arr: ArrayValue) => {
-    const v = arrayView(arr);
-    return v.n > 0 ? { tag: SOME, fields: [v.buf.items[v.start]] } : { tag: NONE, fields: [] };
-  }),
+  firstIfAny: builtin("array.firstIfAny", "first of array if any", ofItem((a) => [[arrayOf_(a)], optional(a)])),
   // The front at once (C137 s3e): the first item and the rest, or none of
   // an empty array. One call, so it runs backwards too (modes.ts,
   // relate.ts): the array from its first item and rest.
-  front: builtin("array.front", "front of array", ofItem((a) => [[arrayOf_(a)], optional({ t: "con", id: PAIR, args: [a, arrayOf_(a)] })]), (arr: ArrayValue) => {
-    const v = arrayView(arr);
-    return v.n > 0 ? { tag: SOME, fields: [{ tag: PAIR_V, fields: [v.buf.items[v.start], restOf(arr)] }] } : { tag: NONE, fields: [] };
-  }),
+  front: builtin("array.front", "front of array", ofItem((a) => [[arrayOf_(a)], optional({ t: "con", id: PAIR, args: [a, arrayOf_(a)] })])),
 };
 
-// A Map whose Int keys sit at their own slot of an array while they are
-// close together (C215, as C58m's direct tables on C; influenced by Lua 5's
-// array part for tables, Ierusalimschy, de Figueiredo, Celes): a read is
-// one index, not a hash (pond's food, cells 0 to 2303, read 25 times by
-// each fish each tick). Compiled JS makes one for each table of Int keys
-// (core-js.ts tableSpec). The array starts at a key `b`, so keys a counter
-// gives out and that are removed as they go (swarm's motes, C60) slide up
-// it: a key past its end moves the live ones to a new array from the least
-// of them. A key goes in the array while the live keys and it span at most
-// twice the keys there and 64; at the first that doesn't, its entries go to
-// a Map (`o`) for good, as on C.
-// Its entries are in key order, not the order put: every listing of a
-// table sorts them or checks they are sorted (numberKeys).
-const HOLE: unique symbol = Symbol("hole");
-const UNDEF: unique symbol = Symbol("undefined");
-const slot = (k: unknown): k is number => typeof k === "number" && (k | 0) === k && k >= 0;
-export class DirectMap {
-  // a[i] holds key b + i (C60: a counter's keys, some removed, slide up).
-  a: unknown[] = [];
-  b = 0;
-  n = 0;
-  o: Map<unknown, unknown> | null = null;
-  constructor(from?: Iterable<[unknown, unknown]>) {
-    if (from instanceof DirectMap && !from.o) { this.a = from.a.slice(); this.b = from.b; this.n = from.n; return; }
-    if (from) for (const [k, v] of from) this.set(k, v);
-  }
-  get size(): number { return this.o ? this.o.size : this.n; }
-  get(k: unknown): unknown {
-    if (this.o) return this.o.get(k);
-    if (slot(k)) { const v = this.a[k - this.b]; return v === HOLE || v === UNDEF ? undefined : v; }
-    return undefined;
-  }
-  has(k: unknown): boolean {
-    if (this.o) return this.o.has(k);
-    if (!slot(k)) return false;
-    const v = this.a[k - this.b];
-    return v !== undefined && v !== HOLE;
-  }
-  set(k: unknown, v: unknown): this {
-    if (this.o) { this.o.set(k, v); return this; }
-    const x = v === undefined ? UNDEF : v;
-    if (slot(k)) {
-      const i = k - this.b, a = this.a;
-      if (i >= 0 && i < a.length) { if (a[i] === HOLE) this.n++; a[i] = x; return this; }
-      if (this.place(k)) { this.a[k - this.b] = x; this.n++; return this; }
-    }
-    // Its entries to a Map, for good.
-    const o = new Map<unknown, unknown>();
-    this.a.forEach((w, j) => { if (w !== HOLE) o.set(this.b + j, w === UNDEF ? undefined : w); });
-    this.a = []; this.n = 0; this.b = 0;
-    (this.o = o).set(k, v);
-    return this;
-  }
-  // Room for key k, its live keys moved so the slots run from the least
-  // live key (or k) on, with as many again free past them: false when
-  // those are over twice the keys there and 64 apart.
-  private place(k: number): boolean {
-    const a = this.a;
-    let f = 0, l = a.length - 1;
-    if (this.n === 0) { f = 0; l = -1; } else { while (a[f] === HOLE) f++; while (a[l] === HOLE) l--; }
-    const lo = this.n ? Math.min(k, this.b + f) : k, hi = this.n ? Math.max(k, this.b + l) : k;
-    const width = hi - lo + 1;
-    if (width > 2 * (this.n + 1) + 64) return false;
-    // Room on the side k came from: past the end for keys going up, in
-    // front for keys going down.
-    const front = k < this.b + f && this.n ? width : 0;
-    const len = Math.max(16, 2 * width + front);
-    const na = new Array(len).fill(HOLE);
-    const nb = lo - front;
-    for (let j = f; j <= l; j++) na[this.b + j - nb] = a[j];
-    this.a = na; this.b = nb;
-    return true;
-  }
-  delete(k: unknown): boolean {
-    if (this.o) return this.o.delete(k);
-    if (!slot(k)) return false;
-    const i = k - this.b;
-    if (!(i >= 0 && i < this.a.length) || this.a[i] === HOLE) return false;
-    this.a[i] = HOLE;
-    this.n--;
-    return true;
-  }
-  *entries(): IterableIterator<[unknown, unknown]> {
-    if (this.o) { yield* this.o.entries(); return; }
-    const a = this.a;
-    for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) yield [this.b + i, v === UNDEF ? undefined : v]; }
-  }
-  *keys(): IterableIterator<unknown> { for (const [k] of this.entries()) yield k; }
-  *values(): IterableIterator<unknown> { for (const [, v] of this.entries()) yield v; }
-  [Symbol.iterator](): IterableIterator<[unknown, unknown]> { return this.entries(); }
-  forEach(f: (v: unknown, k: unknown, m: this) => void): void { for (const [k, v] of this.entries()) f(v, k, this); }
-}
-// An empty direct table, and the value at an Int key of one (core-rt.ts),
-// its own function so that its reads meet only DirectMaps.
-export const directTable = (): Table => new Table(new DirectMap() as unknown as Map<unknown, unknown>, true);
-export const directRead = (t: Table, key: unknown, none: unknown): unknown => { const m = t.m, v = m.get(key); return v === undefined && !m.has(key) ? none : v; };
-
-// A hash table changed in place (C63b, IN-PLACE.md step 2): Map's
-// representation, its keys Ints and Texts, the ones a JS Map holds by value
-// (an Int has one spelling, int.ts), and tuples of them, held by their
-// spelling (C63f). Its entries are in compare's order, so
-// its meaning is the Map it stands for.
-//
-// Every version stays a value (C71): a put writes into the one JS Map and
-// gives a new newest version, and the version it was given becomes the
-// change that undoes it, pointing at the newest. Reading an older version
-// first undoes the changes between, turning the chain round so that one is
-// the newest (`reroot`). A map with one holder only ever reads its newest
-// version, so each put is constant; a map read again after a change is
-// still right, and pays for the changes it walks back over. Prior art:
-// Baker's shallow binding for functional arrays ("Shallow binding makes
-// functional arrays fast", 1991), as Conchon and Filliâtre's persistent
-// arrays ("A persistent union-find data structure", 2007).
-// `empty map` is a constant, one value every use shares: the empty table
-// it stands for is `shared`, and a put or remove on it makes a new one, so
-// maps started from it don't share one chain.
-// No `tag`: it isn't a case of a data type, and nothing takes it apart.
-export class Table {
-  // The newest version holds the JS Map; an older one, the change from the
-  // version after it: `key` was absent (had false) or `old`.
-  cur: Map<unknown, unknown> | null;
-  next: Table | null = null;
-  key: unknown = undefined;
-  had = false;
-  old: unknown = undefined;
-  readonly shared: boolean;
-  // Its entries (a set's items) in compare's order, once listed: a
-  // version's entries never change, so a map read many times (an index's
-  // postings) is sorted once (C72).
-  listed: unknown = undefined;
-  // Its keys in compare's order, once listed, the same way.
-  keyed: unknown = undefined;
-  constructor(m: Map<unknown, unknown>, shared = false) { this.cur = m; this.shared = shared; }
-  get m(): Map<unknown, unknown> { reroot(this); return this.cur!; }
-}
-// Make t the newest version: undo, from the newest back, each change
-// between it and t, each undone one becoming the change that redoes it.
-function reroot(t: Table) {
-  if (t.cur) return;
-  const path: Table[] = [];
-  let x = t;
-  while (!x.cur) { path.push(x); x = x.next!; }
-  for (let i = path.length - 1; i >= 0; i--) {
-    const y = path[i], m = x.cur!;
-    const had = m.has(y.key), old = m.get(y.key);
-    if (y.had) m.set(y.key, y.old); else m.delete(y.key);
-    y.cur = m; y.next = null;
-    x.cur = null; x.next = y; x.key = y.key; x.had = had; x.old = old;
-    x = y;
-  }
-}
-// A put (set) or remove: a new newest version, t the change back to it.
-function change(t: Table, key: unknown, set: boolean, v?: unknown): Table {
-  if (t.shared) { const m = t.m instanceof DirectMap ? new DirectMap(t.m) as unknown as Map<unknown, unknown> : new Map(t.m); if (set) m.set(key, v); else m.delete(key); return new Table(m); }
-  const m = t.m, had = m.has(key), old = m.get(key);
-  if (!set && !had) return t;
-  if (set) m.set(key, v); else m.delete(key);
-  const n = new Table(m);
-  t.cur = null; t.next = n; t.key = key; t.had = had; t.old = old;
-  return n;
-}
-// The same where every table of the program has one holder
-// (owned-tables.ts, compiler): nobody reads the version given again, so
-// the change is written into it and it is given back, with no version
-// made for the old one. The empty table every map starts from is shared,
-// and an older version can't be one here but is still kept right.
-export function changeOwned(t: Table, key: unknown, set: boolean, v?: unknown): Table {
-  if (t.shared || !t.cur) return change(t, key, set, v);
-  if (set) t.cur.set(key, v); else if (!t.cur.delete(key)) return t;
-  t.listed = t.keyed = undefined;
-  return t;
-}
-export const tablePutOwned = (t: Table, key: unknown, v: unknown): Table => { const h = held(key); return changeOwned(t, h, true, h === key ? v : new Keyed(key, v)); };
-export const tableRemoveOwned = (t: Table, key: unknown): Table => changeOwned(t, held(key), false);
 const tableOf_ = (k: Type, v: Type): Type => ({ t: "con", id: TABLE, args: [k, v] });
 const ofEntry = (make: (k: Type, v: Type) => [Type[], Type], effects: Id[] = []): Sig => (s) => { const k = s.fresh(), v = s.fresh(); const [ps, r] = make(k, v); return fn(ps, r, s.freshRow(effects)); };
-// compare's order on Ints, Texts and tuples of them (run.ts
-// compareValues): a tuple part by part.
-const keyOrder = (a: unknown, b: unknown): number => {
-  if (typeof a === "string") return a === b ? 0 : T.less(a, b as string) ? -1 : 1;
-  if (typeof a === "object" && a !== null) {
-    const x = (a as { fields: unknown[] }).fields, y = (b as { fields: unknown[] }).fields;
-    for (let i = 0; i < x.length; i++) { const c = keyOrder(x[i], y[i]); if (c) return c; }
-    return 0;
-  }
-  return (a as number) < (b as number) ? -1 : (a as number) > (b as number) ? 1 : 0;
-};
-// A tuple key (C63f) is held by its spelling, one per value: an Int's
-// digits (an Int has one spelling, int.ts), a Text quoted, a tuple's parts
-// in brackets. The table's keys are all of one type, so a spelling never
-// meets a Text it could be mistaken for. Such an entry keeps the key itself
-// beside its value (`Keyed`), for the entries; an Int or Text key is held
-// as it is.
-class Keyed { key: unknown; value: unknown; constructor(key: unknown, value: unknown) { this.key = key; this.value = value; } }
-// A Text is quoted as it is unless it holds a quote, a backslash or a
-// control character (then as JSON spells it), and a tuple's parts joined
-// as they are spelled, with nothing made for each part (I215: rota's
-// `(day, shift)` keys spelled through JSON.stringify, map and join were a
-// quarter of its run).
-const plain = /^[^"\\\u0000-\u001f]*$/;
-const spelling = (x: unknown): string => {
-  if (typeof x === "string") return plain.test(x) ? `"${x}"` : JSON.stringify(x);
-  if (typeof x !== "object" || x === null) return String(x);
-  const fs = (x as { fields: unknown[] }).fields;
-  let s = "(";
-  for (let i = 0; i < fs.length; i++) s += (i ? "," : "") + spelling(fs[i]);
-  return s + ")";
-};
-const held = (key: unknown) => (typeof key === "object" && key !== null ? spelling(key) : key);
-const valueOf = (v: unknown) => (v instanceof Keyed ? v.value : v);
-// The value at key, or `none` when there is none: no list of answers made
-// for each read (compiled JS's `value at`, core-rt.ts).
-export const tableRead = (t: Table, key: unknown, none: unknown): unknown => { const h = held(key), v = t.m.get(h); return v === undefined && !t.m.has(h) ? none : valueOf(v); };
-const keyOf = (k: unknown, v: unknown) => (v instanceof Keyed ? v.key : k);
 const tableAt = builtin("table.at", "table value at", ofEntry((k, v) => [[tableOf_(k, v), k], v], [CHOICE]));
-STD_MANY[tableAt] = (t: Table, key: unknown) => { const h = held(key); return t.m.has(h) ? [valueOf(t.m.get(h))] : []; };
-// A table whose keys are all plain numbers (Ints), listed without a
-// comparison through keyOrder or a copy per entry: kept in the order they
-// were put, which a counter's keys already are, so sorted only when they
-// aren't (C58b', examples/swarm: listing its 2,000 keys each tick was a
-// third of its run). Null for any other keys.
-// The same for the keys alone: Int keys, put in order, as they are, as a
-// list over one array (bytes.ts ItemsList), which `array of` reads in place.
-// A DirectMap's keys and values, read off its array in order (C215).
-function direct(m: Map<unknown, unknown>): { ks: number[]; vs: unknown[] } | null {
-  if (!(m instanceof DirectMap) || m.o) return null;
-  const ks: number[] = [], vs: unknown[] = [], a = m.a, b = m.b;
-  for (let i = 0; i < a.length; i++) { const v = a[i]; if (v !== HOLE) { ks.push(b + i); vs.push(v === UNDEF ? undefined : v); } }
-  return { ks, vs };
-}
-function numberKeys(m: Map<unknown, unknown>): object | null {
-  if (m instanceof DirectMap && !m.o) {
-    const ks: number[] = new Array(m.n), a = m.a, b = m.b;
-    for (let i = 0, j = 0; j < ks.length; i++) if (a[i] !== HOLE) ks[j++] = b + i;
-    return new ItemsList(ks, 0);
-  }
-  const ks: number[] = [];
-  let sorted = true;
-  for (const k of m.keys()) {
-    if (typeof k !== "number") return null;
-    if (sorted && ks.length && k < ks[ks.length - 1]) sorted = false;
-    ks.push(k);
-  }
-  if (!sorted) ks.sort((a, b) => a - b);
-  // A list over the array, its cells made only where it is walked.
-  return new ItemsList(ks, 0);
-}
-function numberEntries(m: Map<unknown, unknown>): object | null {
-  const d = direct(m);
-  const ks: number[] = d ? d.ks : [], vs: unknown[] = d ? d.vs : [];
-  let sorted = true;
-  if (!d) for (const [k, v] of m) {
-    if (typeof k !== "number") return null;
-    if (sorted && ks.length && k < ks[ks.length - 1]) sorted = false;
-    ks.push(k); vs.push(v);
-  }
-  const at = sorted ? null : ks.map((_, i) => i).sort((a, b) => ks[a] - ks[b]);
-  let out: object = { tag: NIL, fields: [] };
-  for (let i = ks.length - 1; i >= 0; i--) { const j = at ? at[i] : i; out = { tag: CONS, fields: [{ tag: PAIR_V, fields: [ks[j], vs[j]] }, out] }; }
-  return out;
-}
 export const TABLE_OPS = {
-  empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)]), () => new Table(new Map(), true)),
-  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)]), (t: Table, key: unknown, v: unknown) => {
-    const h = held(key);
-    return change(t, h, true, h === key ? v : new Keyed(key, v));
-  }),
-  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)]), (t: Table, key: unknown) => change(t, held(key), false)),
-  has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool]), (t: Table, key: unknown) => ({ tag: t.m.has(held(key)) ? TRUE : FALSE, fields: [] })),
-  size: builtin("table.size", "table size", ofEntry((k, v) => [[tableOf_(k, v)], int]), (t: Table) => t.m.size),
+  empty: builtin("table.empty", "empty table", ofEntry((k, v) => [[], tableOf_(k, v)])),
+  put: builtin("table.put", "table put", ofEntry((k, v) => [[tableOf_(k, v), k, v], tableOf_(k, v)])),
+  remove: builtin("table.remove", "table remove", ofEntry((k, v) => [[tableOf_(k, v), k], tableOf_(k, v)])),
+  has: builtin("table.has", "table has", ofEntry((k, v) => [[tableOf_(k, v), k], bool])),
+  size: builtin("table.size", "table size", ofEntry((k, v) => [[tableOf_(k, v)], int])),
   at: tableAt,
   // The entries in compare's order: the Map it stands for.
-  entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })]),
-    (t: Table) => (t.listed ??= numberEntries(t.m) ?? listOf([...t.m].map(([k, v]) => [keyOf(k, v), valueOf(v)]).sort(([a], [b]) => keyOrder(a, b)).map(([a, b]) => ({ tag: PAIR_V, fields: [a, b] }))))),
+  entries: builtin("table.entries", "table entries", ofEntry((k, v) => [[tableOf_(k, v)], list({ t: "con", id: PAIR, args: [k, v] })])),
   // Its keys alone in compare's order (`keys of`): no pair made for each
   // entry to be taken apart again.
-  keys: builtin("table.keys", "table keys list", ofEntry((k, v) => [[tableOf_(k, v)], list(k)]),
-    (t: Table) => (t.keyed ??= numberKeys(t.m) ?? listOf([...t.m].map(([k, v]) => keyOf(k, v)).sort(keyOrder)))),
+  keys: builtin("table.keys", "table keys list", ofEntry((k, v) => [[tableOf_(k, v)], list(k)])),
 };
 
 // Set as a hash table changed in place (C63d): the same Table, its keys
@@ -1353,87 +852,69 @@ export const TABLE_OPS = {
 const setOf_ = (a: Type): Type => ({ t: "con", id: HASH_SET, args: [a] });
 const ofSetItem = (make: (a: Type) => [Type[], Type]): Sig => (s) => { const a = s.fresh(); const [ps, r] = make(a); return fn(ps, r, s.freshRow([])); };
 export const HASH_SET_OPS = {
-  empty: builtin("hashset.empty", "empty hash set", ofSetItem((a) => [[], setOf_(a)]), () => new Table(new Map(), true)),
-  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => { const h = held(x); return change(t, h, true, h === x ? true : new Keyed(x, true)); }),
-  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)]), (t: Table, x: unknown) => change(t, held(x), false)),
-  has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool]), (t: Table, x: unknown) => ({ tag: t.m.has(held(x)) ? TRUE : FALSE, fields: [] })),
-  size: builtin("hashset.size", "hash set size", ofSetItem((a) => [[setOf_(a)], int]), (t: Table) => t.m.size),
-  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)]), (t: Table) => (t.listed ??= listOf([...t.m].map(([k, v]) => keyOf(k, v)).sort(keyOrder)))),
+  empty: builtin("hashset.empty", "empty hash set", ofSetItem((a) => [[], setOf_(a)])),
+  add: builtin("hashset.add", "hash set add", ofSetItem((a) => [[setOf_(a), a], setOf_(a)])),
+  remove: builtin("hashset.remove", "hash set remove", ofSetItem((a) => [[setOf_(a), a], setOf_(a)])),
+  has: builtin("hashset.has", "hash set has", ofSetItem((a) => [[setOf_(a), a], bool])),
+  size: builtin("hashset.size", "hash set size", ofSetItem((a) => [[setOf_(a)], int])),
+  items: builtin("hashset.items", "hash set items", ofSetItem((a) => [[setOf_(a)], list(a)])),
 };
 
 // Algebraic's operations (src/lang/algebraic.ts). The one + − · −x <
 // resolves to these at Algebraic (arith.ts); a literal there is `fraction`.
 const alg: Type = { t: "con", id: "std.algebraic", args: [] };
-export const toAlg = (v: { fields: unknown[] }): A.Algebraic => ({ p: itemsOf(v.fields[0] as { tag: Id; fields: unknown[] }).map((c) => BigInt(c as I.Int)), k: Number(v.fields[1]) });
-export const ofAlg = (x: A.Algebraic) => ({ tag: ALGEBRAIC_V, fields: [listOf(x.p.map(I.norm)), x.k] });
-const one = (f: (...xs: A.Algebraic[]) => A.Algebraic) => (...vs: { fields: unknown[] }[]) => ofAlg(f(...vs.map(toAlg)));
 export const ALGEBRAIC_OPS = {
-  add: builtin("algebraic.add", "add", pure([alg, alg], alg), one(A.add)),
-  sub: builtin("algebraic.sub", "subtract", pure([alg, alg], alg), one(A.subtract)),
-  mul: builtin("algebraic.mul", "multiply", pure([alg, alg], alg), one(A.multiply)),
-  neg: builtin("algebraic.neg", "negate", pure([alg], alg), one(A.negate)),
-  less: builtin("algebraic.less", "less than", pure([alg, alg], bool), (a: { fields: unknown[] }, b: { fields: unknown[] }) => truth(A.less(toAlg(a), toAlg(b)))),
-  divide: choice("algebraic.divide", "divide", [alg, alg], alg, (a: { fields: unknown[] }, b: { fields: unknown[] }) => { const q = A.divide(toAlg(a), toAlg(b)); return q ? [ofAlg(q)] : []; }),
+  add: builtin("algebraic.add", "add", pure([alg, alg], alg)),
+  sub: builtin("algebraic.sub", "subtract", pure([alg, alg], alg)),
+  mul: builtin("algebraic.mul", "multiply", pure([alg, alg], alg)),
+  neg: builtin("algebraic.neg", "negate", pure([alg], alg)),
+  less: builtin("algebraic.less", "less than", pure([alg, alg], bool)),
+  divide: choice("algebraic.divide", "divide", [alg, alg], alg),
   // The real k-th root: the positive one for an even k, none of a negative
   // number then.
-  root: choice("algebraic.root", "root", [alg, int], alg, (a: { fields: unknown[] }, k: I.Int) => { const r = A.root(toAlg(a), Number(k)); return r ? [ofAlg(r)] : []; }),
-  sqrt: choice("algebraic.sqrt", "square root", [alg], alg, (a: { fields: unknown[] }) => { const r = A.root(toAlg(a), 2); return r ? [ofAlg(r)] : []; }),
+  root: choice("algebraic.root", "root", [alg, int], alg),
+  sqrt: choice("algebraic.sqrt", "square root", [alg], alg),
   // top/bottom, which a literal at Algebraic becomes (the checker has made
   // sure bottom isn't 0). Not offered: `as algebraic` is.
-  fraction: builtin("algebraic.fraction", "algebraic fraction", pure([int, int], alg), (n: I.Int, d: I.Int) => ofAlg(A.fraction(BigInt(n), BigInt(d)))),
+  fraction: builtin("algebraic.fraction", "algebraic fraction", pure([int, int], alg)),
   // The fraction it is, when it is one, as its top and bottom in lowest
   // terms (the bottom positive): √2 · √2 is (2, 1). Not offered: the
   // prelude's `algebraic as fraction` gives the Rational.
-  fractionParts: choice("algebraic.fractionParts", "algebraic fraction parts", [alg], { t: "con", id: PAIR, args: [int, int] }, (a: { fields: unknown[] }) => {
-    const f = A.asFraction(toAlg(a));
-    return f ? [{ tag: PAIR_V, fields: f.map(I.norm) }] : [];
-  }),
-  digits: builtin("algebraic.digits", "digits", pure([alg, int], str), (a: { fields: unknown[] }, n: I.Int) => A.digits(toAlg(a), Number(n))),
-  toNumber: builtin("algebraic.toNumber", "as float64", pure([alg], num), (a: { fields: unknown[] }) => A.toNumber(toAlg(a))),
-  show: builtin("algebraic.show", "show", pure([alg], str), (a: { fields: unknown[] }) => A.show(toAlg(a))),
+  fractionParts: choice("algebraic.fractionParts", "algebraic fraction parts", [alg], { t: "con", id: PAIR, args: [int, int] }),
+  digits: builtin("algebraic.digits", "digits", pure([alg, int], str)),
+  toNumber: builtin("algebraic.toNumber", "as float64", pure([alg], num)),
+  show: builtin("algebraic.show", "show", pure([alg], str)),
 };
 
 // Real's operations (src/lang/real.ts): each makes the Real it is, and
 // `approximate` works one out as far as asked, keeping what it worked out
 // with the value.
 const real: Type = { t: "con", id: "std.real", args: [] };
-type RealData = { tag: Id; fields: unknown[] };
-const reals = new WeakMap<object, RL.Real>();
-export function toReal(v: RealData): RL.Real {
-  let r = reals.get(v);
-  if (r) return r;
-  const [op, parts, top, bottom] = v.fields as [I.Int, RealData, I.Int, I.Int];
-  const ps = itemsOf(parts as { tag: Id; fields: unknown[] }).map((p) => toReal(p as RealData));
-  r = Number(op) === 0 ? RL.fraction(BigInt(top), BigInt(bottom)) : Number(op) === 4 ? RL.pi() : Number(op) === 5 ? RL.exp(ps[0]) : Number(op) === 6 ? RL.log(ps[0]) : Number(op) === 7 ? RL.sin(ps[0]) : Number(op) === 8 ? RL.cos(ps[0]) : Number(op) === 1 ? RL.add(ps[0], ps[1]) : Number(op) === 2 ? RL.negate(ps[0]) : RL.multiply(ps[0], ps[1]);
-  reals.set(v, r);
-  return r;
-}
-const realOf = (op: number, parts: RealData[], top: I.Int = 0, bottom: I.Int = 1): RealData => ({ tag: REAL_V, fields: [op, listOf(parts), top, bottom] });
 export const REAL_OPS = {
-  add: builtin("real.add", "add", pure([real, real], real), (a: RealData, b: RealData) => realOf(1, [a, b])),
-  sub: builtin("real.sub", "subtract", pure([real, real], real), (a: RealData, b: RealData) => realOf(1, [a, realOf(2, [b])])),
-  mul: builtin("real.mul", "multiply", pure([real, real], real), (a: RealData, b: RealData) => realOf(3, [a, b])),
-  neg: builtin("real.neg", "negate", pure([real], real), (a: RealData) => realOf(2, [a])),
+  add: builtin("real.add", "add", pure([real, real], real)),
+  sub: builtin("real.sub", "subtract", pure([real, real], real)),
+  mul: builtin("real.mul", "multiply", pure([real, real], real)),
+  neg: builtin("real.neg", "negate", pure([real], real)),
   // top/bottom, which a literal at Real becomes, as at Algebraic.
-  fraction: builtin("real.fraction", "real fraction", pure([int, int], real), (n: I.Int, d: I.Int) => realOf(0, [], n, d)),
+  fraction: builtin("real.fraction", "real fraction", pure([int, int], real)),
   // a < b, narrowing both until they come apart, to at most 2⁻ᶠᵘᵉˡ (L88e3):
   // no answer when they are still that close, which equal Reals always are.
-  less: choice("real.less", "real less than", [real, real, int], bool, (a: RealData, b: RealData, fuel: I.Int) => { const c = RL.compare(toReal(a), toReal(b), Number(fuel)); return c === null ? [] : [truth(c < 0)]; }),
+  less: choice("real.less", "real less than", [real, real, int], bool),
   // a < b with no fuel (L88): narrowing until they come apart, which two
   // equal Reals never do, so it may not finish. Real's <.
-  lessForever: builtin("real.lessForever", "less than at real", (s) => fn([real, real], bool, s.freshRow([DIVERGE])), (a: RealData, b: RealData) => truth(RL.compare(toReal(a), toReal(b), Infinity)! < 0)),
+  lessForever: builtin("real.lessForever", "less than at real", (s) => fn([real, real], bool, s.freshRow([DIVERGE]))),
   // π, exactly (L88e2): as many of its digits as are asked for.
-  pi: builtin("real.pi", "real pi", pure([], real), () => realOf(4, [])),
+  pi: builtin("real.pi", "real pi", pure([], real)),
   // eˣ and the natural log, exactly (L88e4): as narrow as asked.
-  exp: builtin("real.exp", "real exp", pure([real], real), (x: RealData) => realOf(5, [x])),
-  log: builtin("real.log", "real log", pure([real], real), (x: RealData) => realOf(6, [x])),
+  exp: builtin("real.exp", "real exp", pure([real], real)),
+  log: builtin("real.log", "real log", pure([real], real)),
   // sin and cos, exactly (L88e5).
-  sin: builtin("real.sin", "real sin", pure([real], real), (x: RealData) => realOf(7, [x])),
-  cos: builtin("real.cos", "real cos", pure([real], real), (x: RealData) => realOf(8, [x])),
+  sin: builtin("real.sin", "real sin", pure([real], real)),
+  cos: builtin("real.cos", "real cos", pure([real], real)),
   // x rounded to n decimals, right to within one in the last place.
-  digits: builtin("real.digits", "real digits", pure([real, int], str), (x: RealData, n: I.Int) => RL.digits(toReal(x), Number(n))),
+  digits: builtin("real.digits", "real digits", pure([real, int], str)),
   // An Int m with |x − m/2ᵖ| < 2⁻ᵖ: x is between (m − 1)/2ᵖ and (m + 1)/2ᵖ.
-  approximate: builtin("real.approximate", "approximate", pure([real, int], int), (x: RealData, p: I.Int) => I.norm(RL.approximate(toReal(x), Number(p)))),
+  approximate: builtin("real.approximate", "approximate", pure([real, int], int)),
 };
 
 // show for any plain value: [1, 2, 3], circle(2), "text". Cases print
@@ -1456,10 +937,9 @@ export const COMPARE = builtin("compare", "compare", (s) => { const a = s.fresh(
 // f's input type to f; fields listed(value) is those fields as a list. Both
 // are written out per type as a match before anything runs, so they have no
 // implementation of their own (run.ts says so if one is reached).
-const open = (name: string) => () => { throw new Error(`${name} needs the value's data type and the fields' type known where it is used: give the definition that calls it those types`); };
 export const FIELDS = {
-  mapped: builtin("fields.mapped", "fields mapped", (s) => { const a = s.fresh(true), b = s.fresh(), e = s.freshRow(); return fn([a, fn([b], b, e)], a, e); }, open("fields mapped")),
-  listed: builtin("fields.listed", "fields listed", (s) => { const a = s.fresh(true), b = s.fresh(); return fn([a], list(b), s.freshRow()); }, open("fields listed")),
+  mapped: builtin("fields.mapped", "fields mapped", (s) => { const a = s.fresh(true), b = s.fresh(), e = s.freshRow(); return fn([a, fn([b], b, e)], a, e); }),
+  listed: builtin("fields.listed", "fields listed", (s) => { const a = s.fresh(true), b = s.fresh(); return fn([a], list(b), s.freshRow()); }),
 };
 
 // Records: set(field, record, value) is the record with that field changed.
@@ -1544,7 +1024,6 @@ export const BRANCH_V = { done: "std.branch.done", parked: "std.branch.parked" }
 // the function they go in or come out of. After every other type, so ids
 // above don't move. Prior art: Standard ML's tuples (every function takes
 // one value, which may be a tuple).
-const PART_NAMES = ["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"];
 export const TUPLE_MAX = 8;
 export const TUPLES: Id[] = [];
 for (let n = 2; n <= TUPLE_MAX; n++) {
@@ -1641,26 +1120,6 @@ export function writtenItems(nodes: Code["nodes"], id: Id): Id[] | null {
   }
 }
 export const SHOWN_V = "std.shown.shown";
-// Each type with a Shown implementation, and the definition implementing
-// it: what `show any` shows a value of that type through, in the
-// evaluator (run.ts) and in compiled code (C148).
-export function shownImplementations(info: { implementations?: Map<string, Id> }): Map<Id, Id> {
-  return implementationsOf(info, SHOWN);
-}
-// Each type with an implementation of the interface `iface`, and the
-// definition giving it: Shown's for show any, Ordered's for compare (L204g).
-export function implementationsOf(info: { implementations?: Map<string, Id> }, iface: Id): Map<Id, Id> {
-  const out = new Map<Id, Id>();
-  for (const [key, d] of info.implementations ?? []) {
-    if (!key.startsWith(`${iface}|`)) continue;
-    // One at a closed type, or with type parameters (L219), kept by its
-    // type constructor alone (infer.ts genericKey): `Shown (Box a)`.
-    const rest = key.slice(iface.length + 1);
-    const m = rest.startsWith("@") ? [rest, rest.slice(1)] : /"t":"con","id":"([^"]+)"/.exec(rest);
-    if (m && !out.has(m[1])) out.set(m[1], d);
-  }
-  return out;
-}
 // Wrapping integers (BACKLOG L193, ASPECTS-2026-11-03 142, 143): Word8, Word16,
 // Word32 and Word64 are arithmetic mod 2ⁿ, an Int from 0 to 2ⁿ − 1 kept
 // in `bits`, for hashes, generators, binary formats and samples, which an
@@ -1727,10 +1186,9 @@ export const JSON_V = { null: "std.json.json null", bool: "std.json.json bool", 
 // A program's own values to and from Json by their type (L190d2,
 // json-by-type.ts): written out per type as ordinary definitions before
 // anything runs, so they have no implementation of their own.
-const jsonOpen = (name: string) => () => { throw new Error(`${name} needs the value's type known where it is used`); };
 export const JSON_OPS = {
-  of: builtin("json.of", "json of", (s) => fn([s.fresh(true)], { t: "con", id: JSON_TYPE, args: [] }, s.freshRow()), jsonOpen("json of")),
-  from: builtin("json.from", "from json", (s) => fn([{ t: "con", id: JSON_TYPE, args: [] }], s.fresh(true), s.freshRow([CHOICE])), jsonOpen("from json")),
+  of: builtin("json.of", "json of", (s) => fn([s.fresh(true)], { t: "con", id: JSON_TYPE, args: [] }, s.freshRow())),
+  from: builtin("json.from", "from json", (s) => fn([{ t: "con", id: JSON_TYPE, args: [] }], s.fresh(true), s.freshRow([CHOICE]))),
 };
 // A calendar date (L188, the proleptic Gregorian calendar, as ISO 8601 and
 // java.time's LocalDate): a year, a month 1 to 12 and a day of that month,
@@ -1875,9 +1333,6 @@ export const POOL_KEY = typedef("std.pool key", "Pool key", [], [
   ["pool key", [["slot", () => tref(INT)], ["generation", () => tref(INT)]]],
 ]);
 export const POOL_KEY_V = "std.pool key.pool key";
-export function tupleType(n: number): Id { return `std.tuple${n}`; }
-export const tupleVariant = (n: number): Id => `std.tuple${n}.tuple`;
-export const tuplePart = (n: number, i: number): Id => `std.tuple${n}.tuple.${PART_NAMES[i]}`;
 // Ids that were renamed, as a saved program may still use them: std's Pair
 // is Tuple2 (L139).
 export const RENAMED_IDS: Record<Id, Id> = {
@@ -1909,9 +1364,15 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
   }
   return x;
 }
-export const tupleSize = (id: Id): number | null => { const m = /^std\.tuple(\d)$/.exec(id); return m ? Number(m[1]) : null; };
 
 export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
+// What the signatures say that a run needs, as data (C251), so the
+// evaluator and a page don't carry the signatures: each builtin's number
+// of inputs, and the builtins that only compute (their row has at most
+// Choice and Diverge: one that gives no value or several stops the run).
+const sigOf = (id: Id) => SIGS[id](new Subst());
+export const BUILTIN_INPUTS: Record<Id, number> = Object.fromEntries(Object.keys(SIGS).flatMap((id) => { const t = sigOf(id); return t.t === "fn" ? [[id, t.params.length]] : []; }));
+export const COMPUTE_ONLY: Id[] = Object.keys(SIGS).filter((id) => { const t = sigOf(id); return t.t === "fn" && t.eff.effs.every((e) => e === CHOICE || e === DIVERGE); });
 export const stdNames: Names = { ...names, [B.sqrt]: "sqrt", [B.pow]: "power" };
 
 // Operations where the grouping doesn't change the answer (+ and · only

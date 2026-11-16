@@ -7,7 +7,8 @@
 import type { Code, Id, Node, NodeOf, Call } from "../model.ts";
 import { isCall, isUse } from "../model.ts";
 import { answerKeys } from "./ports.ts";
-import { TUPLE_MAX, tuplePart } from "./std.ts";
+import { TUPLE_MAX } from "./std.ts";
+import { tuplePart } from "./std-values.ts";
 
 // What each let's dot holds, per program: found once.
 const lets = new WeakMap<Code["nodes"], Map<Id, Id>>();

@@ -9,7 +9,8 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { COMPLEX_TYPE, LIBRARY, RATIO_V, RATIONAL_TYPE } from "../src/lang/library.ts";
 import { PROBLEMS, problemOf } from "../src/lang/problems.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, tupleVariant, JOBS, REPRESENTATION_V, COST, TRIG_V } from "../src/lang/std.ts";
+import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS, LOG_OP, RELEASE_V, S, SET, SHOWN_V, SOME, TRIG_OPS, TRUE, JOBS, REPRESENTATION_V, COST, TRIG_V } from "../src/lang/std.ts";
+import { tupleVariant } from "../src/lang/std-values.ts";
 import type { Id, NodeData } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 

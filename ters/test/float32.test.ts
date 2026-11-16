@@ -10,7 +10,8 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { choose, represent, type Representation } from "../src/lang/represent.ts";
 import { makeRunner, type Value } from "../src/lang/run.ts";
 import { withFloat32, ROUNDED } from "../src/lang/float32.ts";
-import { S, STD_IMPL } from "../src/lang/std.ts";
+import { S } from "../src/lang/std.ts";
+import { STD_IMPL } from "../src/lang/std-impl.ts";
 import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
 

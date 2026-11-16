@@ -16,7 +16,7 @@
 // Promise.race.
 
 import type { Data } from "./run.ts";
-import { CONS, TICKET_V } from "./std.ts";
+import { CONS, TICKET_V } from "./std-ids.ts";
 
 // A fetch in the background (L150b): its body, why it failed, or null
 // while it is still on its way.

@@ -23,7 +23,9 @@
 // Prior art: Cilk's work stealing (Blumofe et al. 1995), here with one
 // claim per branch, as the branches are few.
 
-import { ArrayView, arrayOf, CONS, NIL, Table } from "../../ters/src/lang/std.ts";
+import { CONS, NIL } from "../../ters/src/lang/std-ids.ts";
+import { ArrayView, arrayOf } from "../../ters/src/lang/array-view.ts";
+import { Table } from "../../ters/src/lang/table.ts";
 import { counted, OutOfSteps, setStepsLeft, stepsLeft, toList } from "../../ters/src/lang/run.ts";
 import { add, type Int } from "../../ters/src/lang/int.ts";
 import { Pending } from "../../ters/src/lang/cells.ts";

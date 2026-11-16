@@ -12,7 +12,7 @@ import { seededGenerator } from "../src/lang/random.ts";
 import { fromList, PAGE_STEPS, runMain, toList, withSteps } from "../src/lang/run.ts";
 import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { coreCall } from "../../compiler/src/core-rt.ts";
-import { arrayOf, arrayView } from "../src/lang/std.ts";
+import { arrayOf, arrayView } from "../src/lang/array-view.ts";
 import { ARRAY } from "../src/lang/types.ts";
 
 const itemsOfArray = (a: Parameters<typeof arrayView>[0]): unknown[] => { const v = arrayView(a); return v.buf.items.slice(v.start, v.start + v.n) as unknown[]; };
