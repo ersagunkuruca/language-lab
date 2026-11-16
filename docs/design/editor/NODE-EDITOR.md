@@ -86,7 +86,7 @@ menus).
 | Select a part | ✓ click | ✓ click | a call's name or operator selects the whole call in both |
 | Fill a hole | ✓ | ✓ | the panel's palette, or right-click the hole; type a value or `x * 2` |
 | Replace with… | ✓ | ✓ | panel, menu, Enter |
-| Clear to a hole | ✓ Delete | ✓ Delete, or drag an input's wire off | |
+| Clear | ✓ Delete | ✓ Delete, or drag an input's wire off | |
 | Swap function… | ✓ | ✓ | panel, menu, Enter on a call |
 | Copy, cut, paste a whole call | ✓ Ctrl+C/X/V | ✓ Ctrl+C/X/V | the panel's Copy too |
 | Use a variable | ✓ palette | ✓ palette, or drag from the variable to an input | |
@@ -97,7 +97,7 @@ menus).
 | Split by cases, steps earlier/later | ✓ panel | ✓ panel | |
 | Rename | ✓ panel | ✓ panel, menu Rename… | |
 | Open a definition | ✓ double-click a name | ✓ double-click a node, menu Open | |
-| Definition: pin, Let it loosen, inputs, duplicate, delete | ✓ click its name | ✓ click its frame | |
+| Definition: pin, Loosen type, inputs, duplicate, delete | ✓ click its name | ✓ click its frame | |
 | Step through parts | ✓ Tab | ✓ Tab (in reading order) | |
 | Menu from the keyboard | ✓ Shift+F10 | ✓ Shift+F10 | |
 | Long press for the menu (touch) | ✓ | ✓ | |
