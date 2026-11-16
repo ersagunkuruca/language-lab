@@ -276,7 +276,11 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     // A catch that goes on puts the depth back as it was at its try.
     const keep = () => { if (!deep.size) return ["", ""]; const t = temp(); return [`const ${t} = depth; `, `depth = ${t}; `]; };
     const temp = () => `t${temps++}`;
-    const local = (j: number) => `l${j}`;
+    // The locals the printed body reads or sets: only those are declared.
+    // The passes before leave slots behind (a let inlined or never read),
+    // and conjugation's functions declared 1,700 locals they never used.
+    const used = new Set<number>();
+    const local = (j: number) => (used.add(j), `l${j}`);
     const self = (e: SExpr): boolean => (e.k === "call" && e.fn === i && e.tail) || kidsOf(e).some(self);
     const loops = self(f.body);
     // How a statement leaves when what it reads has no answer (C137c15): the
@@ -352,7 +356,13 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           if (MATH[e.op]) return `Math.${MATH[e.op]}(${xs.join(", ")})`;
           return `R.unsupported(${JSON.stringify(`op ${e.op}`)})`;
         }
-        case "let": pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d)};`); return ex(e.body, pre, d);
+        case "let": {
+          // One nothing reads: worked out only for what it does.
+          if (!readsLocal(e.body, e.i)) { if (!quiet(e.value)) pre.push(`${d}${ex(e.value, pre, d)};`); return ex(e.body, pre, d); }
+          const v = ex(e.value, pre, d);
+          if (v !== local(e.i)) pre.push(`${d}${local(e.i)} = ${v};`);
+          return ex(e.body, pre, d);
+        }
         case "if": {
           const c = ex(e.cond, pre, d), t = temp();
           pre.push(`${d}let ${t};`, `${d}if (${c}) {`, ...block(e.then, { set: t }, d + "  "), `${d}} else {`, ...block(e.else, { set: t }, d + "  "), `${d}}`);
@@ -422,7 +432,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
           return e.t.partial ? `R.ck(R.ap(${[local(e.tmp), ...xs].join(", ")}))` : `${local(e.tmp)}(${xs.join(", ")})`;
         }
         case "case": {
-          pre.push(`${d}${local(e.s)} = ${ex(e.scrut, pre, d)};`);
+          { const v = ex(e.scrut, pre, d); if (v !== local(e.s)) pre.push(`${d}${local(e.s)} = ${v};`); }
           const t = temp();
           pre.push(`${d}let ${t};`, `${d}switch (${scrutOf(e.t, local(e.s))}) {`);
           e.arms.forEach((a, c) => { if (a) pre.push(`${d}  case ${label(e.t, c)}: {`, ...block(a, { set: t }, d + "    "), `${d}    break;`, `${d}  }`); });
@@ -535,7 +545,7 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     function block(e: SExpr, to: { set: string; fails?: true } | "return", d: string): string[] {
       const out: string[] = [];
       const failable = to === "return" ? !!f.partial : !!to.fails;
-      const give = (x: string) => [...out, to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`];
+      const give = (x: string) => [...out, ...(to === "return" ? [`${d}return ${x};`] : x === to.set ? [] : [`${d}${to.set} = ${x};`])];
       if (failable && e.k === "fail") return give("R.FAIL");
       if (failable && e.k === "call" && ir.funcs[e.fn].partial && !(to === "return" && e.fn === i && e.tail)) return give(call(e.fn, inputs(e.args, out, d)));
       if (failable && e.k === "attempt" && !(e.resumes && !cycle)) {
@@ -550,13 +560,21 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       // A match hands `to` to its arms, so a self call in one is the
       // loop's next round, not a call as deep as the data (L181b).
       if (e.k === "case") {
-        out.push(`${d}${local(e.s)} = ${slot(e.scrut, out, d)};`, `${d}switch (${scrutOf(e.t, local(e.s))}) {`);
+        // Not `l0 = l0;`: a loop's case on its own parameter.
+        const v = slot(e.scrut, out, d);
+        if (v !== local(e.s)) out.push(`${d}${local(e.s)} = ${v};`);
+        out.push(`${d}switch (${scrutOf(e.t, local(e.s))}) {`);
         e.arms.forEach((a, c) => { if (a) out.push(`${d}  case ${label(e.t, c)}: {`, ...block(a, to, d + "    "), ...(to === "return" ? [] : [`${d}    break;`]), `${d}  }`); });
         out.push(`${d}}`);
         return out;
       }
       if (e.k === "let") {
-        out.push(`${d}${local(e.i)} = ${slot(e.value, out, d)};`);
+        if (!readsLocal(e.body, e.i)) {
+          if (!quiet(e.value)) out.push(`${d}${ex(e.value, out, d)};`);
+          return [...out, ...block(e.body, to, d)];
+        }
+        const v = slot(e.value, out, d);
+        if (v !== local(e.i)) out.push(`${d}${local(e.i)} = ${v};`);
         return [...out, ...block(e.body, to, d)];
       }
       // A field set, then what follows as the statements it is, so a
@@ -572,13 +590,14 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
       }
       if (to === "return" && e.k === "call" && e.fn === i && e.tail) {
         // The loop's next round: every new value computed before any is set.
-        const xs = e.args.map((a) => ex(a, out, d)), ts = xs.map(() => temp());
-        xs.forEach((x, j) => out.push(`${d}const ${ts[j]} = ${x};`));
-        ts.forEach((t, j) => out.push(`${d}${local(j)} = ${t};`));
+        // A parameter passed on as it is stays as it is.
+        const xs = e.args.map((a) => ex(a, out, d)), ts = xs.map((x, j) => (x === local(j) ? null : temp()));
+        xs.forEach((x, j) => { if (ts[j]) out.push(`${d}const ${ts[j]} = ${x};`); });
+        ts.forEach((t, j) => { if (t) out.push(`${d}${local(j)} = ${t};`); });
         return [...out, `${d}continue;`];
       }
       const x = ex(e, out, d);
-      return [...out, to === "return" ? `${d}return ${x};` : `${d}${to.set} = ${x};`];
+      return [...out, ...(to === "return" ? [`${d}return ${x};`] : x === to.set ? [] : [`${d}${to.set} = ${x};`])];
     }
 
     // One from the budget per call, and per round of the loop.
@@ -590,8 +609,9 @@ export function emitCoreJs(ir: CoreIR): { js: string; names: string[]; worlds: s
     // 3.47M page steps where the evaluator takes 442k).
     const step = ir.info.divergent.has(f.def) && !f.piece ? [fuel ? "if (fuel === Infinity) R.step();" : "R.step();"] : [];
     const spend = (d: string) => [...(f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []), ...step.map((x) => d + x)];
-    const params = f.params.map((_, j) => local(j)), locals = f.locals.map((_, j) => local(f.params.length + j));
+    const params = f.params.map((_, j) => local(j));
     const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
+    const locals = f.locals.map((_, j) => f.params.length + j).filter((j) => used.has(j)).map((j) => `l${j}`);
     // A definition that isn't a function is worked out once, at its first
     // use, as compile.ts has it (`??=`): sheet's `symbols`, a set made from
     // a written list, was made again for every character (C137d17).
@@ -767,6 +787,22 @@ function deepFuncs(funcs: SFunc[]): Map<number, Set<number>> {
   });
   return deep;
 }
+
+// Does e read local i? Through a local node, or as the record `make`
+// writes into.
+const readsLocal = (e: SExpr, i: number): boolean => (e.k === "local" && e.i === i) || (e.k === "make" && e.into === i) || kidsOf(e).some((x) => readsLocal(x, i));
+// A value worked out for nothing but itself: no effect, no stop, so one
+// nothing reads needn't be worked out at all.
+const quiet = (e: SExpr): boolean => {
+  switch (e.k) {
+    case "local": case "num": case "int": case "text": case "bool": case "cap": return true;
+    case "get": case "field": case "tag": return quiet(e.rec);
+    case "closure": return e.caps.every(quiet);
+    case "new": return e.args.every(quiet);
+    case "make": return e.into === undefined && e.args.every(quiet);
+    default: return false;
+  }
+};
 
 function kidsOf(e: SExpr): SExpr[] {
   switch (e.k) {
