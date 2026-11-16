@@ -184,11 +184,9 @@ export function buildNumbers(pre: Module): Module {
   const sizes = [2, 3, 4] as const;
   const mats = sizes.map((size) => k.type(`Mat${size}`, [], [[`mat${size}`, Array.from({ length: size * size }, (_, i) => [`m${Math.floor(i / size) + 1}${(i % size) + 1}`, () => k.tref(NUMBER)] as [string, () => Id])]], `${size} × ${size} matrices`));
   const matV = (i: number) => mats[i].v[`mat${sizes[i]}`];
-  const matTables = sizes.map((size, i) => {
-    const units = k.list(...Array.from({ length: size }, (_, r) => k.list(...Array.from({ length: size }, (_, c) =>
-      k.call(matV(i), ...Array.from({ length: size * size }, (_, e) => k.lit(e === r * size + c ? 1 : 0)))))));
-    const d = k.def(`mat${size} table`); k.define(d, k.call(lib("matrix table"), units)); return d;
-  });
+  // Each size's table, from its matrix units (L264b): defined below, with
+  // matrix rows.
+  const matTables = sizes.map((size) => k.def(`mat${size} table`));
   // + − and −x part by part, at any record of Float64s.
   const partwise = (name: string, op: Id) => { const d = k.def(name); k.define(d, k.fn(["a", "b"], (a, b) => k.call(S.zipParts, op, a, b))); return d; };
   const addParts = partwise("add parts", B.add), subParts = partwise("subtract parts", B.sub);
@@ -243,6 +241,12 @@ export function buildNumbers(pre: Module): Module {
     ]) },
   ])));
   const rowsOf = def("matrix rows", ["matrix"], (m) => matOf(m, (r, c, xs) => k.call(map, k.call(INT_OPS.range, r), k.fn(["i"], (i) => k.call(take, k.call(drop, xs, iMul(i, c)), c)))));
+  // The matrix units of a Mat are its record's unit parts (L264b), read
+  // here as the rows of a size × size Matrix: unit parts of a zero at that
+  // Mat, which it reads only for its type, so no table writes an identity
+  // out.
+  matTables.forEach((d, i) => k.define(d, k.call(lib("matrix table"), k.call(rowsOf, M(k.int(sizes[i]), k.int(sizes[i]),
+    k.call(S.unitParts, k.call(matV(i), ...Array.from({ length: sizes[i] * sizes[i] }, () => k.lit(0)))))))));
   const matrixOfRows = def("matrix of rows", ["rows"], (rs) => k.match(rs, [
     { variant: NIL, names: [], body: () => M(k.int(0), k.int(0), k.x(NIL)) },
     { variant: CONS, names: ["first", "rest"], body: ([first]) => k.let("columns", k.call(length, first), (c) =>
