@@ -49,7 +49,7 @@ export function filesPanels(host: FilesHost) {
     const prevMeaning = prev && prev.code.nodes[ui.def] ? meaningOf(prev.code) : meaning;
     box.append(h("div", { class: `meaning${meaning !== prevMeaning ? " moved" : ""}` },
       h("span", {}, "Meaning hash"), h("code", {}, meaning),
-      h("span", { class: "chip" }, meaning === prevMeaning ? "same as before last edit" : "changed by last edit")));
+      h("span", { class: "chip", title: "The meaning hash before the last edit, compared with now" }, meaning === prevMeaning ? "unchanged" : "changed")));
     for (const f of files()) {
       const txt = f.get(doc());
       box.append(h("div", { class: `file${ui.touched.includes(f.name) ? " hot" : ""}` },

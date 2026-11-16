@@ -159,6 +159,11 @@ of text; they were these cells logging every finished row).
   number isn't known before the PR exists, so write "this PR" and fill it
   in with the lane's next PR: a push only for the number costs a CI run.
 - Credit external ideas as the project instructions say.
+- **UI text is lean** (Ersagun 2026-11-16): heads and labels name things,
+  structure (sections, size, spacing, colour, component) explains them, and
+  explanations go in tooltips, warnings and help, not in the panel.
+  [UI-TEXT.md](../design/editor/UI-TEXT.md) has the rule and the words; the
+  `ui-text` project skill is its checklist, and `unslop` checks longer text.
 - **Before merging: type-check, then `node ters/test/affected.ts`, and
   trust what it runs** (TESTING.md §8, T16, Ersagun 2026-11-14). It picks
   the tests from the test map (what each test ran and read, recorded by

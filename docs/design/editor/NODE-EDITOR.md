@@ -29,7 +29,7 @@ Sources this draws on, credited per the project's attribution rule:
 | 3 | **Manual layout is busywork, automatic layout throws your work away.** | Auto-arrange add-ons (Blueprint Assist, Blender's Node Arrange), Houdini's layout tool. They lay out everything, often ignoring wires. | Positions are **free and absolute**: a node is where you put it, not an offset from what it feeds, so moving one never drags others along. **Tidy everything** lays it all out afresh, the same picture every time: each frame on its own, innermost first, then everything in columns by how far it is from the result (the longest-path layering of Sugiyama, Tagawa and Toda), each column ordered by where its nodes plug in (what they feed, top to bottom, then the port), so a call's inputs come in the order of its ports however tall each is, and then each node is centred on the inputs that feed it, as a parent over its children in Reingold and Tilford's tidy trees, a column keeping its order and gaps. A folded frame is one box, so folding makes room, and what it holds is laid out as it would be open, with the folded frames inside it shut. A graph nobody has moved is drawn the same way, so unmoved nodes are where Tidy everything puts them, and tidying twice moves nothing. **Tidy what's inside** a frame lays its contents out the same way and leaves the frame's corner where it is. **Tidy** on picked nodes only spaces those out from where they are: it reorders each column so fewer wires cross (Sugiyama's barycenter step, kept only where it helps), removes overlaps, keeps each frame's contents together, pushes nodes off wires that run through them unless that crosses other wires, and keeps inputs to the left of what they feed. |
 | 4 | **Variables as wires don't scale.** A value used in ten places is ten long wires. | Unreal local variables (Set/Get nodes), Max send/receive, named reroutes. | Same binding, two looks, your choice per binding: a **dot** with wires to every use (the default), or a **let node** plus a small **get node** next to every use, with no long wires. It's a view (layout.json), not code; switching back and forth changes nothing in the program. Selecting either highlights the other. Function inputs can be shown as get nodes too. |
 | 5 | **Named wires vs. variables: two things that are one.** | Unreal has both reroutes and variables; they behave differently. | We had this too: a named dot looked like a **captioned wire** (the name floated over the line) while an unnamed one showed •1, and the two read as different things. They're the same: a name on a wire *is* a let. Now a name is only ever drawn on its dot or let node, and the caption is gone. Values on wires look different on purpose (a chip with a value in it), because they are different: a value, not a name. |
-| 6 | **Hard to add nodes.** Toolbars and side palettes are far from where you work. | Right-click or Tab search menus at the pointer (Blender Shift-A, Unreal right-click, Houdini Tab). | **Right-click** anywhere: on a hole, the same type-checked palette as the side panel, at the pointer, with search. On empty space, **Add a value here** makes a new dot with a hole and opens the palette for it; wire it in afterwards. On a node: open its definition, show it inline, show its value as a let node or a dot, put a dot on it, clear it, tidy. By touch, two fingers pinch to zoom (and pan with it), a press held still for half a second is the right-click, and the menu's **Pick** stands in for shift-click (picked nodes move and tidy together; a picked dot drags to move instead of to wire, as alt-drag does). |
+| 6 | **Hard to add nodes.** Toolbars and side palettes are far from where you work. | Right-click or Tab search menus at the pointer (Blender Shift-A, Unreal right-click, Houdini Tab). | **Right-click** anywhere: on a hole, the same type-checked palette as the side panel, at the pointer, with search. On empty space, **Add value** makes a new dot with a hole and opens the palette for it; wire it in afterwards. On a node: open its definition, show it inline, show its value as a let node or a dot, put a dot on it, clear it, tidy. By touch, two fingers pinch to zoom (and pan with it), a press held still for half a second is the right-click, and the menu's **Pick** stands in for shift-click (picked nodes move and tidy together; a picked dot drags to move instead of to wire, as alt-drag does). |
 | 7 | **The window is the wrong size.** | Every tool lets you resize panels. | The graph fills its pane, and the gutters between panes resize it (the redesign's dock). **Fit** centers the graph horizontally and vertically. |
 | 8 | **No multi-select, so no bulk moves.** | Box select and shift-click everywhere. | Shift-click adds to the selection, shift-drag on empty space draws a box. Dragging any selected node moves them all. Tidy works on the selection. |
 | 9 | **Lists, sequences and curried functions drawn nested.** `cons(1, cons(2, cons(3, nil)))` becomes a staircase; `print; print; print` nests. | Most tools have a "make array" node with N inputs. | A list is one node with one input per item, and a run of steps is a column (done in the "Writing programs" thread; this layout keeps both). `(y) => (angle) => …` is one frame with both parameters, and an `if` always shows *then* above *else*. |
@@ -50,7 +50,7 @@ Sources this draws on, credited per the project's attribution rule:
 - **The order effects run in is numbered, on request** (E265). An action's
   steps are numbered dots, but an effect inside a call's inputs showed no
   order: in `show(area()) ++ show(share(10, 0))` nothing said area is asked
-  first. Right-click the canvas, "Number the effects in the order they run":
+  first. Right-click the canvas, "Number effects":
   each call whose row isn't empty (an effect's own operations too, random(),
   now()) gets a number in the order it runs, a call's inputs left to right
   and then the call (SPEC 5.1). A thunk given to a call (first's, a
@@ -86,28 +86,28 @@ menus).
 | Select a part | ✓ click | ✓ click | a call's name or operator selects the whole call in both |
 | Fill a hole | ✓ | ✓ | the panel's palette, or right-click the hole; type a value or `x * 2` |
 | Replace with… | ✓ | ✓ | panel, menu, Enter |
-| Clear to a hole | ✓ Delete | ✓ Delete, or drag an input's wire off | |
-| Change the function… | ✓ | ✓ | panel, menu, Enter on a call |
+| Clear | ✓ Delete | ✓ Delete, or drag an input's wire off | |
+| Swap function… | ✓ | ✓ | panel, menu, Enter on a call |
 | Copy, cut, paste a whole call | ✓ Ctrl+C/X/V | ✓ Ctrl+C/X/V | the panel's Copy too |
 | Use a variable | ✓ palette | ✓ palette, or drag from the variable to an input | |
 | Share a value (a dot) | ✓ menu | ✓ menu, or drag an output onto another input | |
-| Add a value before this | ✓ menu | ✓ menu | |
+| Add value before | ✓ menu | ✓ menu | |
 | Add a value (empty space) | ✓ right-click empty space: at the start | ✓ right-click the canvas: where you clicked | |
 | List items, a + b + c inputs: add, move, take out | ✓ panel, menu | ✓ panel, menu, + under the inputs, drag an input onto another to move it | |
 | Split by cases, steps earlier/later | ✓ panel | ✓ panel | |
-| Rename | ✓ panel | ✓ panel, menu Name it… | |
+| Rename | ✓ panel | ✓ panel, menu Rename… | |
 | Open a definition | ✓ double-click a name | ✓ double-click a node, menu Open | |
-| Definition: pin, Let it loosen, inputs, duplicate, delete | ✓ click its name | ✓ click its frame | |
+| Definition: pin, Loosen type, inputs, duplicate, delete | ✓ click its name | ✓ click its frame | |
 | Step through parts | ✓ Tab | ✓ Tab (in reading order) | |
 | Menu from the keyboard | ✓ Shift+F10 | ✓ Shift+F10 | |
 | Long press for the menu (touch) | ✓ | ✓ | |
 | Layout: move, pick, tidy, fold, inline, let/get nodes | n/a | ✓ | how the graph is drawn, not the program |
-| Wrap in… / Insert a node after it… | ✓ menu Wrap in… | ✓ menu Insert a node after it… | the same edit: the part goes into a call from the palette |
-| Add a step before this | ✓ menu | ✓ menu | an action's step (E190) |
+| Wrap in… / Insert after… | ✓ menu Wrap in… | ✓ menu Insert after… | the same edit: the part goes into a call from the palette |
+| Add step before | ✓ menu | ✓ menu | an action's step (E190) |
 | Turn around (work out an input from the result), use it forwards | ✓ menu | ✓ menu, or drag the result onto an input | E168 |
 | A list's sockets: add an item, drop onto one | ✓ panel, menu (list items above) | ✓ a socket per item and an empty one after | E166: the sockets are the graph's way of the same edits |
 | A function's result ports (L128) | ✓ panel | ✓ panel | the panel's input/result buttons |
-| Make it a function / a definition, from parts | ✓ menu on a part: it with all it holds | ✓ menu on a node, picked nodes or a group | E208 |
+| Make function / a definition, from parts | ✓ menu on a part: it with all it holds | ✓ menu on a node, picked nodes or a group | E208 |
 | Make an inner function a definition | ✓ menu on it | ✓ menu on its frame | E208 |
 | Simplify | ✓ menu | ✓ menu | |
 | Implement an interface | ✓ panel | ✓ panel | a data type's panel, or a missing implementation's error |

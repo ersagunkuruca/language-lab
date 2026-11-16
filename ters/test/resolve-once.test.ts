@@ -27,6 +27,20 @@ function seen(code: Code, before: Code, names: Record<Id, string>, show: (id: Id
   return { kept: kept.sort(), copies: copies.sort(), defs: code.defs.length };
 }
 
+// The library's resolving is made by whoever asks first and kept: its
+// copies are named by the library's own names, not the first caller's
+// (main was red when a file that resolves with no names ran first, and
+// every copy read "@… at type.number").
+test("the library's copies have the library's names whoever resolves first", () => {
+  const p = loadProgram(join(root, "examples", "queens"));
+  const copies = (r: ReturnType<typeof resolveArithmetic>) => Object.keys(r.code.nodes).filter((id) => !(id in p.code.nodes) && r.code.nodes[id].kind === "def").map((id) => r.names[id]).sort();
+  // First in this file, so nothing here has made it yet.
+  resolveArithmetic(p.code, infer(p.code, p.pres.names, undefined, checkOptions));
+  const named = copies(resolveArithmetic(p.code, infer(p.code, p.pres.names, undefined, checkOptions), p.pres.names));
+  assert.ok(named.length > 0);
+  assert.deepEqual(named.filter((n) => n.startsWith("@") || n.includes("type.number")), []);
+});
+
 const EXAMPLES = (process.env.ALL ? readdirSync(join(root, "examples")) : ["queens", "numbers", "algebra", "lockstep", "generic", "calc"]) as string[];
 for (const example of EXAMPLES) test(`${example}: resolving on the library's own resolving is resolving from scratch`, () => {
   let p: ReturnType<typeof loadProgram>;
@@ -41,3 +55,4 @@ for (const example of EXAMPLES) test(`${example}: resolving on the library's own
   checkOnce(null);
   try { assert.deepEqual(once, run()); } finally { checkOnce(LIBRARY.code, LIBRARY.names); }
 });
+

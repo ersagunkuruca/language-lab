@@ -17,7 +17,7 @@ import type { Trace } from "../ters/src/lang/trace.ts";
 import type { Saved } from "../ters/src/lang/tests.ts";
 import { formatUnit, infer as unitInfer } from "../ters/src/units.ts";
 import type * as T from "./typed.ts";
-import { h } from "./dom.ts";
+import { h, head } from "./dom.ts";
 import { shower } from "./shown.ts";
 import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { declaresUnits } from "./selectedParts.ts";
@@ -242,10 +242,10 @@ export function backwards(host: BackHost) {
     }
     const units = declaresUnits(doc().code) ? (() => { try { return unitInfer(doc().code, ui.def); } catch { return null; } })() : null;
     const unitOf = (p: Id) => { const u = p === "out" ? null : units?.unit(p); return u && Object.keys(u).length ? ` ${formatUnit(u)}` : ""; };
-    if (pixelSeed(ui.def) && !doc().examples?.[ui.def]) box.append(h("p", { class: "hint" }, "The picture above is this function at every pixel. Here it runs at one of them: change x, y or time to look at another."));
-    box.append(h("p", { class: "hint" }, pred
-      ? "A function that says true or false: what used to be a network. Tick the ports you know and it solves for the rest, keeping it true."
-      : "Tick the ports you know, the result included, and it works out the others: this function, run backwards."));
+    if (pixelSeed(ui.def) && !doc().examples?.[ui.def]) box.append(h("p", { class: "hint", title: "The picture above is this function at every pixel. Here it runs at one of them: change x, y or time to look at another." }, "One pixel of the picture"));
+    box.append(head(pred ? "Solve" : "Run backwards", { tip: pred
+      ? "A function that says true or false. Tick the ports you know and it solves for the rest, keeping it true."
+      : "Tick the ports you know, the result included, and it works out the others." }));
     // Only a whole number is rounded: a value that merely starts with a digit
     // (a constructor's hash, say) isn't one, and read as one it was NaN (I32).
     // A Fixed reads as the number it stands for, as on the wires.
@@ -274,18 +274,18 @@ export function backwards(host: BackHost) {
       if (part !== undefined) box.append(htmlPart(part, namer.name(ui.def)));
     }
     if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : portName(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
-    else if (r.error) box.append(LIMIT.test(r.error) ? h("p", { class: "hint" }, `It doesn't run backwards: ${r.error}.`) : h("p", { class: "status-line bad" }, r.error));
-    else if (r.cut) box.append(h("p", { class: "status-line" }, r.answers.length ? "Still looking for other answers… " : "Looking for an answer… ",
+    else if (r.error) box.append(LIMIT.test(r.error) ? h("p", { class: "hint" }, `Doesn't run backwards · ${r.error}`) : h("p", { class: "status-line bad" }, r.error));
+    else if (r.cut) box.append(h("p", { class: "status-line" }, r.answers.length ? "Looking for more… " : "Searching… ",
       h("button", { class: "btn", type: "button", "data-act": "stop-search", title: "Keep what it has found so far" }, "Stop")));
-    else if (r.stopped) box.append(h("p", { class: "status-line" }, r.answers.length ? "Stopped looking for other answers: Run again to look further." : "Stopped looking before it found an answer: give it more known ports."));
-    else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn" }, `Not enough is known: give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}, or it is a whole family of answers.`));
+    else if (r.stopped) box.append(h("p", { class: "status-line", title: r.answers.length ? "Run again to look further" : "Give it more known ports" }, r.answers.length ? "Stopped looking for more" : "Stopped looking · no answer yet"));
+    else if (r.plan && r.plan.status !== "solved") box.append(h("p", { class: "status-line warn", title: "Or it is a whole family of answers" }, `Not enough known · give ${r.plan.needMore} more port${r.plan.needMore === 1 ? "" : "s"}`));
     // Every input given and none found: the search missed the one answer a
     // run forwards gives (relate's limits, I39), not a contradiction.
-    else if (!r.answers.length && handles.length) box.append(h("p", { class: "hint" }, `It handles ${handles.map((e) => pres().names[e] ?? e).join(", ")} for the function it's given, so it has values only where something calls it with one: Run main to see it at work.`));
-    else if (!r.answers.length && acts.length) box.append(h("p", { class: "hint" }, `It uses ${acts.map((e) => pres().names[e] ?? e).join(", ")}, so Run doesn't work it out here. Show values runs it forwards with these inputs.`));
+    else if (!r.answers.length && handles.length) box.append(h("p", { class: "hint", title: "It has values only where something calls it with a function: Run main to see it at work" }, `Handler of ${handles.map((e) => pres().names[e] ?? e).join(", ")} · no values alone`));
+    else if (!r.answers.length && acts.length) box.append(h("p", { class: "hint", title: "Show values runs it forwards with these inputs" }, `Uses ${acts.map((e) => pres().names[e] ?? e).join(", ")} · not solved here`));
     else if (!r.answers.length) box.append(forwards
-      ? h("p", { class: "status-line warn" }, "The search found no result for these values: it works the function out as equations and can miss one a run forwards gives. Show values runs it forwards.")
-      : h("p", { class: "status-line bad" }, "No answer: the known values contradict each other, or would need a complex number."));
+      ? h("p", { class: "status-line warn", title: "It works the function out as equations and can miss one a run forwards gives. Show values runs it forwards." }, "Search found no result")
+      : h("p", { class: "status-line bad", title: "The known values contradict each other, or would need a complex number" }, "No answer"));
     if (r.answers.length > 1 || r.more) {
       const wanted = ports.filter((p) => !known.includes(p));
       const alt = r.answers.slice(1).map((a) => wanted.map((p) => `${p === "out" ? "result" : portName(p)} ${nice(a.values[p])}`).join(", "));
@@ -304,13 +304,13 @@ export function backwards(host: BackHost) {
         b.addEventListener("click", () => acceptAnswer(inputs, got));
         return b;
       };
-      if (acc?.answer === got) box.append(h("p", { class: "status-line accepted" }, "✓ The answer you accepted for these inputs."));
+      if (acc?.answer === got) box.append(h("p", { class: "status-line accepted" }, "✓ Accepted"));
       else if (acc) box.append(h("p", { class: "status-line warn" }, `Accepted: ${nice(acc.answer!)}. Now: ${nice(got)}. `, accept("Accept the new answer")));
-      else box.append(h("p", { class: "hint" }, accept("Accept this answer"), " to check it from now on."));
+      else box.append(h("div", { class: "acts" }, accept("Accept answer")));
     }
     const residual = r.answers[0]?.residual ?? [];
     if (residual.length) box.append(h("p", { class: "hint" }, `Left over: ${residual.join("; ")}`));
-    if (r.plan?.status === "solved") box.append(h("details", { class: "alts" }, h("summary", {}, "The program it derives for this direction"),
+    if (r.plan?.status === "solved") box.append(h("details", { class: "alts" }, h("summary", {}, "Derived program"),
       h("pre", { class: "text" }, programText(namer, r.plan.steps))));
     return box;
   }

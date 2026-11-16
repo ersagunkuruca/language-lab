@@ -257,7 +257,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
         near = ring.find((x) => last.has(x) && !fresh.has(x));
       }
       // A let's dot is wired only to a frame's result and to its uses (I137:
-      // Make it a function's `part` landed where the fresh layout had it,
+      // Make function's `part` landed where the fresh layout had it,
       // past everything): it goes with what stays nearest it there.
       if (!near) {
         const a = arranged.get(k)!;
@@ -1648,7 +1648,7 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     }
     // The frame's ports (E167, PORTS-2026-11-01.md §5): each value wired
     // in from outside on its left, each value wired out on its right,
-    // one port per value: the inputs and results Make it a function
+    // one port per value: the inputs and results Make function
     // would give the picked nodes.
     const items = new Set(units.flatMap((u) => u.keys));
     const frames = new Set<Id>();
@@ -1671,8 +1671,8 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
         spread.append(c);
       }
     };
-    ports([...ins.values()], b.x - mx, "in", "A value wired in from outside: an input Make it a function would give");
-    ports([...outs.values()], b.x + b.w + mx, "out", "A value wired out: a result Make it a function would give");
+    ports([...ins.values()], b.x - mx, "in", "A value wired in from outside: an input Make function would give");
+    ports([...outs.values()], b.x + b.w + mx, "out", "A value wired out: a result Make function would give");
   }
   return [...[false, true].flatMap((up) => [frameL(up), wireL(up), portL(up), ...(up ? [] : [marks]), itemL(up), nameL(up)]), out, vals, spread];
 }

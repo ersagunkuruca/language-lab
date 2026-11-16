@@ -151,7 +151,7 @@ export function selection(host: SelectionHost) {
     // the status line, where the tap is (E203).
     else if (id && TOUCH && onePane()) {
       const d = describe(id);
-      if (d) { ui.note = `${d}. Its panel is in Run & more.`; ui.refused = false; }
+      if (d) { ui.note = `${d} · see Panels`; ui.refused = false; }
     }
     render();
     const live = say ? document.getElementById("sr-say") : null;

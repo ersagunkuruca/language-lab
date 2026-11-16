@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row of its own; the next QA pass's findings |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
-| L Language and library | "Language lane" | C251c, C251d (pages carry only the std they call); L252f waits on how to write a unit on a generic number type, Ersagun's call |
+| L Language and library | "Language lane" | L252f waits on how to write a unit on a generic number type, Ersagun's call |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -36,9 +36,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I308 | The Definition tab's "Where it runs · the compiler's answer" says "Finding out where it can run…" for 6 to 8 s each time a program is opened (Numbers & physics `period` 8.4 s, machine `word at` 8.4 s, Effects `main` 5.8 s); a second definition of the same program answers at once. The panel looks stuck. | QA 11-16 M1 | 2026-11-16 |
-| I309 | Effects' `main` first says it can't be a shader because "main has effects (Console)", then after 5.8 s "main takes or gives Unit, which has a field that isn't a Float64, Bool or record". Unit has no fields; the effect reason is the clear one. | QA 11-16 L1 | 2026-11-16 |
-| I310 | Page: countdown numbers → `symbol` freezes the page 1.2 s on opening (1.7 s to open), the slowest in the walk. | QA 11-16 L2 | 2026-11-16 |
+| I311 | Opening a program's page holds the editor's thread 1.6 s, 0.8 s of it the editor's own render (render → graphOf, model.ts scanningOnLayer; Countdown's `symbol`, headless Chromium). Editor lane, after the text pass (coordinator 11-16). | I310's profile | 2026-11-16 |
 
 ## E: Editor
 
@@ -88,6 +86,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C252 | One loop rewrite over the list interface (R11 §3, P7's next foundation row): "consing onto a call of itself is a loop" is written once per place a list lives (C232 a tree's lists, C240 arrays, C250 the list of one left behind), and "appends onto what a loop carries" again (C233). Gather them into one rewrite that reads the list through its interface, the representations each giving only their own steps; pack and scan as fast as they are now (measured before and after). Before the next speed round | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §3 | P2 | M | |
 
 ### Bugs and gaps found by programs
 
@@ -136,9 +135,8 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C251 | A page carries only the std it calls (Ersagun 2026-11-15: pages ship the whole std). Done: C251a split std.ts, C251b a bundled page imports only the builtins it calls. Left: **C251c** the plain runtime leaves out plan-rt and invertible/* (16 KB) unless the page solves, and branches-rt (22 KB) unless it maps on workers; **C251d** the editor's saved page scripts are minified (conjugation's is 170 KB) | coordinator 2026-11-16, from #2789/#2790 (memory page-tab-size-2026-11-16) | P1 | L | ▶ |
-| C252 | C prints a program's own functions `static` (all but main, and what a page's API or a native app calls from outside), so cc puts a function called from one place where it's called and drops what nothing calls. Now none is, so cc keeps every one: by hand, queens' binary goes from 69 to 60 KB, collatz's from 55 to 46 KB, countdown's from 70 to 64 KB, with the same output | Ersagun 2026-11-16 ("why so many functions"), checked on C by #2803's thread | P2 | S | |
-| C253 | C and WebAssembly declare every local a function has, even ones no let reads any more (gcc -Wall: 3 to 15 unused per example; the JavaScript printer stopped in #2796). Costs nothing at run time (cc -O2 and the engines drop them), only the size of the printed C and the .wasm | Ersagun 2026-11-16 ("a LOT of unused lets"), checked by #2803's thread | P3 | S | |
+| C253 | C prints a program's own functions `static` (all but main, and what a page's API or a native app calls from outside), so cc puts a function called from one place where it's called and drops what nothing calls. Now none is, so cc keeps every one: by hand, queens' binary goes from 69 to 60 KB, collatz's from 55 to 46 KB, countdown's from 70 to 64 KB, with the same output | Ersagun 2026-11-16 ("why so many functions"), checked on C by #2803's thread | P2 | S | |
+| C254 | C and WebAssembly declare every local a function has, even ones no let reads any more (gcc -Wall: 3 to 15 unused per example; the JavaScript printer stopped in #2796). Costs nothing at run time (cc -O2 and the engines drop them), only the size of the printed C and the .wasm | Ersagun 2026-11-16 ("a LOT of unused lets"), checked by #2803's thread | P3 | S | |
 
 ### Someday
 
@@ -155,6 +153,7 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L265 | `numbers` as written (Peano Nat) runs on the evaluator: today it runs out of memory, and the core IR printer's recursion out of stack, so core-js.test checks it only after `represented` stores its Nat as an Int (`asRun`). A user doesn't meet it (`ters run` stores it the same way), but the evaluator is the reference every target is compared with. R11 §4 measured the evaluator 6 to 10 times slower than compiled JS on deep recursion; take after R11's first three fixes | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §4 | P3 | M | |
 
 ### Bugs and gaps found by programs
 
@@ -240,5 +239,6 @@ Not lane work; the coordinator does these or asks Ersagun.
 
 | id | item | source | pri | status |
 |---|---|---|---|---|
+| P10 | Main's red rule (R11 §1): a lane that sees Check main red for more than an hour stops merging until it is green or the failing file has a row a lane is taking; WORKFLOW.md says so beside "fixing it is your next job". Main was red 16 hours on 11-15/16 while 42 PRs merged (resolve-once, fixed by I312 #2819) | [REVIEW-2026-11-16](docs/reports/reviews/REVIEW-2026-11-16.md) §1 | P1 | |
 | P7 | A foundation row every fourth item in each lane; the weekly review tracks kind tests across the code (2,805 on 11-03; 3,421 on 11-13), tests reached by a one-line text.ts edit (145/150 + 44/44 on 11-03; 139/219 + 91/125 on 11-13) and readers of a kind's fields | [FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md) §10 | P2 | |
 | P8 | Add a LICENSE (and say what examples and programs written in Ters carry) once Ersagun picks one | [BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md) §3 | P3 | postponed (Ersagun 2026-11-10: until people want to use Ters) |

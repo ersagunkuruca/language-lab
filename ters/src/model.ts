@@ -600,6 +600,11 @@ export const sameValue = (a: unknown, b: unknown): boolean => {
 export const derived = new WeakMap<Code, { base: Code; changed: Set<Id>; stable?: boolean; same?: boolean }>();
 export function derivedFrom(code: Code, base: Code, changed: Iterable<Id>, same = false) { derived.set(code, { base, changed: new Set(changed), ...(same ? { same } : {}) }); }
 const picked = new WeakMap<Code, Map<string, Id[]>>();
+// Programs checked many times as they are (the library, each of its
+// definitions' bodies typed when first asked: infer.ts libraryLater): their
+// scans and parents are found once and kept, as a base's are.
+const kept = new WeakSet<Code>();
+export function scanOnce(code: Code) { kept.add(code); }
 // The picks but the changed ones: a copy, and the few changed among them
 // taken out by their positions, not a test of each pick (I167c: a filled
 // program's scans each read the thousands of the base's).
@@ -712,6 +717,7 @@ const parentsIn = (code: Code): Map<Id, Id> => {
 };
 export function parentLookup(code: Code): (id: Id) => Id | undefined {
   const from = derived.get(code);
+  if (!from && kept.has(code)) { let p = parentsKept.get(code); if (!p) { const m = parentsIn(code); parentsKept.set(code, (p = (id) => m.get(id))); } return p; }
   if (!from) { const m = parentsIn(code); return (id) => m.get(id); }
   // A base itself derived (a program on the library's layer, the base of
   // a palette's fillings) is looked up through its own base in turn.
@@ -728,6 +734,7 @@ export function parentLookup(code: Code): (id: Id) => Id | undefined {
 // scanned the ~10,000 nodes twice).
 export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean): Id[] {
   const from = derived.get(code);
+  if (!from && kept.has(code)) return picksOf(code, kind, keep).slice();
   if (!from) return Object.values(code.nodes).filter(keep).map((n) => n.id);
   const base = picksOf(from.base, kind, keep);
   const out = from.stable || from.same ? without(base, from.changed) : base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));

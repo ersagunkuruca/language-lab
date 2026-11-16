@@ -10,7 +10,7 @@ import type { Names } from "../../ters/src/presentation.ts";
 import { CASES, LIBRARY } from "../../ters/src/lang/library.ts";
 import { TEXT_OPS } from "../../ters/src/lang/std.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
-import { reachedFrom } from "./scalar.ts";
+import { reachedFrom, reachedWithShows } from "./scalar.ts";
 
 const BY_TABLE: Record<Id, string> = {
   [TEXT_OPS.uppercase]: "table uppercase", [TEXT_OPS.lowercase]: "table lowercase", [TEXT_OPS.graphemes]: "table graphemes",
@@ -19,9 +19,12 @@ const BY_TABLE: Record<Id, string> = {
 const tables = (): Record<Id, Id> => Object.fromEntries(Object.entries(BY_TABLE).map(([op, name]) =>
   [op, CASES.exports.find((d) => LIBRARY.names[d] === name)!]));
 
-export function tableText(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
+// Only when what `roots` reach uses one: else the program isn't checked
+// again (I308: the editor's Build targets waited 2.4 s for the library's
+// own uses of uppercase).
+export function tableText(code: Code, info: Info, names: Names, roots: Id[]): { code: Code; info: Info; names: Names } {
   const used = (c: Code) => Object.values(c.nodes).filter((n) => n.kind === "ref" && BY_TABLE[n.target]);
-  if (!used(code).length) return { code, info, names };
+  if (!used(reachedWithShows(code, roots, info)).length) return { code, info, names };
   const to = tables();
   const nodes = { ...LIBRARY.code.nodes, ...code.nodes };
   for (const u of used({ ...code, nodes })) nodes[u.id] = { ...u, target: to[(u as { target: Id }).target] } as never;

@@ -264,6 +264,9 @@ export function seeds(host: SeedHost) {
     // A function main made (newton's slope) keeps this hook: called
     // later, from a helper's own Run, it is no longer main's run (I78).
     let done = false, pieces: Generator<void> | undefined;
+    // Its steps stop on time too, not only where a lambda is entered
+    // (I310: a view of Countdown's searched for 1.2 s in one call).
+    const late = () => performance.now() > Math.min(end, sliceEnd);
     try {
       withSteps(steps, () => {
         const tr = trace(doc().code, info, main, args, dryWorld(), (l, args, copy) => {
@@ -280,7 +283,7 @@ export function seeds(host: SeedHost) {
           sliceEnd = performance.now() + SLICE_MS;
           try { pieces.next(); } finally { sliceEnd = Infinity; }
         }
-      });
+      }, late);
     } finally { if (!pieces) done = true; }
     if (!pieces) return undefined;
     const rest = pieces;
@@ -296,7 +299,7 @@ export function seeds(host: SeedHost) {
           sliceEnd = from + SLICE_MS;
           let more = false;
           done = false;
-          try { more = withSteps(steps, () => !rest.next().done); } catch { more = false; } finally { sliceEnd = Infinity; done = true; }
+          try { more = withSteps(steps, () => !rest.next().done, late); } catch { more = false; } finally { sliceEnd = Infinity; done = true; }
           left -= performance.now() - from;
           if (!more) break;
           yield;

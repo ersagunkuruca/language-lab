@@ -163,6 +163,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | doc | what it is | status |
 |---|---|---|
 | [NODE-EDITOR.md](design/editor/NODE-EDITOR.md) | The graph view: node editors' usual complaints and what we do about each | current |
+| [UI-TEXT.md](design/editor/UI-TEXT.md) | How the editor's own words are written: names not sentences, explanations in tooltips and help, one word per thing | current |
 | [FEATURE-GESTURES.md](design/editor/FEATURE-GESTURES.md) | Which language features the editor should make (private cases, ways and directions yes; `unique` no) (E199) | built (E209, E210, E210b) |
 | [SHARED-NODES.md](design/editor/SHARED-NODES.md) | Offers in a palette written into one copy of the program instead of a copy each (E133) | built (E133a, E133b) |
 

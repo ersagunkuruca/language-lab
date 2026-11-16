@@ -16,7 +16,7 @@ import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Node, NodeOf, Use } from "../model.ts";
 import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf } from "../model.ts";
-import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanningOnLayer, subtree } from "../model.ts";
+import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { constraints as unitConstraints, declaresUnit, pinUnitsBroken, unitProblems, UnitsBefore } from "../units.ts";
@@ -130,7 +130,7 @@ export const implementationOf = (info: Info, iface: Id, t: Type): Id | undefined
 // `bodiesLater` (I193): a pinned definition's body isn't typed; its scheme
 // is its pin, and its nodes' types are found when asked for (libraryLater).
 // `firstVar`: where the check's type variables start, so a library's
-// bodies typed later (WHOLE_VARS) never share one with a check over it.
+// bodies typed later (BODY_VARS) never share one with a check over it.
 // `ends` (L250): definitions known to end though their recursion may not
 // show it, those of a rewrite (a representation chosen) that ended as
 // written: a rewrite changes no answer, so they keep no Diverge, nor do
@@ -174,9 +174,10 @@ export function checkOnce(code: Code | null, names: Names = {}, also: Code[] | (
 // reads it rather than checking the library again; the editor keeps none.
 // `lib` and `pins` are what the check was of: the library's code and the
 // pins of its own definitions.
-// `kind`: the library's skeleton (its definitions' types, from their
-// pins) or its whole check (every node's), kept apart (libraryLater).
-export type LibraryCheck = "skeleton" | "whole";
+// `kind`: what is kept, the library's skeleton (its definitions' types,
+// from their pins). Its bodies are typed when asked for (libraryLater),
+// each in about 3 ms, and not kept.
+export type LibraryCheck = "skeleton";
 export interface LibraryStore {
   load(lib: Code, opts: Options, pins: [Id, unknown][], kind: LibraryCheck): Info | undefined;
   save(lib: Code, opts: Options, pins: [Id, unknown][], info: Info, kind: LibraryCheck): void;
@@ -198,83 +199,139 @@ const onLib = (code: Code, lib: Code) => {
 };
 // The library's check as a program sees it (I193): its skeleton, each
 // definition's type from its pin, made without typing a body (0.4 s of
-// the whole check's 1.7). A node inside a definition is typed when one is
-// first asked for (a compiler, arith.ts): then the whole library is
-// checked, its type variables from WHOLE_VARS on, where no check over the
-// skeleton reaches, and its substitution and each node's facts join the
-// skeleton's, which the checks over it read through to.
-const WHOLE_VARS = 1 << 26;
+// the whole check's 1.7). A node inside a pinned definition's body is typed
+// when one is first asked for (a compiler, arith.ts), and only that
+// definition's body is (I313, about 3 ms each): checked over the skeleton
+// as the palette checks a filling, which gives each node the type the
+// whole check would. Its type variables are its own, from BODY_VARS on at
+// its place among the library's definitions, where no check over the
+// skeleton reaches: the same whatever was asked first, so what is kept
+// across runs from them (arith.ts, the library's resolving) reads the same
+// in the next run. Its substitution and its nodes' facts join the
+// skeleton's, which the checks over it read through to. Asked for all of a
+// fact (a scan of every node's type), every body is typed.
+const BODY_VARS = 1 << 26, BODY_SPAN = 1 << 15;
+type Got = { [K in "typeOf" | "opAt" | "solveAt" | "reshape" | "copyOf" | "embedded" | "holes"]-?: NonNullable<Info[K]> } & { answered: Set<Id>; spread: Set<Id> };
 class LaterMap<K, V> extends Map<K, V> {
   private base: Map<K, V>;
-  private inside: (k: K) => boolean;
-  private made: () => Map<K, V>;
-  // Once the whole check is made, every read is its (it has the
-  // definitions' too).
-  private whole: Map<K, V> | undefined;
-  constructor(base: Map<K, V>, inside: (k: K) => boolean, made: () => Map<K, V>) { super(); this.base = base; this.inside = inside; this.made = made; }
-  private all() { return (this.whole ??= this.made()); }
-  override get(k: K) { return this.whole ? this.whole.get(k) : this.inside(k) ? this.all().get(k) : this.base.get(k); }
-  override has(k: K) { return this.whole ? this.whole.has(k) : this.inside(k) ? this.all().has(k) : this.base.has(k); }
-  override get size() { return this.all().size; }
+  private got: Map<K, V>;
+  // Whether k is a body's node (and its body typed, so `got` has it).
+  private inBody: (k: K) => boolean;
+  private every: () => void;
+  constructor(base: Map<K, V>, got: Map<K, V>, inBody: (k: K) => boolean, every: () => void) { super(); this.base = base; this.got = got; this.inBody = inBody; this.every = every; }
+  override get(k: K) { return this.inBody(k) ? this.got.get(k) : this.base.get(k); }
+  override has(k: K) { return this.inBody(k) ? this.got.has(k) : this.base.has(k); }
+  override get size() { this.every(); let n = this.got.size; for (const k of this.base.keys()) if (!this.got.has(k)) n++; return n; }
   override set(k: K, v: V): this { this.base.set(k, v); return this; }
-  override entries() { return this.all().entries(); }
-  override keys() { return this.all().keys(); }
-  override values() { return this.all().values(); }
-  override [Symbol.iterator]() { return this.all().entries(); }
-  override forEach(f: (v: V, k: K, m: Map<K, V>) => void) { this.all().forEach(f); }
+  override *entries(): MapIterator<[K, V]> { this.every(); yield* this.got.entries(); for (const e of this.base) if (!this.got.has(e[0])) yield e; }
+  override *keys(): MapIterator<K> { for (const [k] of this.entries()) yield k; }
+  override *values(): MapIterator<V> { for (const [, v] of this.entries()) yield v; }
+  override [Symbol.iterator]() { return this.entries(); }
+  override forEach(f: (v: V, k: K, m: Map<K, V>) => void) { for (const [k, v] of this.entries()) f(v, k, this); }
 }
 class LaterSet<K> extends Set<K> {
   private base: Set<K>;
-  private inside: (k: K) => boolean;
-  private made: () => Set<K>;
-  private whole: Set<K> | undefined;
-  constructor(base: Set<K>, inside: (k: K) => boolean, made: () => Set<K>) { super(); this.base = base; this.inside = inside; this.made = made; }
-  private all() { return (this.whole ??= this.made()); }
-  override has(k: K) { return this.whole ? this.whole.has(k) : this.inside(k) ? this.all().has(k) : this.base.has(k); }
-  override get size() { return this.all().size; }
+  private got: Set<K>;
+  private inBody: (k: K) => boolean;
+  private every: () => void;
+  constructor(base: Set<K>, got: Set<K>, inBody: (k: K) => boolean, every: () => void) { super(); this.base = base; this.got = got; this.inBody = inBody; this.every = every; }
+  override has(k: K) { return this.inBody(k) ? this.got.has(k) : this.base.has(k); }
+  override get size() { this.every(); let n = this.got.size; for (const k of this.base) if (!this.got.has(k)) n++; return n; }
   override add(k: K): this { this.base.add(k); return this; }
-  override values() { return this.all().values(); }
-  override keys() { return this.all().values(); }
-  override entries() { return this.all().entries(); }
-  override [Symbol.iterator]() { return this.all().values(); }
-  override forEach(f: (v: K, k: K, s: Set<K>) => void) { this.all().forEach(f); }
+  override *values(): SetIterator<K> { this.every(); yield* this.got; for (const k of this.base) if (!this.got.has(k)) yield k; }
+  override keys() { return this.values(); }
+  override *entries(): SetIterator<[K, K]> { for (const k of this.values()) yield [k, k]; }
+  override [Symbol.iterator]() { return this.values(); }
+  override forEach(f: (v: K, k: K, s: Set<K>) => void) { for (const k of this.values()) f(k, k, this); }
 }
-// The library checks whose bodies were typed (for the tests).
-const typedWhole = new WeakSet<Info>();
-export const bodiesTyped = (layer: Info) => typedWhole.has(layer);
+// The code each library check is of: the library, or its copy with its
+// uses filled (ports.ts fillOnce).
+const checkedCode = new WeakMap<Info, Code>();
+export const codeChecked = (layer: Info): Code | undefined => checkedCode.get(layer);
+// The bodies a library check has typed (for the tests, and the editor's
+// first look backwards).
+const typedOf = new WeakMap<Info, ReadonlySet<Id>>();
+export const typedBodies = (layer: Info): ReadonlySet<Id> => typedOf.get(layer) ?? new Set();
+export const bodiesTyped = (layer: Info) => typedBodies(layer).size > 0;
+// What the library's bodies' checks found of their variables, all of them
+// (bodyFacts, once every body is typed), and joined into a check of the
+// library that may not have typed them (joinBodyFacts): arith.ts keeps the
+// library's resolving across runs, its types naming those variables.
+export type BodyFacts = Pick<Subst, "types" | "rows" | "plain" | "numbers" | "arith" | "fractional" | "whole" | "literal" | "needs" | "noWorld" | "subs" | "effectsAt">;
+const facts = new WeakMap<Info, { of: () => BodyFacts; join: (f: BodyFacts) => void }>();
+export const bodyFacts = (layer: Info): BodyFacts | undefined => facts.get(layer)?.of();
+export function joinBodyFacts(layer: Info, f: BodyFacts) { facts.get(layer)?.join(f); }
 // The library's checks made again (or read back) from the next check on.
 export function forgetLibraryChecks() { underChecks.length = 0; }
-function libraryLater(lib: Code, skeleton: Info, check: () => Info): Info {
-  const defs = new Set(lib.defs);
-  let whole: Info | undefined;
+// `bodies`: the definitions whose bodies the skeleton didn't type, the
+// pinned ones. `check`: one's typed over `from`, its variables from
+// firstVar on.
+function libraryLater(lib: Code, skeleton: Info, bodies: (d: Id) => boolean, check: (from: Info, d: Id, firstVar: number) => Info): Info {
   skeleton.subst.joinable = true;
-  const inside = (k: Id) => (whole || !defs.has(k)) && k in lib.nodes;
-  const made = (): Info => {
-    if (whole) return whole;
-    whole = check();
-    typedWhole.add(later);
-    // The whole check's substitution joins the skeleton's: its variables
-    // are its own (WHOLE_VARS), so nothing a check over the skeleton bound
-    // changes. Its definitions' schemes stand for the pins' from now on,
-    // the same types, so a body's variables are its scheme's.
-    skeleton.subst.join(whole.subst);
-    for (const [d, sc] of whole.schemes) skeleton.schemes.set(d, sc);
-    return whole;
+  // Each body's check scans the library as the last did.
+  scanOnce(lib);
+  // Each is checked over the skeleton as it was made, its definitions'
+  // schemes the pins', whichever bodies were typed before.
+  const from: Info = { ...skeleton, schemes: new Map(skeleton.schemes) };
+  // Each body's node, by its definition.
+  let defOf: Map<Id, Id> | undefined;
+  const ofDef = () => {
+    const m = new Map<Id, Id>();
+    for (const d of lib.defs) if (bodies(d)) for (const id of subtree(lib, d)) if (id !== d) m.set(id, d);
+    return m;
   };
-  const map = <V,>(base: Map<Id, V> | undefined, of: (w: Info) => Map<Id, V> | undefined) => new LaterMap<Id, V>(base ?? new Map(), inside, () => of(made()) ?? new Map());
-  const set = (base: Set<Id> | undefined, of: (w: Info) => Set<Id> | undefined) => new LaterSet<Id>(base ?? new Set(), inside, () => of(made()) ?? new Set());
+  let all: Id[] | undefined;
+  const pinned = () => (all ??= lib.defs.filter(bodies));
+  let place: Map<Id, number> | undefined;
+  const typed = new Set<Id>();
+  const got: Got = { typeOf: new Map(), opAt: new Map(), solveAt: new Map(), reshape: new Map(), copyOf: new Map(), embedded: new Map(), holes: new Map(), answered: new Set(), spread: new Set() };
+  const maps = ["typeOf", "opAt", "solveAt", "reshape", "copyOf", "embedded", "holes"] as const;
+  const type = (d: Id) => {
+    if (typed.has(d)) return;
+    typed.add(d);
+    const first = BODY_VARS + (place ??= new Map(lib.defs.map((d, i) => [d, i]))).get(d)! * BODY_SPAN;
+    const part = check(from, d, first);
+    if (part.subst.next > first + BODY_SPAN) throw new Error(`${d}'s body took ${part.subst.next - first} type variables, more than the ${BODY_SPAN} each library body has (infer.ts BODY_SPAN)`);
+    // Its scheme stands for the pin from now on, the same type, so the
+    // body's variables are its scheme's.
+    const sc = part.schemes.get(d);
+    if (sc) { skeleton.schemes.set(d, sc); skeleton.typeOf.set(d, sc.type); }
+    for (const id of subtree(lib, d)) {
+      if (id === d) continue;
+      for (const k of maps) { const v = part[k]?.get(id); if (v !== undefined) (got[k] as Map<Id, unknown>).set(id, v); }
+      if (part.answered?.has(id)) got.answered.add(id);
+      if (part.spread?.has(id)) got.spread.add(id);
+    }
+    // The last body typed, no join comes after.
+    skeleton.subst.join(part.subst, typed.size === pinned().length);
+    joined.join(part.subst, false);
+  };
+  // Every body's substitution together, as kept with what was worked out
+  // from them (arith.ts, the library's resolving across runs), and joined
+  // back in a run that hasn't typed them: the kept types name their
+  // variables.
+  const joined = new Subst();
+  const inBody = (k: Id) => { const d = (defOf ??= ofDef()).get(k); if (d === undefined) return false; type(d); return true; };
+  const every = () => { for (const d of pinned()) type(d); };
+  const map = <V,>(base: Map<Id, V> | undefined, k: (typeof maps)[number]) => new LaterMap<Id, V>(base ?? new Map(), got[k] as Map<Id, V>, inBody, every);
+  const set = (base: Set<Id> | undefined, k: "answered" | "spread") => new LaterSet<Id>(base ?? new Set(), got[k], inBody, every);
   const later: Info = {
     ...skeleton,
-    typeOf: new LaterMap<Id, Type>(skeleton.typeOf, inside, () => made().typeOf),
-    opAt: map(skeleton.opAt, (w) => w.opAt),
-    solveAt: map(skeleton.solveAt, (w) => w.solveAt),
-    reshape: map(skeleton.reshape, (w) => w.reshape),
-    copyOf: map(skeleton.copyOf, (w) => w.copyOf),
-    embedded: map(skeleton.embedded, (w) => w.embedded),
-    holes: map(skeleton.holes, (w) => w.holes),
-    answered: set(skeleton.answered, (w) => w.answered),
-    spread: set(skeleton.spread, (w) => w.spread),
+    typeOf: map(skeleton.typeOf, "typeOf"),
+    opAt: map(skeleton.opAt, "opAt"),
+    solveAt: map(skeleton.solveAt, "solveAt"),
+    reshape: map(skeleton.reshape, "reshape"),
+    copyOf: map(skeleton.copyOf, "copyOf"),
+    embedded: map(skeleton.embedded, "embedded"),
+    holes: map(skeleton.holes, "holes"),
+    answered: set(skeleton.answered, "answered"),
+    spread: set(skeleton.spread, "spread"),
   };
+  typedOf.set(later, typed);
+  facts.set(later, {
+    of: () => ({ types: joined.types, rows: joined.rows, plain: joined.plain, numbers: joined.numbers, arith: joined.arith, fractional: joined.fractional, whole: joined.whole, literal: joined.literal, needs: joined.needs, noWorld: joined.noWorld, subs: joined.subs, effectsAt: joined.effectsAt }),
+    join: (f) => { if (typed.size < pinned().length) skeleton.subst.join(Object.assign(new Subst(), f), false); },
+  });
   return later;
 }
 function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null {
@@ -305,17 +362,18 @@ function under(code: Code, opts: Options): { info: Info; only: Set<Id> } | null 
     // and the library's units are checked as the library's.
     const { ends: _, units: __, ...rest } = opts;
     const libOpts: Options = insiders ? { ...rest, insiders } : opts.ends || opts.units === false ? rest : opts;
-    const check = (kind: LibraryCheck): Info => {
-      const opts = libOpts;
-      const stored = libraryStore?.load(lib, opts, mine, kind);
+    const checking = (f: () => Info) => { checkingUnder = true; try { return f(); } finally { checkingUnder = false; } };
+    const skeleton = (): Info => {
+      const stored = libraryStore?.load(lib, libOpts, mine, "skeleton");
       if (stored) return stored;
-      checkingUnder = true;
-      let info: Info;
-      try { info = infer(lib, names, undefined, kind === "skeleton" ? { ...opts, bodiesLater: true } : { ...opts, firstVar: WHOLE_VARS }); } finally { checkingUnder = false; }
-      if (!info.errors.length) libraryStore?.save(lib, opts, mine, info, kind);
+      const info = checking(() => infer(lib, names, undefined, { ...libOpts, bodiesLater: true }));
+      if (!info.errors.length) libraryStore?.save(lib, libOpts, mine, info, "skeleton");
       return info;
     };
-    kept = { lib, opts, info: libraryLater(lib, check("skeleton"), () => check("whole")) };
+    const sk = skeleton();
+    const bodies = (d: Id) => !!libOpts.pins?.[d];
+    kept = { lib, opts, info: libraryLater(lib, sk, bodies, (from, d, firstVar) => checking(() => infer(lib, names, { from, only: new Set([d]) }, { ...libOpts, firstVar }))) };
+    checkedCode.set(kept.info, lib);
     // A few kept, the latest first: a caller that makes its options anew
     // each time would otherwise keep a library check for each.
     underChecks.unshift(kept);
@@ -366,8 +424,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // What the layer under asked is answered already. (Its row containments
   // stay: showing its types reads them.)
   if (layer) s.wanted = [];
-  else if (reuse) s.next = reuse.from.subst.next;
   else if (opts.firstVar) s.next = opts.firstVar;
+  else if (reuse) s.next = reuse.from.subst.next;
   // An input whose type has settled to Int: a counter written with untyped
   // literals counts towards its bound (I199, counting.ts).
   const settledInt = (param: Id) => { const t = info.typeOf.get(param); if (!t) return false; const r = s.resolve(t); return r.t === "con" && r.id === INT; };

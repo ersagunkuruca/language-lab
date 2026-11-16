@@ -231,7 +231,7 @@ export function pagePanels(host: PageHost) {
     page.root = null;
     page.for = prog();
     page.program = doc().program;
-    page.status.textContent = "";
+    page.status.title = "", page.status.textContent = "";
     page.log = [];
     page.started = { info, main };
     // One that takes longer than DRAW_WITHIN to draw interpreted waits
@@ -246,7 +246,7 @@ export function pagePanels(host: PageHost) {
       if (!(e instanceof TooSlow)) { sayStopped("The page stopped", e); return; }
       page.log = [];
       compilePage(main, true);
-      if (!page.now) page.status.textContent = `Compiling: ${e.message}, so it shows when it's compiled, in a few seconds.`;
+      if (!page.now) page.status.title = "", page.status.textContent = "Compiling…", page.status.title = `${e.message}, so it shows when it's compiled`;
       return;
     }
     compilePage(main);
@@ -260,7 +260,7 @@ export function pagePanels(host: PageHost) {
       page.now = interpreted(started.info, started.main);
       page.root = page.now.root as unknown as globalThis.Node;
     } catch (e) { sayStopped("The page stopped", e); return; }
-    page.status.textContent = why;
+    page.status.title = "", page.status.textContent = why;
     renderSoon();
   }
   // After this render, when called while one draws (startPage is).
@@ -271,7 +271,7 @@ export function pagePanels(host: PageHost) {
   function sayStopped(what: string, e: unknown) {
     const at = e && typeof e === "object" ? e as { node?: unknown; def?: unknown; reason?: unknown } : {};
     const why = e instanceof Error ? e.message : at.reason !== undefined ? `aborted: ${String(at.reason)}` : String(e);
-    page.status.replaceChildren(`${what}: ${why}.`);
+    page.status.title = "", page.status.replaceChildren(`${what}: ${why}.`);
     if (typeof at.node === "string" && typeof at.def === "string" && doc().code.nodes[at.def])
       page.status.append(" ", h("button", { class: "btn mini", type: "button", "data-act": "goto-stop", "data-def": at.def, "data-target": at.node }, "Show where it stopped"));
   }
@@ -309,16 +309,18 @@ export function pagePanels(host: PageHost) {
     settle();
     asks++;
     const code = prog();
-    if (!corePageRuntimeText()) return interpretAnyway("Interpreted: this editor has no compiler for pages.");
+    if (!corePageRuntimeText()) return interpretAnyway("Interpreted · no compiler here");
     if (!page.now && !waiting) return;
-    if (page.now?.hush || hasSound(code)) { page.status.textContent = "Interpreted: a page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
+    if (page.now?.hush || hasSound(code)) { page.status.title = "", page.status.textContent = "Interpreted · sound";
+      page.status.title = "A page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
     const made = compiledPages.get(code);
     if (made !== undefined) {
       if (made) swapCompiled(code, made);
-      else if (!page.now) interpretAnyway("Interpreted, slowly: the page couldn't be compiled.");
+      else if (!page.now) interpretAnyway("Interpreted · couldn't compile");
       return;
     }
-    page.status.textContent = "Interpreted while the page compiles; the compiled page takes over in a few seconds, keeping what you do on it.";
+    page.status.title = "", page.status.textContent = "Interpreted · compiling…";
+    page.status.title = "The compiled page takes over in a few seconds, keeping what you do on it";
     // A shipped example as shipped was compiled when the site was built
     // (prebuilt.ts, E245): that program, then, and no compiling here.
     const asked = ++asks;
@@ -367,7 +369,7 @@ export function pagePanels(host: PageHost) {
     catch (e) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); return; }
     page.root = page.now.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
-    page.status.textContent = "";
+    page.status.title = "", page.status.textContent = "";
     drawSteps();
   }
   // Whichever page shows when it's pressed.
@@ -377,7 +379,7 @@ export function pagePanels(host: PageHost) {
   }
   function goOn() {
     page.now?.steps?.resume();
-    page.status.textContent = "";
+    page.status.title = "", page.status.textContent = "";
     drawSteps();
     // The compiled page takes over again, handed the cells as they are now.
     if (page.started && page.for === prog()) compilePage(page.started.main);
@@ -388,7 +390,7 @@ export function pagePanels(host: PageHost) {
     const kept = (page.now?.window?.snapshots ?? page.now?.stepFrom?.().snapshots)?.filter((x) => !x.step).length ?? 1;
     const s = Math.max(1, kept) * LOG_WINDOW.seconds, most = LOG_WINDOW.keep * LOG_WINDOW.seconds;
     const say = (t: number) => (t >= 60 ? `${Math.round(t / 6) / 10} min` : `${t} s`);
-    return s >= most ? `back about ${say(most)}, as far as the window keeps` : `back at most ${say(s)}`;
+    return s >= most ? `≈${say(most)}` : `≤ ${say(s)}`;
   }
   function drawSteps() {
     const steps = page.now?.steps;
@@ -402,8 +404,8 @@ export function pagePanels(host: PageHost) {
       const can = steps || page.now?.stepFrom;
       if (!can) { stepsBox.replaceChildren(btn("Pause", "", () => {}, "this page keeps no window of its log to step through")); return; }
       stepsBox.replaceChildren(
-        btn("Pause", `Stop the page here, then step back and on through what it was given: ${reach()}`, pause),
-        h("span", { class: "hint" }, `Steps ${reach()}.`));
+        btn("Pause", `Stop the page here, then step back and on through what it was given, ${reach()} back`, pause),
+        h("span", { class: "hint", title: "How far back Pause can step, as far as the log's window keeps" }, `Rewind ${reach()}`));
       return;
     }
     const n = steps.events(), at = steps.at, from = steps.from();
@@ -419,7 +421,7 @@ export function pagePanels(host: PageHost) {
       slider,
       btn("On ▶", "The page one event later", () => stepTo(at + 1), at < n ? undefined : "this is the last event the page was given"),
       btn("Go on from here", "The page runs again from this moment; what it was given after it is dropped", goOn),
-      h("span", { class: "hint" }, `Paused after ${at - from} of ${n - from} events${last ? ` (the last: ${last.name})` : ", as far back as the window reaches"}. The page hears nothing till it goes on.`));
+      h("span", { class: "hint", title: "The page hears nothing till it goes on" }, `Paused · event ${at - from} of ${n - from}${last ? ` · ${last.name}` : ""}`));
   }
   function compileHere(code: Code, main: Id) {
     const w = (compiling = newWorker());
@@ -434,7 +436,7 @@ export function pagePanels(host: PageHost) {
       settle();
       if (page.for !== code) return;
       if ("program" in m) swapCompiled(code, m);
-      else if (page.now) page.status.textContent = `Interpreted: the page couldn't be compiled (${m.error}).`;
+      else if (page.now) page.status.title = "", page.status.textContent = "Interpreted · couldn't compile", page.status.title = m.error;
       else interpretAnyway(`Interpreted, slowly: the page couldn't be compiled (${m.error}).`);
     };
     w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data as CompiledPage | { error: string });
@@ -489,7 +491,7 @@ export function pagePanels(host: PageHost) {
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
     // Nothing shown before (one too slow interpreted): put in the frame.
     else renderSoon();
-    page.status.textContent = "";
+    page.status.title = "", page.status.textContent = "";
     drawSteps();
   }
 
@@ -535,7 +537,7 @@ export function pagePanels(host: PageHost) {
       a.href = url;
       a.download = name;
       a.click();
-      ui.note = `Saved the page as ${name}: one HTML file with the program compiled to JavaScript. Open it in any browser, or put it on any web host.`;
+      ui.note = `Saved ${name}`;
       render();
     }, (e: unknown) => { tab?.close(); failed(e instanceof Error ? e.message : String(e)); });
   }

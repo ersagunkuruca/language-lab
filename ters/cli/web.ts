@@ -6,7 +6,7 @@ import type { Code, Id } from "../src/model.ts";
 import { isCall } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
-import { pageShell } from "../src/lang/page.ts";
+import { pageShell, type SavedScripts } from "../src/lang/page.ts";
 import { HTML_V } from "../src/lang/std.ts";
 import { corePageScript, coreSoundScript, hostOpsOf, lowerCore, scriptSolves } from "../../compiler/src/core-js.ts";
 
@@ -74,7 +74,10 @@ export async function coreSoundWorklet(lowered: ReturnType<typeof lowerCore>, na
 const carriesProgram = scriptSolves;
 const SOLVER = /[\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)\.ts$/;
 // A prebuilt runtime has no script to leave out what it doesn't use, so
-// its plain build leaves out core-solve.ts too, which it exports.
+// its plain build leaves out core-solve.ts too, which it exports. It
+// keeps plan-rt.js and core-floats.ts, which a page that solves nothing
+// may run (a third build for those would put another runtime in the
+// editor).
 const SOLVER_RUNTIME = /([\\/]src[\\/]lang[\\/](arith|relate|solve|modes|directions|derive)|[\\/]compiler[\\/]src[\\/]core-solve)\.ts$/;
 const withoutSolver = stubbing(SOLVER);
 function stubbing(filter: RegExp) { return {
@@ -106,4 +109,14 @@ async function prebuilt(entry: string, globalName: string, plain: boolean): Prom
     plugins: plain ? [stubbing(SOLVER_RUNTIME)] : [],
   });
   return out.outputFiles[0].text;
+}
+
+// A saved page's scripts (page.ts savedScripts) minified (C251d), as the
+// site's build gives its examples' (editor/prebuild.ts); the editor has no
+// esbuild to do it itself. Conjugate's 90 → 55 KB. Its title's and
+// worklet's slots stay strings, which page.ts savedPageFile fills.
+export async function minifiedScripts(s: SavedScripts): Promise<SavedScripts> {
+  const { transform } = await esbuild();
+  const min = async (js: string) => (await transform(js, { minify: true, target: "es2022" })).code;
+  return s.sound === undefined ? { script: await min(s.script) } : { script: await min(s.script), sound: await min(s.sound) };
 }

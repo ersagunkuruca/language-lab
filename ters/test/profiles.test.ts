@@ -70,3 +70,16 @@ test("every no told from types is the compiler's no too, on each example", () =>
   }
   assert.ok(told >= 8, `${told} told`);
 });
+
+// I309: a definition that prints and gives Unit is told its effects, and
+// the lowering says the same, not the Unit.
+test("the told and the compiler's reasons agree, effects first", () => {
+  const k = new Lang();
+  const fn = (name: string, params: string[], body: (...xs: Id[]) => Id) => { const d = k.def(name); k.define(d, k.fn(params, body)); return d; };
+  const say = fn("say", ["x"], (x) => k.call(S.print, k.call(SHOW_ANY, x)));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  assert.equal(gpuRefusals(code, info, names, [say]).get(say), "has effects (Console)");
+  assert.equal(new Map(lowerScalar(code, info, names, [say], { records: true, shader: true }).refused).get(say), "has effects (Console)");
+});

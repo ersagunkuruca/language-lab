@@ -13,6 +13,7 @@ import { LIBRARY } from "../ters/src/lang/library.ts";
 import { onTodaysIds } from "../ters/src/lang/std.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { hasSound } from "../ters/src/lang/page.ts";
+import { minifiedScripts } from "../ters/cli/web.ts";
 import { compilePageProgram, compileSavedPage } from "./pageCompile.ts";
 import { buildPicture, pictureEntries } from "./picture.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
@@ -62,14 +63,15 @@ export async function prebuild(manifest: Manifest, site: string): Promise<string
     // preview's compile; a page with sound stays interpreted in the editor
     // (pagePanel.ts), so its saved page alone, with its audio thread's.
     try {
-      if (hasSound(code)) write(prebuiltKey("saved", code, { main }, pins), compileSavedPage(code, names, pins, main));
+      if (hasSound(code)) write(prebuiltKey("saved", code, { main }, pins), await minifiedScripts(compileSavedPage(code, names, pins, main)));
       else {
         const made = compilePageProgram(code, names, pins, main);
         write(prebuiltKey("page", code, { main }, pins), made);
-        write(prebuiltKey("saved", code, { main }, pins), made.saved);
+        write(prebuiltKey("saved", code, { main }, pins), await minifiedScripts(made.saved));
       }
     } catch (e) { console.log(`prebuilt: ${m.program} didn't compile (${(e as Error).message})`); }
   }
   writeFileSync(dir + "index.json", JSON.stringify(keys));
   return keys;
 }
+

@@ -188,7 +188,7 @@ async function implementInterface() {
   const impl = (await p.locator(".p-graph svg.canvas").first().textContent()) ?? "";
   if (!impl.includes("Trig at Wave") || !impl.includes("sin") || /\btrig\b/.test(impl)) errors.push(`${where}: the graph draws the implementation as ${impl.slice(0, 160)}`);
   await p.locator(".p-text .hole").first().click();
-  if (!(await p.locator(".side .hint", { hasText: "This is sin at Wave" }).count())) errors.push(`${where}: sin's hole doesn't say it is sin at Wave`);
+  if (!(await p.locator(".side .typeline", { hasText: "sin at Wave" }).count())) errors.push(`${where}: sin's hole doesn't say it is sin at Wave`);
   if (!(await p.locator(".typeline", { hasText: "(Wave) -> Wave" }).count())) errors.push(`${where}: sin's hole doesn't want (Wave) -> Wave`);
   // A new interface of the program's own (BACKLOG E138).
   await p.locator(".nav-row", { hasText: "+ New definition" }).click();
@@ -198,7 +198,7 @@ async function implementInterface() {
   await p.locator("#f-def-case").fill("half");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator("#f-new-op").fill("twice");
-  await p.locator("button", { hasText: "Add the operation" }).click();
+  await p.locator("button", { hasText: "Add operation" }).click();
   const iface = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   // It reads as its operations, not as the record that holds them (BACKLOG E151).
   if (!/interface Halving a half : \(a\) -> a twice : \(a\) -> a/.test(iface) || /\bhalving\(/.test(iface)) errors.push(`${where}: the new interface reads ${iface.slice(0, 120)}`);
@@ -235,7 +235,7 @@ async function choiceAction() {
   if (!(await p.locator(".run", { hasText: "first(" }).count())) errors.push(`${where}: the panel doesn't say how to run it`);
   await p.locator('[data-act="t-values"]').click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Show values`));
   const gives = await p.locator(".run").first().innerText();
-  if (!/first answer:\s*5\/6/.test(gives)) errors.push(`${where}: Show values reads ${JSON.stringify(gives)}`);
+  if (!/First answer:\s*5\/6/.test(gives)) errors.push(`${where}: Show values reads ${JSON.stringify(gives)}`);
   await p.close();
 }
 
@@ -257,12 +257,12 @@ async function heldSeed() {
   const die = p.locator(".palette .opt", { hasText: /^die\(\)/ });
   await p.locator("#f-query").fill("die()"); await p.waitForTimeout(400);
   if (await die.count()) errors.push(`${where}: die() is offered while the type is held`);
-  const loosen = p.locator(".held button", { hasText: "Let it loosen" });
-  if (!(await loosen.count())) errors.push(`${where}: the hole's panel doesn't say the type is held, nor offer Let it loosen`);
+  const loosen = p.locator(".held button", { hasText: "Loosen type" });
+  if (!(await loosen.count())) errors.push(`${where}: the hole's panel doesn't say the type is held, nor offer Loosen type`);
   else {
     await loosen.click();
     await p.locator("#f-query").fill("die()"); await p.waitForTimeout(400);
-    await die.first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: after Let it loosen die() isn't offered`));
+    await die.first().click({ timeout: 2000 }).catch(() => errors.push(`${where}: after Loosen type die() isn't offered`));
     if (!(await p.locator(".p-text").innerText()).includes("Random")) errors.push(`${where}: filled with die(), its type doesn't say Random`);
   }
   // A program with no units keeps the unit chooser folded (BACKLOG E87).
@@ -287,14 +287,14 @@ async function listItems() {
   const text = async () => (await p.locator(".p-text").innerText()).replace(/\s+/g, " ");
   const before = await text();
   await p.locator(".blocks-wrap .head", { hasText: /^h1$/ }).first().click();
-  const head = (await p.locator(".sub-head", { hasText: /^Item \d+ of \d+ in the list/ }).count());
+  const head = (await p.locator(".sub-head", { hasText: /^Item \d+ of \d+ · the list/ }).count());
   if (!head) errors.push(`${where}: h1(…) in main's list doesn't say it's an item`);
-  await p.locator("button", { hasText: /^Add one after$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Add one after`));
+  await p.locator("button", { hasText: /^Add after$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Add after`));
   if ((await p.locator(".insp-head").first().innerText()).trim() !== "Hole") errors.push(`${where}: the new item isn't a selected hole`);
   if (!/h1\(\[words\("Two dice"\)\]\), □/.test(await text())) errors.push(`${where}: no hole after h1 in ${(await text()).slice(400, 600)}`);
   await p.locator("button", { hasText: /^Earlier$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: a new item can't move earlier`));
   if (!/[\[,] □\S*, h1\(/.test(await text())) errors.push(`${where}: Earlier didn't put the hole first`);
-  await p.locator("button", { hasText: /^Take it out$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Take it out`));
+  await p.locator("button", { hasText: /^Remove$/ }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: no Remove`));
   if ((await text()) !== before) errors.push(`${where}: taking the new item out doesn't give back main`);
   const holes = await p.locator(".p-graph .pill.hole, .p-graph circle.inp.empty").count();
   // The first + may be off the visible part of the canvas: press it where it is.
@@ -496,7 +496,7 @@ async function matchByValue() {
   await p.locator("#f-query").fill("by value"); await p.waitForTimeout(400);
   await p.locator(".opt", { hasText: "a case per Text value" }).click({ timeout: 5000 }).catch(() => errors.push(`${where}: no match name · by value for a Text`));
   await p.locator(".p-text .kw", { hasText: "match" }).first().click({ timeout: 2000 }).catch(() => {});
-  await p.locator("button", { hasText: "Add a value" }).click({ timeout: 3000 }).catch(() => errors.push(`${where}: no Add a value on the match`));
+  await p.locator("button", { hasText: "Add value" }).click({ timeout: 3000 }).catch(() => errors.push(`${where}: no Add a value on the match`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   if (!/match name "" → □\S* "" → □\S* otherwise → □/.test(text)) errors.push(`${where}: the text reads ${text.slice(0, 160)}`);
   await p.close();
@@ -517,10 +517,10 @@ async function sharedField() {
   await p.locator("#f-def-case").fill("jump");
   await p.locator("button", { hasText: "Create" }).click();
   await p.locator("#f-new-case").fill("call");
-  await p.locator("button", { hasText: "Add the case" }).click();
+  await p.locator("button", { hasText: "Add case" }).click();
   await p.locator(".slink", { hasText: /^jump/ }).first().click();
   await p.locator("#f-new-field").fill("to");
-  await p.locator("button", { hasText: "Add the field" }).click();
+  await p.locator("button", { hasText: "Add field" }).click();
   await p.locator(".p-text .body *", { hasText: /^call$/ }).last().click({ timeout: 2000 }).catch(() => errors.push(`${where}: no way back to the case call`));
   await p.locator("button", { hasText: "to, as jump's" }).click({ timeout: 3000 }).catch(() => errors.push(`${where}: call's panel doesn't offer jump's to`));
   if (!/the same one/.test(await p.locator(".status").innerText())) errors.push(`${where}: adding it said ${await p.locator(".status").innerText()}`);
@@ -773,7 +773,7 @@ async function letNodes() {
   else {
     await p.locator(`.p-graph g.items > g:has(text.cl:text-is('${call}')) rect.cn`).first().dispatchEvent("click");
     const acts = (await p.locator(".side button").allInnerTexts()).join(" | ");
-    if (!acts.includes(`Open ${call}`) || !acts.includes("Change the function")) errors.push(`${where}: its panel offers ${acts}`);
+    if (!acts.includes(`Open ${call}`) || !acts.includes("Swap function")) errors.push(`${where}: its panel offers ${acts}`);
   }
   await p.close();
 }
@@ -803,7 +803,7 @@ async function simplifyAppend() {
   await p.close();
 }
 
-// Where it runs, told from its type at once (L22b): with no worker to
+// Build targets, told from its type at once (L22b): with no worker to
 // lower it, a definition taking a List is still told it can't be a shader.
 async function whereTold() {
   where = "where it runs, told from its type";
@@ -814,7 +814,7 @@ async function whereTold() {
   await p.locator("[data-def]", { hasText: /^words$/ }).first().click();
   await p.locator('[data-panel="node"]').click();
   const side = (await p.locator(".side").first().innerText()).replace(/\s+/g, " ");
-  if (!side.includes("no: words takes or gives List") || !side.includes("Told from its type")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Where it runs"), side.indexOf("Where it runs") + 160)}`);
+  if (!side.includes("no: words takes or gives List") || !side.includes("Checking the rest")) errors.push(`${where}: the panel says ${side.slice(side.indexOf("Build targets"), side.indexOf("Build targets") + 160)}`);
   await p.close();
 }
 

@@ -275,11 +275,11 @@ shrinks to a dot. Hover over it to see the value.
 **Right-click** anywhere in the graph to see what you can do there:
 
 - On a hole: the palette, with a search box.
-- On empty space: *Add a value here*, which makes a new dot holding a hole,
+- On empty space: *Add value*, which makes a new dot holding a hole,
   for you to fill and wire in.
 - On a node: open it, show it inline (draw the function it calls right
   there, 3.6), put a dot on it, clear it to a hole, or
-  *Change the function…*. That keeps a call's inputs and offers every
+  *Swap function…*. That keeps a call's inputs and offers every
   function that takes them, so you can turn `·` into `+`.
 - On a dot, or on an input or result of a definition: *Show as let and
   get nodes* (see 3.3).
@@ -349,7 +349,7 @@ A program with holes still runs, until it reaches one.
 **Try it.** Open *Insertion sort*, then `insert`.
 
 1. In the blocks, click the body of the `else` case of the `if`.
-2. Press *Clear to a hole*. The hole needs a `List Float64`.
+2. Press *Clear*. The hole needs a `List Float64`.
 3. Look at the palette. It offers `items`, `tail`, `tail′` (the answer
    already worked out for `tail`, see 3.8), `nil`,
    `cons(□, □)`, `append(□, □)`, `insert(□, □)`, `sort(□)` and other
@@ -395,7 +395,7 @@ palette picks only.
 - The *Definition* tab renames a definition, adds, reorders and removes
   inputs, and deletes it. A new input gives every call a hole for it, so
   no call is ever missing an argument.
-- *Pin this type*, in the same tab, means edits inside must keep the type
+- *Pin*, in the same tab, means edits inside must keep the type
   (3.13).
 - A definition from a published library (3.13) is read-only. *Copy into
   my program* gives you your own version to change.

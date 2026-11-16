@@ -118,7 +118,9 @@ write(rolls, append(‹a hundred rolls›(7), read(rolls)))
 `write(rolls, …)` changes it. Section 8 says more.
 
 1. Click the `7`. The inspector says **Literal**, which means a value
-   written out, of type `Float64`.
+   written out, of type `Float64`. Drag sideways on its field to change
+   the number (Shift for bigger steps, Alt for smaller, Esc to put it
+   back); a click edits the text.
 2. Press **Delete**. The `7` becomes a hole, `□Float64`, and the palette
    opens.
 3. Type `die` in the palette's search and click `die()`.
@@ -369,9 +371,9 @@ To add a button, copy one that's there:
 1. Select the whole `"hundred"` button. In the Blocks text, clicking a
    call's opening bracket selects the whole call, so click the `(` right
    after `named` on that button. Press Ctrl+C.
-2. With it still selected, the inspector says *Item 5 of 5 in the list*:
+2. With it still selected, the inspector says *Item 5 of 5 · the list*:
    it's the last of the five parts listed together there.
-   Press **Add one after**. That leaves a hole in the list, after the
+   Press **Add after**. That leaves a hole in the list, after the
    "hundred" button.
 3. Paste into the hole with Ctrl+V.
 
@@ -398,15 +400,15 @@ There are two ways on:
 
 - Make the change in a place that's allowed to have the effect, like the
   caller. That's what section 3 did.
-- Or let the type change. Press **Let it loosen**, beside the palette,
+- Or let the type change. Press **Loosen type**, beside the palette,
   then fill the hole again.
 
-You can also **pin** a type on purpose, with **Pin this type** in a
+You can also **pin** a type on purpose, with **Pin** in a
 definition's inspector. A pinned type is a promise. Only **Unpin** lets it
 change.
 
 **Try it:** in `a hundred rolls`, clear `seed` and pick `die()`, and read
-the refusal. Then press Let it loosen, pick `die()` again, and read the
+the refusal. Then press Loosen type, pick `die()` again, and read the
 new type. Undo twice to get back.
 
 ?[a hundred rolls, live: try the refused edit here](index.html?embed&program=dice&def=a%20hundred%20rolls)

@@ -392,7 +392,7 @@ async function stepOrder() {
   await pr.dispatchEvent("contextmenu", { clientX: pb.x + 5, clientY: pb.y + 5 });
   // Its click adds the step and opens the palette on the new hole, which
   // checks every candidate against physics' main: give it time.
-  await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 10000 }).catch(async () => errors.push(`${where}: a print's menu has no Add a step before this: ${await p.locator(".ctx-menu").innerText({ timeout: 500 }).catch(() => "no menu")}`));
+  await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 10000 }).catch(async () => errors.push(`${where}: a print's menu has no Add step before: ${await p.locator(".ctx-menu").innerText({ timeout: 500 }).catch(() => "no menu")}`));
   const lines = (await p.locator(".p-text .body").innerText()).split("\n").map((l) => l.trim());
   if (!lines[2]?.startsWith("□") || lines[2].includes("‹•")) errors.push(`${where}: a step added before the first reads ${lines.slice(0, 4).join(" / ")}`);
   await p.close();
@@ -474,7 +474,7 @@ async function groupPicked() {
   const text = async () => (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
   const was = await text();
   const muls = p.locator(".p-graph g:has(> text:text-is('·')) > rect.cn");
-  // With nothing picked, Group and Make it a function take the node
+  // With nothing picked, Group and Make function take the node
   // right-clicked (Ersagun 2026-10-27, BACKLOG E154).
   await muls.nth(0).click({ button: "right" });
   for (const act of ["picked-fn", "group-picked"]) if (!(await p.locator(`.ctx-menu [data-menu="${act}"]:not([disabled])`, { hasText: "This node" }).count())) errors.push(`${where}: with nothing picked, a node's menu has no ${act} for it`);
@@ -482,8 +482,8 @@ async function groupPicked() {
   await muls.nth(0).click({ modifiers: ["Shift"] });
   await muls.nth(1).click({ modifiers: ["Shift"] });
   await muls.nth(1).click({ button: "right" });
-  // Make it a function is on the picked nodes' own menu too (BACKLOG E154).
-  if (!(await p.locator('.ctx-menu [data-menu="picked-fn"]', { hasText: "Make it a function" }).count())) errors.push(`${where}: two picked nodes' menu has no Make it a function`);
+  // Make function is on the picked nodes' own menu too (BACKLOG E154).
+  if (!(await p.locator('.ctx-menu [data-menu="picked-fn"]', { hasText: "Make function" }).count())) errors.push(`${where}: two picked nodes' menu has no Make function`);
   await p.locator('.ctx-menu [data-menu="group-picked"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: no Group on the menu of two picked`));
   const box = p.locator(".p-graph rect.rg.group.folded");
   if ((await box.count()) !== 1) errors.push(`${where}: ${await box.count()} folded group boxes`);
@@ -501,12 +501,12 @@ async function groupPicked() {
   if (!(await p.locator(".p-graph rect.rg.group:not(.folded)").count())) errors.push(`${where}: unfolded, there's no group frame`);
   // A node inside the group offers it too: the frame's edge is hard to hit.
   await muls.first().click({ button: "right" });
-  if (!(await p.locator('.ctx-menu [data-menu="picked-fn"]', { hasText: "The group it's in" }).count())) errors.push(`${where}: a node in a group has no Make it a function`);
+  if (!(await p.locator('.ctx-menu [data-menu="picked-fn"]', { hasText: "The group it's in" }).count())) errors.push(`${where}: a node in a group has no Make function`);
   await p.keyboard.press("Escape");
   await p.locator(".p-graph rect.rg.group").first().click({ button: "right", position: { x: 6, y: 6 } });
   // A group's menu offers to make it a function (BACKLOG E146).
   const fnItem = (await p.locator('.ctx-menu [data-menu="group-fn"]').innerText().catch(() => "")).replace(/\s+/g, " ");
-  if (!/Make it a function/.test(fnItem)) errors.push(`${where}: the group's menu has no Make it a function`);
+  if (!/Make function/.test(fnItem)) errors.push(`${where}: the group's menu has no Make function`);
   await p.locator('.ctx-menu [data-menu="ungroup"]').click({ timeout: 5000 }).catch(() => errors.push(`${where}: a group's menu has no Ungroup`));
   if (await p.locator(".p-graph rect.rg.group").count()) errors.push(`${where}: ungrouped, the frame is still there`);
   await p.close();
@@ -844,7 +844,7 @@ async function pagePreview() {
   // A function that reads files doesn't offer to run backwards: the search
   // would read once per guess (BACKLOG E150).
   await p.locator("[data-def]", { hasText: /^quantity$/ }).click();
-  if (await p.locator(".status-line.bad").count() || !(await p.locator(".run .hint, p.hint").allInnerTexts()).some((t) => t.includes("doesn't run backwards"))) errors.push(`${where}: quantity, which reads files, offers to run backwards`);
+  if (await p.locator(".status-line.bad").count() || !(await p.locator(".run .hint, p.hint").allInnerTexts()).some((t) => t.includes("Forwards only"))) errors.push(`${where}: quantity, which reads files, offers to run backwards`);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   const [file] = await Promise.all([p.waitForEvent("download"), p.locator('[data-act="page-save"]').click()]);
   // Saved where its name says it's a page, or the browser shows it as text.

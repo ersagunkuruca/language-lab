@@ -24,7 +24,7 @@ import { fieldWayOf, isUse, isCall, type Call } from "../../ters/src/model.ts";
 import { freshId, parentLookup, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
-import { OverMap, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { OverMap, OverSet, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { envSet } from "./zero-parts.ts";
 
@@ -61,7 +61,7 @@ export function hoistInvariants(code: Code, info: Info, names: Names): { code: C
   let hoisted = 0;
   // Each new node's type, from the nodes it was made of (I203: no check
   // again). A call's facts keyed by its id go with its contents.
-  const typeOf = new OverMap(info.typeOf), answered = new Set(info.answered ?? []), spread = new Set(info.spread ?? []);
+  const typeOf = new OverMap(info.typeOf), answered = new OverSet(info.answered ?? new Set<Id>()), spread = new OverSet(info.spread ?? new Set<Id>());
   const parent = parentLookup(code);
   const rowAt = (id: Id): Row => {
     for (let at = parent(id); at !== undefined; at = parent(at)) {

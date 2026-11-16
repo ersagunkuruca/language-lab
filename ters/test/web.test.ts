@@ -116,16 +116,21 @@ test("the converter app: typing in any field moves the others, and text with no 
 // program printed from the core IR as a plain script), which has two scripts.
 // Dice solves nothing, so its saved page has the runtime without the
 // solver, and of the program only what main reaches.
-for (const way of ["ters build-web", "Save page"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
-  const { webCorePage, corePageRuntimes } = await import("../cli/web.ts");
-  const { corePageFile } = await import("../src/lang/page.ts");
+// And the site's saved page, its scripts minified (C251d, editor/prebuild.ts).
+for (const way of ["ters build-web", "Save page", "Save page, minified"]) test(`the dice app (${way}): seeded rolls repeat exactly, and the clock ticks frame by frame`, async () => {
+  const { webCorePage, corePageRuntimes, minifiedScripts } = await import("../cli/web.ts");
+  const { corePageFile, savedPageFile, savedScripts } = await import("../src/lang/page.ts");
+  const { lowerCore } = await import("../../compiler/src/core-js.ts");
   const { loadProgram } = await import("../src/lang/load.ts");
   const { infer } = await import("../src/lang/infer.ts");
   const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
   const info = infer(p.code, p.pres.names, undefined, p.options);
   assert.deepEqual(info.errors, []);
   const html = way === "ters build-web" ? await webCorePage("Dice", p.code, info, p.pres.names, p.named("main"))
-    : corePageFile("Dice", await corePageRuntimes(), p.code, info, p.pres.names, p.named("main"));
+    : way === "Save page" ? corePageFile("Dice", await corePageRuntimes(), p.code, info, p.pres.names, p.named("main"))
+    : savedPageFile("Dice", await minifiedScripts(savedScripts(lowerCore(p.code, info, p.pres.names, [p.named("main")]), "main", false)), await corePageRuntimes());
+  // its title's slot filled, as minified (\0 for \u0000)
+  assert.doesNotMatch(html, /the page's (title|worklet)/);
   // nothing is loaded from anywhere: inline scripts only
   assert.doesNotMatch(html, /<script src|<link /);
   // Not the library's nodes and names the solver reads: 0.8 MB before.
@@ -237,4 +242,20 @@ test("a page bundles its hosts/js.js and asks it", async () => {
     runInNewContext(script, { document: { ...fakeDoc(), body }, localStorage: memoryStore(), console, TextEncoder });
     assert.match((body.kids[0] as FakeEl).html(), /<p>phone 7<\/p>/);
   }
+});
+
+test("a page that runs nothing side by side carries none of what does, and one that may does (C251c)", async () => {
+  const { webCorePage } = await import("../cli/web.ts");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { infer } = await import("../src/lang/infer.ts");
+  const built = async (example: string) => {
+    const p = loadProgram(join(import.meta.dirname, "../examples", example));
+    const info = infer(p.code, p.pres.names, undefined, p.options);
+    return webCorePage(example, p.code, info, p.pres.names, p.named("main"));
+  };
+  // A message only branches-rt.ts has.
+  const workers = /a shared table is read only/;
+  assert.doesNotMatch(await built("calculus-page"), workers);
+  // dice's map of its rolls may run on the page's workers.
+  assert.match(await built("dice"), workers);
 });

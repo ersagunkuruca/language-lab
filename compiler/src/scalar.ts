@@ -679,7 +679,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // Case and graphemes with no host to ask run the cases module (L214e5).
-  if (!opts.host) ({ code, info, names } = tableText(code, info, names));
+  if (!opts.host) ({ code, info, names } = tableText(code, info, names, roots));
   // A named handler handles a copy of its effect of its own (L213b).
   ({ code, info, names } = unnameHandlers(code, info, names));
   // The generic + resolved to each type's own operation first
@@ -1116,6 +1116,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     }
     if (inside.includes(t.id)) return `${nm(t.id)}, which contains itself (that needs a heap)`;
     if (td.variants.length !== 1) return `${nm(t.id)}, which has ${td.variants.length} cases (only one-case records fit)`;
+    if (!(code.nodes[td.variants[0]] as NodeOf<"variant">).fields.length) return `${nm(t.id)}, which holds nothing`;
     const ft = (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => code.nodes[(code.nodes[f] as NodeOf<"field">).type]);
     if (ft.some((n) => n?.kind === "tref" && (n.target === t.id || inside.includes(n.target)))) return `${nm(t.id)}, which contains itself (that needs a heap)`;
     return `${nm(t.id)}, which has a field that isn't a Float64, Bool or record`;
@@ -1225,10 +1226,6 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // It's taken as a Float64, and calls must pass one.
     const free = new Set(vars(ft.ret));
     const params = ft.params.map((p) => (p.t === "var" && !free.has(p.v) ? "f64" : stype(p))), result = stype(ft.ret);
-    if (params.some((p) => !p) || !result) {
-      const bad = [...ft.params, ft.ret][[...params, result].findIndex((x) => !x)];
-      fail(opts.records ? `takes or gives ${whyNot(info.subst.zonk(bad))}` : `takes or gives ${OTHER}`);
-    }
     // With `data`, a search with one answer or none (no `one of`, which
     // is refused where it's used) is a partial function, and so is one
     // that spends from a budget: running out is having no answer there,
@@ -1243,7 +1240,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
     const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    // Its effects before its types, as profiles.ts tells them (I309): a
+    // definition that prints is refused for that, which says more than
+    // the Unit it gives.
     if (effs.length) fail(`has effects (${effs.map(nm).join(", ")})`);
+    if (params.some((p) => !p) || !result) {
+      const bad = [...ft.params, ft.ret][[...params, result].findIndex((x) => !x)];
+      fail(opts.records ? `takes or gives ${whyNot(info.subst.zonk(bad))}` : `takes or gives ${OTHER}`);
+    }
     const budgeted = !constant && !opts.data && diverges(ft);
 
     // Reserve the index now, so recursion finds it.

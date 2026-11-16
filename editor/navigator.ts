@@ -69,7 +69,7 @@ export function navigatorPanel(host: NavHost) {
         row({ "data-act": "new-def", title: "A new function, value or data type" }, ui.mode === "new-def", "+ New definition")));
     }
     list.append(row({ "data-act": "new-program" }, false, "+ New program"));
-    const find = h("input", { id: "nav-find", class: "nav-find", type: "search", placeholder: "Find a program or definition", "aria-label": "Find a program or definition", value: ui.find, autocomplete: "off" }) as HTMLInputElement;
+    const find = h("input", { id: "nav-find", class: "nav-find", type: "search", placeholder: "Find", "aria-label": "Find a program or definition", value: ui.find, autocomplete: "off" }) as HTMLInputElement;
     // Filtering hides rows; it doesn't redraw the program.
     const filter = () => {
       const q = find.value.trim().toLowerCase();

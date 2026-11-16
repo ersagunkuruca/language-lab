@@ -28,7 +28,7 @@ import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
-import { implementationOf, type Info } from "./infer.ts";
+import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, type Info } from "./infer.ts";
 import { keptAcrossRuns } from "./kept.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ARITH, ARITH_FIELD, CONS, EMBEDDING, EMBEDDING_MAP, INT_OPS, LIST, LITERAL, LITERAL_V, NIL, S } from "./std.ts";
@@ -47,6 +47,7 @@ import { intCases, usesIntCases } from "./int-cases.ts";
 import { packsWritten, usesPacking } from "./packs.ts";
 import { sharedFields, usesSharedFields } from "./shared-fields.ts";
 import { useDirections } from "./directions.ts";
+import { LIBRARY } from "./library.ts";
 
 const num: Type = { t: "con", id: NUMBER, args: [] };
 const pure: Row = { effs: [], tail: null };
@@ -135,7 +136,10 @@ type Seed = {
 const seeds = new WeakMap<Info, Map<BuiltinCost, Seed | null>>();
 function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): Seed | null {
   const lib = layerOf(code), under = info.layer;
-  if (!lib || !under || !(info.typeOf instanceof OverMap)) return null;
+  // The check under must be of that library: a program whose uses were
+  // filled after it was checked (compiler/src/uses.ts carried) is on the
+  // library filled, and still on the check of the library as written.
+  if (!lib || !under || codeChecked(under) !== lib || !(info.typeOf instanceof OverMap)) return null;
   for (const k of info.implementations?.keys() ?? []) {
     if (under.implementations?.has(k)) continue;
     const rest = k.slice(k.indexOf("|") + 1), con = rest.startsWith("@") ? rest.slice(1) : null;
@@ -147,7 +151,12 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   let byCost = seeds.get(under);
   if (!byCost) seeds.set(under, (byCost = new Map()));
   if (!byCost.has(costOf)) {
-    const make = () => { const r = scanningOnLayer(lib, () => resolving(lib, under, names, costOf, null, true)); return "layer" in r ? r : null; };
+    // Its copies named by the library's own names, whoever asks first:
+    // they are kept for every program after (and across runs), and a
+    // first caller with no names gave "@… at type.number" to all of them
+    // (resolve-once.test, red on main after arith.test ran first).
+    const own = lib === LIBRARY.code ? LIBRARY.names : names;
+    const make = () => { const r = scanningOnLayer(lib, () => resolving(lib, under, own, costOf, null, true)); return "layer" in r ? r : null; };
     let r: ReturnType<typeof make>;
     if (costOf === NEUTRAL) {
       // The neutral one, every program's, kept between runs (I193o): its
@@ -165,10 +174,14 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
         if (!m) return null;
         const changed: Record<Id, Node> = {};
         for (const id in m.nodes) if (m.nodes[id] !== lib.nodes[id]) changed[id] = m.nodes[id];
-        return { ...m, nodes: changed, gone: Object.keys(lib.nodes).filter((id) => !(id in m.nodes)) };
+        // Its types name the variables of the library's bodies, typed one
+        // at a time (infer.ts libraryLater): what their checks found goes
+        // with it, for a run that types none of them (I313).
+        return { ...m, nodes: changed, gone: Object.keys(lib.nodes).filter((id) => !(id in m.nodes)), facts: bodyFacts(under) };
       });
       if (kept) {
-        const { gone, nodes: changed, ...rest } = kept;
+        const { gone, nodes: changed, facts, ...rest } = kept;
+        if (facts) joinBodyFacts(under, facts);
         const nodes: Record<Id, Node> = { ...lib.nodes };
         for (const id of gone) delete nodes[id];
         for (const id in changed) nodes[id] = Object.isFrozen(changed[id]) ? changed[id] : Object.freeze(changed[id]);
@@ -193,7 +206,12 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   ({ code, info, names } = literalMatch(code, info, names));
   ({ code, info, names } = intCases(code, info, names));
   ({ code, info, names } = packsWritten(code, info, names));
-  ({ code, info, names } = spreadTuples(code, info, names));
+  // With the library's resolving kept, the library has none (its own
+  // resolving would have changed it, and kept none), so only the program's
+  // are looked for, and the library's bodies aren't all typed for them.
+  // When the program has some, the library's isn't used: all are.
+  const spread = seed ? spreadTuples(code, info, names, true) : null;
+  ({ code, info, names } = spread && spread.code === code ? spread : spreadTuples(code, info, names));
   ({ code, info, names } = resultsAsFunctions(code, info, names));
   ({ code, info, names } = fieldsByType(code, info, names));
   ({ code, info, names } = jsonByType(code, info, names));
@@ -211,7 +229,11 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   const nodes: Record<Id, Node> = seed ? { ...seed.nodes } : { ...code.nodes };
   for (const id of own) nodes[id] = code.nodes[id];
   const defs = seed ? [...seed.defs, ...code.defs.filter((d) => !(d in seed!.layer.nodes))] : [...code.defs];
-  const typeOf = seed ? new Map(seed.typeOf) : new Map(info.typeOf);
+  // Read through to the check's rather than copied, unless it is kept
+  // (snapshot): a program cut to what its main reaches is checked over the
+  // library, and a copy would type all its bodies (I313).
+  const readThrough = <V,>(m: Map<Id, V> | undefined): Map<Id, V> => (snapshot ? new Map(m ?? []) : new OverMap(m ?? new Map()));
+  const typeOf = seed ? new Map(seed.typeOf) : readThrough(info.typeOf);
   if (seed) for (const [id, t] of (info.typeOf as OverMap<Id, Type>).own()) if (!(id in seed.layer.nodes)) typeOf.set(id, t);
   const schemes = new Map(info.schemes);
   if (seed) for (const [id, sc] of seed.schemes) if (!(id in code.nodes)) schemes.set(id, sc);
@@ -354,9 +376,9 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // implementation's own: a ref to what the implementation gives for it,
   // or, when that is more than a ref, to a definition made of it.
   const ops = interfaceOps(code);
-  const opAt = new Map(seed?.opAt ?? info.opAt ?? []);
+  const opAt = seed ? new Map(seed.opAt) : readThrough(info.opAt);
   if (seed && info.opAt instanceof OverMap) for (const [id, t] of info.opAt.own()) opAt.set(id, t);
-  const copyOf = new Map(seed?.copyOf ?? info.copyOf ?? []);
+  const copyOf = seed ? new Map(seed.copyOf) : readThrough(info.copyOf);
   const lifted = new Map<string, Id>(seed?.lifted ?? []);
   // Ways (WAYS.md, BACKLOG L96, ways.ts): each implementation's pick,
   // made once.
@@ -719,7 +741,10 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(open) };
     return { t: "fn", params: t.params.map(open), ret: open(t.ret), eff: s.resolveRow(t.eff) };
   };
-  for (const [id, t] of typeOf) typeOf.set(id, open(t));
+  // Read through to the check's, the nodes the program has (a library
+  // body it doesn't reach isn't typed for this).
+  if (typeOf instanceof OverMap) { for (const id in nodes) { const t = typeOf.get(id); if (t) typeOf.set(id, open(t)); } }
+  else for (const [id, t] of typeOf) typeOf.set(id, open(t));
   for (const [d, sc] of schemes) {
     // One left as it was keeps its scheme, so resolving the program again
     // (a runner made of it: grades.ts algebrasOf) leaves it as it is too.
@@ -749,7 +774,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
 function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
   if (!info.embedded?.size) return { code, info };
   const nodes: Record<Id, Node> = { ...code.nodes };
-  const typeOf = new Map(info.typeOf);
+  const typeOf = new OverMap(info.typeOf);
   const none = { effs: [], tail: null };
   // map(x) of the embedding, its nodes named after `at`.
   const wrap = (x: Id, at: Id, e: { def: Id; from: Type; to: Type }): Id => {

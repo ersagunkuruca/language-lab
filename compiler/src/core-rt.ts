@@ -23,8 +23,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { bothOn, bothPure, bothSecond, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker, mapAway, searchAway, chooseSplit, rangeSplit, firstInOrder, searchesBy, searchPure, splitGive, splitHold, firstPure, foldInOrder, foldPure, inOrder, mapInOrder, mapPure, mapWorth, testInOrder, testPure, togetherPure } from "./branches-rt.ts";
-import { impl } from "../../ters/src/prelude.ts";
+import type { branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker } from "./branches-rt.ts";
 
 // The builtins a printed program calls, by id (C251b): what std-run.ts
 // runs, given by the program's script, which imports only the ones it
@@ -44,10 +43,22 @@ export const FAIL = { fail: true }, OUT = { out: true };
 // A search's answers counted or gathered (C43): the search a closure of
 // the rest, each answer told to go on.
 const searchRun = (search: unknown, each: (v: unknown) => void): void => { const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, (v: unknown) => { each(v); return FAIL; }); };
-const countEvery = (search: unknown): number => { let n = 0; searchRun(search, () => n++); return n; };
-const allEvery = (search: unknown): unknown[] => { const out: unknown[] = []; searchRun(search, (v) => out.push(v)); return out; };
-const firstOf = (search: unknown): unknown[] => { let out: unknown[] = []; const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, (v: unknown) => { out = [v]; return true; }); return out; };
-searchesBy({ count: countEvery, all: allEvery, first: firstOf });
+export const countEvery = (search: unknown): number => { let n = 0; searchRun(search, () => n++); return n; };
+export const allEvery = (search: unknown): unknown[] => { const out: unknown[] = []; searchRun(search, (v) => out.push(v)); return out; };
+export const firstOf = (search: unknown): unknown[] => { let out: unknown[] = []; const c = search as { code: (...xs: unknown[]) => unknown }; c.code(c, (v: unknown) => { out = [v]; return true; }); return out; };
+// What runs side by side (core-branches.ts), given by a script that does
+// (C251c): its runtime names, its world's operations, and the hand-over
+// of its functions to workers.
+export type Branches = {
+  rt: (name: string) => ((...xs: unknown[]) => unknown) | undefined;
+  world: (op: string) => ((...xs: unknown[]) => unknown) | undefined;
+  branchesFrom: typeof branchesFrom; branchWorker: typeof branchWorker; pageBranches: typeof pageBranches; pageGpu: typeof pageGpu; pageWorker: typeof pageWorker;
+};
+let BRANCHES: Branches | undefined;
+export const useBranches = (b: Branches) => { BRANCHES = b; };
+const branched = (): Branches => { if (!BRANCHES) throw new Unsupported("running side by side, which this page or module wasn't made with"); return BRANCHES; };
+// A page's worker answering its maps (C61 c′), where the page has any.
+export const branchWorkerOfPage = () => BRANCHES?.pageWorker();
 
 const big = (x: I.Int) => BigInt(x);
 // UTF-8 as a browser has it too (a page's script, C137c9).
@@ -63,7 +74,7 @@ const ascii = (t: string) => (known(t), lastAscii);
 const utf8Of = (t: string) => (known(t), (lastBytes ??= UTF8.encode(t)));
 // The items of number.range x, which as a list of 2^26 or more would be
 // gigabytes of cons cells.
-const rangeCount = (x: number): number => {
+export const rangeCount = (x: number): number => {
   const n = x > 0 ? Math.floor(x) : 0;
   if (n >= 2 ** 26) throw new RangeError("out of memory");
   return n;
@@ -201,50 +212,10 @@ function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown
 }
 function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers: Frame[] = [], hostOps?: HostOps): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
-  // A together whose actions only compute (C41): side by side on worker
-  // threads, in order under a budget.
-  if (name === "together.pure") return (actions: unknown, fuel: unknown) => (fuel === Infinity || fuel === undefined ? togetherPure(actions) : inOrder(actions));
-  // And a map of a function that only computes, by runs of its items (C42).
-  if (name === "map.worth") return mapWorth as (...xs: unknown[]) => unknown;
-  // all pass and any pass, stopping at the first item that decides (C43).
-  if (name === "all.pure" || name === "any.pure") {
-    const any = name === "any.pure";
-    return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? testPure(xs, f as (x: unknown) => unknown, site as number, any) : testInOrder(xs, f as (x: unknown) => unknown, any));
-  }
-  // Two calls of a function in its own body (C61 e): the first's answer,
-  // and then the second's.
-  if (name === "both.pure") return bothPure as (...xs: unknown[]) => unknown;
-  if (name === "both.second") return bothSecond;
-  if (name === "both.on") return bothOn;
-  // first where, its answer's item as a list of one or none (C43).
-  if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
-  // A count whose search's first choice is shared out (C43), and that
-  // choice, which keeps one item in each run of it.
-  if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, "count") : countEvery(search));
-  // all's, an array or a list of the runtime's as its type says.
-  if (name === "all.search") return (search: unknown, array: unknown, fuel: unknown, site: unknown) => {
-    const xs = (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, "all") : allEvery(search)) as Value[];
-    return array ? arrayOf(xs) : toList(xs);
-  };
-  // first's: its answer, or FAIL for the default.
-  if (name === "first.search") return (search: unknown, fuel: unknown, site: unknown) => {
-    const xs = (fuel === Infinity || fuel === undefined ? searchPure(search, site as number, "first") : firstOf(search)) as unknown[];
-    if (!xs.length) throw FAIL;
-    return xs[0];
-  };
+  const away = BRANCHES?.rt(name);
+  if (away) return away;
   // A first's answer on a page's workers, or FAIL for the default (C61 c′5).
   if (name === "first.one") return (v: unknown) => { if (v === FAIL) throw FAIL; return v; };
-  // A fold of a list adding an Int for each item, or keeping the largest
-  // or the smallest, after the empty list's z (C42).
-  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, join?: unknown) => (fuel === Infinity || fuel === undefined ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join as (x: unknown) => unknown) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join as (x: unknown) => unknown));
-  if (name === "choose.split") return chooseSplit as (...xs: unknown[]) => unknown;
-  if (name === "range.split") return ((x: number) => rangeSplit(rangeCount(x))) as (...xs: unknown[]) => unknown;
-  if (name === "split.hold") return splitHold;
-  if (name === "split.give") return splitGive as (...xs: unknown[]) => unknown;
-  if (name === "map.pure" || name === "keep.pure") {
-    const keep = name === "keep.pure";
-    return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (fuel === Infinity || fuel === undefined ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
-  }
   // A replace where every array of its type has one holder (C93 s4,
   // core-js.ts lowerCore): written in place.
   if (name.startsWith("array.replaceOwned.")) return replaceOwned as (...xs: unknown[]) => unknown;
@@ -406,12 +377,18 @@ function cellFns(cells: Cells) {
 // (each its first answer, or $no) and its literals, and gives `solve$`,
 // every answer's binds in an array.
 const NO_ANSWER = Symbol("no answer");
+// The Float64 operations a plan runs forward (prelude.ts impl, from the
+// solver's primitive table): given by a script that has a mode plan
+// (core-js.ts floatsFor), so one that has none doesn't carry that table
+// (C251c).
+let FLOATS: Record<string, (...a: number[]) => number> | undefined;
+export const useFloats = (f: Record<string, (...a: number[]) => number>) => { FLOATS = f; };
 const forwardBuiltin = (id: Id) => {
   // A Float64 operation (prelude.ts), as the evaluator runs it: no answer
   // where there is none (x / 0), carried as ∞ where it overflows.
   const op = id.startsWith("builtin.") ? id.slice(8) : "";
-  if (op in impl) {
-    const f = (impl as Record<string, (...a: number[]) => number>)[op];
+  if (FLOATS && Object.hasOwn(FLOATS, op)) {
+    const f = FLOATS[op];
     // A finite answer of finite numbers is the answer, with no iterator.
     return (...xs: unknown[]) => {
       const r = f(...(xs as number[]));
@@ -436,7 +413,12 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
   return planned(() => (...xs: unknown[]) => solve(...xs.map(inn)), all, none, true);
 };
 export const RUNTIME = {
-  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded, branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker,
+  FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
+  branchesFrom: ((...a) => branched().branchesFrom(...a)) as typeof branchesFrom,
+  branchWorker: ((...a) => branched().branchWorker(...a)) as typeof branchWorker,
+  pageBranches: ((...a) => branched().pageBranches(...a)) as typeof pageBranches,
+  pageGpu: ((...a) => branched().pageGpu(...a)) as typeof pageGpu,
+  pageWorker: ((...a) => branched().pageWorker(...a)) as typeof pageWorker,
   fail: (): never => { throw FAIL; },
   // A step of a definition that may not finish: free, except under a
   // page's budget (run.ts withSteps), where running out is the part's
@@ -669,10 +651,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
   };
   switch (op) {
     case "startTimer": return (ms) => timers.start(clock(), ms as number);
-    // A map on a page's workers (C61 c′, branches-rt.ts), given the rest.
-    case "mapAway": return (xs, f, fuel, site, how, z, join, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, typeof join === "number" ? undefined : join as (x: unknown) => unknown, (v) => RUNTIME.ap(k as never, v));
-    // A count or an all of a search there likewise (C61 c′4).
-    case "searchAway": return (search, array, fuel, site, how, k) => searchAway(search, fuel, site as number, how as "count", (v) => RUNTIME.ap(k as never, how === "count" ? v : how === "first" ? ((v as Value[]).length ? (v as Value[])[0] : FAIL) : array ? arrayOf(v as Value[]) : toList(v as Value[])));
+    // A map or a search on a page's workers (core-branches.ts).
+    case "mapAway": case "searchAway": return branched().world(op)!;
     case "wait": return (ms, k) => { try { sleep(ms as number); } catch (e) { paused(e, () => RUNTIME.ap(k as never, unit)); } return RUNTIME.ap(k as never, unit); };
     case "await": return (t, k) => awaited(t as Data, k);
     case "randomSeed": return () => (rt.world?.randomSeed ?? (() => Math.floor(Math.random() * 4294967296)))();
