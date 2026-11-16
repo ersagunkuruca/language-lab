@@ -28,6 +28,10 @@ async function inWorker(ask: unknown): Promise<unknown[]> {
 
 test("dice goes compiled with its rolls, and on compiled after a pause and a step back", async () => {
   const e = openEditor();
+  // The page drawn interpreted first, however long that takes here: a
+  // page slower than half a second waits for its compiled page (I307),
+  // and dice's first drawing in Node can be (CI, 2026-11-16).
+  (e.window as unknown as { tersDrawWithin?: number }).tersDrawWithin = 60_000;
   try {
     await e.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
     const frame = () => (e.doc.querySelector("iframe.page") as HTMLIFrameElement | null)?.contentDocument ?? null;

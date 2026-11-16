@@ -24,7 +24,11 @@ import { eventsIn, isEvent, type LogEntry, type LogWindow, type PlacedSnapshot }
 const LOG_WINDOW = { seconds: 10, keep: 30 };
 // How long a page may take to draw interpreted, in ms, before the editor
 // waits for its compiled page instead (I307, page.ts drawWithin).
+// A scenario that is about the interpreted page itself (page-handover.test)
+// sets `tersDrawWithin` on the window for a longer wait: on a slow machine
+// dice takes longer than that to draw the first time.
 const DRAW_WITHIN = 500;
+const drawWithin = () => (globalThis as { tersDrawWithin?: number }).tersDrawWithin ?? DRAW_WITHIN;
 
 export interface PageHost {
   doc(): Doc;
@@ -236,7 +240,7 @@ export function pagePanels(host: PageHost) {
     // with sound has no compiled page here, so it draws however long.
     const slow = !hasSound(prog());
     try {
-      page.now = interpreted(info, main, undefined, undefined, slow ? DRAW_WITHIN : undefined);
+      page.now = interpreted(info, main, undefined, undefined, slow ? drawWithin() : undefined);
       page.root = page.now.root as unknown as globalThis.Node;
     } catch (e) {
       if (!(e instanceof TooSlow)) { sayStopped("The page stopped", e); return; }
