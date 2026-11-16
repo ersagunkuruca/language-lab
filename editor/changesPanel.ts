@@ -14,7 +14,7 @@ import type { Code, Id } from "../ters/src/model.ts";
 import type { Names, Style } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { diffPrograms, type DiffLine, type ProgramDiff, type Version } from "../ters/src/diff.ts";
-import { h } from "./dom.ts";
+import { h, head } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
 
 export interface ChangesHost {
@@ -73,11 +73,11 @@ export function changesPanels(host: ChangesHost) {
     if (r) {
       let b = restored.get(r.at + d.program);
       if (!b) { try { b = host.restore(r.doc); } catch { b = d; } restored.set(r.at + d.program, b); }
-      return { doc: b, what: `the version marked Reviewed ${new Date(r.at).toLocaleString()}` };
+      return { doc: b, what: `Reviewed · ${new Date(r.at).toLocaleString()}` };
     }
     const shipped = shippedDoc(d);
-    if (shipped) return { doc: shipped, what: "the example as shipped" };
-    return { doc: opened.get(d.program) ?? d, what: "the version opened" };
+    if (shipped) return { doc: shipped, what: "Example as shipped" };
+    return { doc: opened.get(d.program) ?? d, what: "Version opened" };
   }
 
   const infos = new WeakMap<Code, Info | null>();
@@ -159,8 +159,8 @@ export function changesPanels(host: ChangesHost) {
       if ("pr" in asked) {
         const p = await host.pullRequest(asked.pr);
         const [before, after] = await Promise.all([host.atRevision(d, p.base), host.atRevision(d, p.head)]);
-        g = { rev, state: "ready", before, after, what: `pull request #${p.number}, “${p.title}”: what it changes in this program, from where it left the base (${p.base.slice(0, 7)}) to its newest commit (${p.head.slice(0, 7)})`, link: p.url };
-      } else g = { rev, state: "ready", before: await host.atRevision(d, asked.rev), what: `${asked.rev} in the repository on GitHub` };
+        g = { rev, state: "ready", before, after, what: `#${p.number} “${p.title}”, ${p.base.slice(0, 7)}…${p.head.slice(0, 7)}`, link: p.url };
+      } else g = { rev, state: "ready", before: await host.atRevision(d, asked.rev), what: `${asked.rev} on GitHub` };
     } catch (e) { g = { rev, state: "error", error: (e as Error).message }; }
     // Only if it's still what this program is asked to compare with.
     if (git.get(d.program)?.rev === rev) { git.set(d.program, g); host.render(); }
@@ -172,7 +172,7 @@ export function changesPanels(host: ChangesHost) {
     const go = h("button", { class: "btn", type: "button", title: "Compare with this revision of the repository, read from GitHub; a pull request (#123) shows its own change" }, "Compare");
     go.addEventListener("click", () => void compareWith(input.value));
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); void compareWith(input.value); } });
-    const back = g ? h("button", { class: "btn", type: "button", title: "Compare with the version opened, or the one marked Reviewed, again" }, "Stop comparing with git") : null;
+    const back = g ? h("button", { class: "btn", type: "button", title: "Compare with the version opened, or the one marked Reviewed, again" }, "Stop comparing") : null;
     back?.addEventListener("click", () => { git.delete(doc().program); host.render(); });
     return h("div", { class: "row chg-git" }, input, go, back);
   }
@@ -182,25 +182,23 @@ export function changesPanels(host: ChangesHost) {
     const { diff: d, what, open } = diff();
     const r = reviewed[doc().program];
     const box = h("div", { class: "changes" },
-      h("p", { class: "hint" }, open
-        ? `Compared with ${what}. While this tab shows, the open definition's added parts are green and its changed ones amber, in the blocks and the graph.`
-        : `Showing ${what}. Your own version isn't part of it, so nothing is marked in the blocks.`),
-      g?.state === "ready" && g.link ? h("p", { class: "hint" }, h("a", { href: g.link, target: "_blank", rel: "noopener" }, "The pull request on GitHub")) : null,
+      head(open ? "Compared with" : "Showing", { tip: open ? "While this tab shows, the open definition's added parts are green and its changed ones amber, in the blocks and the graph." : "Your own version isn't part of it, so nothing is marked in the blocks." }),
+      h("p", { class: "hint" }, what, g?.state === "ready" && g.link ? h("a", { href: g.link, target: "_blank", rel: "noopener", title: "The pull request on GitHub" }, " ↗") : null),
       h("div", { class: "row" },
         h("button", { class: "btn", type: "button", "data-act": "mark-reviewed", title: "Compare with this version from now on" }, "Mark reviewed"),
         r ? h("button", { class: "btn", type: "button", "data-act": "forget-reviewed", title: "Compare with the version opened (an example as shipped) again" }, "Forget reviewed") : null),
       shippedDoc(doc()) ? gitRow() : null,
-      g?.state === "loading" ? h("p", { class: "hint" }, `Reading ${g.rev} from GitHub…`) : null,
-      g?.state === "error" ? h("p", { class: "chg-error" }, `Couldn't compare with ${g.rev}: ${g.error}. Compared with ${what} instead.`) : null);
+      g?.state === "loading" ? h("p", { class: "hint", role: "status" }, `Reading ${g.rev}…`) : null,
+      g?.state === "error" ? h("p", { class: "chg-error" }, `Couldn't compare with ${g.rev}: ${g.error}`) : null);
     const nothing = !d.defs.length && !d.renamed.length && !d.comments.length;
-    if (nothing) { box.append(h("p", { class: "chg-none" }, "No changes.")); return box; }
+    if (nothing) { box.append(h("p", { class: "chg-none" }, "No changes")); return box; }
     for (const x of d.defs) {
       const head = x.status === "removed"
         ? h("div", { class: "chg-def removed" }, h("span", { class: "chip" }, "removed"), h("span", {}, x.name))
         : h("button", { type: "button", class: `chg-def ${x.status}${x.def === ui.def ? " on" : ""}`, "data-def": x.def }, h("span", { class: "chip" }, x.status), h("span", {}, x.name));
       box.append(head);
       if (x.status === "changed") box.append(x.lines.every((l) => l.status === "same")
-        ? h("p", { class: "hint" }, "Nothing its view shows: its nodes differ, as when a call moves to another version of a library definition.")
+        ? h("p", { class: "hint", title: "Its nodes differ, as when a call moves to another version of a library definition" }, "No visible change")
         : lines(x.lines));
     }
     const renames = new Map<string, number>();
