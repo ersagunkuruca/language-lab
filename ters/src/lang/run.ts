@@ -241,7 +241,8 @@ export const META = Symbol("node");
 const tag = <F extends Fn>(f: F, meta: { lambda: Id; readonly env: Map<Id, Value> } | { prim: Id }): F => Object.assign(f, { [META]: meta });
 
 // `base`: how many choice points there were when the `with fuel` began.
-interface Fuel { left: number; base?: number }
+// `over`: a page's deadline, asked every 1024 steps (I310).
+interface Fuel { left: number; base?: number; over?: () => boolean }
 
 // A page runs each update (a view, a text, a handler) under a step budget:
 // the same count as `with fuel` (one per call into a definition the checker
@@ -256,13 +257,16 @@ let page: Fuel | null = null;
 // Compiled code's count of deep calls (compiler/src/runtime.js, $rec):
 // put back after each update, which may have been cut off midway.
 export const depth = { d: 0 };
-export function withSteps<T>(n: number, f: () => T): T {
+// `over`: the budget runs out when it says so too, for a caller that
+// gives the page back on time (the editor's seeds run, I310: Countdown's
+// search ran 1.2 s of steps between two calls the editor timed).
+export function withSteps<T>(n: number, f: () => T, over?: () => boolean): T {
   const saved = page, d = depth.d;
-  page = { left: n };
+  page = over ? { left: n, over } : { left: n };
   try { return f(); } finally { page = saved; depth.d = d; }
 }
 // One step outside any `with fuel`: free, except under a page's budget.
-export const spendStep = () => { if (page && --page.left < 0) throw new OutOfSteps(); };
+export const spendStep = () => { if (page && (--page.left < 0 || ((page.left & 1023) === 0 && page.over?.()))) throw new OutOfSteps(); };
 // A page's budget as it is now (null: none), and set (C61 c′: what a
 // map's runs on workers spent comes off it).
 export const stepsLeft = (): number | null => (page ? page.left : null);
