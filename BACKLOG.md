@@ -135,6 +135,8 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| C253 | C prints a program's own functions `static` (all but main, and what a page's API or a native app calls from outside), so cc puts a function called from one place where it's called and drops what nothing calls. Now none is, so cc keeps every one: by hand, queens' binary goes from 69 to 60 KB, collatz's from 55 to 46 KB, countdown's from 70 to 64 KB, with the same output | Ersagun 2026-11-16 ("why so many functions"), checked on C by #2803's thread | P2 | S | |
+| C254 | C and WebAssembly declare every local a function has, even ones no let reads any more (gcc -Wall: 3 to 15 unused per example; the JavaScript printer stopped in #2796). Costs nothing at run time (cc -O2 and the engines drop them), only the size of the printed C and the .wasm | Ersagun 2026-11-16 ("a LOT of unused lets"), checked by #2803's thread | P3 | S | |
 
 ### Someday
 
