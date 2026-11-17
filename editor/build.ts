@@ -29,6 +29,8 @@ import { mkdirSync } from "node:fs";
 import { corePageRuntime, coreWorkletRuntime, recordings, webCorePage } from "../ters/cli/web.ts";
 import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
+import { represented } from "../ters/cli/represented.ts";
+import { representationsIn } from "../ters/src/lang/represent.ts";
 import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
 import { shadersBuilt } from "./shadersBuilt.ts";
 import { prebuild } from "./prebuild.ts";
@@ -228,7 +230,11 @@ mkdirSync(site + "apps", { recursive: true });
 for (const name of manifest.programs.flatMap((p) => (p.page ? p.folders ?? [] : []))) {
   const p = loadProgram(here + "../ters/examples/" + name);
   const info = infer(p.code, p.pres.names, undefined, p.options);
-  writeFileSync(site + `apps/${name}.html`, await webCorePage(name[0].toUpperCase() + name.slice(1), p.code, info, p.pres.names, p.named("main")));
+  // Stored as `ters build-web` stores it (ters/cli/represented.ts): a list
+  // read by position as an array, maps and sets as hash tables. As written,
+  // the greenhouse walks its moths as a list and runs a frame a second.
+  const r = represented({ title: name, code: p.code, own: p.own.defs, names: p.pres.names, info, reps: representationsIn(p.code, info, p.pres.names, p.own.defs), options: p.options }, p.named("main"), true);
+  writeFileSync(site + `apps/${name}.html`, await webCorePage(name[0].toUpperCase() + name.slice(1), r.code, r.info, r.names, p.named("main")));
   console.log(`apps/${name}.html`);
   // The recordings a page with sound plays (AUDIO.md), beside it.
   for (const f of recordings(p.code)) copyFileSync(here + `../ters/examples/${name}/${f}`, site + `apps/${f}`);
