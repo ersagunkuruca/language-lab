@@ -4516,3 +4516,68 @@ Gaps found:
 - **G6-6, text the MCP reads (I318).** `x = …; match y` with the arms on
   the next lines isn't read, nor a match after `else`. The game names a
   function for each instead.
+
+### The round (G6b): ideals and results
+
+The ideals, `greenhouse.ideal.c` and `greenhouse.ideal.js`, keep the pool
+as columns by slot (what each slot holds, its place, velocity, plant and
+lamp, with generations and a free list), copy the moths out in slot order
+each tick, file them with a counting sort, and add in the program's
+order. They print the same digits as the evaluator, compiled JS, wasi and
+native for a whole night, plants eaten and lamp moved included.
+
+`node compiler/gaps/bench-greenhouse.ts` (a night, 2,700 ticks of 2,000
+moths), every way a process, start-up included, this container (4 cores):
+
+| way | a night | against C |
+|---|---|---|
+| C, one thread | 1.67 s | 1x |
+| C, OpenMP on 4 cores | 0.59 s | 0.4x |
+| JavaScript by hand | 2.71 s | 1.6x |
+| `ters native`, one thread | 10.74 s | 6.4x |
+| `ters native`, 4 threads | 13.23 s | 7.9x (22x the OpenMP C) |
+| `ters wasi` | 29.03 s | 17.4x |
+| `ters compile`, one thread | 30.97 s | 18.6x (11.4x the JS by hand) |
+| `ters compile`, workers | 32.23 s | 19.4x |
+
+Moths alone (round 1, after G3a and G3c) were 2.9x the C natively; the
+pool of things with optional parts is 6.4x. So the shape ENTITIES.md
+proposes costs about twice what plain records did, before any of G1b.
+
+### The gaps, ranked
+
+From callgrind on the native build, 150 ticks of 2,000 moths:
+
+**GH1. Reading a moth by number costs its counts (C265, about a third).**
+`item at` of a Thing dups it (three Optional cells), and the read is
+dropped again after `met`: `Thing_dup` 9%, `lab_drop`, `lab_fields` and
+`lab_dec` 15%, `item at` itself 9%. The ideal reads two doubles from
+columns. A borrowed read fixes the counts; columns (G1b with G3d) fix the
+reads.
+
+**GH2. The nine cells are a list made per moth (G3b, about 16%).**
+`around cells`, its inner parallel map, `lab_new` and `lab__dead`, as in
+moths M1. Deforestation, the open half of G3b.
+
+**GH3. Positions and moth numbers are big-capable Ints (C267, 9%).** The
+walk over a cell's moth numbers keeps its position, the length and each
+number as `lab_int`, with dup, add and sub checked for overflow.
+
+**GH4. `item at`'s stand-in is built on every read (C268, small).** The
+Thing given for a number past the end is made 32 million times a night
+and never used.
+
+**GH5. Threads cost (C266).** Four threads take 13.2 s against 10.7 s on
+one, where the C gets 2.8x from OpenMP. The counts in GH1 are atomic once
+shared, so C265 comes first and C266 is measured again after it.
+
+**GH6. Compiled JS and wasi, 11x the JS by hand.** The same layout gap as
+moths M4 (G3d measured: `met` is 25 ns alone and 85 ns in place), with
+more objects per thing here (a Thing, its Vec, three Optionals). Columns
+for records holding records and Optionals, G1b with G3d.
+
+### Proposed order
+
+C265 and C268 (native, a third of the night, small), then C267, then G1b
+with G3d (columns with presence, which serves native, JS and the page),
+then G3b's second half, then C266 measured again.

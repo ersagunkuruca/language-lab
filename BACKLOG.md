@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: G6b (the round), then G1b with G3d (columns), G3b ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: C265 and C267 (the greenhouse's reads), G1b with G3d (columns), G3b ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L276 (the looper) with C260, C261, L270, L271; then L277, L278 |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -100,6 +100,8 @@ New targets and speed rank below every language item (Ersagun,
 | C264 | A compiled page refuses a cell (and other host builtins) on data holding a Bool (scalar.ts `host`, boolInside: the evaluator's Bool inside data is a case, compiled code's a boolean). The greenhouse's gardener first held `carrying: Bool`; it now carries an `Optional Lamp`. Convert at the host boundary, or give compiled data the evaluator's Bool | game round 2 (G6), 2026-11-17 | 2026-11-17 |
 | C265 | Optional components cost a count on every read: the greenhouse's Thing holds three Optionals, so on C each `item at` of a moth dups the Thing and drops it again (Thing_dup 83 million and lab_drop 247 million calls in 600 ticks, against none for moths' all-Float64 Moth). An item read only to be read, borrowed, with no count taken | game round 2 (G6), 2026-11-17 | 2026-11-17 |
 | C266 | The greenhouse is slower on 4 threads than on one natively (13.4 s against 10.8 s a night): its maps' answers hold cells (the Optionals), so what they share is counted atomically from every thread (G3c froze it only where answers hold none) | game round 2 (G6), 2026-11-17 | 2026-11-17 |
+| C267 | Counts and positions stay big-capable Ints in a loop: the greenhouse's walk over a cell's moth numbers keeps its position, the array's length and each number as `lab_int` (dup, add and sub with overflow checks), 9% of the native night. A position that counts up to an array's length, and numbers read from a `List Int` only used as positions, as int64 | game round 2 (G6b), 2026-11-17 | 2026-11-17 |
+| C268 | `item at`'s answer when past the end is built on every read: the greenhouse makes its stand-in Thing (`nothing`) 32 million times a night that is never used. Build it only when the position is past the end | game round 2 (G6b), 2026-11-17 | 2026-11-17 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
@@ -270,7 +272,6 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | G3e | moths M5: profile `ters wasi` on moths (14.6x) and split what isn't M1, M2 or M4 into rows | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G6b | Game round 2 on the greenhouse: hand-written C and JS ideals of compiler/gaps/greenhouse, the ways measured (a night native 10.8 s on one thread, compiled JS 32 s), gaps into GAPS.md (C265 and C266 first) | L | [GAPS game round 2](docs/reports/GAPS.md) | P2 | M | |
 | G7 | Drawing with data, a design note: a frame as a value (meshes, instances, materials, cameras, passes), the GPU as a world, what changes between frames uploaded rather than rebuilt (WEB.md's model for pages, for frames) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
 | G8 | Columns into GPU buffers: a program's Float64 columns uploaded as Float32 storage buffers, only the columns a shader reads, only when they change | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G9 | Vertex functions and instanced draws: a Ters function of (instance, vertex) to a position and its varyings, printed as a WGSL vertex stage beside today's fragment | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
