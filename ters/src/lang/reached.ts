@@ -57,15 +57,34 @@ export function reachedWithShows(code: Code, roots: Id[], info: Info, own = fals
   const compares = ordereds.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === COMPARE);
   return shows || compares ? reachedFrom(code, [...roots, ...(shows ? showns : []), ...(compares ? ordereds : [])]) : reached;
 }
+// Asked again of the same program and roots by the passes before lowering
+// (table-text.ts, reachedImplementing, scalar.ts), each a walk of the
+// library (L266: 0.34 s of machine's lowering); a program's builtins found
+// once.
+const reachedKept = new WeakMap<Code, Map<string, Code>>();
+const builtinsKept = new WeakMap<object, Code["nodes"]>();
 export function reachedFrom(code: Code, roots: Id[]): Code {
+  const key = roots.join(",");
+  let kept = reachedKept.get(code);
+  if (!kept) reachedKept.set(code, (kept = new Map()));
+  let out = kept.get(key);
+  if (!out) kept.set(key, (out = reachOf(code, roots)));
+  return out;
+}
+function reachOf(code: Code, roots: Id[]): Code {
   const reach = new Set<Id>();
   for (const r of roots) reach.add(r);
   for (const d of dependenciesOfAll(code, roots)) reach.add(d);
   const isType = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
   const defs = code.defs.filter((d) => reach.has(d) || isType(d));
   if (defs.length === code.defs.length) return code;
-  const nodes: Code["nodes"] = {};
-  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") nodes[id] = n;
+  let builtins = builtinsKept.get(code.nodes);
+  if (!builtins) {
+    builtins = {};
+    for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") builtins[id] = n;
+    builtinsKept.set(code.nodes, builtins);
+  }
+  const nodes: Code["nodes"] = { ...builtins };
   for (const d of defs) for (const id of subtree(code, d)) nodes[id] = code.nodes[id];
   return { nodes, defs };
 }
