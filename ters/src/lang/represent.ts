@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, dependencies, freshId, layerOf, nodesWhere, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
+import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
@@ -159,18 +159,37 @@ const foldJob = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, t: Id) => (n.k
 // (routes' `settle`) takes the smallest so, once per town: on a hash set
 // it was a sort per town (C63f). The refs read so, by node id.
 export const HEAD = "head of ";
-const headsRead = new WeakMap<Code, Set<Id>>();
+// Each node's contribution, for the nodes of a program on the library's
+// layer: the layer's found once, then those of the nodes not the layer's
+// and of the layer nodes holding one changed (L266: headRefs and
+// carriedRefs each scanned all ~50k nodes for each program the chooser
+// made).
+function bySource(code: Code, kept: WeakMap<Code, Map<Id, Id[]>>, from: (code: Code, n: Node, put: (id: Id) => void) => void): Set<Id> {
+  const r = new Set<Id>();
+  const layer = layerOf(code), changed = layer && changedFromLayer(code);
+  if (!layer || !changed) { for (const n of Object.values(code.nodes)) from(code, n, (id) => r.add(id)); return r; }
+  let base = kept.get(layer);
+  if (!base) {
+    kept.set(layer, (base = new Map()));
+    for (const n of Object.values(layer.nodes)) { const got: Id[] = []; from(layer, n, (id) => got.push(id)); if (got.length) base.set(n.id, got); }
+  }
+  const again = new Set<Id>(changed), up = parentLookup(layer);
+  for (const id of changed) if (id in layer.nodes) for (let at = up(id); at !== undefined && !again.has(at); at = up(at)) again.add(at);
+  for (const [src, ids] of base) if (!again.has(src)) for (const id of ids) r.add(id);
+  for (const id of again) { const n = code.nodes[id]; if (n) from(code, n, (x) => r.add(x)); }
+  return r;
+}
+const headsRead = new WeakMap<Code, Set<Id>>(), headsUnder = new WeakMap<Code, Map<Id, Id[]>>();
 function headRefs(code: Code): Set<Id> {
   let r = headsRead.get(code);
   if (r) return r;
-  headsRead.set(code, (r = new Set()));
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "match") continue;
+  headsRead.set(code, (r = bySource(code, headsUnder, (code, n, put) => {
+    if (n.kind !== "match") return;
     const s = code.nodes[n.scrutinee];
-    if (!isCall(s) || code.nodes[s.fn]?.kind !== "ref") continue;
+    if (!isCall(s) || code.nodes[s.fn]?.kind !== "ref") return;
     const cons = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">).find((a) => a?.variant === CONS), rest = cons?.binds[1];
-    if (rest && !subtree(code, cons.body).some((x) => { const y = code.nodes[x]; return y.kind === "ref" && y.target === rest; })) r.add(s.fn);
-  }
+    if (rest && !subtree(code, cons.body).some((x) => { const y = code.nodes[x]; return y.kind === "ref" && y.target === rest; })) put(s.fn);
+  })));
   return r;
 }
 // A job given what a loop carries, its answer carried on in the same
@@ -183,37 +202,36 @@ function headRefs(code: Code): Set<Id> {
 // `CARRIED` and the job's id, at the cost a row gives it, else the job's.
 // The refs, by node id.
 export const CARRIED = "carried ";
-const carriedRead = new WeakMap<Code, Set<Id>>();
+const carriedRead = new WeakMap<Code, Set<Id>>(), carriedUnder = new WeakMap<Code, Map<Id, Id[]>>();
 function carriedRefs(code: Code): Set<Id> {
   let r = carriedRead.get(code);
   if (r) return r;
-  carriedRead.set(code, (r = new Set()));
-  // A call of a function given one of `carried`, as x is or through lets.
-  const given = (x: Id, carried: (y: Id) => boolean): Id | null => {
-    const j = code.nodes[x];
-    if (!isCall(j) || !j.args?.length) return null;
-    const f = code.nodes[j.fn];
-    if (f?.kind === "lambda" && f.params.length === j.args.length) return given(f.body, carried);
-    return f?.kind === "ref" && code.nodes[f.target]?.kind === "def" && j.args.some((a) => { const y = code.nodes[a]; return y?.kind === "ref" && carried(y.target); }) ? j.fn : null;
-  };
-  for (const d of Object.values(code.nodes)) {
+  carriedRead.set(code, (r = bySource(code, carriedUnder, (code, d, put) => {
+    // A call of a function given one of `carried`, as x is or through lets.
+    const given = (x: Id, carried: (y: Id) => boolean): Id | null => {
+      const j = code.nodes[x];
+      if (!isCall(j) || !j.args?.length) return null;
+      const f = code.nodes[j.fn];
+      if (f?.kind === "lambda" && f.params.length === j.args.length) return given(f.body, carried);
+      return f?.kind === "ref" && code.nodes[f.target]?.kind === "def" && j.args.some((a) => { const y = code.nodes[a]; return y?.kind === "ref" && carried(y.target); }) ? j.fn : null;
+    };
     if (d.kind === "arm") {
       const answers = new Set(d.results?.filter((b): b is Id => !!b) ?? []);
       const j = answers.size ? given(d.body, (y) => answers.has(y)) : null;
-      if (j) r.add(j);
-      continue;
+      if (j) put(j);
+      return;
     }
-    if (d.kind !== "def" || !d.body) continue;
+    if (d.kind !== "def" || !d.body) return;
     const lam = code.nodes[d.body];
-    if (lam?.kind !== "lambda") continue;
+    if (lam?.kind !== "lambda") return;
     for (const x of subtree(code, d.body)) {
       const c = code.nodes[x];
       if (!isCall(c) || !c.args) continue;
       const f = code.nodes[c.fn];
       if (f?.kind !== "ref" || f.target !== d.id) continue;
-      c.args.forEach((a, k) => { const j = given(a, (y) => y === lam.params[k]); if (j) r!.add(j); });
+      c.args.forEach((a, k) => { const j = given(a, (y) => y === lam.params[k]); if (j) put(j); });
     }
-  }
+  })));
   return r;
 }
 // Carried only where some row says what that costs (an array's append).
