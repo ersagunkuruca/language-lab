@@ -106,6 +106,7 @@ export function runPanel(host: RunHost) {
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") document.querySelector<HTMLButtonElement>("[data-act=t-run]")?.click(); });
     return h("label", { class: "field cmdline" },
       h("span", { class: "field-head", title: "The command line's words after the program, as ters run gives them" }, "Arguments",
+        m.run?.names ? h("code", { class: "arg-names" }, m.run.names.join(" ")) : null,
         typed !== undefined && words(typed).join("\0") !== (m.run?.args ?? []).join("\0") ? h("button", { class: "link", type: "button", "data-act": "t-args-reset", title: `Back to ${shipped}` }, "Reset") : null),
       input);
   }

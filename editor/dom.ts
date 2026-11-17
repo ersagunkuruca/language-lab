@@ -31,14 +31,19 @@ export function edit(label: string, title: string, r: { ok: true } | { ok: false
 export function head(label: Kid | Kid[], o: { tip?: string; file?: string } = {}) {
   const el = h("div", { class: "sub-head" }, ...(Array.isArray(label) ? label : [label]));
   if (o.tip) {
-    const note = h("p", { class: "tip-note", hidden: true }, o.tip);
-    const b = h("button", { class: "tip", type: "button", title: o.tip, "aria-label": "What this is", "aria-expanded": "false" }, "ⓘ");
-    b.addEventListener("click", () => { note.hidden = !note.hidden; b.setAttribute("aria-expanded", String(!note.hidden)); });
+    const [b, note] = tip(o.tip);
     el.append(b);
     if (o.file) el.append(fileTag(o.file));
     el.append(note);
   } else if (o.file) el.append(fileTag(o.file));
   return el;
+}
+// An ⓘ: its text on hover, and a note under it that a click opens.
+export function tip(text: string, label = "What this is"): [HTMLElement, HTMLElement] {
+  const note = h("p", { class: "tip-note", hidden: true }, text);
+  const b = h("button", { class: "tip", type: "button", title: text, "aria-label": label, "aria-expanded": "false" }, "ⓘ");
+  b.addEventListener("click", () => { note.hidden = !note.hidden; b.setAttribute("aria-expanded", String(!note.hidden)); });
+  return [b, note];
 }
 // The saved file an edit here changes, code.json written `code`.
 export const fileTag = (f: string) => h("span", { class: "file-tag", title: f === "code" ? "Edits here change the program (code.json)" : f === "layout" ? "Edits here change only how it's drawn (layout.json)" : f.includes(".") ? `Saved in ${f}` : `Saved in ${f}.json` }, f);
