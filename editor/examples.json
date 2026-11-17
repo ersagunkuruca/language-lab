@@ -29,6 +29,8 @@
     { "program": "break-page", "label": "Page: break, a pool break played out", "folders": ["break-page"], "page": true },
     { "program": "clinic-page", "label": "Page: clinic, a day of patients and desks", "folders": ["clinic-page"], "page": true },
     { "program": "crew-page", "label": "Page: crew, workers on a plan", "folders": ["crew-page"], "page": true },
+    { "program": "moths-page", "label": "Page: moths, a swarm round the lamps", "folders": ["moths-page"], "page": true },
+    { "program": "greenhouse-page", "label": "Page: greenhouse, a night of moths", "folders": ["greenhouse-page"], "page": true },
     { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"], "run": { "args": ["budget.txt"], "names": ["sheet"], "files": ["budget.txt"] } },
     { "program": "board", "label": "Bigger program: board, a task board page", "folders": ["compiler/gaps/board"] },
     { "program": "machine", "label": "Bigger program: machine, an assembler and interpreter", "folders": ["compiler/gaps/machine"], "run": { "args": ["primes.asm"], "names": ["program…"], "files": ["hello.asm", "primes.asm", "fib.asm", "collatz.asm", "sort.asm"] } },
@@ -41,6 +43,8 @@
     { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "names": ["plan"], "files": ["plan.txt"] } },
     { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"] },
     { "program": "pond", "label": "Bigger program: pond, fish kept in a pool", "folders": ["compiler/gaps/pond"], "run": { "args": ["30", "100"], "names": ["ticks", "fish"] } },
+    { "program": "moths", "label": "Bigger program: moths, boids on a grid", "folders": ["compiler/gaps/moths"], "run": { "args": ["25", "2000"], "names": ["ticks", "moths"] } },
+    { "program": "greenhouse", "label": "Bigger program: greenhouse, a scripted night", "folders": ["compiler/gaps/greenhouse"], "run": { "args": ["300", "500"], "names": ["ticks", "moths"] } },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
