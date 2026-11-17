@@ -55,6 +55,7 @@ export interface OneHolder { ok: boolean; problems: string[] }
 // machine.counts)`), changes that value: it is written in place (C93 s5,
 // owned-records.ts). Its other fields are read first, as arguments are.
 // `rebuilt` gets the binders so changed.
+const reachedKept = new WeakMap<Code, Map<Id, Set<Id>>>();
 export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>): OneHolder {
   const nodes = code.nodes;
   const nm = (id: Id) => names[id] ?? id;
@@ -91,13 +92,21 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
   };
 
   // The definitions main reaches.
-  const reached = new Set<Id>();
-  const reach = (d: Id) => {
-    if (reached.has(d) || nodes[d]?.kind !== "def") return;
-    reached.add(d);
-    for (const id of subtree(code, d)) { const n = nodes[id]; if (n.kind === "ref" && nodes[n.target]?.kind === "def") reach(n.target); }
-  };
-  reach(entry);
+  // Found once per program and entry: owned-arrays.ts asks for each type
+  // of array, owned-records.ts for each record (L266).
+  let byEntry = reachedKept.get(code);
+  if (!byEntry) reachedKept.set(code, (byEntry = new Map()));
+  let reached = byEntry.get(entry);
+  if (!reached) {
+    const found = (reached = new Set<Id>());
+    const reach = (d: Id) => {
+      if (found.has(d) || nodes[d]?.kind !== "def") return;
+      found.add(d);
+      for (const id of subtree(code, d)) { const n = nodes[id]; if (n.kind === "ref" && nodes[n.target]?.kind === "def") reach(n.target); }
+    };
+    reach(entry);
+    byEntry.set(entry, reached);
+  }
   const lambdaOf = (d: Id) => { const n = nodes[d]; const b = n?.kind === "def" && n.body ? nodes[n.body] : null; return b?.kind === "lambda" ? b : null; };
 
   // What a function does with a parameter: the parts of it it reads or
