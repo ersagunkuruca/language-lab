@@ -538,6 +538,7 @@ export const HTML_V: typeof Std.HTML_V = {
   "property": "std.attribute.property",
   "on": "std.attribute.on",
   "listen": "std.attribute.listen",
+  "paint": "std.attribute.paint",
   "event": "std.event.event",
   "microphone": "std.input.microphone",
   "recording": "std.input.recording"
@@ -621,6 +622,13 @@ export const LOG: typeof Std.LOG = "std.log";
 export const LOG_OP: typeof Std.LOG_OP = "std.log.log";
 export const MAP: typeof Std.MAP = "std.map";
 export const MAP_V: typeof Std.MAP_V = "std.map.map of";
+export const MARK: typeof Std.MARK = "std.mark";
+export const MARK_V: typeof Std.MARK_V = {
+  "disk": "std.mark.disk",
+  "rectangle": "std.mark.rectangle",
+  "segment": "std.mark.segment",
+  "writing": "std.mark.writing"
+};
 export const MY_LOCALE_OP: typeof Std.MY_LOCALE_OP = "std.settings.my locale";
 export const MY_ZONE_OP: typeof Std.MY_ZONE_OP = "std.settings.my time zone";
 export const NETWORK_TYPE: typeof Std.NETWORK_TYPE = "effect.network";
@@ -975,6 +983,8 @@ export const stdNames: typeof Std.stdNames = {
   "std.attribute.listen.to": "to",
   "std.attribute.listen.play": "play",
   "std.attribute.listen": "listen",
+  "std.attribute.paint.marks": "marks",
+  "std.attribute.paint": "paint",
   "std.attribute": "Attribute",
   "std.html.element.tag": "tag",
   "std.html.element.attributes": "attributes",
@@ -1555,6 +1565,31 @@ export const stdNames: typeof Std.stdNames = {
   "std.pool key.pool key.generation": "generation",
   "std.pool key.pool key": "pool key",
   "std.pool key": "Pool key",
+  "std.mark.disk.x": "x",
+  "std.mark.disk.y": "y",
+  "std.mark.disk.radius": "radius",
+  "std.mark.disk.fill": "fill",
+  "std.mark.disk": "disk",
+  "std.mark.rectangle.x": "x",
+  "std.mark.rectangle.y": "y",
+  "std.mark.rectangle.width": "width",
+  "std.mark.rectangle.height": "height",
+  "std.mark.rectangle.fill": "fill",
+  "std.mark.rectangle": "rectangle",
+  "std.mark.segment.x": "x",
+  "std.mark.segment.y": "y",
+  "std.mark.segment.to x": "to x",
+  "std.mark.segment.to y": "to y",
+  "std.mark.segment.width": "width",
+  "std.mark.segment.colour": "colour",
+  "std.mark.segment": "segment",
+  "std.mark.writing.x": "x",
+  "std.mark.writing.y": "y",
+  "std.mark.writing.text": "text",
+  "std.mark.writing.size": "size",
+  "std.mark.writing.fill": "fill",
+  "std.mark.writing": "writing",
+  "std.mark": "Mark",
   "builtin.sqrt": "sqrt",
   "builtin.pow": "power"
 };
