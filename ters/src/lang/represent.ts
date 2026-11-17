@@ -235,14 +235,34 @@ function fieldsOf(code: Code, t: Id, variants: Set<Id>): Map<Id, [Id, number]> {
 
 // `absorbed`: leave out a job every use of which is on a list just made
 // (freshUses), as `choose` does.
+// Each definition's own jobs are found once per program and rows
+// (jobsKept): the chooser asks for every definition's reach (rep-groups.ts),
+// and walked each definition again for each that reaches it (L266: 0.5 s
+// of machine's compile). A reach's jobs are its definitions' own, in the
+// order they were found.
+const jobsKept = new WeakMap<Code, Map<string, Map<Id, string[]>>>();
+const repKeys = new WeakMap<Representation, number>();
+let repKeyNext = 0;
+const repKey = (r: Representation) => { let k = repKeys.get(r); if (k === undefined) repKeys.set(r, (k = repKeyNext++)); return k; };
 export function uses(code: Code, entry: Id, reps: Representation[], absorbed = false, opaque: Iterable<Id> = []): string[] {
   const t = reps[0].of;
+  const opaques = [...opaque];
   const variants = new Set(variantsOf(code, t));
-  const implemented = new Set([...reps.flatMap((r) => Object.keys(r.impl)), ...opaque]);
+  const implemented = new Set([...reps.flatMap((r) => Object.keys(r.impl)), ...opaques]);
   const costed = new Set(reps.flatMap((r) => Object.keys(r.cost)));
-  const out = new Set<string>();
-  let fresh = new Set<Id>();
-  const walk = (def: Id) => {
+  const fieldOf = fieldsOf(code, t, variants);
+  let byRows = jobsKept.get(code);
+  if (!byRows) jobsKept.set(code, (byRows = new Map()));
+  const key = `${absorbed}|${reps.map(repKey).join(",")}|${opaques.join(",")}`;
+  let own = byRows.get(key);
+  if (!own) byRows.set(key, (own = new Map()));
+  const ownJobs = (def: Id): string[] => {
+    let jobs = own!.get(def);
+    if (jobs) return jobs;
+    // A list just made is the definition's own: the lets and calls that
+    // make one are in it (freshUses).
+    const fresh = absorbed ? freshUses(code, [def], reps) : new Set<Id>();
+    const out = new Set<string>();
     for (const id of subtree(code, def)) {
       const n = code.nodes[id];
       if (n.kind === "ref" && (variants.has(n.target) || costed.has(n.target)) && !fresh.has(id)) out.add(jobOf(code, n, costed));
@@ -256,8 +276,9 @@ export function uses(code: Code, entry: Id, reps: Representation[], absorbed = f
         if (v) n.args.forEach((a, i) => { const r = code.nodes[a], f = r?.kind === "ref" ? fieldOf.get(r.target) : undefined; if (f?.[0] === v && f[1] === i) out.add(ontoField(v, i)); });
       }
     }
+    own!.set(def, (jobs = [...out]));
+    return jobs;
   };
-  const fieldOf = fieldsOf(code, t, variants);
   // A function some representation implements is one job: don't look
   // inside it, since its body is what gets replaced (`add item` builds a
   // `set of`, which the tree never does).
@@ -269,9 +290,8 @@ export function uses(code: Code, entry: Id, reps: Representation[], absorbed = f
     for (const d of directRefs(code, def)) visit(d);
   };
   visit(entry);
-  const walked = [...seen].filter((d) => !implemented.has(d) || d === entry);
-  if (absorbed) fresh = freshUses(code, walked, reps);
-  walked.forEach(walk);
+  const out = new Set<string>();
+  for (const d of seen) if (!implemented.has(d) || d === entry) for (const j of ownJobs(d)) out.add(j);
   return [...out];
 }
 
@@ -428,12 +448,18 @@ function namesType(code: Code, typedef: Id, t: Id): boolean {
   return td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.some((f) => mentions((code.nodes[f] as NodeOf<"field">).type)));
 }
 
+const refsKept = new WeakMap<Code, Map<Id, Id[]>>();
 function directRefs(code: Code, def: Id): Id[] {
-  const out: Id[] = [];
+  let kept = refsKept.get(code);
+  if (!kept) refsKept.set(code, (kept = new Map()));
+  let out = kept.get(def);
+  if (out) return out;
+  out = [];
   for (const id of subtree(code, def)) {
     const n = code.nodes[id];
     if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") out.push(n.target);
   }
+  kept.set(def, out);
   return out;
 }
 

@@ -89,6 +89,10 @@ Rewrite only what the outside reader marked; the next outsider read checks it.
 New targets and speed rank below every language item (Ersagun,
 2026-10-24 07:01). Measurements and rounds: docs/reports/GAPS.md.
 
+| id | item | source | added |
+|---|---|---|---|
+| C259 | pond-page's reads of its cells kept whole: tracking where each read's value goes (cell-paths.ts trackReads) works pond's calls out inside one another 649 deep, which overflowed the stack (`ters compile examples/pond-page` failed on main); it now gives up past 300 (L266g), so its reads take the whole value. Work them out without nesting (a worklist, or each function's answer by its inputs' shapes) so pond's reads are rewritten too | L266g sweep, 2026-11-17 | 2026-11-17 |
+
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
 | id | item | source | pri | size | status |
