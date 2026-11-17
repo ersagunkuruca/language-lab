@@ -79,9 +79,13 @@ export function fractionCase(code: Code): { variant: Id; type: Id } | undefined 
       read.push([id, x]);
       if (!x) continue;
       if (x.kind === "arm") {
-        const t = Object.values(code.nodes).find((d) => d.kind === "typedef" && d.variants.includes(x.variant));
-        // A module's type is the definition whose body is the typedef.
-        const d = t && Object.values(code.nodes).find((d) => d.kind === "def" && d.body === t.id);
+        // A module's type is the definition whose body is the typedef: found
+        // among the definitions, all top-level (model.ts ownerOfTypeParts),
+        // else among every node (L266: two scans of each program checked).
+        const typeOf = (d: Node | undefined) => { const b = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined; return b?.kind === "typedef" && b.variants.includes(x.variant) ? b : undefined; };
+        const owner = code.defs.map((id) => code.nodes[id]).find((d) => typeOf(d));
+        const t = owner ? typeOf(owner) : Object.values(code.nodes).find((d) => d.kind === "typedef" && d.variants.includes(x.variant));
+        const d = owner ?? (t && Object.values(code.nodes).find((d) => d.kind === "def" && d.body === t.id));
         if (t) found = { variant: x.variant, type: d?.id ?? t.id };
         if (t && d) read.push([t.id, t], [d.id, d]);
         else read.length = 0;

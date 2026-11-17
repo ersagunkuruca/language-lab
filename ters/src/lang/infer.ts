@@ -438,6 +438,10 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Whether a type's private cases are the library's to build.
   const libraryType = (def: Id) => !library || library.has(def);
   const info: Info = { typeOf: new Map(), schemes: new Map(), errors: [], holes: new Map(), divergent: new Set(), subst: s, owner, hidden: new Set(opts.hidden ?? []), options: opts, implementations: new Map(), opAt: new Map(), answered: new Set(), spread: new Set(), reshape: new Map() };
+  // The operations answered later, found once a check: laterOps counts
+  // every node to see that its kept answer is this program's (L266: 135 ms
+  // of machine's checks, asked at every handler's every case).
+  let laterHere: Set<Id> | undefined;
   if (layer) {
     info.layer = layer;
     info.typeOf = new OverMap(layer.typeOf);
@@ -2032,7 +2036,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
       // does and gives what the match gives (ANSWERED-LATER.md).
       // Its case may also leave the rest out and answer at once, as any
       // operation's does (L63): resuming at once is answering.
-      const later = laterOps(code).has(arm.variant) ? 1 : 0;
+      const later = (laterHere ??= laterOps(code)).has(arm.variant) ? 1 : 0;
       if (arm.binds.length !== fs.length + later && !(later && arm.binds.length === fs.length)) err(arm.id, later ? `${nm(arm.variant)} has ${fs.length} inputs and the rest of the computation (or only its inputs, to answer at once), ${arm.binds.length} bound` : `${nm(arm.variant)} has ${fs.length} inputs, ${arm.binds.length} bound`);
       const inner = new Map(env);
       arm.binds.forEach((b, i) => { if (fs[i]) { inner.set(b, fs[i]); info.typeOf.set(b, fs[i]); } });
