@@ -72,8 +72,11 @@ function ownOf(code: Code, variant: Id): boolean[] | null {
   let m = ownFields.get(code.nodes);
   if (!m) {
     m = new Map();
-    for (const n of Object.values(code.nodes)) {
-      if (n.kind !== "def" || !n.body || code.nodes[n.body]?.kind !== "typedef") continue;
+    // Every def is a top-level one (model.ts ownerOfTypeParts): the defs,
+    // not every node (L266: a scan of each program the compiler checks).
+    for (const d of code.defs) {
+      const n = code.nodes[d];
+      if (n?.kind !== "def" || !n.body || code.nodes[n.body]?.kind !== "typedef") continue;
       for (const v of (code.nodes[n.body] as NodeOf<"typedef">).variants) {
         const vn = code.nodes[v];
         if (vn?.kind !== "variant") continue;
