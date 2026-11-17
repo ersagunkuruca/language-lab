@@ -2510,6 +2510,10 @@ function forgetNodes(nodes: object) { matchers.delete(nodes); pieceMakers.delete
 // every node for each filling's ending check, 40 ms a hole).
 const matchersKept = new WeakMap<Code, { m: Set<Id>; calls: Set<Id>; inputs: Set<Id> }>();
 function matchersOf(code: Code): Set<Id> {
+  // Asked at each call a group's ending check walks (L266: machine's check
+  // spent 1.2 s of 1.5 finding them again).
+  const hit = matchers.get(code.nodes);
+  if (hit) return hit;
   const from = derived.get(code);
   if (from && from.base !== code) {
     let kept = matchersKept.get(from.base);
@@ -2523,7 +2527,7 @@ function matchersOf(code: Code): Set<Id> {
       if (k.calls.has(id) || k.inputs.has(id)) return true;
       return [code, from.base].some((c) => { const n = c.nodes[id]; return (n?.kind === "ref" && n.target === JOBS.matchBy) || (isCall(n) && c.nodes[n.fn]?.kind === "ref" && (c.nodes[n.fn] as NodeOf<"ref">).target === JOBS.matchBy); });
     });
-    if (!touches) return k.m;
+    if (!touches) { matchers.set(code.nodes, k.m); return k.m; }
   }
   let m = matchers.get(code.nodes);
   if (!m) {
