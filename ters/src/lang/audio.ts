@@ -45,13 +45,16 @@ export function audioProblem(info: Info, def: Id, names: Names = {}): string | n
   return null;
 }
 
-// Whether a sound's block function leaves its rate's type open: one that
-// never reads the rate (L269). A page's `listen` fixes it to Float64;
-// where the sound itself is what runs (`ters render`), nothing does.
-export function rateOpen(info: Info, def: Id): boolean {
+// What a sound's block function leaves open in its type: its samples' (a
+// metronome never reads its input), its rate's (a pedal never reads the
+// rate, L269), or neither. A page's `listen` fixes both to Float64; where
+// the sound itself is what runs (`ters render`), nothing does.
+export function soundOpen(info: Info, def: Id): { samples: boolean; rate: boolean } {
   const t = info.typeOf.get(def);
   const f = t?.t === "fn" ? info.subst.zonk(t.ret) : undefined;
-  return f?.t === "fn" && f.params.length === 2 && info.subst.zonk(f.params[1]).t === "var";
+  if (f?.t !== "fn" || f.params.length !== 2) return { samples: false, rate: false };
+  const b = info.subst.zonk(f.params[0]), item = b.t === "con" && b.args.length === 1 ? info.subst.zonk(b.args[0]) : b;
+  return { samples: item.t === "var", rate: info.subst.zonk(f.params[1]).t === "var" };
 }
 
 // What playing went through: blocks that played silence instead, and why

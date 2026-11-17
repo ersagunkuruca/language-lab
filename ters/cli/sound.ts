@@ -14,7 +14,8 @@ import { loadCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { coreCall } from "../../compiler/src/core-rt.ts";
 import { arrayOf, arrayView } from "../src/lang/array-view.ts";
 import { ARRAY } from "../src/lang/types.ts";
-import { rateOpen } from "../src/lang/audio.ts";
+import { soundOpen } from "../src/lang/audio.ts";
+import { LIBRARY } from "../src/lang/library.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { merge } from "../src/model.ts";
@@ -26,14 +27,19 @@ const itemsOfArray = (a: Parameters<typeof arrayView>[0]): unknown[] => { const 
 export type Way = "evaluator" | "core";
 export type Play = (block: number[], rate: number) => number[];
 
-// A sound that never reads its rate (L269) leaves the rate's type open,
-// which a page's listen would fix to Float64; compiled code needs to know
-// what it holds. Such a sound is played through one that passes the rate
-// on as a Float64 (a + 0 at Float64); any other is as it was.
+// A sound that never reads its rate (L269), or never reads its samples (a
+// metronome), leaves their types open, which a page's listen would fix to
+// Float64; compiled code needs to know what it holds. Such a sound is
+// played through one that passes them on as Float64s (x + 0 at Float64);
+// any other is as it was.
 export function rateFixed<P extends { code: Code; info: Info; names: Names }>(p: P, def: Id): { p: P; def: Id } {
-  if (!rateOpen(p.info, def)) return { p, def };
+  const open = soundOpen(p.info, def);
+  if (!open.samples && !open.rate) return { p, def };
   const k = new Lang(p.code), at = k.def("sound at a rate");
-  k.define(at, k.thunk(() => k.let("play", k.call(def), (play) => k.fn(["block", "rate"], (block, rate) => k.call(play, block, k.call(B.add, rate, k.lit(0)))))));
+  const map = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "map")!;
+  const float = (x: Id) => k.call(B.add, x, k.lit(0));
+  k.define(at, k.thunk(() => k.let("play", k.call(def), (play) => k.fn(["block", "rate"], (block, rate) =>
+    k.call(play, open.samples ? k.call(map, block, k.fn(["x"], (x) => float(x))) : block, open.rate ? float(rate) : rate)))));
   const code = merge(p.code, k.code), names = { ...p.names, ...k.names };
   return { p: { ...p, code, names, info: infer(code, names, undefined, (p as { options?: Parameters<typeof infer>[3] }).options) }, def: at };
 }

@@ -339,3 +339,30 @@ test("a page with sound copies its recording beside it, and carries its program 
   assert.deepEqual(readFileSync(join(dir, "strum.wav")), readFileSync(join(import.meta.dirname, "../examples/pedal/strum.wav")));
   assert.match(readFileSync(out, "utf8"), /lab-sound/);
 });
+
+// The metronome (L275): a sound with no input. Its clicks land on the
+// samples its tempo puts them at, at any rate, the evaluator and compiled
+// alike: 2+2+3 at 120 pulses a minute is a click each half second, the
+// bar's first loudest and each group's first next.
+test("the metronome clicks on its samples at any rate, the bar and group starts accented", async () => {
+  const m = loadProgram(join(import.meta.dirname, "../examples/metronome"));
+  const p = { code: m.code, info: infer(m.code, m.pres.names, undefined, m.options), names: m.pres.names };
+  const main = m.named("metronome");
+  assert.equal(audioProblem(p.info, main, p.names), null);
+  for (const rate of [44100, 48000]) {
+    const silence = new Float64Array(rate * 4);
+    const ways = await Promise.all((["evaluator", "core"] as const).map(async (way) => playBlocks(await soundOf(p, main, way), way === "core" ? silence : silence.subarray(0, rate), 128, rate).out));
+    ways[0].forEach((x, i) => assert.ok(close(x, ways[1][i]), `${rate}: sample ${i}: ${x} against ${ways[1][i]}`));
+    const out = ways[1], peaks: number[] = [];
+    for (let k = 0; k < 8; k++) {
+      const at = Math.round((k * rate) / 2);
+      // Silent just before each click, sounding just after.
+      if (at > 0) assert.ok(Math.abs(out[at - 1]) < 1e-9, `${rate}: before click ${k}`);
+      peaks.push(peak(out.subarray(at, at + rate / 20)));
+    }
+    // Parts 0, 2 and 4 of 7 start groups; part 0 starts the bar (and again at 7).
+    const [bar, group, rest] = [peaks[0], peaks[2], peaks[1]];
+    assert.ok(bar > group && group > rest && rest > 0.1, `${rate}: ${peaks}`);
+    assert.deepEqual(peaks.map((x) => (x > bar * 0.9 ? 0 : x > group * 0.9 ? 1 : 2)), [0, 2, 1, 2, 1, 2, 2, 0], `${rate}`);
+  }
+});
