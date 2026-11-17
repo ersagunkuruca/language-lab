@@ -48,6 +48,7 @@ updated; their findings are rows in the backlog.
 | [CLOSURES-INTERFACES-EFFECTS-2026-11-14](reports/CLOSURES-INTERFACES-EFFECTS-2026-11-14.md) | Closures and interfaces, data and effects: one typedef with four readings; keep them apart in the language and use the laws (monomorphisation, closure conversion, defunctionalisation, handler fusion) in the compiler | kept as written |
 | [EXAMPLES-TRIAGE-2026-11-14](reports/EXAMPLES-TRIAGE-2026-11-14.md) | Each example in the editor's picker: made a page, commented, or taken out of the picker, with what only it teaches | kept as written |
 | [RUN-INPUTS-2026-11-17](reports/RUN-INPUTS-2026-11-17.md) | What each command-line example takes (arguments, files, standard input), what Run lets you change, and why the simulations print text | kept as written |
+| [INSTRUMENT-APP-2026-11-17](reports/INSTRUMENT-APP-2026-11-17.md) | A tuner, metronome and looper in Ters: what works today, what is missing, and the plan in stages (L267 to L278, C260 to C262) | kept as written |
 | [GAME-READINESS-2026-11-17](reports/GAME-READINESS-2026-11-17.md) | How well Ters can carry a medium-sized game: CPU entity loops at hand-written C, the GPU only draws a function of the pixel, no game tools; staged rows G1 to G24 | kept as written |
 | [CREDITS.md](language/CREDITS.md) | Every influence, prior work and adaptation, feature by feature | current |
 | [invertible/README.md](../invertible/README.md) | The relation solver the language's arithmetic runs backwards with | current |

@@ -1,5 +1,28 @@
 # Audio: a sound is a function on blocks, the speaker is a world
 
+**Status (2026-11-17).** For the instrument app (tuner, metronome,
+looper; [INSTRUMENT-APP-2026-11-17](../../reports/INSTRUMENT-APP-2026-11-17.md)):
+a block function is now given the rate it plays at, samples a second,
+beside each block, `(List Float64, Float64) -[Sound]-> List Float64`
+(L269: 48000 or 44100 in a browser, whatever AAudio or AVAudioSession
+opened on a phone, the WAV file's in `ters render`); and `Input` has a
+third case, `no input`, for a sound that makes its own (a metronome, a
+synthesizer): its blocks come in silent and no microphone is asked for
+(L268). `ters render` plays such a sound with no WAV file:
+`--seconds s [--rate r]`. A sound that never reads its rate leaves the
+rate's type open; a page's `listen` fixes it, and `ters render` plays it
+through one that passes the rate on as a Float64 (cli/sound.ts
+`rateFixed`). And the sound tells the page (L267): a cell main made is
+the page's and the sound's alike. What the block function writes to one
+reaches the page at most once a frame (the latest value of each), and
+what reads it is drawn again: in a browser the worklet sends them over
+its port (sound-thread.ts, compiled data crossing as its tag and fields,
+`portable`), and a write the page sent isn't sent back; natively the
+cells are one heap already, so frames come while a sound plays and a
+part whose cells the audio thread wrote runs again (c.ts
+`ters_sounding`). The metronome lights the part sounding this way.
+Still to come for the app: stereo (L270).
+
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the
 editor's preview, and the measurements (39× real time compiled). What

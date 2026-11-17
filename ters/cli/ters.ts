@@ -32,7 +32,7 @@
 //   ters merge <base> <ours> <theirs> [path]
 //                                        git's merge driver for program files: id by id, ours
 //                                        written with theirs taken in (SHARING.md §6)
-//   ters render <program> in.wav [-o out.wav] [--block n] [--compiled]
+//   ters render <program> in.wav [-o out.wav] [--block n] [--compiled], or --seconds s [--rate r] without a WAV
 //                                        play a sound over a WAV file (AUDIO.md)
 //
 // A program is a file saved by the editor (Save file), or a folder of side

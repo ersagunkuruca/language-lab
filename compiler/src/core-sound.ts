@@ -26,6 +26,6 @@ export function startCoreSound(tables: TableSpec[], worlds: string[], defs: (R: 
   startSoundOn({
     cells,
     main: (w) => { Object.assign(world, w); return fns[main]() as Value; },
-    play: (f, block) => fromList(coreCall(f, toList(block))) as number[],
+    play: (f, block, rate) => fromList(coreCall(f, toList(block), rate)) as number[],
   }, seed);
 }

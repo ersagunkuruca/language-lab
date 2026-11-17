@@ -69,8 +69,9 @@ test("the pedal: the evaluator and the core IR's JavaScript play the same sample
 // (C137d9). calculus's derivative once ran the evaluator's on every call;
 // its functions now carry their derivatives (I245), so it is quick too.
 test("the pedal solves quickly on the core IR, and calculus's derivative does too", () => {
-  const { p, main } = pedal();
-  const ir = lowerCore(p.code, p.info, p.names, [main]);
+  // Its page, where listen gives the block function its rate's type.
+  const { p, page } = pedal();
+  const ir = lowerCore(p.code, p.info, p.names, [page]);
   assert.equal(solvesSlowly(ir), false);
   // Each gives one answer or none, so each is a call with no list of its
   // answers to choose from, though it's inside a search (C184).
@@ -90,11 +91,11 @@ function counting() {
   const map = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "map")!;
   const main = k.def("main");
   k.define(main, k.thunk(() => k.let("blocks", k.call(CELL_OPS.cell, k.lit(0)), (blocks) =>
-    k.fn(["block"], (block) => k.seq(
+    k.fn(["block", "rate"], (block) => k.seq(
       k.call(CELL_OPS.write, blocks, k.call(B.add, k.call(CELL_OPS.read, blocks), k.lit(1))),
       k.call(map, block, k.fn(["x"], (x) => k.call(B.mul, x, k.call(CELL_OPS.read, blocks)))))))));
   const loud = k.def("loud");
-  k.define(loud, k.thunk(() => k.fn(["block"], (block) => k.seq(k.call(S.print, k.lit("hi")), block))));
+  k.define(loud, k.thunk(() => k.fn(["block", "rate"], (block) => k.seq(k.call(S.print, k.lit("hi")), block))));
   const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
   return { p: { code, info: infer(code, names), names }, main, loud };
 }
@@ -140,6 +141,28 @@ test("ters render: the pedal over a WAV file, written as one; a program whose ma
   const bad = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/wc"), input], { encoding: "utf8" });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /main can't be a sound/);
+  // No WAV file (L268): so many seconds of silence in, at the rate asked.
+  const quiet = join(dir, "quiet.wav");
+  const none = spawnSync(process.execPath, [lab, "render", join(import.meta.dirname, "../examples/pedal"), "--main", "pedal", "--seconds", "0.5", "--rate", "8000", "-o", quiet, "--compiled"], { encoding: "utf8" });
+  assert.equal(none.status, 0, none.stderr);
+  const q = readWav(readFileSync(quiet));
+  assert.equal(q.rate, 8000);
+  assert.equal(q.samples.length, 4000);
+});
+
+// The rate a sound plays at reaches its block function (L269), by the
+// evaluator and compiled alike; one that never reads it plays all the same.
+test("a sound's block function is given the rate it plays at", async () => {
+  const k = new Lang(LIBRARY.code);
+  const map = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "map")!;
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.fn(["block", "rate"], (block, rate) => k.call(map, block, k.fn(["x"], (x) => k.call(B.add, x, rate))))));
+  const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+  const p = { code, info: infer(code, names), names };
+  assert.equal(audioProblem(p.info, main, p.names), null);
+  for (const way of ["evaluator", "core"] as const) {
+    assert.deepEqual([...playBlocks(await soundOf(p, main, way), new Array(4).fill(0), 2, 44100).out], [44100, 44100, 44100, 44100], way);
+  }
 });
 
 // A sound's lists as arrays (C196): stored for `ters render --compiled`,
@@ -153,7 +176,7 @@ test("the pedal stored as a sound keeps its blocks as arrays, and plays what its
   assert.deepEqual(stored.chosen, ["List as array of List"]);
   const block = sine(128, 0.4);
   const [lists, arrays] = [await soundOf(p, pedal, "core"), await soundOf(stored, pedal, "core")];
-  for (let i = 0; i < 3; i++) assert.deepEqual(arrays(block), lists(block));
+  for (let i = 0; i < 3; i++) assert.deepEqual(arrays(block, 48000), lists(block, 48000));
 });
 
 // A page's HTML as its scripts draw it.
@@ -174,7 +197,7 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
   const said: unknown[] = [];
   class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
-  runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder });
+  runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder });
   assert.equal(made.length, 1);
   const node = new made[0]({ processorOptions: { index: 0 } });
   const input = [...Float32Array.from(sine(256, 0.3))], offline = playBlocks(await soundOf(p, main, "core"), input, 128).out;
@@ -194,6 +217,30 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   assert.match(drawn(html), /Clean/);
 });
 
+// What a sound's block function writes to main's cells reaches the page
+// (L267), at most once a frame, the latest value of each: the pedal's
+// levels, which its block function follows. A write the page sent isn't
+// sent back.
+test("a sound's writes to main's cells are sent to the page once a frame", async () => {
+  const { p, page } = pedal();
+  const source = await coreSoundWorklet(lowerCore(p.code, p.info, p.names, [page]), p.names[page]);
+  const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+  const said: { writes?: { cell: number; value: unknown }[] }[] = [];
+  class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: never) => said.push(m) }; }
+  runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder });
+  const node = new made[0]({ processorOptions: { index: 0 } });
+  node.port.onmessage!({ data: { cell: 0, value: 64 } });
+  const input = Float32Array.from(sine(128 * 14, 0.3));
+  for (let b = 0; b < 14; b++) node.process([[input.slice(b * 128, b * 128 + 128)]], [[new Float32Array(128)]]);
+  // 48000 / 60 = 800 samples: sent after the 7th block and the 14th.
+  assert.equal(said.length, 2);
+  const cells = [...said[0].writes!.map((w) => w.cell)].sort();
+  // The compressor's level and the two loudnesses, all main made; not the
+  // drive, which the page wrote.
+  assert.deepEqual(cells, [2, 3, 4]);
+  for (const w of said[0].writes!) assert.ok(typeof w.value === "number" && w.value > 0, JSON.stringify(w));
+});
+
 // The core IR's, made in a browser (C137d6): the prebuilt runtimes and the
 // printed program taking its helpers from them, for the editor's "Save
 // page". Its worklet plays what the bundled one plays; its page draws the
@@ -203,7 +250,7 @@ test("a core IR page and worklet made without a bundler play and draw what the b
   const play = (source: string) => {
     const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
     class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
-    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder });
+    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder });
     const node = new made[0]({ processorOptions: { index: 0 } });
     const out = [new Float32Array(128)];
     node.process([[Float32Array.from(sine(128, 0.3))]], [out]);
@@ -239,7 +286,7 @@ test("a core IR page with sound and hosts/js.js: its audio thread asks the host 
   const source = await coreSoundWorklet(ir, names[powered], { file: hosts, ops: hostOpsOf(code, names) });
   const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
   class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
-  const scope: Record<string, unknown> = { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder };
+  const scope: Record<string, unknown> = { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder };
   runInNewContext(source, scope);
   const node = new made[0]({ processorOptions: { index: 0 } });
   const input = Float32Array.from(sine(128, 0.3)), out = [new Float32Array(128)];
@@ -272,7 +319,7 @@ test("a page with sound may read the clock and draw random numbers in main: the 
     const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
     const said: unknown[] = [];
     class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: unknown) => said.push(m) }; }
-    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, console, TextEncoder, TextDecoder });
+    runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder });
     return { node: new made[0]({ processorOptions }), said };
   };
   const { node, said } = start({ index: 0, answers });
@@ -315,4 +362,31 @@ test("a page with sound copies its recording beside it, and carries its program 
   assert.match(r.stderr, /strum\.wav beside it/);
   assert.deepEqual(readFileSync(join(dir, "strum.wav")), readFileSync(join(import.meta.dirname, "../examples/pedal/strum.wav")));
   assert.match(readFileSync(out, "utf8"), /lab-sound/);
+});
+
+// The metronome (L275): a sound with no input. Its clicks land on the
+// samples its tempo puts them at, at any rate, the evaluator and compiled
+// alike: 2+2+3 at 120 pulses a minute is a click each half second, the
+// bar's first loudest and each group's first next.
+test("the metronome clicks on its samples at any rate, the bar and group starts accented", async () => {
+  const m = loadProgram(join(import.meta.dirname, "../examples/metronome"));
+  const p = { code: m.code, info: infer(m.code, m.pres.names, undefined, m.options), names: m.pres.names };
+  const main = m.named("metronome");
+  assert.equal(audioProblem(p.info, main, p.names), null);
+  for (const rate of [44100, 48000]) {
+    const silence = new Float64Array(rate * 4);
+    const ways = await Promise.all((["evaluator", "core"] as const).map(async (way) => playBlocks(await soundOf(p, main, way), way === "core" ? silence : silence.subarray(0, rate), 128, rate).out));
+    ways[0].forEach((x, i) => assert.ok(close(x, ways[1][i]), `${rate}: sample ${i}: ${x} against ${ways[1][i]}`));
+    const out = ways[1], peaks: number[] = [];
+    for (let k = 0; k < 8; k++) {
+      const at = Math.round((k * rate) / 2);
+      // Silent just before each click, sounding just after.
+      if (at > 0) assert.ok(Math.abs(out[at - 1]) < 1e-9, `${rate}: before click ${k}`);
+      peaks.push(peak(out.subarray(at, at + rate / 20)));
+    }
+    // Parts 0, 2 and 4 of 7 start groups; part 0 starts the bar (and again at 7).
+    const [bar, group, rest] = [peaks[0], peaks[2], peaks[1]];
+    assert.ok(bar > group && group > rest && rest > 0.1, `${rate}: ${peaks}`);
+    assert.deepEqual(peaks.map((x) => (x > bar * 0.9 ? 0 : x > group * 0.9 ? 1 : 2)), [0, 2, 1, 2, 1, 2, 2, 0], `${rate}`);
+  }
 });

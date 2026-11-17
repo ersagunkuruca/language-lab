@@ -1533,8 +1533,8 @@ static int u_ask(void *c, const char *what, size_t n) { (void)c; printf("ask %.*
 // screen's audio thread would, the microphone a sine at 441 Hz of 0.5.
 static double u_sound(void *c, int n, int on, int mic, const char *a, size_t an) {
   (void)c;
-  printf("sound %d %s %s\n", n, on ? "on" : "off", mic ? "microphone" : a);
-  if (!on || mic) return 48000;
+  printf("sound %d %s %s\n", n, on ? "on" : "off", mic ? "microphone" : a ? a : "no input");
+  if (!on || mic || !a) return 48000;
   char *path = tl_dup(a, an); FILE *f = fopen(path, "rb"); free(path);
   if (!f) { ters_sound_say(n, "no such recording"); return 0; }
   unsigned char *b = 0; size_t len = 0, got; unsigned char chunk[4096];

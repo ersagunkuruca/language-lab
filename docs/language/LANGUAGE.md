@@ -1544,9 +1544,9 @@ type Html      = element(tag: Text, attributes: List Attribute, children: List H
                | part(view: () -[View]-> Html)
 type Attribute = property(name: Text, value: () -[View]-> Text)
                | on(event: Text, then: (Event) -[Handler]-> Unit)
-               | listen(to: Input, play: (List Float64) -[Sound]-> List Float64)
+               | listen(to: Input, play: (List Float64, Float64) -[Sound]-> List Float64)
 type Event     = event(value: Text, key: Text)
-type Input     = microphone | recording(address: Text)
+type Input     = microphone | recording(address: Text) | no input
 ```
 
 `View`, `Handler` and `Sound` are named rows in std (HOSTS.md, L58): what
@@ -1558,9 +1558,15 @@ isn't shown as anything but that. Koka's effect aliases are the prior art.
 
 `listen` plays a sound (AUDIO.md) when its element is clicked, and stops
 it when it's clicked again: the input, a block of 128 samples at a time,
-through `play`, to the speakers. `play` runs on the audio thread, where
+through `play`, to the speakers. `play` is given each block and the rate
+the samples come at (samples a second: 48000 or 44100 in a browser,
+whatever a phone opened), so a pitch or a click lands right on any
+device. With `no input` the blocks come in silent and no microphone is
+asked for: a metronome or a synthesizer. `play` runs on the audio thread, where
 main runs once more to make it; cells main made are the same cells there,
-so a handler's write to one (a knob) reaches the sound as it plays. main
+so a handler's write to one (a knob) reaches the sound as it plays, and
+what the block function writes to one (a level, the beat it is on)
+reaches the page at the next frame, which draws what reads it again. main
 there is answered what it was on the page: the same random numbers and
 clock readings, in order, so it makes the same cells.
 

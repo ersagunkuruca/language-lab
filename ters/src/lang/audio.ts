@@ -1,5 +1,5 @@
-// Sounds (AUDIO.md): a function from a block of samples to the block to
-// play, made by a function that takes nothing. What checks a sound's type,
+// Sounds (AUDIO.md): a function from a block of samples, and the rate they
+// come at, to the block to play, made by a function that takes nothing. What checks a sound's type,
 // and what plays one over samples block by block, for `ters render` and the
 // browser's worklet alike.
 
@@ -14,13 +14,17 @@ import { NUMBER, type Type } from "./types.ts";
 // The browser's render quantum (Web Audio API, AudioWorklet): the block a
 // sound gets, unless `ters render` is told another size.
 export const BLOCK = 128;
+// The rate a sound plays at when nothing says otherwise: `ters render`
+// with no input file.
+export const RATE = 48000;
 
 // Why `def` can't be a sound, or null: it takes nothing, may only make
-// cells, and returns a function from a List Float64 to a List Float64 whose
-// effects are a sound's block function's.
+// cells, and returns a function from a List Float64 and a Float64 (the
+// rate, samples a second) to a List Float64 whose effects are a sound's
+// block function's.
 export function audioProblem(info: Info, def: Id, names: Names = {}): string | null {
   const t = info.typeOf.get(def);
-  const say = "a sound takes nothing and returns its block function, from a List Float64 to a List Float64";
+  const say = "a sound takes nothing and returns its block function, from a List Float64 and the rate (a Float64) to a List Float64";
   if (!t || t.t !== "fn" || t.params.length) return say;
   const extra = (row: Type & { t: "fn" }, allowed: readonly Id[]) => row.eff.effs.filter((e) => !allowed.includes(e)).map((e) => names[e] ?? e);
   const made = extra(t, AUDIO_MAKER);
@@ -34,25 +38,38 @@ export function audioProblem(info: Info, def: Id, names: Names = {}): string | n
     const a = info.subst.zonk(z.args[0]);
     return a.t === "var" || (a.t === "con" && a.id === NUMBER);
   };
-  if (f.t !== "fn" || f.params.length !== 1 || !numbers(f.params[0]) || !numbers(f.ret)) return say;
+  const rate = (x: Type) => { const z = info.subst.zonk(x); return z.t === "var" || (z.t === "con" && z.id === NUMBER); };
+  if (f.t !== "fn" || f.params.length !== 2 || !numbers(f.params[0]) || !rate(f.params[1]) || !numbers(f.ret)) return say;
   const played = extra(f, AUDIO_BLOCK);
   if (played.length) return `a sound's block function runs on the audio thread, so it can't have ${played.join(", ")}`;
   return null;
+}
+
+// What a sound's block function leaves open in its type: its samples' (a
+// metronome never reads its input), its rate's (a pedal never reads the
+// rate, L269), or neither. A page's `listen` fixes both to Float64; where
+// the sound itself is what runs (`ters render`), nothing does.
+export function soundOpen(info: Info, def: Id): { samples: boolean; rate: boolean } {
+  const t = info.typeOf.get(def);
+  const f = t?.t === "fn" ? info.subst.zonk(t.ret) : undefined;
+  if (f?.t !== "fn" || f.params.length !== 2) return { samples: false, rate: false };
+  const b = info.subst.zonk(f.params[0]), item = b.t === "con" && b.args.length === 1 ? info.subst.zonk(b.args[0]) : b;
+  return { samples: item.t === "var", rate: info.subst.zonk(f.params[1]).t === "var" };
 }
 
 // What playing went through: blocks that played silence instead, and why
 // (the first of each reason is enough to say).
 export interface Played { out: Float64Array; silent: { block: number; why: string }[] }
 
-// `play` over `input`, `size` samples at a time; the last block is padded
-// with silence and cut back. A block that throws or gives the wrong number
-// of samples plays silence.
-export function playBlocks(play: (block: number[]) => number[], input: ArrayLike<number>, size = BLOCK): Played {
+// `play` over `input`, `size` samples at a time, at `rate` samples a
+// second; the last block is padded with silence and cut back. A block that
+// throws or gives the wrong number of samples plays silence.
+export function playBlocks(play: (block: number[], rate: number) => number[], input: ArrayLike<number>, size = BLOCK, rate = RATE): Played {
   const out = new Float64Array(input.length), silent: Played["silent"] = [];
   for (let at = 0, b = 0; at < input.length; at += size, b++) {
     const block = Array.from({ length: size }, (_, i) => (at + i < input.length ? input[at + i] : 0));
     let got: number[];
-    try { got = play(block); } catch (e) { silent.push({ block: b, why: (e as Error).message }); continue; }
+    try { got = play(block, rate); } catch (e) { silent.push({ block: b, why: (e as Error).message }); continue; }
     if (got.length !== size) { silent.push({ block: b, why: `it gave ${got.length} samples for ${size}` }); continue; }
     for (let i = 0; i < size && at + i < input.length; i++) out[at + i] = got[i];
   }

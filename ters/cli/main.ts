@@ -38,7 +38,7 @@ import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
-import { audioProblem, BLOCK, playBlocks } from "../src/lang/audio.ts";
+import { audioProblem, BLOCK, playBlocks, RATE } from "../src/lang/audio.ts";
 import { bundle } from "../src/io.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
@@ -140,7 +140,8 @@ usage:
                                         general as the old, and keep it only if its tests still pass (§2);
                                         its names stay its own unless --take-names takes the author's (§5)
   ters render <program> in.wav [-o out.wav] [--block n] [--compiled]
-                                        play the sound main makes over a WAV file, n samples a block (default 128)
+                                        play the sound main makes over a WAV file, n samples a block (default 128);
+                                        without one, --seconds s [--rate r] plays it over s seconds of silence
 options:
   --main <name>    the entry point (default: main)
   --as-defined     ignore the program's representations and run the definitions as written
@@ -855,13 +856,25 @@ switch (command) {
     if (problem) fail(`${mainName} can't be a sound: ${problem}`);
     const option = (flag: string) => { const at = rest.indexOf(flag); if (at < 0) return undefined; const v = rest[at + 1] ?? fail(`${flag} needs a value`); rest.splice(at, 2); return v; };
     const out = option("-o"), size = Number(option("--block") ?? BLOCK), compiled = rest.includes("--compiled");
-    const input = rest.find((a) => !a.startsWith("--")) ?? fail("render needs a WAV file to play the sound over");
+    // With no WAV file, so many seconds of silence in (--seconds, at
+    // --rate): a sound with no input, such as a metronome (L268).
+    const seconds = option("--seconds"), rate = option("--rate");
+    const input = rest.find((a) => !a.startsWith("--"));
     if (!Number.isInteger(size) || size < 2 || size % 2) fail("--block takes an even number of samples, 2 or more");
-    let wav;
-    try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
+    let wav: { rate: number; samples: ArrayLike<number> };
+    if (input === undefined) {
+      if (seconds === undefined) fail("render needs a WAV file to play the sound over, or --seconds for silence");
+      const r = Number(rate ?? RATE), n = Number(seconds) * r;
+      if (!(r > 0) || !Number.isInteger(r)) fail("--rate takes a whole number of samples a second");
+      if (!(n >= 0)) fail("--seconds takes a number of seconds");
+      wav = { rate: r, samples: new Float64Array(Math.round(n)) };
+    } else {
+      if (seconds !== undefined || rate !== undefined) fail("--seconds and --rate are for a render without a WAV file");
+      try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
+    }
     // --compiled: the core IR's JavaScript (C137d3).
-    const played = playBlocks(await soundOf(p, def, compiled ? "core" : "evaluator"), wav.samples, size);
-    const to = out ?? input.replace(/(\.wav)?$/i, ".out.wav");
+    const played = playBlocks(await soundOf(p, def, compiled ? "core" : "evaluator"), wav.samples, size, wav.rate);
+    const to = out ?? (input ?? mainName).replace(/(\.wav)?$/i, ".out.wav");
     writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
     if (played.silent.length) process.stderr.write(`ters: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);
     process.stderr.write(`ters: wrote ${to}, ${(wav.samples.length / wav.rate).toFixed(2)} s at ${wav.rate} Hz\n`);

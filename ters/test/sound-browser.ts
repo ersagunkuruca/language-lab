@@ -1,10 +1,13 @@
-// A page with sound in a real browser (AUDIO.md, A2): examples/pedal built
+// Pages with sound in a real browser (AUDIO.md, A2): examples/pedal built
 // as `ters build-web` builds it, served, and played in Chromium from its
 // fake microphone (a beep) and from its recording. What reaches the
 // speakers is tapped with an analyser: it must be sound, as loud as what
 // came in (loudness matched) but driven (peaks squashed), and the Clean
 // switch must cross to the audio thread (it gives back what came in). A
-// microphone that won't open must say why on the page.
+// microphone that won't open must say why on the page. Then
+// examples/metronome, a sound with no input (L268): it clicks at its
+// tempo, a change of tempo crosses to the audio thread, and the pulses it
+// counts cross back to the page (L267).
 // Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
@@ -21,8 +24,10 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "sound-"));
-const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, "../examples/pedal"), "-o", join(dir, "pedal.html")], { encoding: "utf8" });
-if (built.status !== 0) throw new Error(built.stderr);
+for (const page of ["pedal", "metronome"]) {
+  const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, `../examples/${page}`), "-o", join(dir, `${page}.html`)], { encoding: "utf8" });
+  if (built.status !== 0) throw new Error(built.stderr);
+}
 const server = createServer((q, r) => {
   try { r.end(readFileSync(join(dir, (q.url ?? "/").split("?")[0]))); } catch { r.statusCode = 404; r.end(); }
 }).listen(0, "127.0.0.1");
@@ -72,7 +77,8 @@ try {
     AudioNode.prototype.connect = function (to, ...rest) {
       const tap = () => { const a = this.context.createAnalyser(); a.fftSize = 2048; connect.call(this, a); return a; };
       if (to instanceof AudioWorkletNode) window.taps.push({ into: tap() });
-      if (to === this.context.destination) window.taps[window.taps.length - 1].out = tap();
+      // A sound with no input has no tap on what comes in.
+      if (to === this.context.destination) { const last = window.taps[window.taps.length - 1]; if (last && !last.out) last.out = tap(); else window.taps.push({ out: tap() }); }
       return connect.call(this, to, ...rest);
     };
   })()` });
@@ -134,6 +140,46 @@ try {
   check("a microphone that won't open says why on the page", /another program may be using it/.test(said), { said });
   // It says so in the console too, which is expected here.
   for (let i = errors.length - 1; i >= 0; i--) if (errors[i].startsWith("sound: the microphone couldn't be opened")) errors.splice(i, 1);
+
+  // The metronome: no input, so no microphone is asked for. Its clicks,
+  // counted over three seconds: 6 at 120 pulses a minute, 12 at 240.
+  await send("Page.navigate", { url: `http://127.0.0.1:${port}/metronome.html` });
+  for (let i = 0; i < 100 && !(await run<boolean>(`!!document.querySelector("button.start") && window.taps.length === 0`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  await run(`navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error("a sound with no input asked for the microphone"))`);
+  await run(`document.querySelector("button.start").click()`);
+  for (let i = 0; i < 100 && !(await run<boolean>(`document.querySelector("button.start").dataset.playing === "true"`)); i++) await new Promise((r) => setTimeout(r, 100));
+  const clicks = () => run<number>(`(async () => {
+    const a = window.taps[0].out, buf = new Float32Array(a.fftSize);
+    let n = 0, was = false;
+    const end = performance.now() + 3000;
+    while (performance.now() < end) {
+      await new Promise((r) => setTimeout(r, 10));
+      a.getFloatTimeDomainData(buf);
+      let peak = 0; for (const x of buf) peak = Math.max(peak, Math.abs(x));
+      if (peak > 0.05 && !was) n++;
+      was = peak > 0.05;
+    }
+    return n;
+  })()`);
+  await run(`window.taps[0].out.fftSize = 512`);
+  const at120 = await clicks();
+  check("the metronome clicks at its tempo, with no input", Math.abs(at120 - 6) <= 1, { at120 });
+  await run(`(() => { const r = document.querySelector("input[type=range]"); r.value = "240"; r.dispatchEvent(new Event("input")); })()`);
+  await new Promise((r) => setTimeout(r, 200));
+  const at240 = await clicks();
+  check("a change of tempo reaches the audio thread", Math.abs(at240 - 12) <= 1, { at240 });
+  // The pulses its block function counts come back to the page (L267),
+  // which lights the part sounding: it moves on as it plays.
+  const lit = await run<number[]>(`(async () => {
+    const seen = [];
+    for (let i = 0; i < 15; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const row = document.querySelector(".pattern g");
+      seen.push([...row.querySelectorAll("circle")].findIndex((c) => c.classList.contains("now")));
+    }
+    return seen;
+  })()`);
+  check("the page lights the part sounding, from the audio thread", new Set(lit.filter((i) => i >= 0)).size >= 3, { lit });
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

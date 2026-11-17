@@ -541,7 +541,8 @@ export const HTML_V: typeof Std.HTML_V = {
   "paint": "std.attribute.paint",
   "event": "std.event.event",
   "microphone": "std.input.microphone",
-  "recording": "std.input.recording"
+  "recording": "std.input.recording",
+  "noInput": "std.input.no input"
 };
 export const INPUT: typeof Std.INPUT = "std.input";
 export const INSTANT: typeof Std.INSTANT = "std.instant";
@@ -973,6 +974,7 @@ export const stdNames: typeof Std.stdNames = {
   "std.input.microphone": "microphone",
   "std.input.recording.address": "address",
   "std.input.recording": "recording",
+  "std.input.no input": "no input",
   "std.input": "Input",
   "std.attribute.property.name": "name",
   "std.attribute.property.value": "value",
