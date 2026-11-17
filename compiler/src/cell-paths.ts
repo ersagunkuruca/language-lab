@@ -43,6 +43,10 @@ const READ = `host:${CELL_OPS.read}`, FORMULA = `host:${CELL_OPS.formula}`;
 // work stays bounded: steps deep, places per read, functions and inputs
 // worked out per round.
 const DEEP = 8, PLACES = 16, CALLS = 20000;
+// Calls worked out inside one another, each with inputs of its own: past
+// this many it gives up too, before the stack does (pond-page needs 649,
+// which overflowed it).
+const NESTED = 300;
 
 const union = (a: Src[], b: Src[]) => [...a, ...b.filter((s) => !a.some((t) => t.o === s.o && t.at === s.at))];
 const join = (a: Abs, b: Abs): Abs => (a === NONE ? b : b === NONE ? a : { srcs: union(a.srcs, b.srcs), clos: [...a.clos, ...b.clos.filter((c) => !a.clos.includes(c))], held: union(a.held, b.held), ...(a.bx || b.bx ? { bx: [...new Set([...(a.bx ?? []), ...(b.bx ?? [])])] } : {}) });
@@ -110,17 +114,18 @@ export function trackReads(ir: CoreIR): number {
 
   // What a call of fn with these inputs gives, as last worked out.
   let results = new Map<string, Abs>(), next = new Map<string, Abs>();
-  let calls = 0;
+  let calls = 0, nested = 0;
   const call = (fn: number, args: Abs[]): Abs => {
     const key = `${fn}#${args.map((a) => sig(a)).join(";")}`;
     const done = next.get(key);
     if (done) return done;
     if (++calls > CALLS) throw new GiveUp();
     next.set(key, results.get(key) ?? NONE);
+    if (++nested > NESTED) throw new GiveUp();
     const outer = ctx;
     ctx = key;
     let r: Abs;
-    try { r = body(fn, args); } finally { ctx = outer; }
+    try { r = body(fn, args); } finally { ctx = outer; nested--; }
     if (sig(r) !== sig(results.get(key) ?? NONE)) changed = true;
     next.set(key, r);
     return r;
