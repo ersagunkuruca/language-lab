@@ -56,6 +56,28 @@ export interface OneHolder { ok: boolean; problems: string[] }
 // owned-records.ts). Its other fields are read first, as arguments are.
 // `rebuilt` gets the binders so changed.
 const reachedKept = new WeakMap<Code, Map<Id, Set<Id>>>();
+// A definition's nodes, kept per program: each type asked walks them.
+const nodesKept = new WeakMap<Code, Map<Id, Id[]>>();
+function nodesOf(code: Code, d: Id): Id[] {
+  let m = nodesKept.get(code);
+  if (!m) nodesKept.set(code, (m = new Map()));
+  let r = m.get(d);
+  if (!r) m.set(d, (r = subtree(code, d)));
+  return r;
+}
+// The definitions a definition names, kept per program.
+const namesKept = new WeakMap<Code, Map<Id, Set<Id>>>();
+function namesIn(code: Code, d: Id): Set<Id> {
+  let m = namesKept.get(code);
+  if (!m) namesKept.set(code, (m = new Map()));
+  let r = m.get(d);
+  if (!r) {
+    r = new Set();
+    for (const id of nodesOf(code, d)) { const n = code.nodes[id]; if (n.kind === "ref" && code.nodes[n.target]?.kind === "def") r.add(n.target); }
+    m.set(d, r);
+  }
+  return r;
+}
 export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>): OneHolder {
   const nodes = code.nodes;
   const nm = (id: Id) => names[id] ?? id;
@@ -102,7 +124,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     const reach = (d: Id) => {
       if (found.has(d) || nodes[d]?.kind !== "def") return;
       found.add(d);
-      for (const id of subtree(code, d)) { const n = nodes[id]; if (n.kind === "ref" && nodes[n.target]?.kind === "def") reach(n.target); }
+      for (const t of namesIn(code, d)) reach(t);
     };
     reach(entry);
     byEntry.set(entry, reached);
@@ -324,7 +346,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     // kept may capture nothing followed. What it does is forgotten after:
     // it may run any number of times.
     const closure = (l: NodeOf<"lambda">, keeps: boolean, st: Walk) => {
-      const inside = new Set(subtree(code, l.id));
+      const inside = new Set(nodesOf(code, l.id));
       const captured = new Set<string>();
       for (const id of inside) { const x = nodes[id]; if (x.kind === "ref" && nodes[x.target]?.kind === "binder" && isTracked(x.target) && !inside.has(x.target) && counts(id)) captured.add(rootOf(pathOf(x.target))); }
       if (keeps && captured.size) { report(`a closure that is kept captures ${[...captured].map(nm).join(", ")}`, [...captured][0]); return; }
@@ -336,10 +358,18 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
 
   // Parameter modes, to a fixed point: each definition's body walked with
   // its parameters followed, whatever their types.
+  // A definition is walked again only when the mode of one it names
+  // changed: its walk reads no other (machine: six rounds of 176
+  // definitions, for each of 8 types, L266).
   const defsReached = [...reached].filter((d) => lambdaOf(d) && !jobs.has(d));
-  for (let round = 0; round < 30; round++) {
+  const callers = new Map<Id, Id[]>();
+  for (const d of defsReached) for (const t of namesIn(code, d)) { let cs = callers.get(t); if (!cs) callers.set(t, (cs = [])); cs.push(d); }
+  let dirty = new Set(defsReached);
+  for (let round = 0; round < 30 && dirty.size; round++) {
     let changed = false;
+    const next = new Set<Id>();
     for (const d of defsReached) {
+      if (!dirty.has(d)) continue;
       const lam = lambdaOf(d)!, params = new Set(lam.params);
       const got = new Map<string, Mode>(lam.params.map((x) => [x, { share: false, uses: [] }]));
       const run = walker((b) => params.has(b), false, (_msg, root) => { if (params.has(root)) got.get(root)!.share = true; }, (p, consume) => {
@@ -350,15 +380,16 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
         if (!m.uses.some((u) => u.path === path && u.consume === consume)) m.uses.push({ path, consume });
       });
       run(lam.body);
-      const next = lam.params.map((x) => got.get(x)!);
-      if (JSON.stringify(next) !== JSON.stringify(modes.get(d))) { modes.set(d, next); changed = true; }
+      const now = lam.params.map((x) => got.get(x)!);
+      if (JSON.stringify(now) !== JSON.stringify(modes.get(d))) { modes.set(d, now); changed = true; for (const c of callers.get(d) ?? []) next.add(c); }
     }
     if (!changed) break;
+    dirty = next;
   }
 
   // A map whose keys or values hold one of these types would hand out
   // parts of itself: not followed, so refused.
-  for (const d of reached) for (const id of subtree(code, d)) {
+  for (const d of reached) for (const id of nodesOf(code, d)) {
     const t = info.typeOf.get(id), z = t && info.subst.zonk(t);
     if (z?.t === "con" && types.has(z.id) && z.args.some(mentions)) { problems.push(`${nm(d)} has a ${nm(z.id)} that holds another`); break; }
   }
@@ -377,7 +408,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
   for (const d of reached) {
     const def = nodes[d] as NodeOf<"def">;
     if (!def.body || jobs.has(d)) continue;
-    if (!subtree(code, d).some((id) => nodes[id].kind === "binder" && linearBinder(id))) continue;
+    if (!nodesOf(code, d).some((id) => nodes[id].kind === "binder" && linearBinder(id))) continue;
     const t = info.typeOf.get(d), z = t && info.subst.zonk(t);
     if (z?.t === "fn" && info.subst.resolveRow(z.eff).effs.includes(CHOICE)) { problems.push(`${nm(d)} has Choice and holds a ${[...types].map(nm).join(" or ")}`); continue; }
     const lam = lambdaOf(d);
