@@ -22,6 +22,12 @@ any form a game needs, and the editor has no tools for game data.
   loop in C at `-O2`; herd on four cores is within 1.1x of hand-written C
   with threads. What C still has over us there is SIMD and Float32 (about
   1.7x on drift), not layout.
+- **A whole simulation of that shape is not.** pond (round 13: fish in a
+  Pool, a grid of food, herons, a parallel plan each tick) is the closest
+  thing we have to a game's update, and natively it is 4x the
+  hand-written C on one core and 6x to 7x on four. Each loop alone is
+  fast; what the game does between the loops (lookups by key, small
+  records made and dropped, the grid read by key) is where it goes.
 - **Whole programs are 2x to 4x the ideal, with cliffs.** The bigger-program
   rounds settle at 2.4x to 3x the hand-written program (round 19, scan),
   but a representation chosen wrong is 10x to 150x until a row fixes it
@@ -71,6 +77,7 @@ This container, 4 cores, no GPU. `ters native` as built on main
 | | | C `-O3 -march=native` (SIMD) 0.13-0.14 s | 1.7-2.1x |
 | | | same, Float32 columns 0.11-0.13 s | about 2x |
 | herd, 200 ticks, ~2,000 animals, 4 cores | native 0.34-0.37 s | C with threads (herd.ideal.c `-DTHREADS`) 0.32-0.33 s | 1.05-1.1x |
+| pond (round 13, 105 defs), 300 ticks, 400 fish at the start | native 0.60 s (1 thread), 0.71 s (4) | C 0.16 s, with threads 0.09-0.11 s | 3.8x / 6.6-7.7x |
 | scan (round 19, 146 defs), whole program | native 2.4x, JS 2.9x | the ideal | |
 | `ters native` of drift / herd (compile + cc) | 6.3 s / 5.0 s | | |
 
@@ -195,7 +202,8 @@ Which lane takes each row is a suggestion; the L lane is mid-redesign.
 6. **Tools** (G21-G24): scene view, inspector, data tables, hot reload.
 
 The first stage needs no new target and mostly tests what exists, so it is
-the cheap way to find out if the CPU numbers above hold in a real game.
+the cheap way to find out where the gap between drift (1x) and pond (4x
+to 7x) comes from in a real game.
 Stages 2 and 3 are the big ones: each is a design note first.
 
 ## Credits to carry
