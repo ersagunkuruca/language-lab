@@ -607,7 +607,7 @@ export { reachedFrom, reachedWithShows };
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
 // `dataKeys`: a table's key may be data (C243, C's tables only).
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -625,7 +625,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
@@ -642,22 +642,23 @@ export function vouched(code: Code, info: Info, names: Names): Info {
   return again;
 }
 
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
-  // Where each stop is lowered from (C143): the node being lowered, and
-  // the sites met so far, one a node.
-  let here: { node: Id; def: Id } | null = null;
-  const sites: { node: Id; def: Id; name?: string }[] = [], siteAt = new Map<Id, number>();
-  stopSite = () => {
-    if (!here) return -1;
-    let i = siteAt.get(here.node);
-    if (i === undefined) { i = sites.push({ ...here, ...(names[here.def] ? { name: names[here.def] } : {}) }) - 1; siteAt.set(here.node, i); }
-    return i;
-  };
-  const asGiven = info;
+// The program as every lowering of these roots starts from (I315): the
+// GPU's and WebAssembly and C's answers in Build targets took the same
+// steps twice (machine: 2.5 s of each 2.6). Kept per code, check and names,
+// for the same roots and host.
+const preparedKept = new WeakMap<Code, WeakMap<Info, { names: Names; key: string; out: { code: Code; info: Info; names: Names } }[]>>();
+function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boolean): { code: Code; info: Info; names: Names } {
+  const key = `${host}:${roots.join(",")}`;
+  let byInfo = preparedKept.get(code);
+  if (!byInfo) preparedKept.set(code, (byInfo = new WeakMap()));
+  const kept = byInfo.get(info) ?? [];
+  const hit = kept.find((k) => k.names === names && k.key === key);
+  if (hit) return hit.out;
+  const given = { code, info, names };
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // Case and graphemes with no host to ask run the cases module (L214e5).
-  if (!opts.host) ({ code, info, names } = tableText(code, info, names, roots));
+  if (!host) ({ code, info, names } = tableText(code, info, names, roots));
   // A named handler handles a copy of its effect of its own (L213b).
   ({ code, info, names } = unnameHandlers(code, info, names));
   // The generic + resolved to each type's own operation first
@@ -681,6 +682,26 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // does (C67): the editor's picture of the ray marcher, with its PGA
   // motor, was checked over the whole library each time (C90).
   code = reachedWithShows(code, roots, info);
+  const out = { code, info, names };
+  byInfo.set(given.info, [...kept.slice(-3), { names: given.names, key, out }]);
+  return out;
+}
+
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+  // Where each stop is lowered from (C143): the node being lowered, and
+  // the sites met so far, one a node.
+  let here: { node: Id; def: Id } | null = null;
+  const sites: { node: Id; def: Id; name?: string }[] = [], siteAt = new Map<Id, number>();
+  stopSite = () => {
+    if (!here) return -1;
+    let i = siteAt.get(here.node);
+    if (i === undefined) { i = sites.push({ ...here, ...(names[here.def] ? { name: names[here.def] } : {}) }) - 1; siteAt.set(here.node, i); }
+    return i;
+  };
+  const asGiven = info;
+  // The steps every lowering of these roots takes alike, done once for
+  // both of Build targets' answers (I315).
+  ({ code, info, names } = prepared(code, info, names, roots, !!opts.host));
   if (opts.data) opts = { ...opts, records: true };
   // A shader's records profile has function values too (C225): closures,
   // made records by defunc.ts once lowered.
@@ -689,8 +710,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Pure calls with every input written down, worked out now where their
   // answer is small next to the work (bake.ts, C255): kept only if the
   // program still checks. Not in a shader, whose Float32 would round
-  // differently.
-  if (!opts.shader && !envSet("NO_BAKE")) {
+  // differently, nor for Build targets' answer (`bake: false`, I315): it
+  // only makes more lower.
+  if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) {
     const b = bakeCalls(code, info, names);
     if (b.baked.length) {
       const checked = infer(b.code, names, undefined, { units: false });
