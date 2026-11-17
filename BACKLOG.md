@@ -103,6 +103,14 @@ New targets and speed rank below every language item (Ersagun,
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 
+### Instrument app ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C260 | Latency figures from the platform, readable by a page: the browser's output latency and the input track's, AAudio's and AVAudioSession's; and an app's sound kept playing with the screen off | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| C261 | Minutes of audio in a cell: a loop buffer (48 000 samples a second, several tracks) written a block at a time in place, never copied per block, samples stored as Float32 where that is all they need. Measure first (five minutes of overdub, no dropout), then fix | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| C262 | Bigger-program round on the instrument app: FFT, YIN and the looper's buffer compiled against hand-written JS and C; gaps to GAPS.md | Ersagun 2026-11-17 | P3 | M | ⏸ until Ersagun says go |
+
 ### Speed of compiled code
 
 | id | item | source | pri | size | status |
@@ -171,6 +179,25 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+
+### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
+
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Held until he decides on the assessment. Stage 0 is L267 to L271 with C260 and C261; then the tuner (L272 to L274), the metronome (L275), the looper (L276), and further (L277, L278).
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L267 | A sound tells the page: something the block function writes on the audio thread that the page reads (the latest value, at most once a frame), for a tuner's reading, a loop's playhead, levels. Today cell writes go only page to audio (AUDIO.md). Design in AUDIO.md first, then the browser worklet and the native audio threads | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| L268 | A sound with no input: `Input` gets a case for none, so a metronome or a synthesizer plays without asking for the microphone | Ersagun 2026-11-17 | P2 | S | ⏸ until Ersagun says go |
+| L269 | The sample rate known to a sound (44.1 or 48 kHz, or whatever the device runs at), so pitches and click times are right on every device; `ters render` tests at two rates | Ersagun 2026-11-17 | P2 | S | ⏸ until Ersagun says go |
+| L270 | Stereo: `listen` with a function on a pair of blocks (AUDIO.md "Stereo? Later") | Ersagun 2026-11-17 | P3 | M | ⏸ until Ersagun says go |
+| L271 | Keeping a recording: a page saves a WAV as a file the person keeps (a download in the browser, the share sheet in an app) and opens one; browser files are localStorage today, too small for audio | Ersagun 2026-11-17 | P3 | M | ⏸ until Ersagun says go |
+| L272 | A signals module: FFT on arrays of Float64 (real and imaginary parts as two columns), Hann window, autocorrelation and cross-correlation by FFT, peaks with parabolic interpolation; credited (Cooley and Tukey) | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| L273 | A tunings module: a tuning is a reference pitch and steps over a period: n-EDO (12, 24, 53, any n), just intonation as Rationals, Scala .scl files read (prior art: Manuel Op de Coul's format); nearest step, cents off, step names per system (53-TET's commas, Arel–Ezgi–Uzdilek); Hz and cents as named units | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| L274 | Tuner example (monophonic): YIN or the McLeod pitch method over the microphone (adaptation, credited on the page), needle and strobe in SVG, any tuning from L273, reference pitch set by hand; tested offline on synthesized tones and recorded strings, error in cents. Needs L267, L269, L272, L273 | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| L275 | Metronome example: rhythms in Rationals: a meter as groups (2+2+3), accents, polymeter (several cycles on one pulse), polyrhythm (n against m in a bar), tempo changes, tap tempo; clicks synthesized and placed to the sample. Needs L268, L269 | Ersagun 2026-11-17 | P2 | M | ⏸ until Ersagun says go |
+| L276 | Looper example: record, play, overdub, undo, several tracks, start and stop on the metronome's bar; round-trip latency measured by a loopback chirp found by cross-correlation and recordings shifted by it, the platform's figure shown beside. Needs L267, L270, C260, C261, L271, L272, L275 | Ersagun 2026-11-17 | P2 | L | ⏸ until Ersagun says go |
+| L277 | Polyphonic tuning: a strum checked string by string against the instrument's known strings (each string's fundamental and harmonics in the spectrum); prior art TC Electronic PolyTune, Klapuri's multi-pitch estimation | Ersagun 2026-11-17 | P3 | L | ⏸ until Ersagun says go |
+| L278 | Frets that move: for a scale length and a tuning, where each fret goes (L·(1 − 1/r) from the nut), the same relation run backwards from a measured fret, and the tuner saying which way and how many millimetres to move a fret (saz, bağlama) | Ersagun 2026-11-17 | P3 | M | ⏸ until Ersagun says go |
 
 ### Numbers (NUMBERS.md)
 
