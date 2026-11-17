@@ -12,7 +12,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { S, SHOW_ANY } from "../src/lang/std.ts";
+import { INT_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { showType } from "../src/lang/types.ts";
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -40,6 +40,9 @@ test("the types", () => {
   assert.equal(t("replaced in pool"), "(Pool a, Pool key, a) -> Pool a");
   assert.equal(t("pool keys"), "(Pool a) -> List Pool key");
   assert.equal(t("pool size"), "(Pool a) -> Int");
+  assert.equal(t("updated in pool"), "(Pool a, (a) -[e]-> b) -[e]-> Pool b");
+  assert.equal(t("kept in pool"), "(Pool a, (a) -[e]-> Bool) -[e]-> Pool a");
+  assert.equal(t("pool items"), "(Pool a) -> List a");
 });
 
 test("a pool gives out keys, reuses a removed item's slot, and an old key finds nothing", () => {
@@ -64,6 +67,36 @@ test("a pool gives out keys, reuses a removed item's slot, and an old key finds 
     ];
   });
   const want = ['"b"', "none", "pool key(1, 1)", '"d"', "none", "[pool key(0, 0), pool key(1, 1), pool key(2, 0)]", "3", '"A"', "2"];
+  assert.deepEqual(ran, want);
+  assert.deepEqual(compiled, want);
+});
+
+// A game's systems over its entities (G1a, ENTITIES.md): every item
+// changed with its key kept, and those failing a test removed, their keys
+// finding nothing and their slots given to the next items added.
+test("a pool's items updated keep their keys; those not kept are removed and their slots reused", () => {
+  const [ran, compiled] = both((k) => {
+    const add = (p: Id, x: number) => k.call(L("added to pool"), p, k.int(x));
+    const p0 = k.x(L("empty pool"));
+    const p3 = add(add(add(p0, 1), 2), 3);
+    const k1 = k.call(L("next key"), add(p0, 1));
+    const ka = k.call(L("next key"), p0);
+    const doubled = k.call(L("updated in pool"), p3, k.fn(["n"], (n) => k.call(INT_OPS.mul, n, k.int(2))));
+    const odd = k.call(L("kept in pool"), p3, k.fn(["n"], (n) => k.equal(k.call(INT_OPS.remainder, n, k.int(2)), k.int(1))));
+    const again = add(odd, 9);
+    return [
+      k.call(L("pool items"), doubled),
+      k.call(L("pool item"), doubled, k1),
+      k.call(L("pool items"), odd),
+      k.call(L("pool size"), odd),
+      k.call(L("pool item"), odd, k1),
+      k.call(L("pool item"), odd, ka),
+      k.call(L("next key"), odd),
+      k.call(L("pool items"), again),
+      k.call(L("pool keys"), again),
+    ];
+  });
+  const want = ["[2, 4, 6]", "4", "[1, 3]", "2", "none", "1", "pool key(1, 1)", "[1, 9, 3]", "[pool key(0, 0), pool key(1, 1), pool key(2, 0)]"];
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
