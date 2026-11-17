@@ -17,7 +17,7 @@ import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
 import type { RunAsk, RunSays, WarmAsk } from "./runWorker.ts";
-import { sendCode } from "./runCode.ts";
+import { line, sendCode, words } from "./runCode.ts";
 import { savedFrom } from "../ters/src/lang/tests.ts";
 import type { CoreMain } from "./coreMain.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
@@ -67,7 +67,22 @@ export function runPanel(host: RunHost) {
   function runGiven(): { args?: string[]; files: Record<string, string> } | null {
     const m = manifest.programs.find((p) => p.program === doc().program && p.editor !== false);
     if (!m?.run || doc().title || ui.def !== defNamed("main")) return null;
-    return { args: m.run.args, files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
+    const typed = ui.args?.[doc().program];
+    return { args: m.run.args && (typed !== undefined ? words(typed) : m.run.args), files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
+  }
+  // The arguments as a line you can change (E273), written and read back
+  // as a shell would split them: by spaces, "quotes" keeping one together.
+  function argsBox(): HTMLElement {
+    const m = manifest.programs.find((p) => p.program === doc().program)!;
+    const shipped = line(m.run?.args ?? []), typed = ui.args?.[doc().program];
+    const input = h("input", { id: "t-args", type: "text", value: typed ?? shipped, autocomplete: "off", spellcheck: "false", "aria-label": "Arguments" }) as HTMLInputElement;
+    input.addEventListener("input", () => { ui.args = { ...ui.args, [doc().program]: input.value }; });
+    input.addEventListener("change", render);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") document.querySelector<HTMLButtonElement>("[data-act=t-run]")?.click(); });
+    return h("label", { class: "field cmdline" },
+      h("span", { class: "field-head", title: "The command line's words after the program, as ters run gives them" }, "Arguments",
+        typed !== undefined && words(typed).join("\0") !== (m.run?.args ?? []).join("\0") ? h("button", { class: "link", type: "button", "data-act": "t-args-reset", title: `Back to ${shipped}` }, "Reset") : null),
+      input);
   }
   // main as printed from the core IR by its last run (E245c), and the code
   // it was printed from.
@@ -163,5 +178,6 @@ export function runPanel(host: RunHost) {
 
   // Ends a run without a word: opening another program.
   const endRun = () => { running?.terminate(); running = null; };
-  return { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox };
+  return { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox };
 }
+
