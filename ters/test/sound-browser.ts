@@ -10,6 +10,10 @@
 // counts cross back to the page (L267). Then examples/tuner (L274): a
 // microphone that is a sawtooth at G3, then 10 cents sharp of it, and the
 // page reads G and the cents from the samples the audio thread sends back.
+// Then examples/looper (L276): its microphone hears the speakers 50 ms
+// late, as a microphone held to them does; Measure finds that round trip,
+// a pass records a tone, the track plays it back, and Undo takes it away
+// and puts it back.
 // Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
@@ -26,7 +30,7 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "sound-"));
-for (const page of ["pedal", "metronome", "tuner"]) {
+for (const page of ["pedal", "metronome", "tuner", "looper"]) {
   const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, `../examples/${page}`), "-o", join(dir, `${page}.html`)], { encoding: "utf8" });
   if (built.status !== 0) throw new Error(built.stderr);
 }
@@ -208,6 +212,65 @@ try {
   const inTune = await reads(0), sharp = await reads(10);
   check("the tuner reads G3 in tune from the microphone", inTune.note === "G3" && Math.abs(parseFloat(inTune.cents)) < 1.5, inTune);
   check("and 10 cents sharp of it", sharp.note === "G3" && Math.abs(parseFloat(sharp.cents) - 10) < 1.5, sharp);
+
+  // The looper: what it plays comes back in 50 ms later, with a tone that
+  // can be turned on mixed in.
+  await send("Page.navigate", { url: `http://127.0.0.1:${port}/looper.html` });
+  for (let i = 0; i < 100 && !(await run<boolean>(`!!document.querySelector("button.start")`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  await run(`(() => {
+    const made = window.AudioContext;
+    navigator.mediaDevices.getUserMedia = async () => {
+      const ctx = window.looped, d = ctx.createDelay(1), out = ctx.createMediaStreamDestination(), osc = ctx.createOscillator(), g = ctx.createGain();
+      d.delayTime.value = 0.05; d.connect(out);
+      osc.frequency.value = 440; g.gain.value = 0; osc.connect(g); g.connect(out); osc.start();
+      window.back = d; window.tone = g;
+      return out.stream;
+    };
+    window.AudioContext = class extends made { constructor(o) { super(o); window.looped = this; } };
+    const connect = AudioNode.prototype.connect;
+    AudioNode.prototype.connect = function (to, ...rest) {
+      if (to === this.context.destination && window.back && this instanceof AudioWorkletNode) connect.call(this, window.back);
+      return connect.call(this, to, ...rest);
+    };
+  })()`);
+  const button = (label: string) => `[...document.querySelectorAll("button")].find((b) => b.textContent === ${JSON.stringify(label)})`;
+  const until = async (what: string, test: string, ms = 10000) => {
+    for (let t = 0; t < ms; t += 100) { if (await run<boolean>(test)) return; await new Promise((r) => setTimeout(r, 100)); }
+    throw new Error(`the looper: ${what} didn't happen`);
+  };
+  await run(`document.querySelector("button.start").click()`);
+  await until("playing", `document.querySelector("button.start").dataset.playing === "true"`);
+  await run(`${button("Measure")}.click()`);
+  await until("the measurement", `/Round trip [0-9]/.test(document.querySelector(".figures").textContent)`);
+  const trip = await run<number>(`parseFloat(/Round trip ([0-9.]+)/.exec(document.querySelector(".figures").textContent)[1])`);
+  check("the looper measures the round trip through its speakers and microphone", trip >= 50 && trip < 150, { trip });
+  // The loop a second long (a bar of 4 at 240), with no click to record.
+  await run(`(() => { ${button("Measured")}.click(); ${button("Click")}.click(); })()`);
+  await run(`(() => { const [tempo, beats, bars] = document.querySelectorAll(".field input"); for (const [f, v] of [[tempo, "240"], [beats, "4"], [bars, "1"]]) { f.value = v; f.dispatchEvent(new Event("input")); } })()`);
+  const loudness = () => run<number>(`(async () => {
+    const a = window.taps[window.taps.length - 1].out, buf = new Float32Array(a.fftSize);
+    let s = 0, n = 0;
+    for (let i = 0; i < 20; i++) { await new Promise((r) => setTimeout(r, 20)); a.getFloatTimeDomainData(buf); for (const x of buf) { s += x * x; n++; } }
+    return Math.sqrt(s / n);
+  })()`);
+  const silent = await loudness();
+  await run(`(() => { window.tone.gain.value = 0.3; ${button("Record")}.click(); })()`);
+  await until("recording", `!!${button("Recording")}`);
+  await new Promise((r) => setTimeout(r, 300));
+  // Pressed again, it stops when the pass ends.
+  await run(`${button("Recording")}.click()`);
+  await until("the pass ending", `!${button("Recording")} && !document.querySelector(".track .state").textContent`);
+  await run(`window.tone.gain.value = 0`);
+  await new Promise((r) => setTimeout(r, 200));
+  const played = await loudness();
+  const drawn = await run<number>(`Math.max(...[...document.querySelector(".track .wave").querySelectorAll("rect")].map((r) => parseFloat(r.getAttribute("height"))))`);
+  await run(`${button("Undo")}.click()`);
+  await new Promise((r) => setTimeout(r, 300));
+  const undone = await loudness();
+  await run(`${button("Undo")}.click()`);
+  await new Promise((r) => setTimeout(r, 300));
+  const redone = await loudness();
+  check("the looper plays back what it recorded, and Undo takes it away and puts it back", silent < 0.01 && played > 0.1 && undone < 0.01 && redone > 0.1 && drawn > 20, { silent, played, undone, redone, drawn });
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

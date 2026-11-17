@@ -309,10 +309,11 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
 // the evaluator's own, by its id, a Bool given turned to the evaluator's
 // and one given back (`:bool`) turned back; no answer is FAIL.
 function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | undefined>): (...xs: unknown[]) => unknown {
-  const [, id, bool] = name.split(":");
-  const out = bool ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : (v: unknown) => v;
+  const [, id, how] = name.split(":");
+  const out = how === "bool" ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : how === "deep" ? (v: unknown) => turned(v, toBoolean) : (v: unknown) => v;
+  const into = how === "deep" ? (x: unknown) => turned(x, inn) : inn;
   const cell = cells?.[id];
-  if (cell) return (...xs) => { const v = cell(...(xs.map(inn) as Value[])); if (v === undefined) throw FAIL; return out(v); };
+  if (cell) return (...xs) => { const v = cell(...(xs.map(into) as Value[])); if (v === undefined) throw FAIL; return out(v); };
   const one = BUILTINS.one[id], many = BUILTINS.many[id];
   if (one) return (...xs) => out(one(...xs.map(inn)));
   if (many) return (...xs) => { const r = many(...xs.map(inn)); if (!r.length) throw FAIL; return out(r[0]); };
@@ -327,6 +328,29 @@ export type Solver = {
 let SOLVER: Solver | undefined;
 export const useSolver = (s: Solver) => { SOLVER = s; };
 export const inn = (x: unknown) => (typeof x === "boolean" ? { tag: x ? TRUE : FALSE, fields: [] } : x);
+const toBoolean = (x: unknown) => ((x as { tag?: Id } | null)?.tag === TRUE ? true : (x as { tag?: Id } | null)?.tag === FALSE ? false : x);
+// Each Bool inside data turned by `f` (to the evaluator's case, or back to
+// a boolean): the data copied as its tag and fields, which the printed
+// code reads as it reads its own (core-js.ts). Along a list's tail in a
+// loop, as a list may be long; what isn't data (a number, a cell, an
+// array) as it is.
+function turned(v: unknown, f: (x: unknown) => unknown): unknown {
+  type D = { tag: Id; fields: unknown[] };
+  const data = (x: unknown): x is D => typeof x === "object" && x !== null && "tag" in x && Array.isArray((x as D).fields);
+  const b = f(v);
+  if (b !== v || !data(v)) return b;
+  let first: D | undefined, last: D | undefined, at: D = v;
+  for (;;) {
+    const cons = at.tag === CONS && at.fields.length === 2;
+    const copy: D = { tag: at.tag, fields: cons ? [turned(at.fields[0], f), undefined] : at.fields.map((x) => turned(x, f)) };
+    if (last) last.fields[1] = copy; else first = copy;
+    if (!cons) return first;
+    last = copy;
+    const next = at.fields[1];
+    if (!data(next)) { last.fields[1] = next; return first; }
+    at = next;
+  }
+}
 // A List made as it is read (`solveAll`): a periodic solution (an angle)
 // has no end, and `one of` it stops at the first that the rest of the
 // search takes, as the evaluator's does.

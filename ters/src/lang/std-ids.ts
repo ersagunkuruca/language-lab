@@ -78,7 +78,8 @@ export const AUDIO_BLOCK: typeof Std.AUDIO_BLOCK = [
   "effect.cells",
   "effect.update",
   "std.random",
-  "effect.diverge"
+  "effect.diverge",
+  "std.settings"
 ];
 export const AUDIO_MAKER: typeof Std.AUDIO_MAKER = [
   "effect.cells",

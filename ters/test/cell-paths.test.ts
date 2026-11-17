@@ -240,8 +240,10 @@ test("paths and edits type-check, path refuses a function that isn't a place, an
 test("compiled JavaScript applies the same edits", async () => {
   const p = program();
   const clean = { ...p.info, errors: p.info.errors.filter((e) => !isUnder(p, p.bad, e.id)) };
-  // A core IR gap (C137): a cell on data holding a Bool.
-  assert.throws(() => compiledDefs(p.code, clean, p.names, ["demo"]), /cell on data holding a Bool/);
+  // Its cells hold data with Bools inside: a cell's operations turn them
+  // the evaluator's way and back (L276).
+  const v = compiledDefs(p.code, clean, p.names, ["demo"]).demo();
+  assert.deepEqual(listOf(v as Value), EXPECTED);
 });
 
 const isUnder = (p: ReturnType<typeof program>, d: Id, id: Id) => subtree(p.code, d).includes(id);
@@ -343,7 +345,7 @@ test("what a sound wrote crosses as a run of items, not the whole tape", () => {
   c.edit(tape, [{ item: 1 }], () => 2, LIST_SHAPE);
   c.write(level, 0.5);
   const writes = wrote.take(c, [tape, level]);
-  assert.deepEqual(writes, [{ cell: 1, value: 0.5 }, { cell: 0, from: 1, items: [2, 0, 1] }]);
+  assert.deepEqual(writes, [{ cell: 0, from: 1, items: [2, 0, 1] }, { cell: 1, value: 0.5 }]);
   for (const w of writes) applyWrite(page, there[w.cell], w);
   assert.deepEqual([fromList(page.peek(there[0])), page.peek(there[1])], [[0, 2, 0, 1, 0, 0], 0.5]);
   assert.equal(wrote.size, 0);

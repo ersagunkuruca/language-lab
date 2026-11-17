@@ -20,9 +20,9 @@ import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
 import { corePageRuntimes, coreSoundWorklet, coreWorkletRuntimes, webCorePage } from "../cli/web.ts";
 import { FakeEl, fakeDoc } from "./fakedom.ts";
-import { emitCoreJs, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
+import { emitCoreJs, hostOpsOf, loadCoreJs, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, soundFile } from "../src/lang/page.ts";
-import { close } from "../src/lang/run.ts";
+import { close, fromList, toList } from "../src/lang/run.ts";
 import { CELL_OPS, HTML_V, INT_OPS, NOW_OP, PAIR_V, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
 import { replaying } from "../src/lang/sound-thread.ts";
@@ -469,4 +469,56 @@ test("a tape in a cell, overdubbed with write at: the same both ways, and a bloc
   };
   const [short, long] = [await blocks(48000), await blocks(480000)];
   assert.ok(long < 5 * short + 20, JSON.stringify({ short, long }));
+});
+
+// The looper (L276), through its speakers into its microphone: what it
+// plays comes back in `lag` samples later. Track 1 armed from the start
+// records the first bar (a click on each beat, as it came back), then
+// plays it with the live click. Making up for the round trip, the take's
+// clicks land on the beat: the bar's first click sounds twice as loud the
+// second time round, in place. Making up for none, they land `lag`
+// samples late.
+test("the looper records a bar as it comes back, and making up for the round trip puts it on the beat", async () => {
+  const m = loadProgram(join(import.meta.dirname, "../examples/looper"));
+  const k = new Lang(m.code), lag = 1000;
+  const at = (latency: number) => { const d = k.def(`at ${latency}`); k.define(d, k.thunk(() => k.call(m.named("looper at"), k.lit(latency)))); return d; };
+  const [made, none] = [at(lag / 48000), at(0)];
+  const code = merge(m.code, k.code), names = { ...m.pres.names, ...k.names };
+  const p = { code, info: infer(code, names, undefined, m.options), names };
+  assert.equal(audioProblem(p.info, made, p.names), null);
+  // A bar of 4 at 100 a minute, in samples; the click is 40 ms.
+  const bar = 115200, click = 1920;
+  const looped = async (def: Id) => {
+    const play = await soundOf(p, def, "core"), out = new Float64Array(bar * 2 + 4096);
+    for (let at = 0; at + 128 <= out.length; at += 128) {
+      const back = Array.from({ length: 128 }, (_, i) => (at + i >= lag ? out[at + i - lag] : 0));
+      out.set(play(back, 48000), at);
+    }
+    return out;
+  };
+  const [on, off] = [await looped(made), await looped(none)];
+  assert.ok(peak(on.subarray(0, click)) > 0.3);
+  for (let i = 0; i < click + lag; i++) {
+    assert.equal(on[bar + i], 2 * on[i], `made up for: sample ${i} of the second bar`);
+    assert.equal(off[bar + i], off[i] + (i >= lag ? off[i - lag] : 0), `not made up for: sample ${i} of the second bar, the take ${lag} samples late`);
+  }
+});
+
+// The looper measures the round trip by playing a chirp and finding it
+// again in what comes in: the lag where they line up best, read between
+// samples; none when nothing stands out.
+test("the looper finds its chirp in what came in, to a fraction of a sample", async () => {
+  const m = loadProgram(join(import.meta.dirname, "../examples/looper"));
+  const info = infer(m.code, m.pres.names, undefined, m.options);
+  const ir = lowerCore(m.code, info, m.pres.names, [m.named("round trip in"), m.named("chirp samples")]);
+  const fns = loadCoreJs(ir, { print: () => {}, world: { random: Math.random } as never });
+  const fn = (name: string) => fns[ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted)] as (...xs: unknown[]) => unknown;
+  const chirp = fromList(fn("chirp samples")(48000) as never) as number[];
+  assert.equal(chirp.length, 1920);
+  let seed = 7;
+  const noise = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 0.02;
+  const heard = Array.from({ length: 24000 }, (_, i) => 0.4 * (chirp[i - 3217] ?? 0) + noise());
+  const found = fn("round trip in")(toList(heard), 48000) as number;
+  assert.ok(Math.abs(found * 48000 - 3217) < 0.05, `${found * 48000}`);
+  assert.equal(fn("round trip in")(toList(Array.from({ length: 24000 }, noise)), 48000), -1);
 });

@@ -59,7 +59,10 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
       try { node.port.postMessage("from" in w ? { cell: w.cell, from: w.from, items: w.items.map(portable) } : { cell: w.cell, value: portable(w.value), ...(w.at ? { at: w.at } : {}) }); } catch { return; }
     }
   };
-  cells.onWrite = (place, value, at) => { const cell = mine.get(place); if (cell !== undefined && playing.size) send({ cell, value, at }); };
+  // main's cells written since main made them: what a sound starting
+  // later is sent (it made the rest the same).
+  const changed = new Set<number>();
+  cells.onWrite = (place, value, at) => { const cell = mine.get(place); if (cell === undefined) return; changed.add(cell); if (playing.size) send({ cell, value, at }); };
   // What a sound's block function wrote to main's cells (L267): written
   // here too, so what reads them is drawn again.
   const take = (node: { port: MessagePort }, writes: Write[]) => {
@@ -161,8 +164,12 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
             console.warn(`sound: ${m.data.said}`);
             say(m.data.said);
           };
-          // The cells as the page has them now, before what's written next.
-          for (const [cell, c] of made.entries()) { try { node.port.postMessage({ cell, value: portable(cells.peek(c)) }); } catch { /* not copied */ } }
+          // The cells as the page has them now, before what's written next:
+          // a tape (C261) as its items, not a list made of them.
+          for (const cell of changed) {
+            const c = made[cell], items = cells.tapeItems(c);
+            try { node.port.postMessage(items ? { cell, from: 0, items: items instanceof Float64Array ? items : Array.from(items, portable) } : { cell, value: portable(cells.peek(c)) }); } catch { /* not copied */ }
+          }
           if (from.node) from.node.connect(node);
           node.connect(ctx.destination);
           playing.add(node);
@@ -177,9 +184,11 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           // (outputLatency, which a browser may know only once it plays,
           // so read again a moment later; baseLatency where it has none).
           const report = () => {
-            if (!latency || on?.stop !== end) return;
-            const out = (ctx as AudioContext & { outputLatency?: number }).outputLatency || ctx.baseLatency || 0;
-            cells.write(latency, (from.latency ?? 0) + out);
+            if (on?.stop !== end) return;
+            const out = (ctx as AudioContext & { outputLatency?: number }).outputLatency || ctx.baseLatency || 0, total = (from.latency ?? 0) + out;
+            if (latency) cells.write(latency, total);
+            // And the sound's own `my sound latency()` (a looper compensates by it).
+            node.port.postMessage({ latency: total });
           };
           report();
           setTimeout(report, 500);
