@@ -16,7 +16,7 @@
 // `ofNat n | negSucc n`, which these two cases are.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, nodesWhere } from "../model.ts";
+import { derived, freshId, layerOf, nodesWhere, scanningOnLayer } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { FALSE, INT_OPS, TRUE } from "./std.ts";
@@ -28,7 +28,12 @@ type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : ne
 const isCase = (id: Id) => !!INT_CASES.type && (id === INT_CASES.from || id === INT_CASES.minus);
 const onInt = (code: Code, n: Node): boolean =>
   (n.kind === "match" && n.arms.some((a) => isCase((code.nodes[a] as NodeOf<"arm"> | undefined)?.variant ?? ""))) || (n.kind === "ref" && isCase(n.target));
-const usesIn = (code: Code) => nodesWhere(code, "int cases", (n) => onInt(code, n));
+// On its layer, the layer's matches and uses of the cases found once (L266:
+// a scan of every node of each program the representations are chosen for).
+const maybe = (n: Node) => n.kind === "match" || (n.kind === "ref" && isCase(n.target));
+const usesIn = (code: Code) => layerOf(code) && !derived.has(code)
+  ? scanningOnLayer(code, () => nodesWhere(code, "int cases, maybe", maybe)).filter((id) => onInt(code, code.nodes[id]))
+  : nodesWhere(code, "int cases", (n) => onInt(code, n));
 export const usesIntCases = (code: Code) => !!INT_CASES.type && usesIn(code).length > 0;
 
 export function intCases(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {

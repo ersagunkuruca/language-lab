@@ -412,8 +412,10 @@ export function dependencies(code: Code, root: Id): Id[] {
 // The same for several roots, each definition walked once however many
 // roots reach it (I315: Build targets asks of every own definition, and
 // a root at a time walked machine's shared ones 140 times).
-export function dependenciesOfAll(code: Code, roots: Id[]): Set<Id> {
-  const seen = new Set<Id>();
+// `into`: what is found is added to it, and what it holds is taken as
+// walked already (with all it reaches).
+export function dependenciesOfAll(code: Code, roots: Id[], into?: Set<Id>): Set<Id> {
+  const seen = into ?? new Set<Id>();
   const owner = ownerOfTypeParts(code);
   const visit = (id: Id) => {
     for (const n of subtree(code, id)) {
