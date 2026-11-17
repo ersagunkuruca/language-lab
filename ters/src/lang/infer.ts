@@ -2518,6 +2518,9 @@ function matchersOf(code: Code): Set<Id> {
   // spent 1.2 s of 1.5 finding them again).
   const hit = matchers.get(code.nodes);
   if (hit) return hit;
+  // A program on its layer, outside a check (represent.ts notePieces):
+  // read on the layer too.
+  if (!derived.has(code) && layerOf(code)) return scanningOnLayer(code, () => matchersOf(code));
   const from = derived.get(code);
   if (from && from.base !== code) {
     let kept = matchersKept.get(from.base);
