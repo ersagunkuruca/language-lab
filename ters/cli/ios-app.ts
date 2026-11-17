@@ -232,7 +232,7 @@ static double u_sound(void *c, int n, int on, int mic, const char *a, size_t an)
   if (rate <= 0) rate = 48000;
   if (!s_rings[n]) s_rings[n] = calloc(1, sizeof(s_ring));
   atomic_store(&s_rings[n]->r, atomic_load(&s_rings[n]->w));
-  if (!mic) {
+  if (!mic && a) {
     NSString *name = str(a, an);
     NSData *d = [NSData dataWithContentsOfFile:[NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:name]];
     if (!d) { s_say(n, [name stringByAppendingString:@": no such recording in the app"]); s_on[n] = 0; return 0; }

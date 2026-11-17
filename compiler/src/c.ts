@@ -1232,7 +1232,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       return tag < 0 || head < 0 || d.cases[tag].fields[head].t !== "f64" ? null : { d, cons: cname(d, tag), nil: cname(d, 1 - tag), type: tnum.get(d.key)!, tag, head, rest: 1 - head };
     };
     const sin = SF ? listOf(SF.params[0]) : null, sout = SF ? listOf(SF.result) : null;
-    const sound = !!(SF && IN && sin && sout && fname.has(SF.key));
+    // Its second input is the rate it plays at, samples a second (L269).
+    const sound = !!(SF && IN && sin && sout && SF.params[1] === "f64" && fname.has(SF.key));
     const mic = sound ? ci(IN!, "std.input.microphone") : -1, rec = sound ? ci(IN!, "std.input.recording") : -1;
     // A handler that asks for a permission waits for the person's answer
     // (L236b), as a browser page's does: it runs on a fiber of its own,
@@ -1326,7 +1327,8 @@ typedef struct ters_host {
   // (c-layout.ts). May be null.
   void (*renew)(void *ctx, void *el);
   // A page's sound (C217): sound n's speaker opened (on 1) or closed (on
-  // 0), from the microphone (mic 1) or the recording at address. The rate
+  // 0), from the microphone (mic 1), the recording at address, or nothing
+  // (mic 0 and no address: its blocks come in silent, L268). The rate
   // it plays at, or 0 when it can't (ters_sound_say says why). Its audio
   // thread then asks ters_sound_play for samples. May be null: no sound.
   double (*sound)(void *ctx, int n, int on, int mic, const char *address, size_t an);
@@ -1415,7 +1417,7 @@ static void ters_snd_block(ters_snd *s) {
   lab_cell *l = (lab_cell *)&${sin?.nil};
   for (int k = TERS_BLOCK; k-- > 0;) { ${sin?.cons} *c = lab_new(sizeof(${sin?.cons}), ${sin?.type}, ${sin?.tag}); c->f${sin?.head} = s->in[k]; c->f${sin?.rest} = l; l = (lab_cell *)c; }
   lab_dup(s->play);
-  lab_cell *r = ${SF ? call(SF, "s->play", ["l"]) : "0"};
+  lab_cell *r = ${SF ? call(SF, "s->play", ["l", "s->rate"]) : "0"};
   if (lab_st) {
     char why[200];
     if (lab_st == 2) snprintf(why, sizeof why, "a block stopped, and played silence: %.*s", (int)LAB_TN(lab_reason), (const char *)LAB_TB(lab_reason));

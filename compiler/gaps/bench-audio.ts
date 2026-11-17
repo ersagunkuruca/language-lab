@@ -54,16 +54,16 @@ const ways: [string, Play, number][] = [
   ["evaluator", await soundOf(prog, p.named("pedal"), "evaluator"), 4],
   ["by hand", ideal(), 20000],
 ];
-const firsts = ways.map(([, play]) => play(blocks[0]));
+const firsts = ways.map(([, play]) => play(blocks[0], 48000));
 firsts.slice(1).forEach((f) => f.forEach((x, i) => assert.ok(Math.abs(x - firsts[0][i]) < 1e-9, `sample ${i}: ${x} against ${firsts[0][i]}`)));
 const rate: Record<string, number> = {};
 for (const [name, play, n] of ways) {
-  for (let i = 0; i < Math.min(n, 200); i++) play(blocks[i % blocks.length]);
+  for (let i = 0; i < Math.min(n, 200); i++) play(blocks[i % blocks.length], 48000);
   // The best of five runs: a laptop's other work only ever adds time.
   let ms = Infinity;
   for (let r = 0; r < 5; r++) {
     const t = performance.now();
-    for (let i = 0; i < n; i++) play(blocks[i % blocks.length]);
+    for (let i = 0; i < n; i++) play(blocks[i % blocks.length], 48000);
     ms = Math.min(ms, (performance.now() - t) / n);
   }
   rate[name] = 1000 / ms;

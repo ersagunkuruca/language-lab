@@ -98,7 +98,10 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
     }
   }
 
-  async function source(ctx: AudioContext, to: Data): Promise<{ ctx: AudioContext; node: AudioNode; stop: () => void }> {
+  // Where the samples come from; none for a sound with no input (L268),
+  // whose blocks come in silent.
+  async function source(ctx: AudioContext, to: Data): Promise<{ ctx: AudioContext; node: AudioNode | null; stop: () => void }> {
+    if (to.tag === HTML_V.noInput) return { ctx, node: null, stop: () => {} };
     if (to.tag === HTML_V.microphone) return microphone(ctx);
     const reply = await fetch(base ? new URL(String(to.fields[0]), new URL(base, location.href)).href : String(to.fields[0]));
     if (!reply.ok) throw new Error(`${to.fields[0]}: ${reply.status} ${reply.statusText}`);
@@ -141,10 +144,11 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           node.port.onmessage = (m: MessageEvent<{ said: string }>) => { console.warn(`sound: ${m.data.said}`); say(m.data.said); };
           // The cells as the page has them now, before what's written next.
           for (const [cell, c] of made.entries()) { try { node.port.postMessage({ cell, value: cells.peek(c) }); } catch { /* not copied */ } }
-          from.node.connect(node).connect(ctx.destination);
+          if (from.node) from.node.connect(node);
+          node.connect(ctx.destination);
           playing.add(node);
-          const quiet = (a.fields[0] as Data).tag === HTML_V.microphone ? silence(ctx, from.node, () => say("the microphone sends silence: is it muted (a headset often has a switch on its cable), or is another input chosen in the system's sound settings?")) : () => {};
-          const end = () => { quiet(); from.stop(); from.node.disconnect(); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); };
+          const quiet = from.node && (a.fields[0] as Data).tag === HTML_V.microphone ? silence(ctx, from.node, () => say("the microphone sends silence: is it muted (a headset often has a switch on its cable), or is another input chosen in the system's sound settings?")) : () => {};
+          const end = () => { quiet(); from.stop(); from.node?.disconnect(); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); };
           on = { stop: end };
           going.add(end);
           // Stopped while it was starting: nothing plays.

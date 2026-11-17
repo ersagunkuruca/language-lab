@@ -452,9 +452,10 @@ test("the font shorthand in C: its weight, size and line height (C195)", { skip 
 
 // A page's sound in C (C217): a button that plays a recording through a
 // block function scaling it by a cell's gain, a button writing the gain,
-// and one playing the microphone as it comes. Played on a thread of its
-// own, as a screen's audio thread does, a block behind; the gain the
-// handler wrote is what the next block plays.
+// and one playing the microphone as it comes, and one with no input
+// playing its rate (L268, L269). Played on a thread of its own, as a
+// screen's audio thread does, a block behind; the gain the handler wrote
+// is what the next block plays.
 test("a page's sound in C plays its block function on another thread, with the page's cells (C217)", { skip }, async () => {
   const { mkdtempSync, writeFileSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
@@ -468,11 +469,18 @@ test("a page's sound in C plays its block function on another thread, with the p
     { variant: NIL, names: [], body: () => k.list() },
     { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, k.call(ARITH.mul, g, x), k.call(louder, g, rest)) },
   ])));
+  // Each sample the level v (the rate, scaled).
+  const level = k.def("level");
+  k.define(level, k.fn(["v", "xs"], (v, xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.list() },
+    { variant: CONS, names: ["x", "rest"], body: ([, rest]) => k.call(CONS, v, k.call(level, v, rest)) },
+  ])));
   const main = k.def("main");
   k.define(main, k.thunk(() => k.let("gain", k.call(CELL_OPS.cell, k.lit(2)), (gain) => el("div", [], [
-    el("button", [prop("id", "play"), k.call(HTML_V.listen, k.call(HTML_V.recording, k.lit("strum.wav")), k.fn(["b"], (b) => k.call(louder, k.call(CELL_OPS.read, gain), b)))], [text("play")]),
+    el("button", [prop("id", "play"), k.call(HTML_V.listen, k.call(HTML_V.recording, k.lit("strum.wav")), k.fn(["b", "rate"], (b) => k.call(louder, k.call(CELL_OPS.read, gain), b)))], [text("play")]),
     el("button", [prop("id", "up"), k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.call(CELL_OPS.write, gain, k.lit(4))))], [text("up")]),
-    el("button", [prop("id", "mic"), k.call(HTML_V.listen, k.x(HTML_V.microphone), k.fn(["b"], (b) => b))], [text("mic")]),
+    el("button", [prop("id", "mic"), k.call(HTML_V.listen, k.x(HTML_V.microphone), k.fn(["b", "rate"], (b) => b))], [text("mic")]),
+    el("button", [prop("id", "none"), k.call(HTML_V.listen, k.x(HTML_V.noInput), k.fn(["b", "rate"], (b, rate) => k.call(level, k.call(ARITH.mul, rate, k.lit(1 / 96000)), b)))], [text("none")]),
   ]))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
@@ -483,7 +491,7 @@ test("a page's sound in C plays its block function on another thread, with the p
   wav.writeUInt32LE(24000, 24); wav.writeUInt32LE(48000, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(2 * n, 40);
   for (let i = 0; i < n; i++) wav.writeInt16LE(8192, 44 + 2 * i);
   writeFileSync(join(at, "strum.wav"), wav);
-  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["click:play", "play:0:1024", "click:up", "play:0:48000", "click:mic", "play:1:48000", "click:play"], { cwd: at });
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["click:play", "play:0:1024", "click:up", "play:0:48000", "click:mic", "play:1:48000", "click:play", "click:none", "play:2:256"], { cwd: at });
   assert.equal(r.status, 0, r.stderr.toString());
   const lines = r.stdout.toString().split("\n").filter((s) => /^(sound|played|heard) /.test(s));
   assert.equal(lines[0], "sound 0 on strum.wav");
@@ -499,4 +507,7 @@ test("a page's sound in C plays its block function on another thread, with the p
   mic.forEach((x, i) => assert.ok(Math.abs(x - sine(i)) < 1e-6, `${x} ${sine(i)}`));
   assert.match(lines[6], /^heard 1: in 0\.3536 out 0\.35\d\d changed 0\.0\d\d\d$/);
   assert.equal(lines[7], "sound 0 off strum.wav");
+  // No input: nothing opened, and the block function given 48000.
+  assert.equal(lines[8], "sound 2 on no input");
+  assert.match(lines[9], /^played 2: 0\.500000 0\.500000 0\.500000 0\.500000 /);
 });

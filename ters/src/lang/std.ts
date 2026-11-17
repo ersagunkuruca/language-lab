@@ -162,18 +162,22 @@ export const ROW_TYPE = typedef(ROW_CARRIER, "Row", [], []);
 export const EVENT = typedef("std.event", "Event", [], [
   ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)], ["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["seconds", () => tref(NUMBER)]]],
 ]);
-// Where a sound's samples come from (AUDIO.md): the microphone, or a
-// recording the page fetches by its address and plays over and over.
+// Where a sound's samples come from (AUDIO.md): the microphone, a
+// recording the page fetches by its address and plays over and over, or
+// nothing (a metronome, a synthesizer: its blocks come in silent, and no
+// microphone is asked for, L268).
 export const INPUT = typedef("std.input", "Input", [], [
   ["microphone", []],
   ["recording", [["address", () => tref(STRING)]]],
+  ["no input", []],
 ]);
 export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
   ["property", [["name", () => tref(STRING)], ["value", () => tfun([], tref(STRING), [VIEW_ROW])]]],
   ["on", [["event", () => tref(STRING)], ["then", () => tfun([tref(EVENT)], tref(UNIT), [HANDLER_ROW])]]],
   // A sound played from an input when the element is clicked, and stopped
-  // when it's clicked again (AUDIO.md, A2).
-  ["listen", [["to", () => tref(INPUT)], ["play", () => tfun([tref(LIST, tref(NUMBER))], tref(LIST, tref(NUMBER)), [SOUND_ROW])]]],
+  // when it's clicked again (AUDIO.md, A2). Its block function is given
+  // each block and the rate it plays at, in samples a second (L269).
+  ["listen", [["to", () => tref(INPUT)], ["play", () => tfun([tref(LIST, tref(NUMBER)), tref(NUMBER)], tref(LIST, tref(NUMBER)), [SOUND_ROW])]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
@@ -310,7 +314,7 @@ tn += 4 + 9 + 16;
 // for the checker's message.
 export const SMART: Record<Id, string> = { [ALGEBRAIC_V]: "as algebraic or square root", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
 for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
-export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording" } as const;
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";

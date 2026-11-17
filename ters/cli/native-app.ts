@@ -244,7 +244,7 @@ static double j_sound(void *c, int n, int on, int mic, const char *address, size
     // plays silence till then.
     if (j_has_mic()) j_snd_mic(p, rate);
     else { p->waiting = 1; jstring t = ters_js("microphone", 10); (*ters_j)->CallIntMethod(ters_j, ters_a, ters_jm[18], t); (*ters_j)->DeleteLocalRef(ters_j, t); }
-  } else {
+  } else if (address) {
     AAsset *a = 0;
     if (j_assets) { char *name = malloc(an + 1); memcpy(name, address, an); name[an] = 0; a = AAssetManager_open(j_assets, name, AASSET_MODE_BUFFER); free(name); }
     if (!a) { char why[200]; snprintf(why, sizeof why, "%.*s: no such recording in the app", (int)an, address); ters_sound_say(n, why); AAudioStream_close(p->out); p->out = 0; return 0; }
@@ -254,7 +254,7 @@ static double j_sound(void *c, int n, int on, int mic, const char *address, size
   }
   r = AAudioStream_requestStart(p->out);
   if (r != AAUDIO_OK) { char why[160]; snprintf(why, sizeof why, "the speaker couldn't start: %s", AAudio_convertResultToText(r)); ters_sound_say(n, why); AAudioStream_close(p->out); p->out = 0; return 0; }
-  __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d playing at %d a second, %s", n, (int)rate, mic ? "from the microphone" : address);
+  __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d playing at %d a second, %s", n, (int)rate, mic ? "from the microphone" : address ? address : "with no input");
   return rate;
 }
 // The person allowed the microphone, or not: what waited for it opens.

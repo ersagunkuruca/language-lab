@@ -16,6 +16,8 @@ import { OutOfSteps, PAGE_STEPS, withSteps, type Data, type Value } from "./run.
 // What an AudioWorkletGlobalScope has (Web Audio API).
 declare const registerProcessor: (name: string, p: new (options: { processorOptions: { index: number; answers?: Answers } }) => unknown) => void;
 declare class AudioWorkletProcessor { readonly port: MessagePort }
+// The audio thread's rate, samples a second (AudioWorkletGlobalScope).
+declare const sampleRate: number;
 
 export const PROCESSOR = "lab-sound";
 
@@ -46,11 +48,11 @@ export function replaying(answers: Answers | undefined, cells: Pick<Cells, "cell
 }
 
 // How a compiled program runs on the audio thread: its cells, main run
-// once with a world, and a block function called on a block.
+// once with a world, and a block function called on a block and the rate.
 export interface SoundHost {
   readonly cells: Cells;
   main(world: { random(): number; now(): number; wait(): never; log(): void; error(): void }): Value;
-  play(f: Value, block: number[]): number[];
+  play(f: Value, block: number[], rate: number): number[];
 }
 
 export function startSoundOn(host: SoundHost, seed = 1): void {
@@ -88,7 +90,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
       const input = inputs[0]?.[0] ?? new Float32Array(n);
       if (!this.play) return true;
       let got: number[];
-      try { got = withSteps(PAGE_STEPS, () => host.play(this.play as never, Array.from(input))); } catch (e) {
+      try { got = withSteps(PAGE_STEPS, () => host.play(this.play as never, Array.from(input), sampleRate)); } catch (e) {
         this.say(e instanceof OutOfSteps ? "a block didn't finish in its steps, and played silence" : (e as Error).message);
         return true;
       }
