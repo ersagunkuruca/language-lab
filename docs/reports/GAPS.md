@@ -4294,3 +4294,92 @@ Where round 19 stops. Native's instructions at 1000 lines after C243
 Core keeps the tree (C243 doesn't pay in JavaScript), and its largest part
 is the same class lookup. The round stops here: core 2.9x, native 2.4x,
 wasi about 2.3x the ideal at 8000 lines.
+
+## Game round 1: moths, boids on a grid hash (2026-11-17)
+
+The first program of the game plan (GAME-READINESS-2026-11-17, BACKLOG
+G3): `compiler/gaps/moths`, 61 definitions written through the MCP. Ten
+thousand moths flock by Reynolds's boids in a 256 m garden that wraps
+round, drawn to whichever of four lamps is lit. Each tick the moths are
+filed in a grid of 8 m cells (a list of moth numbers per cell, built with
+`replace at` and `cons`), and each moth looks only at its own cell and
+the eight around it, in a `map` that only computes. This is the update
+loop a game spends its frame on, and the shape the CPU side was tuned for
+(drift, herd, pond).
+
+The ideals, `moths.ideal.c` and `moths.ideal.js`, keep the moths as
+columns and the grid as a counting sort (cell starts and moth numbers),
+walk the cells in the program's order and add in its order, so every way
+prints the same digits. All ways agreed the first time
+(`compiler/test/moths.test.ts`: evaluator, core, wasi, native).
+
+### Results
+
+`node compiler/gaps/bench-moths.ts 100 3000 10000`, every way a process,
+start-up included, median of 3, this container (4 cores):
+
+| way | 3,000 moths | 10,000 moths | against C |
+|---|---|---|---|
+| C, one thread | 0.10 s | 0.68 s | 1x |
+| C, OpenMP on 4 cores | 0.04 s | 0.20 s | 0.3x |
+| JavaScript by hand | 0.45 s | 1.32 s | 1.9x |
+| `ters native`, one thread | 0.42 s | 2.24 s | 3.3x |
+| `ters native`, 4 threads | 0.47 s | 2.14 s | 3.1x (10.7x the OpenMP C) |
+| `ters wasi` | 1.55 s | 9.98 s | 14.6x |
+| `ters compile`, one thread | 1.68 s | 13.52 s | 19.8x (10.2x the JS by hand) |
+| `ters compile`, workers | 1.47 s | 9.84 s | 14.4x |
+
+Threads buy nothing natively (2.24 to 2.14 s; C gets 3.4x from them), and
+the compiled JavaScript is 10x the hand-written JavaScript on one thread.
+
+### The gaps, ranked
+
+**M1. A three-item `map` inside each moth's work is sent to the thread
+pool, and the nine cells are a list made per moth (native, 26%).**
+`around cells` is `flat map(offsets, (dy) => map(offsets, (dx) => …))`,
+and its inner map over `[-1, 0, 1]` is a parallel map (`lab_par_map_2`)
+called from inside the outer map's work, which is already on a thread:
+callgrind at 3,000 moths puts `around cells` at 26% inclusive, most of it
+the pool's own work for three items. The list of nine cells is then made
+and dropped for every moth. Two fixes: a map inside work already sent
+away runs in turn (and a map over a list known to be short never leaves),
+and a list made only to be walked once (`flock over` walks it) becomes
+the loop that makes it, which is deforestation (Wadler, 1988).
+
+**M2. A cell's moths, a `List Int` stored as an array, are walked by
+`match`, and each `rest` makes a new array view (native, about 25%).**
+`gathered` matches its list `cons(j, rest)`: `lab_array_first_a2`,
+`lab_array_rest_a2` (9%), `lab_new`, `lab__dead` (12%) and `free` for
+every moth looked at. The ideal walks an index. A list read by a match
+that walks it to its end, in a function that calls itself on `rest`, is
+an index loop over the array (C227 did this for `item at`).
+
+**M3. Threads give 1.05x (native).** 93% of the time is under the moths'
+map on the pool, so this is not Amdahl. Every moth's work allocates (M1,
+M2, the Flock and Vec records), and the threads share one allocator. To
+be measured again after M1 and M2; if it holds, per-thread arenas for
+work sent away (REGIONS.md measured regions for one thread only).
+
+**M4. Compiled JavaScript: a record per neighbour, and finite checks on
+constants (core, 10x the hand-written JS).** `met`, called for every pair
+of moths in the nine cells, is 55% of the samples on its own: it makes a
+`Vec` for the offset and a `Flock` for the sum on every call, checks
+`d2` and the constant `64` for finiteness before comparing them
+(`l5 - l5 === 0` on a literal), and reads fields as `f0 ?? fields[0]`.
+The garbage collector is another 8%. The C target keeps these records in
+registers (owned-records.ts); the JS target needs the same for records
+that never leave a function, and no finite check on a literal.
+
+**M5. WebAssembly is 14.6x.** Not profiled yet; likely M1, M2 and M4 at
+once, since it lowers the same IR.
+
+**M6. The MCP offers the wrong type for a field two types share.**
+`l.place` with `Moth` and `Lamp` both having `place` asks `as`, and the
+first type it offers was Moth. Known since round 20's notes (the `as`
+question doesn't read the rest of the definition).
+
+### Proposed order
+
+M2 and M1 first (native, each a quarter of the time, and they also feed
+M3), then M3 measured again, then M4 for pages, which is where the game's
+first slice (G6) runs. Rows G3a to G3e in BACKLOG.md.
