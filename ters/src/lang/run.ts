@@ -257,6 +257,8 @@ export const PAGE_STEPS = 1_000_000;
 let page: Fuel | null = null;
 // The evaluator's machine steps, counted to ask a page's deadline (I310).
 let machineTicks = 0;
+// How many it has taken so far: work, for a caller weighing a run (C255).
+export const evaluatorTicks = (): number => machineTicks;
 // Compiled code's count of deep calls (compiler/src/runtime.js, $rec):
 // put back after each update, which may have been cut off midway.
 export const depth = { d: 0 };

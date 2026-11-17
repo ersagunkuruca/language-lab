@@ -86,6 +86,7 @@ import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
 import { carriedDerivatives } from "./carried-derivatives.ts";
 import { stageProgram } from "../../ters/src/lang/stage.ts";
+import { bakeCalls } from "./bake.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { countsInto } from "./fold-chunks.ts";
@@ -685,6 +686,17 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // made records by defunc.ts once lowered.
   const defunc = !opts.data && !!opts.shader && !!opts.records && !envSet("NO_DEFUNC");
   const closures = !!opts.data || defunc;
+  // Pure calls with every input written down, worked out now where their
+  // answer is small next to the work (bake.ts, C255): kept only if the
+  // program still checks. Not in a shader, whose Float32 would round
+  // differently.
+  if (!opts.shader && !envSet("NO_BAKE")) {
+    const b = bakeCalls(code, info, names);
+    if (b.baked.length) {
+      const checked = infer(b.code, names, undefined, { units: false });
+      if (checked.errors.length <= info.errors.length) ({ code, info } = { code: reachedWithShows(b.code, roots, checked), info: checked });
+    }
+  }
   // Calls given data written down (an algebra's signature and basis) are
   // worked out as far as that data goes (stage.ts, C65): what's left is
   // arithmetic, with no lists. Kept only if the program still checks.
