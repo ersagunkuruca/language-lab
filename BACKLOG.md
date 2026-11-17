@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Editor lane" | no open row (E273 to E278 done, RUN-INPUTS-2026-11-17) |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
-| L Language and library | "Language lane" | I316 (once editor/ is free), L266 (Ersagun 2026-11-17: yes, in that order) |
+| L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I316 | Build targets cached: the shipped examples' answers built with the site, as their compiled pages are (prebuilt.ts, by content hash); an edited program's kept per definition by its hash (hash.ts covers what it uses), so an edit works out only what it touches. A first open answers at once (machine's took 4.1 s after I315). And the editor's check handed over: Build targets' worker checks the program whole on every ask (machine 1.5 s) though the editor has checked it; the worker keeps its last check and checks an edit incrementally (inferEdited, I304), so after the first ask no ask checks the whole program | Ersagun 2026-11-17 ("the editor can just give whatever data structure is output from the typechecking", and "weren't we packaging precompiled versions of the programs and caching builds?") | 2026-11-17 |
 | L266 | A faster checker: machine's 8,000 reached nodes took 1.5 s, about 190 µs a node; aim for 10x. L266a: 0.2 s warm. Next: compiling machine still checks it six times (firstArms three, bake, stage, fused folds: about 0.2 s each), L266b keeps the higher-order call analysis's answers between checks. L266c resolves arithmetic over what is reached, L266d reaches once. Left, in `ters compile machine` (8.8 s): the first check 1.1 s (warm it is 0.15 s; L266e found the once-per-process part, 0.45 s, not worth a snapshot); choosing representations 4.8 s, of it two whole checks of the program over the library (represented.ts and library-reps.ts, 0.7 and 0.8 s) and the choice's walks (choiceOf 2.4 s: splitByGroups, represent.ts uses and looped walking each definition's subtree again per type); lowering 3.5 s, of it first-arms' checks 0.6 s. With I316, machine's compile under half a second. C256 found the checks inside lowering are the checker's cost too: rechecking only what a pass changed (infer.ts inferRewritten) saved 0.2 s of machine's 3.1 but kept effects the passes had made more exact (drift, depot, sheet got Diverge back), so a faster whole check is the fix; and a layered check joined a first's thunk's row to the row around it (agent's first-arms took 5 of 7) | Ersagun 2026-11-17 ("Having to spend more than a second compiling them is kinda weird") | 2026-11-17 |
 
 ## E: Editor

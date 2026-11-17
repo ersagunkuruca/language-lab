@@ -26,7 +26,7 @@ import { compilePageProgram, compileSavedPage, type CompiledPage } from "./pageC
 import type { SavedScripts } from "../ters/src/lang/page.ts";
 import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
-import { lowerScalar } from "../compiler/src/scalar.ts";
+import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
 import { loadChecks } from "./checkStore.ts";
 
@@ -49,11 +49,11 @@ export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pi
 // Printed from the core IR (core-js.ts corePageScript), the script
 // calling $core.startCorePage (E244).
 export type CompileSays = CompiledPage | { saved: SavedScripts } | { error: string };
-// Where the program's own definitions can run (whereRuns.ts, L22a): the
-// ones a shader can't hold, and the ones WebAssembly and C can't, each
-// with the compiler's reason.
-export type WhereAsk = { whereRuns: true; code: Code; names: Names; pins: Pins };
-export type WhereSays = { gpu: [Id, string][]; native: [Id, string][] } | { error: string };
+// Where some of the program's own definitions can run (whereRuns.ts,
+// L22a): for each in `only`, why a shader can't hold it and why
+// WebAssembly and C can't, or null (whereAnswers.ts).
+export type WhereAsk = { whereRuns: true; code: SentCode; names: Names; pins: Pins; only: Id[] };
+export type WhereSays = { answers: [Id, ...Answer][] } | { error: string };
 // Where the last read of a text run backwards stopped, when one found no
 // answer (L70c): the text, the place, what was looked for there, and how
 // many reads stopped.
@@ -67,6 +67,9 @@ export type Profile = { def: Id; calls: number; ms: number }[];
 // `at`: where a compiled main stopped, its node and definition (C143f).
 export type StopAt = { node: Id; def: Id };
 export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt } | { error: string; files: [string, string][]; stuck?: Stuck; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt };
+
+// The program Build targets asked about last (whereAnswers.ts receivedOnto).
+let lastWhere: Code | null = null;
 
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
@@ -128,15 +131,15 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     return;
   }
   if ("whereRuns" in e.data) {
-    const { code, names, pins } = e.data;
+    const { names, pins, only } = e.data;
     try {
       setDisplayNames(names);
       setProgramPins(pins);
-      const info = infer(code, names);
-      const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
-      const refused = (o: object) => { try { return [...lowerScalar(code, info, names, own, o).refused]; } catch (err) { return own.map((d): [Id, string] => [d, (err as Error).message]); } };
-      // The native answer after the GPU's reuses its first steps (I315).
-      return post({ gpu: refused({ records: true, shader: true }), native: refused({ data: true, bake: false }) });
+      // Build targets' worker is kept (I316): the program checked over its
+      // last check, so after the first ask an edit is checked, not the
+      // whole program.
+      const code = (lastWhere = receivedOnto(e.data.code, lastWhere));
+      return post({ answers: whereAnswers(code, infer(code, names), names, only) });
     } catch (err) {
       return post({ error: (err as Error).message });
     }
