@@ -588,7 +588,7 @@ export const MAX_FUEL = 2 ** 24;
 const BUDGET = "first(() => with fuel(n, () => …), () => …)";
 const MAY_NOT_FINISH = `may not finish (its type has Diverge): on a GPU that hangs the page, so run it under a budget, ${BUDGET}`;
 
-import { reachedFrom, reachedWithShows } from "../../ters/src/lang/reached.ts";
+import { reachedFrom, reachedImplementing, reachedWithShows } from "../../ters/src/lang/reached.ts";
 export { reachedFrom, reachedWithShows };
 
 
@@ -607,7 +607,7 @@ export { reachedFrom, reachedWithShows };
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
 // `dataKeys`: a table's key may be data (C243, C's tables only).
-export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
+export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
   // types' closures pay for taking the rest.
@@ -625,7 +625,7 @@ export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], o
   }
 }
 
-function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   const outer = stopSite;
   try { return lowerOnceIn(code, info, names, roots, opts, severalTypes, carry); } finally { stopSite = outer; }
 }
@@ -647,8 +647,8 @@ export function vouched(code: Code, info: Info, names: Names): Info {
 // steps twice (machine: 2.5 s of each 2.6). Kept per code, check and names,
 // for the same roots and host.
 const preparedKept = new WeakMap<Code, WeakMap<Info, { names: Names; key: string; out: { code: Code; info: Info; names: Names } }[]>>();
-function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boolean): { code: Code; info: Info; names: Names } {
-  const key = `${host}:${roots.join(",")}`;
+function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boolean, reach: boolean): { code: Code; info: Info; names: Names } {
+  const key = `${host}:${reach}:${roots.join(",")}`;
   let byInfo = preparedKept.get(code);
   if (!byInfo) preparedKept.set(code, (byInfo = new WeakMap()));
   const kept = byInfo.get(info) ?? [];
@@ -664,6 +664,12 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   if (!host) ({ code, info, names } = tableText(code, info, names, roots));
   // A named handler handles a copy of its effect of its own (L213b).
   ({ code, info, names } = unnameHandlers(code, info, names));
+  // Only what the roots reach, with the implementations at the types it
+  // reaches, which arith.ts finds by type (L266: it walked the whole
+  // library, 0.9 s of machine's lowering; core-js.ts gives it this).
+  // Not for code that is that already (`reached`: gpu-maps.ts's, made of
+  // a lowering's).
+  if (reach) code = reachedImplementing(code, roots, info);
   // The generic + resolved to each type's own operation first
   // (ters/src/lang/arith.ts): nothing here sees a generic one.
   ({ code, info, names } = resolveArithmetic(code, info, names));
@@ -690,7 +696,7 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   return out;
 }
 
-function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
+function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
   let here: { node: Id; def: Id } | null = null;
@@ -704,7 +710,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const asGiven = info;
   // The steps every lowering of these roots takes alike, done once for
   // both of Build targets' answers (I315).
-  ({ code, info, names } = prepared(code, info, names, roots, !!opts.host));
+  ({ code, info, names } = prepared(code, info, names, roots, !!opts.host, !opts.reached));
   // The checks after a pass below: with the definitions known to end
   // (L250 `ends`), which a check without them gave Diverge again (C256:
   // buffer's JavaScript kept its searches' branches, 214 KB to 159), and
