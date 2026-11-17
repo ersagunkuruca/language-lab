@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | (none yet) | G1 to G24 held for Ersagun's decision ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: G3a, G3b, G1, G2, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -233,13 +233,17 @@ agent with inertia: built as L119 to L124 (DONE.md).
 
 ## G: Game ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md))
 
-Ersagun 2026-11-17: a medium-sized original game to test Ters against current engines and languages. All rows held until he decides after the assessment. The lane column is a suggestion; each stage ends in a bigger-program round.
+Ersagun 2026-11-17: a medium-sized original game to test Ters against current engines and languages. Ersagun said go for stage 1 on 2026-11-17 19:00 UTC; stages 2 to 6 stay held until stage 1's round is reported. The lane column is a suggestion; each stage ends in a bigger-program round.
 
 | id | item | lane | source | pri | size | status |
 |---|---|---|---|---|---|---|
 | G1 | ECS as a representation, a design note: entities as a `Pool` of records with `Optional` (or sum-typed) components, stored as archetype columns chosen by the compiler; queries as keep/map with a match; systems scheduled by their effect rows (disjoint reads and writes run at once). Influences: Unity DOTS, Bevy, flecs, EnTT | L | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
 | G2 | A game page host: a `canvas` element the program draws into from a draw list each frame (rectangles, circles, sprites, lines), keys held and pointer as state, a fixed-step update with the frame's seconds; SVG stays for small pictures | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G3 | Spatial hash grid and boids written in Ters as an example (ten thousand moths), measured against hand-written JS and C; gaps into GAPS.md | L | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
+| G3a | moths M2: a list stored as an array and walked by `match` to its end in a function that calls itself on `rest` is an index loop, no view made per step (native about 25%) | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
+| G3b | moths M1: a `map` inside work already sent to the thread pool (or over a list known to be short) runs in turn; a list made only to be walked once becomes the loop that makes it (deforestation, credit Wadler 1988) | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
+| G3c | moths M3: threads give 1.05x natively; measure again after G3a and G3b, then per-thread arenas for work sent away if allocation still serializes it | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
+| G3d | moths M4: compiled JS keeps records that never leave a function as locals (Vec, Flock in `met`), no finite check on a literal, plain field reads; 10x the hand-written JS | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
+| G3e | moths M5: profile `ters wasi` on moths (14.6x) and split what isn't M1, M2 or M4 into rows | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G6 | Stage 1 slice and round: the greenhouse (or Ersagun's pick) in 2D on the CPU, moths, lamps, a frame budget; a bigger-program round on it | L | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
