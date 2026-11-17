@@ -388,7 +388,9 @@ test("upgrade moves a program to a new version only when the type is the same", 
   const up = upgrade(p.code, prelude("sum"), to, pins);
   assert.ok(up.ok, up.ok ? "" : (up as { reason?: string }).reason);
   if (up.ok) {
-    assert.equal(up.uses, 1);
+    // main's use, and the library's own (the signals module's DFT sums).
+    const inLibrary = Object.values(LIBRARY.code.nodes).filter((n) => !n.id.startsWith(prelude("sum")) && JSON.stringify(n).includes(`"${prelude("sum")}"`)).length;
+    assert.equal(up.uses, 1 + inLibrary);
     const out: string[] = [];
     runMain(up.code, infer(up.code), main, { print: (s) => out.push(s) });
     assert.deepEqual(out, ["3"]);

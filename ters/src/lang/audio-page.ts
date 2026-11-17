@@ -9,7 +9,7 @@
 
 import type { Cells } from "./cells.ts";
 import { listens } from "./audio.ts";
-import { portable, PROCESSOR, type Answers, type FromSound, type Write } from "./sound-thread.ts";
+import { portable, PROCESSOR, unportable, type Answers, type FromSound, type Write } from "./sound-thread.ts";
 import type { El } from "./html.ts";
 import type { Data, Value, World } from "./run.ts";
 import { HTML_V } from "./std-ids.ts";
@@ -62,7 +62,7 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
   // here too, so what reads them is drawn again.
   const take = (node: { port: MessagePort }, writes: Write[]) => {
     from = node;
-    try { for (const w of writes) if (made[w.cell] !== undefined) cells.write(made[w.cell], w.value); } finally { from = null; }
+    try { for (const w of writes) if (made[w.cell] !== undefined) cells.write(made[w.cell], unportable(w.value)); } finally { from = null; }
   };
   // One context, at the device's rate; another only for a microphone at a
   // rate the browser won't convert (Firefox refuses to connect across rates).

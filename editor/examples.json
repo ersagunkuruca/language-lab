@@ -22,6 +22,7 @@
     { "program": "converter", "label": "Page: unit converter", "folders": ["converter"], "page": true },
     { "program": "pedal", "label": "Page: guitar pedal", "folders": ["pedal"], "page": true },
     { "program": "metronome", "label": "Page: metronome", "folders": ["metronome"], "page": true },
+    { "program": "tuner", "label": "Page: tuner", "folders": ["tuner"], "page": true },
     { "program": "constructions", "label": "Page: constructions", "folders": ["constructions"], "page": true },
     { "program": "bounce", "label": "Page: bounce", "folders": ["bounce"], "page": true },
     { "program": "spacetime", "label": "Page: spacetime", "folders": ["spacetime"], "page": true },

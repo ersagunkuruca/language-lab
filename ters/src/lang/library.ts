@@ -9,6 +9,8 @@ import trees0 from "../../library/trees.json" with { type: "json" };
 import steady0 from "../../library/steady.json" with { type: "json" };
 import cases0 from "../../library/cases.json" with { type: "json" };
 import numbers0 from "../../library/numbers.json" with { type: "json" };
+import signals0 from "../../library/signals.json" with { type: "json" };
+import tunings0 from "../../library/tunings.json" with { type: "json" };
 import { readSaved } from "../saved.ts";
 import { merge, shapeHooks, type Code, type Id } from "../model.ts";
 import { fillLater, usesGiveTheirPorts } from "./ports.ts";
@@ -52,7 +54,12 @@ export const NAT_TYPE = numbersNode("def", "Nat"), NAT_V = { zero: numbersNode("
 WHOLE_LITERALS.add(NAT_TYPE);
 Object.assign(INT_CASES, { type: numbersNode("def", "Int as data"), from: numbersNode("variant", "from"), minus: numbersNode("variant", "minus one minus"), fromFn: numbersNode("def", "from (Int)"), minusFn: numbersNode("def", "minus one minus (Int)"), natural: numbersNode("def", "natural") });
 export const MAT_V = { 2: numbersNode("variant", "mat2"), 3: numbersNode("variant", "mat3"), 4: numbersNode("variant", "mat4") } as const;
-export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS];
+// FFT, windows, correlation and peaks on the numbers module's Complex
+// (signals-source.ts, L272).
+export const SIGNALS = readSaved(signals0) as unknown as Module;
+// Tunings, cents and a tuner's reading (tunings-source.ts, L273).
+export const TUNINGS = readSaved(tunings0) as unknown as Module;
+export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS, SIGNALS, TUNINGS];
 export const CORE: Code = merge(prelude, std);
 // Every program is checked on top of the library, so the trees (about
 // 1,500 nodes nobody edits) aren't in it: they're merged in only when a

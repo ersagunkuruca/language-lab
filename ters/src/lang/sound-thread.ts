@@ -34,12 +34,32 @@ export type FromSound = { said: string } | { writes: Write[] };
 // A value as it crosses between the page and the audio thread. Compiled
 // data keeps its case on its class, which a copy across threads loses, so
 // it crosses as its tag and fields, which the evaluator and compiled code
-// both read (core-js.ts caseOf).
+// both read (core-js.ts caseOf). A list crosses as its items in an array
+// (the tuner's window is 4096 of them): copied as written, a list is
+// cells nested as deep as it is long, which overflows the stack of the
+// copy and of a recursive walk alike. `unportable` builds it again.
+const CONS = "std.list.cons"; // std.ts CONS: this file stays out of std's way
+const ITEMS = "portable.items";
+const isData = (v: Value): v is Data => v !== null && typeof v === "object" && !Array.isArray(v) && !ArrayBuffer.isView(v) && typeof (v as Data).tag === "string" && Array.isArray((v as Data).fields);
 export function portable(v: Value): Value {
-  if (v === null || typeof v !== "object" || Array.isArray(v) || ArrayBuffer.isView(v)) return v;
-  const d = v as Data;
-  if (typeof d.tag === "string" && Array.isArray(d.fields)) return { tag: d.tag, fields: d.fields.map(portable) } as Data;
-  return v;
+  if (!isData(v)) return v;
+  if (v.tag === CONS) {
+    const items: Value[] = [];
+    let at: Value = v;
+    while (isData(at) && at.tag === CONS) { items.push(portable(at.fields[0])); at = at.fields[1]; }
+    return { tag: ITEMS, fields: [items as unknown as Value, portable(at)] } as Data;
+  }
+  return { tag: v.tag, fields: v.fields.map(portable) } as Data;
+}
+export function unportable(v: Value): Value {
+  if (!isData(v)) return v;
+  if (v.tag === ITEMS) {
+    const items = v.fields[0] as unknown as Value[];
+    let out = unportable(v.fields[1]);
+    for (let i = items.length - 1; i >= 0; i--) out = { tag: CONS, fields: [unportable(items[i]), out] } as Data;
+    return out;
+  }
+  return { tag: v.tag, fields: v.fields.map(unportable) } as Data;
 }
 
 // What the page's world answered while main ran there (audio-page.ts
@@ -106,7 +126,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
           const cell = p.cells[e.data.cell];
           if (!cell) return;
           taking = true;
-          try { host.cells.write(cell, e.data.value); } finally { taking = false; }
+          try { host.cells.write(cell, unportable(e.data.value)); } finally { taking = false; }
         };
       } catch (e) { this.say((e as Error).message); }
     }

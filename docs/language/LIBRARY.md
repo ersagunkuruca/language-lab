@@ -753,6 +753,40 @@ uppercase and lowercase are each host's own (its Unicode version, its locale dat
 - **table graphemes** : `(Text) -> List Text` (cases module). The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.
 - **table collated** : `(Text, Text, Locale) -[Diverge]-> Order` (cases module). Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).
 
+## Signals
+
+What a tuner, a looper or a pitch finder does to a block of samples. fft is Cooley and Tukey's radix-2 transform on a list of Complex (any length; a power of two is n log n), autocorrelation and cross correlation go by it, and peaks are read between samples off a parabola.
+
+- **fft** : `(List Complex) -[Diverge]-> List Complex` (signals module). The discrete Fourier transform of a list of complex numbers: item k is Σ x_j·e^(−2πi·jk/n). Any length; a power of two takes n log n steps. Cooley and Tukey's radix-2 split (1965).
+- **inverse fft** : `(List Complex) -[Diverge]-> List Complex` (signals module). The inverse of fft: inverse fft(fft(xs)) is xs again.
+- **spectrum** : `(List Float64) -[Diverge]-> List Complex` (signals module). The fft of real samples: item k is how much of k cycles per length there is, as a complex number (its modulus the amount, its angle the phase).
+- **hann window** : `(Int) -> List Float64` (signals module). n weights rising from 0 to 1 and back, ½ − ½cos(2πi/(n − 1)): a block multiplied by them has no edges, so its spectrum doesn't smear. Hann's window (Blackman and Tukey, 1958).
+- **hann windowed** : `(List Float64) -> List Float64` (signals module). The samples multiplied by a Hann window as long as they are.
+- **autocorrelation** : `(List Float64) -[Diverge]-> List Float64` (signals module). The cross correlation of the samples with themselves: high at a lag the signal repeats after, so a note's period is its first high lag past 0.
+- **cross correlation** : `(List Float64, List Float64) -[Diverge]-> List Float64` (signals module). For each lag from 0 to length(a) − 1, Σ a[i + lag]·b[i]: how strongly b turns up in a that many samples late. By FFT (Wiener–Khinchin), so n log n.
+- **peaks** : `(List Float64) -> List (Float64, Float64)` (signals module). Every place a value is higher than both its neighbours, as (place, height), each read between samples off the parabola through the three (quadratic interpolation).
+- **parabola peak offset** : `(Float64, Float64, Float64) -> Float64` (signals module). Where the top of the parabola through three evenly spaced values is, from the middle one: 0 when the middle is the top, between −½ and ½ when it is the highest of the three.
+- **power of two at least** : `(Int) -[Diverge]-> Int` (signals module). The smallest power of two that is at least n: the length an FFT is quickest at.
+- **padded to** : `(List a, Int) -> List a where a is a Number` (signals module). The samples with zeros after them, to size items in all.
+
+## Tunings
+
+A Tuning is its first step's pitch, its steps in cents within a period, and their names: 12, 24 or 53 equal steps (53 named in commas, as Turkish theory counts them), just intonation by Rationals, or a Scala .scl file. nearest step says what a tuner reads off a pitch.
+
+- **Tuning** (type) (tunings module). A tuning: the pitch of its first step (its tonic, in Hz, in octave 4), each step's cents above it within a period (1200 cents is an octave), and the steps' names.
+- **Reading** (type) (tunings module). What a tuner reads off a pitch: the nearest step's name, place and octave, how many cents the pitch is above it (below when negative), and the pitch the step should be.
+- **cents between** : `(Float64, Float64) -> Float64` (tunings module). How far high is above low in cents, 1200·log₂(high/low): 100 is an equal-tempered semitone. 0 where either isn't above 0. Ellis's cents (1885).
+- **cents above** : `(Float64, Float64) -> Float64` (tunings module). The pitch that many cents above this one.
+- **equal temperament** : `(Int, Float64, List Text) -> Tuning` (tunings module). The octave divided into equal steps: 12 is the piano's, 24 has quarter tones, 53 is Turkish theory's commas. Names are optional (an empty list numbers the steps).
+- **twelve tone** : `(Float64) -> Tuning` (tunings module). 12-TET with C to B, tuned so A4 is the pitch given (440 is concert pitch).
+- **quarter tones** : `(Float64) -> Tuning` (tunings module). 24-TET: the twelve and a quarter tone above each (C+ is 50 cents above C), A4 at the pitch given.
+- **fifty three tone** : `(Float64) -> Tuning` (tunings module). 53-TET, the comma tuning of Turkish theory: steps named by the nearest natural and how many commas off (D+4 is 4 commas above D), naturals placed as Arel–Ezgi–Uzdilek place them (whole tone 9 commas, limma 4); A4 at the pitch given.
+- **just intonation** : `(Text, Float64, List Rational, List Text) -> Tuning` (tunings module). Just intonation: the steps are ratios to the tonic (3/2 is a pure fifth), as Rationals.
+- **scala tuning** : `(Text, Float64) -[Choice]-> Tuning` (tunings module). A tuning from a Scala .scl file (Manuel Op de Coul's format): ! comments, a description, the number of pitches, then each pitch as cents (with a point) or a ratio, the last one the period. No answer for a file that isn't one.
+- **with reference** : `(Tuning, Int, Int, Float64) -> Tuning` (tunings module). The same tuning moved so that a step in an octave sounds at the pitch given: A4 = 432, say.
+- **step pitch** : `(Tuning, Int, Int) -> Float64` (tunings module). The pitch of a step in an octave (C4's octave is 4).
+- **nearest step** : `(Tuning, Float64) -> Reading` (tunings module). What a tuner says about a pitch heard: the nearest step, its octave, how many cents off, and the pitch it should be.
+
 ## Points, colours and slopes
 
 A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.

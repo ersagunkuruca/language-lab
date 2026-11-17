@@ -7,7 +7,9 @@
 // microphone that won't open must say why on the page. Then
 // examples/metronome, a sound with no input (L268): it clicks at its
 // tempo, a change of tempo crosses to the audio thread, and the pulses it
-// counts cross back to the page (L267).
+// counts cross back to the page (L267). Then examples/tuner (L274): a
+// microphone that is a sawtooth at G3, then 10 cents sharp of it, and the
+// page reads G and the cents from the samples the audio thread sends back.
 // Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
@@ -24,7 +26,7 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "sound-"));
-for (const page of ["pedal", "metronome"]) {
+for (const page of ["pedal", "metronome", "tuner"]) {
   const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, `../examples/${page}`), "-o", join(dir, `${page}.html`)], { encoding: "utf8" });
   if (built.status !== 0) throw new Error(built.stderr);
 }
@@ -180,6 +182,32 @@ try {
     return seen;
   })()`);
   check("the page lights the part sounding, from the audio thread", new Set(lit.filter((i) => i >= 0)).size >= 3, { lit });
+
+  // The tuner: its microphone a sawtooth (every harmonic) at G3, 196 Hz.
+  await send("Page.navigate", { url: `http://127.0.0.1:${port}/tuner.html` });
+  for (let i = 0; i < 100 && !(await run<boolean>(`!!document.querySelector("button.start")`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  await run(`(() => {
+    const ctx = new AudioContext(), osc = ctx.createOscillator(), out = ctx.createMediaStreamDestination(), g = ctx.createGain();
+    osc.type = "sawtooth"; osc.frequency.value = 196; g.gain.value = 0.3;
+    osc.connect(g); g.connect(out); osc.start();
+    window.tone = osc;
+    navigator.mediaDevices.getUserMedia = async () => out.stream;
+  })()`);
+  await run(`document.querySelector("button.start").click()`);
+  const reads = (cents: number) => run<{ note: string; cents: string }>(`(async () => {
+    window.tone.frequency.value = 196 * Math.pow(2, ${cents} / 1200);
+    let seen = { note: "", cents: "" };
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const n = document.querySelector(".note"), c = document.querySelector(".cents");
+      seen = { note: n ? n.textContent : "", cents: c ? c.textContent : "" };
+      if (i > 8 && c && Math.abs(parseFloat(seen.cents.replace("−", "-")) - ${cents}) < 1.5) break;
+    }
+    return seen;
+  })()`);
+  const inTune = await reads(0), sharp = await reads(10);
+  check("the tuner reads G3 in tune from the microphone", inTune.note === "G3" && Math.abs(parseFloat(inTune.cents)) < 1.5, inTune);
+  check("and 10 cents sharp of it", sharp.note === "G3" && Math.abs(parseFloat(sharp.cents) - 10) < 1.5, sharp);
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);
