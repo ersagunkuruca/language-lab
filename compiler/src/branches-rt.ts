@@ -57,7 +57,17 @@ function encode(x: unknown, names: Map<Fn, string>): unknown {
   if (x instanceof Table) return encodeTable(x, names);
   if (Array.isArray(x)) { const r = recordsAsColumns(x) ?? byShape(x, 0, x.length); if (r) return r; }
   if (Array.isArray(x)) { const xs = x.map((v) => encode(v, names)); return xs.includes(NO) ? NO : xs; }
-  const t = x as { tag?: unknown; fields?: unknown[] };
+  const t = x as { tag?: unknown; fields?: unknown[]; f0?: unknown; f1?: unknown };
+  // A cons list as its items, walked, not recursed into: a long one (the
+  // pond page's 2,304 patches) would overflow the stack here, and in
+  // postMessage's own copying.
+  if (t.tag === CONS) {
+    const items: unknown[] = [];
+    let c = t;
+    for (; c.tag === CONS; c = (c.f1 ?? c.fields![1]) as typeof c) { const e = encode(c.f0 ?? c.fields![0], names); if (e === NO) return NO; items.push(e); }
+    const end = encode(c, names);
+    return end === NO ? NO : { $l: items, end };
+  }
   if (t.tag !== undefined && Array.isArray(t.fields)) {
     const fields = t.fields.map((v) => encode(v, names));
     return fields.includes(NO) ? NO : { $t: t.tag, fields };
@@ -197,8 +207,13 @@ function decode(x: unknown, fns: Record<string, Fn>, closure: (code: Fn, caps: u
   if (o.$s) return new Table(new SharedEntries(o.$s, o.n!, o.w!, o.tag) as unknown as Map<unknown, unknown>, true);
   if (o.$m) { const m = new Map<unknown, unknown>(); for (let i = 0; i < o.$m.length; i += 2) m.set(decode(o.$m[i], fns, closure), decode(o.$m[i + 1], fns, closure)); return new Table(m, true); }
   if (o.$f !== undefined) return closure(fns[o.$f], o.caps!.map((v) => decode(v, fns, closure)));
+  if ((o as { $l?: unknown[] }).$l) { const xs = (o as { $l: unknown[] }).$l; let out = decode((o as { end: unknown }).end, fns, closure); for (let i = xs.length - 1; i >= 0; i--) out = { tag: CONS, fields: [decode(xs[i], fns, closure), out] }; return out; }
   return { tag: o.$t, fields: o.fields!.map((v) => decode(v, fns, closure)) };
 }
+
+// A value as a worker gets it: encoded, copied as postMessage copies,
+// decoded. Data only (no functions), for tests.
+export const crossed = (x: unknown): unknown => decode(structuredClone(encode(x, new Map())), {}, () => { throw new Error("no functions here"); });
 
 // The module's own: where it was loaded from, its functions by name, and
 // how it makes a closure and an abort.
