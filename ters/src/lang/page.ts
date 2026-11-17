@@ -378,7 +378,7 @@ export function soundFile(runtime: Runtime, code0: Code, info0: Info, names0: Na
 const sounds = new WeakMap<Code, boolean>();
 export const hasSound = (code: Code): boolean => {
   let r = sounds.get(code);
-  if (r === undefined) sounds.set(code, (r = Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen)));
+  if (r === undefined) sounds.set(code, (r = Object.values(code.nodes).some((n) => n.kind === "ref" && (n.target === HTML_V.listen || n.target === HTML_V.listenStereo))));
   return r;
 };
 

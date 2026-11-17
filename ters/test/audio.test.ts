@@ -15,7 +15,7 @@ import { Lang } from "../src/lang/dsl.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
-import { audioProblem, playBlocks } from "../src/lang/audio.ts";
+import { audioProblem, playBlocks, playStereoBlocks, soundStereo } from "../src/lang/audio.ts";
 import { createContext, runInContext, runInNewContext } from "node:vm";
 import { runMain } from "../src/lang/run.ts";
 import { corePageRuntimes, coreSoundWorklet, coreWorkletRuntimes, webCorePage } from "../cli/web.ts";
@@ -23,12 +23,12 @@ import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { emitCoreJs, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, soundFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
-import { CELL_OPS, NOW_OP, RANDOM_OP, S } from "../src/lang/std.ts";
+import { CELL_OPS, HTML_V, NOW_OP, PAIR_V, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
 import { replaying } from "../src/lang/sound-thread.ts";
 import type { World } from "../src/lang/run.ts";
 import { B } from "../src/prelude.ts";
-import { soundOf } from "../cli/sound.ts";
+import { soundOf, stereoSoundOf } from "../cli/sound.ts";
 import { represented, type Program } from "../cli/represented.ts";
 import { readWav, writeWav } from "../cli/wav.ts";
 
@@ -389,4 +389,45 @@ test("the metronome clicks on its samples at any rate, the bar and group starts 
     assert.ok(bar > group && group > rest && rest > 0.1, `${rate}: ${peaks}`);
     assert.deepEqual(peaks.map((x) => (x > bar * 0.9 ? 0 : x > group * 0.9 ? 1 : 2)), [0, 2, 1, 2, 1, 2, 2, 0], `${rate}`);
   }
+});
+
+// A sound in stereo (L270): its block function takes a pair of blocks,
+// left and right, and gives a pair back, by the evaluator and compiled
+// alike; `ters render` writes the pair as a WAV file's two channels. One
+// that takes a pair and gives one block isn't a sound.
+test("a sound in stereo plays a pair of blocks, and renders to two channels", async () => {
+  const k = new Lang(LIBRARY.code);
+  const map = LIBRARY.code.defs.find((d) => LIBRARY.names[d] === "map")!;
+  const main = k.def("main"), half = k.def("half");
+  // Left and right swapped, the new right twice as loud.
+  k.define(main, k.thunk(() => k.fn(["blocks", "rate"], (blocks) => k.match(blocks, [{ variant: PAIR_V, names: ["left", "right"], body: ([l, r]) => k.call(PAIR_V, r, k.call(map, l, k.fn(["x"], (x) => k.call(B.mul, x, k.lit(2))))) }]))));
+  k.define(half, k.thunk(() => k.fn(["blocks", "rate"], (blocks) => k.match(blocks, [{ variant: PAIR_V, names: ["left", "right"], body: ([l]) => l }]))));
+  const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+  const p = { code, info: infer(code, names), names };
+  assert.equal(audioProblem(p.info, main, p.names), null);
+  assert.equal(soundStereo(p.info, main), true);
+  assert.match(audioProblem(p.info, half, p.names)!, /a sound in stereo takes a pair of blocks and gives a pair back/);
+  const left = [1, 2, 3, 4, 5], right = [-1, -2, -3, -4, -5];
+  for (const way of ["evaluator", "core"] as const) {
+    const played = playStereoBlocks(await stereoSoundOf(p, main, way), left, right, 2);
+    assert.deepEqual([[...played.out], [...played.right]], [right, [2, 4, 6, 8, 10]], way);
+  }
+  const back = readWav(writeWav({ rate: 8000, samples: Float64Array.from(left), channels: [Float64Array.from(left), Float64Array.from(right)] }));
+  assert.deepEqual(back.channels!.map((c) => [...c]), [left, right]);
+  // On a page, `listen in stereo`: its worklet takes the input's two
+  // channels and gives the speakers the pair.
+  const page = k.def("page");
+  k.define(page, k.fn([], () => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.listenStereo, k.x(HTML_V.noInput), k.call(main))), k.list())));
+  const code2 = merge(LIBRARY.code, k.code), names2 = { ...LIBRARY.names, ...k.names };
+  const info2 = infer(code2, names2);
+  assert.deepEqual(info2.errors.map((e) => e.message), []);
+  const source = await coreSoundWorklet(lowerCore(code2, info2, names2, [page]), names2[page]);
+  const made: (new (o: object) => { process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+  class AudioWorkletProcessor { port = { onmessage: null, postMessage: () => {} }; }
+  runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder });
+  const node = new made[0]({ processorOptions: { index: 0 } });
+  const l = Float32Array.from({ length: 128 }, (_, i) => i / 128), r = Float32Array.from({ length: 128 }, (_, i) => -i / 256);
+  const out = [new Float32Array(128), new Float32Array(128)];
+  assert.equal(node.process([[l, r]], [out]), true);
+  assert.deepEqual([[...out[0]], [...out[1]]], [[...r], [...l].map((x) => 2 * x)]);
 });

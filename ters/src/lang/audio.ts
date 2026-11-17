@@ -8,7 +8,7 @@ import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList } from "./run.ts";
-import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST } from "./std-ids.ts";
+import { AUDIO_BLOCK, AUDIO_MAKER, HTML_V, LIST, PAIR } from "./std-ids.ts";
 import { NUMBER, type Type } from "./types.ts";
 
 // The browser's render quantum (Web Audio API, AudioWorklet): the block a
@@ -24,7 +24,7 @@ export const RATE = 48000;
 // block function's.
 export function audioProblem(info: Info, def: Id, names: Names = {}): string | null {
   const t = info.typeOf.get(def);
-  const say = "a sound takes nothing and returns its block function, from a List Float64 and the rate (a Float64) to a List Float64";
+  const say = "a sound takes nothing and returns its block function, from a List Float64 and the rate (a Float64) to a List Float64 (or, in stereo, from a pair of them to a pair)";
   if (!t || t.t !== "fn" || t.params.length) return say;
   const extra = (row: Type & { t: "fn" }, allowed: readonly Id[]) => row.eff.effs.filter((e) => !allowed.includes(e)).map((e) => names[e] ?? e);
   const made = extra(t, AUDIO_MAKER);
@@ -39,10 +39,23 @@ export function audioProblem(info: Info, def: Id, names: Names = {}): string | n
     return a.t === "var" || (a.t === "con" && a.id === NUMBER);
   };
   const rate = (x: Type) => { const z = info.subst.zonk(x); return z.t === "var" || (z.t === "con" && z.id === NUMBER); };
-  if (f.t !== "fn" || f.params.length !== 2 || !numbers(f.params[0]) || !rate(f.params[1]) || !numbers(f.ret)) return say;
+  // Or a pair of them, left and right (L270): a sound in stereo.
+  const blocks = (x: Type) => { const z = info.subst.zonk(x); return numbers(z) || (z.t === "con" && z.id === PAIR && z.args.length === 2 && z.args.every(numbers)); };
+  if (f.t !== "fn" || f.params.length !== 2 || !blocks(f.params[0]) || !rate(f.params[1]) || !blocks(f.ret)) return say;
+  if (soundStereo(info, def) !== stereoOut(info, f)) return "a sound in stereo takes a pair of blocks and gives a pair back; a mono one takes a block and gives one";
   const played = extra(f, AUDIO_BLOCK);
   if (played.length) return `a sound's block function runs on the audio thread, so it can't have ${played.join(", ")}`;
   return null;
+}
+
+// Whether a sound's block function takes a pair of blocks, left and
+// right (L270), and whether it gives one.
+const isPair = (info: Info, x: Type) => { const z = info.subst.zonk(x); return z.t === "con" && z.id === PAIR; };
+const stereoOut = (info: Info, f: Type & { t: "fn" }) => isPair(info, f.ret);
+export function soundStereo(info: Info, def: Id): boolean {
+  const t = info.typeOf.get(def);
+  const f = t?.t === "fn" ? info.subst.zonk(t.ret) : undefined;
+  return f?.t === "fn" && f.params.length === 2 && isPair(info, f.params[0]);
 }
 
 // What a sound's block function leaves open in its type: its samples' (a
@@ -53,8 +66,11 @@ export function soundOpen(info: Info, def: Id): { samples: boolean; rate: boolea
   const t = info.typeOf.get(def);
   const f = t?.t === "fn" ? info.subst.zonk(t.ret) : undefined;
   if (f?.t !== "fn" || f.params.length !== 2) return { samples: false, rate: false };
-  const b = info.subst.zonk(f.params[0]), item = b.t === "con" && b.args.length === 1 ? info.subst.zonk(b.args[0]) : b;
-  return { samples: item.t === "var", rate: info.subst.zonk(f.params[1]).t === "var" };
+  // In stereo, open when either block's items are (a sound that passes the
+  // right block on as it came).
+  const b0 = info.subst.zonk(f.params[0]), bs = b0.t === "con" && b0.id === PAIR ? b0.args.map((a) => info.subst.zonk(a)) : [b0];
+  const open = (b: Type) => (b.t === "con" && b.args.length === 1 ? info.subst.zonk(b.args[0]) : b).t === "var";
+  return { samples: bs.some(open), rate: info.subst.zonk(f.params[1]).t === "var" };
 }
 
 // What playing went through: blocks that played silence instead, and why
@@ -76,7 +92,21 @@ export function playBlocks(play: (block: number[], rate: number) => number[], in
   return { out, silent };
 }
 
-// A page's `listen` attributes, in the order they're written, where main
+// `play` in stereo over `left` and `right`, as playBlocks plays a mono
+// sound: each block a pair, and a pair back.
+export function playStereoBlocks(play: (left: number[], right: number[], rate: number) => [number[], number[]], left: ArrayLike<number>, right: ArrayLike<number>, size = BLOCK, rate = RATE): Played & { right: Float64Array } {
+  const n = left.length, out = new Float64Array(n), outR = new Float64Array(n), silent: Played["silent"] = [];
+  const block = (xs: ArrayLike<number>, at: number) => Array.from({ length: size }, (_, i) => (at + i < n ? xs[at + i] : 0));
+  for (let at = 0, b = 0; at < n; at += size, b++) {
+    let got: [number[], number[]];
+    try { got = play(block(left, at), block(right, at), rate); } catch (e) { silent.push({ block: b, why: (e as Error).message }); continue; }
+    if (got[0].length !== size || got[1].length !== size) { silent.push({ block: b, why: `it gave ${got[0].length} and ${got[1].length} samples for ${size}` }); continue; }
+    for (let i = 0; i < size && at + i < n; i++) { out[at + i] = got[0][i]; outR[at + i] = got[1][i]; }
+  }
+  return { out, right: outR, silent };
+}
+
+// A page's `listen` and `listen in stereo` attributes, in the order they're written, where main
 // put them (not inside a `part`, which a view draws later). The page and
 // the audio thread each run main and walk it the same way, so the n-th
 // here is the n-th there (audio-page.ts, audio-worklet.ts).
@@ -85,7 +115,7 @@ export function listens(page: Value): Data[] {
   const walk = (v: Value) => {
     const d = v as Data;
     if (d?.tag !== HTML_V.element) return;
-    for (const a of fromList(d.fields[1]) as Data[]) if (a.tag === HTML_V.listen) found.push(a);
+    for (const a of fromList(d.fields[1]) as Data[]) if (a.tag === HTML_V.listen || a.tag === HTML_V.listenStereo) found.push(a);
     fromList(d.fields[2]).forEach(walk);
   };
   walk(page);

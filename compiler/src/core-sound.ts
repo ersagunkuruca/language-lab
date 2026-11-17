@@ -3,7 +3,7 @@
 // more there and each block played through its block function, as
 // sound-thread.ts does for any compiled program.
 
-import { equal, fromList, toList, type Value } from "../../ters/src/lang/run.ts";
+import { equal, type Value } from "../../ters/src/lang/run.ts";
 import { Cells } from "../../ters/src/lang/cells.ts";
 import { startSoundOn } from "../../ters/src/lang/sound-thread.ts";
 import { coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
@@ -26,6 +26,6 @@ export function startCoreSound(tables: TableSpec[], worlds: string[], defs: (R: 
   startSoundOn({
     cells,
     main: (w) => { Object.assign(world, w); return fns[main]() as Value; },
-    play: (f, block, rate) => fromList(coreCall(f, toList(block), rate)) as number[],
+    play: (f, block, rate) => coreCall(f, block, rate) as Value,
   }, seed);
 }

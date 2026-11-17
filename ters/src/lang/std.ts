@@ -183,6 +183,16 @@ export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
   // cell the view read changes. Its types by fixed ids, so the numbered
   // ones after it don't move.
   ["paint", [["marks", () => node({ id: "std.attribute.paint.marks.type", kind: "tfun", params: [], result: node({ id: "std.attribute.paint.marks.result", kind: "tref", target: LIST, args: [node({ id: "std.attribute.paint.marks.mark", kind: "tref", target: "std.mark", args: [] })] }), effects: [VIEW_ROW] })]]],
+  // A sound in stereo (L270): its block function is given each block as
+  // a pair, left and right, and the rate, and gives a pair back. A mono
+  // input comes in on both sides. Its types by fixed ids, as paint's.
+  ["listen in stereo", [["to", () => node({ id: "std.attribute.listen in stereo.to.type", kind: "tref", target: INPUT, args: [] })], ["play", () => {
+    const at = (s: string) => `std.attribute.listen in stereo.play.${s}`;
+    const num = (s: string) => node({ id: at(s), kind: "tref", target: NUMBER, args: [] });
+    const block = (s: string) => node({ id: at(s), kind: "tref", target: LIST, args: [num(`${s}.item`)] });
+    const pair = (s: string) => node({ id: at(s), kind: "tref", target: PAIR, args: [block(`${s}.left`), block(`${s}.right`)] });
+    return node({ id: at("type"), kind: "tfun", params: [pair("blocks"), num("rate")], result: pair("result"), effects: [SOUND_ROW] });
+  }]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
@@ -319,7 +329,7 @@ tn += 4 + 9 + 16;
 // for the checker's message.
 export const SMART: Record<Id, string> = { [ALGEBRAIC_V]: "as algebraic or square root", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
 for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
-export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", paint: "std.attribute.paint", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", listenStereo: "std.attribute.listen in stereo", paint: "std.attribute.paint", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";

@@ -1223,7 +1223,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const E = EF.params[0] as RType;
     // A page's sound (C217): listen's input and its block function, from
     // a List Float64 to a List Float64.
-    const li = ci(A, "std.attribute.listen");
+    const li = ci(A, "std.attribute.listen"), ls = ci(A, "std.attribute.listen in stereo");
     const SF = li >= 0 ? (A.cases[li].fields[1].t as FType) : null, IN = li >= 0 ? (A.cases[li].fields[0].t as DType) : null;
     const listOf = (t: unknown) => {
       const d = t as DType;
@@ -1597,6 +1597,7 @@ static void ters_fill(ters_m *m, lab_cell *h) {
     t->kind = a->tag;
     if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
     else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
+    ${ls >= 0 ? `else if (a->tag == ${ls}) fputs("a sound in stereo plays only in a browser for now (ters build-web)\\n", stderr);` : ""}
     else ${sound ? `if (ters_parts) fputs("a listen inside a part doesn't play: put it where main returns it\\n", stderr);` : `fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);`}
   }
   ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) if (${field(LA, la.c, la.head, "x")}->tag == ${li}) ters_snd_add(m, ${field(LA, la.c, la.head, "x")});
