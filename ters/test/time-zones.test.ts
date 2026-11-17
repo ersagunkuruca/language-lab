@@ -5,14 +5,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { compiledDefs } from "../../compiler/src/core-js.ts";
+import { compiledDefs, compiledMain } from "../../compiler/src/core-js.ts";
+import { nodeWorld } from "../src/lang/world.ts";
 import type { Id } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { MY_LOCALE_OP, MY_ZONE_OP, S, SHOW_ANY, ZONE_OPS } from "../src/lang/std.ts";
+import { MY_LATENCY_OP, MY_LOCALE_OP, MY_ZONE_OP, S, SHOW_ANY, ZONE_OPS } from "../src/lang/std.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -28,7 +29,7 @@ test("zone offsets by name, summer time, an unknown zone, and my time zone", asy
     inZone("2026-01-01T09:30:00Z", k.lit("America/St_Johns")),
     inZone("2026-01-01T09:30:00Z", k.lit("Nowhere/At all")),
     inZone("2026-11-04T09:30:00Z", k.call(MY_ZONE_OP)),
-    k.handle(inZone("2026-11-04T09:30:00Z", k.call(MY_ZONE_OP)), [{ variant: MY_ZONE_OP, names: [], body: () => k.lit("UTC") }, { variant: MY_LOCALE_OP, names: [], body: () => k.call(MY_LOCALE_OP) }])))));
+    k.handle(inZone("2026-11-04T09:30:00Z", k.call(MY_ZONE_OP)), [{ variant: MY_ZONE_OP, names: [], body: () => k.lit("UTC") }, { variant: MY_LOCALE_OP, names: [], body: () => k.call(MY_LOCALE_OP) }, { variant: MY_LATENCY_OP, names: [], body: () => k.call(MY_LATENCY_OP) }])))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
@@ -60,4 +61,33 @@ test("a local date and time read back in a zone, across the jump ahead and the g
   const want = shown(["2026-07-01T09:30:00Z", "2026-01-01T09:30:00Z", "2026-03-29T01:30:00Z", "2026-03-29T11:00:00Z", "2026-10-25T00:30:00Z", "2026-03-08T07:30:00Z", "2026-11-04T09:30:00Z", "no such zone"]);
   assert.equal(runMain(code, info, main, { print: () => {}, names }), want);
   assert.equal(compiledDefs(code, info, names, ["main"], { print: () => {} } as never).main(), want);
+});
+
+// C260: the platform's sound latency is a setting too. The world answers
+// it (0 where it reports none), a match answers it in a test, evaluated
+// and compiled the same; on a page, a view showing it is drawn again when
+// a sound reports it.
+test("my sound latency: the world's figure, a match's in a test, and a page's view drawn again when it changes", async () => {
+  const k = new Lang();
+  const main = k.def("main");
+  const shown = () => k.call(SHOW_ANY, k.call(MY_LATENCY_OP));
+  k.define(main, k.thunk(() => k.seq(k.call(S.print, shown()),
+    k.call(S.print, k.handle(shown(), [{ variant: MY_LATENCY_OP, names: [], body: () => k.lit(0.25) }, { variant: MY_LOCALE_OP, names: [], body: () => k.call(MY_LOCALE_OP) }, { variant: MY_ZONE_OP, names: [], body: () => k.call(MY_ZONE_OP) }])))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  for (const world of [{}, { soundLatency: () => 0.0125 }]) {
+    const ran: string[] = [], compiled: string[] = [];
+    runMain(code, info, main, { print: (l) => ran.push(l), names, world: { ...nodeWorld(), ...world } });
+    compiledMain(code, info, names, { print: (l: string) => compiled.push(l), world: { ...nodeWorld(), ...world } } as never);
+    assert.deepEqual(ran, ["soundLatency" in world ? "0.0125" : "0", "0.25"]);
+    assert.deepEqual(compiled, ran);
+  }
+  const { browserWorld } = await import("../src/lang/browser.ts");
+  const { Cells } = await import("../src/lang/cells.ts");
+  const cells = new Cells(), latency = cells.own(0, "sound latency");
+  const w = browserWorld({ getItem: () => null, setItem: () => {}, removeItem: () => {}, length: 0, key: () => null }, "t", console, { cells, frame: () => {}, latency } as never);
+  const seen: number[] = [];
+  cells.watch(() => { seen.push(w.soundLatency!()); });
+  cells.write(latency, 0.02);
+  assert.deepEqual(seen, [0, 0.02]);
 });

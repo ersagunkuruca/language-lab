@@ -41,7 +41,8 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   // console can copy out (copy(JSON.stringify(tersLog))).
   const log = typeof location !== "undefined" && /[?&]ters-log(?:[=&]|$)/.test(location.search) ? ((globalThis as { tersLog?: LogEntry[] }).tersLog = []) : undefined;
   if (log) console.info("ters: this run's log is in tersLog; copy(JSON.stringify(tersLog)) copies it");
-  const browser = browserWorld(pageStorage(), program, console, { cells, frame: (f) => requestAnimationFrame(f) });
+  const latency = cells.own(0, "sound latency");
+  const browser = browserWorld(pageStorage(), program, console, { cells, frame: (f) => requestAnimationFrame(f), latency });
   // Its events and answers up to MAIN_LOG_CAP, then the log says it
   // stopped (I239d): a compiled page's log is for the evaluator to replay
   // from the start, so it is capped rather than kept as a window.
@@ -54,7 +55,7 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const fns = defs(coreRuntime(tables, worlds, rt, code, undefined, hosts?.ops));
   const doc = document as unknown as Doc & { body: { append(n: Node_): void } };
   const run = () => fns[main]() as Value;
-  const sound = worklet ? SOUND!.soundPlayer(cells, worklet, run, undefined, recorded!) : null;
+  const sound = worklet ? SOUND!.soundPlayer(cells, worklet, run, undefined, recorded!, latency) : null;
   doc.body.append(mountHtml((sound ? sound.page : run()) as never, { cells, doc, call: coreCall, listen: sound?.listen, heard: log && heardInto(log, undefined, cap) }));
 }
 

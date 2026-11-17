@@ -129,7 +129,8 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells || (o.log && o.window)) cells.kept = [];
-  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose });
+  const latency = cells.own(0, "sound latency");
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose, latency });
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser, undefined, undefined, () => cells.inView()) : browser;
   // While the page is stepped through its log (I239c), the world answers
   // from the log and nothing new is logged: `asking` is which world.
@@ -158,7 +159,7 @@ export function showPage(o: PageOptions): Preview {
   const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world, entered });
   let sound: ReturnType<typeof soundPlayer> | null = null, root!: Node_;
   try {
-    sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world) : null;
+    sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world, latency) : null;
     const value = sound ? sound.page : run();
     root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && ((h) => (...a: Parameters<typeof h>) => { if (!stepping) h(...a); })(heardInto(o.log, window)), live: () => !stepping });
   } catch (e) {

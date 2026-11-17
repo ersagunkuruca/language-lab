@@ -12,7 +12,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { runMain } from "../src/lang/run.ts";
-import { LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
+import { LOCALE_V, MY_LATENCY_OP, MY_LOCALE_OP, MY_ZONE_OP, SHOW_ANY, TEXT_OPS } from "../src/lang/std.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
@@ -66,7 +66,7 @@ test("my locale: from the world, or from a handler", async () => {
   const up = () => k.call(TEXT_OPS.uppercase, k.lit("iyi"), k.call(MY_LOCALE_OP));
   k.define(main, k.thunk(() => k.call(SHOW_ANY, k.listOf(
     up(),
-    k.handle(up(), [{ variant: MY_LOCALE_OP, names: [], body: () => k.call(LOCALE_V, k.lit("en")) }, { variant: MY_ZONE_OP, names: [], body: () => k.call(MY_ZONE_OP) }])))));
+    k.handle(up(), [{ variant: MY_LOCALE_OP, names: [], body: () => k.call(LOCALE_V, k.lit("en")) }, { variant: MY_ZONE_OP, names: [], body: () => k.call(MY_ZONE_OP) }, { variant: MY_LATENCY_OP, names: [], body: () => k.call(MY_LATENCY_OP) }])))));
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);

@@ -61,7 +61,7 @@ import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info, Options } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
-import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
+import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, MY_LATENCY_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { tupleType } from "../../ters/src/lang/std-values.ts";
 import { shownImplementations, implementationsOf } from "../../ters/src/lang/std-values.ts";
 import { liftLets } from "../../ters/src/lang/lift-lets.ts";
@@ -917,7 +917,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
   // The person's settings too (L214b2), where the program answers them: an
   // ask no handler of the program's answers is the world's.
-  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); }
+  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP || n.variant === MY_LATENCY_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); tailOps.set(MY_LATENCY_OP, SETTINGS); }
   // Check too, where the program handles it (T7e2: `ters test --compiled`
   // runs a test under a handler of its expects).
   if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
@@ -1792,11 +1792,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // The person's locale and time zone (L214b2, L188), a file's bytes
         // (L189c), a fetched text, for JavaScript from the core IR: the
         // world's, as the evaluator answers them.
-        if (opts.host && (target === MY_LOCALE_OP || target === MY_ZONE_OP || HOST_WORLD[target])) {
+        if (opts.host && (target === MY_LOCALE_OP || target === MY_ZONE_OP || target === MY_LATENCY_OP || HOST_WORLD[target])) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           if (HOST_WORLD[target]) return worldCall(target, args(), t)!;
-          return { k: "world", op: target === MY_LOCALE_OP ? "myLocale" : "myTimeZone", aborts: false, args: [], t };
+          return { k: "world", op: target === MY_LOCALE_OP ? "myLocale" : target === MY_LATENCY_OP ? "mySoundLatency" : "myTimeZone", aborts: false, args: [], t };
         }
         // The files `with open file` keeps open (L213c3): the world's, by
         // their number, as the evaluator answers them; only the library

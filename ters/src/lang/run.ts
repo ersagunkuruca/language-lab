@@ -37,7 +37,7 @@ import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
 import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std-ids.ts";
-import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
+import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
 import { ArrayView } from "./array-view.ts";
 import { Table } from "./table.ts";
@@ -449,6 +449,10 @@ export interface World {
   // Permissions' (L236, std.ts): whether the person gave this one. A world
   // without it answers yes, as a command line has no such dialog.
   askPermission?(what: string): boolean;
+  // Settings' sound latency (C260): seconds from a sample coming in to it
+  // being heard, as the platform reports them. A world without it reports
+  // none: 0.
+  soundLatency?(): number;
   // Environment's (L253): a variable's value, null where it isn't set. A
   // world without it has none set.
   environmentVariable?(name: string): string | null;
@@ -1320,6 +1324,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (op === NOW_OP) return this.ret((rt.world?.now ?? Date.now)());
       if (op === MY_LOCALE_OP) return this.ret({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
       if (op === MY_ZONE_OP) return this.ret((rt.world?.timeZone ?? hostZone)());
+      if (op === MY_LATENCY_OP) return this.ret(rt.world?.soundLatency?.() ?? 0);
       if (op === ASK_PERMISSION_OP) return this.ret(bool((rt.world?.askPermission ?? (() => true))(args[0] as string)));
       if (op === ENV_OP) return this.ret(environmentValue(rt.world?.environmentVariable?.(args[0] as string) ?? null));
       // A file the prelude's `with open file` keeps open (L213c): by its

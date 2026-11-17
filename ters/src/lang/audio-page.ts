@@ -37,7 +37,9 @@ export function recordingWorld<W extends Pick<World, "random" | "now">>(w: W): W
 // gone, replaced or left must not keep sounding. `world` is the page's
 // world made with recordingWorld: what it answers main goes to the audio
 // thread too.
-export function soundPlayer(cells: Cells, worklet: string, main: () => Value, base?: string, world?: { keep: Answers | null }) {
+// `latency`: a cell of the runtime's own that `my sound latency` reads
+// (C260); each sound that starts writes the platform's figures into it.
+export function soundPlayer(cells: Cells, worklet: string, main: () => Value, base?: string, world?: { keep: Answers | null }, latency?: Value) {
   // By their place among main's cells, which is their place on the audio
   // thread too (the handler's own count may have started before main).
   const made: Value[] = [], mine = new Map<number, number>();
@@ -83,7 +85,7 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
     return made;
   };
 
-  async function microphone(ctx: AudioContext): Promise<{ ctx: AudioContext; node: AudioNode; stop: () => void }> {
+  async function microphone(ctx: AudioContext): Promise<{ ctx: AudioContext; node: AudioNode; stop: () => void; latency: number }> {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("this browser gives no microphone here: a page needs https (or localhost) for one");
     // The guitar as it is: no echo cancelling, noise gate or gain riding.
     // Asked for, not demanded, and nothing about the rate or channels, so
@@ -96,20 +98,22 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
       stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch((e2) => { throw new Error(micProblem(e2)); });
     }
     const stop = () => stream.getTracks().forEach((t) => t.stop());
+    // What the platform says the input adds (MediaTrackSettings.latency).
+    const heard = (stream.getAudioTracks()[0]?.getSettings() as { latency?: number } | undefined)?.latency ?? 0;
     try {
-      return { ctx, node: ctx.createMediaStreamSource(stream), stop };
+      return { ctx, node: ctx.createMediaStreamSource(stream), stop, latency: heard };
     } catch (e) {
       const rate = stream.getAudioTracks()[0]?.getSettings().sampleRate;
       if (!rate || rate === ctx.sampleRate) { stop(); throw e; }
       const own = await start(rate);
       if (own.state === "suspended") await own.resume();
-      return { ctx: own, node: own.createMediaStreamSource(stream), stop };
+      return { ctx: own, node: own.createMediaStreamSource(stream), stop, latency: heard };
     }
   }
 
   // Where the samples come from; none for a sound with no input (L268),
   // whose blocks come in silent.
-  async function source(ctx: AudioContext, to: Data): Promise<{ ctx: AudioContext; node: AudioNode | null; stop: () => void }> {
+  async function source(ctx: AudioContext, to: Data): Promise<{ ctx: AudioContext; node: AudioNode | null; stop: () => void; latency?: number }> {
     if (to.tag === HTML_V.noInput) return { ctx, node: null, stop: () => {} };
     if (to.tag === HTML_V.microphone) return microphone(ctx);
     const reply = await fetch(base ? new URL(String(to.fields[0]), new URL(base, location.href)).href : String(to.fields[0]));
@@ -169,6 +173,16 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           // Stopped while it was starting: nothing plays.
           if (closed) return end();
           e.setAttribute("data-playing", "true");
+          // The platform's figures (C260): the input's, and the output's
+          // (outputLatency, which a browser may know only once it plays,
+          // so read again a moment later; baseLatency where it has none).
+          const report = () => {
+            if (!latency || on?.stop !== end) return;
+            const out = (ctx as AudioContext & { outputLatency?: number }).outputLatency || ctx.baseLatency || 0;
+            cells.write(latency, (from.latency ?? 0) + out);
+          };
+          report();
+          setTimeout(report, 500);
         } catch (err) {
           on = null;
           console.error(`sound: ${(err as Error).message}`);

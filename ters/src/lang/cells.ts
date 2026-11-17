@@ -452,6 +452,13 @@ export class Cells {
     return c;
   }
 
+  // A cell of the runtime's own, not the program's (the platform's sound
+  // latency, C260): it has no place among the cells, so nothing sends it
+  // to the audio thread or hands it over, and making it moves no place.
+  own(initial: Value, label = "own"): Value {
+    return this.wrap(this.node(null, initial, label));
+  }
+
   // Solid's createMemo, lazy: nothing runs until the first read.
   formula(compute: () => Value, label = "formula"): Value {
     if (this.plain) throw new Error("cells kept plainly have no formulas, watchers or each");
