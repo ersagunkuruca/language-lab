@@ -693,6 +693,35 @@ async function seededRun() {
   await p.close();
 }
 
+// Run's inputs (E273-E275): calc's standard input starts with its own
+// lines; sheet's arguments and budget.txt show, and a change to the file
+// reaches the run, Reset giving the example's back.
+async function runInputs() {
+  where = "Run's inputs";
+  const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  await p.locator('[data-set="program"]', { hasText: /calc, a calculator/ }).first().click();
+  const stdin = await p.locator("#t-stdin").inputValue();
+  if (!stdin.startsWith("1 + 2")) errors.push(`${where}: calc's standard input is ${JSON.stringify(stdin)}`);
+  await p.locator('[data-set="program"]', { hasText: /sheet, a spreadsheet/ }).first().click();
+  const args = await p.locator("#t-args").inputValue();
+  if (args !== "budget.txt") errors.push(`${where}: sheet's arguments are ${JSON.stringify(args)}`);
+  const file = p.locator("#t-file");
+  await file.fill((await file.inputValue()).replace("A1 = 1200", "A1 = 5000"));
+  await file.evaluate((e) => (e as HTMLElement).blur());
+  // Run sends the changed file: the worker's ask, as the page made it.
+  await p.locator('[data-act="t-run"]').click();
+  const isRun = (a: unknown) => !!a && typeof a === "object" && "files" in a && !("whereRuns" in a) && !("warm" in a);
+  const ask = p.workers.findLast((x) => x.asked.some(isRun))?.asked.find(isRun) as { files: [string, string][]; args?: string[] } | undefined;
+  if (!ask?.files.some(([k, v]) => k.endsWith(":budget.txt") && v.includes("A1 = 5000"))) errors.push(`${where}: Run didn't send the changed budget.txt`);
+  if (JSON.stringify(ask?.args) !== '["budget.txt"]') errors.push(`${where}: Run sent the arguments ${JSON.stringify(ask?.args)}`);
+  await p.locator('[data-act="t-stop"]').click();
+  await p.locator('[data-act="t-file-reset"]').click();
+  if (!(await p.locator("#t-file").inputValue()).includes("A1 = 1200")) errors.push(`${where}: Reset didn't give budget.txt back`);
+  await p.close();
+}
+
 // A shader opens on the definition its picture draws, not on a data type
 // (BACKLOG I22).
 async function shaderOpens() {
@@ -818,11 +847,11 @@ async function whereTold() {
   await p.close();
 }
 
-const scenarios: Record<string, () => Promise<void>> = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, newtonOpens, letNodes, simplifyAppend, whereTold };
+const scenarios: Record<string, () => Promise<void>> = { stuckRead, sharedField, matchByValue, deleteAndUndo, swapAndUndo, implementInterface, choiceAction, heldSeed, listItems, sharedRow, matchDeeper, foldFrom, answeredLater, helperAtValue, partToFunction, textPort, newAndDeleteDefinition, undoNewDefinition, keptOnReload, reorderInputs, looseParts, seededRun, shaderOpens, newtonOpens, letNodes, simplifyAppend, whereTold, runInputs };
 // Each file's scenarios, about a third of the time each (measured
 // 2026-11-12); every scenario in exactly one.
 const GROUPS = [
-  ["shaderOpens", "listItems", "stuckRead", "heldSeed", "partToFunction", "letNodes", "keptOnReload", "whereTold", "seededRun"],
+  ["shaderOpens", "listItems", "stuckRead", "heldSeed", "partToFunction", "letNodes", "keptOnReload", "whereTold", "seededRun", "runInputs"],
   ["swapAndUndo", "looseParts", "sharedField", "helperAtValue", "sharedRow", "deleteAndUndo", "answeredLater", "textPort", "undoNewDefinition"],
   ["simplifyAppend", "matchDeeper", "implementInterface", "reorderInputs", "foldFrom", "newAndDeleteDefinition", "newtonOpens", "choiceAction", "matchByValue"],
 ];
