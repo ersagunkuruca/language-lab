@@ -16,7 +16,7 @@
 // to the compiler and the page runtime by their ids, and a type a builtin
 // makes or takes is built by its runtime as the original, so they stay.
 
-import { dependencies, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { dependenciesOfAll, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
@@ -44,7 +44,11 @@ export interface Owned { code: Code; names: Names; own: Id[]; info: Info; copied
 export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id, own: Id[]): Owned | null {
   const mine = new Set(own);
   const isTypedef = (d: Id) => code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""]?.kind === "typedef";
-  const reached = new Set<Id>([main, ...dependencies(code, main), ...own.flatMap((d) => [d, ...dependencies(code, d)])]);
+  // Each definition walked once, not once for every own definition that
+  // reaches it (L266: 125 ms of machine's compile).
+  const reached = new Set<Id>([main]);
+  dependenciesOfAll(code, [main], reached);
+  for (const d of own) if (!reached.has(d)) { reached.add(d); dependenciesOfAll(code, [d], reached); }
   const stored = new Set(LIBRARY.reps.map((r) => r.of)), byBuiltins = namedByBuiltins();
   // Whether a type's fields name a list, through the types they name.
   const memo = new Map<Id, boolean>();
