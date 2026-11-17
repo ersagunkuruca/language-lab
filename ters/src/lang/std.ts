@@ -178,6 +178,11 @@ export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
   // when it's clicked again (AUDIO.md, A2). Its block function is given
   // each block and the rate it plays at, in samples a second (L269).
   ["listen", [["to", () => tref(INPUT)], ["play", () => tfun([tref(LIST, tref(NUMBER)), tref(NUMBER)], tref(LIST, tref(NUMBER)), [SOUND_ROW])]]],
+  // What a canvas element shows (BACKLOG G2, a game's frame): the marks
+  // the view gives, painted in order on its 2D context, again whenever a
+  // cell the view read changes. Its types by fixed ids, so the numbered
+  // ones after it don't move.
+  ["paint", [["marks", () => node({ id: "std.attribute.paint.marks.type", kind: "tfun", params: [], result: node({ id: "std.attribute.paint.marks.result", kind: "tref", target: LIST, args: [node({ id: "std.attribute.paint.marks.mark", kind: "tref", target: "std.mark", args: [] })] }), effects: [VIEW_ROW] })]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
@@ -314,7 +319,7 @@ tn += 4 + 9 + 16;
 // for the checker's message.
 export const SMART: Record<Id, string> = { [ALGEBRAIC_V]: "as algebraic or square root", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
 for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
-export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", paint: "std.attribute.paint", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";
@@ -1339,6 +1344,17 @@ export const POOL_KEY = typedef("std.pool key", "Pool key", [], [
   ["pool key", [["slot", () => tref(INT)], ["generation", () => tref(INT)]]],
 ]);
 export const POOL_KEY_V = "std.pool key.pool key";
+// What a canvas paints (BACKLOG G2, paint above): a disk, a rectangle, a
+// segment of a line and some writing, in the canvas's own units (its
+// width and height attributes), each with a CSS colour. After everything
+// above, so their ids don't move.
+export const MARK = typedef("std.mark", "Mark", [], [
+  ["disk", [["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["radius", () => tref(NUMBER)], ["fill", () => tref(STRING)]]],
+  ["rectangle", [["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["width", () => tref(NUMBER)], ["height", () => tref(NUMBER)], ["fill", () => tref(STRING)]]],
+  ["segment", [["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["to x", () => tref(NUMBER)], ["to y", () => tref(NUMBER)], ["width", () => tref(NUMBER)], ["colour", () => tref(STRING)]]],
+  ["writing", [["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["text", () => tref(STRING)], ["size", () => tref(NUMBER)], ["fill", () => tref(STRING)]]],
+]);
+export const MARK_V = { disk: "std.mark.disk", rectangle: "std.mark.rectangle", segment: "std.mark.segment", writing: "std.mark.writing" } as const;
 // Ids that were renamed, as a saved program may still use them: std's Pair
 // is Tuple2 (L139).
 export const RENAMED_IDS: Record<Id, Id> = {
@@ -1371,7 +1387,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
   return x;
 }
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number
 // of inputs, and the builtins that only compute (their row has at most

@@ -14,7 +14,7 @@ import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
-import { HTML_V } from "./std-ids.ts";
+import { HTML_V, MARK_V } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
 
 export interface Node_ { textContent: string | null }
@@ -26,6 +26,19 @@ export interface El extends Node_ {
   addEventListener(type: string, f: (e: { key?: string; target?: unknown }) => void): void;
   setAttribute(name: string, value: string): void;
   removeAttribute?(name: string): void;
+  // A canvas's (paint, G2); a host without one paints nothing.
+  getContext?(kind: "2d"): Context2D | null;
+  width?: number;
+  height?: number;
+}
+// The part of a canvas's 2D context that painting marks uses.
+export interface Context2D {
+  fillStyle: unknown; strokeStyle: unknown; lineWidth: number; font: string;
+  clearRect(x: number, y: number, w: number, h: number): void;
+  fillRect(x: number, y: number, w: number, h: number): void;
+  beginPath(): void; arc(x: number, y: number, r: number, a: number, b: number): void; fill(): void;
+  moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; stroke(): void;
+  fillText(text: string, x: number, y: number): void;
 }
 export interface Doc {
   createElement(tag: string): El;
@@ -315,6 +328,11 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           if (name === "frame") everyFrame(e, (seconds) => handle({ seconds }));
           else if (PLATFORM_EVENTS.has(name)) platformEvent(e, name, () => handle({}));
           else e.addEventListener(name, handle);
+        } else if (a.tag === HTML_V.paint) {
+          // A canvas's marks (G2): painted in order, all again whenever a
+          // cell the view read changes. Out of steps, it keeps what it
+          // painted last.
+          watch(e, "paint", () => paintMarks(e, viewOf(m.call, a.fields[0])));
         } else if (a.tag === HTML_V.listen) {
           if (m.listen) m.listen(e, a);
           else console.warn("this page can't play sound here: build it with ters build-web");
@@ -333,6 +351,26 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   }
 }
 
+// The marks a canvas paints (std.ts Mark), on its 2D context, in its own
+// units. A compiled record's fields are f0, f1, … and the evaluator's are
+// in fields, so each is read either way.
+function paintMarks(e: El, v: Value | null): void {
+  const c = e.getContext?.("2d");
+  if (!c || v === null) return;
+  c.clearRect(0, 0, e.width ?? 0, e.height ?? 0);
+  for (const mk of fromList(v) as Data[]) {
+    const o = mk as unknown as Record<string, unknown>;
+    const f = (i: number) => o[`f${i}`] ?? mk.fields[i];
+    const n = (i: number) => Number(f(i));
+    switch (mk.tag) {
+      case MARK_V.disk: c.fillStyle = String(f(3)); c.beginPath(); c.arc(n(0), n(1), n(2), 0, 2 * Math.PI); c.fill(); break;
+      case MARK_V.rectangle: c.fillStyle = String(f(4)); c.fillRect(n(0), n(1), n(2), n(3)); break;
+      case MARK_V.segment: c.strokeStyle = String(f(5)); c.lineWidth = n(4); c.beginPath(); c.moveTo(n(0), n(1)); c.lineTo(n(2), n(3)); c.stroke(); break;
+      case MARK_V.writing: c.fillStyle = String(f(4)); c.font = `${n(3)}px system-ui, sans-serif`; c.fillText(String(f(2)), n(0), n(1)); break;
+    }
+  }
+}
+
 // Where the pointer is, in the element's own units (I87): inside a
 // picture, its SVG units, so a point lands where it's drawn; elsewhere,
 // CSS pixels from the element's top-left. 0, 0 when the event has no
@@ -348,8 +386,11 @@ function pointerRaw(e: El, ev: { clientX?: number; clientY?: number }): [number,
   const g = e as El & { getScreenCTM?: () => DOMMatrix | null; getBoundingClientRect?: () => { left: number; top: number } };
   const m = g.getScreenCTM?.();
   if (m) { const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(m.inverse()); return [p.x, p.y]; }
-  const r = g.getBoundingClientRect?.();
-  return r ? [ev.clientX - r.left, ev.clientY - r.top] : [0, 0];
+  const r = g.getBoundingClientRect?.() as { left: number; top: number; width?: number; height?: number } | undefined;
+  if (!r) return [0, 0];
+  // A canvas (G2): in its own units, as its marks are painted.
+  if (e.getContext && r.width && r.height && e.width && e.height) return [(ev.clientX - r.left) * e.width / r.width, (ev.clientY - r.top) * e.height / r.height];
+  return [ev.clientX - r.left, ev.clientY - r.top];
 }
 
 // Calls `tick` once a frame from when `e` is first on the page until it

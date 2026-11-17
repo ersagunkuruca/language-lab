@@ -8,7 +8,7 @@ import { buildHtml } from "../src/lang/html-source.ts";
 import { verify } from "../src/lang/modules.ts";
 import { infer } from "../src/lang/infer.ts";
 import { equal, fromList, makeRunner, runMain, toList, type Data, type Value } from "../src/lang/run.ts";
-import { CELL_OPS, CONS, HTML_V, S } from "../src/lang/std.ts";
+import { CELL_OPS, CONS, HTML_V, MARK_V, S } from "../src/lang/std.ts";
 import { Cells } from "../src/lang/cells.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { evaluatorCall, htmlText, mountHtml } from "../src/lang/html.ts";
@@ -217,4 +217,42 @@ test("the platform's moments: back, pause and resume, heard while the element is
     assert.deepEqual(heard, ["back", "pause", "resume"], "gone from the page: heard no more");
     assert.equal(on.popstate.length + onDoc.visibilitychange.length, 0);
   } finally { Object.assign(g, saved); }
+});
+
+test("a canvas paints its marks (G2), and its pointer is in canvas units", () => {
+  const drawn: string[] = [];
+  const ctx = {
+    clearRect: (x: number, y: number, w: number, h: number) => drawn.push(`clear ${x} ${y} ${w} ${h}`),
+    beginPath: () => {}, fill: () => drawn.push("fill"), stroke: () => drawn.push("stroke"),
+    arc: (x: number, y: number, r: number) => drawn.push(`arc ${x} ${y} ${r}`),
+    fillRect: (x: number, y: number, w: number, h: number) => drawn.push(`rect ${x} ${y} ${w} ${h}`),
+    moveTo: (x: number, y: number) => drawn.push(`from ${x} ${y}`), lineTo: (x: number, y: number) => drawn.push(`to ${x} ${y}`),
+    fillText: (t: string, x: number, y: number) => drawn.push(`text ${t} ${x} ${y}`),
+    set fillStyle(c: string) { drawn.push(`fill style ${c}`); }, set strokeStyle(c: string) { drawn.push(`stroke style ${c}`); },
+    set lineWidth(w: number) { drawn.push(`width ${w}`); }, set font(f: string) { drawn.push(`font ${f}`); },
+  };
+  const marks = toList([
+    { tag: MARK_V.disk, fields: [10, 20, 3, "#fc0"] },
+    { tag: MARK_V.rectangle, fields: [0, 0, 4, 5, "black"] },
+    { tag: MARK_V.segment, fields: [1, 2, 3, 4, 0.5, "red"] },
+    { tag: MARK_V.writing, fields: [5, 6, "hi", 12, "white"] },
+  ] as Data[]);
+  let got: Data | null = null;
+  const then = (ev: Data) => { got = ev; return { tag: "std.unit.unit", fields: [] }; };
+  const page = { tag: HTML_V.element, fields: ["canvas", toList([{ tag: HTML_V.paint, fields: [(() => marks) as never] }, { tag: HTML_V.on, fields: ["pointerdown", then as never] }]), toList([])] } as Data;
+  const doc = fakeDoc();
+  const make = doc.createElement;
+  doc.createElement = (tag: string) => Object.assign(make(tag), { getContext: () => ctx, width: 200, height: 100 });
+  const e = mountHtml(page, { cells: new Cells(), doc, call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { getBoundingClientRect?: () => object };
+  assert.deepEqual(drawn, [
+    "clear 0 0 200 100",
+    "fill style #fc0", "arc 10 20 3", "fill",
+    "fill style black", "rect 0 0 4 5",
+    "stroke style red", "width 0.5", "from 1 2", "to 3 4", "stroke",
+    "fill style white", "font 12px system-ui, sans-serif", "text hi 5 6",
+  ]);
+  // Shown at twice its size: a click 40, 20 in is 20, 10 on the canvas.
+  e.getBoundingClientRect = () => ({ left: 100, top: 40, width: 400, height: 200 });
+  e.fire("pointerdown", { clientX: 140, clientY: 60 } as never);
+  assert.deepEqual(got!.fields.slice(2, 4), [20, 10]);
 });

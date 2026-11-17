@@ -3816,28 +3816,45 @@ static int lab_range_${gi}(int64_t n, lab_cell *a) {
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
     const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
+    // While the threads run the items, what they share isn't counted at
+    // all (lab_freeze, as a count's job, I216) when an answer holds no
+    // cell, so nothing made there keeps one of them: else every item took
+    // and gave back counts of the map's closure and what it captured,
+    // atomically, on the same few cells from every thread (moths: about
+    // 4.8 a moth each way, GAPS.md game round 1 M3, G3c).
     // A test that decides (C202c) says so in stop, the highest such slot,
     // the first in order: a thread past it takes no more items.
-    return `typedef struct { lab_cell *f; ${Ti} *in; ${To} *out; char *bad; int64_t next${tests ? ", stop" : ""}; } ${J};
+    // The threads take the items in runs, the last first (G3c): one
+    // count taken from the shared next per run, not per item, and each
+    // thread's answers side by side, not interleaved with another's. A
+    // run is an eighth of a thread's share, so a slow run still leaves
+    // others to balance it. What a thread ran is told once, at its end.
+    // An item that stops the thread (a jump to lab_stop_at) leaves the
+    // rest of its run undone, as failed: they are run here, in turn.
+    return `typedef struct { lab_cell *f; ${Ti} *in; ${To} *out; char *bad; int64_t next, run${tests ? ", stop" : ""}; } ${J};
 static void lab_par_one_${n}(${J} *j, int64_t k) {
   lab_cell *f = lab_dup(j->f);
   j->out[k] = ((${fname.get(tf.key)})((lab_closure *)f)->code)(f, ${dup(ta.item, "j->in[k]")});
 }
 static void lab_par_work_${n}(void *p) {
   ${J} *j = p;
-  volatile int64_t k;${stops ? `
+  volatile int64_t k, hi, lo, done = 0;${stops ? `
   jmp_buf here, *was = lab_stop_at;
   if (setjmp(here)) lab_st = 0;
   lab_stop_at = &here;` : ""}
-  while ((k = __atomic_sub_fetch(&j->next, 1, __ATOMIC_RELAXED)) >= 0) {${tests ? `
-    if (k < __atomic_load_n(&j->stop, __ATOMIC_RELAXED)) break;` : ""}
-    lab_par_one_${n}(j, k);
-    if (${failed}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
-    else {
-      j->bad[k] = 0; if (lab_on_pool) __atomic_fetch_add(&lab_par_items, 1, __ATOMIC_RELAXED);${tests ? `
-      if (${decides("j->out[k]")}) { int64_t s = __atomic_load_n(&j->stop, __ATOMIC_RELAXED); while (s < k && !__atomic_compare_exchange_n(&j->stop, &s, k, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)); }` : ""}
+  while ((hi = __atomic_fetch_sub(&j->next, j->run, __ATOMIC_RELAXED)) > 0) {
+    lo = hi > j->run ? hi - j->run : 0;
+    for (k = hi; k-- > lo;) {${tests ? `
+      if (k < __atomic_load_n(&j->stop, __ATOMIC_RELAXED)) break;` : ""}
+      lab_par_one_${n}(j, k);
+      if (${failed}) { if (lab_st >= 2) { lab_drop(lab_reason); lab_reason = 0; } lab_st = 0;${fuelled ? " lab_fuel = INFINITY;" : ""} }
+      else {
+        j->bad[k] = 0; done++;${tests ? `
+        if (${decides("j->out[k]")}) { int64_t s = __atomic_load_n(&j->stop, __ATOMIC_RELAXED); while (s < k && !__atomic_compare_exchange_n(&j->stop, &s, k, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)); }` : ""}
+      }
     }
-  }${stops ? `
+  }
+  if (lab_on_pool && done) __atomic_fetch_add(&lab_par_items, done, __ATOMIC_RELAXED);${stops ? `
   lab_stop_at = was;` : ""}
 }
 // What the map shares (its function, its items through xs) is held till
@@ -3855,7 +3872,31 @@ static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;
-  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0${tests ? ", -1" : ""} };
+${job === "map" ? `  // Already on the threads (a map inside a map's item, moths' cells
+  // around a moth, GAPS.md game round 1 M1): nothing can be shared, so
+  // the items in turn, the last first as below, with nothing put aside.
+  // The same with no threads to share them with.
+  if (lab_in_par || !lab_pool_ready()) {
+    ${To} lab_par_sm[16];
+    ${To} *lab_par_o = n <= 16 ? lab_par_sm : malloc((size_t)n * sizeof(${To}));
+    if (!lab_par_o) lab_oom();
+    for (k = n; k-- > 0;) {
+      lab_cell *g = lab_dup(f);
+      lab_par_o[k] = ((${fname.get(tf.key)})((lab_closure *)g)->code)(g, ${dup(ta.item, rd)});
+      if (lab_st) {
+        ${counted(out) ? `for (int64_t m = k + 1; m < n; m++) ${drop(out, "lab_par_o[m]")}
+        ` : ""}if (lab_par_o != lab_par_sm) free(lab_par_o);
+        lab_drop(xs); lab_drop(f);
+        return 0;
+      }
+    }
+    lab_drop(xs); lab_drop(f);
+    ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)n, 0);
+    for (k = 0; k < n; k++) r->it[r->lo + (uint32_t)k] = lab_par_o[k];
+    if (lab_par_o != lab_par_sm) free(lab_par_o);
+    return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)n);
+  }
+` : ""}  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0, 1${tests ? ", -1" : ""} };
   struct timespec t0;
   if (!j.in || !j.out || !j.bad) lab_oom();
   for (k = 0; k < n; k++) j.in[${keep && !fold ? "n - 1 - k" : "k"}] = ${dup(ta.item, rd)};
@@ -3874,7 +3915,7 @@ static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"
     lab_share(f);
     for (k = 0; k < left; k++) ${share(ta.item, "j.in[k]")}
     lab_shared();
-    if (!lab_share_no) { j.next = left; lab_pool_run(lab_par_work_${n}, &j); }
+    if (!lab_share_no) { j.next = left; j.run = left / (8 * ((int64_t)lab_pool_n + 1)); if (j.run < 1) j.run = 1;${counted(out) ? "" : " lab_freeze();"} lab_pool_run(lab_par_work_${n}, &j);${counted(out) ? "" : " lab_thaw();"} }
   }
 ${tests ? `  for (k = left - 1; k >= 0; k--) {
     if (j.bad[k]) {
