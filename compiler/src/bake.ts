@@ -38,9 +38,10 @@ const WORK_PER_NODE = 8, MAX_SIZE = 4096;
 const LEAST = 100;
 // Work in a function with inputs: it may run many times.
 const AGAIN = 16;
-// Work one run may take, and all of them together (a few hundred ms),
+// Work one run may take, and all of them together (a few hundred ms;
+// numbers, Peano Nat, spent 2 s at 4M, I315),
 // counted as a page's budget is (OutOfSteps).
-const BUDGET = 1_000_000, TOTAL = 4_000_000;
+const BUDGET = 250_000, TOTAL = 1_000_000;
 
 export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; baked: Id[] } {
   const nodes = code.nodes;

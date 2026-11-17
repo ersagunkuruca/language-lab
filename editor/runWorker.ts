@@ -135,7 +135,8 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
       const info = infer(code, names);
       const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
       const refused = (o: object) => { try { return [...lowerScalar(code, info, names, own, o).refused]; } catch (err) { return own.map((d): [Id, string] => [d, (err as Error).message]); } };
-      return post({ gpu: refused({ records: true, shader: true }), native: refused({ data: true }) });
+      // The native answer after the GPU's reuses its first steps (I315).
+      return post({ gpu: refused({ records: true, shader: true }), native: refused({ data: true, bake: false }) });
     } catch (err) {
       return post({ error: (err as Error).message });
     }

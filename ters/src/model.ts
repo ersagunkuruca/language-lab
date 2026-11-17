@@ -407,6 +407,12 @@ export function subtree(code: Code, root: Id): Id[] {
 // Defs and builtins that `root` reaches through refs, transitively. This is
 // all a "package" is: the closure of what a definition depends on.
 export function dependencies(code: Code, root: Id): Id[] {
+  return [...dependenciesOfAll(code, [root])];
+}
+// The same for several roots, each definition walked once however many
+// roots reach it (I315: Build targets asks of every own definition, and
+// a root at a time walked machine's shared ones 140 times).
+export function dependenciesOfAll(code: Code, roots: Id[]): Set<Id> {
   const seen = new Set<Id>();
   const owner = ownerOfTypeParts(code);
   const visit = (id: Id) => {
@@ -424,8 +430,8 @@ export function dependencies(code: Code, root: Id): Id[] {
       }
     }
   };
-  visit(root);
-  return [...seen];
+  for (const r of roots) visit(r);
+  return seen;
 }
 
 // Variants and fields are referred to directly (constructors, projections);

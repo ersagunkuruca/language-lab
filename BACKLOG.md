@@ -36,7 +36,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I315 | "Build targets" still takes 2.9 to 6.3 s on a program's first open until every target answers (machine `word at` 6.3 s, numbers `period` 5.0 s, Effects `main` 2.9 s); I308 sped up the GPU answer, and WebAssembly and C's answer is most of what's left. | QA 11-17 L1 | 2026-11-17 |
 
 ## E: Editor
 

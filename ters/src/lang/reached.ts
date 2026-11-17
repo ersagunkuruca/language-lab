@@ -6,7 +6,7 @@
 // on it (run.ts runProgram, L265), so neither types library bodies the
 // program never reaches.
 
-import { dependencies, subtree, type Code, type Id } from "../model.ts";
+import { dependencies, dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { implementationsOf, shownImplementations } from "./std-values.ts";
 import { interfaceOps, waysIn } from "./ways.ts";
@@ -59,7 +59,8 @@ export function reachedWithShows(code: Code, roots: Id[], info: Info, own = fals
 }
 export function reachedFrom(code: Code, roots: Id[]): Code {
   const reach = new Set<Id>();
-  for (const r of roots) { reach.add(r); for (const d of dependencies(code, r)) reach.add(d); }
+  for (const r of roots) reach.add(r);
+  for (const d of dependenciesOfAll(code, roots)) reach.add(d);
   const isType = (d: Id) => { const n = code.nodes[d]; return n?.kind === "def" && !!n.body && code.nodes[n.body]?.kind === "typedef"; };
   const defs = code.defs.filter((d) => reach.has(d) || isType(d));
   if (defs.length === code.defs.length) return code;
