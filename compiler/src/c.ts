@@ -3814,6 +3814,12 @@ static int lab_range_${gi}(int64_t n, lab_cell *a) {
     const vi = aname.get(ta.key)!, vo = aname.get(to.key)!;
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
     const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
+    // While the threads run the items, what they share isn't counted at
+    // all (lab_freeze, as a count's job, I216) when an answer holds no
+    // cell, so nothing made there keeps one of them: else every item took
+    // and gave back counts of the map's closure and what it captured,
+    // atomically, on the same few cells from every thread (moths: about
+    // 4.8 a moth each way, GAPS.md game round 1 M3, G3c).
     // A test that decides (C202c) says so in stop, the highest such slot,
     // the first in order: a thread past it takes no more items.
     return `typedef struct { lab_cell *f; ${Ti} *in; ${To} *out; char *bad; int64_t next${tests ? ", stop" : ""}; } ${J};
@@ -3896,7 +3902,7 @@ ${job === "map" ? `  // Already on the threads (a map inside a map's item, moths
     lab_share(f);
     for (k = 0; k < left; k++) ${share(ta.item, "j.in[k]")}
     lab_shared();
-    if (!lab_share_no) { j.next = left; lab_pool_run(lab_par_work_${n}, &j); }
+    if (!lab_share_no) { j.next = left;${counted(out) ? "" : " lab_freeze();"} lab_pool_run(lab_par_work_${n}, &j);${counted(out) ? "" : " lab_thaw();"} }
   }
 ${tests ? `  for (k = left - 1; k >= 0; k--) {
     if (j.bad[k]) {
