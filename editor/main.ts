@@ -2055,7 +2055,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${label}`));
     // The files only where it brings some (pond's words are numbers).
     const brought = Object.keys(given?.files ?? {});
-    if (given) box.append(h("p", { class: "hint", title: `As ters run gives it.${brought.length ? ` ${brought.join(", ")} ${brought.length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.` : ""}` }, `Arguments · ${given.args.join(", ")}${brought.length ? ` · files ${brought.join(", ")}` : ""}`));
+    if (given) box.append(h("p", { class: "hint", title: `As ters run gives it.${brought.length ? ` ${brought.join(", ")} ${brought.length > 1 ? "come" : "comes"} with the example; what the run writes stays in this browser.` : ""}` }, `Arguments · ${(given.args ?? []).join(", ")}${brought.length ? ` · files ${brought.join(", ")}` : ""}`));
     if (ui.output?.def === ui.def) {
       // What it prints is read out as it comes (a log), and a failure at once.
       box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));

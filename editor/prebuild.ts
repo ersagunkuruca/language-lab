@@ -55,7 +55,7 @@ export async function prebuild(manifest: Manifest, site: string): Promise<string
     if (main && !m.page) try {
       setDisplayNames(names);
       setProgramPins(pins);
-      const lib = checkedForRun(code, names, main), made = coreMain(lib.code, lib.info, lib.names, main, !!m.run);
+      const lib = checkedForRun(code, names, main), made = coreMain(lib.code, lib.info, lib.names, main, !!m.run?.args);
       if (made && !made.printed.code && !made.printed.checked) write(prebuiltKey("main", code, { main }, pins), made);
     } catch (e) { console.log(`prebuilt: ${m.program}'s main didn't lower (${(e as Error).message})`); }
     if (!m.page || !main) continue;

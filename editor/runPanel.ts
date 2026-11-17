@@ -62,8 +62,9 @@ export function runPanel(host: RunHost) {
   // What `ters run` would be given for an example whose main reads the
   // command line (examples.json "run", E212): its arguments, and its files,
   // shipped beside it. Only for main as the example has it: a program of
-  // one's own, or main taking other inputs, gets none.
-  function runGiven(): { args: string[]; files: Record<string, string> } | null {
+  // one's own, or main taking other inputs, gets none. A main that takes
+  // no command line has no arguments, only its files (clinic.txt, E277).
+  function runGiven(): { args?: string[]; files: Record<string, string> } | null {
     const m = manifest.programs.find((p) => p.program === doc().program && p.editor !== false);
     if (!m?.run || doc().title || ui.def !== defNamed("main")) return null;
     return { args: m.run.args, files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };

@@ -110,6 +110,20 @@ test("pond's Run main, opened as the editor opens it, lives its pond", async () 
   assert.ok(printedLines(said).includes("Checks: 0 outside the pond, 0 spent, 0 overfull patches, 0 too old."), printedLines(said).join("\n"));
 });
 
+// clinic's settings come in a file Run gives it (E277): the day as
+// shipped, then with the file's desks changed.
+test("clinic's Run main reads its clinic.txt", async () => {
+  const { code, names, pins, files, def, run } = example("clinic");
+  assert.equal(run?.args, undefined);
+  const first = async (fs: string[][]) => {
+    const said = await inWorker({ code, names, pins, def, title: "clinic", files: fs, args: run?.args });
+    assert.equal(said.at(-1)!.error, undefined, String(said.at(-1)!.error));
+    return printedLines(said).join("\n").split("\n")[0];
+  };
+  assert.equal(await first(files), "4 desks, urgency first, least busy, seed 7");
+  assert.equal(await first(files.map(([k, v]) => [k, v.replace("desks 4", "desks 3")])), "3 desks, urgency first, least busy, seed 7");
+});
+
 // markov (L240): where three chains settle, by settled and settled by,
 // and the one that only swaps has no answer.
 test("markov's Run main shows where each chain settles, or no answer", async () => {
