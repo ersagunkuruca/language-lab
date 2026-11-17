@@ -11,7 +11,8 @@
 import { listens } from "./audio.ts";
 import type { Cells } from "./cells.ts";
 import { seededGenerator } from "./random.ts";
-import { OutOfSteps, PAGE_STEPS, withSteps, type Data, type Value } from "./run.ts";
+import { fromList, OutOfSteps, PAGE_STEPS, toList, withSteps, type Data, type Value } from "./run.ts";
+import { HTML_V, PAIR_V } from "./std-ids.ts";
 
 // What an AudioWorkletGlobalScope has (Web Audio API).
 declare const registerProcessor: (name: string, p: new (options: { processorOptions: { index: number; answers?: Answers } }) => unknown) => void;
@@ -86,11 +87,12 @@ export function replaying(answers: Answers | undefined, cells: Pick<Cells, "cell
 }
 
 // How a compiled program runs on the audio thread: its cells, main run
-// once with a world, and a block function called on a block and the rate.
+// once with a world, and a block function called on a block (a list, or
+// in stereo a pair of them) and the rate.
 export interface SoundHost {
   readonly cells: Cells;
   main(world: { random(): number; now(): number; wait(): never; log(): void; error(): void }): Value;
-  play(f: Value, block: number[], rate: number): number[];
+  play(f: Value, block: Value, rate: number): Value;
 }
 
 export function startSoundOn(host: SoundHost, seed = 1): void {
@@ -112,6 +114,8 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
   };
   registerProcessor(PROCESSOR, class extends AudioWorkletProcessor {
     play: ((block: Value) => Value) | null = null;
+    // A `listen in stereo` (L270): a pair of blocks in and out.
+    stereo = false;
     said = new Set<string>();
     cells: Value[] = [];
     // Samples played since the page was last sent what was written.
@@ -120,7 +124,9 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
       super();
       try {
         const p = run(options.processorOptions.answers);
-        this.play = p.listens[options.processorOptions.index].fields[1] as never;
+        const a = p.listens[options.processorOptions.index];
+        this.play = a.fields[1] as never;
+        this.stereo = a.tag === HTML_V.listenStereo;
         this.cells = p.cells;
         this.port.onmessage = (e: MessageEvent<Write>) => {
           const cell = p.cells[e.data.cell];
@@ -140,13 +146,22 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
       const out = outputs[0], n = out[0].length;
       const input = inputs[0]?.[0] ?? new Float32Array(n);
       if (!this.play) return true;
-      let got: number[];
-      try { got = withSteps(PAGE_STEPS, () => host.play(this.play as never, Array.from(input), sampleRate)); } catch (e) {
+      // In stereo the second channel, or the first again for a mono input.
+      const block = this.stereo
+        ? { tag: PAIR_V, fields: [toList(Array.from(input)), toList(Array.from(inputs[0]?.[1] ?? input))] } as Data
+        : toList(Array.from(input));
+      let got: number[][];
+      try {
+        const v = withSteps(PAGE_STEPS, () => host.play(this.play as never, block, sampleRate));
+        got = this.stereo ? (v as Data).fields.map((b) => fromList(b) as number[]) : [fromList(v) as number[]];
+      } catch (e) {
         this.say(e instanceof OutOfSteps ? "a block didn't finish in its steps, and played silence" : (e as Error).message);
         return true;
       }
-      if (got.length !== n) { this.say(`a block gave ${got.length} samples for ${n}, and played silence`); return true; }
-      for (const channel of out) for (let i = 0; i < n; i++) channel[i] = got[i];
+      const wrong = got.find((g) => g.length !== n);
+      if (wrong) { this.say(`a block gave ${wrong.length} samples for ${n}, and played silence`); return true; }
+      // Mono plays on every speaker; stereo left and right.
+      out.forEach((channel, c) => { const g = got[Math.min(c, got.length - 1)]; for (let i = 0; i < n; i++) channel[i] = g[i]; });
       this.send(n);
       return true;
     }

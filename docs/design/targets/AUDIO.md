@@ -26,7 +26,7 @@ side (`unportable`): the tuner (L274) sends 4096-sample windows, and as
 nested cells a list that long overflowed the copy's stack. The tuner
 finds the pitch on the page, not the audio thread: a window's
 autocorrelation compiled takes about 14 ms, five blocks' time.
-Still to come for the app: stereo (L270).
+A sound in stereo (L270) takes and gives a pair of blocks.
 
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the
@@ -209,8 +209,11 @@ real program.
   a block to a block is exactly what LV2, VST3 and CLAP host. Cells are in
   C now, and a native app's page plays its sound (C217); a plugin is still
   to come.
-- **Stereo?** Later, and in the language: a stereo block is a pair of
-  blocks, `listen` takes a function on pairs.
+- **Stereo.** In the language (L270): a stereo block is a pair of
+  blocks, left and right, and `listen in stereo(to, play)` takes a
+  function from a pair and the rate to a pair. A mono input comes in on
+  both; `ters render` reads a WAV file's first two channels and writes
+  two. A native app doesn't play one yet: it says so.
 
 ## Stages, one PR each
 

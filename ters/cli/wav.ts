@@ -1,10 +1,13 @@
-// WAV files for `ters render` (AUDIO.md): read the first channel of PCM
-// (8, 16, 24 or 32-bit integers, or 32 or 64-bit floats) as samples in -1
-// to 1, and write samples as one channel of 32-bit floats, so a render
-// keeps what the program computed. The format is Microsoft's RIFF WAVE
+// WAV files for `ters render` (AUDIO.md): read PCM (8, 16, 24 or 32-bit
+// integers, or 32 or 64-bit floats) as samples in -1 to 1, the first
+// channel and each of them, and write one channel of 32-bit floats, or
+// two for a sound in stereo (L270), so a render keeps what the program
+// computed. The format is Microsoft's RIFF WAVE
 // (WAVE_FORMAT_PCM 1, WAVE_FORMAT_IEEE_FLOAT 3, WAVE_FORMAT_EXTENSIBLE).
 
-export interface Wav { rate: number; samples: Float64Array }
+// `samples`: the first channel. `channels`: every channel, read; when
+// written, more than one is interleaved, as WAV keeps them.
+export interface Wav { rate: number; samples: Float64Array; channels?: Float64Array[] }
 
 export function readWav(bytes: Uint8Array): Wav {
   const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -26,22 +29,26 @@ export function readWav(bytes: Uint8Array): Wav {
           : bits === 24 ? (p: number) => ((v.getUint8(p) | (v.getUint8(p + 1) << 8) | (v.getInt8(p + 2) << 16)) / 8388608) : bits === 32 ? (p: number) => v.getInt32(p, true) / 2147483648 : null)
         : null;
       if (!read) throw new Error(`a WAV file of format ${format} with ${bits}-bit samples isn't one ters reads (PCM or float)`);
-      const samples = new Float64Array(len);
-      for (let i = 0; i < len; i++) samples[i] = read(body + i * step);
-      return { rate: fmt.rate, samples };
+      const all = Array.from({ length: channels }, (_, c) => {
+        const xs = new Float64Array(len);
+        for (let i = 0; i < len; i++) xs[i] = read(body + i * step + c * (bits / 8));
+        return xs;
+      });
+      return channels > 1 ? { rate: fmt.rate, samples: all[0], channels: all } : { rate: fmt.rate, samples: all[0] };
     }
     at = body + n + (n & 1);
   }
   throw new Error("a WAV file with no data");
 }
 
-export function writeWav({ rate, samples }: Wav): Uint8Array {
-  const bytes = new Uint8Array(44 + 4 * samples.length), v = new DataView(bytes.buffer);
+export function writeWav({ rate, samples, channels }: Wav): Uint8Array {
+  const cs = channels && channels.length > 1 ? channels : [samples], k = cs.length, n = cs[0].length;
+  const bytes = new Uint8Array(44 + 4 * k * n), v = new DataView(bytes.buffer);
   const tag = (at: number, t: string) => { for (let i = 0; i < 4; i++) bytes[at + i] = t.charCodeAt(i); };
-  tag(0, "RIFF"); v.setUint32(4, 36 + 4 * samples.length, true); tag(8, "WAVE");
-  tag(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 3, true); v.setUint16(22, 1, true);
-  v.setUint32(24, rate, true); v.setUint32(28, rate * 4, true); v.setUint16(32, 4, true); v.setUint16(34, 32, true);
-  tag(36, "data"); v.setUint32(40, 4 * samples.length, true);
-  for (let i = 0; i < samples.length; i++) v.setFloat32(44 + 4 * i, samples[i], true);
+  tag(0, "RIFF"); v.setUint32(4, 36 + 4 * k * n, true); tag(8, "WAVE");
+  tag(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 3, true); v.setUint16(22, k, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 4 * k, true); v.setUint16(32, 4 * k, true); v.setUint16(34, 32, true);
+  tag(36, "data"); v.setUint32(40, 4 * k * n, true);
+  for (let i = 0; i < n; i++) for (let c = 0; c < k; c++) v.setFloat32(44 + 4 * (i * k + c), cs[c][i], true);
   return bytes;
 }

@@ -337,7 +337,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           // cell the view read changes. Out of steps, it keeps what it
           // painted last.
           watch(e, "paint", () => paintMarks(e, viewOf(m.call, a.fields[0])));
-        } else if (a.tag === HTML_V.listen) {
+        } else if (a.tag === HTML_V.listen || a.tag === HTML_V.listenStereo) {
           if (m.listen) m.listen(e, a);
           else console.warn("this page can't play sound here: build it with ters build-web");
         } else throw new Error(`not an attribute: ${a.tag}`);

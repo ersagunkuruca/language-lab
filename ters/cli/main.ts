@@ -38,7 +38,7 @@ import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
-import { audioProblem, BLOCK, playBlocks, RATE } from "../src/lang/audio.ts";
+import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
 import { bundle } from "../src/io.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
 import { representationLaws } from "../src/lang/rep-laws.ts";
@@ -75,7 +75,7 @@ const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as
 const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
 const { iosAppFolder } = compiles ? await import("./ios-app.ts") : ({} as typeof import("./ios-app.ts"));
 import { nativePageReport } from "./native-check.ts";
-const { soundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
+const { soundOf, stereoSoundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
 
 const USAGE = `ters: the command line for Ters, the language
 usage:
@@ -872,10 +872,17 @@ switch (command) {
       if (seconds !== undefined || rate !== undefined) fail("--seconds and --rate are for a render without a WAV file");
       try { wav = readWav(readFileSync(input)); } catch (e) { fail(`${input}: ${(e as Error).message}`); }
     }
-    // --compiled: the core IR's JavaScript (C137d3).
-    const played = playBlocks(await soundOf(p, def, compiled ? "core" : "evaluator"), wav.samples, size, wav.rate);
+    // --compiled: the core IR's JavaScript (C137d3). A sound in stereo
+    // (L270) plays a file's first two channels (a mono file on both) and
+    // writes two.
+    const way = compiled ? "core" : "evaluator";
+    const stereo = soundStereo(loaded.info, def);
+    const chans = (wav as { channels?: ArrayLike<number>[] }).channels;
+    const played = stereo
+      ? playStereoBlocks(await stereoSoundOf(p, def, way), wav.samples, chans?.[1] ?? wav.samples, size, wav.rate)
+      : playBlocks(await soundOf(p, def, way), wav.samples, size, wav.rate);
     const to = out ?? (input ?? mainName).replace(/(\.wav)?$/i, ".out.wav");
-    writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out }));
+    writeFileSync(to, writeWav({ rate: wav.rate, samples: played.out, channels: "right" in played ? [played.out, played.right as Float64Array] : undefined }));
     if (played.silent.length) process.stderr.write(`ters: ${played.silent.length} block${played.silent.length === 1 ? "" : "s"} played silence, the first (block ${played.silent[0].block}) because ${played.silent[0].why}\n`);
     process.stderr.write(`ters: wrote ${to}, ${(wav.samples.length / wav.rate).toFixed(2)} s at ${wav.rate} Hz\n`);
     break;

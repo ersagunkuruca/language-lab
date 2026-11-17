@@ -16,7 +16,7 @@ const esbuild = () => import("esbuild").catch(() => { throw new Error("a page ne
 const at = (path: string) => JSON.stringify(join(here, path));
 // A page with sound (AUDIO.md, A2) also carries its program bundled for the
 // audio thread (core-sound.ts), which runs main again there.
-const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.listen);
+const hasSound = (code: Code) => Object.values(code.nodes).some((n) => n.kind === "ref" && (n.target === HTML_V.listen || n.target === HTML_V.listenStereo));
 // The recordings a page plays from files beside it (`recording("strum.wav")`):
 // `ters build-web` copies them from the program's folder next to the page.
 export function recordings(code: Code): string[] {

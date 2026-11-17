@@ -148,8 +148,10 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           if (first.state === "suspended") await first.resume();
           const from = await source(first, a.fields[0] as Data), ctx = from.ctx;
           // Mono in: a stereo input is mixed down, so a microphone on either
-          // channel is heard.
-          const node = new AudioWorkletNode(ctx, PROCESSOR, { processorOptions: { index, answers }, numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 1, channelCountMode: "explicit", channelInterpretation: "speakers" });
+          // channel is heard. A sound in stereo (L270) takes both, a mono
+          // input coming in on each.
+          const stereo = a.tag === HTML_V.listenStereo;
+          const node = new AudioWorkletNode(ctx, PROCESSOR, { processorOptions: { index, answers }, numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: stereo ? 2 : 1, channelCountMode: "explicit", channelInterpretation: "speakers" });
           node.port.onmessage = (m: MessageEvent<FromSound>) => {
             if ("writes" in m.data) return take(node, m.data.writes);
             console.warn(`sound: ${m.data.said}`);
