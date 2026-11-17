@@ -26,7 +26,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 |---|---|---|
 | E Editor | "Make command-line examples interactive" | E275, E277, E273, E274, E276, then E278 |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
-| L Language and library | "Language lane" | C256, I316 (once editor/ is free), L266 (Ersagun 2026-11-17: yes, in that order) |
+| L Language and library | "Language lane" | I316 (once editor/ is free), L266 (Ersagun 2026-11-17: yes, in that order) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -36,9 +36,8 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I316 | Build targets cached: the shipped examples' answers built with the site, as their compiled pages are (prebuilt.ts, by content hash); an edited program's kept per definition by its hash (hash.ts covers what it uses), so an edit works out only what it touches. A first open answers at once (machine's took 4.1 s after I315) | Ersagun 2026-11-17 ("weren't we packaging precompiled versions of the programs and caching builds?") | 2026-11-17 |
-| C256 | No second checks inside lowering: firstArms, resolveArithmetic and bake check the whole program again after rewriting it (machine: about 1.1 s of a 3.1 s lowering; writing the code itself is 70 ms). Each carries the types of the nodes it makes and the verifier vouches for them, as staging does (I203) | Ersagun 2026-11-17 ("These programs should be a breeze to compile") | 2026-11-17 |
-| L266 | A faster checker: machine's 8,000 reached nodes take 1.5 s, about 190 µs a node (termination 0.5 s of it); find the per-node cost and aim for 10x. With C256 and I316, machine's compile under half a second | Ersagun 2026-11-17 ("Having to spend more than a second compiling them is kinda weird") | 2026-11-17 |
+| I316 | Build targets cached: the shipped examples' answers built with the site, as their compiled pages are (prebuilt.ts, by content hash); an edited program's kept per definition by its hash (hash.ts covers what it uses), so an edit works out only what it touches. A first open answers at once (machine's took 4.1 s after I315). And the editor's check handed over: Build targets' worker checks the program whole on every ask (machine 1.5 s) though the editor has checked it; the worker keeps its last check and checks an edit incrementally (inferEdited, I304), so after the first ask no ask checks the whole program | Ersagun 2026-11-17 ("the editor can just give whatever data structure is output from the typechecking", and "weren't we packaging precompiled versions of the programs and caching builds?") | 2026-11-17 |
+| L266 | A faster checker: machine's 8,000 reached nodes take 1.5 s, about 190 µs a node (termination 0.5 s of it); find the per-node cost and aim for 10x. With I316, machine's compile under half a second. C256 found the checks inside lowering are the checker's cost too: rechecking only what a pass changed (infer.ts inferRewritten) saved 0.2 s of machine's 3.1 but kept effects the passes had made more exact (drift, depot, sheet got Diverge back), so a faster whole check is the fix; and a layered check joined a first's thunk's row to the row around it (agent's first-arms took 5 of 7) | Ersagun 2026-11-17 ("Having to spend more than a second compiling them is kinda weird") | 2026-11-17 |
 
 ## E: Editor
 

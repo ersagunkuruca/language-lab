@@ -59,7 +59,7 @@ import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
 import { dependencies, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
-import type { Info } from "../../ters/src/lang/infer.ts";
+import type { Info, Options } from "../../ters/src/lang/infer.ts";
 import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { tupleType } from "../../ters/src/lang/std-values.ts";
@@ -655,6 +655,9 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   const hit = kept.find((k) => k.names === names && k.key === key);
   if (hit) return hit.out;
   const given = { code, info, names };
+  // The passes below rewrite a checked program and check it again; none
+  // changes a unit, so units aren't checked again (I261, as core-js.ts).
+  info = { ...info, options: { ...info.options, units: false } };
   // A use with no body, as the use that binds its ports (C161, uses.ts).
   ({ code, info } = withBodies(code, info, names));
   // Case and graphemes with no host to ask run the cases module (L214e5).
@@ -702,6 +705,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // The steps every lowering of these roots takes alike, done once for
   // both of Build targets' answers (I315).
   ({ code, info, names } = prepared(code, info, names, roots, !!opts.host));
+  // The checks after a pass below: with the definitions known to end
+  // (L250 `ends`), which a check without them gave Diverge again (C256:
+  // buffer's JavaScript kept its searches' branches, 214 KB to 159), and
+  // no units (I261). Not the library's pins, which leave more of it
+  // generic (calculus-page 167 KB to 178).
+  const recheck: Options = { units: false, ...(info.options?.ends ? { ends: info.options.ends } : {}) };
   if (opts.data) opts = { ...opts, records: true };
   // A shader's records profile has function values too (C225): closures,
   // made records by defunc.ts once lowered.
@@ -715,7 +724,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) {
     const b = bakeCalls(code, info, names);
     if (b.baked.length) {
-      const checked = infer(b.code, names, undefined, { units: false });
+      const checked = infer(b.code, names, undefined, recheck);
       if (checked.errors.length <= info.errors.length) ({ code, info } = { code: reachedWithShows(b.code, roots, checked), info: checked });
     }
   }
@@ -748,7 +757,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
   });
   if (later.expanded.length) {
-    const checked = infer(later.code, later.names, undefined, { units: false });
+    const checked = infer(later.code, later.names, undefined, recheck);
     if (checked.errors.length <= info.errors.length) {
       ({ code, names } = later);
       info = checked;
@@ -772,13 +781,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const lets = inlineLists(code, info);
   if (lets.inlined) {
     code = lets.code;
-    info = infer(code, names, undefined, { units: false });
+    info = infer(code, names, undefined, recheck);
   }
   // A fold of a map made one fold (fuse-steps.ts, C207c).
   const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
   if (fusedSteps?.fused) {
     code = fusedSteps.code;
-    info = infer(code, names, undefined, { units: false });
+    info = infer(code, names, undefined, recheck);
   }
   // A fold's costly work on each item shared out as a map, where a target
   // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares
@@ -786,7 +795,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const sharedItems = opts.host && !opts.shader && !envSet("NO_FOLD_ITEMS") ? shareFoldItems(code, info) : null;
   if (sharedItems?.shared) {
     code = sharedItems.code;
-    info = infer(code, names, undefined, { units: false });
+    info = infer(code, names, undefined, recheck);
   }
   const derivativeOf = carried?.derivativeOf ?? new Map<Id, { lambda: Id; stand: Map<Id, Id> }>();
   // The closure types it is asked of, and the code of the derivatives
