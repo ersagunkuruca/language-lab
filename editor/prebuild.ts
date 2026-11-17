@@ -17,7 +17,8 @@ import { minifiedScripts } from "../ters/cli/web.ts";
 import { compilePageProgram, compileSavedPage } from "./pageCompile.ts";
 import { buildPicture, pictureEntries } from "./picture.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
-import { prebuiltKey } from "./prebuilt.ts";
+import { prebuiltKey, wherePrebuiltKey } from "./prebuilt.ts";
+import { whereAnswers } from "./whereAnswers.ts";
 import { exampleTables, type Manifest } from "./examplesPlugin.ts";
 import { checkedForRun, coreMain } from "./coreMain.ts";
 
@@ -46,6 +47,14 @@ export async function prebuild(manifest: Manifest, site: string): Promise<string
       const info = infer(code, names);
       write(prebuiltKey("picture", code, entries, pins), await buildPicture(code, info, names, entries, false));
     } catch (e) { console.log(`prebuilt: ${m.program}'s picture didn't compile (${(e as Error).message})`); }
+    // Build targets (whereRuns.ts, I316): every own definition's answer,
+    // so a first open shows them at once.
+    try {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
+      write(wherePrebuiltKey(code, pins), whereAnswers(code, infer(code, names), names, own));
+    } catch (e) { console.log(`prebuilt: ${m.program}'s build targets weren't found (${(e as Error).message})`); }
     const main = code.defs.find((d) => !LIBRARY.code.nodes[d] && names[d] === "main");
     // Run main (E245c, coreMain.ts): printed from the core IR as the run
     // would lower it, with the command line's words when the example is

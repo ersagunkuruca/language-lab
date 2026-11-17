@@ -10,11 +10,16 @@
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
 import { digest, hashes } from "../ters/src/hash.ts";
+import { LIBRARY } from "../ters/src/lang/library.ts";
 
 export const prebuiltKey = (kind: string, code: Code, roots: Record<string, Id>, pins: Pins): string => {
   const h = hashes(code, Object.values(roots));
   return digest([kind, Object.entries(roots).map(([k, d]) => [k, h.get(d)]), pins]);
 };
+
+// Build targets' answers (whereRuns.ts), for every own definition.
+export const wherePrebuiltKey = (code: Code, pins: Pins): string =>
+  prebuiltKey("where", code, Object.fromEntries(code.defs.filter((d) => !LIBRARY.code.nodes[d]).map((d) => [d, d])), pins);
 
 let index: Promise<Set<string>> | null = null;
 // Opened from disk (file://) the browser blocks the fetch and says so in
