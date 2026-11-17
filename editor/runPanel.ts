@@ -18,6 +18,7 @@ import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
 import type { RunAsk, RunSays, WarmAsk } from "./runWorker.ts";
 import { sendCode } from "./runCode.ts";
+import { savedFrom } from "../ters/src/lang/tests.ts";
 import type { CoreMain } from "./coreMain.ts";
 import { prebuilt, prebuiltKey } from "./prebuilt.ts";
 import type { Doc, UI } from "./main.ts";
@@ -100,9 +101,18 @@ export function runPanel(host: RunHost) {
     if (r === undefined) reading.set(code, (r = (ids ? [...ids].map((id) => code.nodes[id]) : Object.values(code.nodes)).some((n) => n?.kind === "ref" && (n.target === IO.readInput || n.target === IO.readLine) && !LIBRARY.code.nodes[n.id])));
     return r;
   }
+  // Standard input as typed, or else the example's own (E275): the first
+  // accepted run of main with some input (examples.json, T7e15), so calc
+  // opens with lines to run.
+  function stdinOf(): string {
+    const typed = ui.stdin?.[doc().program];
+    if (typed !== undefined) return typed;
+    const main = defNamed("main");
+    return (main && savedFrom(doc().examples ?? {})[main]?.find((s) => s.main?.input)?.main?.input) || "";
+  }
   function stdinBox(): HTMLElement {
     const ta = h("textarea", { id: "t-stdin", rows: "3", spellcheck: "false", "aria-label": "Standard input" }) as HTMLTextAreaElement;
-    ta.value = ui.stdin?.[doc().program] ?? "";
+    ta.value = stdinOf();
     ta.addEventListener("input", () => { ui.stdin = { ...ui.stdin, [doc().program]: ta.value }; });
     return h("label", { class: "field stdin" }, h("span", {}, "Standard input"), ta);
   }
@@ -126,7 +136,7 @@ export function runPanel(host: RunHost) {
     const kept = sameAs(printedFor) ? printedFor!.core : undefined;
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
-    const stdin = readsInput() ? ui.stdin?.[doc().program] ?? "" : undefined;
+    const stdin = readsInput() ? stdinOf() : undefined;
     const ask: RunAsk = { code: sendCode(code), names: pres().names, pins: pins(), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
