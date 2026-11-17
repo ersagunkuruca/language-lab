@@ -1330,8 +1330,13 @@ export const RELEASE_V = "std.release.release";
 // locale()`, the language the person running the program uses, for
 // uppercase, lowercase and collated. An effect, so a function that
 // depends on it says so, and a test answers it with a match.
-export const SETTINGS = typedef("std.settings", "Settings", [], [["my locale", [], () => tref("std.locale")], ["my time zone", [], () => tref(STRING)]], true);
-export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings.my time zone";
+// `my sound latency` (C260): seconds from a sample coming in to it being
+// heard, as the platform reports them (the input's and the output's), 0
+// where it reports none or before a sound has played; a view reading it is
+// drawn again when it changes. Last, so the ids above don't move.
+export const SETTINGS = typedef("std.settings", "Settings", [], [["my locale", [], () => tref("std.locale")], ["my time zone", [], () => tref(STRING)],
+  ["my sound latency", [], () => fixedTref("std.settings.my sound latency.returns", NUMBER)]], true);
+export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings.my time zone", MY_LATENCY_OP = "std.settings.my sound latency";
 // Asking for a permission (L236): the platform asks the person (a
 // browser's prompt, Android's permission dialog) and answers whether it was
 // given. `what` is one meaning on every platform: "camera", "microphone",

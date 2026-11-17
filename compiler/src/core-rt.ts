@@ -672,6 +672,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     };
     case "myLocale": return () => ({ tag: LOCALE_V, fields: [(rt.world?.locale ?? hostLocale)()] });
     case "myTimeZone": return () => (rt.world?.timeZone ?? hostZone)();
+    case "mySoundLatency": return () => rt.world?.soundLatency?.() ?? 0;
     case "askPermission": return (what) => (rt.world?.askPermission ?? (() => true))(what as string);
     // An environment variable (L253), as run.ts answers it.
     case "environmentVariable": return (name) => { const v = rt.world?.environmentVariable?.(name as string) ?? null; return v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v.normalize("NFC")] }; };

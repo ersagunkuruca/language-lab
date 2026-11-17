@@ -635,6 +635,7 @@ export const MARK_V: typeof Std.MARK_V = {
   "segment": "std.mark.segment",
   "writing": "std.mark.writing"
 };
+export const MY_LATENCY_OP: typeof Std.MY_LATENCY_OP = "std.settings.my sound latency";
 export const MY_LOCALE_OP: typeof Std.MY_LOCALE_OP = "std.settings.my locale";
 export const MY_ZONE_OP: typeof Std.MY_ZONE_OP = "std.settings.my time zone";
 export const NETWORK_TYPE: typeof Std.NETWORK_TYPE = "effect.network";
@@ -1565,6 +1566,7 @@ export const stdNames: typeof Std.stdNames = {
   "std.literal": "Literal",
   "std.settings.my locale": "my locale",
   "std.settings.my time zone": "my time zone",
+  "std.settings.my sound latency": "my sound latency",
   "std.settings": "Settings",
   "std.permissions.ask permission.what": "what",
   "std.permissions.ask permission": "ask permission",

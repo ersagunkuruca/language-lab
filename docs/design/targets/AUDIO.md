@@ -29,7 +29,9 @@ autocorrelation compiled takes about 14 ms, five blocks' time.
 A sound in stereo (L270) takes and gives a pair of blocks. A looper's tape is a list in a cell, edited with `write at` at
 an item (C261): the cell keeps it as an array of its own, edited in place,
 so a block costs the same on a tape of five minutes as on one of a second,
-and only the items written cross to the page.
+and only the items written cross to the page. What the platform says a sound's latency is
+(input plus output) a page reads with `my sound latency()` (C260a), to
+show beside the round trip the looper measures.
 
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the

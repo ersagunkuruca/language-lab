@@ -62,6 +62,9 @@ export interface Clock {
   // default a download and the browser's file picker.
   offer?(name: string, bytes: Uint8Array): void;
   choose?(kinds: string): Promise<Uint8Array>;
+  // The platform's sound latency in seconds, a cell of the runtime's own
+  // (C260): what a sound playing reports writes it.
+  latency?: Value;
 }
 
 // A file the person keeps (L271): a download of it, by its name.
@@ -234,6 +237,8 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     // when the response lands, and one event sends each request once.
     // Asked once per event, as a fetch is: the handler goes on with the answer.
     askPermission: (what) => ask(`permission ${what}`, () => (clock?.permission ?? browserPermission)(what), (e) => `could not ask for ${what}: ${e}`, what) as boolean,
+    // Read as a cell, so a view showing it is drawn again when a sound reports it.
+    soundLatency: () => (clock?.latency ? (clock.cells.read(clock.latency) as number) : 0),
     // Offered once the handler is kept, so a retried handler offers it once.
     offerFile: (name, bytes) => later(() => (clock?.offer ?? browserOffer)(name, bytes)),
     // Asked once per event, as a fetch is: the handler goes on with the file.
