@@ -1,0 +1,33 @@
+// greenhouse (compiler/gaps/greenhouse), GAPS.md game round 2 (BACKLOG
+// G6): a night in a greenhouse, its moths, plants and lamps one Pool of
+// things with optional parts, each tick a few systems over the pool. The
+// evaluator, compiled JavaScript and `ters native` must print the same
+// lines, the plants eaten and the lamp moved included.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { skip } from "./c-harness.ts";
+
+const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), folder = join(import.meta.dirname, "../gaps/greenhouse");
+const dir = mkdtempSync(join(tmpdir(), "greenhouse-"));
+const js = join(dir, "g.mjs");
+const ran = (cmd: string, args: string[]) => { const r = spawnSync(cmd, args, { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+ran(process.execPath, [lab, "compile", folder, "-o", js]);
+
+test("greenhouse: 200 ticks of 300 moths, evaluated and compiled, the lamp hung at 199", () => {
+  const want = ran(process.execPath, [lab, "run", folder, "200", "300"]);
+  assert.match(want, /^tick 0: moths 300, plants 24, eaten 0, checksum /);
+  assert.equal(ran(process.execPath, [js, "200", "300"]), want);
+});
+
+test("greenhouse: 900 ticks of 2000 moths, compiled and native, plants eaten", () => {
+  const want = ran(process.execPath, [js, "900", "2000"]);
+  assert.match(want, /tick 900: moths 2000, plants 18, eaten 6, /);
+  if (skip) return;
+  ran(process.execPath, [lab, "native", folder, "-o", join(dir, "g")]);
+  assert.equal(ran(join(dir, "g"), ["900", "2000"]), want);
+});

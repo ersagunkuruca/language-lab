@@ -136,3 +136,18 @@ test("tuple keys whose Texts hold quotes, commas, brackets and backslashes stay 
   const read = (k: unknown) => listed(t).find(([key]) => JSON.stringify(key) === JSON.stringify(k))?.[1];
   keys.forEach((k, i) => assert.equal(read(k), i));
 });
+
+// A page's cell holding a set kept as a hash table (the greenhouse's held
+// keys, G6): a write compares the new value with the old, and two tables
+// are equal when they hold the same entries, whichever versions they are.
+test("two tables are equal when they hold the same entries, versions of one table or not", async () => {
+  const { equal: eq } = await import("../src/lang/run.ts");
+  const equal = (a: unknown, b: unknown) => eq(a as never, b as never);
+  const a = put(empty(), "ArrowUp", 1), b = put(put(empty(), "ArrowUp", 1), "a", 2);
+  const c = remove(b, "a");
+  assert.equal(equal(a, c), true);
+  assert.equal(equal(b, a), false);
+  assert.equal(equal(put(empty(), "ArrowUp", 3), a), false, "the same key with another value");
+  assert.equal(equal(b, b), true);
+  assert.equal(equal(a, { tag: CONS, fields: [] }), false, "a table isn't a list");
+});

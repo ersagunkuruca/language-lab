@@ -40,6 +40,7 @@ import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std-ids.t
 import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
 import { ArrayView } from "./array-view.ts";
+import { Table } from "./table.ts";
 import { floatText, shownImplementations, implementationsOf } from "./std-values.ts";
 import { STD_IMPL, STD_MANY } from "./std-impl.ts";
 import { intLit } from "./int.ts";
@@ -169,6 +170,17 @@ export function equal(a: Value, b: Value, same = sameNumber): boolean {
     // The same value on both sides is equal to itself, whatever is inside
     // (a cell written back with what it holds, C85).
     if (x === y) continue;
+    // A map or set stored as a hash table (C63b, C63d; table.ts) has no
+    // tag or fields: two are equal when they hold the same keys, each with
+    // an equal value. Versions of one table share its JS Map, so x's
+    // entries are listed before y is read.
+    if (x instanceof Table || y instanceof Table) {
+      if (!(x instanceof Table && y instanceof Table)) return false;
+      const xs = [...x.m], ym = y.m;
+      if (xs.length !== ym.size) return false;
+      for (const [k, v] of xs) { if (!ym.has(k)) return false; todo.push([v as Value, ym.get(k) as Value]); }
+      continue;
+    }
     if (x.tag !== y.tag) return false;
     // Arrays of different lengths, told apart before their items are
     // copied out (an array's first field is its length).
