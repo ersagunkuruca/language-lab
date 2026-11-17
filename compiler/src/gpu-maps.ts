@@ -73,7 +73,7 @@ export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
       const ft: Type = { ...t, params: [...t.params, ...(capTypes as Type[])] };
       const info: Info = { ...ir.info, typeOf: new Map(ir.info.typeOf).set(id, ft).set(lifted, ft) };
       const names = { ...(ir as { names?: Names }).names, [id]: `map ${m.site}` } as Names;
-      const l = lowerScalar(code, info, names, [id], { records: true, shader: true, stepped: true });
+      const l = lowerScalar(code, info, names, [id], { records: true, shader: true, stepped: true, reached: true });
       if (l.refused.has(id)) continue;
       const fi = l.funcs.findIndex((g) => g.def === id && !g.inner);
       const f = l.funcs[fi];
