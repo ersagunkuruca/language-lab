@@ -70,6 +70,31 @@ export function runPanel(host: RunHost) {
     const typed = ui.args?.[doc().program];
     return { args: m.run.args && (typed !== undefined ? words(typed) : m.run.args), files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
   }
+  // The files a run sees (E274): the example's own, and what runs wrote
+  // or you changed, kept in this browser under the program's title (as
+  // runTyped reads them). One opens at a time, as text you can change;
+  // Reset gives a changed file of the example's back.
+  function filesBox(): HTMLElement | null {
+    const shipped = runGiven()?.files ?? {}, prefix = `lab:${titleOf(doc())}:`, kept: Record<string, string> = {};
+    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k?.startsWith(prefix)) kept[k.slice(prefix.length)] = localStorage.getItem(k)!; } } catch { /* no storage */ }
+    const names = [...new Set([...Object.keys(shipped), ...Object.keys(kept)])];
+    if (!names.length) return null;
+    const open = ui.openFile?.[doc().program] ?? names[0];
+    const text = kept[open] ?? shipped[open] ?? "";
+    const ta = h("textarea", { id: "t-file", rows: "8", spellcheck: "false", wrap: "off", "aria-label": open }) as HTMLTextAreaElement;
+    ta.value = text;
+    ta.addEventListener("input", () => { try { localStorage.setItem(prefix + open, ta.value); } catch { /* no storage */ } });
+    ta.addEventListener("change", render);
+    const changed = open in shipped && open in kept && kept[open] !== shipped[open];
+    return h("div", { class: "field run-files" },
+      h("span", { class: "field-head", title: "What the run reads and writes. Changes stay in this browser." }, "Files",
+        changed ? h("button", { class: "link", type: "button", "data-act": "t-file-reset", "data-file": open, title: `Back to ${open} as the example has it` }, "Reset") : null),
+      h("div", { class: "file-chips" }, ...names.map((n) => h("button", { class: `chip-btn${n === open ? " on" : ""}`, type: "button", "data-act": "t-file-open", "data-file": n, "aria-pressed": String(n === open) }, n))),
+      ta);
+  }
+  function resetFile(name: string) {
+    try { localStorage.removeItem(`lab:${titleOf(doc())}:${name}`); } catch { /* no storage */ }
+  }
   // The arguments as a line you can change (E273), written and read back
   // as a shell would split them: by spaces, "quotes" keeping one together.
   function argsBox(): HTMLElement {
@@ -178,6 +203,6 @@ export function runPanel(host: RunHost) {
 
   // Ends a run without a word: opening another program.
   const endRun = () => { running?.terminate(); running = null; };
-  return { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox };
+  return { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile };
 }
 

@@ -187,6 +187,8 @@ export interface UI {
   stdin?: Record<string, string>;
   // Run's arguments as typed, by program (E273); else the example's.
   args?: Record<string, string>;
+  // The file open in Run's Files, by program (E274).
+  openFile?: Record<string, string>;
   // Values on the wires shown a step at a time (E232d): only the first
   // `at` nodes the run worked out, in the order it worked them out.
   step?: { def: Id; at: number } | null;
@@ -2053,11 +2055,11 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
     const given = action || value ? null : runGiven();
     if (given?.args && !going && ui.allowing !== ui.def) box.append(argsBox());
     if (readsInput() && !going && ui.allowing !== ui.def) box.append(stdinBox());
+    // The files only where there are some (pond's words are numbers).
+    const files = going || ui.allowing === ui.def ? null : filesBox();
+    if (files) box.append(files);
     box.append(going ? h("button", { class: "btn", type: "button", "data-act": "t-stop" }, `Stop ${namer.name(ui.def)}`)
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
-    // The files only where it brings some (pond's words are numbers).
-    const brought = Object.keys(given?.files ?? {});
-    if (brought.length) box.append(h("p", { class: "hint", title: `${brought.length > 1 ? "They come" : "It comes"} with the example; what the run writes stays in this browser.` }, `Files · ${brought.join(", ")}`));
     if (ui.output?.def === ui.def) {
       // What it prints is read out as it comes (a log), and a failure at once.
       box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
@@ -2243,7 +2245,7 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 }
 
 // Run main (editor/runPanel.ts, E228i).
-const { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox } = runPanel({
+const { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
   doc: () => doc, ui, prog: () => prog(), pres: () => pres(), typesOf: () => typesOf(), titleOf, render: () => render(),
   defNamed, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });
@@ -2663,6 +2665,8 @@ document.addEventListener("click", (e) => {
     if (a === "split") { ui.mode = ui.mode === "split" ? null : "split"; return render(); }
     if (a === "t-replay" && typesOf() && ui.output?.def === ui.def && ui.output.answers) return runTyped(ui.output.answers);
     if (a === "t-replay-to" && typesOf() && ui.output?.def === ui.def && ui.output.answers) return runTyped(ui.output.answers, Number(act.dataset.at));
+    if (a === "t-file-open") { ui.openFile = { ...ui.openFile, [doc.program]: act.dataset.file! }; return render(); }
+    if (a === "t-file-reset") { resetFile(act.dataset.file!); return render(); }
     if (a === "t-args-reset") { const { [doc.program]: _, ...rest } = ui.args ?? {}; ui.args = rest; return render(); }
     if (a === "t-run" && typesOf()) {
       // A program opened from a file asks first (E229), once.
