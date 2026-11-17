@@ -58,7 +58,42 @@ export interface Clock {
   after?(ms: number): Promise<void>;
   // A test's person answering a permission (L236); by default the browser asks.
   permission?(what: string): Promise<boolean>;
+  // A test's person keeping a file offered and choosing one (L271); by
+  // default a download and the browser's file picker.
+  offer?(name: string, bytes: Uint8Array): void;
+  choose?(kinds: string): Promise<Uint8Array>;
 }
+
+// A file the person keeps (L271): a download of it, by its name.
+const browserOffer = (name: string, bytes: Uint8Array): void => {
+  const doc = globalThis.document;
+  if (!doc) throw new Error("offering a file needs a page");
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart]));
+  const a = doc.createElement("a");
+  a.href = url;
+  a.download = name;
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+};
+
+// A file the person chooses (L271), with the browser's picker: opened now,
+// while the click that asked is still going (a browser opens one only
+// then); none chosen is a failure.
+const browserChoose = (kinds: string): Promise<Uint8Array> => {
+  const doc = globalThis.document;
+  if (!doc) return Promise.reject(new Error("choosing a file needs a page"));
+  const input = doc.createElement("input");
+  input.type = "file";
+  if (kinds) input.accept = kinds;
+  const chosen = new Promise<Uint8Array>((ok, no) => {
+    input.addEventListener("change", () => { const f = input.files?.[0]; if (f) f.arrayBuffer().then((b) => ok(new Uint8Array(b)), no); else no(new Error("no file was chosen")); });
+    input.addEventListener("cancel", () => no(new Error("no file was chosen")));
+  });
+  input.click();
+  return chosen;
+};
 
 const browserFetch = async (url: string): Promise<string> => {
   const r = await fetch(url);
@@ -199,6 +234,10 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     // when the response lands, and one event sends each request once.
     // Asked once per event, as a fetch is: the handler goes on with the answer.
     askPermission: (what) => ask(`permission ${what}`, () => (clock?.permission ?? browserPermission)(what), (e) => `could not ask for ${what}: ${e}`, what) as boolean,
+    // Offered once the handler is kept, so a retried handler offers it once.
+    offerFile: (name, bytes) => later(() => (clock?.offer ?? browserOffer)(name, bytes)),
+    // Asked once per event, as a fetch is: the handler goes on with the file.
+    askForFile: (kinds) => ask(`choose ${kinds}`, () => (clock?.choose ?? browserChoose)(kinds), (e) => e, "a file") as Uint8Array,
     sendRequest: (r) => ask(`send ${requestKey(r)}`, () => (clock?.send ?? browserSend)(r), (e) => `could not send ${r.method} ${r.url}: ${e}`, r.url) as PlainResponse,
   };
 }

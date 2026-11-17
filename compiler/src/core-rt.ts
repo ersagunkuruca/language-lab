@@ -700,6 +700,8 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     case "fileExists": return (p) => w("fileExists")(p as string);
     case "readBytes": return (p) => tried(() => bytesValue(w("readBytes")!(p as string)));
     case "writeBytes": return (p, b) => tried(() => { w("writeBytes")!(p as string, plainBytes(b)); return []; });
+    case "offerFile": return (n, b) => tried(() => { w("offerFile")!(n as string, plainBytes(b)); return []; });
+    case "askForFile": return (k) => tried(() => bytesValue(w("askForFile")!(k as string)));
     // A zone's offset (L188), NaN for a zone the host doesn't know.
     case "zoneOffset": return (z, s) => T.zoneOffset(z as string, s as number)[0] ?? NaN;
     case "listFolder": return (p) => tried(() => toList(w("listFolder")(p as string)));

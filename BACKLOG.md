@@ -29,7 +29,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C265 and C267 (the greenhouse's reads), G1b with G3d (columns), G3b ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
-| L Language and library | "Build a tuner, metronome and looper app" | L276 (the looper) with C260, L271; then L277, L278 |
+| L Language and library | "Build a tuner, metronome and looper app" | L276 (the looper) with C260, L271b; then L277, L278 |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -192,11 +192,11 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). Left: L271 with C260, then the looper (L276), and further (L277, L278). The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). Left: L271b with C260, then the looper (L276), and further (L277, L278). The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L271 | Keeping a recording: a page saves a WAV as a file the person keeps (a download in the browser, the share sheet in an app) and opens one; browser files are localStorage today, too small for audio | Ersagun 2026-11-17 | P3 | M |  |
+| L271b | Keeping a recording, the rest: WAV written and read in the language (a sound-files module: 16-bit and float PCM, mono and stereo) from a tape without making it a list of every byte, so a few minutes save in a second; the files ops are L271a (DONE). Needs a way to make Bytes item by item (by position) that compiles to a buffer; in an app, offer file as the share sheet and ask for file as the system's picker (c.ts) | Ersagun 2026-11-17 | P3 | M |  |
 | L276 | Looper example: record, play, overdub, undo, several tracks, start and stop on the metronome's bar; round-trip latency measured by a loopback chirp found by cross-correlation and recordings shifted by it, the platform's figure shown beside. Needs L267, L270, C260, C261, L271, L272, L275 | Ersagun 2026-11-17 | P2 | L |  |
 | L277 | Polyphonic tuning: a strum checked string by string against the instrument's known strings (each string's fundamental and harmonics in the spectrum); prior art TC Electronic PolyTune, Klapuri's multi-pitch estimation | Ersagun 2026-11-17 | P3 | L |  |
 | L278 | Frets that move: for a scale length and a tuning, where each fret goes (L·(1 − 1/r) from the nut), the same relation run backwards from a measured fret, and the tuner saying which way and how many millimetres to move a fret (saz, bağlama) | Ersagun 2026-11-17 | P3 | M |  |

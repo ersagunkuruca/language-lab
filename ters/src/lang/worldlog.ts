@@ -29,7 +29,7 @@ export type LogEntry = {
 
 // What the program tells the world rather than asks it. Everything else a
 // World does is an answer, so a world effect added later is logged too.
-const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes", "wait"]);
+const WRITES = new Set(["error", "log", "writeFile", "appendFile", "writeBytes", "offerFile", "wait"]);
 
 // `log`: where to keep it, when the caller keeps events there too (a
 // page's run, C172e). `seeded`: Random's draws come from our generator,

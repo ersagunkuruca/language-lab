@@ -57,6 +57,10 @@ export interface PageOptions {
   fetch?: (url: string) => Promise<string>;
   // How the person answers a permission (a test's; by default the browser asks).
   permission?: (what: string) => Promise<boolean>;
+  // A file offered and one chosen (L271; a test's person, by default a
+  // download and the browser's picker).
+  offer?: (name: string, bytes: Uint8Array) => void;
+  choose?: (kinds: string) => Promise<Uint8Array>;
   // And for send request (L191b).
   send?: (request: PlainRequest) => Promise<PlainResponse>;
   // How the page waits (a test's; by default setTimeout): C40.
@@ -125,7 +129,7 @@ export function showPage(o: PageOptions): Preview {
   const cells = new Cells(equal);
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells || (o.log && o.window)) cells.kept = [];
-  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission });
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose });
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser, undefined, undefined, () => cells.inView()) : browser;
   // While the page is stepped through its log (I239c), the world answers
   // from the log and nothing new is logged: `asking` is which world.

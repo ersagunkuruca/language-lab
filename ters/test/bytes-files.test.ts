@@ -75,3 +75,57 @@ test("on a page, write bytes and read bytes keep every byte, and a file reads as
   assert.deepEqual(out, ["[0, 255, 10, 200]", "[195, 169]", "hi", JSON.stringify("\u0000x"), "[0, 120]"]);
   assert.equal(m.get("lab:t:note.txt"), "é");
 });
+
+// L271: a page hands the person a file to keep and asks them for one. The
+// file chosen comes back to the click that asked, once the person has
+// chosen; none chosen aborts, which the page can catch.
+test("a page offers a file and asks for one: the click goes on with the bytes chosen", async () => {
+  const { showPage } = await import("../src/lang/page.ts");
+  const { fakeDoc } = await import("./fakedom.ts");
+  const { HTML_V, IO, S: Std, SHOW_ANY } = await import("../src/lang/std.ts");
+  const k = new Lang();
+  const main = k.def("main");
+  const button = (label: string, then: () => string) => k.call(HTML_V.element, k.lit("button"), k.list(k.call(HTML_V.on, k.lit("click"), k.fn(["e"], then))), k.list(k.call(HTML_V.text, k.thunk(() => k.lit(label)))));
+  k.define(main, k.thunk(() => k.call(HTML_V.element, k.lit("div"), k.list(), k.list(
+    button("save", () => k.call(IO.offerFile, k.lit("take.bin"), k.call(IO.readBytes, k.lit("take")))),
+    button("open", () => k.call(Std.print, k.call(SHOW_ANY, k.call(IO.askForFile, k.lit("audio/*")))))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const printed: string[] = [], offered: [string, number[]][] = [], asked: string[] = [];
+  let chosen!: (b: Uint8Array) => void;
+  const store = new Map<string, string>([["lab:t:take", "\u0000AQL/"]]);
+  const page = showPage({ code, info, names, main, program: "t", doc: fakeDoc(), store: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k), get length() { return store.size; }, key: (i: number) => [...store.keys()][i] ?? null }, frame: () => {},
+    console: { log: (l: string) => printed.push(l), error: (l: string) => printed.push(l) },
+    offer: (name, bytes) => offered.push([name, [...bytes]]), choose: (kinds) => { asked.push(kinds); return new Promise<Uint8Array>((r) => (chosen = r)); } });
+  const [save, open] = (page.root as unknown as { kids: { fire(name: string): void }[] }).kids;
+  save.fire("click");
+  assert.deepEqual(offered, [["take.bin", [1, 2, 255]]]);
+  open.fire("click");
+  assert.deepEqual([asked, printed], [["audio/*"], []], "waiting for the person");
+  chosen(new Uint8Array([7, 8]));
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual([asked, printed], [["audio/*"], ["bytes([7, 8])"]]);
+});
+
+// On the command line (L271): an offered file is written in the folder it
+// runs in, under its name alone; asking for one aborts, with no one there.
+test("on the command line, offer file writes the file here and ask for file aborts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "offer-"));
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.seq(
+    k.call(IO.offerFile, k.lit("../elsewhere/take.bin"), k.call(lib("bytes of"), k.list(k.int(1), k.int(2)))),
+    k.call(S.print, k.handle(k.call(SHOW_ANY, k.call(IO.askForFile, k.lit(""))), [{ variant: ABORT_OP, names: ["why"], body: ([why]) => why }])))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const was = process.cwd();
+  process.chdir(dir);
+  try {
+    for (const run of [(p: (l: string) => void) => runMain(code, info, main, { print: p, names, world: nodeWorld() }), (p: (l: string) => void) => compiledMain(code, info, names, { print: p, world: nodeWorld() } as never)]) {
+      const said: string[] = [];
+      run((l) => said.push(l));
+      assert.match(said[0], /no one to choose a file/);
+      assert.deepEqual([...readFileSync(join(dir, "take.bin"))], [1, 2]);
+    }
+  } finally { process.chdir(was); }
+});

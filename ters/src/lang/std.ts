@@ -514,6 +514,14 @@ export const IO = {
   // formats.
   readBytes: world("io.readBytes", "read bytes", [str], { t: "con", id: "std.bytes", args: [] }, [FILES, ABORT]),
   writeBytes: world("io.writeBytes", "write bytes", [str, { t: "con", id: "std.bytes", args: [] }], unit, [FILES, ABORT]),
+  // A file the person keeps, and one they choose (L271): on a page a
+  // download and the browser's file picker, in an app the share sheet and
+  // the system's picker, on the command line a file in the folder it runs
+  // in and none to choose. `kinds` says what may be chosen, as an input's
+  // accept does: "audio/*", ".wav,.flac", or "" for any file. Aborts when
+  // the person chooses none.
+  offerFile: world("io.offerFile", "offer file", [str, { t: "con", id: "std.bytes", args: [] }], unit, [FILES, ABORT]),
+  askForFile: world("io.askForFile", "ask for file", [str], { t: "con", id: "std.bytes", args: [] }, [FILES, ABORT]),
   // The body of a GET, as text. Aborts when it can't be had (no network,
   // a status that isn't 2xx). Fetched once per address per run.
   fetchText: world("io.fetchText", "fetch text", [str], str, [NETWORK, ABORT]),
@@ -588,6 +596,10 @@ export const FILES_TYPE = typedef(FILES, "Files", [], [
   // them don't move (as start fetch's, below).
   ["read bytes", [["path", () => fixedTref(`${FILES}.read bytes.path.type`, STRING)]], () => fixedTref(`${FILES}.read bytes.returns`, "std.bytes")],
   ["write bytes", [["path", () => fixedTref(`${FILES}.write bytes.path.type`, STRING)], ["bytes", () => fixedTref(`${FILES}.write bytes.bytes.type`, "std.bytes")]], () => fixedTref(`${FILES}.write bytes.returns`, UNIT)],
+  // A file handed to the person and one they choose (L271): last, so the
+  // ids above don't move.
+  ["offer file", [["name", () => fixedTref(`${FILES}.offer file.name.type`, STRING)], ["bytes", () => fixedTref(`${FILES}.offer file.bytes.type`, "std.bytes")]], () => fixedTref(`${FILES}.offer file.returns`, UNIT)],
+  ["ask for file", [["kinds", () => fixedTref(`${FILES}.ask for file.kinds.type`, STRING)]], () => fixedTref(`${FILES}.ask for file.returns`, "std.bytes")],
 ], true);
 
 // start fetch's types are nodes with ids of their own, so the numbered
@@ -603,7 +615,7 @@ export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
 // Each builtin that acts on the world, by the operation it performs.
 export const WORLD_OPS: Record<Id, Id> = {
   [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
-  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`,
+  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`, [IO.offerFile]: `${FILES}.offer file`, [IO.askForFile]: `${FILES}.ask for file`,
   [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`, [IO.sendRequest]: `${NETWORK}.send request`,
 };
 for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
