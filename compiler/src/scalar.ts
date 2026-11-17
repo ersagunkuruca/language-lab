@@ -2115,7 +2115,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // only (C137c7, `host`): the evaluator's own, called by its id, as the
   // values are the evaluator's. Not one with effects past Choice and
   // Diverge (the evaluator's runtime would be needed), nor one taking or
-  // giving a Bool inside data (a Bool is a boolean only at the top).
+  // giving a Bool inside data (a Bool is a boolean only at the top), but a
+  // cell's operations: they keep a value without looking inside it, so it
+  // is turned the evaluator's way going in and back coming out (`:deep`,
+  // a looper's tracks, which are empty or not).
   function host(n: Call, target: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const sig = SIGS[target]?.(new Subst());
     const effs = sig?.t === "fn" ? info.subst.resolveRow(sig.eff).effs : [];
@@ -2123,10 +2126,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (bad) throw new Refused(`uses ${nm(target)}, which has ${nm(bad)} and isn't lowered yet`);
     const ts = [...n.args, id].map((a) => stype(zonk(a)));
     ts.forEach((t, i) => { if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk([...n.args, id][i]))}`); });
-    if (ts.some((t) => typeof t === "object" && boolInside(t!))) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
+    const deep = ts.some((t) => typeof t === "object" && boolInside(t!));
+    if (deep && !HOST_CELLS.has(target)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;
-    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
+    return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? ":deep" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
   // A relation run some way with one answer, for JavaScript from the core
   // IR (C137c11): the evaluator's solve (run.ts solveAnswers) gives the

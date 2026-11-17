@@ -1440,7 +1440,7 @@ builtin's type takes away exactly what its row says.
 | a page's text, part or attribute value | Cells, Diverge, Time, Network, Log, Choice, Settings | the page runtime runs a view in a watcher, under a step budget, after main has returned; a view with no answer shows nothing; a log line goes to the browser's console, once per run |
 | a program's main | Console, Files, Update, Cells, Diverge, Network, Log, Abort, Random, Time, Wait, Await, Settings, Permissions, Environment, Kept files | the runtime handles them around main: the world, cells, the clock, timers and the web; an Abort ends the program with its reason |
 | a shader | Diverge | only under a literal with fuel, which gives each pixel a step budget |
-| a sound's block function | Cells, Update, Random, Diverge | the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence |
+| a sound's block function | Cells, Update, Random, Diverge, Settings | the audio runtime runs it on each block, under a step budget, with Random seeded and Settings answered as on the page; a block that doesn't finish plays silence |
 | a sound's maker | Cells, Diverge | the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells |
 | a test run by ters test | Check, Choice | the test runner handles Check, collecting every expect that failed, and runs each path a search takes |
 | all, count | Choice | every answer, collected into a list or counted |
@@ -1538,7 +1538,7 @@ an ordinary data type in std (WEB.md has the design and the reasons):
 ```
 row  View      = Cells, Diverge, Time, Network, Log
 row  Handler   = Cells, Update, Console, Files, Abort, Diverge, Time, Network, Random, Log
-row  Sound     = Cells, Update, Random, Diverge
+row  Sound     = Cells, Update, Random, Diverge, Settings
 type Html      = element(tag: Text, attributes: List Attribute, children: List Html)
                | text(shows: () -[View]-> Text)
                | part(view: () -[View]-> Html)

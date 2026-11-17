@@ -626,6 +626,13 @@ export class Cells {
     return Array.from(taped(n, lists).items.slice(from, from + count) as ArrayLike<Value>);
   }
 
+  // The items of the list a cell holds while it's on a tape, else null:
+  // what a page sends a sound of a tape, without making the list.
+  tapeItems(c: Value): ArrayLike<Value> | null {
+    const n = nodeOf(c), t = n && tapeOf(n);
+    return t ? t.items : null;
+  }
+
   // Items written at from, from, from + 1, … of the list a cell holds, in
   // place: one wake for all of them.
   writeItems(c: Value, from: number, xs: Value[], lists: Lists): void {

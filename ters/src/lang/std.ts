@@ -134,12 +134,13 @@ export const PAGE_HANDLER: readonly Id[] = discharge("a page's event handler", [
 // play, made by a function that makes its cells. The runtime runs the
 // block function on the audio thread, 375 times a second, so its row is
 // closed and has nothing that waits or prints: its cells (read and
-// written), noise (Random, which the runtime seeds, so a render repeats)
-// and a step budget. The
-// maker runs once, and in the browser once more in the audio thread, so it
+// written), noise (Random, which the runtime seeds, so a render repeats),
+// a step budget, and Settings (my sound latency(), C260a, which a
+// looper compensates by; the audio thread is answered with the page's).
+// The maker runs once, and in the browser once more in the audio thread, so it
 // may only make cells: both runs must make the same ones.
-export const AUDIO_BLOCK: readonly Id[] = discharge("a sound's block function", [CELLS, UPDATE, RANDOM, DIVERGE],
-  "the audio runtime runs it on each block, under a step budget, with Random seeded; a block that doesn't finish plays silence");
+export const AUDIO_BLOCK: readonly Id[] = discharge("a sound's block function", [CELLS, UPDATE, RANDOM, DIVERGE, "std.settings"],
+  "the audio runtime runs it on each block, under a step budget, with Random seeded and Settings answered as on the page; a block that doesn't finish plays silence");
 export const AUDIO_MAKER: readonly Id[] = discharge("a sound's maker", [CELLS, DIVERGE],
   "the audio runtime runs it once to get the block function, and in a page once more in the audio thread, so it may only make cells");
 // The hosts' rows by name (HOSTS.md, L58): Html's and Attribute's fields

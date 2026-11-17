@@ -30,8 +30,15 @@ A sound in stereo (L270) takes and gives a pair of blocks. A looper's tape is a 
 an item (C261): the cell keeps it as an array of its own, edited in place,
 so a block costs the same on a tape of five minutes as on one of a second,
 and only the items written cross to the page. What the platform says a sound's latency is
-(input plus output) a page reads with `my sound latency()` (C260a), to
-show beside the round trip the looper measures.
+(input plus output) a page reads with `my sound latency()` (C260a), and
+a block function too: Settings is in a sound's row, answered on the audio
+thread as on the page. The looper (L276, `examples/looper`) puts them
+together: four tracks on tapes and a spare, each pass written onto the
+spare over the track's own tape so that undo is a swap, and what comes in
+written where it was played, the latency earlier, the platform's or the
+round trip it measures by playing a chirp and finding it again by
+cross-correlation. Only the sound moves the tapes: the page asks (an undo,
+a clear) through cells the sound reads.
 
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the
@@ -152,7 +159,8 @@ real program.
 - **What can a block function do?** Its row is closed, named once in std.ts
   as `AUDIO_BLOCK`, like `PAGE_VIEW` and `PAGE_HANDLER`: `Cells` and
   `Update` (its state, read and written), `Random` (noise; the runtime seeds it, so a render repeats) and
-  `Diverge` under a step budget. No `Console`, `Files`, `Time` or `Log`:
+  `Diverge` under a step budget, and `Settings` (a looper reads
+  `my sound latency()`). No `Console`, `Files`, `Time` or `Log`:
   the audio thread can't wait, and 375 blocks a second must not print. A
   block that runs out of steps, aborts or gives a block of the wrong length
   plays silence for that block, and the page says so once.

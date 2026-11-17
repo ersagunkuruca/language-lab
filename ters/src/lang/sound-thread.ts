@@ -54,9 +54,11 @@ export class Wrote {
   }
   // The writes to send, and none left.
   take(cells: Cells, made: Value[]): Write[] {
+    // Items first: a cell written whole after a run of items (a looper's
+    // "done" after its capture) lands after them on the other side too.
     const out: Write[] = [];
-    for (const at of this.whole) out.push({ cell: at, value: portable(cells.peek(made[at])) });
     for (const [at, { lo, hi }] of this.items) out.push({ cell: at, from: lo, items: cells.itemsAt(made[at], lo, hi - lo + 1, LIST_SHAPE).map(portable) });
+    for (const at of this.whole) out.push({ cell: at, value: portable(cells.peek(made[at])) });
     this.whole.clear();
     this.items.clear();
     return out;
@@ -126,7 +128,7 @@ export function replaying(answers: Answers | undefined, cells: Pick<Cells, "cell
 // in stereo a pair of them) and the rate.
 export interface SoundHost {
   readonly cells: Cells;
-  main(world: { random(): number; now(): number; wait(): never; log(): void; error(): void }): Value;
+  main(world: { random(): number; now(): number; wait(): never; log(): void; error(): void; soundLatency(): number }): Value;
   play(f: Value, block: Value, rate: number): Value;
 }
 
@@ -138,12 +140,15 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
   // the page is being taken in, which the page already has.
   const wrote = new Wrote();
   let taking = false;
+  // What the page says the platform's latency is (C260a): the block
+  // function reads it as the page's views do.
+  let latency = 0;
   const run = (answers?: Answers) => {
     if (page) return page;
     const cells: Value[] = [], c = host.cells, mine = new Map<number, number>();
     const wait = (): never => { throw new Error("a page can't wait in main"); };
     c.onCell = (cell, place) => { mine.set(place, cells.length); cells.push(cell); };
-    try { page = { listens: listens(host.main({ ...replaying(answers, c, seed), wait, log: () => {}, error: () => {} })), cells }; } finally { c.onCell = null; }
+    try { page = { listens: listens(host.main({ ...replaying(answers, c, seed), wait, log: () => {}, error: () => {}, soundLatency: () => latency })), cells }; } finally { c.onCell = null; }
     c.onWrite = (place, _, where) => { const at = mine.get(place); if (at !== undefined && !taking) wrote.add(at, where); };
     return page;
   };
@@ -163,7 +168,8 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
         this.play = a.fields[1] as never;
         this.stereo = a.tag === HTML_V.listenStereo;
         this.cells = p.cells;
-        this.port.onmessage = (e: MessageEvent<Write>) => {
+        this.port.onmessage = (e: MessageEvent<Write | { latency: number }>) => {
+          if ("latency" in e.data) { latency = e.data.latency; return; }
           const cell = p.cells[e.data.cell];
           if (!cell) return;
           taking = true;
