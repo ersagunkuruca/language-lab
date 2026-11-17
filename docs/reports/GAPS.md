@@ -4383,3 +4383,35 @@ question doesn't read the rest of the definition).
 M2 and M1 first (native, each a quarter of the time, and they also feed
 M3), then M3 measured again, then M4 for pages, which is where the game's
 first slice (G6) runs. Rows G3a to G3e in BACKLOG.md.
+
+### After G3a and the first half of G3b
+
+- **G3a (M2):** array-offsets.ts (C196, JavaScript's) now runs for C and
+  WebAssembly too, its count an Int there: a cell's moths are read by
+  position through the borrowed array, with no view made a step.
+- **G3b, first half (M1):** a map's runtime on C, when it is already on
+  the threads or there are no threads, runs its items in turn into the
+  answer, with no copies of its items, no clock and nothing put aside
+  (c.ts `parC`). The nine cells are still a list made per moth: the
+  second half (a list made only to be walked, made the loop) is open.
+
+| way, 100 ticks, 10,000 moths | before | after |
+|---|---|---|
+| `ters native`, one thread | 2.24 s | 1.95 s (2.9x C) |
+| `ters native`, 4 threads | 2.14 s | 1.73 s (2.6x C, 8.2x the OpenMP C) |
+| `ters wasi` | 9.98 s | 10.03 s |
+
+**M3, found since: the thread pool's cost per item.** With 3 workers the
+threads do 2.7x the CPU work of one thread (user time 5.5 s against
+2.0 s) for 1.35x less wall time, and two threads give no speed-up at all.
+Each moth's work is about 2 µs, and per item the pool changes counts
+that every thread shares, atomically: a count measured at about 4.8
+taken and 4.8 dropped per moth, a million on the map's closure alone
+(`lab_par_one` takes a count of it for each item, and the closure's code
+drops it), most of the rest on what the closure captured and on the
+grid's cells as they are read. All on a few cache lines, from four
+cores. The ideal has none. Fixes, G3c: a worker lends the closure and its
+captures to the items it runs (the closure's body as a borrowed
+function, as `_b` functions already are), takes items in runs rather
+than one at a time, and reads a cell of a shared array without a count
+(the bucket read in `flock over` measured alone: 1.83 to 1.58 s).

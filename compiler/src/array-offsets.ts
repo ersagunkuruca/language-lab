@@ -9,8 +9,11 @@
 //
 // Changes no answer: the item at position k of a rest taken m times is
 // the item at k + m of the array, and its length the array's less m.
-// The core IR's JavaScript only (its arrays are views, std.ts ArrayView);
-// a function with a call that keeps the rest of the search (cps), or with
+// On JavaScript (its arrays are views, std.ts ArrayView) the count is a
+// Float64. On C and WebAssembly (`ints`, G3a) it is an Int: there a rest
+// of an array something else holds made a new view each step, an
+// allocation and a drop per item (moths' walk of a cell's moths, GAPS.md
+// game round 1 M2). A function with a call that keeps the rest of the search (cps), or with
 // several answers, is left as it is. A lambda's code is walked too
 // (depot's searches over `indices`, a recursion inside `closest`, C228).
 
@@ -18,7 +21,7 @@ import { isArray, kids, mapKids, mapLocals, type CoreIR, type SExpr, type SFunc 
 
 const READ = /^array\.(first|length|rest)\.a(\d+)$/;
 
-export function arrayOffsets(ir: CoreIR): number {
+export function arrayOffsets(ir: CoreIR, opts: { ints?: boolean } = {}): number {
   let n = 0;
   const count = ir.funcs.length;
   for (let fi = 0; fi < count; fi++) {
@@ -30,7 +33,7 @@ export function arrayOffsets(ir: CoreIR): number {
     for (let p = 0; p < f.params.length; p++) {
       const g = ir.funcs[at];
       if (!isArray(g.params[p]) || !walked(g, at, p)) continue;
-      at = offsetBy(ir, at, p);
+      at = offsetBy(ir, at, p, !!opts.ints);
       n++;
     }
   }
@@ -65,7 +68,7 @@ function walked(f: SFunc, fi: number, p: number): boolean {
 
 // f becomes a call of a new function g taking f's inputs and a number, how
 // many items of input p have been passed (0 from f).
-function offsetBy(ir: CoreIR, fi: number, p: number): number {
+function offsetBy(ir: CoreIR, fi: number, p: number, ints: boolean): number {
   const f = ir.funcs[fi], at = f.params.length, gi = ir.funcs.length;
   const array = f.params[p];
   if (!isArray(array)) return fi;
@@ -74,8 +77,9 @@ function offsetBy(ir: CoreIR, fi: number, p: number): number {
   const shift = (i: number) => (i >= at ? i + 1 : i);
   const depth = new Map<number, number>([[p, 0]]);
   const k: SExpr = { k: "local", i: at };
-  // The count a number (a JavaScript one, as an array's positions are).
-  const off = (m: number): SExpr => (m ? { k: "op", op: "add", args: [k, { k: "num", v: m }] } : k);
+  // The count a number (a JavaScript one, as an array's positions are), or
+  // an Int on C and WebAssembly.
+  const off = (m: number): SExpr => (!m ? k : ints ? { k: "rt", fn: "int.add", args: [k, { k: "int", v: BigInt(m) }] } : { k: "op", op: "add", args: [k, { k: "num", v: m }] });
   const of = (e: SExpr) => (e.k === "local" ? depth.get(e.i) : undefined);
   const put = (e: SExpr): SExpr => {
     if (e.k === "let" && of(e.value) !== undefined) { depth.set(e.i, of(e.value)!); return put(e.body); }
@@ -87,7 +91,10 @@ function offsetBy(ir: CoreIR, fi: number, p: number): number {
       const m = of(e.args[0])!, what = READ.exec(e.fn)?.[1];
       const arr: SExpr = { k: "local", i: p };
       if (what === "first") return { k: "rt", fn: `array.get.a${a}`, args: [arr, off(m)] };
-      if (what === "length") return { k: "op", op: "sub", args: [{ k: "rt", fn: `array.length.a${a}`, args: [arr] }, off(m)] };
+      if (what === "length") {
+        const n: SExpr = { k: "rt", fn: `array.length.a${a}`, args: [arr] };
+        return ints ? { k: "rt", fn: "int.sub", args: [n, off(m)] } : { k: "op", op: "sub", args: [n, off(m)] };
+      }
     }
     if (e.k === "call" && e.fn === fi) {
       const m = of(e.args[p]) ?? 0;
@@ -96,8 +103,8 @@ function offsetBy(ir: CoreIR, fi: number, p: number): number {
     return mapKids(e, put);
   };
   const body = put(mapLocals(f.body, shift));
-  const g: SFunc = { ...f, name: `${f.name}$from`, params: [...f.params, "f64"], locals: [...f.locals.slice(0, at), "f64", ...f.locals.slice(at)], body, inner: true };
+  const g: SFunc = { ...f, name: `${f.name}$from`, params: [...f.params, ints ? "int" : "f64"], locals: [...f.locals.slice(0, at), ints ? "int" : "f64", ...f.locals.slice(at)], body, inner: true };
   ir.funcs.push(g);
-  f.body = { k: "call", fn: gi, args: [...f.params.map((_, i): SExpr => ({ k: "local", i })), { k: "num", v: 0 }], tail: true };
+  f.body = { k: "call", fn: gi, args: [...f.params.map((_, i): SExpr => ({ k: "local", i })), ints ? { k: "int", v: 0n } : { k: "num", v: 0 }], tail: true };
   return gi;
 }

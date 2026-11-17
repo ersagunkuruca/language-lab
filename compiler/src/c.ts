@@ -3853,7 +3853,31 @@ static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;
-  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0${tests ? ", -1" : ""} };
+${job === "map" ? `  // Already on the threads (a map inside a map's item, moths' cells
+  // around a moth, GAPS.md game round 1 M1): nothing can be shared, so
+  // the items in turn, the last first as below, with nothing put aside.
+  // The same with no threads to share them with.
+  if (lab_in_par || !lab_pool_ready()) {
+    ${To} lab_par_sm[16];
+    ${To} *lab_par_o = n <= 16 ? lab_par_sm : malloc((size_t)n * sizeof(${To}));
+    if (!lab_par_o) lab_oom();
+    for (k = n; k-- > 0;) {
+      lab_cell *g = lab_dup(f);
+      lab_par_o[k] = ((${fname.get(tf.key)})((lab_closure *)g)->code)(g, ${dup(ta.item, rd)});
+      if (lab_st) {
+        ${counted(out) ? `for (int64_t m = k + 1; m < n; m++) ${drop(out, "lab_par_o[m]")}
+        ` : ""}if (lab_par_o != lab_par_sm) free(lab_par_o);
+        lab_drop(xs); lab_drop(f);
+        return 0;
+      }
+    }
+    lab_drop(xs); lab_drop(f);
+    ${vo.buf} *r = lab__buf_a${to.index}((uint32_t)n, 0);
+    for (k = 0; k < n; k++) r->it[r->lo + (uint32_t)k] = lab_par_o[k];
+    if (lab_par_o != lab_par_sm) free(lab_par_o);
+    return lab__view_a${to.index}((lab_cell *)r, r->lo, (uint32_t)n);
+  }
+` : ""}  ${J} j = { f, malloc((size_t)(n ? n : 1) * sizeof(${Ti})), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0${tests ? ", -1" : ""} };
   struct timespec t0;
   if (!j.in || !j.out || !j.bad) lab_oom();
   for (k = 0; k < n; k++) j.in[${keep && !fold ? "n - 1 - k" : "k"}] = ${dup(ta.item, rd)};
