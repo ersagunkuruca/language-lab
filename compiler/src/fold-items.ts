@@ -33,20 +33,24 @@ export function shareFoldItems(code: Code, info: Info): { code: Code; shared: nu
   const map = preludeDef("map");
   if (!map) return { code, shared: 0 };
   const folds = parallelFolds(code, info);
-  const reached = new Set(code.defs.flatMap((d) => subtree(code, d)));
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  // (Most programs have none: the walk and the copy below are of all the
+  // program's nodes, L266.)
+  if (!folds.size) return { code, shared: 0 };
+  // What the definitions hold, and the copy of the nodes, made only for a
+  // fold that passes the rest.
+  let reached: Set<Id> | undefined, copy: Record<Id, Node> | undefined;
+  const at = (id: Id) => (copy ?? code.nodes)[id], edit = () => (copy ??= { ...code.nodes });
   let shared = 0;
   for (const id of folds) {
-    if (!reached.has(id)) continue;
-    const fold = nodes[id] as NodeOf<"fold">;
-    const arms = fold.arms.map((a) => nodes[a] as NodeOf<"arm">);
+    const fold = at(id) as NodeOf<"fold">;
+    const arms = fold.arms.map((a) => at(a) as NodeOf<"arm">);
     const cons = arms.find((a) => a.variant === CONS), nil = arms.find((a) => a.variant === NIL);
     if (arms.length !== 2 || !cons || !nil || cons.binds.length !== 2 || !cons.results[1] || cons.results[0]) continue;
     const [x, rest] = cons.binds, r = cons.results[1]!;
     // The arm's body a let: (v) => b, given e.
-    const body = nodes[cons.body];
+    const body = at(cons.body);
     if (!isCall(body) || body.args?.length !== 1) continue;
-    const lam = nodes[body.fn];
+    const lam = at(body.fn);
     if (lam?.kind !== "lambda" || lam.params.length !== 1) continue;
     const e = body.args[0];
     const refs = (at: Id) => subtree(code, at).map((n) => code.nodes[n]).filter((n): n is NodeOf<"ref"> => n?.kind === "ref").map((n) => n.target);
@@ -55,15 +59,16 @@ export function shareFoldItems(code: Code, info: Info): { code: Code; shared: nu
     if (joins(code, lam.body, r)) continue;
     const own = ownEffects(code, info, e);
     if (!own?.has(DIVERGE)) continue;
+    if (!(reached ??= new Set(code.defs.flatMap((d) => subtree(code, d)))).has(id)) continue;
     // map(xs, (x) => e), the fold's input; the arm's item v, its body b.
     const fn = freshId(), mapRef = freshId(), call = freshId();
-    nodes[fn] = { id: fn, kind: "lambda", params: [x], body: e };
-    nodes[mapRef] = { id: mapRef, kind: "ref", target: map };
-    nodes[call] = { id: call, kind: "call", fn: mapRef, args: [fold.scrutinee, fn] } as Node;
-    nodes[id] = { ...fold, scrutinee: call };
-    nodes[cons.id] = { ...cons, binds: [lam.params[0], rest], body: lam.body };
-    delete nodes[body.id];
-    delete nodes[lam.id];
+    edit()[fn] = { id: fn, kind: "lambda", params: [x], body: e };
+    edit()[mapRef] = { id: mapRef, kind: "ref", target: map };
+    edit()[call] = { id: call, kind: "call", fn: mapRef, args: [fold.scrutinee, fn] } as Node;
+    edit()[id] = { ...fold, scrutinee: call };
+    edit()[cons.id] = { ...cons, binds: [lam.params[0], rest], body: lam.body };
+    delete edit()[body.id];
+    delete edit()[lam.id];
     shared++;
   }
   if (!shared) return { code, shared };
@@ -73,9 +78,9 @@ export function shareFoldItems(code: Code, info: Info): { code: Code; shared: nu
   for (const d of [map, ...dependencies(whole, map)]) {
     if (defs.includes(d) || whole.nodes[d]?.kind !== "def") continue;
     defs.push(d);
-    for (const n of subtree(whole, d)) nodes[n] ??= whole.nodes[n];
+    for (const n of subtree(whole, d)) copy![n] ??= whole.nodes[n];
   }
-  return { code: { nodes, defs }, shared };
+  return { code: { nodes: copy!, defs }, shared };
 }
 
 // Whether b reads the rest's result r (or its fields) only to add an Int
