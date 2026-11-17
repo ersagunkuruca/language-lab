@@ -38,7 +38,10 @@ spare over the track's own tape so that undo is a swap, and what comes in
 written where it was played, the latency earlier, the platform's or the
 round trip it measures by playing a chirp and finding it again by
 cross-correlation. Only the sound moves the tapes: the page asks (an undo,
-a clear) through cells the sound reads.
+a clear) through cells the sound reads. The strum tuner (L277, `examples/strum-tuner`)
+gathers a window on the audio thread and hands it to the page whole,
+where every string of a strum is read at once against the tuning's
+strings.
 
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the
