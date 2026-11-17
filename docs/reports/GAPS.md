@@ -4415,3 +4415,23 @@ captures to the items it runs (the closure's body as a borrowed
 function, as `_b` functions already are), takes items in runs rather
 than one at a time, and reads a cell of a shared array without a count
 (the bucket read in `flock over` measured alone: 1.83 to 1.58 s).
+
+### G3c, first part: what a map shares isn't counted while its threads run
+
+A map whose answers hold no cell (moths' answers are records of
+Float64s) now freezes what it shared while the threads run its items
+(c.ts `parC`, `lab_freeze` and `lab_thaw`, which a count's job already
+did, I216): the closure, what it captured and the arrays they hold have
+a count of 0 for the job's length, so taking and dropping them costs
+nothing and touches no shared line. Nothing made in the job can keep
+one, since the answers hold no cells.
+
+| moths, 100 ticks, 10,000 | before | after |
+|---|---|---|
+| `ters native`, one thread | 1.95 s | 1.85-1.97 s |
+| `ters native`, 4 threads | 1.73 s | 1.03-1.12 s (1.8x one thread; the OpenMP C gets 3.2x) |
+
+Left of M3: with 3 workers the threads still do about 1.8x the CPU work
+of one (3.6 s against 2.0 s). Each moth is about 2 µs of work, and each
+item still takes its slot from one shared counter; the next step is
+items in runs, measured.
