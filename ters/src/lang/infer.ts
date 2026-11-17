@@ -2534,6 +2534,20 @@ function matchersOf(code: Code): Set<Id> {
     if (!touches) { matchers.set(code.nodes, k.m); return k.m; }
   }
   let m = matchers.get(code.nodes);
+  if (!m && derived.has(code)) {
+    // On a layer (being checked): the uses of `match by`, the layer's
+    // found once, and the calls they're the function of (L266: a scan of
+    // every node of each program checked).
+    m = new Set();
+    const up = parentLookup(code);
+    for (const r of nodesWhere(code, "match by", (n) => n.kind === "ref" && n.target === JOBS.matchBy)) {
+      const c = up(r), n = c === undefined ? undefined : code.nodes[c];
+      if (!isCall(n) || n.fn !== r) continue;
+      const by = code.nodes[n.args[0]];
+      if (by?.kind === "ref") m.add(by.target);
+    }
+    matchers.set(code.nodes, m);
+  }
   if (!m) {
     m = new Set();
     for (const n of Object.values(code.nodes)) {
