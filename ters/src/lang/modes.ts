@@ -34,7 +34,7 @@
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import steadyModes from "../../library/steady-modes.json" with { type: "json" };
-import { children, dependencies, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
+import { children, dependencies, dependenciesOfAll, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -231,6 +231,24 @@ const modeAsked = (code: Code, def: Id, known: string[], spec: Map<number, Fn>):
 };
 const returnedAsked = (def: Id, spec: Map<number, Fn>): string | null =>
   isPublished(def) && [...spec.values()].every(fixedFn) ? `returned|${def}|${specText(spec)}` : null;
+// What ofMode and ofReturned answered for a program whose nodes it read
+// are the same ones here (L266: compiling machine checks it six times,
+// each check with an analyzer of its own asking the same questions; a
+// pass that changes a node gives it a new one). Kept with the nodes of
+// the definition, of the functions given and of all they reach.
+const verdictsSeen = new Map<string, { v: Verdict | null; read: [Id, Node][] }>();
+export function seenVerdict(code: Code, ask: "mode" | "returned", def: Id, known: string[], spec: Map<number, Fn>, work: () => Verdict | null): Verdict | null {
+  const k = `${ask}|${def}|${[...new Set(known)].sort().join(",")}|${specText(spec)}`;
+  const was = verdictsSeen.get(k);
+  if (was && was.read.every(([id, n]) => code.nodes[id] === n)) return was.v;
+  const v = work();
+  const roots = [def, ...[...spec.values()].map((f) => f.id).filter((id) => code.nodes[id])];
+  const read: [Id, Node][] = [];
+  for (const r of [...roots, ...dependenciesOfAll(code, roots)]) for (const id of subtree(code, r)) read.push([id, code.nodes[id]]);
+  if (verdictsSeen.size >= 4096) verdictsSeen.clear();
+  verdictsSeen.set(k, { v, read });
+  return v;
+}
 // What ofMode and ofReturned would answer, when it is kept; undefined
 // when it isn't, and an analyzer is needed.
 export function keptMode(code: Code, names: Record<Id, string>, def: Id, known: string[], spec: Map<number, Fn>): Verdict | null | undefined {

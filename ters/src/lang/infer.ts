@@ -24,7 +24,7 @@ import { showWithPinUnits } from "./unit-types.ts";
 import { fillHole } from "./refactor.ts";
 import { planSolve, runsBackwards, solvesInWholeNumbers } from "./solve.ts";
 import { computedForward, directionProblem, useDirections } from "./directions.ts";
-import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, solveMode, type Fn } from "./modes.ts";
+import { analyzer, derivedFrom, determinism, keptMode, keptReturned, oneAnswer, seenVerdict, solveMode, type Fn } from "./modes.ts";
 import { smoothDerivative as hasSmoothDerivative, smoothGradient as hasSmoothGradient, recordVariant, forgetDerived } from "./derive.ts";
 import { answerKeys } from "./ports.ts";
 import { laterOps } from "./later-ops.ts";
@@ -1527,8 +1527,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
               const ports = args.map((_, i) => String(i));
               const asked = r ? keptMode(code, names, given.target, ports, spec) : null, back = rr && ret.t === "fn" ? keptReturned(names, given.target, spec) : null;
               const an = () => (modes ??= analyzer(code, names));
-              const mine = r && dropped(r, asked !== undefined ? asked : an().ofMode(given.target, ports, spec));
-              const theirs = rr && ret.t === "fn" && dropped(rr, back !== undefined ? back : an().ofReturned(given.target, spec));
+              const mine = r && dropped(r, asked !== undefined ? asked : seenVerdict(code, "mode", given.target, ports, spec, () => an().ofMode(given.target, ports, spec)));
+              const theirs = rr && ret.t === "fn" && dropped(rr, back !== undefined ? back : seenVerdict(code, "returned", given.target, [], spec, () => an().ofReturned(given.target, spec)));
               if (mine || theirs) fr = { ...fr, ...(mine ? { eff: mine } : {}), ...(theirs && ret.t === "fn" ? { ret: { ...ret, eff: theirs } } : {}) };
             }
           }
