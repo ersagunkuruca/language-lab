@@ -25,10 +25,10 @@
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { conditionResults, isUse, isBound, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
-import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer } from "../model.ts";
+import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
-import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, type Info } from "./infer.ts";
+import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, sccs, terminates, type Info } from "./infer.ts";
 import { keptAcrossRuns } from "./kept.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
 import { ARITH, ARITH_FIELD, CONS, EMBEDDING, EMBEDDING_MAP, INT_OPS, LIST, LITERAL, LITERAL_V, NIL, S } from "./std.ts";
@@ -763,6 +763,22 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // substitution doesn't know a library body's variable) left the three
   // disagreeing, which verify.ts refused (REVIEW-2026-11-11 §2, I207).
   typedAsBodies({ nodes, defs }, typeOf, schemes, unresolved);
+  // A definition that might not finish may end at the types it's resolved
+  // at: fibonacci's `fib` counting down Float64s might never reach its
+  // guard, counting down Ints (its own default, or a copy's) does
+  // (counting.ts). Each recursive group is judged again at its types, as a
+  // check of the resolved program would judge it, so the compiled code
+  // doesn't depend on whether the program is checked again (L266).
+  const maybe = new Set([...divergent].filter((id) => nodes[id]?.kind === "def" && !(seed && id in seed.layer.nodes)));
+  if (maybe.size) {
+    const all: Code = { nodes, defs };
+    const callsIn = (d: Id) => subtree(all, d).flatMap((x) => { const r = nodes[x]; return r?.kind === "ref" && maybe.has(r.target) ? [r.target] : []; });
+    const isInt = (p: Id) => { const t = typeOf.get(p); const r = t && s.resolve(t); return r?.t === "con" && r.id === INT; };
+    for (const group of sccs([...maybe], callsIn)) {
+      const recursive = group.length > 1 || callsIn(group[0]).includes(group[0]);
+      if (recursive && terminates(all, group, undefined, isInt)) for (const d of group) divergent.delete(d);
+    }
+  }
   return { code: { nodes, defs }, info: { ...info, typeOf, schemes, divergent, copyOf }, names: outNames, ...(wanted ? { wanted } : {}) };
 }
 
