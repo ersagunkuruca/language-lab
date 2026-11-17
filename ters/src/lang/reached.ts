@@ -6,7 +6,7 @@
 // on it (run.ts runProgram, L265), so neither types library bodies the
 // program never reaches.
 
-import { dependencies, dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
+import { dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { implementationsOf, shownImplementations } from "./std-values.ts";
 import { interfaceOps, waysIn } from "./ways.ts";
@@ -26,7 +26,8 @@ export function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
   // The types the roots use: what they refer to, types included (model.ts
   // dependencies); the builtin ones (Float64, Int, Text) always.
   const used = new Set<Id>(), more: Id[] = [], kept = new Set<Id>();
-  const use = (r: Id) => { if (used.has(r)) return; used.add(r); for (const d of dependencies(code, r)) used.add(d); };
+  // (What is used was walked: each root's walk stops there, L266.)
+  const use = (r: Id) => { if (used.has(r)) return; used.add(r); dependenciesOfAll(code, [r], used); };
   roots.forEach(use);
   // The ways of a kept implementation's interface too (WAYS.md): arith.ts
   // puts one in for a field the implementation leaves `by its ways`, so it

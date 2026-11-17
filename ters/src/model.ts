@@ -577,8 +577,9 @@ export function merge(...codes: Code[]): Code {
   const nodes: Record<Id, Node> = {};
   const clashes: Id[] = [];
   for (const c of codes) {
-    for (const [id, n] of Object.entries(c.nodes)) {
-      const old = nodes[id];
+    const from = c.nodes;
+    for (const id in from) {
+      const n = from[id], old = nodes[id];
       if (old && old !== n && !sameNode(old, n)) clashes.push(id);
       nodes[id] = n;
     }
