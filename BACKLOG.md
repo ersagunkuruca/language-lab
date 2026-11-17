@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Make command-line examples interactive" | E278 |
+| E Editor | "Editor lane" | no open row (E273 to E278 done, RUN-INPUTS-2026-11-17) |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | I316 (once editor/ is free), L266 (Ersagun 2026-11-17: yes, in that order) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -62,7 +62,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E278 | Pages for the simulations beside their benchmark mains, the same definitions drawn: crew left (pond E278a, break E278b and clinic E278c done) | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P2 | L | |
 
 ### Speed of editing
 

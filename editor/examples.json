@@ -27,6 +27,7 @@
     { "program": "pond-page", "label": "Page: pond, fish and herons", "folders": ["pond-page"], "page": true },
     { "program": "break-page", "label": "Page: break, a pool break played out", "folders": ["break-page"], "page": true },
     { "program": "clinic-page", "label": "Page: clinic, a day of patients and desks", "folders": ["clinic-page"], "page": true },
+    { "program": "crew-page", "label": "Page: crew, workers on a plan", "folders": ["crew-page"], "page": true },
     { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"], "run": { "args": ["budget.txt"], "names": ["sheet"], "files": ["budget.txt"] } },
     { "program": "board", "label": "Bigger program: board, a task board page", "folders": ["compiler/gaps/board"] },
     { "program": "machine", "label": "Bigger program: machine, an assembler and interpreter", "folders": ["compiler/gaps/machine"], "run": { "args": ["primes.asm"], "names": ["program…"], "files": ["hello.asm", "primes.asm", "fib.asm", "collatz.asm", "sort.asm"] } },
