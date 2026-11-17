@@ -62,7 +62,7 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E278 | Pages for the simulations beside their benchmark mains, the same definitions drawn: pond, break, clinic, crew (one PR each) | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P2 | L | |
+| E278 | Pages for the simulations beside their benchmark mains, the same definitions drawn: break, clinic, crew left (one PR each; pond done, E278a) | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P2 | L | |
 
 ### Speed of editing
 
