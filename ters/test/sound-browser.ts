@@ -13,7 +13,8 @@
 // Then examples/looper (L276): its microphone hears the speakers 50 ms
 // late, as a microphone held to them does; Measure finds that round trip,
 // a pass records a tone, the track plays it back, and Undo takes it away
-// and puts it back.
+// and puts it back. Then examples/strum-tuner (L277): a microphone that
+// is six sawtooth strings, each a few cents off, read string by string.
 // Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
@@ -30,7 +31,7 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "sound-"));
-for (const page of ["pedal", "metronome", "tuner", "looper"]) {
+for (const page of ["pedal", "metronome", "tuner", "looper", "strum-tuner"]) {
   const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, `../examples/${page}`), "-o", join(dir, `${page}.html`)], { encoding: "utf8" });
   if (built.status !== 0) throw new Error(built.stderr);
 }
@@ -271,6 +272,33 @@ try {
   await new Promise((r) => setTimeout(r, 300));
   const redone = await loudness();
   check("the looper plays back what it recorded, and Undo takes it away and puts it back", silent < 0.01 && played > 0.1 && undone < 0.01 && redone > 0.1 && drawn > 20, { silent, played, undone, redone, drawn });
+
+  // The strum tuner: six strings sounding at once, each off by its own cents.
+  await send("Page.navigate", { url: `http://127.0.0.1:${port}/strum-tuner.html` });
+  for (let i = 0; i < 100 && !(await run<boolean>(`!!document.querySelector("button.start")`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  const off = [0, 8, -12, 4, -6, 15];
+  await run(`(() => {
+    const ctx = new AudioContext(), out = ctx.createMediaStreamDestination();
+    [82.40688922821748, 110, 146.8323839587038, 195.99771799087463, 246.94165062806206, 329.6275569128699].forEach((f, j) => {
+      const osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.type = "sawtooth"; osc.frequency.value = f * Math.pow(2, ${JSON.stringify(off)}[j] / 1200); g.gain.value = 0.05;
+      osc.connect(g); g.connect(out); osc.start();
+    });
+    navigator.mediaDevices.getUserMedia = async () => out.stream;
+  })()`);
+  await run(`document.querySelector("button.start").click()`);
+  const strings = await run<{ name: string; cents: string }[]>(`(async () => {
+    const read = () => [...document.querySelectorAll(".string")].map((r) => ({ name: r.querySelector(".name").textContent, cents: r.querySelector(".cents").textContent }));
+    let seen = read();
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      seen = read();
+      if (i > 15 && seen.every((s) => s.cents !== "—")) break;
+    }
+    return seen;
+  })()`);
+  const cents = strings.map((s) => parseFloat(s.cents.replace("−", "-")));
+  check("the strum tuner reads all six strings at once, each within 2 cents", strings.length === 6 && cents.every((c, j) => Math.abs(c - off[j]) <= 2), strings);
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);
