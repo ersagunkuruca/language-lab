@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: G3c, G3b, G3d, G1a, G2, G1b, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: G3c, G3b, G3d, G1a, G1b, G2b, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -239,7 +239,7 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 |---|---|---|---|---|---|---|
 | G1a | std on Pool for systems: `updated` (map items, keys kept), `kept` (despawn those failing a test), changes (spawn, despawn) given back and applied after a system ([ENTITIES](docs/design/data/ENTITIES.md)) | L | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | M | |
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
-| G2 | A game page host: a `canvas` element the program draws into from a draw list each frame (rectangles, circles, sprites, lines), keys held and pointer as state, a fixed-step update with the frame's seconds; SVG stays for small pictures | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
+| G2b | The game page's input as state: keys held and the pointer read in a frame, not only as events, and a fixed-step update with the frame's seconds (G2 built the canvas and its marks) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
 | G3b | moths M1, second half: a list made only to be walked once (moths' nine cells, `flat map` of `map`) becomes the loop that makes it (deforestation, credit Wadler 1988). First half done with G3a | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
 | G3c | moths M3, rest: 4 threads are 1.8x one thread (C gets 3.2x) and still do 1.8x the CPU work; a map whose answers hold no cells no longer counts what it shares (done); next: items taken in runs, not one at a time from one shared counter, then measure what is left | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
 | G3d | moths M4: compiled JS keeps records that never leave a function as locals (Vec, Flock in `met`), no finite check on a literal, plain field reads; 10x the hand-written JS | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
