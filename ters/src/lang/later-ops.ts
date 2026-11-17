@@ -5,21 +5,30 @@
 // operation nobody takes the rest of is answered at once, and costs
 // nothing kept (Koka's `ctl` beside its `fun`).
 
-import type { Code, Id, NodeOf } from "../model.ts";
+import { derived, nodesWhere, type Code, type Id, type Node, type NodeOf } from "../model.ts";
 
 const cache = new WeakMap<Code["nodes"], { size: number; ops: Set<Id> }>();
 
+const picked = (n: Node) => (n.kind === "variant" && !!n.later && !!n.returns) || n.kind === "arm";
 export function laterOps(code: Code): Set<Id> {
-  const nodes = code.nodes, size = Object.keys(nodes).length, had = cache.get(nodes);
+  const nodes = code.nodes;
+  // A program on its layer (being checked, model.ts scanningOnLayer): the
+  // layer's cases and operations, found once, and its own (L266: each
+  // check counted and walked every node, the library's ~45,000).
+  if (derived.has(code)) return opsIn(nodes, nodesWhere(code, "later ops", picked).map((id) => nodes[id]));
+  const size = Object.keys(nodes).length, had = cache.get(nodes);
   if (had && had.size === size) return had.ops;
+  const ops = opsIn(nodes, Object.values(nodes));
+  cache.set(nodes, { size, ops });
+  return ops;
+}
+function opsIn(nodes: Code["nodes"], ns: Iterable<Node>): Set<Id> {
   const ops = new Set<Id>();
-  for (const n of Object.values(nodes)) {
+  for (const n of ns) {
     if (n.kind === "variant" && n.later && n.returns) ops.add(n.id);
     if (n.kind !== "arm") continue;
     const v = nodes[n.variant];
     if (v?.kind === "variant" && v.returns && n.binds.length === (v as NodeOf<"variant">).fields.length + 1) ops.add(v.id);
   }
-  cache.set(nodes, { size, ops });
   return ops;
 }
-
