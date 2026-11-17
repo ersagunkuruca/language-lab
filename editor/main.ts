@@ -34,7 +34,7 @@ import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, type Pos } from "./canvas.ts";
-import { edit, fileTag, h, head, type Kid } from "./dom.ts";
+import { edit, fileTag, h, head, tip, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
 import { navigatorPanel } from "./navigator.ts";
 import { runPanel } from "./runPanel.ts";
@@ -2108,6 +2108,15 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   return box;
 }
 
+// Run's head, and for main its comment behind an ⓘ (E276): what the
+// program does and what to give it, without reading its code.
+function runHead(): HTMLElement {
+  const about = ui.def === defNamed("main") ? doc.comments[ui.def] : undefined;
+  if (!about) return h("h2", {}, "Run");
+  const [b, note] = tip(about, "What main does");
+  return h("div", { class: "run-head" }, h("h2", {}, "Run"), b, note);
+}
+
 const { page, pageSection, pictureSection, savePage, saveLog } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
   errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
@@ -2547,7 +2556,7 @@ function draw() {
       h("aside", { class: "side" },
         // A helper's own Run comes first; the page, still running, sits
         // under it (I76).
-        h("section", { class: "panel" }, h("h2", {}, "Run"), pictureSection(info),
+        h("section", { class: "panel" }, runHead(), pictureSection(info),
           ...(info && pageMain(ownDefs(), info, pres().names) !== ui.def ? [typedRunPanel(namer, info), pageSection(info)] : [pageSection(info), typedRunPanel(namer, info)])),
         h("section", { class: "panel", "aria-label": shown[1] },
           h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>

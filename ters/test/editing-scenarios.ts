@@ -705,6 +705,8 @@ async function runInputs() {
   const stdin = await p.locator("#t-stdin").inputValue();
   if (!stdin.startsWith("1 + 2")) errors.push(`${where}: calc's standard input is ${JSON.stringify(stdin)}`);
   await p.locator('[data-set="program"]', { hasText: /sheet, a spreadsheet/ }).first().click();
+  // What main does, behind Run's ⓘ (E276).
+  if (!(await p.locator(".run-head .tip").getAttribute("title"))?.startsWith("Runs the sheet")) errors.push(`${where}: Run's ⓘ doesn't say what sheet's main does`);
   const args = await p.locator("#t-args").inputValue();
   if (args !== "budget.txt") errors.push(`${where}: sheet's arguments are ${JSON.stringify(args)}`);
   const file = p.locator("#t-file");

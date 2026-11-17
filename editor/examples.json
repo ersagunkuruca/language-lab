@@ -1,5 +1,5 @@
 {
-  "about": "The example programs (BACKLOG E205), with every bigger-program round's program (GAPS.md): the editor's picker in this order, each from its folders under ters/examples/, or from the repository root when the name has a slash (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: a page only. run: what Run gives main as ters run would, its arguments (none: main takes no command line) and the files beside it.",
+  "about": "The example programs (BACKLOG E205), with every bigger-program round's program (GAPS.md): the editor's picker in this order, each from its folders under ters/examples/, or from the repository root when the name has a slash (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: a page only. run: what Run gives main as ters run would, its arguments (none: main takes no command line), what each argument is (names, shown beside them) and the files beside it.",
   "programs": [
     { "program": "numbers", "label": "Numbers & physics", "folders": ["quadratic", "physics"], "start": "fall" },
     { "program": "queens", "label": "Eight queens", "folders": ["queens"], "start": "queens" },
@@ -24,18 +24,18 @@
     { "program": "constructions", "label": "Page: constructions", "folders": ["constructions"], "page": true },
     { "program": "bounce", "label": "Page: bounce", "folders": ["bounce"], "page": true },
     { "program": "spacetime", "label": "Page: spacetime", "folders": ["spacetime"], "page": true },
-    { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"], "run": { "args": ["budget.txt"], "files": ["budget.txt"] } },
+    { "program": "sheet", "label": "Bigger program: sheet, a spreadsheet", "folders": ["sheet"], "run": { "args": ["budget.txt"], "names": ["sheet"], "files": ["budget.txt"] } },
     { "program": "board", "label": "Bigger program: board, a task board page", "folders": ["compiler/gaps/board"] },
-    { "program": "machine", "label": "Bigger program: machine, an assembler and interpreter", "folders": ["compiler/gaps/machine"], "run": { "args": ["primes.asm"], "files": ["hello.asm", "primes.asm", "fib.asm", "collatz.asm", "sort.asm"] } },
-    { "program": "notebook", "label": "Bigger program: notebook, notes and a word index", "folders": ["notebook"], "run": { "args": ["notes.txt"], "files": ["notes.txt"] } },
-    { "program": "routes", "label": "Bigger program: routes, roads between towns", "folders": ["routes"], "run": { "args": ["roads.txt"], "files": ["roads.txt"] } },
-    { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"], "run": { "args": ["book.csv"], "files": ["book.csv"] } },
-    { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"], "run": { "args": ["book.md", "out"], "files": ["book.md"] } },
+    { "program": "machine", "label": "Bigger program: machine, an assembler and interpreter", "folders": ["compiler/gaps/machine"], "run": { "args": ["primes.asm"], "names": ["program…"], "files": ["hello.asm", "primes.asm", "fib.asm", "collatz.asm", "sort.asm"] } },
+    { "program": "notebook", "label": "Bigger program: notebook, notes and a word index", "folders": ["notebook"], "run": { "args": ["notes.txt"], "names": ["notes"], "files": ["notes.txt"] } },
+    { "program": "routes", "label": "Bigger program: routes, roads between towns", "folders": ["routes"], "run": { "args": ["roads.txt"], "names": ["roads"], "files": ["roads.txt"] } },
+    { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"], "run": { "args": ["book.csv"], "names": ["book"], "files": ["book.csv"] } },
+    { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"], "run": { "args": ["book.md", "out"], "names": ["book", "folder"], "files": ["book.md"] } },
     { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
     { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"], "run": { "files": ["clinic.txt"] } },
-    { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "files": ["plan.txt"] } },
+    { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "names": ["plan"], "files": ["plan.txt"] } },
     { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"] },
-    { "program": "pond", "label": "Bigger program: pond, fish kept in a pool", "folders": ["compiler/gaps/pond"], "run": { "args": ["30", "100"] } },
+    { "program": "pond", "label": "Bigger program: pond, fish kept in a pool", "folders": ["compiler/gaps/pond"], "run": { "args": ["30", "100"], "names": ["ticks", "fish"] } },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
