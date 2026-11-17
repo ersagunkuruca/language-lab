@@ -12,6 +12,8 @@ import { buildTreesModule } from "../src/lang/trees-source.ts";
 import { buildSteady } from "../src/lang/steady-source.ts";
 import { buildCases } from "../src/lang/cases-source.ts";
 import { buildNumbers } from "../src/lang/numbers-source.ts";
+import { buildSignals } from "../src/lang/signals-source.ts";
+import { buildTunings } from "../src/lang/tunings-source.ts";
 import { verify, type Module } from "../src/lang/modules.ts";
 
 export interface Built { name: string; module: Module; line: string }
@@ -29,7 +31,10 @@ export function buildModules(): Built[] {
   add("html", buildHtml(), [prelude, std, m.code]);
   add("steady", buildSteady(), [prelude, std]);
   add("cases", buildCases(), [prelude, std]);
-  add("numbers", buildNumbers(m), [prelude, std, m.code]);
+  const nu = buildNumbers(m);
+  add("numbers", nu, [prelude, std, m.code]);
+  add("signals", buildSignals(m, nu), [prelude, std, m.code, nu.code]);
+  add("tunings", buildTunings(m, nu), [prelude, std, m.code, nu.code]);
   const t = buildTreesModule(m);
   add("trees", t, [prelude, std, m.code], `${t.representations!.length} representations`);
   return out;

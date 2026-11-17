@@ -11,7 +11,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Id } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
-import { CASES, HTML_MODULE, LIBRARY, NUMBERS, PRELUDE, STEADY, VECTORS } from "../src/lang/library.ts";
+import { CASES, HTML_MODULE, LIBRARY, NUMBERS, PRELUDE, SIGNALS, STEADY, TUNINGS, VECTORS } from "../src/lang/library.ts";
 import { checkOptions } from "../src/lang/load.ts";
 import type { Module } from "../src/lang/modules.ts";
 import { DIVIDE, SIGS, std } from "../src/lang/std.ts";
@@ -25,7 +25,7 @@ const of = (...ms: Module[]) => (...names: string[]): Id[] => names.map((name) =
   if (!d) throw new Error(`${name} isn't in the ${ms.map((m) => m.title).join(" or ")} module`);
   return d;
 });
-const prelude = of(PRELUDE, NUMBERS), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY), cases = of(CASES);
+const prelude = of(PRELUDE, NUMBERS), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY), cases = of(CASES), signals = of(SIGNALS), tunings = of(TUNINGS);
 // Rational's and Fixed's `as float64`, the one name (L156), in that order.
 // (Both in the numbers module, L207e and L207f4.)
 const [ratioAsFloat, fixedAsFloat] = NUMBERS.exports.filter((e) => LIBRARY.names[e] === "as float64");
@@ -103,6 +103,10 @@ export const SECTIONS: Section[] = [
     ids: steady("Steady", "steady sin", "steady cos", "steady tan", "steady exp", "steady log", "steady pow", "steady atan", "steady atan2", "steady asin", "steady acos") },
   { title: "Capitals the same on every machine", intro: "uppercase and lowercase are each host's own (its Unicode version, its locale data). The cases module's are written in Ters over the Unicode case tables, read off the host when the library is built, so a target with no host to ask (WebAssembly, C) gives what JavaScript gives: final sigma and Turkish, Azeri, Lithuanian and Greek capitals included, and grapheme clusters by UAX #29.",
     ids: cases("table uppercase", "table lowercase", "table graphemes", "table collated") },
+  { title: "Signals", intro: "What a tuner, a looper or a pitch finder does to a block of samples. fft is Cooley and Tukey's radix-2 transform on a list of Complex (any length; a power of two is n log n), autocorrelation and cross correlation go by it, and peaks are read between samples off a parabola.",
+    ids: signals("fft", "inverse fft", "spectrum", "hann window", "hann windowed", "autocorrelation", "cross correlation", "peaks", "parabola peak offset", "power of two at least", "padded to") },
+  { title: "Tunings", intro: "A Tuning is its first step's pitch, its steps in cents within a period, and their names: 12, 24 or 53 equal steps (53 named in commas, as Turkish theory counts them), just intonation by Rationals, or a Scala .scl file. nearest step says what a tuner reads off a pitch.",
+    ids: tunings("Tuning", "Reading", "cents between", "cents above", "equal temperament", "twelve tone", "quarter tones", "fifty three tone", "just intonation", "scala tuning", "with reference", "step pitch", "nearest step") },
   { title: "Points, colours and slopes", intro: "A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.",
     ids: [...b("mapParts", "zipParts", "total", "set", "fields.mapped", "fields.listed", "derivative", "gradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
 ];

@@ -29,7 +29,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C265 and C267 (the greenhouse's reads), G1b with G3d (columns), G3b ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
-| L Language and library | "Build a tuner, metronome and looper app" | L272, L273, L274 (the tuner) |
+| L Language and library | "Build a tuner, metronome and looper app" | L276 (the looper) with C260, C261, L270, L271; then L277, L278 |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -192,15 +192,12 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269 and the metronome (L275) are done (DONE.md). Stage 0 left: L270, L271 with C260 and C261; then the tuner (L272 to L274), the metronome (L275), the looper (L276), and further (L277, L278).
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) are done (DONE.md). Left: L270, L271 with C260 and C261, then the looper (L276), and further (L277, L278). The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L270 | Stereo: `listen` with a function on a pair of blocks (AUDIO.md "Stereo? Later") | Ersagun 2026-11-17 | P3 | M |  |
 | L271 | Keeping a recording: a page saves a WAV as a file the person keeps (a download in the browser, the share sheet in an app) and opens one; browser files are localStorage today, too small for audio | Ersagun 2026-11-17 | P3 | M |  |
-| L272 | A signals module: FFT on arrays of Float64 (real and imaginary parts as two columns), Hann window, autocorrelation and cross-correlation by FFT, peaks with parabolic interpolation; credited (Cooley and Tukey) | Ersagun 2026-11-17 | P2 | M |  |
-| L273 | A tunings module: a tuning is a reference pitch and steps over a period: n-EDO (12, 24, 53, any n), just intonation as Rationals, Scala .scl files read (prior art: Manuel Op de Coul's format); nearest step, cents off, step names per system (53-TET's commas, Arel–Ezgi–Uzdilek); Hz and cents as named units | Ersagun 2026-11-17 | P2 | M |  |
-| L274 | Tuner example (monophonic): YIN or the McLeod pitch method over the microphone (adaptation, credited on the page), needle and strobe in SVG, any tuning from L273, reference pitch set by hand; tested offline on synthesized tones and recorded strings, error in cents. Needs L267, L269, L272, L273 | Ersagun 2026-11-17 | P2 | M |  |
 | L276 | Looper example: record, play, overdub, undo, several tracks, start and stop on the metronome's bar; round-trip latency measured by a loopback chirp found by cross-correlation and recordings shifted by it, the platform's figure shown beside. Needs L267, L270, C260, C261, L271, L272, L275 | Ersagun 2026-11-17 | P2 | L |  |
 | L277 | Polyphonic tuning: a strum checked string by string against the instrument's known strings (each string's fundamental and harmonics in the spectrum); prior art TC Electronic PolyTune, Klapuri's multi-pitch estimation | Ersagun 2026-11-17 | P3 | L |  |
 | L278 | Frets that move: for a scale length and a tuning, where each fret goes (L·(1 − 1/r) from the nut), the same relation run backwards from a measured fret, and the tuner saying which way and how many millimetres to move a fret (saz, bağlama) | Ersagun 2026-11-17 | P3 | M |  |

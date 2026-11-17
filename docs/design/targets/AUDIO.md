@@ -20,7 +20,12 @@ its port (sound-thread.ts, compiled data crossing as its tag and fields,
 `portable`), and a write the page sent isn't sent back; natively the
 cells are one heap already, so frames come while a sound plays and a
 part whose cells the audio thread wrote runs again (c.ts
-`ters_sounding`). The metronome lights the part sounding this way.
+`ters_sounding`). The metronome lights the part sounding this way. A
+list crosses as an array of its items and is built again on the other
+side (`unportable`): the tuner (L274) sends 4096-sample windows, and as
+nested cells a list that long overflowed the copy's stack. The tuner
+finds the pitch on the page, not the audio thread: a window's
+autocorrelation compiled takes about 14 ms, five blocks' time.
 Still to come for the app: stereo (L270).
 
 **Status (2026-10-30).** All five stages are built: sounds offline
