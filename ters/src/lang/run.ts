@@ -84,7 +84,7 @@ export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value)
   const listsHere = LIST_SHAPE;
   const noValue = (f: () => Value) => { try { return f(); } catch (e) { if (e instanceof NoValue) return undefined; throw e; } };
   return {
-    [CELL_OPS.cell]: (v) => cells.cell(v),
+    [CELL_OPS.cell]: (v) => cells.cell(v, "cell", listsHere),
     [CELL_OPS.formula]: (f) => cells.formula(() => call(f)),
     [CELL_OPS.each]: (items, f) => cells.each(items, (x) => call(f, x), listsHere),
     [CELL_OPS.eachOf]: (items, f) => cells.eachOf(items, (x) => call(f, x), listsHere),

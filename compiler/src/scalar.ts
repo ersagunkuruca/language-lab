@@ -1889,6 +1889,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           return { k: "get", rec: expr(n.args[0], env, f, false), t: r, i: fieldIndex(code, target) };
         }
         if (opts.cells && !opts.host && CELL_C.has(target)) return cellOp(n, target, id, env, f);
+        // A place in a cell (L98), written where it's made: a field, a chain
+        // of fields, or the whole ((t) ↦ t), worked out here, so the runtime
+        // gets the field positions and never looks inside a function.
+        if (opts.host && target === CELL_OPS.path && n.args.length === 1) {
+          const get = code.nodes[n.args[0]];
+          const fields = get?.kind === "ref" && code.nodes[get.target]?.kind === "field" ? [get.target] : stepsOfPath(id).map((s) => ("field" in s ? s.field : null));
+          if (fields.some((x) => x === null)) throw new Refused("makes a path that isn't a field, a chain of fields, or (t) ↦ t");
+          return { k: "rt", fn: `path:${fields.map((x) => fieldIndex(code, x!)).join(",")}`, args: [], host: { t: "host", partial: false } };
+        }
         if (opts.host && (STD_IMPL[target] || STD_MANY[target] || (HOST_CELLS.has(target)))) return host(n, target, id, env, f);
         // for some(x => …), for JavaScript from the core IR (C137c16): the
         // evaluator's relational interpreter (relate.ts satisfiable) on the

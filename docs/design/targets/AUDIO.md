@@ -26,7 +26,10 @@ side (`unportable`): the tuner (L274) sends 4096-sample windows, and as
 nested cells a list that long overflowed the copy's stack. The tuner
 finds the pitch on the page, not the audio thread: a window's
 autocorrelation compiled takes about 14 ms, five blocks' time.
-A sound in stereo (L270) takes and gives a pair of blocks.
+A sound in stereo (L270) takes and gives a pair of blocks. A looper's tape is a list in a cell, edited with `write at` at
+an item (C261): the cell keeps it as an array of its own, edited in place,
+so a block costs the same on a tape of five minutes as on one of a second,
+and only the items written cross to the page.
 
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the

@@ -17,6 +17,7 @@ import { BOOL, CELL_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { STRING, showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
+import { applyWrite, Wrote } from "../src/lang/sound-thread.ts";
 
 
 // ---------------------------------------------------------------- the handler alone
@@ -298,4 +299,52 @@ test("readPaths' kept places (C162c): a change inside an item a formula hands on
   // A card's done, which it looked at: run again.
   c.write(cards, toList([now[0], card("rye", false), now[2]]));
   assert.deepEqual([runs, seen.at(-1)], [2, "oat milk rye eggs"]);
+});
+
+// ---------------------------------------------------------------- a tape (C261)
+
+// A list a cell holds, edited at its items: written in place on an array
+// the cell owns, so an edit costs the same at any length; a whole read is
+// a list of its own that later edits leave as it was.
+test("a tape: edits at items in place, a whole read keeps what it read, readers of other items sleep", () => {
+  const c = new Cells(same);
+  const tape = c.cell(toList([0, 0, 0, 0]));
+  let second = 0, whole = 0;
+  c.watch(() => { c.readAt(tape, [{ item: 1 }], LIST_SHAPE); second++; });
+  c.watch(() => { c.read(tape); whole++; });
+  const before = c.peek(tape);
+  c.edit(tape, [{ item: 2 }], () => 5, LIST_SHAPE);
+  assert.deepEqual([second, whole], [1, 2]);
+  const after = c.peek(tape);
+  c.edit(tape, [{ item: 1 }], () => 7, LIST_SHAPE);
+  assert.deepEqual([second, whole], [2, 3]);
+  assert.deepEqual([fromList(before), fromList(after), fromList(c.peek(tape))], [[0, 0, 0, 0], [0, 0, 5, 0], [0, 7, 5, 0]]);
+  assert.equal(c.readAt(tape, [{ item: 2 }], LIST_SHAPE), 5);
+  // Past the end: nothing changes, nobody wakes.
+  c.edit(tape, [{ item: 9 }], () => 1, LIST_SHAPE);
+  assert.deepEqual([second, whole], [2, 3]);
+  // Items written as a run, as the audio thread's come to the page.
+  c.writeItems(tape, 2, [8, 9, 10], LIST_SHAPE);
+  assert.deepEqual([fromList(c.peek(tape)), c.itemsAt(tape, 1, 3, LIST_SHAPE)], [[0, 7, 8, 9], [7, 8, 9]]);
+  assert.deepEqual([second, whole], [2, 4]);
+  // A whole value written: no tape any more, the value as written.
+  c.write(tape, toList([1]));
+  assert.deepEqual(fromList(c.peek(tape)), [1]);
+  c.edit(tape, [{ item: 0 }], () => 2, LIST_SHAPE);
+  assert.deepEqual(fromList(c.peek(tape)), [2]);
+});
+
+test("what a sound wrote crosses as a run of items, not the whole tape", () => {
+  const c = new Cells(same), page = new Cells(same);
+  const tape = c.cell(toList([0, 0, 0, 0, 0, 0])), level = c.cell(0), there = [page.cell(toList([0, 0, 0, 0, 0, 0])), page.cell(0)];
+  const wrote = new Wrote();
+  c.onWrite = (place, _, at) => wrote.add(place, at);
+  c.edit(tape, [{ item: 3 }], () => 1, LIST_SHAPE);
+  c.edit(tape, [{ item: 1 }], () => 2, LIST_SHAPE);
+  c.write(level, 0.5);
+  const writes = wrote.take(c, [tape, level]);
+  assert.deepEqual(writes, [{ cell: 1, value: 0.5 }, { cell: 0, from: 1, items: [2, 0, 1] }]);
+  for (const w of writes) applyWrite(page, there[w.cell], w);
+  assert.deepEqual([fromList(page.peek(there[0])), page.peek(there[1])], [[0, 2, 0, 1, 0, 0], 0.5]);
+  assert.equal(wrote.size, 0);
 });

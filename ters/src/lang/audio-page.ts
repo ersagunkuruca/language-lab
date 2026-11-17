@@ -9,7 +9,7 @@
 
 import type { Cells } from "./cells.ts";
 import { listens } from "./audio.ts";
-import { portable, PROCESSOR, unportable, type Answers, type FromSound, type Write } from "./sound-thread.ts";
+import { applyWrite, portable, PROCESSOR, type Answers, type FromSound, type Write } from "./sound-thread.ts";
 import type { El } from "./html.ts";
 import type { Data, Value, World } from "./run.ts";
 import { HTML_V } from "./std-ids.ts";
@@ -54,15 +54,15 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
     for (const node of playing) {
       if (node === from) continue;
       // A value that can't be copied (a function) stays on the page.
-      try { node.port.postMessage({ cell: w.cell, value: portable(w.value) }); } catch { return; }
+      try { node.port.postMessage("from" in w ? { cell: w.cell, from: w.from, items: w.items.map(portable) } : { cell: w.cell, value: portable(w.value), ...(w.at ? { at: w.at } : {}) }); } catch { return; }
     }
   };
-  cells.onWrite = (at, value) => { const cell = mine.get(at); if (cell !== undefined && playing.size) send({ cell, value }); };
+  cells.onWrite = (place, value, at) => { const cell = mine.get(place); if (cell !== undefined && playing.size) send({ cell, value, at }); };
   // What a sound's block function wrote to main's cells (L267): written
   // here too, so what reads them is drawn again.
   const take = (node: { port: MessagePort }, writes: Write[]) => {
     from = node;
-    try { for (const w of writes) if (made[w.cell] !== undefined) cells.write(made[w.cell], unportable(w.value)); } finally { from = null; }
+    try { for (const w of writes) if (made[w.cell] !== undefined) applyWrite(cells, made[w.cell], w); } finally { from = null; }
   };
   // One context, at the device's rate; another only for a microphone at a
   // rate the browser won't convert (Firefox refuses to connect across rates).
