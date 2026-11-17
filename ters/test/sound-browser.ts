@@ -6,7 +6,8 @@
 // switch must cross to the audio thread (it gives back what came in). A
 // microphone that won't open must say why on the page. Then
 // examples/metronome, a sound with no input (L268): it clicks at its
-// tempo, and a change of tempo crosses to the audio thread.
+// tempo, a change of tempo crosses to the audio thread, and the pulses it
+// counts cross back to the page (L267).
 // Fails on any error or warning the page logs.
 //
 //   node test/sound-browser.ts
@@ -167,6 +168,18 @@ try {
   await new Promise((r) => setTimeout(r, 200));
   const at240 = await clicks();
   check("a change of tempo reaches the audio thread", Math.abs(at240 - 12) <= 1, { at240 });
+  // The pulses its block function counts come back to the page (L267),
+  // which lights the part sounding: it moves on as it plays.
+  const lit = await run<number[]>(`(async () => {
+    const seen = [];
+    for (let i = 0; i < 15; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      const row = document.querySelector(".pattern g");
+      seen.push([...row.querySelectorAll("circle")].findIndex((c) => c.classList.contains("now")));
+    }
+    return seen;
+  })()`);
+  check("the page lights the part sounding, from the audio thread", new Set(lit.filter((i) => i >= 0)).size >= 3, { lit });
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

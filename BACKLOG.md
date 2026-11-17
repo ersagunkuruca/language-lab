@@ -29,7 +29,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: G3b, G3d, G1a, G1b, G2b, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
-| L Language and library | "Build a tuner, metronome and looper app" | L267 (the metronome shows the beat), then L272, L273, L274 (the tuner) |
+| L Language and library | "Build a tuner, metronome and looper app" | L272, L273, L274 (the tuner) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -185,11 +185,10 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L268, L269 and the metronome (L275) are done (DONE.md). Stage 0 left: L267, L270, L271 with C260 and C261; then the tuner (L272 to L274), the metronome (L275), the looper (L276), and further (L277, L278).
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269 and the metronome (L275) are done (DONE.md). Stage 0 left: L270, L271 with C260 and C261; then the tuner (L272 to L274), the metronome (L275), the looper (L276), and further (L277, L278).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L267 | A sound tells the page: something the block function writes on the audio thread that the page reads (the latest value, at most once a frame), for a tuner's reading, a loop's playhead, levels. Today cell writes go only page to audio (AUDIO.md). Design in AUDIO.md first, then the browser worklet and the native audio threads | Ersagun 2026-11-17 | P2 | M |  |
 | L270 | Stereo: `listen` with a function on a pair of blocks (AUDIO.md "Stereo? Later") | Ersagun 2026-11-17 | P3 | M |  |
 | L271 | Keeping a recording: a page saves a WAV as a file the person keeps (a download in the browser, the share sheet in an app) and opens one; browser files are localStorage today, too small for audio | Ersagun 2026-11-17 | P3 | M |  |
 | L272 | A signals module: FFT on arrays of Float64 (real and imaginary parts as two columns), Hann window, autocorrelation and cross-correlation by FFT, peaks with parabolic interpolation; credited (Cooley and Tukey) | Ersagun 2026-11-17 | P2 | M |  |

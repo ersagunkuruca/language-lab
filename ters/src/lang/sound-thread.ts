@@ -21,8 +21,26 @@ declare const sampleRate: number;
 
 export const PROCESSOR = "lab-sound";
 
-// A write from the page: the cell's place, and its value.
+// A write to one of main's cells: the cell's place among them, and its
+// value. The page sends its writes to the audio thread, and the audio
+// thread sends its own back (L267), each as it is, so a cell main made is
+// the page's and the sound's alike.
 export interface Write { cell: number; value: Value }
+// What the audio thread sends the page: why a block played silence, or
+// the latest value of each of main's cells it wrote since it last sent,
+// at most once a frame (a sixtieth of a second of samples).
+export type FromSound = { said: string } | { writes: Write[] };
+
+// A value as it crosses between the page and the audio thread. Compiled
+// data keeps its case on its class, which a copy across threads loses, so
+// it crosses as its tag and fields, which the evaluator and compiled code
+// both read (core-js.ts caseOf).
+export function portable(v: Value): Value {
+  if (v === null || typeof v !== "object" || Array.isArray(v) || ArrayBuffer.isView(v)) return v;
+  const d = v as Data;
+  if (typeof d.tag === "string" && Array.isArray(d.fields)) return { tag: d.tag, fields: d.fields.map(portable) } as Data;
+  return v;
+}
 
 // What the page's world answered while main ran there (audio-page.ts
 // recordingWorld), in order.
@@ -58,24 +76,37 @@ export interface SoundHost {
 export function startSoundOn(host: SoundHost, seed = 1): void {
   // main runs once for all the page's sounds, as on the page.
   let page: { listens: Data[]; cells: Value[] } | null = null;
+  // main's cells the block functions wrote since they were last sent to
+  // the page, by their place among main's cells; none while a write from
+  // the page is being taken in, which the page already has.
+  const wrote = new Set<number>();
+  let taking = false;
   const run = (answers?: Answers) => {
     if (page) return page;
-    const cells: Value[] = [], c = host.cells;
+    const cells: Value[] = [], c = host.cells, mine = new Map<number, number>();
     const wait = (): never => { throw new Error("a page can't wait in main"); };
-    c.onCell = (cell) => void cells.push(cell);
-    try { return (page = { listens: listens(host.main({ ...replaying(answers, c, seed), wait, log: () => {}, error: () => {} })), cells }); } finally { c.onCell = null; }
+    c.onCell = (cell, place) => { mine.set(place, cells.length); cells.push(cell); };
+    try { page = { listens: listens(host.main({ ...replaying(answers, c, seed), wait, log: () => {}, error: () => {} })), cells }; } finally { c.onCell = null; }
+    c.onWrite = (place) => { const at = mine.get(place); if (at !== undefined && !taking) wrote.add(at); };
+    return page;
   };
   registerProcessor(PROCESSOR, class extends AudioWorkletProcessor {
     play: ((block: Value) => Value) | null = null;
     said = new Set<string>();
+    cells: Value[] = [];
+    // Samples played since the page was last sent what was written.
+    since = 0;
     constructor(options: { processorOptions: { index: number; answers?: Answers } }) {
       super();
       try {
         const p = run(options.processorOptions.answers);
         this.play = p.listens[options.processorOptions.index].fields[1] as never;
+        this.cells = p.cells;
         this.port.onmessage = (e: MessageEvent<Write>) => {
           const cell = p.cells[e.data.cell];
-          if (cell) host.cells.write(cell, e.data.value);
+          if (!cell) return;
+          taking = true;
+          try { host.cells.write(cell, e.data.value); } finally { taking = false; }
         };
       } catch (e) { this.say((e as Error).message); }
     }
@@ -96,7 +127,19 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
       }
       if (got.length !== n) { this.say(`a block gave ${got.length} samples for ${n}, and played silence`); return true; }
       for (const channel of out) for (let i = 0; i < n; i++) channel[i] = got[i];
+      this.send(n);
       return true;
+    }
+    // What the block functions wrote, to the page, once a frame's worth of
+    // samples has played: each cell's latest value.
+    send(n: number) {
+      this.since += n;
+      if (!wrote.size || this.since < sampleRate / 60) return;
+      this.since = 0;
+      const writes: Write[] = [];
+      for (const at of wrote) writes.push({ cell: at, value: portable(host.cells.peek(this.cells[at])) });
+      wrote.clear();
+      try { this.port.postMessage({ writes } satisfies FromSound); } catch { /* a value that can't be copied (a function) stays here */ }
     }
   });
 }

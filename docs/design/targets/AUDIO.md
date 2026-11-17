@@ -12,8 +12,16 @@ synthesizer): its blocks come in silent and no microphone is asked for
 `--seconds s [--rate r]`. A sound that never reads its rate leaves the
 rate's type open; a page's `listen` fixes it, and `ters render` plays it
 through one that passes the rate on as a Float64 (cli/sound.ts
-`rateFixed`). Still to come for the app: the audio thread telling the
-page something (L267), stereo (L270).
+`rateFixed`). And the sound tells the page (L267): a cell main made is
+the page's and the sound's alike. What the block function writes to one
+reaches the page at most once a frame (the latest value of each), and
+what reads it is drawn again: in a browser the worklet sends them over
+its port (sound-thread.ts, compiled data crossing as its tag and fields,
+`portable`), and a write the page sent isn't sent back; natively the
+cells are one heap already, so frames come while a sound plays and a
+part whose cells the audio thread wrote runs again (c.ts
+`ters_sounding`). The metronome lights the part sounding this way.
+Still to come for the app: stereo (L270).
 
 **Status (2026-10-30).** All five stages are built: sounds offline
 (`ters render`), live in a page (apps/pedal.html), the compressor, the

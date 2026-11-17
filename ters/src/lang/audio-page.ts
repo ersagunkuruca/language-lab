@@ -9,7 +9,7 @@
 
 import type { Cells } from "./cells.ts";
 import { listens } from "./audio.ts";
-import { PROCESSOR, type Answers, type Write } from "./sound-thread.ts";
+import { portable, PROCESSOR, type Answers, type FromSound, type Write } from "./sound-thread.ts";
 import type { El } from "./html.ts";
 import type { Data, Value, World } from "./run.ts";
 import { HTML_V } from "./std-ids.ts";
@@ -48,13 +48,22 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
   try { page = main(); } finally { cells.onCell = null; if (world) world.keep = null; }
   const place = new Map(listens(page).map((a, i) => [a, i]));
   const playing = new Set<{ port: MessagePort }>();
+  // The sound whose writes are being taken in: they aren't sent back to it.
+  let from: { port: MessagePort } | null = null;
   const send = (w: Write) => {
     for (const node of playing) {
+      if (node === from) continue;
       // A value that can't be copied (a function) stays on the page.
-      try { node.port.postMessage(w); } catch { return; }
+      try { node.port.postMessage({ cell: w.cell, value: portable(w.value) }); } catch { return; }
     }
   };
   cells.onWrite = (at, value) => { const cell = mine.get(at); if (cell !== undefined && playing.size) send({ cell, value }); };
+  // What a sound's block function wrote to main's cells (L267): written
+  // here too, so what reads them is drawn again.
+  const take = (node: { port: MessagePort }, writes: Write[]) => {
+    from = node;
+    try { for (const w of writes) if (made[w.cell] !== undefined) cells.write(made[w.cell], w.value); } finally { from = null; }
+  };
   // One context, at the device's rate; another only for a microphone at a
   // rate the browser won't convert (Firefox refuses to connect across rates).
   const contexts = new Map<number, Promise<AudioContext>>();
@@ -141,9 +150,13 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           // Mono in: a stereo input is mixed down, so a microphone on either
           // channel is heard.
           const node = new AudioWorkletNode(ctx, PROCESSOR, { processorOptions: { index, answers }, numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 1, channelCountMode: "explicit", channelInterpretation: "speakers" });
-          node.port.onmessage = (m: MessageEvent<{ said: string }>) => { console.warn(`sound: ${m.data.said}`); say(m.data.said); };
+          node.port.onmessage = (m: MessageEvent<FromSound>) => {
+            if ("writes" in m.data) return take(node, m.data.writes);
+            console.warn(`sound: ${m.data.said}`);
+            say(m.data.said);
+          };
           // The cells as the page has them now, before what's written next.
-          for (const [cell, c] of made.entries()) { try { node.port.postMessage({ cell, value: cells.peek(c) }); } catch { /* not copied */ } }
+          for (const [cell, c] of made.entries()) { try { node.port.postMessage({ cell, value: portable(cells.peek(c)) }); } catch { /* not copied */ } }
           if (from.node) from.node.connect(node);
           node.connect(ctx.destination);
           playing.add(node);

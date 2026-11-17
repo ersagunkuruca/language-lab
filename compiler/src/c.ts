@@ -1753,14 +1753,20 @@ static int ters__page_event(int n, const char *value, size_t vn, const char *key
   ${waits ? "if (!ters_ev_parked) { ters_ev_f = f; ters_ev_e = e; return ters_shown(ters_ev_start()); }" : ""}
   return ters_shown(ters_ev_run(f, e));
 }
+// Whether a sound plays: what its block function writes to the page's
+// cells is shown at the next frame (L267), so frames come while it plays.
+static int ters_sounding(void) {
+  ${sound ? "for (int k = 0; k < ters_nsnd; k++) if (ters_snds[k].on) return 1;" : ""}
+  return 0;
+}
 // Whether what the page shows read the clock, so it runs again each frame.
-static int ters__page_clock(void) { return ters_clock || (ters_moving && ters_moving(0)); }
-// A frame: what the page shows runs again, if it read the clock. Whether
-// it still does.
+static int ters__page_clock(void) { return ters_clock || (ters_moving && ters_moving(0)) || ters_sounding(); }
+// A frame: what the page shows runs again, if it read the clock or a
+// sound wrote a cell it read. Whether it still does.
 static int ters__page_frame(void) {
-  int moving = ters_moving && ters_moving(0);
-  if (!ters_clock && !moving) return 0;
-  if (ters_clock) {
+  int moving = ters_moving && ters_moving(0), sounding = ters_sounding();
+  if (!ters_clock && !moving && !sounding) return 0;
+  if (ters_clock || (sounding && lab_nwr)) {
     ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
     ters_refresh(ters_root);
     lab_nwr = 0;
@@ -1768,7 +1774,7 @@ static int ters__page_frame(void) {
     if (ters_after) ters_after();
   }
   if (ters_moving) moving = ters_moving(1);
-  return ters_clock || moving;
+  return ters_clock || moving || sounding;
 }
 // Each way in, under the page's lock.
 void *ters_page_start(ters_host *h) { ters_page_lock(); void *r = ters__page_start(h); ters_page_unlock(); return r; }

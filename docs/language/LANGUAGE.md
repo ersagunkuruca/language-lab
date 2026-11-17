@@ -1564,7 +1564,9 @@ whatever a phone opened), so a pitch or a click lands right on any
 device. With `no input` the blocks come in silent and no microphone is
 asked for: a metronome or a synthesizer. `play` runs on the audio thread, where
 main runs once more to make it; cells main made are the same cells there,
-so a handler's write to one (a knob) reaches the sound as it plays. main
+so a handler's write to one (a knob) reaches the sound as it plays, and
+what the block function writes to one (a level, the beat it is on)
+reaches the page at the next frame, which draws what reads it again. main
 there is answered what it was on the page: the same random numbers and
 clock readings, in order, so it makes the same cells.
 

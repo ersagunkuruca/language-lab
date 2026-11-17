@@ -217,6 +217,30 @@ test("the pedal page's worklet from the core IR plays the pedal, and the page's 
   assert.match(drawn(html), /Clean/);
 });
 
+// What a sound's block function writes to main's cells reaches the page
+// (L267), at most once a frame, the latest value of each: the pedal's
+// levels, which its block function follows. A write the page sent isn't
+// sent back.
+test("a sound's writes to main's cells are sent to the page once a frame", async () => {
+  const { p, page } = pedal();
+  const source = await coreSoundWorklet(lowerCore(p.code, p.info, p.names, [page]), p.names[page]);
+  const made: (new (o: object) => { port: { onmessage: ((e: { data: unknown }) => void) | null }; process(i: Float32Array[][], o: Float32Array[][]): boolean })[] = [];
+  const said: { writes?: { cell: number; value: unknown }[] }[] = [];
+  class AudioWorkletProcessor { port = { onmessage: null, postMessage: (m: never) => said.push(m) }; }
+  runInNewContext(source, { registerProcessor: (_: string, processor: never) => made.push(processor), AudioWorkletProcessor, sampleRate: 48000, console, TextEncoder, TextDecoder });
+  const node = new made[0]({ processorOptions: { index: 0 } });
+  node.port.onmessage!({ data: { cell: 0, value: 64 } });
+  const input = Float32Array.from(sine(128 * 14, 0.3));
+  for (let b = 0; b < 14; b++) node.process([[input.slice(b * 128, b * 128 + 128)]], [[new Float32Array(128)]]);
+  // 48000 / 60 = 800 samples: sent after the 7th block and the 14th.
+  assert.equal(said.length, 2);
+  const cells = [...said[0].writes!.map((w) => w.cell)].sort();
+  // The compressor's level and the two loudnesses, all main made; not the
+  // drive, which the page wrote.
+  assert.deepEqual(cells, [2, 3, 4]);
+  for (const w of said[0].writes!) assert.ok(typeof w.value === "number" && w.value > 0, JSON.stringify(w));
+});
+
 // The core IR's, made in a browser (C137d6): the prebuilt runtimes and the
 // printed program taking its helpers from them, for the editor's "Save
 // page". Its worklet plays what the bundled one plays; its page draws the
