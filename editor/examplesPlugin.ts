@@ -23,7 +23,7 @@ const dirOf = (f: string) => (f.includes("/") ? `${editor}../${f}/` : `${example
 // Its page element's id has no slash.
 const idOf = (f: string) => f.replace(/\//g, "-");
 
-export type Manifest = { programs: { program: string; label: string; folders?: string[]; start?: string; page?: boolean; built?: boolean; editor?: boolean; run?: { args: string[]; files?: string[] } }[] };
+export type Manifest = { programs: { program: string; label: string; folders?: string[]; start?: string; page?: boolean; built?: boolean; editor?: boolean; run?: { args?: string[]; files?: string[] } }[] };
 
 // Which file holds which table. A folder has names.default.json, or
 // names.short.json beside names.descriptive.json (quadratic).

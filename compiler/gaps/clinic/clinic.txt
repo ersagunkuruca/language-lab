@@ -1,0 +1,15 @@
+# The day's settings; a line left out keeps its default.
+desks 4
+hours 8
+# patients an hour, the minutes each needs, and the minutes they'll wait
+rate 18
+minutes 12
+patience 25
+# shares of urgent and soon patients; the rest are routine
+urgent 0.1
+soon 0.3
+# order: urgency or arrival; pick: least, first or random
+order urgency
+pick least
+breaks yes
+seed 7
