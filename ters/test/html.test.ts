@@ -256,3 +256,16 @@ test("a canvas paints its marks (G2), and its pointer is in canvas units", () =>
   e.fire("pointerdown", { clientX: 140, clientY: 60 } as never);
   assert.deepEqual(got!.fields.slice(2, 4), [20, 10]);
 });
+
+test("a key a page listens for on a game's element doesn't scroll the page; in a field it types (G2b)", () => {
+  const then = () => ({ tag: "std.unit.unit", fields: [] });
+  const page = (tag: string) => ({ tag: HTML_V.element, fields: [tag, toList([{ tag: HTML_V.on, fields: ["keydown", then as never] }]), toList([])] }) as Data;
+  const mount = (tag: string) => mountHtml(page(tag), { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl;
+  const stopped = (e: FakeEl, key: string) => { let n = 0; e.fire("keydown", { key, preventDefault: () => n++ } as never); return n; };
+  const canvas = mount("canvas");
+  assert.equal(stopped(canvas, "ArrowUp"), 1);
+  assert.equal(stopped(canvas, " "), 1);
+  assert.equal(stopped(canvas, "a"), 0, "a letter isn't a scrolling key");
+  const field = Object.assign(mount("input"), { tagName: "INPUT" });
+  assert.equal(stopped(field, "ArrowLeft"), 0, "in a field the arrows move the caret");
+});

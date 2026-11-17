@@ -4475,3 +4475,44 @@ two Vecs, and `gathered` gives the item read whole to `met`, which is
 too big to put in place. So G3d is a layout row: columns for records
 holding records (a column per leaf field), with an item given to a
 function as its fields. It goes with G1b, columns with presence bits.
+
+## Game round 2: greenhouse (2026-11-17, BACKLOG G6)
+
+The first slice of the game (compiler/gaps/greenhouse, 88 definitions;
+examples/greenhouse-page, 98). Moths, plants and hung lamps are one
+`Pool Thing`, each thing a place and optional parts, and a tick is three
+systems over the pool (`updated in pool` twice, `kept in pool` once). It
+is the shape ENTITIES.md says a game is written in. The round itself, with
+hand-written ideals, is G6b. These are the first measures and what
+writing it found.
+
+| a night: 2,700 ticks, 2,000 moths, 24 plants | time |
+|---|---|
+| `ters native`, one thread | 10.8 s (4.0 ms a tick) |
+| `ters native`, 4 threads | 13.4 s |
+| compiled JS (Node) | 31.9 s (11.8 ms a tick) |
+| the page in Chromium (compiled JS, painting too) | about 27 ticks a second, short of 30 |
+
+Gaps found:
+
+- **G6-1, counts on Optional parts (C265).** A Thing holds three
+  Optionals, so on C each read of a moth takes a count on the Thing and
+  drops it again. In 600 ticks that is 83 million Thing dups and 247
+  million drops, where moths' Moth (Float64s only) had none. An item read
+  only to be read should be borrowed.
+- **G6-2, threads slower than one (C266).** The pool's maps give Things,
+  which hold cells, so G3c's freeze doesn't apply and every item's shared
+  reads are counted atomically. Four threads take 13.4 s, one 10.8 s.
+- **G6-3, a cell of data holding a Bool (C264).** The page wouldn't
+  compile while the gardener held `carrying: Bool`. It carries an
+  `Optional Lamp` now, which is also the better entity, but a page's state
+  with a Bool in it is ordinary.
+- **G6-4, a cell holding a set crashed on every write (fixed here).** The
+  held keys are a `Set Text`, compiled as a hash table, which has no
+  fields. `equal` (run by every cell write) read them and threw, so key
+  presses did nothing. It now compares two tables by their entries.
+- **G6-5, the MCP server's memory (I317).** Writing the page ran out of
+  the 2 GB heap at the 85th definition; 6 GB was enough.
+- **G6-6, text the MCP reads (I318).** `x = …; match y` with the arms on
+  the next lines isn't read, nor a match after `else`. The game names a
+  function for each instead.
