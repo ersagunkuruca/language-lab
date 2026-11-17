@@ -114,6 +114,51 @@ export const nodeOf = (v: Value): CellNode | null => (typeof v === "function" ? 
 export type Step = { item: number } | { field: number } | { key: Value; by: Step[] };
 export const PATH = Symbol("path");
 export const stepsOf = (v: Value): Step[] | null => (typeof v === "function" ? ((v as unknown as Record<symbol, Step[]>)[PATH] ?? null) : null);
+
+// A list a cell holds, edited at its items (C261: a looper's tape, minutes
+// of samples): kept as an array of its items the cell owns, each edit at
+// an item written there in place, and made a list again only when it's
+// read whole, once until the next edit. Prior art: copy-on-write with an
+// owner (Clojure's transients, Swift's isKnownUniquelyReferenced); here
+// the owner is the cell, and a whole read gets its own copy.
+// Its items are a Float64Array while they are all numbers (samples): no
+// object an item, nothing for the garbage collector to look through.
+interface Tape { items: Value[] | Float64Array; lists: Lists; list: Value | undefined }
+// Item i of the tape set to x, the numbers' array given up for a plain
+// one when x isn't a number.
+function setItem(t: Tape, i: number, x: Value): void {
+  if (t.items instanceof Float64Array && typeof x !== "number") t.items = Array.from(t.items);
+  (t.items as Value[])[i] = x;
+}
+const TAPE = Symbol("tape");
+// A list of at least a tape's worth of items (a tenth of a second at 48 kHz).
+const TAPE_FROM = 4800;
+function longList(v: Value, views: NonNullable<Lists["views"]>): boolean {
+  let d = v as unknown as Data, n = 0;
+  for (; n < TAPE_FROM && d && typeof d === "object" && d.tag === views.cons; n++) d = d.fields[1] as unknown as Data;
+  return n === TAPE_FROM;
+}
+const tapeOf = (n: CellNode): Tape | undefined => (n as CellNode & { [TAPE]?: Tape })[TAPE];
+function taped(n: CellNode, lists: Lists): Tape {
+  const had = tapeOf(n);
+  if (had) return had;
+  // Copied: a list's own array (lists kept as arrays) isn't the cell's.
+  const xs = lists.from(n.value as Value);
+  // Not kept as a list: the tape is what the cell holds from now on, and a
+  // list as long as a tape is a great deal for the collector to mark.
+  const t: Tape = { items: xs.every((x) => typeof x === "number") ? Float64Array.from(xs as number[]) : xs.slice(), lists, list: undefined };
+  (n as CellNode & { [TAPE]?: Tape })[TAPE] = t;
+  Object.defineProperty(n, "value", {
+    configurable: true, enumerable: true,
+    get: () => (t.list ??= lists.to(Array.from(t.items as ArrayLike<Value>))),
+    // A whole value written: the tape is gone, the value kept as it is.
+    set: (v: Value | undefined) => {
+      delete (n as CellNode & { [TAPE]?: Tape })[TAPE];
+      Object.defineProperty(n, "value", { value: v, writable: true, configurable: true, enumerable: true });
+    },
+  });
+  return t;
+}
 export const pathValue = (steps: Step[]): Value => Object.assign(() => { throw new Error("a path is used by read at and the edits, not called"); }, { [PATH]: steps }) as unknown as Value;
 // How a list is taken apart and made: cons cells in the evaluator, the
 // compiled code's own lists in JS.
@@ -362,7 +407,9 @@ export class Cells {
   // with: the editor's preview hands what a page did across to the same
   // page compiled (handOver, below).
   kept: { cell: Value; first: Value }[] | null = null;
-  onWrite: ((place: number, v: Value) => void) | null = null;
+  // With `at`, v is the new part at that place (an edit, L98), not the
+  // whole value.
+  onWrite: ((place: number, v: Value, at?: Step[]) => void) | null = null;
   // The event a page's handler is running for (html.ts), the same object
   // through its retries and resumes, so the world remembers a fetch for
   // that event alone (L59c, browser.ts). Formulas and watchers run outside
@@ -394,8 +441,11 @@ export class Cells {
   }
 
   // Solid's createSignal.
-  cell(initial: Value, label = "cell"): Value {
+  // `lists`: how the program's lists look; a long one (a looper's tape)
+  // goes on a tape now, in main, not at its first edit in an audio block.
+  cell(initial: Value, label = "cell", lists?: Lists): Value {
     const n = this.node(null, this.plain ? initial : this.plainOf(initial), label), c = this.wrap(n), place = this.made++;
+    if (lists?.views && longList(n.value as Value, lists.views)) taped(n, lists);
     this.order.set(n, place);
     this.onCell?.(c, place);
     this.kept?.push({ cell: c, first: n.value as Value });
@@ -431,7 +481,14 @@ export class Cells {
   }
 
   private readNode(n: CellNode, at?: Step[], keys?: string[], kept?: string[]): Value {
-    if (this.plain) return n.value as Value;
+    this.track(n, at, keys, kept);
+    return n.value as Value;
+  }
+
+  // The reader running reads n (at a place, or whole), and n is brought up
+  // to date.
+  private track(n: CellNode, at?: Step[], keys?: string[], kept?: string[]): void {
+    if (this.plain) return;
     // The reader depends on it even if computing it stops part way, so it
     // runs again when what the formula read changes.
     const r = this.current;
@@ -448,7 +505,6 @@ export class Cells {
     }
     if (n.compute) this.update(n);
     if (n.error !== undefined) throw n.error;
-    return n.value as Value;
   }
 
   // Whether a view (a formula or watcher, or a row it makes) is running
@@ -484,6 +540,10 @@ export class Cells {
     if (this.journal) { const old = n.value as Value; this.journal.undo.push(() => this.write(c, old)); }
     n.value = v;
     if (this.onWrite) this.onWrite(this.order.get(n)!, v);
+    this.wake(n, at, what, was, v);
+  }
+
+  private wake(n: CellNode, at: Step[] | undefined, what: Edit | undefined, was: Value | undefined, v: Value): void {
     // A change at a place wakes the readers of that place, of a place
     // inside it and of one around it; the rest read elsewhere (L98).
     // A place read through a view wakes only for an edit there or around
@@ -529,15 +589,62 @@ export class Cells {
     const n = nodeOf(c);
     if (!n) throw new Error("an edit needs a cell");
     if (n.compute) throw new Error("a formula can't be written: write the cells it reads");
+    // At an item of the list the cell holds (an item step first: the
+    // value is a list, as the path's type says): in place, on its tape.
+    const top = at[0];
+    if (what.kind === "write" && top && "item" in top) return this.editTape(n, top.item, at, change, lists, what);
     const old = n.value as Value;
     if (at.some((s) => "key" in s)) { at = resolved(old, at, lists); what = { ...what, at }; }
     const next = changeAt(old, at, (part) => { const v = change(part); return v === undefined || this.plain ? v : this.plainOf(v); }, lists);
     if (next !== old) this.write(c, next, at, what);
   }
 
+  private editTape(n: CellNode, i: number, at: Step[], change: (part: Value) => Value | undefined, lists: Lists, what: Edit): void {
+    const t = taped(n, lists);
+    if (!(i >= 0 && i < t.items.length)) return;
+    const was = t.items[i], part = changeAt(was, at.slice(1), (x) => { const v = change(x); return v === undefined || this.plain ? v : this.plainOf(v); }, lists);
+    if (part === was || (at.length === 1 && this.same(was, part))) return;
+    if (this.journal) this.journal.undo.push(() => { const u = tapeOf(n); if (u) { setItem(u, i, was); u.list = undefined; } else this.edit(this.wrap(n), [{ item: i }], () => was, lists); });
+    setItem(t, i, part);
+    t.list = undefined;
+    if (this.onWrite) this.onWrite(this.order.get(n)!, part, [{ item: i }]);
+    if (!this.plain) this.wake(n, at, what, undefined, part);
+  }
+
+  // Items from..from+count of the list a cell holds, without reading it
+  // whole (what the audio thread sends the page of a tape it wrote).
+  itemsAt(c: Value, from: number, count: number, lists: Lists): Value[] {
+    const n = nodeOf(c);
+    if (!n) throw new Error("itemsAt needs a cell");
+    return Array.from(taped(n, lists).items.slice(from, from + count) as ArrayLike<Value>);
+  }
+
+  // Items written at from, from, from + 1, … of the list a cell holds, in
+  // place: one wake for all of them.
+  writeItems(c: Value, from: number, xs: Value[], lists: Lists): void {
+    const n = nodeOf(c);
+    if (!n) throw new Error("writeItems needs a cell");
+    const t = taped(n, lists), end = Math.min(t.items.length, from + xs.length);
+    if (from < 0 || from >= end) return;
+    for (let i = from; i < end; i++) setItem(t, i, xs[i - from]);
+    t.list = undefined;
+    if (this.onWrite) for (let i = from; i < end; i++) this.onWrite(this.order.get(n)!, t.items[i], [{ item: i }]);
+    if (this.plain) return;
+    // Readers of these items wake, and whole readers, after all of them.
+    this.batching++;
+    try { for (let i = from; i < end; i++) this.wake(n, [{ item: i }], { at: [{ item: i }], kind: "write" }, undefined, t.items[i]); } finally { this.batching--; }
+    if (!this.batching) this.flush();
+  }
+
   // What's at a place in a cell's value, read as a reader of that place
   // only; undefined when there's no such item.
   readAt(c: Value, at: Step[], lists: Lists): Value | undefined {
+    const n = nodeOf(c), top = at[0], t = n && tapeOf(n);
+    if (n && t && top && "item" in top) {
+      this.track(n, at);
+      const x = t.items[top.item];
+      return x === undefined ? undefined : partAt(x, at.slice(1), lists);
+    }
     if (at.some((s) => "key" in s)) at = resolved(this.peek(c), at, lists);
     return partAt(this.read(c, at), at, lists);
   }

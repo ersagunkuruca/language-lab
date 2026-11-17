@@ -433,8 +433,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           return constant(e) ? constName(v) : v;
         }
         // A written list (L181b): its items in order, made into conses from the last.
+        // An item that does something first (a write, then a read) has the
+        // items before it worked out before that (exs).
         case "list": {
-          const [nil, cons] = listSteps(e), xs = e.items.map((a) => ex(a, pre, d));
+          const [nil, cons] = listSteps(e), xs = exs(e.items, pre, d);
           const fields = (cons as Extract<SExpr, { k: "new" }>).args.map((a) => ((a as { i: number }).i === e.acc ? "t" : "x")).join(", ");
           return `[${xs.join(", ")}].reduceRight((t, x) => ${made(e.t.cases[e.c].variant, fields.split(", "))}, ${ex(nil, pre, d)})`;
         }

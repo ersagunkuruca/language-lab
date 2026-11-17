@@ -23,7 +23,7 @@ import { FakeEl, fakeDoc } from "./fakedom.ts";
 import { emitCoreJs, hostOpsOf, lowerCore, solvesSlowly } from "../../compiler/src/core-js.ts";
 import { corePageFile, coreWorkletFile, soundFile } from "../src/lang/page.ts";
 import { close } from "../src/lang/run.ts";
-import { CELL_OPS, HTML_V, NOW_OP, PAIR_V, RANDOM_OP, S } from "../src/lang/std.ts";
+import { CELL_OPS, HTML_V, INT_OPS, NOW_OP, PAIR_V, RANDOM_OP, S } from "../src/lang/std.ts";
 import { recordingWorld } from "../src/lang/audio-page.ts";
 import { replaying } from "../src/lang/sound-thread.ts";
 import type { World } from "../src/lang/run.ts";
@@ -430,4 +430,43 @@ test("a sound in stereo plays a pair of blocks, and renders to two channels", as
   const out = [new Float32Array(128), new Float32Array(128)];
   assert.equal(node.process([[l, r]], [out]), true);
   assert.deepEqual([[...out[0]], [...out[1]]], [[...r], [...l].map((x) => 2 * x)]);
+});
+
+// A looper's tape (C261): a list in a cell overdubbed a sample at a time
+// with `write at`, the same by the evaluator and compiled; compiled, an
+// edit is in place, so a block costs the same on a tape of a second as on
+// one of ten (it copied the whole tape per sample: 570 ms a block at a
+// minute).
+test("a tape in a cell, overdubbed with write at: the same both ways, and a block's cost doesn't grow with the tape", async () => {
+  const tapeSound = (n: number) => {
+    const k = new Lang(LIBRARY.code);
+    const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
+    const main = k.def("looper");
+    k.define(main, k.thunk(() => k.let("tape", k.call(CELL_OPS.cell, k.call(lib("copies"), k.int(n), k.lit(0.25))), (tape) =>
+      k.let("at", k.call(CELL_OPS.cell, k.int(0)), (at) => k.fn(["block", "rate"], (block) =>
+        k.call(lib("map"), block, k.fn(["x"], (x) => k.let("i", k.call(CELL_OPS.read, at), (i) => {
+          const place = () => k.call(CELL_OPS.itemPath, k.call(CELL_OPS.path, k.fn(["t"], (t) => t)), i);
+          return k.seq(k.call(CELL_OPS.write, at, k.call(INT_OPS.add, i, k.int(1))),
+            k.let("old", k.call(S.first, k.thunk(() => k.call(CELL_OPS.readAt, tape, place())), k.thunk(() => k.lit(0))), (old) =>
+              k.seq(k.call(CELL_OPS.writeAt, tape, place(), k.call(B.add, old, x)), old)));
+        }))))))));
+    const code = merge(LIBRARY.code, k.code), names = { ...LIBRARY.names, ...k.names };
+    return { p: { code, info: infer(code, names), names }, main };
+  };
+  const { p, main } = tapeSound(300);
+  assert.equal(audioProblem(p.info, main, p.names), null);
+  const input = sine(512, 0.5);
+  const [evaluated, compiled] = await Promise.all((["evaluator", "core"] as const).map(async (way) => playBlocks(await soundOf(p, main, way), input, 128).out));
+  assert.deepEqual([...compiled], [...evaluated]);
+  // Each sample hears the tape as it was (0.25) while the tape lasts, then nothing.
+  assert.deepEqual([compiled[0], compiled[299], compiled[300]], [0.25, 0.25, 0]);
+  const blocks = async (n: number) => {
+    const { p, main } = tapeSound(n), play = await soundOf(p, main, "core"), block = sine(128, 0.5);
+    play(block, 48000);
+    const t = performance.now();
+    for (let b = 0; b < 20; b++) play(block, 48000);
+    return performance.now() - t;
+  };
+  const [short, long] = [await blocks(48000), await blocks(480000)];
+  assert.ok(long < 5 * short + 20, JSON.stringify({ short, long }));
 });

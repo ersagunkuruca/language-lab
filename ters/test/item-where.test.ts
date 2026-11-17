@@ -55,8 +55,8 @@ test("item where finds the card by its id and write at changes only its title; n
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
   const [v] = r.call(r.value(p.demo));
   assert.deepEqual(listOf(v), EXPECTED);
-  // A core IR gap (C137): path on cells.
-  assert.throws(() => compiledDefs(p.code, p.info, p.names, ["demo"]), /uses path/);
+  // Compiled the same: paths made where they're used (C261).
+  assert.deepEqual(listOf(compiledDefs(p.code, p.info, p.names, ["demo"]).demo() as Value), EXPECTED);
 });
 
 test("their types", () => {

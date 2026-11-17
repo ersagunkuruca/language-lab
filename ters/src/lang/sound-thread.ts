@@ -9,9 +9,9 @@
 // place, land in the same cells.
 
 import { listens } from "./audio.ts";
-import type { Cells } from "./cells.ts";
+import type { Cells, Step } from "./cells.ts";
 import { seededGenerator } from "./random.ts";
-import { fromList, OutOfSteps, PAGE_STEPS, toList, withSteps, type Data, type Value } from "./run.ts";
+import { fromList, LIST_SHAPE, OutOfSteps, PAGE_STEPS, toList, withSteps, type Data, type Value } from "./run.ts";
 import { HTML_V, PAIR_V } from "./std-ids.ts";
 
 // What an AudioWorkletGlobalScope has (Web Audio API).
@@ -26,7 +26,42 @@ export const PROCESSOR = "lab-sound";
 // value. The page sends its writes to the audio thread, and the audio
 // thread sends its own back (L267), each as it is, so a cell main made is
 // the page's and the sound's alike.
-export interface Write { cell: number; value: Value }
+// An edit at a place (L98) crosses as the place and the new part (`at`);
+// items written at a run of positions of a long list (a looper's tape,
+// C261) as the first position and the items (`from`), not the whole list.
+export type Write = { cell: number; value: Value; at?: Step[] } | { cell: number; from: number; items: Value[] };
+
+// A write that came across, put into the cell here.
+export function applyWrite(cells: Cells, cell: Value, w: Write): void {
+  if ("from" in w) cells.writeItems(cell, w.from, w.items.map(unportable), LIST_SHAPE);
+  else if (w.at) cells.edit(cell, w.at, () => unportable(w.value), LIST_SHAPE);
+  else cells.write(cell, unportable(w.value));
+}
+
+// What was written to main's cells since it was last sent, by their place
+// among them: a cell written whole, or the run of items edited of a list
+// it holds (an edit inside an item counts as the item's).
+export class Wrote {
+  private whole = new Set<number>();
+  private items = new Map<number, { lo: number; hi: number }>();
+  get size() { return this.whole.size + this.items.size; }
+  add(cell: number, at?: Step[]): void {
+    const top = at?.[0];
+    if (!top || !("item" in top) || this.whole.has(cell)) { this.whole.add(cell); this.items.delete(cell); return; }
+    const r = this.items.get(cell);
+    if (!r) this.items.set(cell, { lo: top.item, hi: top.item });
+    else { r.lo = Math.min(r.lo, top.item); r.hi = Math.max(r.hi, top.item); }
+  }
+  // The writes to send, and none left.
+  take(cells: Cells, made: Value[]): Write[] {
+    const out: Write[] = [];
+    for (const at of this.whole) out.push({ cell: at, value: portable(cells.peek(made[at])) });
+    for (const [at, { lo, hi }] of this.items) out.push({ cell: at, from: lo, items: cells.itemsAt(made[at], lo, hi - lo + 1, LIST_SHAPE).map(portable) });
+    this.whole.clear();
+    this.items.clear();
+    return out;
+  }
+}
 // What the audio thread sends the page: why a block played silence, or
 // the latest value of each of main's cells it wrote since it last sent,
 // at most once a frame (a sixtieth of a second of samples).
@@ -101,7 +136,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
   // main's cells the block functions wrote since they were last sent to
   // the page, by their place among main's cells; none while a write from
   // the page is being taken in, which the page already has.
-  const wrote = new Set<number>();
+  const wrote = new Wrote();
   let taking = false;
   const run = (answers?: Answers) => {
     if (page) return page;
@@ -109,7 +144,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
     const wait = (): never => { throw new Error("a page can't wait in main"); };
     c.onCell = (cell, place) => { mine.set(place, cells.length); cells.push(cell); };
     try { page = { listens: listens(host.main({ ...replaying(answers, c, seed), wait, log: () => {}, error: () => {} })), cells }; } finally { c.onCell = null; }
-    c.onWrite = (place) => { const at = mine.get(place); if (at !== undefined && !taking) wrote.add(at); };
+    c.onWrite = (place, _, where) => { const at = mine.get(place); if (at !== undefined && !taking) wrote.add(at, where); };
     return page;
   };
   registerProcessor(PROCESSOR, class extends AudioWorkletProcessor {
@@ -132,7 +167,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
           const cell = p.cells[e.data.cell];
           if (!cell) return;
           taking = true;
-          try { host.cells.write(cell, unportable(e.data.value)); } finally { taking = false; }
+          try { applyWrite(host.cells, cell, e.data); } finally { taking = false; }
         };
       } catch (e) { this.say((e as Error).message); }
     }
@@ -171,9 +206,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
       this.since += n;
       if (!wrote.size || this.since < sampleRate / 60) return;
       this.since = 0;
-      const writes: Write[] = [];
-      for (const at of wrote) writes.push({ cell: at, value: portable(host.cells.peek(this.cells[at])) });
-      wrote.clear();
+      const writes = wrote.take(host.cells, this.cells);
       try { this.port.postMessage({ writes } satisfies FromSound); } catch { /* a value that can't be copied (a function) stays here */ }
     }
   });

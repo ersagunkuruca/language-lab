@@ -14,7 +14,7 @@ import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
 import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
-import { Cells, NoValue, Pending } from "../../ters/src/lang/cells.ts";
+import { Cells, NoValue, Pending, pathValue } from "../../ters/src/lang/cells.ts";
 import { worldTimers, type Timers } from "../../ters/src/lang/timers.ts";
 import { NoAnswer } from "../../ters/src/lang/html.ts";
 import { worldRandom } from "../../ters/src/lang/random.ts";
@@ -212,6 +212,8 @@ function handleK(name: string, handlers: Frame[]): (...xs: unknown[]) => unknown
 }
 function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Record<string, (...xs: never[]) => unknown>, cells?: Record<Id, (...xs: Value[]) => Value | undefined>, code?: Code, spend?: () => boolean, info?: Info, rt?: Runtime, handlers: Frame[] = [], hostOps?: HostOps): (...xs: unknown[]) => unknown {
   if (name.startsWith("host:")) return hostFn(name, cells);
+  // A place in a cell, its field positions worked out by the compiler.
+  if (name.startsWith("path:")) { const v = pathValue(name.slice(5) ? name.slice(5).split(",").map((i) => ({ field: Number(i) })) : []); return () => v; }
   const away = BRANCHES?.rt(name);
   if (away) return away;
   // A first's answer on a page's workers, or FAIL for the default (C61 c′5).
