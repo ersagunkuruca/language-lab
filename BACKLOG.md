@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: G3c, G3b, G3d, G1a, G1b, G2b, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: G3b, G3d, G1a, G1b, G2b, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -93,6 +93,7 @@ New targets and speed rank below every language item (Ersagun,
 | id | item | source | added |
 |---|---|---|---|
 | C259 | pond-page's reads of its cells kept whole: tracking where each read's value goes (cell-paths.ts trackReads) works pond's calls out inside one another 649 deep, which overflowed the stack (`ters compile examples/pond-page` failed on main); it now gives up past 300 (L266g), so its reads take the whole value. Work them out without nesting (a worklist, or each function's answer by its inputs' shapes) so pond's reads are rewritten too | L266g sweep, 2026-11-17 | 2026-11-17 |
+| C263 | branches.test "a search whose first choice has one item with answers shares out its second choice's items (C43g)" fails on main in a 4-core container, twice in a row: compiled JS with `TERS_WORKERS=3` says `branches on workers: 0`, so the second choice's items weren't shared out (the answers are right). Find why the search no longer reaches the workers | game thread, 2026-11-17 | 2026-11-17 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
@@ -241,7 +242,6 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
 | G2b | The game page's input as state: keys held and the pointer read in a frame, not only as events, and a fixed-step update with the frame's seconds (G2 built the canvas and its marks) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
 | G3b | moths M1, second half: a list made only to be walked once (moths' nine cells, `flat map` of `map`) becomes the loop that makes it (deforestation, credit Wadler 1988). First half done with G3a | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
-| G3c | moths M3, rest: 4 threads are 1.8x one thread (C gets 3.2x) and still do 1.8x the CPU work; a map whose answers hold no cells no longer counts what it shares (done); next: items taken in runs, not one at a time from one shared counter, then measure what is left | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
 | G3d | moths M4: compiled JS keeps records that never leave a function as locals (Vec, Flock in `met`), no finite check on a literal, plain field reads; 10x the hand-written JS | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
 | G3e | moths M5: profile `ters wasi` on moths (14.6x) and split what isn't M1, M2 or M4 into rows | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |

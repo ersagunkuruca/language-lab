@@ -4435,3 +4435,22 @@ Left of M3: with 3 workers the threads still do about 1.8x the CPU work
 of one (3.6 s against 2.0 s). Each moth is about 2 µs of work, and each
 item still takes its slot from one shared counter; the next step is
 items in runs, measured.
+
+### G3c, second part: the threads take items in runs
+
+Each thread took one item at a time from the map's shared counter, and
+told another shared counter (the items run on threads, for
+`TERS_BRANCHES=say`) after every item, and the answers of neighbouring
+items, written side by side, came from different threads. Now a thread
+takes a run of items at once, an eighth of its share (moths: about 300),
+and tells what it ran once, at its end (c.ts `parC`).
+
+| moths, 100 ticks, 10,000 | before | after |
+|---|---|---|
+| `ters native`, 4 threads | 1.03-1.12 s | 0.79-0.83 s (2.4x one thread; OpenMP C 0.21 s) |
+| CPU time, 4 threads | 3.6 s | 2.7 s (one thread 1.9 s) |
+
+The threads still do 1.45x the work of one. What is left is per-item
+work done on every thread: records made and dropped in `met` and
+`flock over`, through malloc from four threads at once. That is G3b and
+the allocation part of M1, not the scheduling.
