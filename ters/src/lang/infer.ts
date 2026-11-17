@@ -3747,9 +3747,13 @@ export function inferEdited(before: Code, next: Code, names: Names, info: Info, 
 // again only where it changed: the definitions holding `changed` nodes of
 // `before` and the ones it `made`, over the check before as a layer is
 // read under a program. A changed definition whose type comes out other
-// than it was, or an error the program didn't have, has the whole program
-// checked (I192: each step checked all of calc again, 0.3 s each).
-export function inferRewritten(before: Code, next: Code, names: Names, info: Info, changed: Iterable<Id>, made: Id[]): Info {
+// than it was has the ones that use it checked again with it; an error
+// the program didn't have has the whole program checked (I192: each step
+// checked all of calc again, 0.3 s each). `trial`: only the type of what
+// those definitions reach is asked (firstArms' searches), so users are
+// followed only among them and errors are left as found.
+export function inferRewritten(before: Code, next: Code, names: Names, info: Info, changed: Iterable<Id>, made: Id[], trial?: Set<Id>): Info {
+  const errorsAny = !!trial;
   const whole = () => infer(next, names, undefined, info.options);
   const parent = parentLookup(before), defs = new Set(before.defs);
   const only = new Set<Id>(made);
@@ -3768,16 +3772,43 @@ export function inferRewritten(before: Code, next: Code, names: Names, info: Inf
     for (const id in next.nodes) if (!(id in before.nodes)) touched.add(id);
     derivedFrom(next, before, touched, true);
   }
-  const quick = infer(next, names, { from: info, only, layer: true }, info.options);
+  let quick = infer(next, names, { from: info, only, layer: true }, info.options);
+  // A definition whose type came out other than it was has the ones that
+  // use it, and those that use them, on up, checked again with it (an
+  // effect a taken first way lets out, firstArms). Where one of those
+  // shares variables it doesn't quantify, or is an implementation used by
+  // type, not name, the whole program is checked.
+  const sameType = (d: Id) => { const was = info.schemes.get(d), now = quick.schemes.get(d); return !was === !now && (!was || !now || groupKey(info.subst, [was.type]) === groupKey(quick.subst, [now.type])); };
+  const moved = [...only].filter((d) => !made.includes(d) && !sameType(d));
+  if (moved.length) {
+    const library = new Set(info.options?.library ?? []), all = new Set(next.defs);
+    const impls = new Set(info.implementations?.values() ?? []);
+    callsFrom.set(next, { base: before, changed: only });
+    const users = new Set<Id>(moved);
+    for (let grew = true; grew; ) {
+      grew = false;
+      for (const d of next.defs) {
+        if (users.has(d) || (trial ? !trial.has(d) : library.has(d))) continue;
+        for (const t of callsIn(next, d, all)) if (users.has(t)) { users.add(d); grew = true; break; }
+      }
+    }
+    if ([...users].some((d) => impls.has(d))) return whole();
+    for (const d of users) only.add(d);
+    quick = infer(next, names, { from: info, only, layer: true }, info.options);
+    const shares = (i: Info, d: Id) => {
+      const sc = i.schemes.get(d);
+      if (!sc) return false;
+      const vars = new Set<number>(), rows = new Set<number>();
+      freeVars(sc.type, i.subst, vars, rows);
+      return [...vars].some((v) => !sc.vars.includes(v)) || [...rows].some((r) => !sc.rows.includes(r));
+    };
+    if (!errorsAny && [...only].some((d) => shares(quick, d) || shares(info, d))) return whole();
+  }
+  if (errorsAny) return quick;
   // Its errors are those the program had (a library definition's that
   // takes any value, say): only the rechecked ones are found again.
   const had = new Set(info.errors.map((e) => e.message));
   if (quick.errors.some((e) => !had.has(e.message))) return whole();
   quick.errors = info.errors;
-  for (const d of only) {
-    if (made.includes(d)) continue;
-    const was = info.schemes.get(d), now = quick.schemes.get(d);
-    if (!was !== !now || (was && now && groupKey(info.subst, [was.type]) !== groupKey(quick.subst, [now.type]))) return whole();
-  }
   return quick;
 }
