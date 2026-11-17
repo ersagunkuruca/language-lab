@@ -11,7 +11,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { onTodaysIds } from "../src/lang/std.ts";
 import { exampleTables, type Manifest } from "../../editor/examplesPlugin.ts";
 import type { CoreMain } from "../../editor/coreMain.ts";
-import { sendCode } from "../../editor/runCode.ts";
+import { line, sendCode, words } from "../../editor/runCode.ts";
 
 const manifest = JSON.parse(readFileSync(new URL("../../editor/examples.json", import.meta.url), "utf8")) as Manifest;
 // A picker's program, or (folders given) a test program the picker doesn't
@@ -108,6 +108,14 @@ test("pond's Run main, opened as the editor opens it, lives its pond", async () 
   const end = said.at(-1)!;
   assert.equal(end.error, undefined, String(end.error));
   assert.ok(printedLines(said).includes("Checks: 0 outside the pond, 0 spent, 0 overfull patches, 0 too old."), printedLines(said).join("\n"));
+});
+
+// Run's arguments typed as a line (E273): split at spaces, quotes keeping
+// one word together, and written back so they read the same.
+test("Run's arguments line reads as a shell splits it", () => {
+  assert.deepEqual(words("  book.md   out "), ["book.md", "out"]);
+  assert.deepEqual(words('"my notes.txt" 3 ""'), ["my notes.txt", "3", ""]);
+  for (const ws of [["30", "100"], ["a b", "", "c"]]) assert.deepEqual(words(line(ws)), ws);
 });
 
 // clinic's settings come in a file Run gives it (E277): the day as

@@ -21,3 +21,10 @@ export function receivedCode(s: SentCode): Code {
   for (const id of s.gone) delete nodes[id];
   return { nodes, defs: s.defs };
 }
+
+// A command line's words: split at spaces, a "quoted" stretch one word.
+export function words(s: string): string[] {
+  return [...s.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2]);
+}
+// Words back as a line words reads the same.
+export const line = (ws: string[]) => ws.map((w) => (w === "" || /[\s"]/.test(w) ? `"${w}"` : w)).join(" ");

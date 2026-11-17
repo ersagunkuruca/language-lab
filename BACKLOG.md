@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Make command-line examples interactive" | E273, E274, E276, then E278 |
+| E Editor | "Make command-line examples interactive" | E274, E276, then E278 |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | C256, I316 (once editor/ is free), L266 (Ersagun 2026-11-17: yes, in that order) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -63,7 +63,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E273 | Arguments editable in Run: a field holding the example's arguments, and a reset to them | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P1 | M | |
 | E274 | Input files shown and editable in Run: each file the example brings opens in a text box, edits kept in the browser per program with a reset; files a run writes listed after it | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P1 | M | |
 | E276 | What main does, where it runs: main's comment behind Run's ⓘ, and each argument named (pond: ticks, fish) | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P1 | S | |
 | E278 | Pages for the simulations beside their benchmark mains, the same definitions drawn: pond, break, clinic, crew (one PR each) | [RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md) | P2 | L | |
