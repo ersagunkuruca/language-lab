@@ -15,9 +15,9 @@
 // stays. Inside another search (all, count, first, optional) or a use,
 // nothing is taken: there every way may count.
 import type { Code, Id, Node } from "../model.ts";
-import { SCHEMA, subtree, freshId, isCall } from "../model.ts";
+import { SCHEMA, subtree, freshId, isCall, dependenciesOfAll } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
+import { infer, inferRewritten, type Info } from "./infer.ts";
 import { S } from "./std.ts";
 import { CHOICE, type Type } from "./types.ts";
 
@@ -116,18 +116,26 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   for (const [s, th] of thunks) nodes[s] = { id: s, kind: "call", fn: th, args: [] } as Node;
   let out: Code = { ...code, nodes, defs: [...code.defs, ...copies.values()] };
   let checked: Info;
-  try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
+  const made = [...copies.values()];
   // Where the thunk chooses no more, the first is its body; elsewhere the
-  // first stays as it was.
+  // first stays as it was. Which ones may is asked first of a check of
+  // only what the searches reach (machine's 19 firsts, none taken: the
+  // whole program's check was 0.4 s); where that finds one, of the whole
+  // program, so a first is taken where it always was (what's known of a
+  // number's sign is the whole program's, pond's tick).
+  const stillChooses = (c: Info, th: Id) => { const t = c.typeOf.get(th), z = t && c.subst.zonk(t); return z?.t !== "fn" || c.subst.resolveRow(z.eff).effs.includes(CHOICE); };
+  const mayTake = (c: Info) => [...thunks].filter(([s, th]) => !open.has(s) && !stillChooses(c, th));
+  try { checked = inferRewritten(code, out, outNames, info, sites, made, dependenciesOfAll(code, sites.map((s) => (code.nodes[s] as { args: Id[] }).args[0]))); } catch { return { code, info, names, taken: 0 }; }
+  if (mayTake(checked).length) try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
+  const take = new Set(mayTake(checked).map(([s]) => s));
   let taken = 0;
   for (const [s, th] of thunks) {
-    const t = checked.typeOf.get(th), z = t && checked.subst.zonk(t);
-    if (!open.has(s) && z?.t === "fn" && !checked.subst.resolveRow(z.eff).effs.includes(CHOICE)) { nodes[s] = { ...nodes[(nodes[th] as { body: Id }).body], id: s } as Node; taken++; }
+    if (take.has(s)) { nodes[s] = { ...nodes[(nodes[th] as { body: Id }).body], id: s } as Node; taken++; }
     else nodes[s] = code.nodes[s];
   }
   if (!taken) return { code, info, names, taken: 0 };
   out = { ...out, nodes };
-  try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
+  try { checked = inferRewritten(code, out, outNames, info, sites, made); } catch { return { code, info, names, taken: 0 }; }
   // Checked again, the program as it came may have problems its first
   // check didn't (stage.ts has the same): only new ones count.
   if (checked.errors.length > info.errors.length) {
