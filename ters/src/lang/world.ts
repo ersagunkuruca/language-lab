@@ -10,7 +10,7 @@ import { base64Of, bytesOfBase64, requestKey, type PlainRequest, type PlainRespo
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { worldRandom } from "./random.ts";
 import type { World } from "./run.ts";
 
@@ -129,6 +129,10 @@ export function nodeWorld(): World {
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
     readBytes: (path) => { try { return new Uint8Array(readFileSync(path)); } catch (e) { return plain(e, path); } },
     writeBytes: (path, bytes) => { try { writeFileSync(path, bytes); } catch (e) { plain(e, path); } },
+    // The person's file (L271): written in the folder this runs in, under
+    // its name alone; there's no one here to choose one.
+    offerFile: (name, bytes) => { const path = basename(name) || "file"; try { writeFileSync(path, bytes); } catch (e) { plain(e, path); } },
+    askForFile: () => { throw new Error("there's no one to choose a file on the command line: read one with read bytes"); },
     fetchText: (url) => {
       let r = fetched.get(url);
       if (!r) fetched.set(url, (r = fetchOnce(url)));
@@ -212,7 +216,7 @@ export function allowedOnly(world: World, allow: string[]): World {
   const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
   const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: ters run was given --allow ${allow.join(",") || "nothing"}`); };
   const out: World = { ...world };
-  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes", "openFile"] as const) out[k] = refuse("Files") as never;
+  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes", "openFile", "offerFile", "askForFile"] as const) out[k] = refuse("Files") as never;
   if (!environment) out.environmentVariable = refuse("Environment") as never;
   if (!network) {
     const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };

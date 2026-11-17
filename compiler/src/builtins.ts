@@ -128,6 +128,8 @@ export const TARGETS: Record<Id, Target> = {
   [IO.fetchText]: { js: op(([a]) => `$io.fetchText(${a})`), scalar: WORLD },
   [IO.readBytes]: { js: op(([a]) => `$io.readBytes(${a})`), scalar: WORLD },
   [IO.writeBytes]: { js: op(([a, b]) => `$io.writeBytes(${a}, ${b})`), scalar: WORLD },
+  [IO.offerFile]: { js: op(([a, b]) => `$io.offerFile(${a}, ${b})`), scalar: WORLD },
+  [IO.askForFile]: { js: op(([a]) => `$io.askForFile(${a})`), scalar: WORLD },
   [IO.sendRequest]: { js: op(([a]) => `$io.sendRequest(${a})`), scalar: WORLD },
   [IO.startFetch]: { js: op(([a]) => `$io.startFetch(${a})`), scalar: WORLD },
   // Cells: the runtime's one handler (ters/src/lang/cells.ts). A

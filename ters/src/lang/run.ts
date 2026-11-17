@@ -419,6 +419,10 @@ export interface World {
   // A file's bytes as they are, and bytes written (L189c, bytes.ts).
   readBytes?(path: string): Uint8Array;
   writeBytes?(path: string, bytes: Uint8Array): void;
+  // A file handed to the person to keep, and one they choose (L271): a
+  // world without them has no person to hand one to or ask.
+  offerFile?(name: string, bytes: Uint8Array): void;
+  askForFile?(kinds: string): Uint8Array;
   // A file kept open by `with open file` (L213c): opened for reading from
   // its start and adding lines at its end (created if it isn't there), by
   // a number; its next line without the line break, null at the end.
@@ -655,6 +659,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
     [IO.readBytes]: (p) => one(bytesValue(world("readBytes")!(p as string)) as Value),
     [IO.writeBytes]: (p, b) => (world("writeBytes")!(p as string, plainBytes(b)), one(unit)),
+    [IO.offerFile]: (n, b) => (world("offerFile")!(n as string, plainBytes(b)), one(unit)),
+    [IO.askForFile]: (k) => one(bytesValue(world("askForFile")!(k as string)) as Value),
     [IO.fetchText]: (u) => one(world("fetchText")(u as string)),
     [IO.sendRequest]: (r) => one(responseValue(world("sendRequest")!(plainRequest(r))) as Value),
     // In the background where the world can (L150b): a ticket ready when
@@ -723,7 +729,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
   const timers = worldTimers((m) => { throw new Aborted(m); });
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readBytes, IO.writeBytes, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readBytes, IO.offerFile, IO.askForFile, IO.writeBytes, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];
