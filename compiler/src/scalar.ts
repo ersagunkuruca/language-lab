@@ -5218,7 +5218,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return { ...e, ok: cps(e.ok, j, tail, g), otherwise: cps(e.otherwise, j, tail, g), t: "i32" };
       }
     }
-    if (["op", "call", "make", "new", "rt", "world", "get", "field", "tag", "apply", "abort"].includes(e.k)) {
+    if (["op", "call", "make", "new", "rt", "world", "get", "field", "tag", "apply", "abort", "list"].includes(e.k)) {
       return inOrder(kids(e), (vs, tl) => { let j = 0; return k.gen(untail(mapKids(e, () => vs[j++])), tl); }, tail, g);
     }
     throw new Refused("chooses among several answers where WebAssembly can't yet");
