@@ -46,13 +46,15 @@ A system is a function over the pool that maps or keeps its items by
 their fields:
 
 ```
-fly(w) = updated(w.things, (t) => match (t.velocity, t.wings)
+fly(w) = updated in pool(w.things, (t) => match (t.velocity, t.wings)
   (some(v), some(f)) → with velocity(t, flown(v, f, w))
   _ → t)
 ```
 
-`updated` is a new std operation on Pool (G1a): the pool with each item
-replaced by f of it, keys unchanged. Spawning and despawning inside a
+`updated in pool` is a std operation on Pool (G1a): the pool with each
+item replaced by f of it, keys unchanged. `kept in pool` removes the items
+that fail a test, as `removed from pool` does, and `pool items` lists them
+in slot order. Spawning and despawning inside a
 system are not done in place: a system gives back the changes it wants
 (a list of `spawn(Thing)` and `despawn(Pool key)`), applied after it, as
 pond's plans are (GAPS round 13). That is Bevy's `Commands`, and in Ters
@@ -128,9 +130,11 @@ then systems at once (G5).
 
 ## Steps
 
-- **G1a.** std: `updated` (map a pool's items, keys kept), `kept`
-  (despawn those that fail a test), and changes applied after a system;
-  the moths and lamps of the greenhouse written as one `Pool Thing`.
+- **G1a** (done). std: `updated in pool` (map a pool's items, keys
+  kept), `kept in pool` (despawn those that fail a test), `pool items`.
+  Changes applied after a system need nothing new: a fold of the list it
+  gives back with `added to pool` and `removed from pool`. The greenhouse
+  writes its moths and lamps as one `Pool Thing` (G6).
 - **G1b.** Columns with presence: an `Optional` field of a record kept as
   columns stored as a bit per slot and a column of values, read in place
   by a match on it (columns.ts, C and JS first).
