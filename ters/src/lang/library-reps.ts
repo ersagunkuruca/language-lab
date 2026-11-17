@@ -14,7 +14,7 @@
 // by the tree's shape, so such a program keeps the definition.
 
 import { COPIED_FROM, originalOf, PRELUDE_DEFS } from "./prelude-ids.ts";
-import { bindsOf, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
+import { bindsOf, children, ownerOfTypeParts, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -1106,10 +1106,32 @@ export function withTrees(code: Code, rows: Representation[]): Code {
 // checker reads a row's match from it), their jobs, and what those
 // reach in the module.
 export function treesFor(code: Code, rows: Representation[]): Code {
-  const all = merge(TREES.code, code);
+  // What the roots reach in the module and the program together, read
+  // from each (merged, the two were copied whole for it: L266).
   const keep = new Set<Id>();
   const roots = rows.flatMap((r) => [...(r.def ? [r.def] : []), ...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...Object.values(r.byType ?? {}), ...Object.values(r.heads ?? {}), ...(r.store ? [r.store] : [])]);
-  for (const d of roots) for (const x of [d, ...dependencies(all, d)]) if (TREES.code.nodes[x]) keep.add(x);
+  const at = (id: Id): Node | undefined => (Object.hasOwn(code.nodes, id) ? code.nodes[id] : TREES.code.nodes[id]);
+  const owners = [ownerOfTypeParts(code), ownerOfTypeParts(TREES.code)];
+  const reached = (root: Id): Set<Id> => {
+    const seen = new Set<Id>();
+    const visit = (id: Id) => {
+      const walk = (x: Id) => {
+        const node = at(x)!;
+        const target = node.kind === "ref" ? node.target : node.kind === "tref" ? node.target : node.kind === "arm" ? node.variant : null;
+        for (let t of [target, ...(node.kind === "tfun" ? node.effects ?? [] : []), ...(node.kind === "typedef" ? node.row ?? [] : [])]) {
+          if (t) t = owners[0].get(t) ?? owners[1].get(t) ?? t;
+          if (!t || seen.has(t)) continue;
+          const d = at(t);
+          if (d?.kind === "def" || d?.kind === "builtin") { seen.add(t); visit(t); }
+        }
+        for (const c of children(node)) walk(c);
+      };
+      walk(id);
+    };
+    visit(root);
+    return seen;
+  };
+  for (const d of roots) for (const x of [d, ...reached(d)]) if (TREES.code.nodes[x]) keep.add(x);
   const defs = TREES.code.defs.filter((d) => keep.has(d));
   const nodes: Record<Id, Node> = {};
   for (const d of defs) for (const id of subtree(TREES.code, d)) nodes[id] = TREES.code.nodes[id];
