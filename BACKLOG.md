@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: G1b with G3d (columns), G3b, G2b, then G6 ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: G6b (the round), then G1b with G3d (columns), G3b ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -38,6 +38,8 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | added |
 |---|---|---|---|
 | L266 | A faster checker: machine's 8,000 reached nodes took 1.5 s, about 190 µs a node; aim for 10x. L266a: 0.2 s warm. Next: compiling machine still checks it six times (firstArms three, bake, stage, fused folds: about 0.2 s each), L266b keeps the higher-order call analysis's answers between checks. L266c resolves arithmetic over what is reached, L266d reaches once. Left, in `ters compile machine` (8.8 s): the first check 1.1 s (warm it is 0.15 s; L266e found the once-per-process part, 0.45 s, not worth a snapshot); choosing representations 4.8 s, of it two whole checks of the program over the library (represented.ts and library-reps.ts, 0.7 and 0.8 s) and the choice's walks (choiceOf 2.4 s: splitByGroups, represent.ts uses and looped walking each definition's subtree again per type); lowering 3.5 s, of it first-arms' checks 0.6 s. With I316, machine's compile under half a second. C256 found the checks inside lowering are the checker's cost too: rechecking only what a pass changed (infer.ts inferRewritten) saved 0.2 s of machine's 3.1 but kept effects the passes had made more exact (drift, depot, sheet got Diverge back), so a faster whole check is the fix; and a layered check joined a first's thunk's row to the row around it (agent's first-arms took 5 of 7) | Ersagun 2026-11-17 ("Having to spend more than a second compiling them is kinda weird") | 2026-11-17 |
+| I317 | The MCP server ran out of its 2 GB heap writing the greenhouse page (98 definitions, at the 85th) and needed 6 GB; its heap grows with every definition. Find what it keeps | game round 2 (G6), 2026-11-17 | 2026-11-17 |
+| I318 | Text the MCP reads: `x = …; match y` with the match's arms on the lines after isn't read ("no operator starts it"), nor a match after `else` on one line; both need a step (□) or a function of their own | game round 2 (G6), 2026-11-17 | 2026-11-17 |
 
 ## E: Editor
 
@@ -94,6 +96,9 @@ New targets and speed rank below every language item (Ersagun,
 |---|---|---|---|
 | C259 | pond-page's reads of its cells kept whole: tracking where each read's value goes (cell-paths.ts trackReads) works pond's calls out inside one another 649 deep, which overflowed the stack (`ters compile examples/pond-page` failed on main); it now gives up past 300 (L266g), so its reads take the whole value. Work them out without nesting (a worklist, or each function's answer by its inputs' shapes) so pond's reads are rewritten too | L266g sweep, 2026-11-17 | 2026-11-17 |
 | C263 | branches.test "a search whose first choice has one item with answers shares out its second choice's items (C43g)" fails on main in a 4-core container, twice in a row: compiled JS with `TERS_WORKERS=3` says `branches on workers: 0`, so the second choice's items weren't shared out (the answers are right). Find why the search no longer reaches the workers | game thread, 2026-11-17 | 2026-11-17 |
+| C264 | A compiled page refuses a cell (and other host builtins) on data holding a Bool (scalar.ts `host`, boolInside: the evaluator's Bool inside data is a case, compiled code's a boolean). The greenhouse's gardener first held `carrying: Bool`; it now carries an `Optional Lamp`. Convert at the host boundary, or give compiled data the evaluator's Bool | game round 2 (G6), 2026-11-17 | 2026-11-17 |
+| C265 | Optional components cost a count on every read: the greenhouse's Thing holds three Optionals, so on C each `item at` of a moth dups the Thing and drops it again (Thing_dup 83 million and lab_drop 247 million calls in 600 ticks, against none for moths' all-Float64 Moth). An item read only to be read, borrowed, with no count taken | game round 2 (G6), 2026-11-17 | 2026-11-17 |
+| C266 | The greenhouse is slower on 4 threads than on one natively (13.4 s against 10.8 s a night): its maps' answers hold cells (the Optionals), so what they share is counted atomically from every thread (G3c froze it only where answers hold none) | game round 2 (G6), 2026-11-17 | 2026-11-17 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
@@ -239,13 +244,12 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | id | item | lane | source | pri | size | status |
 |---|---|---|---|---|---|---|
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
-| G2b | The game page's input as state: keys held and the pointer read in a frame, not only as events, and a fixed-step update with the frame's seconds (G2 built the canvas and its marks) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
 | G3b | moths M1, second half: a list made only to be walked once (moths' nine cells, `flat map` of `map`) becomes the loop that makes it (deforestation, credit Wadler 1988). First half done with G3a | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
 | G3d | moths M4: compiled JS is 10x the hand-written JS because each moth is 3 objects and 4 boxed numbers spread over the heap, not because of `met`'s code (25 ns a call alone, 85 ns in place; GAPS game round 1, G3d measured). Columns (columns.ts) for records holding records, a column per leaf field, and an item given whole to a function passed as its fields; build with G1b | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | L | |
 | G3e | moths M5: profile `ters wasi` on moths (14.6x) and split what isn't M1, M2 or M4 into rows | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G6 | Stage 1 slice and round: the greenhouse (or Ersagun's pick) in 2D on the CPU, moths, lamps, a frame budget; a bigger-program round on it | L | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
+| G6b | Game round 2 on the greenhouse: hand-written C and JS ideals of compiler/gaps/greenhouse, the ways measured (a night native 10.8 s on one thread, compiled JS 32 s), gaps into GAPS.md (C265 and C266 first) | L | [GAPS game round 2](docs/reports/GAPS.md) | P2 | M | |
 | G7 | Drawing with data, a design note: a frame as a value (meshes, instances, materials, cameras, passes), the GPU as a world, what changes between frames uploaded rather than rebuilt (WEB.md's model for pages, for frames) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
 | G8 | Columns into GPU buffers: a program's Float64 columns uploaded as Float32 storage buffers, only the columns a shader reads, only when they change | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G9 | Vertex functions and instanced draws: a Ters function of (instance, vertex) to a position and its varyings, printed as a WGSL vertex stage beside today's fragment | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |

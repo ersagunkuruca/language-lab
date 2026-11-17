@@ -256,9 +256,13 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           });
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
-          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number }) => {
+          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number; preventDefault?: () => void }) => {
             if (m.live && !m.live()) return;
             const target = (ev.target ?? e) as El & { type?: string };
+            // A key a page listens for on an element that isn't for typing
+            // (a game's canvas, G2b) is the page's: the arrows and space
+            // move the player, not the page under it.
+            if ((name === "keydown" || name === "keyup") && SCROLL_KEYS.has(ev.key ?? "") && !TYPED.has(String((target as { tagName?: string }).tagName ?? "").toLowerCase())) ev.preventDefault?.();
             // What was typed enters in NFC (L214a, border.ts).
             const value = target.type === "checkbox" ? String(!!target.checked) : nfc(String(target.value ?? ""));
             const [x, y] = pointer(e, ev);
@@ -350,6 +354,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
     default: throw new Error(`not Html: ${d.tag}`);
   }
 }
+
+// The keys that scroll a page, and the elements that are for typing.
+const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "PageUp", "PageDown", "Home", "End"]);
+const TYPED = new Set(["input", "textarea", "select"]);
 
 // The marks a canvas paints (std.ts Mark), on its 2D context, in its own
 // units. A compiled record's fields are f0, f1, … and the evaluator's are
