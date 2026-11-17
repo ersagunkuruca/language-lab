@@ -1318,6 +1318,39 @@ export function buildPrelude(): Module {
     ]) },
   ])));
   const poolKeys = def("pool keys", ["pool"], (p) => poolOf(p, (items, gens, _f, _n, slots) => k.call(keysFrom, items, gens, pSub1(slots), k.x(NIL))));
+  // A game's systems over a pool of entities (G1a, ENTITIES.md): every
+  // item changed by f, each keeping its key; the items that pass a test
+  // kept and the rest removed, each removed slot freed and its generation
+  // moved on as `removed from pool` does; and the items in slot order.
+  const updatedInPool = def("updated in pool", ["pool", "f"], (p, f) => poolOf(p, (items, gens, free, n, slots) =>
+    PL(k.call(map, items, k.fn(["slot"], (o) => k.match(o, [
+      { variant: NONE, names: [], body: () => k.x(NONE) },
+      { variant: SOME, names: ["item"], body: ([x]) => k.call(SOME, k.call(f, x)) },
+    ]))), gens, free, n, slots)));
+  // The slots of those marked gone put in front of free, walked from the
+  // newest slot (i) down.
+  const freedFrom = k.def("pool freed from");
+  k.define(freedFrom, k.fn(["gone", "slot", "free"], (gone, i, free) => k.match(gone, [
+    { variant: NIL, names: [], body: () => free },
+    { variant: CONS, names: ["is gone", "rest"], body: ([g, rest]) => k.call(freedFrom, rest, pSub1(i), k.if(g, k.call(CONS, i, free), free)) },
+  ])));
+  const keptInPool = def("kept in pool", ["pool", "test"], (p, test) => poolOf(p, (items, gens, free, n, slots) =>
+    k.let("gone", k.call(map, items, k.fn(["slot"], (o) => k.match(o, [
+      { variant: NONE, names: [], body: () => k.x(FALSE) },
+      { variant: SOME, names: ["item"], body: ([x]) => k.call(S.not, k.call(test, x)) },
+    ]))), (gone) => k.let("freed", k.call(freedFrom, gone, pSub1(slots), free), (freed) =>
+      PL(k.call(map, k.call(zipped, items, gone), k.fn(["pair"], (pr) => entry(pr, (o, g) => k.if(g, k.x(NONE), o), ["slot", "is gone"]))),
+        k.call(map, k.call(zipped, gens, gone), k.fn(["pair"], (pr) => entry(pr, (gen, g) => k.if(g, pAdd1(gen), gen), ["generation", "is gone"]))),
+        freed, k.call(INT_OPS.sub, n, k.call(INT_OPS.sub, k.call(length, freed), k.call(length, free))), slots)))));
+  const itemsFrom = k.def("pool items from");
+  k.define(itemsFrom, k.fn(["items", "after"], (items, after) => k.match(items, [
+    { variant: NIL, names: [], body: () => after },
+    { variant: CONS, names: ["slot", "rest"], body: ([o, rest]) => k.match(o, [
+      { variant: NONE, names: [], body: () => k.call(itemsFrom, rest, after) },
+      { variant: SOME, names: ["item"], body: ([x]) => k.call(itemsFrom, rest, k.call(CONS, x, after)) },
+    ]) },
+  ])));
+  const poolItems = def("pool items", ["pool"], (p) => poolOf(p, (items) => k.call(itemsFrom, items, k.x(NIL))));
   const iLess = (a: Id, b: Id) => k.call(INT_OPS.less, a, b);
   const iSame = (a: Id, b: Id) => k.equal(a, b);
   const iMul = (a: Id, b: Id) => k.call(INT_OPS.mul, a, b);
@@ -2248,7 +2281,7 @@ export function buildPrelude(): Module {
   const embeddings = [
     embed("int in float64", k.x(INT_OPS.toNumber)),
   ];
-  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, grow, settled, settledBy, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
+  const offered: Id[] = [...embeddings, extLess, extAdd, extNeg, extSub, extMul, minimum, maximum, startsWith, endsWith, containsText, afterPrefix, repeated, padStart, padEnd, spaced, optionalParens, flatten, flatMap, rangeFrom, wholeOf, dividedOr, isDigit, isLetter, lowercase, uppercase, each, map, keep, showNumbers, length, sum, append, reverse, inverse, conjugate, curry, uncurry, partially, flip, atMost, moreThan, atLeast, smaller, larger, tableProduct, cliffordTable, cliffordAlgebra, cliffordProduct, cliffordReverse, cliffordInverse, cliffordSandwich, cliffordReflect, cliffordProject, cliffordExp, cliffordOuter, cliffordInner, cliffordGrade, cliffordDual, cliffordUndual, cliffordRegressive, cliffordPart, cliffordWithPart, matrixTable, itemAt, replaceAt, take, drop, zipped, numbered, copies, allPass, anyPass, firstWhere, positionOf, contains, largestOf, smallestOf, insertedAt, caseOf, positionWhere, itemWhere, randomItem, change, showDecimals, sort, sortBy, sortWith, collated, attempt, valueOrAbort, emptyMap, asMap, put, updateAt, lookup, remove, hasKey, mergeMaps, keys, values, entries, mapSize, emptySet, asSet, addItem, removeItem, has, union, intersection, difference, items, setSize, smallestItem, largestItem, grow, settled, settledBy, smallestKey, largestKey, emptyQueue, queueOf, queued, frontOf, dequeued, queueSize, queueItems, emptyPriorityQueue, priorityQueueOf, prioritized, soonest, withoutSoonest, priorityQueueSize, priorityQueueItems, emptyPool, nextKey, poolAdded, poolItem, replacedInPool, removedFromPool, poolSize, poolKeys, updatedInPool, keptInPool, poolItems, tensorOf, tensorShape, tensorItems, rank, tensorSize, tensorEntry, tensorMap, tensorZipWith, reshaped, contracted, transposedBy, traced, bytesOf, byteItems, byteCount, byteAt, utf8Of, textOfUtf8, base64Of, bytesOfBase64, hexOf, bytesOfHex, jsonPrinted, jsonIndented, jsonRead, jsonSpelled, blank, jsonField, jsonAsNumber, jsonAsText, jsonAsBool, jsonAsList, csvPrinted, csvRows, csvRecords, csvOfRecords, dateOf, dateYear, dateMonth, dateDay, leapYear, daysInMonth, dayNumber, dateOfDay, weekday, addedDays, daysBetween, dateText, dateRead, timeOf, timeHour, timeMinute, timeSecond, secondsOfDay, timeOfSeconds, timeText, timeRead, secondsD, minute, hour, day, instantOf, secondsSince, laterBy, durationBetween, instantAt, dateAt, timeAt, instantText, instantRead, offsetText, instantTextIn, instantTextInZone, instantInZone, durationText, durationRead, currentInstant, waitFor, withState, changeState, withOpenFile, piped, ticketId, ...wordMakers, anyOf, together, race, within, simulated, near];
   // Each number's own show, from before the generic one showed every number
   // (L153, L156): kept so programs saved before still open, not offered.
   const perTypeShows: Id[] = [showExt];
@@ -2385,6 +2418,9 @@ export function buildPrelude(): Module {
     [removedFromPool]: "The pool without the item under the key. Its slot is free again, and the key and every copy of it find nothing from now on.",
     [poolSize]: "How many items the pool holds. Kept, not counted.",
     [poolKeys]: "The keys of the pool's items, in the order of their slots.",
+    [updatedInPool]: "The pool with each item changed by f; every item keeps its key.",
+    [keptInPool]: "The pool with only the items that pass the test; the others are removed, and their keys find nothing.",
+    [poolItems]: "The pool's items, in the order of their slots.",
     [emptyPriorityQueue]: "A priority queue with nothing in it: prioritized adds an item with a priority, and soonest is the one with the lowest priority (in compare's order), of those the one added first.",
     [priorityQueueOf]: "A priority queue of (priority, item) pairs, added in the list's order: priority queue of([(2.5, \"b\"), (1.0, \"a\")]).",
     [prioritized]: "The queue with the item added at that priority. Two items may share a priority; they leave in the order they were added. A simulation's events: prioritized(events, now + delay, arrival(p)).",

@@ -4454,3 +4454,24 @@ The threads still do 1.45x the work of one. What is left is per-item
 work done on every thread: records made and dropped in `met` and
 `flock over`, through malloc from four threads at once. That is G3b and
 the allocation part of M1, not the scheduling.
+
+### G3d, measured: compiled JS loses on layout, not on `met`'s code
+
+`met` (what a moth sees of one more moth) is 55% of compiled JS's time
+in a profile of 20 ticks (V8 optimizes it and never throws it out). It
+is called about 87 times a moth a tick, at about 85 ns a call. The same
+function, copied out and called 17.4 million times over 1,000 moths
+kept close together, takes 25 ns a call. Removing the `f0 ?? fields[0]`
+fallback from it changes nothing measurable (2.70 s against 2.68 s).
+
+What differs is where the moths are. On JS a moth is three objects (a
+Moth and two Vecs) and four boxed Float64s, made at different times,
+and the neighbours `met` reads are spread over 10,000 of them, so most
+reads miss the cache. C keeps the same list as an array of structs,
+each moth 32 bytes in a row, and the hand-written JS keeps Float64Array
+columns. columns.ts (C60) would do the same here, but it takes an array
+only when its items are flat records read field by field. A moth holds
+two Vecs, and `gathered` gives the item read whole to `met`, which is
+too big to put in place. So G3d is a layout row: columns for records
+holding records (a column per leaf field), with an item given to a
+function as its fields. It goes with G1b, columns with presence bits.

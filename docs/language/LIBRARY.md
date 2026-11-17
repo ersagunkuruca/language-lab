@@ -358,6 +358,9 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **removed from pool** : `(Pool a, Pool key) -> Pool a`. The pool without the item under the key. Its slot is free again, and the key and every copy of it find nothing from now on.
 - **pool size** : `(Pool a) -> Int`. How many items the pool holds. Kept, not counted.
 - **pool keys** : `(Pool a) -> List Pool key`. The keys of the pool's items, in the order of their slots.
+- **pool items** : `(Pool a) -> List a`. The pool's items, in the order of their slots.
+- **updated in pool** : `(Pool a, (a) -[e]-> b) -[e]-> Pool b`. The pool with each item changed by f; every item keeps its key.
+- **kept in pool** : `(Pool a, (a) -[e]-> Bool) -[e]-> Pool a`. The pool with only the items that pass the test; the others are removed, and their keys find nothing.
 
 ## Queues
 
