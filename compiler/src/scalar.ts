@@ -60,7 +60,7 @@ import { dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, 
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info, Options } from "../../ters/src/lang/infer.ts";
-import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
+import { ARRAY, TABLE, HASH_SET, CELL, CELLS, UPDATE, CHOICE, CONSOLE, DIVERGE, FILES, INT, NUMBER, PATH as PATH_T, STRING, BUILTIN_EFFECTS, OverMap, Subst, type Row, type Type } from "../../ters/src/lang/types.ts";
 import { RELEASE_V, LOG_OP, FILE_OPS, KEPT_FILES, OPEN_FILE, ABORT, ABORT_OP, CHECK, CHECK_OP, ALGEBRAIC_V, ARRAY_OPS, TABLE_OPS, HASH_SET_OPS, BOOL, CASE_NAME, RANDOM, RANDOM_OP, CELL_OPS, COMPARE, CONS, EXTENDED_V, FALSE, INT_OPS, IO, NIL, NONE, NOW_OP, ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, MY_LOCALE_OP, MY_ZONE_OP, MY_LATENCY_OP, SETTINGS, OPTIONAL, ORDER_V, PAIR_V, S, SET, SHOW_ANY, ORDERED, SOME, TEXT_OPS, TRUE, ZONE_OPS } from "../../ters/src/lang/std.ts";
 import { tupleType } from "../../ters/src/lang/std-values.ts";
 import { shownImplementations, implementationsOf } from "../../ters/src/lang/std-values.ts";
@@ -631,6 +631,9 @@ function lowerOnce(code: Code, info: Info, names: Names, roots: Id[], opts: { re
 }
 // The info as carried when the verifier finds nothing wrong with it, else
 // the program checked again (kept only if that check has no more errors).
+// The last lowering's fusions (fuse-steps.ts) and whether their carried
+// types were vouched for (tests).
+export let lastFused: { fused: number; carried: boolean } | null = null;
 export let lastVerdict: { checked: number; problems: number; rechecked: boolean } | null = null;
 export function vouched(code: Code, info: Info, names: Names): Info {
   const v = verify(code, elaborate(code, info));
@@ -793,7 +796,16 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const fusedSteps = envSet("NO_FUSE") ? null : fuseSteps(code, info);
   if (fusedSteps?.fused) {
     code = fusedSteps.code;
-    info = infer(code, names, undefined, recheck);
+    // Its nodes' types carried (stage 2 of the compiler redesign), vouched
+    // for by the verifier as the passes before; checked again where they
+    // couldn't be carried, or the verifier finds a problem.
+    if (fusedSteps.types && !envSet("TERS_RECHECK")) {
+      const typeOf = new OverMap(info.typeOf);
+      for (const [id, t] of fusedSteps.types) typeOf.set(id, t);
+      const carried = { ...info, typeOf }, v = verify(code, elaborate(code, carried));
+      lastFused = { fused: fusedSteps.fused, carried: !v.problems.length };
+      info = v.problems.length ? infer(code, names, undefined, recheck) : carried;
+    } else info = infer(code, names, undefined, recheck);
   }
   // A fold's costly work on each item shared out as a map, where a target
   // shares a list's maps out: JavaScript (fold-items.ts, C42e); C shares
