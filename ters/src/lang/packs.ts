@@ -103,7 +103,7 @@ export function packsWritten(code: Code, info: Info, names: Names): { code: Code
   const found = nodesWhere(code, "packing", (n) =>
     (n.kind === "ref" && (byVariant.has(n.target) || byField.has(n.target))) ||
     (isCall(n) && code.nodes[n.fn]?.kind === "ref" && (byVariant.has((code.nodes[n.fn] as NodeOf<"ref">).target) || byField.has((code.nodes[n.fn] as NodeOf<"ref">).target))) ||
-    ((n.kind === "match" || n.kind === "fold") && n.arms.some((a) => byVariant.has((code.nodes[a] as NodeOf<"arm"> | undefined)?.variant ?? ""))));
+    ((n.kind === "match" || n.kind === "fold") && n.arms.some((a) => byVariant.has((code.nodes[a] as NodeOf<"arm"> | undefined)?.variant ?? ""))), ["ref", "call", "match", "fold"]);
   const done = new Set<Id>();
   for (const id of found) {
     const n = code.nodes[id];

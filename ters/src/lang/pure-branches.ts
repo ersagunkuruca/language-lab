@@ -12,7 +12,7 @@
 // thread hop runs in place, C41); this only marks the calls it may.
 
 import { originalOf, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
-import { subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
+import { nodesOfKind, subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
 import { ABORT, S, SIGS, writtenItems } from "./std.ts";
@@ -119,8 +119,7 @@ export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...par
 // from the last, and an abort is the one the fold in turn would meet first.
 export function parallelFolds(code: Code, info: Info): Set<Id> {
   const out = new Set<Id>();
-  for (const n of Object.values(code.nodes)) {
-    if (n.kind !== "fold") continue;
+  for (const n of nodesOfKind(code, "fold")) {
     const effs = n.arms.map((a) => ownEffects(code, info, (code.nodes[a] as NodeOf<"arm">).body));
     const all = new Set(effs.flatMap((e) => (e ? [...e] : [CHOICE])));
     if (effs.every((e) => e) && [...all].every((e) => ALONE.has(e)) && !(all.has(DIVERGE) && all.has(ABORT))) out.add(n.id);

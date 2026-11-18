@@ -33,7 +33,7 @@ const onInt = (code: Code, n: Node): boolean =>
 const maybe = (n: Node) => n.kind === "match" || (n.kind === "ref" && isCase(n.target));
 const usesIn = (code: Code) => layerOf(code) && !derived.has(code)
   ? scanningOnLayer(code, () => nodesWhere(code, "int cases, maybe", maybe)).filter((id) => onInt(code, code.nodes[id]))
-  : nodesWhere(code, "int cases", (n) => onInt(code, n));
+  : nodesWhere(code, "int cases", (n) => onInt(code, n), ["match", "ref"]);
 export const usesIntCases = (code: Code) => !!INT_CASES.type && usesIn(code).length > 0;
 
 export function intCases(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {

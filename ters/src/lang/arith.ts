@@ -72,7 +72,7 @@ export const preludeDef = (name: string): Id | undefined => PRELUDE_DEFS[name];
 
 export const usesGenericArithmetic = (code: Code) => {
   const ops = interfaceOps(code);
-  return nodesWhere(code, "generic arithmetic", (n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || typedLiteral(n)).length > 0;
+  return nodesWhere(code, "generic arithmetic", (n) => (n.kind === "ref" && (n.target in AT || ops.has(n.target))) || (isUse(n) && ops.has(useTarget(code.nodes, n))) || typedLiteral(n), ["ref", "call", "lit"]).length > 0;
 };
 
 // Whether resolveArithmetic changes anything: it also lifts recursive lets
@@ -81,9 +81,9 @@ export const usesGenericArithmetic = (code: Code) => {
 // A plain number literal is some Number (infer.ts), so a program with one
 // may need resolving too; with the types at hand, only when one isn't
 // already a Float64.
-export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesJsonByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesIntCases(code) || usesPacking(code) || usesSharedFields(code) || hasRecursiveLet(code) || nodesWhere(code, "plain number", plainNumber).length > 0;
+export const needsResolving = (code: Code) => usesGenericArithmetic(code) || usesResultsAsFunction(code) || usesFieldsByType(code) || usesJsonByType(code) || usesSetSeveral(code) || usesSetThrough(code) || usesLiteralMatch(code) || usesIntCases(code) || usesPacking(code) || usesSharedFields(code) || hasRecursiveLet(code) || nodesWhere(code, "plain number", plainNumber, ["lit"]).length > 0;
 const plainNumber = (n: Node) => n.kind === "lit" && n.of === undefined && typeof n.value === "number";
-const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plain number", plainNumber).some((id) => {
+const someLiteralNotFloat64 = (code: Code, info: Info) => nodesWhere(code, "plain number", plainNumber, ["lit"]).some((id) => {
   const n = code.nodes[id];
   const t = info.typeOf.get(n.id), r = t && (info.subst ? info.subst.resolve(t) : t);
   return !!r && !(r.t === "con" && r.id === NUMBER);

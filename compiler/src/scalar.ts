@@ -56,7 +56,7 @@ import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
+import { dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info, Options } from "../../ters/src/lang/infer.ts";
@@ -920,7 +920,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP || n.variant === MY_LATENCY_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); tailOps.set(MY_LATENCY_OP, SETTINGS); }
   // Check too, where the program handles it (T7e2: `ters test --compiled`
   // runs a test under a handler of its expects).
-  if (opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
+  if (opts.host && nodesOfKind(code, "arm").some((n) => n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
   // A program's own effect whose operations are answered later (step 3:
   // tumble's Animate, ANSWERED-LATER.md): its case is given the rest, so
   // the performer runs in continuation passing (several_), and a perform
@@ -950,7 +950,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // the program's answers is the world's (core-rt.ts `perform:`).
   // Wait and Time too (the simulated clock's, C180): a case that answers
   // at once may await, so the performer goes on by the rest.
-  const handledHere = (v: Id) => opts.host && Object.values(code.nodes).some((n) => n.kind === "arm" && n.variant === v);
+  const handledHere = (v: Id) => opts.host && nodesOfKind(code, "arm").some((n) => n.variant === v);
   if (handledHere(AWAIT_OP) || handledHere(START_TIMER_OP)) { laterOps.set(AWAIT_OP, AWAIT); laterOps.set(START_TIMER_OP, AWAIT); }
   if (handledHere(WAIT_OP)) laterOps.set(WAIT_OP, WAIT);
   if (handledHere(NOW_OP)) laterOps.set(NOW_OP, TIME);
