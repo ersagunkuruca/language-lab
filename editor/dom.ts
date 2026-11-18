@@ -45,5 +45,22 @@ export function tip(text: string, label = "What this is"): [HTMLElement, HTMLEle
   b.addEventListener("click", () => { note.hidden = !note.hidden; b.setAttribute("aria-expanded", String(!note.hidden)); });
   return [b, note];
 }
+// "Gestures ⓘ": its text on hover, and a tap or click opens it as a
+// popover under it, since a phone has no hover. A popover sits above the
+// page, so the tab row's scrolling doesn't clip it; a tap elsewhere
+// closes it.
+export function gesturesTip(text: string): HTMLElement[] {
+  const note = h("p", { class: "gestures-note", popover: "auto" }, text);
+  const b = h("button", { class: "hint gestures", type: "button", title: text, "aria-label": `Gestures: ${text}` }, "Gestures ⓘ");
+  b.addEventListener("click", () => note.togglePopover());
+  note.addEventListener("toggle", (e) => {
+    if ((e as ToggleEvent).newState !== "open") return;
+    const r = b.getBoundingClientRect(), w = Math.min(360, innerWidth - 16);
+    note.style.width = `${w}px`;
+    note.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+    note.style.top = `${r.bottom + 4}px`;
+  });
+  return [b, note];
+}
 // The saved file an edit here changes, code.json written `code`.
 export const fileTag = (f: string) => h("span", { class: "file-tag", title: f === "code" ? "Edits here change the program (code.json)" : f === "layout" ? "Edits here change only how it's drawn (layout.json)" : f.includes(".") ? `Saved in ${f}` : `Saved in ${f}.json` }, f);

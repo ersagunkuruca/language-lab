@@ -34,7 +34,7 @@ import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, type Pos } from "./canvas.ts";
-import { edit, fileTag, h, head, tip, type Kid } from "./dom.ts";
+import { edit, fileTag, gesturesTip, h, head, tip, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
 import { navigatorPanel } from "./navigator.ts";
 import { runPanel } from "./runPanel.ts";
@@ -2543,13 +2543,13 @@ function draw() {
       h("div", { class: "gutter", "data-gutter": "nav-w", style: "grid-area: g1", "aria-hidden": "true" }),
       h("div", { class: "center" },
         h("section", { class: "panel p-graph", "aria-label": "Graph" },
-          h("div", { class: "tabs" }, ...ui.tabs.map(tab), h("span", { class: "hint gestures", title: GRAPH_HINT, tabindex: "0", "aria-label": GRAPH_HINT }, "Gestures ⓘ")),
+          h("div", { class: "tabs" }, ...ui.tabs.map(tab), ...gesturesTip(GRAPH_HINT)),
           h("div", { class: "graph-host", tabindex: "0", "aria-label": GRAPH_KEYS }, later ? null : graphOf(info))),
         h("div", { class: "gutter row", "data-gutter": "text-h", "aria-hidden": "true" }),
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
             seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
-            ui.text === "blocks" ? h("span", { class: "hint gestures", tabindex: "0", title: TOUCH ? "Tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "Hover for types; click a □ to fill it; double-click a name to open it" }, "Gestures ⓘ") : null),
+            ...(ui.text === "blocks" ? gesturesTip(TOUCH ? "Tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "Hover for types; click a □ to fill it; double-click a name to open it") : [])),
           sameLine(namer),
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": onPage ? "page-w" : "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
