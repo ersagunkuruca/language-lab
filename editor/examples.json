@@ -25,6 +25,7 @@
     { "program": "tuner", "label": "Page: tuner", "folders": ["tuner"], "page": true },
     { "program": "looper", "label": "Page: looper", "folders": ["looper"], "page": true },
     { "program": "strum-tuner", "label": "Page: strum tuner", "folders": ["strum-tuner"], "page": true },
+    { "program": "frets", "label": "Page: frets", "folders": ["frets"], "page": true },
     { "program": "constructions", "label": "Page: constructions", "folders": ["constructions"], "page": true },
     { "program": "bounce", "label": "Page: bounce", "folders": ["bounce"], "page": true },
     { "program": "spacetime", "label": "Page: spacetime", "folders": ["spacetime"], "page": true },

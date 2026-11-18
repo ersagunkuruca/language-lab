@@ -1,0 +1,7 @@
+{"d1qlutk2vdim1eaqs7rhs7j71j": {
+"plain": [],
+"rows": [0],
+"type": {"t": "fn", "params": [{"t": "con", "id": "type.number", "args": []}, {"t": "con", "id": "type.number", "args": []}], "ret": {"t": "con", "id": "type.number", "args": []}, "eff": {"effs": ["effect.choice"], "tail": 0}},
+"units": {"0": {"~0": 1}, "1": {}, "out": {"~0": 1}},
+"vars": []
+}}
