@@ -9,9 +9,49 @@ import type { Names } from "../ters/src/presentation.ts";
 import { relate, showTerm } from "../ters/src/lang/relate.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { makeRunner, type Data } from "../ters/src/lang/run.ts";
+import { CONS } from "../ters/src/lang/std-ids.ts";
 
 export interface Found { answers: { values: Record<string, string>; free: string[]; residual: string[] }[]; more: boolean; error?: string; cut?: boolean }
 export type BackAsk = { backwards: true; code: Code; names: Names; def: Id; values: Record<string, unknown> };
+
+// The known ports' values as the worker gets them (I319). A cons list
+// goes as its items, walked, not recursed into: postMessage's copy
+// recursed into a long one's tails (pond's patches) and overflowed the
+// stack, as C257 found for pages. A function anywhere inside can't be
+// copied at all, so that search stays on the page: null.
+type Flat = { $l: unknown[]; end: unknown };
+export function sendable(values: Record<string, unknown>): Record<string, unknown> | null {
+  const NO = {};
+  const go = (x: unknown): unknown => {
+    if (typeof x === "function") return NO;
+    if (Array.isArray(x)) { const xs = x.map(go); return xs.includes(NO) ? NO : xs; }
+    const d = x as Partial<Data> | null;
+    if (!d || typeof d !== "object" || d.tag === undefined || !Array.isArray(d.fields)) return x;
+    if (d.tag === CONS) {
+      const items: unknown[] = [];
+      let c = d as Data;
+      for (; c.tag === CONS; c = c.fields[1] as Data) { const e = go(c.fields[0]); if (e === NO) return NO; items.push(e); }
+      const end = go(c);
+      return end === NO ? NO : ({ $l: items, end } satisfies Flat);
+    }
+    const fields = d.fields.map(go);
+    return fields.includes(NO) ? NO : { ...d, fields };
+  };
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(values)) { const e = go(v); if (e === NO) return null; out[k] = e; }
+  return out;
+}
+export function received(values: Record<string, unknown>): Record<string, unknown> {
+  const go = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(go);
+    const o = x as Partial<Flat & Data> | null;
+    if (!o || typeof o !== "object") return x;
+    if (Array.isArray(o.$l)) { let out = go(o.end); for (let i = o.$l.length - 1; i >= 0; i--) out = { tag: CONS, fields: [go(o.$l[i]), out] }; return out; }
+    if (o.tag !== undefined && Array.isArray(o.fields)) return { ...o, fields: o.fields.map(go) };
+    return x;
+  };
+  return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, go(v)]));
+}
 
 // Countdown's solutions take about 5 times what they did before I200.
 const STEPS = 100000;

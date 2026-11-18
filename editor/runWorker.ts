@@ -24,7 +24,7 @@ import { LIBRARY } from "../ters/src/lang/library.ts";
 import { infer, setDisplayNames, setProgramPins } from "./typed.ts";
 import { compilePageProgram, compileSavedPage, type CompiledPage } from "./pageCompile.ts";
 import type { SavedScripts } from "../ters/src/lang/page.ts";
-import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
+import { received, searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
@@ -157,7 +157,7 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
   // most (backSearch.ts).
   if ("backwards" in e.data) {
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
-    return post(searchBackwards(code, def, values, names, () => Date.now() > until));
+    return post(searchBackwards(code, def, received(values), names, () => Date.now() > until));
   }
   const { code: given, names, pins, def, title, files, args, core, deny, stdin, replay, until } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
