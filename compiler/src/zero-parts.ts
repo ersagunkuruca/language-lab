@@ -70,7 +70,7 @@ function same(a: Abs, b: Abs): boolean {
 const fkey = (t: FType) => t.key.replace(/!$/, "");
 // The key the runtime calls a function type by: also whether or not its
 // closures take the rest of the work as a continuation (scalar.ts's
-// several, `…!*`). A page's handler that runs a search (Break's frame,
+// several, `…!*`). A page's handler that may not end (Break's frame,
 // which plays events to the time shown) is one, though the Html it sits
 // in holds the plain type: its inputs, and so every cell it writes, are
 // still the runtime's to give.
