@@ -22,23 +22,29 @@
 import { children, mapIds, freshId, subtree, isCall, type Code, type Id, type Node } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
-import { ARRAY_OPS, CONS } from "../../ters/src/lang/std.ts";
+import { ARRAY_OPS, CONS, LIST } from "../../ters/src/lang/std.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { DIVERGE, Subst, type Type } from "../../ters/src/lang/types.ts";
 
 const MAPS = new Set([preludeDef("map"), preludeDef("array map")].filter((x): x is Id => !!x));
 
-export function fuseSteps(code: Code, info: Info): { code: Code; fused: number } {
+// `types`: the types of the nodes the rewrites made, carried from the
+// check given (I203, the compiler redesign's stage 2), or null where one
+// couldn't be: the program is then checked again.
+export function fuseSteps(code: Code, info: Info): { code: Code; fused: number; types: Map<Id, Type> | null } {
   let fused = 0;
-  for (let c = candidate(code, info); c; c = candidate(code, info)) {
-    code = c();
+  let types: Map<Id, Type> | null = new Map();
+  for (let c = candidate(code, info, types); c; c = candidate(code, info, types)) {
+    const r = c();
+    code = r.code;
+    types = types && r.types;
     fused++;
   }
-  return { code, fused };
+  return { code, fused, types };
 }
 
 // The first call to fuse, as the rewrite of the program.
-function candidate(code: Code, info: Info): (() => Code) | null {
+function candidate(code: Code, info: Info, made: Map<Id, Type> | null): (() => { code: Code; types: Map<Id, Type> | null }) | null {
   const nodes = code.nodes;
   const reached = new Set(code.defs.flatMap((d) => subtree(code, d)));
   for (const id of reached) {
@@ -58,7 +64,7 @@ function candidate(code: Code, info: Info): (() => Code) | null {
     const gn = nodes[g];
     if (gn.kind !== "ref" && gn.kind !== "lambda") continue;
     if (!onlyComputes(code, info, g)) continue;
-    return () => rewrite(code, id, consumer, xs, g);
+    return () => rewrite(code, info, made, id, consumer, xs, g);
   }
   return null;
 }
@@ -152,19 +158,24 @@ function folds(code: Code, info: Info, def: Id): Consumer | null {
 
 // The call at `at` made the consumer's fold over xs, its item arm's item
 // g of the item.
-function rewrite(code: Code, at: Id, c: Consumer, xs: Id, g: Id): Code {
+// The types of what it made go into `made` (null: not carried): the
+// consumer's at the call's instance of it; the fold's input and the rest
+// its arm binds are xs's, and each item is given to g first.
+function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: Consumer, xs: Id, g: Id): { code: Code; types: Map<Id, Type> | null } {
   const nodes: Record<Id, Node> = { ...code.nodes };
+  const typed = made && typer(code, info, made, at, c, xs, g);
   // The consumer's fold copied, every id inside fresh.
   const ids = new Map<Id, Id>();
   for (const x of subtree(code, c.fold)) ids.set(x, freshId());
   const re = (x: Id) => ids.get(x) ?? x;
-  for (const [old, now] of ids) nodes[now] = mapIds(code.nodes[old], re);
+  for (const [old, now] of ids) { nodes[now] = mapIds(code.nodes[old], re); typed?.copy(old, now); }
   const fold = nodes[re(c.fold)] as Extract<Node, { kind: "fold" }>;
   // Its input: xs, or xs's items.
   if (c.items) {
     const s = nodes[fold.scrutinee] as Extract<Node, { kind: "call" }>;
     nodes[fold.scrutinee] = { ...s, args: [xs] } as Node;
-  } else nodes[fold.scrutinee] = { ...code.nodes[xs], id: fold.scrutinee } as Node;
+    typed?.items(fold.scrutinee, s.fn);
+  } else { nodes[fold.scrutinee] = { ...code.nodes[xs], id: fold.scrutinee } as Node; typed?.set(fold.scrutinee, typed.of(xs)); }
   // The item arm: a fresh item, and its old binder g of it, as a let
   // (a function written there, applied).
   for (const a of fold.arms) {
@@ -179,8 +190,68 @@ function rewrite(code: Code, at: Id, c: Consumer, xs: Id, g: Id): Code {
     const body = freshId();
     nodes[body] = { id: body, kind: "call", fn: lam, args: [applied] };
     nodes[a] = { ...arm, binds: [item, ...arm.binds.slice(1)], body };
+    typed?.item({ item, ref, gref, applied, lam, body, was: arm.binds[0], rest: arm.binds[1], armBody: arm.body });
   }
   nodes[at] = { ...fold, id: at };
+  typed?.set(at, typed.of(at));
   delete nodes[re(c.fold)];
-  return { ...code, nodes };
+  return { code: { ...code, nodes }, types: typed ? typed.done() : null };
+}
+
+// The types of a rewrite's nodes, from the check given and those carried
+// so far. The consumer's own are general in its variables: each is taken
+// at the call's instance of it, found by matching its type against the
+// type its name has at the call.
+function typer(code: Code, info: Info, made: Map<Id, Type>, at: Id, c: Consumer, xs: Id, g: Id) {
+  const out = new Map(made);
+  let ok = true;
+  const of = (id: Id): Type => { const t = out.get(id) ?? info.typeOf.get(id); if (!t) { ok = false; return { t: "var", v: -1 }; } return info.subst.zonk(t); };
+  const call = code.nodes[at] as Extract<Node, { kind: "call" }>;
+  const vars = new Map<number, Type>(), tails = new Map<number, number | null>();
+  const match = (general: Type, at: Type): void => {
+    if (!ok) return;
+    if (general.t === "var") { const was = vars.get(general.v); if (was && JSON.stringify(was) !== JSON.stringify(at)) ok = false; else vars.set(general.v, at); return; }
+    if (general.t === "con") { if (at.t !== "con" || at.id !== general.id || at.args.length !== general.args.length) { ok = false; return; } general.args.forEach((x, i) => match(x, at.args[i])); return; }
+    if (at.t !== "fn" || at.params.length !== general.params.length || general.eff.effs.length !== at.eff.effs.length) { ok = false; return; }
+    general.params.forEach((x, i) => match(x, at.params[i]));
+    match(general.ret, at.ret);
+    if (general.eff.tail !== null) { const was = tails.get(general.eff.tail); if (was !== undefined && was !== at.eff.tail) ok = false; else tails.set(general.eff.tail, at.eff.tail); }
+  };
+  const consumer = (code.nodes[(code.nodes[call.fn] as Extract<Node, { kind: "ref" }>).target]) as Extract<Node, { kind: "def" }>;
+  match(of(consumer.id), of(call.fn));
+  const inst = (t: Type): Type => {
+    if (t.t === "var") return vars.get(t.v) ?? t;
+    if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(inst) };
+    return { t: "fn", params: t.params.map(inst), ret: inst(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : tails.has(t.eff.tail) ? tails.get(t.eff.tail)! : t.eff.tail } };
+  };
+  const set = (id: Id, t: Type) => out.set(id, t);
+  // What xs holds, a list's or an array's items.
+  const xt = of(xs), item: Type | undefined = xt.t === "con" ? xt.args[0] : undefined;
+  if (!item) ok = false;
+  return {
+    of,
+    set,
+    copy: (old: Id, now: Id) => { if (info.typeOf.has(old) || out.has(old)) set(now, inst(of(old))); },
+    // The fold's input `items of array(xs)`: a list of xs's items.
+    items: (scrutinee: Id, fn: Id) => {
+      const list: Type = { t: "con", id: LIST, args: [item!] };
+      const ft = of(fn);
+      set(scrutinee, list);
+      if (ft.t !== "fn") { ok = false; return; }
+      set(fn, { t: "fn", params: [xt], ret: list, eff: (inst(ft) as Extract<Type, { t: "fn" }>).eff });
+    },
+    item: (x: { item: Id; ref: Id; gref: Id; applied: Id; lam: Id; body: Id; was: Id; rest?: Id; armBody: Id }) => {
+      // The arm's own nodes are copies, typed at the instance already.
+      const gt = of(g), mapped = of(x.was), result = of(x.armBody);
+      if (gt.t !== "fn") { ok = false; return; }
+      set(x.item, item!);
+      set(x.ref, item!);
+      set(x.gref, gt);
+      set(x.applied, gt.ret);
+      set(x.lam, { t: "fn", params: [mapped], ret: result, eff: { effs: [], tail: null } });
+      set(x.body, result);
+      if (x.rest) set(x.rest, { t: "con", id: LIST, args: [item!] });
+    },
+    done: () => (ok ? out : null),
+  };
 }
