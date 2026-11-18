@@ -40,7 +40,7 @@ const throughAt = (code: Code, n: Node) => {
   return fn?.kind === "ref" && fn.target === SET ? readPaths(code, n.args[0]) : null;
 };
 
-const settingThrough = (code: Code) => nodesWhere(code, "set through", (n) => !!throughAt(code, n));
+const settingThrough = (code: Code) => nodesWhere(code, "set through", (n) => !!throughAt(code, n), ["call"]);
 export const usesSetThrough = (code: Code) => settingThrough(code).length > 0;
 
 export function setThrough(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {

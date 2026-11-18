@@ -378,17 +378,23 @@ export const SCHEMA: Schema = {
   arm: { value: "child", variant: "ref", binds: "child", results: "child", body: "child" },
 };
 
-// The ids in one attribute's value: an id, a list of ids (nulls skipped),
-// or a record of them.
-const idsIn = (v: unknown): Id[] =>
-  typeof v === "string" ? [v] : Array.isArray(v) ? v.filter((x): x is Id => typeof x === "string") : v && typeof v === "object" ? (Object.values(v) as Id[]) : [];
+// Each kind's child slots, in the order SCHEMA lists them.
+const CHILD_SLOTS: Record<string, string[]> = Object.fromEntries(Object.entries(SCHEMA).map(([k, slots]) => [k, Object.entries(slots as Record<string, Slot>).filter(([, s]) => s === "child").map(([a]) => a)]));
+
+// The ids in one attribute's value pushed onto out: an id, a list of ids
+// (nulls skipped), or a record of them.
+function pushIds(out: Id[], v: unknown): void {
+  if (typeof v === "string") out.push(v);
+  else if (Array.isArray(v)) { for (const x of v) if (typeof x === "string") out.push(x); }
+  else if (v && typeof v === "object") for (const k in v) out.push((v as Record<string, Id>)[k]);
+}
 
 // The nodes under n, in the order its kind's child slots are listed.
 export function children(n: Node): Id[] {
-  const slots = SCHEMA[n.kind] as Record<string, Slot> | undefined;
+  const slots = CHILD_SLOTS[n.kind];
   if (!slots) return [];
   const out: Id[] = [];
-  for (const [a, slot] of Object.entries(slots)) if (slot === "child") out.push(...idsIn((n as Record<string, unknown>)[a]));
+  for (const a of slots) pushIds(out, (n as Record<string, unknown>)[a]);
   // A condition's results are among its parameters (L225d): each once.
   return n.kind === "lambda" && n.results ? [...new Set(out)] : out;
 }
@@ -396,9 +402,20 @@ export function children(n: Node): Id[] {
 // Every node id under `root`, in pre-order. Does not follow refs.
 export function subtree(code: Code, root: Id): Id[] {
   const out: Id[] = [];
+  const nodes = code.nodes;
   const walk = (id: Id) => {
     out.push(id);
-    for (const c of children(code.nodes[id])) walk(c);
+    const n = nodes[id];
+    const slots = CHILD_SLOTS[n.kind];
+    if (!slots) return;
+    if (n.kind === "lambda" && n.results) { for (const c of children(n)) walk(c); return; }
+    const o = n as Record<string, unknown>;
+    for (const a of slots) {
+      const v = o[a];
+      if (typeof v === "string") walk(v);
+      else if (Array.isArray(v)) { for (const x of v) if (typeof x === "string") walk(x); }
+      else if (v && typeof v === "object") for (const k in v) walk((v as Record<string, Id>)[k]);
+    }
   };
   walk(root);
   return out;
@@ -643,6 +660,41 @@ const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => 
   return out;
 };
 const baseNodes = new WeakMap<object, Node[]>();
+// Each kind's nodes in a version of the nodes, in their order there: one
+// walk, kept for every pass that asks of that version (the compiler
+// redesign's program index, stage 1). A pass looking for its arms, calls
+// or builtins reads those, not the ~50,000 nodes again (machine's compile
+// walked every node some 30 times, a few ms a walk). Like every scan kept
+// for a version, it holds while the nodes aren't changed in place.
+const kindsKept = new WeakMap<object, { kinds: Map<string, Node[]>; at: Map<string, number[]> }>();
+function kindIndex(nodes: Record<Id, Node>) {
+  let k = kindsKept.get(nodes);
+  if (!k) {
+    k = { kinds: new Map(), at: new Map() };
+    let i = 0;
+    for (const id in nodes) {
+      const n = nodes[id];
+      let ns = k.kinds.get(n.kind);
+      if (!ns) { k.kinds.set(n.kind, (ns = [])); k.at.set(n.kind, []); }
+      ns.push(n);
+      k.at.get(n.kind)!.push(i++);
+    }
+    kindsKept.set(nodes, k);
+  }
+  return k;
+}
+const none: Node[] = [];
+export function nodesOfKind<K extends Kind>(code: Code, kind: K): readonly NodeOf<K>[] {
+  return (kindIndex(code.nodes).kinds.get(kind) ?? none) as NodeOf<K>[];
+}
+// The nodes of any of `kinds`, in their order in the nodes.
+function nodesOfKinds(code: Code, kinds: readonly string[]): Node[] {
+  if (kinds.length === 1) return (kindIndex(code.nodes).kinds.get(kinds[0]) ?? none).slice();
+  const k = kindIndex(code.nodes), all: [number, Node][] = [];
+  for (const kind of kinds) { const ns = k.kinds.get(kind), at = k.at.get(kind); if (ns) for (let j = 0; j < ns.length; j++) all.push([at![j], ns[j]]); }
+  return all.sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+}
+export const forgetKinds = (nodes: object) => void kindsKept.delete(nodes);
 // A program put on a layer of code under it, the library (load.ts base,
 // L217). `scanningOnLayer` reads it, for one step that doesn't change it,
 // as derived from the layer by the nodes that aren't the layer's own (the
@@ -741,10 +793,11 @@ export function parentLookup(code: Code): (id: Id) => Id | undefined {
 // program: its base's (scanned once), those still there and still picked,
 // and the changed nodes picked (E103d: a whole check of each palette offer
 // scanned the ~10,000 nodes twice).
-export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean): Id[] {
+// `kinds`: the kinds of node `keep` may pick, the rest never looked at.
+export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean, kinds?: readonly Kind[]): Id[] {
   const from = derived.get(code);
   if (!from && kept.has(code)) return picksOf(code, kind, keep).slice();
-  if (!from) return Object.values(code.nodes).filter(keep).map((n) => n.id);
+  if (!from) return (kinds ? nodesOfKinds(code, kinds) : Object.values(code.nodes)).filter(keep).map((n) => n.id);
   const base = picksOf(from.base, kind, keep);
   const out = from.stable || from.same ? without(base, from.changed) : base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
   for (const id of from.changed) if (code.nodes[id] && keep(code.nodes[id])) out.push(id);

@@ -34,7 +34,7 @@ const severalAt = (code: Code, n: Node): Id[][] | null => {
   return fn?.kind === "ref" && fn.target === SET ? fieldPaths(code, n.args[0]) : null;
 };
 
-const settingSeveral = (code: Code) => nodesWhere(code, "set several", (n) => !!severalAt(code, n));
+const settingSeveral = (code: Code) => nodesWhere(code, "set several", (n) => !!severalAt(code, n), ["call"]);
 export const usesSetSeveral = (code: Code) => settingSeveral(code).length > 0;
 
 export function setSeveral(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {

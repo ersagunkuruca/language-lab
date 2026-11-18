@@ -55,7 +55,7 @@ function typeOf(code: Code, field: Id): NodeOf<"typedef"> | null {
   return null;
 }
 
-export const usesSharedFields = (code: Code) => nodesWhere(code, "shared field", (n) => n.kind === "field" && !!n.same).length > 0;
+export const usesSharedFields = (code: Code) => nodesWhere(code, "shared field", (n) => n.kind === "field" && !!n.same, ["field"]).length > 0;
 
 export function sharedFields(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   if (!usesSharedFields(code)) return { code, info, names };

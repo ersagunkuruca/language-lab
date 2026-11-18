@@ -33,7 +33,7 @@ type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : ne
 const byValue = (code: Code, n: Node): n is NodeOf<"match"> =>
   n.kind === "match" && n.arms.some((a) => !!(code.nodes[a] as NodeOf<"arm"> | undefined)?.value);
 
-const byValueIn = (code: Code) => nodesWhere(code, "match by value", (n) => byValue(code, n));
+const byValueIn = (code: Code) => nodesWhere(code, "match by value", (n) => byValue(code, n), ["match"]);
 export const usesLiteralMatch = (code: Code) => byValueIn(code).length > 0;
 
 export function literalMatch(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {

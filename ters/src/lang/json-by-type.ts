@@ -39,7 +39,7 @@ import { BOOL, BYTES, CONS, INT_OPS, JSON_OPS, JSON_TYPE, JSON_V, LIST, MAP, NIL
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
 
 const OPS = new Set<Id>([JSON_OPS.of, JSON_OPS.from]);
-export const usesJsonByType = (code: Code) => nodesWhere(code, "json by type", (n) => n.kind === "ref" && OPS.has(n.target)).length > 0;
+export const usesJsonByType = (code: Code) => nodesWhere(code, "json by type", (n) => n.kind === "ref" && OPS.has(n.target), ["ref"]).length > 0;
 
 const isTuple = (id: Id) => /^std\.tuple\d+$/.test(id);
 // A Map, a Set and Bytes keep their cases to their library, so they are

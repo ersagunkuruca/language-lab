@@ -14,9 +14,9 @@ import { jsonProblem } from "./json-by-type.ts";
 import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
-import type { Bound, Code, Id, Node, NodeOf, Use } from "../model.ts";
+import type { Bound, Code, Id, Kind, Node, NodeOf, Use } from "../model.ts";
 import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf } from "../model.ts";
-import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree } from "../model.ts";
+import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, nodesOfKind, forgetKinds, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
 import { constraints as unitConstraints, declaresUnit, pinUnitsBroken, unitProblems, UnitsBefore } from "../units.ts";
@@ -638,7 +638,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // The named handlers, from the program's own list where a whole check
   // reads one (nodesWhere): scanning every node was a quarter of an offer's
   // check (E103j).
-  for (const id of nodesWhere(code, "named match", (n) => n.kind === "match" && !!n.name)) {
+  for (const id of nodesWhere(code, "named match", (n) => n.kind === "match" && !!n.name, ["match"])) {
     const x = code.nodes[id] as NodeOf<"match">;
     const first = code.nodes[x.arms[0] ?? ""];
     const e = first?.kind === "arm" ? owner.get(first.variant) : undefined;
@@ -2270,8 +2270,8 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // The nodes a scan below looks at: under a reused check only those of
   // the definitions it rechecks, since the others' are as the earlier
   // check found them (E103p: every call of the program, each filling).
-  const rechecked = (kind: string, keep: (n: Node) => boolean): Id[] => {
-    if (!reuse) return nodesWhere(code, kind, keep);
+  const rechecked = (kind: string, keep: (n: Node) => boolean, kinds?: readonly Kind[]): Id[] => {
+    if (!reuse) return nodesWhere(code, kind, keep, kinds);
     return [...reuse.only].flatMap((d) => subtree(code, d)).filter((id) => { const n = code.nodes[id]; return !!n && keep(n); });
   };
   // A number written where a type of the program's own goes (L204b) is
@@ -2279,7 +2279,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // Float64s takes it, in every part.
   // These scans start from a base program's (model.ts nodesWhere, E248):
   // a palette's offers each scanned every node three times.
-  for (const id of rechecked("number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number")) {
+  for (const id of rechecked("number lit", (n) => n.kind === "lit" && !n.of && typeof n.value === "number", ["lit"])) {
     const n = code.nodes[id] as NodeOf<"lit">;
     const t0 = info.typeOf.get(n.id), t = t0 && s.zonk(t0);
     // A natural number is written as one: a whole number from 0 (L249b).
@@ -2296,7 +2296,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   // found in one pass over the calls (E250: three passes were most of a
   // palette offer's check).
   const callsOf = new Map<Id, Id[]>();
-  for (const id of rechecked("call", (n) => isCall(n))) {
+  for (const id of rechecked("call", (n) => isCall(n), ["call"])) {
     const f = code.nodes[(code.nodes[id] as Call).fn];
     if (f?.kind === "ref" && (f.target === FIELDS.mapped || f.target === FIELDS.listed || f.target === JSON_OPS.of || f.target === JSON_OPS.from || f.target === JOBS.job || f.target === JOBS.asWritten || f.target === JOBS.matchBy || f.target === JOBS.foldBy)) (callsOf.get(f.target) ?? callsOf.set(f.target, []).get(f.target)!).push(id);
   }
@@ -2507,7 +2507,7 @@ function trefTargetsIn(code: Code, tid: Id, out = new Set<Id>()): Set<Id> {
 // The definitions a representation row names as its match (`match by`).
 const matchers = new WeakMap<object, Set<Id>>();
 // What is kept by a nodes object, forgotten when it changes (fillings).
-function forgetNodes(nodes: object) { matchers.delete(nodes); pieceMakers.delete(nodes); forgetDerived(nodes); }
+function forgetNodes(nodes: object) { matchers.delete(nodes); pieceMakers.delete(nodes); forgetDerived(nodes); forgetKinds(nodes); }
 // A program derived from another (a palette's filling) has its base's,
 // unless a changed node is one of a `match by` call's, there or in the
 // base: the call, its function or the input it names (E103: the scan of
@@ -2553,7 +2553,7 @@ function matchersOf(code: Code): Set<Id> {
   }
   if (!m) {
     m = new Set();
-    for (const n of Object.values(code.nodes)) {
+    for (const n of nodesOfKind(code, "call")) {
       if (!isCall(n)) continue;
       const f = code.nodes[n.fn], by = code.nodes[n.args[0]];
       if (f?.kind === "ref" && f.target === JOBS.matchBy && by?.kind === "ref") m.add(by.target);
@@ -2875,7 +2875,7 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   const reach = new Set([d, ...dependencies(code, d)]);
   const defs = code.defs.filter((x) => reach.has(x) || code.nodes[(code.nodes[x] as NodeOf<"def">).body ?? ""]?.kind === "typedef");
   const nodes: Record<Id, Node> = {};
-  for (const id of nodesWhere(code, "builtin", (n) => n.kind === "builtin")) nodes[id] = code.nodes[id];
+  for (const id of nodesWhere(code, "builtin", (n) => n.kind === "builtin", ["builtin"])) nodes[id] = code.nodes[id];
   for (const x of defs) for (const id of subtree(code, x)) nodes[id] = code.nodes[id];
   // The same nodes as an earlier ask of d's: its effects stand (E253c: two
   // of physics' definitions with results took 26 ms of each edit's check).
@@ -3019,7 +3019,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // makes the answer two). What the check makes of the body is its plan,
   // so a filling that leaves every plan of the group's solves as it was
   // is checked like any other; one that changes a plan, on its own.
-  const solves = nodesWhere(code, "use", isUse).map((id) => code.nodes[id] as Use).filter((n) => h.group.includes(useTarget(code.nodes, n)));
+  const solves = nodesWhere(code, "use", isUse, ["call"]).map((id) => code.nodes[id] as Use).filter((n) => h.group.includes(useTarget(code.nodes, n)));
   const plans = (c: Code) => solves.map((n) => {
     try {
       const p = planSolve(c, n);

@@ -30,7 +30,7 @@ import type { Type } from "./types.ts";
 type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : never;
 const OPS = new Set<Id>([FIELDS.mapped, FIELDS.listed]);
 
-export const usesFieldsByType = (code: Code) => nodesWhere(code, "fields by type", (n) => n.kind === "ref" && OPS.has(n.target)).length > 0;
+export const usesFieldsByType = (code: Code) => nodesWhere(code, "fields by type", (n) => n.kind === "ref" && OPS.has(n.target), ["ref"]).length > 0;
 
 // The data type a type is, with its cases, or null.
 function cases(code: Code, t: Type | undefined): { id: Id; variants: Id[] } | null {

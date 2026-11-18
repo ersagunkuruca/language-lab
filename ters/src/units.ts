@@ -155,7 +155,7 @@ function typesOf(code: Code): DataTypes {
   if (m) return m;
   dataTypes.set(code, (m = { fields: new Map(), params: new Map() }));
   // (A pick reads the typedef, not the def: a pick's test sees one node.)
-  for (const tid of nodesWhere(code, "a data type with parameters", (n) => n.kind === "typedef" && n.params.length > 0 && !n.interface && !n.effect)) {
+  for (const tid of nodesWhere(code, "a data type with parameters", (n) => n.kind === "typedef" && n.params.length > 0 && !n.interface && !n.effect, ["typedef"])) {
     const td = code.nodes[tid] as Extract<Node, { kind: "typedef" }>;
     const walk = (t: Id, path: number[], out: Holds, depth: number) => {
       const n = code.nodes[t];

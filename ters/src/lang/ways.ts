@@ -27,7 +27,7 @@ export type Ways = Map<Id, { def: Id; uses: Set<Id>; cost: number }[]>;
 // of it, and the fields each one uses.
 export function waysIn(code: Code, ops: Map<Id, Id> = interfaceOps(code)): Ways {
   const ways: Ways = new Map();
-  for (const id of nodesWhere(code, "way", (n) => n.kind === "def" && !!n.way && !!n.body)) {
+  for (const id of nodesWhere(code, "way", (n) => n.kind === "def" && !!n.way && !!n.body, ["def"])) {
     const n = code.nodes[id] as NodeOf<"def">;
     // A way of a relation is a direction of it (directions.ts), not here.
     if (!n.body || !n.way || !fieldWayOf(code.nodes, id)) continue;

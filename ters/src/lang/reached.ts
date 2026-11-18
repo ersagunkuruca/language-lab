@@ -6,7 +6,7 @@
 // on it (run.ts runProgram, L265), so neither types library bodies the
 // program never reaches.
 
-import { dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
+import { dependenciesOfAll, nodesOfKind, subtree, type Code, type Id } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { implementationsOf, shownImplementations } from "./std-values.ts";
 import { interfaceOps, waysIn } from "./ways.ts";
@@ -52,10 +52,10 @@ export function reachedImplementing(code: Code, roots: Id[], info: Info): Code {
 export function reachedWithShows(code: Code, roots: Id[], info: Info, own = false): Code {
   const reached = reachedFrom(code, roots);
   const showns = [...shownImplementations(info)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
-  const shows = showns.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === SHOW_ANY);
+  const shows = showns.length && nodesOfKind(reached, "ref").some((n) => n.target === SHOW_ANY);
   // And the Ordered implementations a compare orders through (L204h).
   const ordereds = [...implementationsOf(info, ORDERED)].flatMap(([t, d]) => (own && t.startsWith("std.") ? [] : [d]));
-  const compares = ordereds.length && Object.values(reached.nodes).some((n) => n.kind === "ref" && n.target === COMPARE);
+  const compares = ordereds.length && nodesOfKind(reached, "ref").some((n) => n.target === COMPARE);
   return shows || compares ? reachedFrom(code, [...roots, ...(shows ? showns : []), ...(compares ? ordereds : [])]) : reached;
 }
 // Asked again of the same program and roots by the passes before lowering
@@ -82,7 +82,7 @@ function reachOf(code: Code, roots: Id[]): Code {
   let builtins = builtinsKept.get(code.nodes);
   if (!builtins) {
     builtins = {};
-    for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin") builtins[id] = n;
+    for (const n of nodesOfKind(code, "builtin")) builtins[n.id] = n;
     builtinsKept.set(code.nodes, builtins);
   }
   const nodes: Code["nodes"] = { ...builtins };

@@ -4,7 +4,7 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { derived, derivedFrom, fieldPorts, isBound, onLayer, useTarget } from "../model.ts";
+import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget } from "../model.ts";
 import { BUILTIN_INPUTS, TUPLE_MAX } from "./std-ids.ts";
 import { tupleVariant, tuplePart } from "./std-values.ts";
 import { forgetSpine } from "./spine.ts";
@@ -158,6 +158,7 @@ function filledFrom(code: Code): Code {
   else {
     for (const id of m.put) { if (id in fb.nodes) m.nodes[id] = fb.nodes[id]; else delete m.nodes[id]; }
     forgetSpine(m.nodes);
+    forgetKinds(m.nodes);
   }
   m.fb = fb;
   m.put = [...from.changed];

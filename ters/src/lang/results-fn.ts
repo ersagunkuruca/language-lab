@@ -38,7 +38,7 @@ function portsOf(nodes: Record<Id, Node>, target: Id): { ins: string[]; outs: st
 // interface's record, which stays the definition it names (arith.ts reads
 // it there to resolve the field's uses).
 function refsToRewrite(code: Code): { ref: NodeOf<"ref">; ports: { ins: string[]; outs: string[] }; parent?: Node }[] {
-  const refs = nodesWhere(code, "ref with results", (n) => n.kind === "ref" && !!portsOf(code.nodes, n.target)).map((id) => code.nodes[id] as NodeOf<"ref">);
+  const refs = nodesWhere(code, "ref with results", (n) => n.kind === "ref" && !!portsOf(code.nodes, n.target), ["ref"]).map((id) => code.nodes[id] as NodeOf<"ref">);
   if (!refs.length) return [];
   const parentOf = parentLookup(code);
   return refs.flatMap((ref) => {
@@ -64,6 +64,8 @@ function refsToRewrite(code: Code): { ref: NodeOf<"ref">; ports: { ins: string[]
 // itself when it uses none; both are then a definition with results called
 // or passed on, which the rest of this pass makes its use.
 function inlineRelation(code: Code): NodeOf<"lambda"> | null {
+  // Every node looked at, not the kind index's lambdas: liftRelations asks
+  // again of the same nodes after changing them in place.
   const bodies = new Set(code.defs.map((d) => code.nodes[d]).flatMap((d) => (d?.kind === "def" && d.body ? [d.body] : [])));
   for (const id of nodesWhere(code, "a relation inside a body", (n) => n.kind === "lambda" && !!n.results?.length && n.results.every((r) => n.params.includes(r)))) {
     if (!bodies.has(id)) return code.nodes[id] as NodeOf<"lambda">;
