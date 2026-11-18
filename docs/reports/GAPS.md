@@ -4581,3 +4581,70 @@ for records holding records and Optionals, G1b with G3d.
 C265 and C268 (native, a third of the night, small), then C267, then G1b
 with G3d (columns with presence, which serves native, JS and the page),
 then G3b's second half, then C266 measured again.
+
+## Game round 3: flock (2026-11-18, BACKLOG G6d)
+
+The stress test beside Night watch, as Ersagun asked: 3D boids
+(compiler/gaps/flock, 57 definitions; examples/flock-page, 75). Birds
+are a `List Bird` of plain Float64 records in a 120 m box cut into
+12 x 12 x 12 cells of 10 m. Each tick files the birds by cell, and each
+bird reads the 27 cells around its own (`around cells`, a `flat map` of
+`flat map` of `map`) and steers by the birds within ten metres. The goal
+sweeps the box on triangle waves rather than sin and cos, so the
+evaluator, compiled JS, wasi, native and both ideals print the same
+digits (`compiler/test/flock.test.ts`). The page flies 2,000 birds at 30
+ticks a second and paints them in perspective at 60 frames a second in
+Chromium.
+
+The ideals, `flock.ideal.c` and `flock.ideal.js`, keep the birds as
+columns, file them by a counting sort each tick, and walk the 27 cells
+as three nested loops. `node compiler/gaps/bench-flock.ts`, 100 ticks,
+every way a process, start-up included, this container (4 cores):
+
+| way | 5,000 birds | against C | 20,000 birds | against C |
+|---|---|---|---|---|
+| C, one thread | 0.40 s | 1x | 3.25 s | 1x |
+| C, OpenMP on 4 cores | 0.12 s | 0.3x | 2.04 s | 0.6x |
+| JavaScript by hand | 0.82 s | 2.0x | 4.70 s | 1.4x |
+| `ters native`, one thread | 1.43 s | 3.6x | 9.89 s | 3.0x |
+| `ters native`, 4 threads | 0.55 s | 1.4x | 3.31 s | 1.0x |
+| `ters wasi` | 6.04 s | 15.0x | 60.06 s | 18.5x |
+| `ters compile`, one thread | 8.83 s | 21.9x | 120.41 s | 37.0x |
+| `ters compile`, workers | 8.65 s | 21.5x | 66.07 s | 20.3x |
+
+Plain records go a long way: native is 3x the C on one thread, and here
+threads pay (2.6x on 4 cores at 5,000 birds, 3x at 20,000), where the
+greenhouse's Things made them slower (GH5). Compiled JS falls furthest
+behind, and grows worse with the flock's size.
+
+### The gaps, ranked
+
+From callgrind on the native build, 20 ticks of 2,000 birds, one thread:
+
+**FL1. The 27 cells are a list made per bird (G3b, about two thirds).**
+`around cells` builds 27 cell numbers as lists of lists, flattened:
+`lab_flatten_b` 11%, `lab_wrapped_cell` 9%, `lab_around_cells_*` 10%,
+`lab_par_map_1` 6%, `lab_cell_key` 4%, list pushes 6%, and the cells
+made and freed again (`lab_new`, `lab__dead`, `lab_fields`) 21%. The
+ideal's three loops make nothing. This is moths M1 and greenhouse GH2,
+nine cells there, 27 here: the open half of G3b, deforestation, is now
+the largest single gap in the game rounds.
+
+**FL2. Cell numbers are big-capable Ints (C267).** The walk keeps cell
+keys, positions and bird numbers as `lab_int`, checked for overflow.
+
+**FL3. Compiled JS and wasi, 15x to 26x the JS by hand.** A bird is an
+object holding two Vec3 objects, so 20,000 birds are 60,000 objects
+re-made each tick, and the cell lists are more. The gap widens from 11x
+to 26x as the flock grows, which points at the collector. Columns for
+lists of records (G1b with G3d) and G3b both serve it.
+
+The bird itself costs nothing in counts: `Bird` is passed by value in C
+with no dups or drops, unlike the greenhouse's Thing (GH1, C265).
+
+### Proposed order
+
+G3b's second half moves up: it is two thirds of the flock natively and
+16% of the greenhouse, and it serves every target. Then C265 and C268
+(the greenhouse), C267 (both), G1b with G3d (columns, which JS and the
+page need most), then C266 measured again.
