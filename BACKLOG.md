@@ -28,7 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: G3b (lists made per bird: two thirds of the flock, GAPS game round 3), C265 and C267 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | C260b, L271b, C271, C273, L279 |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -267,7 +267,6 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | id | item | lane | source | pri | size | status |
 |---|---|---|---|---|---|---|
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
-| G3b | moths M1, second half: a list made only to be walked once (moths' nine cells, `flat map` of `map`) becomes the loop that makes it (deforestation, credit Wadler 1988). First half done with G3a | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | |
 | G3d | moths M4: compiled JS is 10x the hand-written JS because each moth is 3 objects and 4 boxed numbers spread over the heap, not because of `met`'s code (25 ns a call alone, 85 ns in place; GAPS game round 1, G3d measured). Columns (columns.ts) for records holding records, a column per leaf field, and an item given whole to a function passed as its fields; build with G1b | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | L | |
 | G3e | moths M5: profile `ters wasi` on moths (14.6x) and split what isn't M1, M2 or M4 into rows | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |

@@ -81,7 +81,7 @@ const typeEffects = (info: Info, t: Type | undefined): Set<Id> | null => {
 // callee handles for a function written in place (`first`'s Choice in
 // its first input's row, not its own), or null when it calls a function
 // whose effects only its caller knows.
-function does(code: Code, info: Info, id: Id): Set<Id> | null {
+export function does(code: Code, info: Info, id: Id): Set<Id> | null {
   const n = code.nodes[id];
   if (!n) return new Set();
   const out = new Set<Id>();

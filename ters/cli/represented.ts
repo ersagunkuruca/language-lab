@@ -8,6 +8,7 @@ import { choose, jobProblem, represent, type Representation } from "../src/lang/
 import { endedAsWritten, storedRows, withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
+import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
 export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[] }
@@ -30,7 +31,12 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // A library type holding lists (std's Pool) the program's own, so its
   // lists are stored as the program's are (own-holders.ts, C58d).
   const held = ownLibraryHolders(reached.code, reached.info, reached.names, main, reached.own);
-  const p = held ? { ...reached, code: held.code, names: held.names, own: held.own, info: held.info } : reached;
+  const p1 = held ? { ...reached, code: held.code, names: held.names, own: held.own, info: held.info } : reached;
+  // A walk over a list made by map or flat map, a walk over what they were
+  // given, so no list is made (fuse-walks.ts, G3b); its walks are the
+  // program's own, stored as the rest.
+  const walks = process.env.NO_FUSE_WALKS ? null : fuseWalks(p1.code, p1.info, p1.names, { ...(p1.options as Parameters<typeof infer>[3]), units: false });
+  const p = walks?.made.length ? { ...p1, code: walks.code, info: walks.info, names: walks.names, own: [...p1.own, ...walks.made] } : p1;
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are for its own representations.
   // The library's are chosen over the types too, so a field typed Map
@@ -56,7 +62,7 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
     code = represent(code, defs, rep);
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
   }
-  if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held ? p : p0;
+  if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held || walks?.made.length ? p : p0;
   // So does a library row's (std's Nat as an Int): written on the type's
   // own definitions, which a rewrite onto another row changes.
   const rowDefs = new Set(rows.flatMap((r) => (r.def ? [r.def] : [])));
