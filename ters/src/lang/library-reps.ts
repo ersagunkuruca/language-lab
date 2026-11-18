@@ -26,6 +26,7 @@ import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
 import { consOnto, type ConsOnto } from "./cons-onto.ts";
 import { splitLists } from "./rep-split.ts";
+import { carriedChoice } from "./carried-reps.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
 
@@ -109,7 +110,9 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     // What ended as written ends rewritten (infer.ts Options `ends`, L250).
     const ends = endedAsWritten(info, defs);
     // Its units aren't checked again: a rewrite changes none (I261).
-    const checked = infer(r.code, r.names, undefined, { ...info.options, ...(r.insiders.length ? { insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : {}), ends, units: false });
+    const checkWith = { ...info.options, ...(r.insiders.length ? { insiders: [...(info.options?.insiders ?? []), ...r.insiders] } : {}), ends, units: false as const };
+    const carried = carriedChoice(code, info, r.code, r.reps, defs);
+    const checked = carried ? { ...carried, options: checkWith } : infer(r.code, r.names, undefined, checkWith);
     if (checked.errors.length <= info.errors.length) {
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as
