@@ -170,7 +170,9 @@ type V =
   | { k: "lit"; vs: number[] }      // a number for each part
   | { k: "op"; op: VOp; args: V[] };
 const ELEMENTWISE = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "sin", "cos", "tan", "exp", "log", "atan2"]);
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+// An Int literal is a bigint, which JSON can't write: as its digits, marked.
+const json = (a: unknown) => JSON.stringify(a, (_, v) => (typeof v === "bigint" ? `${v}n` : v));
+const same = (a: unknown, b: unknown) => json(a) === json(b);
 
 // Operations of constants the matrix reading folds (C30c).
 const FOLD: Partial<Record<Op, (...xs: number[]) => number>> = {

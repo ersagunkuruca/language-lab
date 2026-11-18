@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { skip } from "./c-harness.ts";
@@ -33,4 +33,12 @@ test("flock: 200 ticks of 2000 birds, compiled, native and the C by hand", () =>
   assert.equal(ran(join(dir, "f"), ["200", "2000"]), want);
   ran("cc", ["-O2", "-ffp-contract=off", join(gaps, "flock.ideal.c"), "-o", join(dir, "c"), "-lm"]);
   assert.equal(ran(join(dir, "c"), ["200", "2000"]), want);
+});
+
+test("flock: the 27 cells are walked where they are made, no list (fuse-walks.ts, G3b)", () => {
+  if (skip) return;
+  ran(process.execPath, [lab, "native", folder, "-o", join(dir, "w")]);
+  const c = readFileSync(join(dir, "w.c"), "utf8");
+  assert.match(c, /lab_flock_over_over_flat_map/);
+  assert.doesNotMatch(c, /lab_flatten|lab_around_cells/);
 });

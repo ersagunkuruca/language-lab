@@ -4648,3 +4648,24 @@ G3b's second half moves up: it is two thirds of the flock natively and
 16% of the greenhouse, and it serves every target. Then C265 and C268
 (the greenhouse), C267 (both), G1b with G3d (columns, which JS and the
 page need most), then C266 measured again.
+
+### After G3b's second half
+
+`compiler/src/fuse-walks.ts`: a definition that walks a list carrying an
+answer, called on a list made by `map` or `flat map`, walks what they were
+given instead, through lets and a call of a definition that only computes
+(`around cells`). `flat map` of `flat map` of `map` becomes three walks
+with no list made, and the birds are met in the same order, so every way
+still prints the same digits. It runs before the representations are
+chosen, so it serves every target and the pages.
+
+| 100 ticks, 5,000 birds, one thread | before | after |
+|---|---|---|
+| `ters native` | 1.53 s | 1.06 s (2.7x the C) |
+| `ters compile` | 11.5 s | 7.9 s |
+
+Callgrind now finds no list made or freed in a tick, and half the
+instructions of before. What is left of FL1 is the cell arithmetic on
+big-capable Ints (`wrapped cell` 17%, `cell key` 9%), which is FL2,
+C267. The greenhouse's night is 18% shorter natively (its moths' nine
+cells and its wave adding fuse too); moths' barely moves.
