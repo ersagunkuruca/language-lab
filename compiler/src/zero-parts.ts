@@ -68,6 +68,13 @@ function same(a: Abs, b: Abs): boolean {
 }
 // A function type's key, whether or not it may have no answer.
 const fkey = (t: FType) => t.key.replace(/!$/, "");
+// The key the runtime calls a function type by: also whether or not its
+// closures take the rest of the work as a continuation (scalar.ts's
+// several, `…!*`). A page's handler that may not end (Break's frame,
+// which plays events to the time shown) is one, though the Html it sits
+// in holds the plain type: its inputs, and so every cell it writes, are
+// still the runtime's to give.
+const worldKey = (k: string) => k.replace(/[!*]+$/, "");
 
 // Part i of a record, case c's field i of a data value.
 function fieldOf(rec: Abs, i: number): Abs {
@@ -221,7 +228,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   const fnTypesIn = (t: LType, seen = new Set<object>()) => {
     if (typeof t !== "object" || seen.has(t)) return;
     seen.add(t);
-    if (isFn(t)) { wide.add(fkey(t)); t.params.forEach((p) => fnTypesIn(p, seen)); fnTypesIn(t.result, seen); return; }
+    if (isFn(t)) { wide.add(worldKey(t.key)); t.params.forEach((p) => fnTypesIn(p, seen)); fnTypesIn(t.result, seen); return; }
     if (isRecord(t)) t.fields.forEach((x) => fnTypesIn(x.t, seen));
     else if (isData(t)) t.cases.forEach((c) => c.fields.forEach((x) => fnTypesIn(x.t, seen)));
     else if ("item" in t) fnTypesIn(t.item, seen);
@@ -255,7 +262,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     kids(e).forEach((x) => scanWorld(f, x));
   };
   // An argument whose type isn't at hand: every closure inside it.
-  const wideAll = (e: SExpr) => { if (e.k === "closure") wide.add(fkey(e.t)); kids(e).forEach(wideAll); };
+  const wideAll = (e: SExpr) => { if (e.k === "closure") wide.add(worldKey(e.t.key)); kids(e).forEach(wideAll); };
   funcs.forEach((f) => scanWorld(f, f.body));
   for (const r of roots) { funcs[r].params.forEach((p) => fnTypesIn(p)); fnTypesIn(funcs[r].result); }
   // A closure held in a mutable record (a box) or an array may be called
@@ -295,7 +302,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
   };
   for (const r of roots) instFor(r, funcs[r].params.map(() => true), "root");
   // Closure codes the runtime calls: every input anything.
-  for (const [t, codes] of codesOf) if (wide.has(t)) for (const c of codes) instFor(c, funcs[c].params.map(() => true), "world");
+  for (const [t, codes] of codesOf) if (wide.has(worldKey(t))) for (const c of codes) instFor(c, funcs[c].params.map(() => true), "world");
   // What cells are given, by type: a cell gives back only what was put in
   // it (builtin.cells), so what a cell read may be is what every value of
   // its type put in a cell may be. Anything else the runtime gives is
@@ -652,7 +659,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
     };
     funcs.forEach((f) => scanX(f, f.body));
     for (const r of roots) { funcs[r].params.forEach((p) => expose(p)); expose(funcs[r].result); }
-    for (const t of ir.fns) if (wide.has(fkey(t)) || t.several || t.chooses || t.answer) expose(t);
+    for (const t of ir.fns) if (wide.has(worldKey(t.key)) || t.several || t.chooses || t.answer) expose(t);
     for (const t of ir.records) if (t.mutable) expose(t);
     ir.arrays.forEach((t) => expose(t)); ir.tables.forEach((t) => expose(t)); ir.escapes.forEach((t) => expose(t));
     funcs.forEach((f) => { if (f.multi) { f.params.forEach((p) => expose(p)); expose(f.result); if (f.answer) expose(f.answer); } });
@@ -698,7 +705,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
       for (const [x, t] of sets) x.t = t;
       // A closure's captures, from what every closure of its shape
       // captured; the runtime's closures (its solver reads them) keep all.
-      ir.shapes = ir.shapes.map((s, si) => (wide.has(fkey(s.t)) ? s : { ...s, caps: s.caps.map((t, i) => { const A = baseOf(t); return A ? narrow(A, maskOf(caps[si][i], A)) : t; }) }));
+      ir.shapes = ir.shapes.map((s, si) => (wide.has(worldKey(s.t.key)) ? s : { ...s, caps: s.caps.map((t, i) => { const A = baseOf(t); return A ? narrow(A, maskOf(caps[si][i], A)) : t; }) }));
       // A function type's inputs and answer, from every closure code of it.
       const fnSig = new Map<string, { params: LType[]; result: LType }>();
       const codeKey = new Map<number, string>();
@@ -706,7 +713,7 @@ export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: n
         const cs = [...codes], g = funcs[cs[0]];
         cs.forEach((c) => codeKey.set(c, k));
         const ft = ir.fns.find((t) => fkey(t) === k);
-        const whole = wide.has(k) || !ft || ft.several || ft.chooses || ft.answer || cs.some((c) => funcs[c].multi || funcs[c].params.length !== g.params.length);
+        const whole = wide.has(worldKey(k)) || !ft || ft.several || ft.chooses || ft.answer || cs.some((c) => funcs[c].multi || funcs[c].params.length !== g.params.length);
         const of = (t: LType, pick: (i: Inst) => Abs): LType => {
           const A = baseOf(t);
           if (!A || whole) return t;
