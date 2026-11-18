@@ -344,7 +344,7 @@ function nativeLowered(main: Id, wasm = false, page = false) {
     if (!process.env.NO_DEEP_LOOPS) deepLoops(lowered);
     ownedArrays(lowered, q.code, q.info, q.names, root, true);
     ownedRecords(lowered, q.code, q.info, q.names, root);
-    columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])));
+    columns(lowered, lowered.funcs.flatMap((g, i) => (g.def === root && !g.inner ? [i] : [])), { plain: true });
     intoAsSets(lowered);
     // A loop computing on Ints alone, with them as i64s (C207k).
     untaggedLoops(lowered, true);

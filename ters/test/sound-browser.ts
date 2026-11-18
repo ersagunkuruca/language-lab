@@ -31,7 +31,7 @@ import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 const dir = mkdtempSync(join(tmpdir(), "sound-"));
-for (const page of ["pedal", "metronome", "tuner", "looper", "strum-tuner"]) {
+for (const page of ["pedal", "metronome", "tuner", "looper", "strum-tuner", "frets"]) {
   const built = spawnSync(process.execPath, [join(import.meta.dirname, "../cli/ters.ts"), "build-web", join(import.meta.dirname, `../examples/${page}`), "-o", join(dir, `${page}.html`)], { encoding: "utf8" });
   if (built.status !== 0) throw new Error(built.stderr);
 }
@@ -299,6 +299,36 @@ try {
   })()`);
   const cents = strings.map((s) => parseFloat(s.cents.replace("−", "-")));
   check("the strum tuner reads all six strings at once, each within 2 cents", strings.length === 6 && cents.every((c, j) => Math.abs(c - off[j]) <= 2), strings);
+
+  // Frets: fret 7 of 12-TET on a 650 mm scale played 10 cents sharp over
+  // an open string at 110 Hz, which plays as if the fret sat 2.5 mm
+  // further from the nut.
+  await send("Page.navigate", { url: `http://127.0.0.1:${port}/frets.html` });
+  for (let i = 0; i < 100 && !(await run<boolean>(`!!document.querySelector("button.start")`).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+  await run(`(() => {
+    const ctx = new AudioContext(), out = ctx.createMediaStreamDestination(), osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = "sawtooth"; osc.frequency.value = 110 * Math.pow(2, 710 / 1200); g.gain.value = 0.2;
+    osc.connect(g); g.connect(out); osc.start();
+    navigator.mediaDevices.getUserMedia = async () => out.stream;
+    const field = (name, v) => { const i = [...document.querySelectorAll(".field")].find((f) => f.querySelector("span").textContent === name).querySelector("input"); i.value = v; i.dispatchEvent(new Event("input")); };
+    [...document.querySelectorAll("button")].find((b) => b.textContent === "12-TET").click();
+    field("Scale (mm)", "650"); field("Open (Hz)", "110");
+  })()`);
+  await new Promise((r) => setTimeout(r, 200));
+  await run(`[...document.querySelectorAll("tbody tr")][6].click()`);
+  const seventh = await run<string>(`[...document.querySelectorAll("tbody tr")][6].children[2].textContent`);
+  await run(`document.querySelector("button.start").click()`);
+  const advice = await run<{ off: string; advice: string }>(`(async () => {
+    const read = () => ({ off: document.querySelector(".check .off").textContent, advice: document.querySelector(".check .advice").textContent });
+    let seen = read();
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      seen = read();
+      if (i > 10 && seen.advice.startsWith("Move")) break;
+    }
+    return seen;
+  })()`);
+  check("the frets page places fret 7 and says to move it 2.5 mm toward the nut when it plays 10 cents sharp", seventh === "216.2" && advice.advice === "Move 2.5 mm toward the nut" && Math.abs(parseFloat(advice.off.replace("−", "-")) - 10) <= 1, { seventh, ...advice });
   ws.close();
 } catch (e) {
   errors.push((e as Error).message);

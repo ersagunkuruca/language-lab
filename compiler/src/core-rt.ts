@@ -85,6 +85,8 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "text.equal": (a: string, b: string) => a === b,
   "text.less": (a: string, b: string) => T.less(a, b),
   "text.quoted": (t: string) => JSON.stringify(t),
+  // Rounded down, no answer thrown for infinity or NaN (C270).
+  "int.wholePart": (x: number) => { if (!Number.isFinite(x)) throw FAIL; return I.floorOf(x); },
   "int.exact": (a: I.Int, b: I.Int) => I.norm(big(a) / big(b)),
   "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
   // run.ts's, which the evaluator has outside std.ts.

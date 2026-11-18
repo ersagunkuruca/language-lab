@@ -107,11 +107,15 @@ function inlined(ir: CoreIR, f: SFunc, self: number, wanted: (e: Extract<SExpr, 
 }
 const found = (e: SExpr, p: (e: SExpr) => boolean): boolean => p(e) || kids(e).some((k) => found(k, p));
 
-export function columns(ir: CoreIR, roots: number[]): number {
+// `plain`: only records of plain fields (Float64, Int, Text, Bool), the
+// columns WebAssembly keeps (wasm.ts colScan): there a record holding an
+// array or a record stays a row (pack's, read by position since G3a).
+export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean } = {}): number {
   let n = 0;
   for (const a of ir.arrays) {
     const r = a.item;
     if (!isRecord(r) || !r.fields.length) continue;
+    if (opts.plain && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
     if (stored(ir, a, r, roots)) n++;
   }
   return n;
