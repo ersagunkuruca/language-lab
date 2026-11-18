@@ -22,7 +22,7 @@ import { shower } from "./shown.ts";
 import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { declaresUnits } from "./selectedParts.ts";
 import { newWorker } from "./runViews.ts";
-import { searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
+import { searchBackwards, sendable, type BackAsk, type Found } from "./backSearch.ts";
 import { programText, type Step } from "./solverText.ts";
 import type { Doc, UI } from "./main.ts";
 
@@ -174,7 +174,7 @@ export function backwards(host: BackHost) {
     if (look && info.layer && !bodiesTyped(info.layer)) look = false;
     if (look) Object.assign(out, searchBackwards(doc().code, ui.def, values, pres().names, () => Date.now() > until, info));
     else out.cut = true;
-    if (out.cut) searchOn(key, values, out.plan);
+    if (out.cut && !searchOn(key, values, out.plan)) { out.cut = false; out.stopped = true; }
     backwardsCache.set(key, out);
     return out;
   }
@@ -182,15 +182,27 @@ export function backwards(host: BackHost) {
   // The whole search, in a worker: one at a time, and its answers replace
   // the short look's when it ends, or after a minute.
   let searching: Worker | null = null, searchingKey = "";
-  function searchOn(key: string, values: Record<string, unknown>, plan: Backwards["plan"]) {
+  // Values that can't cross (a function inside one, I319) keep the short
+  // look's answers, stopped there, instead of failing the whole draw.
+  function searchOn(key: string, values: Record<string, unknown>, plan: Backwards["plan"]): boolean {
+    const sent = sendable(values);
+    if (!sent) return false;
     searching?.terminate();
     searchingKey = key;
     const w = (searching = newWorker());
     const done = (r: Found) => { w.terminate(); if (searching !== w) return; searching = null; searchingKey = ""; backwardsCache.set(key, { ...r, cut: false, stopped: r.cut, plan }); render(); };
     w.onmessage = (e: MessageEvent<Found>) => done(e.data);
     w.onerror = (e) => { e.preventDefault(); done({ answers: backwardsCache.get(key)?.answers ?? [], more: false, error: e.message || "the search failed" }); };
-    const ask: BackAsk = { backwards: true, code: doc().code, names: pres().names, def: ui.def, values };
-    w.postMessage(ask);
+    try {
+      const ask: BackAsk = { backwards: true, code: doc().code, names: pres().names, def: ui.def, values: sent };
+      w.postMessage(ask);
+      return true;
+    } catch {
+      w.terminate();
+      searching = null;
+      searchingKey = "";
+      return false;
+    }
   }
 
   // Stop keeps the answers found so far.
