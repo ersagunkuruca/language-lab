@@ -29,7 +29,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C265 and C267 (the greenhouse's reads), G1b with G3d (columns), G3b ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
-| L Language and library | "Build a tuner, metronome and looper app" | C260b, L271b, C270, C271; then L278 |
+| L Language and library | "Build a tuner, metronome and looper app" | C260b, L271b, C271, C272; then L278 |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -122,7 +122,7 @@ New targets and speed rank below every language item (Ersagun,
 | C260b | The platform's sound latency in an app (AAudio's and AVAudioSession's figures behind `my sound latency`, which a page in a browser has, C260a), and an app's sound kept playing with the screen off | Ersagun 2026-11-17 | P2 | M |  |
 | C262 | Bigger-program round on the instrument app: FFT, YIN and the looper's buffer compiled against hand-written JS and C; gaps to GAPS.md | Ersagun 2026-11-17 | P3 | M |  |
 | C269 | A sound in stereo (L270) in a native app: c.ts plays only `listen`, and says a `listen in stereo` plays only in a browser for now | Ersagun 2026-11-17 | P3 | S |  |
-| C270 | The looper's Start waits 250 to 400 ms while main runs on the audio thread: `cell(copies(576000, 0))` builds a list of the samples before the cell takes it as a tape, five times over. Measured in the built worklet (node, a minute recording): no block pays for that garbage, since it is collected while main runs; blocks 0.3 ms median, 1.5 to 2.5 ms at the 99.9th percentile, up to 3.5 to 5.5 ms (the metronome's worklet up to 2.2 ms on the same machine). Fix: a tape made at its length without a list first, and fewer objects a sample (an item path is a new function each time; `whole of` returns a list of answers) | L276 | P3 | S |  |
+| C272 | An item path made for every sample: `write at(tape, at item(q), v)` makes a path value (a function with its steps) and reads it apart again, as `at item` is a definition of the program the compiler doesn't inline; three a sample in the looper, its blocks' main allocation left after C270. Compile a read or edit at an item of a known path without the path (core-js.ts, as scalar.ts writes out `changed`'s path) | C270 | P3 | M |  |
 | C271 | Lists read by position stay cons lists in compiled code: the strum tuner's analysis (L277) read its spectrum and templates with `item at` and took 0.79 s a window as the page compiles it; written to walk each list once instead (`at positions`) it takes 0.2 s. The representation chooser should make a list read by position an array (NO EXPLICIT SELECTION), so the first way of writing it is as fast | L277 | P3 | M |  |
 
 ### Speed of compiled code
@@ -196,7 +196,7 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: C260b, L271b, C270 and C271 beside them, and further L278. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: C260b, L271b, C271 and C272 beside them, and further L278. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|

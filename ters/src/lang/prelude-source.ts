@@ -914,7 +914,13 @@ export function buildPrelude(): Module {
   const numbered = k.def("numbered");
   k.define(numbered, k.fn(["list"], (xs) => k.call(numberedFrom, xs, k.int(0))));
   const copies = k.def("copies");
-  k.define(copies, k.fn(["count", "item"], (c, x) => k.call(map, k.call(INT_OPS.range, c), k.fn(["i"], () => x))));
+  // Made onto the empty list a copy at a time, one list built (C270: a
+  // looper's tapes are copies of 0 minutes long; mapped over a range, the
+  // range and the mapped list were made too).
+  const copiesOnto = k.def("copies onto");
+  k.define(copiesOnto, k.fn(["count", "item", "onto"], (c, x, acc) => k.if(k.call(INT_OPS.less, k.int(0), c),
+    k.call(copiesOnto, k.call(INT_OPS.sub, c, k.int(1)), x, k.call(CONS, x, acc)), acc)));
+  k.define(copies, k.fn(["count", "item"], (c, x) => k.call(copiesOnto, c, x, NIL)));
   const allPass = k.def("all pass");
   k.define(allPass, k.fn(["list", "test"], (xs, test) => k.match(xs, [
     { variant: NIL, names: [], body: () => k.true },

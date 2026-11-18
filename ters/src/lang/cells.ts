@@ -159,7 +159,19 @@ function taped(n: CellNode, lists: Lists): Tape {
   });
   return t;
 }
-export const pathValue = (steps: Step[]): Value => Object.assign(() => { throw new Error("a path is used by read at and the edits, not called"); }, { [PATH]: steps }) as unknown as Value;
+// A function, opaque as a cell is, with its steps on it: set as a property,
+// not by Object.assign, which costs twice as much (C270: a looper makes
+// item paths each sample).
+export const pathValue = (steps: Step[]): Value => {
+  const p = () => { throw new Error("a path is used by read at and the edits, not called"); };
+  (p as unknown as Record<symbol, Step[]>)[PATH] = steps;
+  return p as unknown as Value;
+};
+// Item i of the list at path p.
+export const itemPathOf = (p: Value, i: number): Value => {
+  const s = stepsOf(p)!;
+  return pathValue(s.length === 0 ? [{ item: i }] : [...s, { item: i }]);
+};
 // How a list is taken apart and made: cons cells in the evaluator, the
 // compiled code's own lists in JS.
 export interface Lists {

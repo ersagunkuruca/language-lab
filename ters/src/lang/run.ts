@@ -48,7 +48,7 @@ import { answeredEffects, jsHostHas, supported } from "./supports.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, pureEffect, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
-import { Cells, NoValue, Pending, changeAt, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
+import { Cells, NoValue, Pending, changeAt, itemPathOf, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
 import { CELLS, CHOICE, DIVERGE, INT, NETWORK, Subst, WORLD, type Type } from "./types.ts";
@@ -92,7 +92,7 @@ export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value)
     // with no answer; it is computed again at the next read.
     [CELL_OPS.read]: (c) => noValue(() => cells.read(c)),
     [CELL_OPS.write]: (c, v) => (cells.write(c, v), unit),
-    [CELL_OPS.itemPath]: (p, i) => pathValue([...stepsOf(p)!, { item: Number(i) }]),
+    [CELL_OPS.itemPath]: (p, i) => itemPathOf(p, Number(i)),
     [CELL_OPS.thenPath]: (p, q) => pathValue([...stepsOf(p)!, ...stepsOf(q)!]),
     [CELL_OPS.keyPath]: (p, by, k) => pathValue([...stepsOf(p)!, { key: k, by: stepsOf(by)! }]),
     [CELL_OPS.readAt]: (c, p) => noValue(() => cells.readAt(c, stepsOf(p)!, LISTS) as Value),
