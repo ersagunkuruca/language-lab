@@ -135,9 +135,14 @@ export const show = (a: Int): string => String(a);
 export const toNumber = (a: Int): number => Number(a);
 // Rounds down. Infinity and NaN aren't whole numbers: no answer.
 export function wholePart(x: number): Int[] {
-  if (!Number.isFinite(x)) return [];
+  return Number.isFinite(x) ? [floorOf(x)] : [];
+}
+// x (finite) rounded down, as an Int: compiled code's `whole part`, with no
+// list of answers made for each (C270: a looper's place in its tape, each
+// sample).
+export function floorOf(x: number): Int {
   const f = Math.floor(x);
-  return [small(f) ? (f === 0 ? 0 : f) : norm(BigInt(f))];
+  return small(f) ? (f === 0 ? 0 : f) : norm(BigInt(f));
 }
 // Only the spelling `show` produces: no leading zeros, no plus sign, no
 // spaces. So reading is `show` run backwards, and it has one answer or none.
