@@ -14,7 +14,7 @@ import { infer, type Info } from "./infer.ts";
 import { base, baseNames, checkOptions } from "./base.ts";
 import { TREES } from "./library.ts";
 import { LIST } from "./std.ts";
-import { OverMap, type Type } from "./types.ts";
+import { OverMap, OverSet, type Type } from "./types.ts";
 import type { Representation } from "./represent.ts";
 import { elaborate, verify } from "./verify.ts";
 
@@ -49,8 +49,11 @@ export function carriedChoice(code: Code, info: Info, next: Code, reps: Represen
     if (t.t === "con") return { t: "con", id: t.id, args: t.args.map(apart) };
     return { t: "fn", params: t.params.map(apart), ret: apart(t.ret), eff: { effs: t.eff.effs, tail: t.eff.tail === null ? null : t.eff.tail + APART } };
   };
-  const typeOf = new OverMap(info.typeOf), schemes = new Map(info.schemes), divergent = new Set(info.divergent), owner = new Map(info.owner);
-  const opAt = new Map(info.opAt ?? []), solveAt = new Map(info.solveAt ?? []);
+  // Read through, not copied: copying the check's maps read every one of
+  // the library's bodies' types, which a fresh process types only as asked
+  // (infer.ts libraryLater), 3 s of a compile by `ters`.
+  const typeOf = new OverMap(info.typeOf), schemes = new OverMap(info.schemes), divergent = new OverSet(info.divergent), owner = new OverMap(info.owner);
+  const opAt = new OverMap(info.opAt ?? new Map()), solveAt = new OverMap(info.solveAt ?? new Map());
   for (const d of rewritten) {
     for (const id of subtree(next, d)) {
       const t = info.typeOf.get(id);
