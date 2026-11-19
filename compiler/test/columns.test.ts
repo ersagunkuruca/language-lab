@@ -1,8 +1,8 @@
 // An array of records stored as columns (columns.ts, C60): drift's motes,
 // stored by the chooser as an array, are moved as an array per field, and
-// the program prints what the evaluator prints. Where an item leaves whole
-// (every other example today), the array stays rows: none of them prints
-// a column.
+// the program prints what the evaluator prints. Compiled JavaScript keeps
+// arrays whose items leave whole as columns too (G3d), each item made from
+// its columns where it leaves; swarm's and pedal's stay rows.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { represented } from "../../ters/cli/represented.ts";
 import { representationsIn } from "../../ters/src/lang/represent.ts";
-import { runProgram } from "../../ters/src/lang/run.ts";
+import { equal, runProgram } from "../../ters/src/lang/run.ts";
 import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
 import { kids, type SExpr } from "../src/scalar.ts";
@@ -63,4 +63,14 @@ test("drift's map on C writes into the array it was given, and prints what ters 
   assert.match(c0, /->it \+ \(size_t\)\S+->cap \* 8\)\)/);
   const c = spawnSync(out, ["300"], { encoding: "utf8" }), run = spawnSync(process.execPath, [ters, "run", ex, "300"], { encoding: "utf8" });
   assert.equal(c.stdout, run.stdout);
+});
+
+// A page's cell holding columns (flock's sky holds its birds, G3d) is
+// compared by them when written.
+test("columns are equal when every column is", () => {
+  const cols = (xs: number[], ys: string[]) => ({ n: xs.length, c0: Float64Array.from(xs), c1: ys }) as never;
+  assert.ok(equal(cols([1, 2], ["a", "b"]), cols([1, 2], ["a", "b"])));
+  assert.ok(!equal(cols([1, 2], ["a", "b"]), cols([1, 3], ["a", "b"])));
+  assert.ok(!equal(cols([1, 2], ["a", "b"]), cols([1, 2], ["a", "c"])));
+  assert.ok(!equal(cols([1], ["a"]), cols([1, 2], ["a", "b"])));
 });

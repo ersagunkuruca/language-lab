@@ -181,6 +181,20 @@ export function equal(a: Value, b: Value, same = sameNumber): boolean {
       for (const [k, v] of xs) { if (!ym.has(k)) return false; todo.push([v as Value, ym.get(k) as Value]); }
       continue;
     }
+    // An array of records kept as columns by the compiled code (columns.ts,
+    // G3d), `{ n, c0, c1, … }`, a column per leaf field: equal when every
+    // column is.
+    if (!("fields" in x) || !("fields" in y)) {
+      const u = x as unknown as Record<string, ArrayLike<Value>>, w = y as unknown as Record<string, ArrayLike<Value>>;
+      if (!("n" in u && "n" in w) || u.n !== w.n) return false;
+      for (const k in u) {
+        if (k === "n") continue;
+        const p = u[k], q = w[k];
+        if (!q || p.length !== q.length) return false;
+        for (let i = 0; i < p.length; i++) todo.push([p[i], q[i]]);
+      }
+      continue;
+    }
     if (x.tag !== y.tag) return false;
     // Arrays of different lengths, told apart before their items are
     // copied out (an array's first field is its length).

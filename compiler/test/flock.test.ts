@@ -22,6 +22,9 @@ test("flock: 50 ticks of 300 birds, evaluated, compiled and by hand in JS", () =
   const want = ran(process.execPath, [lab, "run", folder, "50", "300"]);
   assert.match(want, /^tick 25: checksum 104099\.948241, mean speed 0\.884289\n/);
   assert.equal(ran(process.execPath, [js, "50", "300"]), want);
+  // The birds as a column per leaf field, their places' and velocities'
+  // parts too (columns.ts whole, G3d).
+  assert.match(readFileSync(js, "utf8"), /c5: new Float64Array/, "the birds are columns");
   assert.equal(ran(process.execPath, [join(gaps, "flock.ideal.js"), "50", "300"]), want);
 });
 

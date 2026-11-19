@@ -17,6 +17,16 @@
 // on C (c.ts) the items stay a buffer of structs, each field written in
 // its slot where nothing else counts the array.
 
+//
+// `whole` (JavaScript, G3d): an item may also leave whole (given to a
+// function, kept in a closure, read with `item at`'s check), and is then
+// made from its columns where it is read; a record held in a field is
+// stored as a column per leaf field (a bird's place, three Float64Arrays),
+// so no item is an object holding objects, each Float64 boxed, spread
+// over the heap (the moths', the flock's). V8 takes the record made from
+// the columns apart again where it only reads its fields (escape
+// analysis). An array captured by a closure given to a call stays columns.
+
 import { kids, mapKids, type AType, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 type Local = Extract<SExpr, { k: "local" }>;
@@ -27,7 +37,7 @@ const isRecord = (t: LType | undefined): t is RType => typeof t === "object" && 
 const isArray = (t: LType | undefined, a: AType) => typeof t === "object" && t !== null && (t as { key?: string }).key === a.key;
 
 // The ops on an array type that columns keep, by name.
-const KEPT = /^array\.(get|length|empty|replaceOwned|pushFrontOwned|replaceAt|pushFront)\.a(\d+)$/;
+const KEPT = /^array\.(get|at|length|empty|replaceOwned|pushFrontOwned|replaceAt|pushFront)\.a(\d+)$/;
 const PUSH = /^array\.pushFront(Owned)?\.a\d+$/, REPLACE = /^array\.replace(Owned|At)\.a\d+$/;
 
 // A map's fold as lowered (owned-arrays.ts): f(a, i, made, by) is `if i = 0
@@ -107,21 +117,30 @@ function inlined(ir: CoreIR, f: SFunc, self: number, wanted: (e: Extract<SExpr, 
 }
 const found = (e: SExpr, p: (e: SExpr) => boolean): boolean => p(e) || kids(e).some((k) => found(k, p));
 
+// A record's leaf fields, each by its path of field positions: a field
+// holding a record (not one changed in place) is its own leaves.
+export type Leaf = { path: number[]; t: LType };
+export function leavesOf(r: RType, deep: boolean, at: number[] = []): Leaf[] {
+  return r.fields.flatMap((x, k) => (deep && isRecord(x.t) && !x.t.mutable && x.t.fields.length ? leavesOf(x.t, deep, [...at, k]) : [{ path: [...at, k], t: x.t }]));
+}
+
 // `plain`: only records of plain fields (Float64, Int, Text, Bool), the
 // columns WebAssembly keeps (wasm.ts colScan): there a record holding an
 // array or a record stays a row (pack's, read by position since G3a).
-export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean } = {}): number {
+export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; whole?: boolean } = {}): number {
   let n = 0;
   for (const a of ir.arrays) {
     const r = a.item;
     if (!isRecord(r) || !r.fields.length) continue;
     if (opts.plain && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
-    if (stored(ir, a, r, roots)) n++;
+    if (stored(ir, a, r, roots, !!opts.whole)) n++;
   }
   return n;
 }
 
-function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
+function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean): boolean {
+  const leaves = leavesOf(r, whole);
+  const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
   const ofA = (fn: string) => fn.endsWith(suffix) && /^array\./.test(fn);
   if (!ir.funcs.some((f) => found(f.body, (e) => e.k === "rt" && e.fn === `array.get${suffix}`))) return false;
@@ -181,12 +200,14 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
     const items = new Map<number, true>();
     const fold = folds.get(i);
     let ok = true;
-    const bad = () => { ok = false; };
+    const bad = () => { if (ok && typeof process !== "undefined" && process.env.COLUMNS_WHY) console.error("columns:", r.name, "kept rows, for", e0?.k, "in", funcs[i].def); ok = false; };
+    let e0: SExpr | undefined;
     const isItem = (e: SExpr) => e.k === "local" && items.has(e.i);
     let terminal: SExpr | undefined;
     if (fold) { terminal = fold.put.args[fold.put.args.length - 1]; while (terminal.k === "let") terminal = terminal.body; }
     const walk = (e: SExpr, under?: SExpr): void => {
       if (!ok) return;
+      e0 = e;
       switch (e.k) {
         case "let":
           if (e.value.k === "rt" && e.value.fn === `array.get${suffix}`) {
@@ -199,8 +220,9 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
           if (isItem(e.value)) { items.set(e.i, true); walk(e.body); return; }
           break;
         case "local":
-          // An item read only field by field, or written into.
-          if (isItem(e) && !(under?.k === "get" && under.rec === e)) return bad();
+          // An item read only field by field, or written into (or, whole,
+          // made from its columns where it is read).
+          if (isItem(e) && !whole && !(under?.k === "get" && under.rec === e)) return bad();
           return;
         case "make":
           if (e.into !== undefined && items.has(e.into) && e !== terminal) return bad();
@@ -210,6 +232,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
             const m = KEPT.exec(e.fn);
             if (!m) return bad();
             if (m[1] === "get" && under?.k !== "let") return bad();
+            if (m[1] === "at" && (!whole || !isLocal(e.args[0]))) return bad();
             if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e)) return bad();
             if (m[1] === "empty" && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
             for (const x of e.args) walk(x, e);
@@ -218,10 +241,14 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
           if (e.args.some(arrayOf)) return bad();
           break;
         case "world": case "apply": case "closure": case "new": case "list":
-          if ((e.k === "closure" ? e.caps : e.k === "list" ? e.items : e.args).some((x: SExpr) => arrayOf(x) || isItem(x))) return bad();
+          // Whole, a closure may keep the array and one applied may be
+          // given it: their code is reached from the roots and kept to
+          // columns too. Items are made where read.
+          if (whole && (e.k === "closure" || e.k === "apply")) break;
+          if ((e.k === "closure" ? e.caps : e.k === "list" ? e.items : e.args).some((x: SExpr) => arrayOf(x) || (!whole && isItem(x)))) return bad();
           break;
         case "call":
-          if (e.args.some(isItem)) return bad();
+          if (!whole && e.args.some(isItem)) return bad();
           break;
         case "get":
           walk(e.rec, e);
@@ -238,13 +265,43 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
     const f = funcs[i];
     const at = new Map<number, { x: Local; j: Local }>();
     const entry = entries.get(i), fold = folds.get(i);
+    // The record (or the record in a field, by its path) at j of x, made
+    // from its columns.
+    const madeAt = (x: Local, j: Local, t: RType, path: number[]): SExpr =>
+      ({ k: "make", t, args: t.fields.map((fd, k) => { const l = leafAt([...path, k]); return l >= 0 ? rt(`array.cget${l}${suffix}`, x, j) : madeAt(x, j, fd.t as RType, [...path, k]); }) });
+    // A read of a field of a record at a path in an item.
+    const fieldAt = (p: { x: Local; j: Local }, path: number[], t: RType): SExpr => {
+      const l = leafAt(path);
+      return l >= 0 ? rt(`array.cget${l}${suffix}`, p.x, p.j) : madeAt(p.x, p.j, t, path);
+    };
+    // A get of a get … of an item: its path, or null.
+    const pathOf = (e: SExpr): { p: { x: Local; j: Local }; path: number[] } | null => {
+      if (e.k === "local" && at.has(e.i)) return { p: at.get(e.i)!, path: [] };
+      if (e.k === "get") { const q = pathOf(e.rec); return q && (whole || !q.path.length) ? { p: q.p, path: [...q.path, e.i] } : null; }
+      return null;
+    };
     const go = (e: SExpr): SExpr => {
       if (e.k === "let" && e.value.k === "rt" && e.value.fn === `array.get${suffix}`) {
         at.set(e.i, { x: e.value.args[0] as Local, j: e.value.args[1] as Local });
-        return go(e.body);
+        // Whole, the item made too, for where it leaves (dropped when
+        // nothing reads it).
+        return whole ? { ...e, value: madeAt(e.value.args[0] as Local, e.value.args[1] as Local, r, []), body: go(e.body) } : go(e.body);
       }
-      if (e.k === "let" && e.value.k === "local" && at.has(e.value.i)) { at.set(e.i, at.get(e.value.i)!); return go(e.body); }
-      if (e.k === "get" && e.rec.k === "local" && at.has(e.rec.i)) { const p = at.get(e.rec.i)!; return rt(`array.cget${e.i}${suffix}`, p.x, p.j); }
+      // `item at`, checked: made from its columns, or no answer.
+      if (e.k === "rt" && e.fn === `array.at${suffix}`) {
+        const x = go(e.args[0]) as Local, jv = go(e.args[1]), j = f.locals.push("int") - 1;
+        return { k: "let", i: j, value: jv, body: { k: "if", cond: rt(`array.cin${suffix}`, x, loc(j)), then: madeAt(x, loc(j), r, []), else: { k: "fail" }, t: r } };
+      }
+      if (e.k === "let" && e.value.k === "local" && at.has(e.value.i)) { at.set(e.i, at.get(e.value.i)!); return whole ? { ...e, body: go(e.body) } : go(e.body); }
+      if (e.k === "get") {
+        const q = pathOf(e);
+        if (q) {
+          // The record it reads into: the item's, or the record in a field.
+          let t: RType = r;
+          for (const k of q.path.slice(0, -1)) t = t.fields[k].t as RType;
+          return fieldAt(q.p, q.path, t.fields[q.path[q.path.length - 1]].t as RType);
+        }
+      }
       if (e.k === "rt" && e.fn === `array.length${suffix}`) return rt(`array.clength${suffix}`, ...e.args.map(go));
       if (e.k === "rt" && fold && e === fold.put) return written(e.args[0], loc(fold.j), e.args[e.args.length - 1], REPLACE.test(e.fn));
       if (entry && e === entry.call) {
@@ -264,20 +321,25 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
         lets.push({ i: x.i, value: x.value });
         x = x.body;
       }
-      let ks: number[], vals: SExpr[];
+      let same = new Set<number>();
       if (x.k === "make") {
         // Made from the item at j of the array it is put into (the map's
         // own, owned-arrays.ts): the fields it keeps are there already.
         const from = x.into !== undefined ? at.get(x.into) : undefined;
-        const same = replaces && from && from.j.i === j.i && fold && from.x.i === fold.from ? new Set(x.same ?? []) : new Set<number>();
-        ks = r.fields.map((_, k) => k).filter((k) => !same.has(k));
-        vals = ks.map((k) => x.k === "make" ? x.args[k] : x);
-      } else {
-        const t = f.locals.push(r) - 1;
-        lets.push({ i: t, value: x });
-        ks = r.fields.map((_, k) => k);
-        vals = ks.map((k): SExpr => ({ k: "get", rec: loc(t), t: r, i: k }));
+        if (replaces && from && from.j.i === j.i && fold && from.x.i === fold.from) same = new Set(x.same ?? []);
       }
+      // The value at a leaf's path in v: a part of a record made here, or
+      // read from a let of it.
+      const named = new Map<SExpr, Local>();
+      const partOf = (v: SExpr, path: number[], t: RType): SExpr => {
+        if (!path.length) return v;
+        if (v.k === "make") return partOf(v.args[path[0]], path.slice(1), t.fields[path[0]].t as RType);
+        let l = v.k === "local" ? v : named.get(v);
+        if (!l) { const ti = f.locals.push(t) - 1; lets.push({ i: ti, value: v }); l = loc(ti); named.set(v, l); }
+        return partOf({ k: "get", rec: l, t, i: path[0] }, path.slice(1), t.fields[path[0]].t as RType);
+      };
+      const ks = leaves.map((_, k) => k).filter((k) => !same.has(leaves[k].path[0]));
+      const vals = ks.map((k) => partOf(x, leaves[k].path, r));
       // The lets first (an item read in them still says what it said).
       const body: SExpr = rt(`array.cset${ks.join("_")}${suffix}`, c, j, ...vals);
       return go(lets.reduceRight<SExpr>((b, l) => ({ k: "let", i: l.i, value: l.value, body: b }), body));
@@ -285,6 +347,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
     f.body = unread(go(f.body));
   }
   ir.funcs.splice(0, ir.funcs.length, ...funcs);
+  if (whole) a.leaves = leaves.map((l) => l.t);
   return true;
 }
 
@@ -293,6 +356,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[]): boolean {
 function unread(e: SExpr): SExpr {
   const x = mapKids(e, unread);
   if (x.k !== "let") return x;
-  const cheap = x.value.k === "local" || (x.value.k === "rt" && x.value.fn.startsWith("array.cget"));
+  const read = (v: SExpr): boolean => v.k === "local" || (v.k === "rt" && v.fn.startsWith("array.cget")) || (v.k === "make" && v.args.every(read));
+  const cheap = read(x.value);
   return cheap && !found(x.body, (y) => y.k === "local" && y.i === x.i) ? x.body : x;
 }

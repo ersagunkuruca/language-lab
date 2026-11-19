@@ -232,7 +232,9 @@ export type WType = "int" | "text" | "host";
 // `index`: its place in CoreIR.arrays, which the runtime's array
 // functions are named by (`array.push.a0`); `list`: List of its items,
 // when a job takes or gives one.
-export interface AType { key: string; name: string; item: LType; index: number; list: DType | null }
+// `leaves`: kept as a column per leaf field of its records, each of
+// this type (columns.ts `whole`, on JavaScript).
+export interface AType { key: string; name: string; item: LType; index: number; list: DType | null; leaves?: LType[] }
 // std's Table (C63h): Map as a hash table, in C only, for Int and Text
 // keys (c.ts `tableC`); in C, keys that are data too (`dataKeys`, C243). `index`: its place in CoreIR.tables, which its
 // runtime functions are named by (`table.put.t0`); `entries`: each List
