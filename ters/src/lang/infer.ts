@@ -187,6 +187,8 @@ let libraryStore: LibraryStore | null = null;
 // groups on disk, so a program's unchanged groups aren't checked again.
 let defaultCache: CheckCache | undefined;
 export function cacheChecks(c: CheckCache | undefined) { defaultCache = c; }
+// Whether a check with these options keeps its groups for the next.
+export const checksKept = (opts?: Options) => !!(opts?.cache ?? defaultCache);
 export function keepLibraryChecks(store: LibraryStore | null) { libraryStore = store; underChecks.length = 0; }
 let checkingUnder = false;
 // On its layer (E253b), the nodes that aren't the layer's are known: the

@@ -13,10 +13,11 @@
 // type (C52). A map's keys or a set's items that hold one would be ordered
 // by the tree's shape, so such a program keeps the definition.
 
-import { COPIED_FROM, originalOf, PRELUDE_DEFS } from "./prelude-ids.ts";
-import { bindsOf, children, ownerOfTypeParts, dependencies, layerOf, onLayer, freshId, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
+import { COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
+import { stableIds } from "../stable-ids.ts";
+import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
+import { checksKept, infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
 import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
@@ -98,7 +99,8 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
   if (usesIntCases(code)) ({ code, info, names } = intCases(code, info, names));
   const skip = new Set<Id>();
   for (;;) {
-    const r = choiceOf(code, info, names, main, defs, asked, skip, options);
+    const choose = () => choiceOf(code, info, names, main, defs, asked, skip, options);
+    const r = checksKept(info.options) ? stably(idsMadeBy(choose), code, defs) : choose();
     if (!r.reps.length) return { code, names, chosen: [], insiders: [] };
     // The program's own options where nothing is added, so the check reads
     // through to the library's, kept for those options (infer.ts `under`):
@@ -130,6 +132,23 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
     const table = r.reps.find((x) => x.oneHolder);
     for (const x of table ? [table] : list ? [list] : r.reps) skip.add(table ? x.name + " " + x.of : x.of);
   }
+}
+
+// The choice's new nodes named by what they hold (stable-ids.ts), so the
+// check of what it made finds its groups kept from the last compile, in
+// this process or on disk: machine's was checked again whole each time.
+// Only where checks are kept (`ters`, the editor): elsewhere nothing
+// finds them, and naming them is 80 ms of machine's.
+function stably({ result: r, made }: { result: Chosen & { reps: Representation[] }; made: Set<Id> }, before: Code, defs: Id[]): Chosen & { reps: Representation[] } {
+  if (!r.reps.length || !made.size) return r;
+  const was = new Set(before.defs);
+  const { code, rename } = stableIds(r.code, made, dependenciesOfAll(r.code, defs), [...defs, ...r.code.defs.filter((d) => !was.has(d))]);
+  if (!rename.size) return r;
+  const f = (id: Id) => rename.get(id) ?? id;
+  const names: Names = {};
+  for (const k in r.names) names[f(k)] = r.names[k];
+  for (const from of [COPIED_FROM, SPLIT_COPIED_FROM]) for (const [a, b] of rename) { const o = from.get(a); if (o !== undefined) from.set(b, o); }
+  return { ...r, code, names, insiders: r.insiders.map(f) };
 }
 
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
