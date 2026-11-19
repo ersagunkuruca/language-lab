@@ -315,7 +315,16 @@ export function freshId(): Id {
   if (at + 26 > pool.length) { crypto.getRandomValues(pool); at = 0; }
   let id = "";
   for (let i = 0; i < 26; i++) id += DIGITS[pool[at++] & 31];
+  if (making) making.add(id);
   return id;
+}
+// The ids freshId made while f ran (stable-ids.ts names them by what they
+// hold).
+let making: Set<Id> | null = null;
+export function idsMadeBy<T>(f: () => T): { result: T; made: Set<Id> } {
+  const outer = making, made = new Set<Id>();
+  making = made;
+  try { return { result: f(), made }; } finally { making = outer; if (outer) for (const id of made) outer.add(id); }
 }
 
 // The same node with every id in it passed through f: its own, its
