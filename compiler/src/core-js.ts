@@ -488,14 +488,17 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           // An array of records as columns (columns.ts, C60): an array per
           // field, a Float64Array for a Float64.
           {
-            const m = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
+            const m = /^array\.c(new|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
               if (m[1] === "length") return `${xs[0]}.n`;
+              // Whether a position is one of the array's (`item at`'s check).
+              if (m[1] === "in") { const j = temp(); pre.push(`${d}const ${j} = ${xs[1]};`); return `(Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${xs[0]}.n)`; }
               if (m[2] !== undefined) return `${xs[0]}.c${m[2]}[${xs[1]}]`;
               if (m[1] === "new") {
                 const t = temp(), r = ir.arrays[Number(m[4])].item as RType;
                 pre.push(`${d}const ${t} = ${xs[0]};`);
-                return `{ n: ${t}, ${r.fields.map((x, i) => `c${i}: ${x.t === "f64" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
+                const ts = ir.arrays[Number(m[4])].leaves ?? r.fields.map((x) => x.t);
+                return `{ n: ${t}, ${ts.map((x, i) => `c${i}: ${x === "f64" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
               }
               const c = temp(), j = temp(), ks = m[3]!.split("_");
               pre.push(`${d}const ${c} = ${xs[0]}, ${j} = ${xs[1]};`);
@@ -729,7 +732,7 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
   // Arrays of records whose loops read and write them field by field, as
   // an array per field (columns.ts, C60).
-  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
+  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])), { whole: !envSet("NO_WHOLE_COLUMNS") });
   // Then calls put in place for the printed code: a function called from
   // one place, or a small one, whatever it does (inline-small.ts).
   if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
