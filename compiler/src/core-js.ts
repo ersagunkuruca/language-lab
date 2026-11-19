@@ -508,6 +508,20 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
               return c;
             }
           }
+          // An array's item and length read in place where it is a view
+          // (G3d): the runtime's own, one function for every array of a
+          // program, was a quarter of the flock page's time, its calls
+          // seeing every kind of array.
+          {
+            const m = /^array\.(get|length)\.a\d+$/.exec(e.fn);
+            if (m && xs.length === (m[1] === "get" ? 2 : 1)) {
+              const named = (x: string) => { if (/^[\w$]+$/.test(x)) return x; const t = temp(); pre.push(`${d}const ${t} = ${x};`); return t; };
+              const a = named(xs[0]);
+              if (m[1] === "length") return `(${a} instanceof R.ArrayView ? ${a}.n : ${rtName(e.fn)}(${a}))`;
+              const j = named(xs[1]);
+              return `(${a} instanceof R.ArrayView && ${j} >= 0 && ${j} < ${a}.n ? ${a}.buf.items[${a}.start + ${j}] : ${rtName(e.fn)}(${a}, ${j}))`;
+            }
+          }
           // A builtin that is one JavaScript operator, printed as it (C170b).
           { const op = RT_INFIX[e.fn]; if (op && xs.length === 2) return `(${xs[0]} ${op} ${xs[1]})`; }
           // A map's `value at` where no answer leaves by onFail: checked as
