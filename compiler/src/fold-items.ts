@@ -21,27 +21,25 @@
 // recursion): a cheap e is quicker in the loop, as a fold of a map is made
 // one (fuse-steps.ts, C207c) for that reason, before this.
 
-import { children, dependencies, freshId, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import { children, dependencies, freshId, nodesOfKind, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import { DIVERGE } from "../../ters/src/lang/types.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
-import { ownEffects, parallelFolds } from "../../ters/src/lang/pure-branches.ts";
+import { ownEffects, parallelFold } from "../../ters/src/lang/pure-branches.ts";
 
 export function shareFoldItems(code: Code, info: Info): { code: Code; shared: number } {
   const map = preludeDef("map");
   if (!map) return { code, shared: 0 };
-  const folds = parallelFolds(code, info);
-  // (Most programs have none: the walk and the copy below are of all the
-  // program's nodes, L266.)
-  if (!folds.size) return { code, shared: 0 };
   // What the definitions hold, and the copy of the nodes, made only for a
-  // fold that passes the rest.
+  // fold that passes the rest. (Most programs have none: the walk and the
+  // copy are of all the program's nodes, L266.)
   let reached: Set<Id> | undefined, copy: Record<Id, Node> | undefined;
   const at = (id: Id) => (copy ?? code.nodes)[id], edit = () => (copy ??= { ...code.nodes });
   let shared = 0;
-  for (const id of folds) {
+  for (const n of nodesOfKind(code, "fold")) {
+    const id = n.id;
     const fold = at(id) as NodeOf<"fold">;
     const arms = fold.arms.map((a) => at(a) as NodeOf<"arm">);
     const cons = arms.find((a) => a.variant === CONS), nil = arms.find((a) => a.variant === NIL);
@@ -57,6 +55,11 @@ export function shareFoldItems(code: Code, info: Info): { code: Code; shared: nu
     const inE = refs(e), inB = refs(lam.body);
     if (inE.includes(r) || inE.includes(rest) || inB.includes(x) || inB.includes(rest)) continue;
     if (joins(code, lam.body, r)) continue;
+    // Only a fold whose arms only compute (pure-branches.ts), asked last:
+    // asking reads the types of the library's bodies its arms are in, which
+    // asked of every fold typed the whole library's (0.3 s of `ters
+    // compile machine` in a fresh process).
+    if (!parallelFold(code, info, n)) continue;
     const own = ownEffects(code, info, e);
     if (!own?.has(DIVERGE)) continue;
     if (!(reached ??= new Set(code.defs.flatMap((d) => subtree(code, d)))).has(id)) continue;

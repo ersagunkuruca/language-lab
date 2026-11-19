@@ -119,12 +119,16 @@ export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...par
 // from the last, and an abort is the one the fold in turn would meet first.
 export function parallelFolds(code: Code, info: Info): Set<Id> {
   const out = new Set<Id>();
-  for (const n of nodesOfKind(code, "fold")) {
-    const effs = n.arms.map((a) => ownEffects(code, info, (code.nodes[a] as NodeOf<"arm">).body));
-    const all = new Set(effs.flatMap((e) => (e ? [...e] : [CHOICE])));
-    if (effs.every((e) => e) && [...all].every((e) => ALONE.has(e)) && !(all.has(DIVERGE) && all.has(ABORT))) out.add(n.id);
-  }
+  for (const n of nodesOfKind(code, "fold")) if (parallelFold(code, info, n)) out.add(n.id);
   return out;
+}
+// One fold, so: what asks of a few folds needn't type every body of the
+// library's with one (its types are worked out as asked, infer.ts
+// libraryLater).
+export function parallelFold(code: Code, info: Info, n: NodeOf<"fold">): boolean {
+  const effs = n.arms.map((a) => ownEffects(code, info, (code.nodes[a] as NodeOf<"arm">).body));
+  const all = new Set(effs.flatMap((e) => (e ? [...e] : [CHOICE])));
+  return effs.every((e) => e) && [...all].every((e) => ALONE.has(e)) && !(all.has(DIVERGE) && all.has(ABORT));
 }
 
 // The calls of `count` and `all` a target may share out by the
