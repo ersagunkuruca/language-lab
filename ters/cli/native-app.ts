@@ -778,6 +778,20 @@ public class MainActivity extends Activity {
             i += 7 + n;
             break;
           }
+          case 7: {
+            // A canvas's disk (G2): its middle, radius and colour.
+            brush.reset(); brush.setAntiAlias(true); brush.setStyle(Paint.Style.FILL); brush.setColor((int) (long) o[i + 3]);
+            c.drawCircle(f(o[i]), f(o[i + 1]), f(o[i + 2]), brush);
+            i += 4;
+            break;
+          }
+          case 8: {
+            // A canvas's segment: its ends, width and colour, ends flat.
+            brush.reset(); brush.setAntiAlias(true); brush.setStyle(Paint.Style.STROKE); brush.setColor((int) (long) o[i + 5]); brush.setStrokeWidth(f(o[i + 4]));
+            c.drawLine(f(o[i]), f(o[i + 1]), f(o[i + 2]), f(o[i + 3]), brush);
+            i += 6;
+            break;
+          }
           default: i = o.length;
         }
       }

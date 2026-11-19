@@ -137,6 +137,28 @@ test("tumble's fibers without ucontext, as on Android, show what they show with 
   assert.equal(run("#undef _FORTIFY_SOURCE\n#define LAB_FIBER_SJLJ 1\n#pragma GCC diagnostic ignored \"-Wformat-overflow\"\n" + c), run(c));
 });
 
+// A canvas on a phone's screen (G2): its paint function's marks reach the
+// C layout, which draws them as a picture's, the canvas's width and height
+// its units, fitted to its box. Moths' 512 canvas in a 296 box: a moth's
+// 1.6 disk is 0.925 across there, and frames move them.
+test("a canvas's marks are drawn by the C screen, in the canvas's units, and move as frames go: moths (G2)", { skip }, () => {
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/moths-page"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["width:360", "frames:3:16"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const [first, then] = r.stdout.toString().split("\x1e\n");
+  const moths = (s: string) => s.split("\n").filter((x) => / 0\.925 FFF3E3B5$/.test(x)).map((x) => x.trim());
+  assert.equal(moths(first).length, 3000);
+  assert.equal(moths(then).length, 3000);
+  assert.notDeepEqual(moths(first), moths(then));
+  // The night under them: the canvas's first mark, a rectangle filling it.
+  assert.match(first, /^\s+shape 32 88 296 296 fill FF10141C /m);
+  assert.match(first, /tick 0 ·/);
+  assert.match(then, /tick 3 ·/);
+});
+
 test("a part inside a picture is an SVG group in C, as html.ts makes it: compass (C199f)", { skip }, () => {
   const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/compass"));
   const info = infer(p0.code, p0.pres.names, undefined, p0.options);

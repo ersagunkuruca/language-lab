@@ -36,7 +36,9 @@ typedef struct ters_ui {
   // fill stroke width dash gap join, which paints the shape so far (fill
   // and stroke ARGB, 0 for none; join 0 miter, 1 round, 2 bevel) and
   // starts the next, and 6 x y size colour anchor bold n then n UTF-8
-  // bytes, a text (anchor 0 start, 1 middle, 2 end; x y its baseline).
+  // bytes, a text (anchor 0 start, 1 middle, 2 end; x y its baseline);
+  // and a canvas's marks (G2), each whole: 7 x y radius colour, a disk,
+  // and 8 x y to-x to-y width colour, a line with flat ends.
   void (*draw)(void *ctx, void *v, const double *ops, size_t n);
   // Whether a box cuts what's inside it to its bounds, its corners
   // rounded (overflow: hidden; tumble's board, where pieces drop in from
@@ -99,6 +101,8 @@ typedef struct tl_n {
   // then offset); a shape's ops in its picture's; the pointer events a
   // picture's shapes listen for (the screen sees only the picture).
   double *drawn; size_t ndrawn, op0, op1; double fit[3];
+  // A canvas's marks as the page last painted them (ters_host's marks).
+  double *mk; size_t nmk; char *mkt;
   char **pev; int *ph, np;
   void *view;
   tl_css c;
@@ -131,12 +135,17 @@ static tl_kf *tl_kf_of(const char *name) { for (int i = tl_nkf; i-- > 0;) if (!s
 static double tl_fake = -1;
 static double tl_ms(void) { if (tl_fake >= 0) return tl_fake; struct timespec t; clock_gettime(CLOCK_MONOTONIC, &t); return t.tv_sec * 1e3 + t.tv_nsec / 1e6; }
 
+// Whether e is a picture: an svg, or a canvas (G2), whose marks are its
+// shapes.
+static int tl_pic(tl_n *e) { return e->tag && (!strcmp(e->tag, "svg") || !strcmp(e->tag, "canvas")); }
 static char *tl_dup(const char *s, size_t n) { char *r = malloc(n + 1); memcpy(r, s, n); r[n] = 0; return r; }
 static void *tl_element(void *c, const char *tag, size_t n) {
   (void)c;
   tl_n *e = calloc(1, sizeof *e);
   e->tag = tl_dup(tag, n);
-  e->view = tl_ui->box(tl_ui->ctx, tag, n);
+  // A canvas is a picture to the screen (G2): its marks are drawn as a
+  // picture's shapes are.
+  e->view = tl_pic(e) ? tl_ui->box(tl_ui->ctx, "svg", 3) : tl_ui->box(tl_ui->ctx, tag, n);
   return e;
 }
 static void *tl_text(void *c, const char *s, size_t n) {
@@ -193,7 +202,7 @@ static void tl_gone(void *c, void *x) {
   tl_ui->gone(tl_ui->ctx, e->view);
   for (int j = 0; j < e->na; j++) { free(e->ak[j]); free(e->av[j]); }
   for (int j = 0; j < e->np; j++) free(e->pev[j]);
-  free(e->ak); free(e->av); free(e->drawn); free(e->pev); free(e->ph);
+  free(e->ak); free(e->av); free(e->drawn); free(e->pev); free(e->ph); free(e->mk); free(e->mkt);
   free(e->tag); free(e->s); free(e->id); free(e->cls); free(e->style); free(e->kids); free(e);
 }
 
@@ -698,6 +707,12 @@ static void tl_measure(tl_n *k, double width, double *w, int *lines) {
 static void tl_lay(tl_n *e, double avail);
 // A picture's viewBox (x, y, width, height), when it has one.
 static int tl_viewbox(tl_n *e, double *vb) {
+  // A canvas's units: its width and height (300 by 150 without them).
+  if (!strcmp(e->tag, "canvas")) {
+    const char *w = tl_attr(e, "width"), *h = tl_attr(e, "height");
+    vb[0] = vb[1] = 0; vb[2] = w ? strtod(w, 0) : 300; vb[3] = h ? strtod(h, 0) : 150;
+    return vb[2] > 0 && vb[3] > 0;
+  }
   const char *p = tl_attr(e, "viewBox");
   if (!p) return 0;
   for (int i = 0; i < 4; i++) { char *z; vb[i] = strtod(p, &z); if (z == p) return 0; p = z; while (*p == ' ' || *p == ',') p++; }
@@ -727,7 +742,7 @@ static double tl_fit(tl_n *k, double avail) {
   if (!k->tag) { double w; int lines; tl_measure(k, avail, &w, &lines); return w; }
   if (k->c.set_w) return tl_border_w(&k->c) + k->c.mar[1] + k->c.mar[3];
   // A picture with no width set is 300 wide, as a browser's.
-  if (!strcmp(k->tag, "svg")) { double w = 300 + k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3]; return w < avail ? w : avail; }
+  if (tl_pic(k)) { double w = 300 + k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3]; return w < avail ? w : avail; }
   tl_n *it[256]; int n = tl_items(k, it, 256, 0);
   double inner = 0, line = 0, edge = k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3];
   int flexrow = k->c.display == TL_FLEX && k->c.row, used = 0;
@@ -792,7 +807,7 @@ static double tl_flow(tl_n *e, double w) {
         tl_n *k = it[ln[i]];
         double oh = tl_outer_h(k), dy = c->items == 2 ? (lineh - oh) / 2 : c->items == 3 ? lineh - oh : 0;
         // Stretched to the line's height (not a picture, which keeps its own).
-        if (!c->items && k->tag && !k->c.set_h && !k->c.set_maxh && strcmp(k->tag, "svg")) k->h = lineh - k->c.mar[0] - k->c.mar[2];
+        if (!c->items && k->tag && !k->c.set_h && !k->c.set_maxh && !tl_pic(k)) k->h = lineh - k->c.mar[0] - k->c.mar[2];
         if (i) x += c->gap_c;
         k->x = ox + x + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + dy + (k->tag ? k->c.mar[0] : 0);
         x += tl_outer_w(k);
@@ -922,7 +937,7 @@ static void tl_lay(tl_n *e, double avail) {
   if (c->set_maxw && w > mw) w = mw;
   if (w < 0) w = 0;
   double vb[4];
-  int pic = !strcmp(e->tag, "svg");
+  int pic = tl_pic(e);
   // A picture's shapes aren't boxes; with no height set it is as high as
   // its viewBox is for its width (150 without one).
   double h = (pic ? (tl_viewbox(e, vb) ? (w - edge) * vb[3] / vb[2] : 150) : tl_flow(e, w - edge)) + c->pad[0] + c->pad[2] + 2 * c->bw;
@@ -1111,6 +1126,40 @@ static void tl_shapes(tl_n *e, tl_ops *d) {
   tl_op(d, c->sw * d->s); tl_op(d, c->dash[0] * d->s); tl_op(d, c->dash[1] * d->s); tl_op(d, c->join);
   e->op1 = d->n;
 }
+// A canvas's marks as draw ops, in order (G2, html.ts paintMarks): a
+// colour that isn't one paints nothing.
+static uint32_t tl_mk_colour(tl_n *e, const double *w) { const char *p = e->mkt + (size_t)w[0]; uint32_t c = tl_colour(p, p + (size_t)w[1]); return c == 1 ? 0 : c; }
+static void tl_canvas(tl_n *e, tl_ops *d) {
+  for (size_t i = 0; i < e->nmk; i++) {
+    const double *w = e->mk + i * 11;
+    uint32_t col = tl_mk_colour(e, w + 7);
+    if (!col) continue;
+    switch ((int)w[0]) {
+      case 0: if (w[3] > 0) { tl_op(d, 7); tl_pt(d, w[1], w[2]); tl_op(d, w[3] * d->s); tl_op(d, col); } break;
+      case 1:
+        if (w[3] > 0 && w[4] > 0) {
+          tl_mv(d, w[1], w[2]); tl_ln(d, w[1] + w[3], w[2]); tl_ln(d, w[1] + w[3], w[2] + w[4]); tl_ln(d, w[1], w[2] + w[4]); tl_op(d, 4);
+          tl_op(d, 5); tl_op(d, col); tl_op(d, 0); tl_op(d, 0); tl_op(d, 0); tl_op(d, 0); tl_op(d, 0);
+        }
+        break;
+      case 2: if (w[5] > 0) { tl_op(d, 8); tl_pt(d, w[1], w[2]); tl_pt(d, w[3], w[4]); tl_op(d, w[5] * d->s); tl_op(d, col); } break;
+      case 3: {
+        size_t n = (size_t)w[10];
+        if (!n) break;
+        tl_op(d, 6); tl_pt(d, w[1], w[2]); tl_op(d, w[3] * d->s); tl_op(d, col); tl_op(d, 0); tl_op(d, 0); tl_op(d, (double)n);
+        for (const unsigned char *q = (const unsigned char *)e->mkt + (size_t)w[9], *z = q + n; q < z; q++) tl_op(d, *q);
+        break;
+      }
+    }
+  }
+}
+// A canvas painted again: its marks kept, and drawn after the layout.
+static void tl_marks(void *c, void *x, const double *m, size_t n, const char *t, size_t tn) {
+  (void)c; tl_n *e = x;
+  free(e->mk); free(e->mkt);
+  e->mk = malloc(sizeof *m * (n * 11 + 1)); memcpy(e->mk, m, sizeof *m * n * 11); e->nmk = n;
+  e->mkt = malloc(tn + 1); memcpy(e->mkt, t, tn); e->mkt[tn] = 0;
+}
 // A picture's shapes to the screen, when they changed.
 static void tl_picture(tl_n *e) {
   const tl_css *c = &e->c;
@@ -1123,6 +1172,7 @@ static void tl_picture(tl_n *e) {
   d.tx = l + (cw - vb[2] * d.s) / 2 - vb[0] * d.s; d.ty = t + (ch - vb[3] * d.s) / 2 - vb[1] * d.s;
   e->fit[0] = d.s; e->fit[1] = d.tx; e->fit[2] = d.ty;
   for (int j = 0; j < e->nk; j++) tl_shapes(e->kids[j], &d);
+  if (e->mk) tl_canvas(e, &d);
   if (e->drawn && d.n == e->ndrawn && !memcmp(d.o, e->drawn, sizeof *d.o * d.n)) { free(d.o); return; }
   free(e->drawn); e->drawn = d.o ? d.o : malloc(sizeof(double)); e->ndrawn = d.n;
   if (tl_ui->draw) tl_ui->draw(tl_ui->ctx, e->view, e->drawn, e->ndrawn);
@@ -1136,7 +1186,7 @@ static void tl_reach(tl_n *k, double ox, double oy, double *rx, double *ry) {
   double x = ox + k->x, y = oy + k->y;
   if (k->c.pos == 2 && x + k->w > *rx) *rx = x + k->w;
   if (k->c.pos == 2 && y + k->h > *ry) *ry = y + k->h;
-  if (strcmp(k->tag, "svg")) for (int j = 0; j < k->nk; j++) tl_reach(k->kids[j], x, y, rx, ry);
+  if (!tl_pic(k)) for (int j = 0; j < k->nk; j++) tl_reach(k->kids[j], x, y, rx, ry);
 }
 // Each box to the screen: its place against its parent's view.
 static void tl_show(tl_n *e, double dx, double dy, int shown) {
@@ -1163,7 +1213,7 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   // bounds, and a browser finds an absolutely placed box under a finger
   // wherever its parents are (tumble's tiles, in a div 0 high).
   double rw = e->w, rh = e->h;
-  if (!e->c.bg && !e->c.bw && strcmp(e->tag, "svg")) for (int j = 0; j < e->nk; j++) tl_reach(e->kids[j], 0, 0, &rw, &rh);
+  if (!e->c.bg && !e->c.bw && !tl_pic(e)) for (int j = 0; j < e->nk; j++) tl_reach(e->kids[j], 0, 0, &rw, &rh);
   double ax = 0, ay = 0, as = 1, ao = 1;
   if (e->an[0] && !e->aend && e->as > 0) ax = e->ax, ay = e->ay, as = e->as, ao = e->ao;
   if (as != 1) { ax += (1 - as) * e->w / 2; ay += (1 - as) * e->h / 2; rw *= as; rh *= as; }
@@ -1183,7 +1233,7 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
     if (!(e->sent & 64) || memcmp(o, e->sent_outline, sizeof o)) { e->sent |= 64; memcpy(e->sent_outline, o, sizeof o); tl_ui->outline(tl_ui->ctx, e->view, o + 1, (size_t)e->c.npoly); }
   }
   if (tl_ui->scroll && e->c.clip == 2 && (!(e->sent & 16) || e->sent_inside != e->inside)) { e->sent |= 16; e->sent_inside = e->inside; tl_ui->scroll(tl_ui->ctx, e->view, e->inside); }
-  if (!strcmp(e->tag, "svg")) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
+  if (tl_pic(e)) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
   for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
 }
 // The style sheets: the texts of the page's style elements.
@@ -1388,7 +1438,7 @@ static int ters__ui_pointer(void *view, int kind, double x, double y) {
 // browser's new element's would) when it next has one.
 static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
 static double tl_sound(void *c, int n, int on, int mic, const char *a, size_t an) { (void)c; return tl_ui->sound ? tl_ui->sound(tl_ui->ctx, n, on, mic, a, an) : 0; }
-static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew, tl_sound };
+static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew, tl_sound, tl_marks };
 // main's page on screen ui, width wide (in the units its texts measure
 // in), dark or not: the root's view.
 static int tl_ask(const char *what, size_t n) { return tl_ui->ask(tl_ui->ctx, what, n); }
@@ -1493,6 +1543,8 @@ static void u_print(uv *v, double dx, double dy, int depth) {
       i += 7 + len;
       continue;
     }
+    if (op == 7) { printf("%*sdisk %g %g %g %08X\n", 2 * depth + 2, "", v->ops[i] + x, v->ops[i + 1] + y, v->ops[i + 2], (unsigned)v->ops[i + 3]); i += 4; continue; }
+    if (op == 8) { printf("%*ssegment %g %g %g %g width %g %08X\n", 2 * depth + 2, "", v->ops[i] + x, v->ops[i + 1] + y, v->ops[i + 2] + x, v->ops[i + 3] + y, v->ops[i + 4], (unsigned)v->ops[i + 5]); i += 6; continue; }
     for (int k = 0; k < m; k++) { double z = v->ops[i + k] + (k % 2 ? y : x); if (z < lo[k % 2]) lo[k % 2] = z; if (z > hi[k % 2]) hi[k % 2] = z; }
     i += m;
     if (op == 5) {
@@ -1514,7 +1566,7 @@ static tl_n *u_find(tl_n *e, const char *id) {
 static tl_n *u_picture(tl_n *e, double dx, double dy, double x, double y, double *bx, double *by) {
   if (!e->tag || e->c.display == TL_NONE) return 0;
   double ex = dx + e->x, ey = dy + e->y;
-  if (!strcmp(e->tag, "svg")) { if (x >= ex && x < ex + e->w && y >= ey && y < ey + e->h) { *bx = x - ex; *by = y - ey; return e; } return 0; }
+  if (tl_pic(e)) { if (x >= ex && x < ex + e->w && y >= ey && y < ey + e->h) { *bx = x - ex; *by = y - ey; return e; } return 0; }
   for (int j = 0; j < e->nk; j++) { tl_n *r = u_picture(e->kids[j], ex, ey, x, y, bx, by); if (r) return r; }
   return 0;
 }

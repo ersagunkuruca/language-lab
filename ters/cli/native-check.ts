@@ -19,7 +19,7 @@ import { HTML_V } from "../src/lang/std.ts";
 
 // Elements with a meaning a box, a text field or a picture doesn't have.
 const REFUSED: Record<string, string> = {
-  img: "an image", picture: "an image", video: "a video", audio: "a sound player", canvas: "a canvas", iframe: "another page",
+  img: "an image", picture: "an image", video: "a video", audio: "a sound player", iframe: "another page",
   object: "an embedded object", embed: "an embedded object", select: "a menu to pick from", option: "a menu's choice", datalist: "a list of suggestions",
   // Inside an svg the picture draws g, a, path, circle, ellipse, rect, line, polyline, polygon and text.
   image: "an image in a picture", use: "a shape used again in a picture", foreignObject: "a page inside a picture",

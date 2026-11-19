@@ -756,6 +756,25 @@ static void shown(NSString *when) {
         i += 7 + k;
         break;
       }
+      case 7: {
+        // A canvas's disk (G2): its middle, radius and colour.
+        double r = o[i + 2];
+        CGContextSetFillColorWithColor(c, colour((uint32_t)(int64_t)o[i + 3]).CGColor);
+        CGContextFillEllipseInRect(c, CGRectMake(o[i] - r, o[i + 1] - r, 2 * r, 2 * r));
+        i += 4;
+        break;
+      }
+      case 8: {
+        // A canvas's segment: its ends, width and colour, ends flat.
+        CGPoint e[2] = { CGPointMake(o[i], o[i + 1]), CGPointMake(o[i + 2], o[i + 3]) };
+        CGContextSetStrokeColorWithColor(c, colour((uint32_t)(int64_t)o[i + 5]).CGColor);
+        CGContextSetLineWidth(c, o[i + 4]);
+        CGContextSetLineCap(c, kCGLineCapButt);
+        CGContextSetLineDash(c, 0, NULL, 0);
+        CGContextStrokeLineSegments(c, e, 2);
+        i += 6;
+        break;
+      }
       default: i = n;
     }
   }
