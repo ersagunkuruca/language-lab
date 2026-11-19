@@ -35,7 +35,7 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // A walk over a list made by map or flat map, a walk over what they were
   // given, so no list is made (fuse-walks.ts, G3b); its walks are the
   // program's own, stored as the rest.
-  const walks = process.env.NO_FUSE_WALKS ? null : fuseWalks(p1.code, p1.info, p1.names, { ...(p1.options as Parameters<typeof infer>[3]), units: false });
+  const walks = (typeof process !== "undefined" && process.env.NO_FUSE_WALKS) ? null : fuseWalks(p1.code, p1.info, p1.names, { ...(p1.options as Parameters<typeof infer>[3]), units: false });
   const p = walks?.made.length ? { ...p1, code: walks.code, info: walks.info, names: walks.names, own: [...p1.own, ...walks.made] } : p1;
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are for its own representations.
@@ -48,7 +48,7 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // A fold's costly work on each item made a map first (fold-items.ts,
   // C42e), so the map's list is chosen for as any other: an array, whose
   // map C shares out on its threads.
-  const shared = process.env.NO_FOLD_ITEMS ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
+  const shared = (typeof process !== "undefined" && process.env.NO_FOLD_ITEMS) ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
   const pinfo = shared.shared ? infer(shared.code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false }) : p.info;
   const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys });
   let code = lib.code;

@@ -25,7 +25,7 @@ const treesCheck = (): Info => (treesChecked ??= infer(base(TREES.code), baseNam
 const APART = 1 << 28;
 
 export function carriedChoice(code: Code, info: Info, next: Code, reps: Representation[], defs: Id[]): Info | null {
-  if (process.env.TERS_RECHECK || !reps.length || reps.some((r) => r.of === LIST || r.of === r.type)) return null;
+  if ((typeof process !== "undefined" && process.env.TERS_RECHECK) || !reps.length || reps.some((r) => r.of === LIST || r.of === r.type)) return null;
   const was = new Set(code.defs), made = next.defs.filter((d) => !was.has(d));
   if (made.some((d) => !TREES.code.nodes[d])) return null;
   // The definitions the rewrite went into: the program's own and the
@@ -120,7 +120,7 @@ export function carriedChoice(code: Code, info: Info, next: Code, reps: Represen
     if (!typeOf.has(id)) typeOf.set(id, at.ret);
   }
   const out: Info = { ...info, typeOf, schemes, divergent, owner, opAt, solveAt };
-  if (process.env.TERS_VERIFY_REPS) {
+  if (typeof process !== "undefined" && process.env.TERS_VERIFY_REPS) {
     const v = verify(next, elaborate(next, out, [...rewritten, ...made]));
     if (v.problems.length) throw new Error(`carried types of ${reps.map((r) => r.name).join(", ")}: ${v.problems.slice(0, 3).map((p) => `${p.id} ${p.rule}`).join("; ")}`);
   }
