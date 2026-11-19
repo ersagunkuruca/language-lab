@@ -319,6 +319,13 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         pre.push(`${d}${local(e.res)} = R.remk(${ex(b.args[0], pre, d)}, ${b.args[1].v});`);
         return "true";
       }
+      // `item at` likewise (the flock's `first(cells item at k, else [])`
+      // for each of a bird's 27 cells): its check in place, no try.
+      if (b.k === "rt" && /^array\.at\.a\d+$/.test(b.fn) && b.args.length === 2 && !e.spent && !e.resumes && !b.args.some((x) => fails(x, ir.funcs))) {
+        const x = ex(b.args[0], pre, d), k = ex(b.args[1], pre, d), a = temp(), j = temp(), ok = temp();
+        pre.push(`${d}const ${a} = ${x} instanceof R.ArrayView ? ${x} : R.arrayView(${x}), ${j} = ${k};`, `${d}const ${ok} = Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${a}.n;`, `${d}if (${ok}) ${local(e.res)} = ${a}.buf.items[${a}.start + ${j}];`);
+        return ok;
+      }
       const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
       // A body whose every no answer leaves by its label, with nothing in
@@ -506,6 +513,20 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
               const vs = ks.map((k, i) => { const v = temp(); pre.push(`${d}const ${v} = ${xs[i + 2]};`); return [k, v]; });
               for (const [k, v] of vs) pre.push(`${d}${c}.c${k}[${j}] = ${v};`);
               return c;
+            }
+          }
+          // An array's item and length read in place where it is a view
+          // (G3d): the runtime's own, one function for every array of a
+          // program, was a quarter of the flock page's time, its calls
+          // seeing every kind of array.
+          {
+            const m = /^array\.(get|length)\.a\d+$/.exec(e.fn);
+            if (m && xs.length === (m[1] === "get" ? 2 : 1)) {
+              const named = (x: string) => { if (/^[\w$]+$/.test(x)) return x; const t = temp(); pre.push(`${d}const ${t} = ${x};`); return t; };
+              const a = named(xs[0]);
+              if (m[1] === "length") return `(${a} instanceof R.ArrayView ? ${a}.n : ${rtName(e.fn)}(${a}))`;
+              const j = named(xs[1]);
+              return `(${a} instanceof R.ArrayView && ${j} >= 0 && ${j} < ${a}.n ? ${a}.buf.items[${a}.start + ${j}] : ${rtName(e.fn)}(${a}, ${j}))`;
             }
           }
           // A builtin that is one JavaScript operator, printed as it (C170b).
