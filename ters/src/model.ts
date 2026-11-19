@@ -409,9 +409,27 @@ export function children(n: Node): Id[] {
 }
 
 // Every node id under `root`, in pre-order. Does not follow refs.
+// Kept per version of the nodes with the node objects it met, and given
+// again while each is still the one there (a version changed in place
+// walks again).
+const subtreesKept = new WeakMap<object, Map<Id, { ids: Id[]; met: Node[] }>>();
 export function subtree(code: Code, root: Id): Id[] {
-  const out: Id[] = [];
   const nodes = code.nodes;
+  let byRoot = subtreesKept.get(nodes);
+  const k = byRoot?.get(root);
+  if (k) {
+    const { ids, met } = k;
+    let same = true;
+    for (let i = 0; i < ids.length; i++) if (nodes[ids[i]] !== met[i]) { same = false; break; }
+    if (same) return ids.slice();
+  }
+  const out = walked(nodes, root);
+  if (!byRoot) subtreesKept.set(nodes, (byRoot = new Map()));
+  byRoot.set(root, { ids: out.slice(), met: out.map((id) => nodes[id]) });
+  return out;
+}
+function walked(nodes: Record<Id, Node>, root: Id): Id[] {
+  const out: Id[] = [];
   const walk = (id: Id) => {
     out.push(id);
     const n = nodes[id];
