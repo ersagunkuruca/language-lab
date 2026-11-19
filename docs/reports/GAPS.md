@@ -9,15 +9,16 @@ gap below gets its evidence, a fix and a rank.
 
 The programs are original, written for this purpose.
 
-**Rounds so far (2026-11-13):** 1 calc, 2 Countdown and chapters, 3
+**Rounds so far (2026-11-19):** 1 calc, 2 Countdown and chapters, 3
 ledger, 4 the guitar pedal, 5 routes, 6 notebook, 7 sheet (written in the
 editor), 8 board (a page, written in the editor), 9 machine (an assembler
 and interpreter, on every target), 10 clinic (a simulation, written in
 the editor), 11 crew (workers as fibers), 12 break (written through the
 MCP), 13 pond (stable references, free lists and threads), 14 rota (a
 search written with Choice), 15 fit (gradients of functions chosen at
-run time), 16 trek (a hiking track with units), 17 depot, 18 pack and 19
-scan (regular expressions made automata). Each round's gaps are
+run time), 16 trek (a hiking track with units), 17 depot, 18 pack, 19
+scan (regular expressions made automata) and 20 larder (exact fractions,
+and lines read by running their printers backwards). Each round's gaps are
 below, as written then. The gaps still open are rows in BACKLOG.md, lane
 C (C30, C31, C59, C63, C64, C70 to C73, C85 to C88, C91 to C96), and the next round's
 program is chosen when the weekly round is due.
@@ -4669,3 +4670,193 @@ instructions of before. What is left of FL1 is the cell arithmetic on
 big-capable Ints (`wrapped cell` 17%, `cell key` 9%), which is FL2,
 C267. The greenhouse's night is 18% shorter natively (its moths' nine
 cells and its wave adding fuse too); moths' barely moves.
+
+## Round 20: larder, exact fractions and lines read backwards (2026-11-19)
+
+`compiler/gaps/larder` plans a week's cooking from a book of recipes:
+- a book names units (`unit tbsp 3 tsp`), recipes (`recipe pancakes 4`
+  and a line per food, `1 1/2 cup flour`), what the larder has (`have …`),
+  the packs the shop sells (`sell 4 cup flour`) and what to make (`make
+  pancakes 6`);
+- every amount, unit and food line is read by running its printer
+  backwards: `spelled item` writes a `Quantity` (`whole`, `part` or
+  `mixed`), a unit and a food, and `inverse(spelled item, line)` is every
+  way that line could have been printed by it, of which the one whose unit
+  and food are one word each is kept;
+- amounts are exact `Rational`s; each dish is scaled to its portions, and
+  every amount spelled as a kitchen would: exactly, in the largest unit
+  holding at least a quarter of one, with halves, thirds, quarters or
+  eighths (`all` of a search over units and fractions, its answers
+  ranked), else in any unit, else "about" the nearest eighth;
+- for each food the larder is short of, every way to buy enough of the
+  packs sold is searched (`one of` a count per pack), and the one with the
+  least over, then the fewest packs, is kept;
+- how many portions the larder alone makes is a product run backwards,
+  `inverse((y) => y · per, have)`, per food of each dish.
+
+It was chosen to try what no round had: `inverse` (relations run
+backwards) inside a compiled program, `Rational` arithmetic throughout,
+and a Choice search whose answers are ranked rather than taken first.
+**94 definitions** (10 types, 84 functions and values).
+
+It was written through the MCP (`gaps-round20/drive.ts` in the project's
+files). No `replace` was refused once the text was right; four `as`
+answers were given (`every item`'s Recipe, `whole part`'s Rational, two
+tuples), and five things had to be written another way first (L5).
+
+Files:
+- `compiler/gaps/larder/`: the program, its README (credits) and a sample
+  `book.txt`.
+- `compiler/gaps/larder.ideal.js`: the same by hand. A line's reading is
+  found from its words directly (the amount is the words before the last
+  two), fractions are `[top, bottom]` pairs of JavaScript numbers kept in
+  lowest terms, and the pack search is the same enumeration with the best
+  kept as it goes.
+- `compiler/gaps/larder.ts`: the evaluator, the core IR's module and the
+  ideal, in one process, and `book`, a made-up book of any size.
+- `compiler/test/larder.test.ts`: the three print the same on the sample
+  book, on small books and on every error; the core IR and the ideal on 16
+  recipes. The core IR's "the larder alone makes" line is left out of its
+  comparison until L1 is fixed.
+- `compiler/gaps/bench-larder.ts`: the table below.
+
+**Correctness.** The evaluator and the ideal print the same on every
+book tried. The core IR's module prints the same except one line: it says
+the larder makes 0 portions of every dish (L1). `ters wasi` and `ters
+native` don't build it at all (L2).
+
+### Results
+
+```
+book   way        report     against the ideal
+4x3    evaluator   406 ms    709x
+4x3    core       28.9 ms     50x
+4x3    ideal       0.6 ms
+16x3   core        272 ms     55x
+16x3   ideal       5.0 ms
+16x4   core       1566 ms    141x
+16x4   ideal      11.1 ms
+64x4   core       8325 ms    167x
+64x4   ideal      49.9 ms
+```
+
+`node compiler/gaps/bench-larder.ts 4x3 16x3 16x4 64x4`: recipes by pack
+sizes per food. The ideal's cost is the pack search; the core IR's grows
+faster than the ideal's with the number of ways to buy (L3, L4).
+
+Where the core IR's 3.05 s at 16x4 go (a CPU profile of `ters compile`'s
+module, start-up included; inclusive, overlapping):
+- `shop lines`, the pack search: 65%. Of it `sort by` 58% and its key,
+  `bought`, 48% (L4);
+- Rational arithmetic's lowest terms, `int.gcd` and `int.exact` through
+  BigInt: `big2` alone is 26% self (L3);
+- `book of`, reading the lines through the relational interpreter: 9%;
+- loading the 9.2 MB module: 0.2 s, and the interpreter's first `infer`
+  0.1 s (L2).
+
+### The gaps, ranked
+
+**L1. Compiled `inverse` with a Rational answer gives no answer (I325).**
+`length(all(inverse((y) => y · two(), h)))`, with `two() = as fraction(2)`
+and h 6 as a fraction, is 1 in the evaluator and 0 in `ters run` (the core
+IR); the same with Float64s is 1 in both. So `portions of item` is always
+`else as fraction(0)` compiled. The module hands `inverse` to the
+evaluator's solver (`R.rt("solveAll:…")`, the closure made by `R.closure`
+with its captured values); a Rational is a `K0(top, bottom)` record in the
+module, and somewhere across that boundary it isn't read or given back as
+one. Not looked into further. Fix: convert Rationals both ways where the
+module and the relational interpreter meet, as Float64s and data already
+are, with the two-line program above as the test.
+
+**L2. `inverse` runs the relational interpreter, shipped in the module, and
+no other target has it (I326).** Both kinds of `inverse` here, a printer
+(`inverse(spelled item, line)`) and a product with one side unknown
+(`inverse((y) => y · per, have)`), compile to `R.rt("solveAll:…")`, the
+evaluator's interpreter with the library's saved code: the module is 9.2
+MB, a one-line book takes 0.71 s (Node starts in 0.03 s), of which loading
+the module is 0.2 s and the interpreter's first `infer` of what it runs
+0.11 s. `ters wasi` and `ters native` refuse the program: "main isn't in
+WebAssembly: calls run book, … which calls portions of item, which solves
+applied by the relational interpreter (its plan isn't fixed before it
+runs; not in this profile yet)", and, with that call made a `divide`, the
+same for `fitting definition`'s `inverse`. Fix: give these directions
+plans fixed before they run (MODES.md), so they compile like any
+function: a fraction product with one side unknown is a division; a
+printer made of `++` and `show` read backwards is a parser, each `join
+text` with both sides unknown a cut at each position of a known text and
+`show` backwards `read whole number`. The plan is a search (Choice), which
+every target already compiles.
+
+**L3. Int's gcd and exact division go through BigInt in JavaScript
+(I327).** Every Rational operation puts its answer in lowest terms with
+`int.gcd` and two `int.exact`s; core-rt.ts does both on BigInts whatever
+the size (`norm(big(a) / big(b))`), where c-rt.ts has a small-Int fast
+path. With the same fast path patched into core-rt.ts (numbers in,
+`Math.trunc(a / b)` and Euclid's loop on numbers), same output:
+
+| book | core before | core with the fast path |
+|---|---|---|
+| 16x4 | 1566 ms, 141x | 517 ms, 41x |
+| 64x4 | 8325 ms, 167x | 2410 ms, 57x |
+
+Fix: that patch, and a test that a Rational sum of small numbers makes no
+BigInt.
+
+**L4. `sort by` calls its key twice per comparison (I328).** The
+library's `sort by` is a merge sort whose `merge by key` calls `key(y)` and
+`key(x)` at every step, so a list of n is keyed about 2·n·log₂ n times. Its
+comment names Python's `key=`, which keys each item once. `shopping` sorts
+every way to buy by (what is left over, how many packs, the counts), and
+the leftover is a sum of Rationals: `bought` is 48% of the run. Written
+by hand as decorate, sort, undecorate (the "Schwartzian transform",
+after Randal L. Schwartz), with `sort by(map(options, (ks) => (key, ks)),
+first)` and the keys taken back off, the same book takes 1.29 s instead of
+2.73 s as a process, its run alone 0.52 s instead of 1.93 s. Fix: `sort
+by` keys each item once, in the library, so every program and target
+gains; then, smaller, `nicest of(sort by(xs, key))`, the first of a sort,
+could be one pass keeping the least.
+
+**L5. Text the MCP doesn't read, and answers that go wrong far away
+(I329).**
+- `f(result = y)`, the way the view prints a definition run backwards
+  (`greet(result = greeting)` in `examples/backwards`), is "nothing is
+  named result here", and `solve f(…)` isn't read either. `inverse(f, y)`
+  is all the MCP can write, and it is the form that compiles to the
+  interpreter (L2).
+- `++` between lists is "join text needs Text here, got List (Item,
+  Int)"; `append` was meant. The message could say so.
+- A definition named like a library one is written and then can't be
+  reached: `define run` succeeded, and the `replace` at `run` that followed
+  went to the library's `run`, "no part of #run8 reads □". It became `run
+  book`.
+- A wrong `as` answer shows up far away. `whole part(y) = whole
+  of(floor(as float64(y)))` asks Int, Fixed, Algebraic or Rational, and
+  the driver's first answer, Int, made it `(Int) -> Int`. Its callers on
+  Rationals then typed with Choice, and the refusal came 30 definitions
+  later at `report`: "report does Console while a Choice is open". The
+  question could weigh what callers pass, or `replace` could say when a
+  definition's effects grow.
+- The MCP ran out of Node's default 2 GB heap after about 100 s (the
+  first time at the 70th definition, `cover`), as I317 found on the
+  greenhouse; the 94 definitions were written in 110 s with a 7 GB heap.
+
+**L6. Smaller things, seen, not rows yet.**
+- `y + y = 6` on Rationals has no answer even in the evaluator: the
+  fraction relation takes any two sides, and here one unknown is both.
+  Int's sum hands such a case to the equation solver (BACKWARDS.md); a
+  fraction's could too.
+- Reading a line backwards carries Diverge (`fitting item : (Text)
+  -[Choice, Diverge]-> Item`), so `main` does, though a printer of a known
+  text read back ends: each step reads a shorter text, which BACKWARDS.md
+  says the modes see for `show numbers`.
+- `ters compile` takes 4.9 s.
+- The evaluator is 709x the ideal.
+
+### Next
+
+1. L1 (I325), a correctness gap on JavaScript.
+2. L3 and L4 (I327, I328): measured above, together they should bring
+   the core IR to a few times the ideal.
+3. L2 (I326), which is what lets `ters wasi` and `ters native` build the
+   program at all, then the bench again on every target.
+4. L5 (I329) for the MCP.
