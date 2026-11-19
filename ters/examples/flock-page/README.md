@@ -6,8 +6,9 @@ keeps apart from the nearest, flies the way they fly, and stays with them.
 A point that roams the box draws the whole flock after it, and the walls
 push back. Out of that come the swirls and the long ribbons.
 
-Arrows or WASD turn and tilt the camera, which turns slowly by itself
-while no key is held. Click the sky first.
+Drag the sky with a finger or the mouse to turn and tilt the camera, or
+click it and use the arrows or WASD. It turns slowly by itself while
+nothing turns it.
 
 The birds are a list of records, flown 30 times a second on a grid of
 10 m cells: each bird reads the birds in its own cell and the 26 around
