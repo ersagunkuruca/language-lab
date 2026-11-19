@@ -562,7 +562,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   if (rep.type === rep.of && !Object.keys(rep.impl).length && !rep.literal) return code;
   // What its matches give as pieces, before they are put in place
   // (infer.ts notePieces).
-  notePieces(code);
+  if (rep.impl.match) notePieces(code, [rep.impl.match]);
   const t = rep.of;
   const variants = new Set(variantsOf(code, t));
   const nodes: Record<Id, Node> = { ...code.nodes };
