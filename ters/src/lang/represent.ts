@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
+import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
@@ -249,7 +249,7 @@ function fieldsOf(code: Code, t: Id, variants: Set<Id>): Map<Id, [Id, number]> {
   byType.set(t, (r = new Map()));
   // On its layer, the layer's arms found once (L266: a scan of every node
   // for each program and type the chooser asks of).
-  const arms = layerOf(code) ? scanningOnLayer(code, () => nodesWhere(code, `arms of ${t}`, (n) => n.kind === "arm" && variants.has(n.variant))).map((id) => code.nodes[id]) : Object.values(code.nodes);
+  const arms = layerOf(code) ? scanningOnLayer(code, () => nodesWhere(code, `arms of ${t}`, (n) => n.kind === "arm" && variants.has(n.variant))).map((id) => code.nodes[id]) : nodesOfKind(code, "arm");
   for (const n of arms) if (n.kind === "arm" && variants.has(n.variant)) n.binds.forEach((b, i) => r!.set(b, [n.variant, i]));
   return r;
 }
