@@ -74,3 +74,17 @@ test("columns are equal when every column is", () => {
   assert.ok(!equal(cols([1, 2], ["a", "b"]), cols([1, 2], ["a", "c"])));
   assert.ok(!equal(cols([1], ["a"]), cols([1, 2], ["a", "b"])));
 });
+
+// The flock's neighbour, `first(birds item at j, else nobody)`, read only
+// by its place and velocity: each part chosen on its own from the
+// columns, so the loop over a cell's birds makes no bird (chosen-parts.ts).
+test("the flock's loop over its neighbours reads their columns and makes no bird", () => {
+  const { ir } = compiled("../../compiler/gaps/flock");
+  const has = (e: SExpr, p: (e: SExpr) => boolean): boolean => p(e) || kids(e).some((k) => has(k, p));
+  const loops = ir.funcs.filter((f) => f.name.startsWith("gathered"));
+  assert.ok(loops.some((f) => has(f.body, (e) => e.k === "rt" && /^array\.cin\./.test(e.fn))), "the position checked in the loop");
+  for (const f of loops) {
+    assert.ok(!has(f.body, (e) => e.k === "make" && e.t.name === "Bird"), "no bird made");
+    assert.ok(!has(f.body, (e) => e.k === "call" && ir.funcs[e.fn].name === "array item at"), "no call making one");
+  }
+});
