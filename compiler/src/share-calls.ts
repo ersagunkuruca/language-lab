@@ -59,7 +59,7 @@ export function binds(e: SExpr): number[] {
 
 // The runtime's functions that only read and compute (scalar.ts RT,
 // ARRAY_RT's reads); not one that may change an array or a table in place.
-const SAFE_RT = (fn: string) => /^(int\.|text\.|number\.|pick:|array\.(first|rest|length|at|of|items|empty)\.)/.test(fn);
+export const SAFE_RT = (fn: string) => /^(int\.|text\.|number\.|pick:|array\.(first|rest|length|at|of|items|empty)\.)/.test(fn);
 
 // Functions that only compute: no world, no closures called, no effects
 // handled or performed, no boxes set; and that always answer.
@@ -93,7 +93,7 @@ export function pureFuncs(ir: CoreIR): Set<number> {
 }
 
 // Arithmetic that only computes and always answers.
-const PURE_OPS = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "float32", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "mod", "less", "equal", "beq", "and", "or", "not", "itof"]);
+export const PURE_OPS = new Set<Op>(["add", "sub", "mul", "div", "neg", "sqrt", "abs", "floor", "float32", "sin", "cos", "tan", "exp", "log", "pow", "atan2", "mod", "less", "equal", "beq", "and", "or", "not", "itof"]);
 // A value worked out from locals and constants by pure arithmetic, pure
 // calls and records.
 export function pureTree(e: SExpr, pure: Set<number>): boolean {

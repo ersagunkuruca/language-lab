@@ -63,6 +63,8 @@ export function inlineSmall(ir: CoreIR): number {
 // is a definition's value worked out once, reads a closure's captures, or
 // can stop and go on later (handlers, waits, the rest of a search); nor one
 // that reaches itself. Rounds until nothing more is put in place.
+// Into a fold's own loop too (G3d): the flock's `met`, called once for
+// each neighbour, is put in its loop over a cell's birds.
 // Small functions called from several places stay calls: put in each
 // place they made the pages bigger (dice 29.5 to 31.0 KB, spacetime 165 to
 // 179 KB) and no run faster, as V8 puts a small function in place itself
@@ -92,7 +94,7 @@ export function inlineCalls(ir: CoreIR, divergent: (i: number) => boolean): numb
     ir.funcs.forEach((f) => count(f.body));
     const before = changed;
     ir.funcs.forEach((f, fi) => {
-      if (f.inner || stops(f.body)) return;
+      if (stops(f.body)) return;
       const put = (e: SExpr): SExpr => {
         const r = mapKids(e, put);
         if (r.k !== "call" || r.cps || r.fn === fi || !can[r.fn] || reach[r.fn].has(fi)) return r;

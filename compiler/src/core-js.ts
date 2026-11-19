@@ -21,6 +21,7 @@
 
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
+import { chosenParts } from "./chosen-parts.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
@@ -736,6 +737,9 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Then calls put in place for the printed code: a function called from
   // one place, or a small one, whatever it does (inline-small.ts).
   if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
+  // A record chosen between and read only by its parts, as its parts
+  // (chosen-parts.ts, G3d): the flock's neighbour, no bird made for it.
+  if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
