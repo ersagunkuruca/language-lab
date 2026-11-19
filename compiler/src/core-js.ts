@@ -22,6 +22,7 @@
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { chosenParts } from "./chosen-parts.ts";
+import { intRanges } from "./int-ranges.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
 import { linearCalls } from "./linear-calls.ts";
@@ -126,7 +127,7 @@ const tableSpecs = (ir: CoreIR): TableSpec[] => {
 const INFIX: Partial<Record<Op, string>> = { add: "+", sub: "-", mul: "*", div: "/", less: "<", equal: "===", beq: "===", and: "&&", or: "||" };
 // The runtime's builtins that are one operator on how values are held
 // (core-rt.ts OWN, std.ts concat): Ints normalised, so equal ones are ===.
-const RT_INFIX: Record<string, string> = { "text.concat": "+", "text.equal": "===", "int.equal": "===", "int.less": "<" };
+const RT_INFIX: Record<string, string> = { "text.concat": "+", "text.equal": "===", "int.equal": "===", "int.less": "<", "int.addSmall": "+", "int.subSmall": "-", "int.remainderSmallUp": "%" };
 const MATH: Partial<Record<Op, string>> = { sqrt: "sqrt", abs: "abs", floor: "floor", float32: "fround", sin: "sin", cos: "cos", tan: "tan", exp: "exp", log: "log", pow: "pow", atan2: "atan2" };
 
 
@@ -529,6 +530,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
               return `(${a} instanceof R.ArrayView && ${j} >= 0 && ${j} < ${a}.n ? ${a}.buf.items[${a}.start + ${j}] : ${rtName(e.fn)}(${a}, ${j}))`;
             }
           }
+          // Small Ints' product and remainder (int-ranges.ts): a product
+          // that is 0 is 0, not −0.
+          if (e.fn === "int.mulSmall" && xs.length === 2) return `(${xs[0]} * ${xs[1]} + 0)`;
+          if (e.fn === "int.remainderSmall" && xs.length === 2) return `((${xs[0]} % ${xs[1]} + ${xs[1]}) % ${xs[1]})`;
           // A builtin that is one JavaScript operator, printed as it (C170b).
           { const op = RT_INFIX[e.fn]; if (op && xs.length === 2) return `(${xs[0]} ${op} ${xs[1]})`; }
           // A map's `value at` where no answer leaves by onFail: checked as
@@ -761,6 +766,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // A record chosen between and read only by its parts, as its parts
   // (chosen-parts.ts, G3d): the flock's neighbour, no bird made for it.
   if (!envSet("NO_CHOSEN_PARTS")) chosenParts(ir);
+  // Ints known small worked out as numbers (int-ranges.ts, C267).
+  if (!envSet("NO_INT_RANGES")) intRanges(ir, new Set(ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))));
   // Reads that wait on the places their values are used at (C162).
   trackReads(ir);
   return ir;
