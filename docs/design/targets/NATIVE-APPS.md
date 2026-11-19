@@ -180,6 +180,12 @@ What a page's parts become under route A:
   Chromium puts them at 360 wide (compiler/test/c-page.test.ts, the
   headless screen `page: "ui-headless"`), and the JNI screen on the
   stand-in tells the same places (c-native-app.test.ts).
+  A canvas (G2) is a picture too: its `paint` function runs where a
+  property's would, its marks go to the layout (ters_host's marks), and
+  the layout draws them in the canvas's own units (its width and
+  height) fitted to its box; disks and segments go to the screen whole
+  (draw ops 7 and 8), so Android draws each with one drawCircle or
+  drawLine. Example: the flock page, two thousand birds, as a native app.
 - **C199e. The iOS shell.** Done: `ters build-native-app --ios` writes
   the same page C as Android's with Screen.m, the screen in Objective-C
   over UIKit rather than Swift, since it takes ters_ui's C calls with no

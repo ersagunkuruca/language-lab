@@ -1234,6 +1234,26 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const sin = SF ? listOf(SF.params[0]) : null, sout = SF ? listOf(SF.result) : null;
     // Its second input is the rate it plays at, samples a second (L269).
     const sound = !!(SF && IN && sin && sout && SF.params[1] === "f64" && fname.has(SF.key));
+    // A canvas's paint (G2): its function's marks, each as numbers and
+    // texts the host reads (ters_host's marks).
+    const pa = ci(A, "std.attribute.paint"), MF = pa >= 0 ? (A.cases[pa].fields[0].t as FType) : null;
+    const LM = MF && fname.has(MF.key) && isData(MF.result) ? (MF.result as DType) : null;
+    const lm = LM && LM.cases.length === 2 ? consOf(LM) : null;
+    const M = lm && lm.head >= 0 ? (LM!.cases[lm.c].fields[lm.head].t as DType) : null;
+    const MARKS = ["std.mark.disk", "std.mark.rectangle", "std.mark.segment", "std.mark.writing"];
+    const paint = !!(M && typeof M === "object" && "cases" in M && MARKS.every((v) => ci(M, v) >= 0));
+    // Each mark as kind (0 disk, 1 rectangle, 2 segment, 3 writing), its
+    // numbers in the order written, then where its colour and its text
+    // are in the texts (offset, length).
+    const markC = () => !paint ? "" : MARKS.map((v, k) => {
+      const c = ci(M!, v), fs = M!.cases[c].fields;
+      const nums: string[] = [], texts: string[] = [];
+      fs.forEach((f, j) => { if (f.t === "f64") nums.push(field(M!, c, j, "mk")); else if (f.t === "text") texts.push(field(M!, c, j, "mk")); });
+      if (nums.length + texts.length !== fs.length) return "";
+      // writing's text comes before its colour.
+      const colour = texts[texts.length - 1], text = texts.length > 1 ? texts[0] : null;
+      return `if (mk->tag == ${c}) { w[0] = ${k}; ${nums.map((x, i) => `w[${1 + i}] = ${x};`).join(" ")} ters_mk_text(w + 7, ${colour});${text ? ` ters_mk_text(w + 9, ${text});` : ""} }`;
+    }).filter(Boolean).join("\n    else ");
     const mic = sound ? ci(IN!, "std.input.microphone") : -1, rec = sound ? ci(IN!, "std.input.recording") : -1;
     // A handler that asks for a permission waits for the person's answer
     // (L236b), as a browser page's does: it runs on a fiber of its own,
@@ -1332,6 +1352,12 @@ typedef struct ters_host {
   // it plays at, or 0 when it can't (ters_sound_say says why). Its audio
   // thread then asks ters_sound_play for samples. May be null: no sound.
   double (*sound)(void *ctx, int n, int on, int mic, const char *address, size_t an);
+  // A canvas's marks, painted again (G2): n marks, 11 numbers each, kind
+  // (0 disk, 1 rectangle, 2 segment, 3 writing), its numbers as written
+  // (disk x y radius, rectangle x y width height, segment x y to-x to-y
+  // width, writing x y size; the rest 0), then its colour and its text as
+  // offsets and lengths in texts. May be null: canvases stay blank.
+  void (*marks)(void *ctx, void *el, const double *m, size_t n, const char *texts, size_t tn);
 } ters_host;
 // The page is the screen's thread's, and the audio thread's while it
 // plays a block (C217): each comes in through this lock, which one
@@ -1374,7 +1400,34 @@ static lab_cell *ters_view(lab_cell *f) {
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
   return r;
 }
-static int ters_handler(lab_cell *f) {
+${paint ? `// A canvas's marks (G2): its paint function run and its list told to
+// the host, which draws them.
+static double *ters_mk; static size_t ters_mkc;
+static char *ters_mkt; static size_t ters_mktn, ters_mktc;
+static void ters_mk_text(double *at, lab_cell *t) {
+  size_t n = LAB_TN(t);
+  if (ters_mktn + n > ters_mktc) { ters_mktc = (ters_mktn + n) * 2 + 256; ters_mkt = realloc(ters_mkt, ters_mktc); if (!ters_mkt) lab_oom(); }
+  memcpy(ters_mkt + ters_mktn, LAB_TB(t), n);
+  at[0] = (double)ters_mktn; at[1] = (double)n;
+  ters_mktn += n;
+}
+static void ters_paint(ters_m *m, lab_cell *f) {
+  if (!ters_h->marks) return;
+  lab_dup(f);
+  lab_cell *l = ${call(MF!, "f")};
+  if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return; }
+  size_t n = 0; ters_mktn = 0;
+  for (lab_cell *x = l; x->tag == ${lm!.c}; x = ${field(LM!, lm!.c, lm!.rest, "x")}, n++) {
+    if ((n + 1) * 11 > ters_mkc) { ters_mkc = (n + 1) * 22 + 1024; ters_mk = realloc(ters_mk, sizeof *ters_mk * ters_mkc); if (!ters_mk) lab_oom(); }
+    lab_cell *mk = ${field(LM!, lm!.c, lm!.head, "x")};
+    double *w = ters_mk + n * 11;
+    memset(w, 0, sizeof *w * 11);
+    ${markC()}
+  }
+  ters_h->marks(ters_h->ctx, m->view, ters_mk, n, ters_mkt, ters_mktn);
+  lab_drop(l);
+}
+` : ""}static int ters_handler(lab_cell *f) {
   if (ters_nh == ters_ch) { ters_ch = ters_ch ? 2 * ters_ch : 16; ters_handlers = realloc(ters_handlers, sizeof *ters_handlers * (size_t)ters_ch); }
   lab_dup(f);
   ters_handlers[ters_nh] = f;
@@ -1597,6 +1650,7 @@ static void ters_fill(ters_m *m, lab_cell *h) {
     t->kind = a->tag;
     if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
     else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
+    ${paint ? `else if (a->tag == ${pa}) { t->f = ${field(A, pa, 0, "a")}; lab_dup(t->f); ters_paint(m, t->f); }` : ""}
     ${ls >= 0 ? `else if (a->tag == ${ls}) fputs("a sound in stereo plays only in a browser for now (ters build-web)\\n", stderr);` : ""}
     else ${sound ? `if (ters_parts) fputs("a listen inside a part doesn't play: put it where main returns it\\n", stderr);` : `fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);`}
   }
@@ -1654,7 +1708,7 @@ static int ters_fits(ters_m *m, lab_cell *h) {
   for (lab_cell *x = ${field(H, el, 1, "h")}; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}, j++) {
     lab_cell *a = ${field(LA, la.c, la.head, "x")};
     if (j >= m->na || m->attrs[j].kind != (int)a->tag) return 0;
-    if (a->tag == ${pr} ? !ters_same(m->attrs[j].name, ${field(A, pr, 0, "a")}) : a->tag == ${on} ? !ters_same(m->attrs[j].name, ${field(A, on, 0, "a")}) : 1) return 0;
+    if (a->tag == ${pr} ? !ters_same(m->attrs[j].name, ${field(A, pr, 0, "a")}) : a->tag == ${on} ? !ters_same(m->attrs[j].name, ${field(A, on, 0, "a")}) : ${paint ? `a->tag != ${pa}` : "1"}) return 0;
   }
   if (j != m->na) return 0;
   j = 0;
@@ -1669,6 +1723,7 @@ static void ters_lay(ters_m *m, lab_cell *h) {
       lab_cell *a = ${field(LA, la.c, la.head, "x")};
       if (a->tag == ${pr}) { lab_cell *f = ${field(A, pr, 1, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_show(m, &m->attrs[j]); }
       else if (a->tag == ${on}) { lab_cell *f = ${field(A, on, 1, "a")}; lab_dup(f); lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = f; }
+      ${paint ? `else if (a->tag == ${pa}) { lab_cell *f = ${field(A, pa, 0, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_paint(m, f); }` : ""}
     }
     j = 0;
     for (lab_cell *x = ${field(H, el, 2, "h")}; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) ters_lay(m->kids[j], ${field(LH, lh.c, lh.head, "x")});
@@ -1707,7 +1762,7 @@ static int ters_no_clock, ters_clock;
 static void ters_refresh(ters_m *m) {
   if (m->kind == ${tx}) { ters_text(m); return; }
   if (m->kind == ${pt}) { ters_part(m); return; }
-  for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${pr}) ters_show(m, &m->attrs[j]);
+  for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${pr}) ters_show(m, &m->attrs[j]);${paint ? ` else if (m->attrs[j].kind == ${pa}) ters_paint(m, m->attrs[j].f);` : ""}
   for (int j = 0; j < m->nk; j++) ters_refresh(m->kids[j]);
 }
 ${waits ? "static int ters_ask(const char *what, size_t n);\n" : ""}// main's page on host h: its root's view, or null when main has no answer.
