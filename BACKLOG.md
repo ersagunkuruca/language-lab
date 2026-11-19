@@ -188,7 +188,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L266u | Make the List choice carry its types, as the Map and Set choice does (carried-reps.ts, #2899), so a first compile doesn't check the program again (about 0.2 s of machine's 2.3 s warm). The rewrite's old nodes keep their types, with List read as the array on the arrays' side; refs to builtins at the boundary, the conversions and the loops' new definitions are typed by unifying what they're given. On machine that rule types every old node the way the check does, except 55 of these. Set aside on 11-19 for stage 4, whose stable ids already let a recompile skip this check | compiler redesign, 2026-11-19 | low | M | open |
 | L279 | A function made in a let and called both inside a `part` and outside it takes on what `part` handles: in the frets page, `frets now = () => frets of(…)` called in `part(() => …)` and in the page's table gave main `-[Cells, Choice, Diverge, Network, Log, Settings, Time]`, and the page wouldn't build ("main can't be a page: unhandled effect: Choice"), though frets of has no effect; as definitions taking the cells it builds. A let-bound lambda's effects should be its own at each call (generalised, as a definition's are) | L278 | P2 | M |  |
 
 ### Ersagun's current asks

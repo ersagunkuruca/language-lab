@@ -115,7 +115,7 @@ const tests = sources.filter((f) => /\.test\.(ts|js)$/.test(f));
 // A test that bundles the editor reaches what the editor imports, and its
 // page, though it imports neither.
 const editorPage = ["editor/main.ts", "editor/page.html"];
-const bundles: Record<string, string[]> = { "ters/test/draws.test.ts": [...editorPage, "editor/smoke-saved.json"], "ters/test/editing.test.ts": editorPage, "ters/test/editing-2.test.ts": editorPage, "ters/test/editing-3.test.ts": editorPage };
+const bundles: Record<string, string[]> = { "ters/test/draws.test.ts": [...editorPage, "editor/smoke-saved.json"], "ters/test/editing.test.ts": editorPage, "ters/test/editing-2.test.ts": editorPage, "ters/test/editing-3.test.ts": editorPage, "ters/test/editor-no-node.test.ts": ["editor/main.ts", "editor/runWorker.ts"] };
 // By imports and the data a test names: the rule when there is no test
 // map, and for the tests the map hasn't recorded or can't see into.
 const byImports = (t: string) => {
