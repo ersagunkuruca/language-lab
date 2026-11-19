@@ -319,6 +319,13 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
         pre.push(`${d}${local(e.res)} = R.remk(${ex(b.args[0], pre, d)}, ${b.args[1].v});`);
         return "true";
       }
+      // `item at` likewise (the flock's `first(cells item at k, else [])`
+      // for each of a bird's 27 cells): its check in place, no try.
+      if (b.k === "rt" && /^array\.at\.a\d+$/.test(b.fn) && b.args.length === 2 && !e.spent && !e.resumes && !b.args.some((x) => fails(x, ir.funcs))) {
+        const x = ex(b.args[0], pre, d), k = ex(b.args[1], pre, d), a = temp(), j = temp(), ok = temp();
+        pre.push(`${d}const ${a} = ${x} instanceof R.ArrayView ? ${x} : R.arrayView(${x}), ${j} = ${k};`, `${d}const ${ok} = Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${a}.n;`, `${d}if (${ok}) ${local(e.res)} = ${a}.buf.items[${a}.start + ${j}];`);
+        return ok;
+      }
       const ok = temp(), label = temp(), [save, back] = keep();
       const body = within(`{ ${ok} = false; break ${label}; }`, () => block(e.body, { set: local(e.res), fails: true }, d + "  "));
       // A body whose every no answer leaves by its label, with nothing in

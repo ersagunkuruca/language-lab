@@ -443,7 +443,7 @@ export const moded = (make: (...a: unknown[]) => (...xs: unknown[]) => Iterable<
 export const RUNTIME = {
   FAIL, OUT, Aborted, Pending, Unsupported, planned, moded,
   // An array's item read in place (core-js.ts, G3d).
-  ArrayView,
+  ArrayView, arrayView,
   branchesFrom: ((...a) => branched().branchesFrom(...a)) as typeof branchesFrom,
   branchWorker: ((...a) => branched().branchWorker(...a)) as typeof branchWorker,
   pageBranches: ((...a) => branched().pageBranches(...a)) as typeof pageBranches,
