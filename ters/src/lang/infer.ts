@@ -2573,7 +2573,10 @@ function matchersOf(code: Code): Set<Id> {
 // again, though the program's own check found it ends (I207). A fact about
 // a definition, by its id, wherever it is.
 const piecesSeen = new Set<Id>();
-export function notePieces(code: Code): void { for (const g of piecesOf(code)) piecesSeen.add(g); }
+// Those of the matchers given: the representation's own `match by`,
+// which represent.ts puts in place (L266: finding every matcher of the
+// program anew was a kind index of its ~50,000 nodes each time).
+export function notePieces(code: Code, matchers: Iterable<Id>): void { for (const d of matchers) piecesOfMatcher(code, d, piecesSeen); }
 // What a representation's match gives its cases as the rest, made from its
 // input by one function (`list tree without first(tree)`, `rest of
 // array(a)`): a piece of that input. Where the match is put in place
@@ -2583,22 +2586,23 @@ function piecesOf(code: Code): Set<Id> {
   let m = pieceMakers.get(code.nodes);
   if (!m) {
     m = new Set();
-    for (const d of matchersOf(code)) {
-      const def = code.nodes[d], lam = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
-      if (lam?.kind !== "lambda" || !lam.params.length) continue;
-      const cases = new Set(lam.params.slice(1)), input = lam.params[0];
-      for (const id of subtree(code, lam.body)) {
-        const n = code.nodes[id], f = isCall(n) ? code.nodes[n.fn] : null;
-        if (!isCall(n) || f?.kind !== "ref" || !cases.has(f.target)) continue;
-        for (const a of n.args) {
-          const c = code.nodes[a], g = isCall(c) ? code.nodes[c.fn] : null, x = isCall(c) ? code.nodes[c.args[0]] : null;
-          if (isCall(c) && c.args.length === 1 && g?.kind === "ref" && x?.kind === "ref" && x.target === input) m.add(g.target);
-        }
-      }
-    }
+    for (const d of matchersOf(code)) piecesOfMatcher(code, d, m);
     pieceMakers.set(code.nodes, m);
   }
   return m;
+}
+function piecesOfMatcher(code: Code, d: Id, m: Set<Id>): void {
+  const def = code.nodes[d], lam = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
+  if (lam?.kind !== "lambda" || !lam.params.length) return;
+  const cases = new Set(lam.params.slice(1)), input = lam.params[0];
+  for (const id of subtree(code, lam.body)) {
+    const n = code.nodes[id], f = isCall(n) ? code.nodes[n.fn] : null;
+    if (!isCall(n) || f?.kind !== "ref" || !cases.has(f.target)) continue;
+    for (const a of n.args) {
+      const c = code.nodes[a], g = isCall(c) ? code.nodes[c.fn] : null, x = isCall(c) ? code.nodes[c.args[0]] : null;
+      if (isCall(c) && c.args.length === 1 && g?.kind === "ref" && x?.kind === "ref" && x.target === input) m.add(g.target);
+    }
+  }
 }
 
 // A let's function that calls itself by its name (BACKLOG L84): the let's
