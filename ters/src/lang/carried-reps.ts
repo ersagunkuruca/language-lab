@@ -11,7 +11,7 @@
 
 import { dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
 import { infer, type Info } from "./infer.ts";
-import { base, baseNames, checkOptions } from "./load.ts";
+import { base, baseNames, checkOptions } from "./base.ts";
 import { TREES } from "./library.ts";
 import { LIST } from "./std.ts";
 import { OverMap, type Type } from "./types.ts";

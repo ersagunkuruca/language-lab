@@ -19,18 +19,10 @@ import "./library-store.ts";
 // A saved file, with ids since renamed read as today's (std.ts RENAMED_IDS).
 const read = <T>(path: string, fallback: T): T => (existsSync(path) ? onTodaysIds(readJsonFile<T>(path, readFileSync(path, "utf8"))) : fallback);
 
-// A use with no body is read as the tuple of its produced ports (L211).
-// On the library as its layer (model.ts onLayer, L217): the passes that
-// scan every node look at the library's once per process.
-export const base = (code: Code): Code => onLayer(merge(LIBRARY.code, code), LIBRARY.code);
-export const baseNames = (...layers: Names[]): Names => layer<Names>(LIBRARY.names, ...layers);
-// What the checker is given with every program: the modules' pins, and
-// which of their definitions are helpers.
-// The prelude keeps the rules of the types whose constructors are private
-// (std.ts SMART; the numbers module Rational's, L207f4), and the trees module stands in for Map and Set, so their
-// definitions are the insiders. A private case of a type the program
-// declares is the program's own to build (L165).
-export const checkOptions: Options = { pins: LIBRARY.pins, hidden: LIBRARY.hidden, insiders: [...PRELUDE.code.defs, ...TREES.code.defs, ...NUMBERS.code.defs], library: LIBRARY.code.defs };
+// The library as a program's layer, its names and the checker's options:
+// in base.ts, which the browser reaches too (carried-reps.ts).
+import { base, baseNames, checkOptions } from "./base.ts";
+export { base, baseNames, checkOptions };
 
 // The checker's options for a program with pins of its own (signatures.ts):
 // a folder's signatures.json, a saved file's `signatures`.
