@@ -589,25 +589,30 @@ export function children(n: Node): Id[] {
 }
 
 // Every node id under `root`, in pre-order. Does not follow refs.
-// Kept per version of the nodes with the node objects it met, and given
-// again while each is still the one there (a version changed in place
-// walks again).
-const subtreesKept = new WeakMap<object, Map<Id, { ids: Id[]; met: Node[] }>>();
-export function subtree(code: Code, root: Id): Id[] {
-  const nodes = code.nodes;
-  let byRoot = subtreesKept.get(nodes);
-  const k = byRoot?.get(root);
+// Kept by the root's node object with the node objects it met, and given
+// again in any version of the nodes while each is still the one there: a
+// copy of the program changing a few nodes walks only the definitions
+// holding them (a version changed in place walks again too).
+type Walk = { ids: Id[]; met: Node[] };
+const subtreesKept = new WeakMap<Node, Walk>();
+function subtreeWalk(nodes: Record<Id, Node>, root: Id): Walk {
+  const rn = nodes[root], k = rn && subtreesKept.get(rn);
   if (k) {
     const { ids, met } = k;
     let same = true;
-    for (let i = 0; i < ids.length; i++) if (nodes[ids[i]] !== met[i]) { same = false; break; }
-    if (same) return ids.slice();
+    for (let i = 1; i < ids.length; i++) if (nodes[ids[i]] !== met[i]) { same = false; break; }
+    if (same) return k;
   }
-  const out = walked(nodes, root);
-  if (!byRoot) subtreesKept.set(nodes, (byRoot = new Map()));
-  byRoot.set(root, { ids: out.slice(), met: out.map((id) => nodes[id]) });
-  return out;
+  const ids = walked(nodes, root), w = { ids, met: ids.map((id) => nodes[id]) };
+  if (rn) subtreesKept.set(rn, w);
+  return w;
 }
+export function subtree(code: Code, root: Id): Id[] {
+  return subtreeWalk(code.nodes, root).ids.slice();
+}
+// The same, not to be changed by the caller; the same array while the
+// nodes under root are the same objects (a key for what is read of them).
+export const subtreeKept = (code: Code, root: Id): readonly Id[] => subtreeWalk(code.nodes, root).ids;
 function walked(nodes: Record<Id, Node>, root: Id): Id[] {
   const out: Id[] = [];
   const walk = (id: Id) => {
@@ -896,7 +901,7 @@ function kindIndex(nodes: Record<Id, Node>): KindIndex {
   let k = kindsKept.get(nodes);
   const under = k ? undefined : nodesUnder(nodes);
   // Not kept: read from its own nodes each time, it holds after a change in place.
-  if (under && !nodesUnder(under)) return kindsOver(nodes, under);
+  if (under) return kindsOver(nodes, under);
   if (!k) {
     k = { kinds: new Map(), at: new Map() };
     let i = 0;
@@ -911,12 +916,30 @@ function kindIndex(nodes: Record<Id, Node>): KindIndex {
   }
   return k;
 }
-// A version over plain nodes: their index (kept, as they never change)
+// The index of nodes others sit over (which never change), by their
+// place in its listing (underOf), kept.
+const underKindsKept = new WeakMap<object, KindIndex>();
+function underKinds(under: Record<Id, Node>, u: ReturnType<typeof underOf>): KindIndex {
+  let k = underKindsKept.get(under);
+  if (!k) {
+    k = { kinds: new Map(), at: new Map() };
+    for (let i = 0; i < u.values.length; i++) {
+      const n = u.values[i];
+      let ns = k.kinds.get(n.kind);
+      if (!ns) { k.kinds.set(n.kind, (ns = [])); k.at.set(n.kind, []); }
+      ns.push(n);
+      k.at.get(n.kind)!.push(i);
+    }
+    underKindsKept.set(under, k);
+  }
+  return k;
+}
+// A version over other nodes: their index (kept, as they never change)
 // with the version's own nodes put in, a kind none of them is or was
 // shared as it is. Positions only order: those under are shifted past the
 // ones listed first, the ones added come after.
 function kindsOver(nodes: Record<Id, Node>, under: Record<Id, Node>): KindIndex {
-  const uk = kindIndex(under), { raw, first, u, changed, added } = overParts(nodes, under);
+  const { raw, first, u, changed, added } = overParts(nodes, under), uk = underKinds(under, u);
   if (!changed.length && !added.length && !first?.length) return uk;
   const touched = new Set<string>();
   for (const [i, n] of changed) { touched.add(u.values[i].kind); if (n) touched.add(n.kind); }

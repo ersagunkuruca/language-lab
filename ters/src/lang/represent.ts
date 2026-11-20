@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues } from "../model.ts";
+import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, subtreeKept, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
@@ -437,13 +437,19 @@ function holders(code: Code, def: Id, t: Id): Id[] {
   return [...out];
 }
 // The types whose cases a definition makes or matches.
+// What a definition's refs and arms name, kept by its walk (the same
+// while its nodes are).
+const namedKept = new WeakMap<readonly Id[], Id[]>();
 function madeOrMatched(code: Code, def: Id): Set<Id> {
-  const out = new Set<Id>();
-  for (const id of subtree(code, def)) {
-    const n = code.nodes[id], v = n.kind === "ref" ? n.target : n.kind === "arm" ? n.variant : null;
-    const o = v && code.nodes[v]?.kind === "variant" ? ownerOf(code, v) : null;
-    if (o) out.add(o);
+  const ids = subtreeKept(code, def);
+  let named = namedKept.get(ids);
+  if (!named) {
+    const vs = new Set<Id>();
+    for (const id of ids) { const n = code.nodes[id], v = n.kind === "ref" ? n.target : n.kind === "arm" ? n.variant : null; if (v) vs.add(v); }
+    namedKept.set(ids, (named = [...vs]));
   }
+  const out = new Set<Id>();
+  for (const v of named) { const o = code.nodes[v]?.kind === "variant" ? ownerOf(code, v) : null; if (o) out.add(o); }
   return out;
 }
 let owners: { code: Code; of: Map<Id, Id> } | null = null;
