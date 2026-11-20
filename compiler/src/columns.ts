@@ -37,7 +37,7 @@ const isRecord = (t: LType | undefined): t is RType => typeof t === "object" && 
 const isArray = (t: LType | undefined, a: AType) => typeof t === "object" && t !== null && (t as { key?: string }).key === a.key;
 
 // The ops on an array type that columns keep, by name.
-const KEPT = /^array\.(get|at|length|empty|replaceOwned|pushFrontOwned|replaceAt|pushFront)\.a(\d+)$/;
+const KEPT = /^array\.(get|at|length|empty|replaceOwned|pushFrontOwned|replaceAt|pushFront|push)\.a(\d+)$/;
 const PUSH = /^array\.pushFront(Owned)?\.a\d+$/, REPLACE = /^array\.replace(Owned|At)\.a\d+$/;
 
 // A map's fold as lowered (owned-arrays.ts): f(a, i, made, by) is `if i = 0
@@ -127,18 +127,21 @@ export function leavesOf(r: RType, deep: boolean, at: number[] = []): Leaf[] {
 // `plain`: only records of plain fields (Float64, Int, Text, Bool), the
 // columns WebAssembly keeps (wasm.ts colScan): there a record holding an
 // array or a record stays a row (pack's, read by position since G3a).
-export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; whole?: boolean } = {}): number {
+// `grow` (JavaScript, G1b2): an array built by pushes in a loop from an
+// empty one (`keep`'s, kept-items.ts) is columns too, growing as it is
+// pushed onto; any empty array is columns with room to grow.
+export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; whole?: boolean; grow?: boolean } = {}): number {
   let n = 0;
   for (const a of ir.arrays) {
     const r = a.item;
     if (!isRecord(r) || !r.fields.length) continue;
     if (opts.plain && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
-    if (stored(ir, a, r, roots, !!opts.whole)) n++;
+    if (stored(ir, a, r, roots, !!opts.whole, !!opts.grow)) n++;
   }
   return n;
 }
 
-function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean): boolean {
+function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean, grow: boolean): boolean {
   const leaves = leavesOf(r, whole);
   const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
@@ -193,6 +196,10 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
     entries.set(i, { call: b, fold: fd });
   }
 
+  // Loops building an array by pushes, from an empty one (G1b2): the
+  // pushes onto the array they carry, which nothing else holds.
+  const pushes = grow ? builtBy(funcs, now, a, suffix) : new Set<SExpr>();
+
   // Every use of a, and of an item read of it, is one columns keep?
   for (const i of now) {
     const f = funcs[i];
@@ -233,8 +240,8 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
             if (!m) return bad();
             if (m[1] === "get" && under?.k !== "let") return bad();
             if (m[1] === "at" && (!whole || !isLocal(e.args[0]))) return bad();
-            if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e)) return bad();
-            if (m[1] === "empty" && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
+            if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e) && !pushes.has(e)) return bad();
+            if (m[1] === "empty" && !grow && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
             for (const x of e.args) walk(x, e);
             return;
           }
@@ -303,6 +310,12 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
         }
       }
       if (e.k === "rt" && e.fn === `array.length${suffix}`) return rt(`array.clength${suffix}`, ...e.args.map(go));
+      // Pushed onto where a loop builds it; empty, with room to grow.
+      if (e.k === "rt" && pushes.has(e)) return written(e.args[0], null, e.args[1], false);
+      // A call of `array nil` too: a function of no inputs is worked out
+      // once (core-js.ts), and each loop pushes onto an array of its own.
+      if (grow && e.k === "call" && !e.cps && e.args.length === 0 && pushes.size && (b0 => b0.k === "rt" && b0.fn === `array.empty${suffix}`)(funcs[e.fn].body)) return rt(`array.cbuild${suffix}`);
+      if (grow && e.k === "rt" && e.fn === `array.empty${suffix}` && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return rt(`array.cbuild${suffix}`);
       if (e.k === "rt" && fold && e === fold.put) return written(e.args[0], loc(fold.j), e.args[e.args.length - 1], REPLACE.test(e.fn));
       if (entry && e === entry.call) {
         const made = e.args[2];
@@ -313,7 +326,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
     };
     // The record v put at position j of c: its fields written there, only
     // those it changes where it was made from the item it replaces.
-    const written = (c: SExpr, j: Local, v: SExpr, replaces: boolean): SExpr => {
+    const written = (c: SExpr, j: Local | null, v: SExpr, replaces: boolean): SExpr => {
       const lets: { i: number; value: SExpr }[] = [];
       let x = v;
       while (x.k === "let") {
@@ -326,7 +339,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
         // Made from the item at j of the array it is put into (the map's
         // own, owned-arrays.ts): the fields it keeps are there already.
         const from = x.into !== undefined ? at.get(x.into) : undefined;
-        if (replaces && from && from.j.i === j.i && fold && from.x.i === fold.from) same = new Set(x.same ?? []);
+        if (replaces && j && from && from.j.i === j.i && fold && from.x.i === fold.from) same = new Set(x.same ?? []);
       }
       // The value at a leaf's path in v: a part of a record made here, or
       // read from a let of it.
@@ -341,7 +354,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
       const ks = leaves.map((_, k) => k).filter((k) => !same.has(leaves[k].path[0]));
       const vals = ks.map((k) => partOf(x, leaves[k].path, r));
       // The lets first (an item read in them still says what it said).
-      const body: SExpr = rt(`array.cset${ks.join("_")}${suffix}`, c, j, ...vals);
+      const body: SExpr = j ? rt(`array.cset${ks.join("_")}${suffix}`, c, j, ...vals) : rt(`array.cpush${suffix}`, c, ...vals);
       return go(lets.reduceRight<SExpr>((b, l) => ({ k: "let", i: l.i, value: l.value, body: b }), body));
     };
     f.body = unread(go(f.body));
@@ -359,4 +372,79 @@ function unread(e: SExpr): SExpr {
   const read = (v: SExpr): boolean => v.k === "local" || (v.k === "rt" && v.fn.startsWith("array.cget")) || (v.k === "make" && v.args.every(read));
   const cheap = read(x.value);
   return cheap && !found(x.body, (y) => y.k === "local" && y.i === x.i) ? x.body : x;
+}
+
+// The pushes of loops building an array of a by pushes from an empty one
+// (G1b2), each onto the array the loop carries: a function whose input p
+// is such an array, read only as pushed onto, given to its next round
+// (as it is, or pushed onto), or given back; and every call of it from
+// elsewhere given an empty array there, new, so that nothing else holds
+// the array pushed onto. `keep`'s loop (kept-items.ts):
+//   L(a, i, out, …) = if … then let o = attempt V ok push(out, v) else out;
+//                     L(a, i + 1, o, …) else out
+function builtBy(funcs: SFunc[], now: Set<number>, a: AType, suffix: string): Set<SExpr> {
+  const pushes = new Set<SExpr>();
+  const PUSHED = `array.push${suffix}`, EMPTY = `array.empty${suffix}`;
+  // A function whose body is an empty array of a (`array nil`).
+  const empties = new Set([...now].filter((i) => { const b = funcs[i].body; return b.k === "rt" && b.fn === EMPTY; }));
+  const isEmpty = (e: SExpr) => (e.k === "rt" && e.fn === EMPTY) || (e.k === "call" && !e.cps && empties.has(e.fn));
+  // How many calls of i give it a new empty array at p, or −1 when one
+  // doesn't.
+  const givenNew = (i: number, p: number, depth: number): number => {
+    let given = 0;
+    for (const j of now) {
+      if (j === i) continue;
+      const g = funcs[j];
+      const once = (l: number) => { let n = 0; found(g.body, (y) => { if (isLocal(y, l)) n++; return false; }); return n === 1; };
+      const fresh = (x: SExpr): boolean => isEmpty(x) || (x.k === "local" && once(x.i) && (found(g.body, (y) => y.k === "let" && y.i === x.i && isEmpty(y.value)) || (x.i < g.params.length && depth < 3 && givenNew(j, x.i, depth + 1) >= 0)));
+      let bad = false;
+      found(g.body, (y) => { if (y.k === "call" && y.fn === i) { given++; if (!fresh(y.args[p])) bad = true; } return false; });
+      if (bad) return -1;
+    }
+    return given;
+  };
+  for (const i of now) {
+    const f = funcs[i];
+    for (let p = 0; p < f.params.length; p++) {
+      if (!isArray(f.params[p], a)) continue;
+      const mine = new Set<SExpr>();
+      // A value given to the next round at p: the array, a push onto it,
+      // an attempt answering one or the array, or a let of one of those.
+      const lets = new Map<number, SExpr>();
+      let ok = true;
+      const next = (v: SExpr): boolean => {
+        if (isLocal(v, p)) return true;
+        { const u = v as SExpr; if (u.k === "local" && lets.has(u.i)) { const x = lets.get(u.i)!; lets.delete(u.i); return next(x); } }
+        if (v.k === "rt" && v.fn === PUSHED && isLocal(v.args[0], p) && !found(v.args[1], (y) => isLocal(y, p))) { mine.add(v); return true; }
+        if (v.k === "attempt" && !found(v.body, (y) => isLocal(y, p))) return next(v.ok) && next(v.otherwise);
+        return false;
+      };
+      const walk = (e: SExpr, tail: boolean): void => {
+        if (!ok) return;
+        if (tail && isLocal(e, p)) return;
+        if (e.k === "local" && (e.i === p || lets.has(e.i))) { ok = false; return; }
+        if (e.k === "let" && found(e.value, (y) => isLocal(y, p))) {
+          // A round's value, used once, as the next round's at p.
+          lets.set(e.i, e.value);
+          walk(e.body, tail);
+          if (lets.has(e.i)) ok = false;
+          return;
+        }
+        if (e.k === "call" && e.fn === i && !e.cps) {
+          if (!e.tail || !next(e.args[p])) { ok = false; return; }
+          e.args.forEach((x, k) => k !== p && walk(x, false));
+          return;
+        }
+        if (e.k === "if") { walk(e.cond, false); walk(e.then, tail); walk(e.else, tail); return; }
+        if (e.k === "let") { walk(e.value, false); walk(e.body, tail); return; }
+        kids(e).forEach((x) => walk(x, false));
+      };
+      walk(f.body, true);
+      if (!ok || !mine.size) continue;
+      // Every call from elsewhere given a new empty array at p (or an
+      // input of a function every call of which is given one there).
+      if (ok && givenNew(i, p, 0) > 0) mine.forEach((x) => pushes.add(x));
+    }
+  }
+  return pushes;
 }

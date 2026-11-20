@@ -150,3 +150,71 @@ function chooser(c: SFunc, ci: number): { value: SExpr; x: number } | null {
   if (reads(value, 0) || reads(value, 1) || reads(value, rest)) return null;
   return { value, x };
 }
+
+// A loop going up an array's positions and putting what it keeps in
+// front of an array it builds (`pool items`: the pool's slots, newest
+// first, each item put in front of those after it) builds the same array
+// going down the positions and pushing each at the end (G1b2), which
+// columns can grow (columns.ts `grow`). The loop counts its rounds as it
+// did; round i reads the item at length − 1 − i. Only a loop that does
+// nothing else, so that the order it reads its items in can't tell:
+//   L(a, out, i) = if 0 < length(a) − i then let s = a[i]; … L(a, out′, i + 1) … else out
+// with out′ the array it built, or one item put in front of it, and its
+// other inputs as they were. JavaScript (positions are Float64s).
+const QUIET = new Set(["if", "let", "case", "field", "get", "local", "num", "int", "bool", "op", "make", "new"]);
+export function pushedInOrder(ir: CoreIR): number {
+  let made = 0;
+  ir.funcs.forEach((f, fi) => {
+    const b = f.body;
+    if (b.k !== "if") return;
+    const c = b.cond;
+    // 0 < length(a) − i, i an input, a an input.
+    if (c.k !== "rt" || c.fn !== "int.less" || c.args[0].k !== "int" || c.args[0].v !== 0n) return;
+    const d = c.args[1];
+    if (d.k !== "op" || d.op !== "sub" || d.args[0].k !== "rt" || !/^array\.length\.a\d+$/.test(d.args[0].fn) || d.args[1].k !== "local") return;
+    const len = d.args[0], a = len.args[0], i = d.args[1].i;
+    if (a.k !== "local" || a.i >= f.params.length || i >= f.params.length) return;
+    // The array built: the input given back where the loop ends.
+    if (b.else.k !== "local" || b.else.i >= f.params.length) return;
+    const out = b.else.i, n = (len as Extract<SExpr, { k: "rt" }>).fn.split(".").pop()!;
+    let ok = true, fronts = 0;
+    const PUT = /^array\.pushFront\.a\d+$/;
+    const look = (e: SExpr): void => {
+      if (!ok) return;
+      if (e.k === "call" && e.fn === fi && !e.cps) {
+        if (!e.tail) { ok = false; return; }
+        e.args.forEach((x, k) => {
+          if (k === i) { if (!(x.k === "op" && x.op === "add" && isLocal(x.args[0], i) && x.args[1].k === "num" && x.args[1].v === 1)) ok = false; return; }
+          if (k === out) {
+            if (isLocal(x, out)) return;
+            if (x.k === "rt" && PUT.test(x.fn) && isLocal(x.args[0], out) && !reads(x.args[1], out)) { fronts++; look(x.args[1]); return; }
+            ok = false; return;
+          }
+          if (!isLocal(x, k)) ok = false;
+        });
+        return;
+      }
+      if (e.k === "rt") {
+        // The item at i read, and nothing else of the array.
+        if (/^array\.get\.a\d+$/.test(e.fn) && isLocal(e.args[0], a.i) && isLocal(e.args[1], i)) return;
+        ok = false; return;
+      }
+      if (isLocal(e, out) || isLocal(e, a.i) || isLocal(e, i)) { ok = false; return; }
+      if (!QUIET.has(e.k)) { ok = false; return; }
+      kids(e).forEach(look);
+    };
+    look(b.then);
+    if (!ok || !fronts) return;
+    // Round i reads the item at length − 1 − i, and pushes it at the end.
+    const at = (): SExpr => ({ k: "op", op: "sub", args: [{ k: "op", op: "sub", args: [{ k: "rt", fn: `array.length.${n}`, args: [{ k: "local", i: a.i }] }, { k: "num", v: 1 }] }, { k: "local", i }] });
+    const go = (e: SExpr): SExpr => {
+      const x = mapKids(e, go);
+      if (x.k === "rt" && /^array\.get\.a\d+$/.test(x.fn) && isLocal(x.args[1], i)) return { ...x, args: [x.args[0], at()] };
+      if (x.k === "rt" && PUT.test(x.fn)) return { ...x, fn: x.fn.replace("pushFront", "push") };
+      return x;
+    };
+    f.body = { ...b, then: go(b.then) };
+    made++;
+  });
+  return made;
+}

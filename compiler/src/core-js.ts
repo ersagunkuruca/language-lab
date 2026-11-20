@@ -23,7 +23,7 @@ import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
-import { keptItems } from "./kept-items.ts";
+import { keptItems, pushedInOrder } from "./kept-items.ts";
 import { intRanges } from "./int-ranges.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
@@ -499,8 +499,23 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           // An array of records as columns (columns.ts, C60): an array per
           // field, a Float64Array for a Float64.
           {
-            const m = /^array\.c(new|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
+            const m = /^array\.c(new|build|push|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
+              // An array a loop builds by pushes (G1b2): room for eight,
+              // each column twice the size when full.
+              if (m[1] === "build" || m[1] === "push") {
+                const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
+                if (m[1] === "build") return `{ n: 0, ${ts.map((x, i) => `c${i}: ${x === "f64" ? "new Float64Array" : "new Array"}(8)`).join(", ")} }`;
+                const c = temp();
+                pre.push(`${d}const ${c} = ${xs[0]};`);
+                const vs = ts.map((_, i) => { const v = temp(); pre.push(`${d}const ${v} = ${xs[i + 1]};`); return v; });
+                pre.push(`${d}if (${c}.n === ${c}.c0.length) {`);
+                ts.forEach((x, i) => pre.push(`${d}  { const o = ${c}.c${i}, g = new ${x === "f64" ? "Float64Array" : "Array"}(o.length * 2); for (let k = 0; k < ${c}.n; k++) g[k] = o[k]; ${c}.c${i} = g; }`));
+                pre.push(`${d}}`);
+                vs.forEach((v, i) => pre.push(`${d}${c}.c${i}[${c}.n] = ${v};`));
+                pre.push(`${d}${c}.n++;`);
+                return c;
+              }
               if (m[1] === "length") return `${xs[0]}.n`;
               // Whether a position is one of the array's (`item at`'s check).
               if (m[1] === "in") { const j = temp(); pre.push(`${d}const ${j} = ${xs[1]};`); return `(Number.isInteger(${j}) && ${j} >= 0 && ${j} < ${xs[0]}.n)`; }
@@ -763,9 +778,12 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   if (!envSet("NO_PUSHES")) ownedPushes(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])));
   // And records rebuilt from their own fields (owned-records.ts, C93 s5).
   if (!envSet("NO_OWN") && !envSet("NO_OWN_RECORDS") && roots.length === 1) ownedRecords(ir, code, info, names, roots[0]);
+  // A loop putting what it keeps in front, pushing at the end going
+  // down instead (G1b2), so columns can grow it.
+  if (!envSet("NO_GROW_COLUMNS")) pushedInOrder(ir);
   // Arrays of records whose loops read and write them field by field, as
   // an array per field (columns.ts, C60).
-  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])), { whole: !envSet("NO_WHOLE_COLUMNS") });
+  if (!envSet("NO_COLUMNS")) columns(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : [])), { whole: !envSet("NO_WHOLE_COLUMNS"), grow: !envSet("NO_GROW_COLUMNS") });
   // Then calls put in place for the printed code: a function called from
   // one place, or a small one, whatever it does (inline-small.ts).
   if (!envSet("NO_INLINE_CALLS")) inlineCalls(ir, (i) => ir.info.divergent.has(ir.funcs[i].def));
