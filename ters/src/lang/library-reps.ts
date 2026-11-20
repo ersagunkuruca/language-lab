@@ -490,6 +490,15 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
     let seeds: Id[] = [];
     for (const r of roots) { const t = splitLists(code, info, names, defs, main, [...seeds, r], array); if (t) { s = t; seeds = [...seeds, r]; } }
   }
+  // A group whose lists cross holding lists (the strum tuner's analysis,
+  // its templates a list of lists, read by position: C271) splits off
+  // with those converted whole, a list of lists item by item (rep-split.ts
+  // `deep`), where what that makes checks; else it stays with its caller.
+  for (const r of roots) {
+    if (s?.seeds.includes(r)) continue;
+    const t = splitLists(code, info, names, defs, main, [...(s?.seeds ?? []), r], array, true);
+    if (t && infer(t.code, t.names, undefined, { ...info.options, ends: endedAsWritten(info, defs), units: false }).errors.length <= info.errors.length) s = t;
+  }
   if (!s) return null;
   return { code: s.code, names: s.names, chosen: [`List as array of List from ${s.seeds.filter((d) => roots.includes(d)).map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array] };
 }
