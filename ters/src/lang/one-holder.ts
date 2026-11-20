@@ -65,6 +65,9 @@ function nodesOf(code: Code, d: Id): Id[] {
   if (!r) m.set(d, (r = subtree(code, d)));
   return r;
 }
+// Whether a builtin may keep or give back its parameter i (oneHolder's
+// `generic`): read off its signature, the same in every program.
+const genericKept = new Map<string, boolean>();
 // The definitions a definition names, kept per program.
 const namesKept = new WeakMap<Code, Map<Id, Set<Id>>>();
 function namesIn(code: Code, d: Id): Set<Id> {
@@ -106,7 +109,12 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     if (types.has(z.id) && item !== undefined) { const a = z.args[0] && info.subst.zonk(z.args[0]); if (a?.t === "con" && a.id === item) return true; return z.args.some(mentions); }
     return dataMentions(z.id) || z.args.some(mentions);
   };
-  const linearBinder = (b: Id) => mentions(info.typeOf.get(b));
+  // Each node's answers, kept for this call: the modes' rounds and the
+  // program's walk ask them again for the same nodes.
+  const mentionsKept = new Map<Id, boolean>(), openKept = new Map<Id, boolean>();
+  const mentionsAt = (id: Id): boolean => { let r = mentionsKept.get(id); if (r === undefined) mentionsKept.set(id, (r = mentions(info.typeOf.get(id)))); return r; };
+  const openAt = (id: Id): boolean => { let r = openKept.get(id); if (r === undefined) openKept.set(id, (r = open(info.typeOf.get(id)))); return r; };
+  const linearBinder = (b: Id) => mentionsAt(b);
   const open = (t: Type | undefined): boolean => {
     if (!t) return true;
     const z = info.subst.zonk(t);
@@ -155,7 +163,13 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
   // answers it makes rather than holds (map's `f`).
   const vars = (t: Type): number[] => t.t === "var" ? [t.v] : t.t === "con" ? t.args.flatMap(vars) : [];
   const generic = (fnRef: Id, i: number) => {
-    const target = (nodes[fnRef] as NodeOf<"ref">).target, sig = SIGS[target];
+    const target = (nodes[fnRef] as NodeOf<"ref">).target, k = `${target} ${i}`;
+    let r = genericKept.get(k);
+    if (r === undefined) genericKept.set(k, (r = genericAt(target, i)));
+    return r;
+  };
+  const genericAt = (target: Id, i: number) => {
+    const sig = SIGS[target];
     const s = new Subst(), dz = sig ? s.zonk(sig(s)) : undefined;
     const p = dz?.t === "fn" ? dz.params[i] : undefined;
     return !!p && dz?.t === "fn" && vars(s.zonk(p)).some((v) => occurs(v, s.zonk(dz.ret)));
@@ -183,7 +197,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     const pathOf = (b: Id) => paths.get(b) ?? b;
     // A part of a known type that holds none of `types` is never followed;
     // in a parameter's mode, one of a type still open might be.
-    const counts = (node: Id) => mentions(info.typeOf.get(node)) || (!typed && open(info.typeOf.get(node)));
+    const counts = (node: Id) => mentionsAt(node) || (!typed && openAt(node));
     const use = (st: Walk, p: string, consume: boolean, node: Id) => {
       // With rebuilds, a function reading any field of its parameter reads
       // the parameter: written in place, it would say something else. The
@@ -361,7 +375,12 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
   // A definition is walked again only when the mode of one it names
   // changed: its walk reads no other (machine: six rounds of 176
   // definitions, for each of 8 types, L266).
-  const defsReached = [...reached].filter((d) => lambdaOf(d) && !jobs.has(d));
+  // A parameter of a type that holds none of `types` and isn't open has
+  // no uses that count: whatever is given for it is of a type the walks
+  // pass over (with rebuilds its fields' reads are noted, but only as
+  // reads of such values, which no walk of the program counts). A
+  // definition with only such parameters keeps empty modes, unwalked.
+  const defsReached = [...reached].filter((d) => lambdaOf(d) && !jobs.has(d) && lambdaOf(d)!.params.some((x) => mentionsAt(x) || openAt(x)));
   const callers = new Map<Id, Id[]>();
   for (const d of defsReached) for (const t of namesIn(code, d)) { let cs = callers.get(t); if (!cs) callers.set(t, (cs = [])); cs.push(d); }
   let dirty = new Set(defsReached);
