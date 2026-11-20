@@ -216,3 +216,14 @@ What a page's parts become under route A:
   much it changed what came in. Example: pedal's A strum plays on the
   Android emulator and the iPhone simulator, Clean changing nearly
   nothing and Harder changing more (2026-11-12).
+- **C260b. Latency and the screen off.** Done: `my sound latency()` in
+  a C page is what the screen measured once a sound plays, 0 till then
+  and on a command line (`ters_page_sound_latency`, shown at the next
+  frame). Android measures each stream from its timestamp as Oboe does
+  (when the last frame written will be heard, and when the last frame
+  read was heard), half a second after it starts and again later; iOS
+  adds the session's output and input latencies and their buffers. A
+  sound plays on with the screen off or the app left: on Android a
+  foreground service of the app's (media playback, and the microphone
+  once allowed) while any sound plays, stopped with the activity; on
+  iOS the `audio` background mode.

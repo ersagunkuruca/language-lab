@@ -12,6 +12,48 @@ import { hostCName, type Shape } from "../src/lang/hosts.ts";
 
 export const PACKAGE = "app.ters.page";
 
+// What a page's sound needs to play on with the screen off (C260b): a
+// service in the foreground, playing media and, from the microphone,
+// recording.
+const FOREGROUND = (mic: boolean) => ["FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MEDIA_PLAYBACK", ...(mic ? ["FOREGROUND_SERVICE_MICROPHONE"] : [])].map((p) => `  <uses-permission android:name="android.permission.${p}" />\n`).join("");
+const soundService = (mic: boolean) => `package ${PACKAGE};
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
+import android.os.Build;
+import android.os.IBinder;
+
+// What keeps a page's sound playing with the screen off or the app left
+// (C260b): in the foreground while a sound plays (MainActivity.sounding),
+// its notification the app's name, which opens the app.
+public class SoundService extends Service {
+  @Override public IBinder onBind(Intent i) { return null; }
+  @Override public int onStartCommand(Intent i, int flags, int id) {
+    NotificationManager m = getSystemService(NotificationManager.class);
+    m.createNotificationChannel(new NotificationChannel("sound", "Sound", NotificationManager.IMPORTANCE_LOW));
+    Notification n = new Notification.Builder(this, "sound")
+      .setContentTitle(getApplicationInfo().loadLabel(getPackageManager()))
+      .setSmallIcon(android.R.drawable.ic_media_play)
+      .setOngoing(true)
+      .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))
+      .build();
+    if (Build.VERSION.SDK_INT >= 29) {
+      int type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;${mic ? `
+      // The microphone too, once it's allowed (asked again then).
+      if (Build.VERSION.SDK_INT >= 30 && checkSelfPermission("android.permission.RECORD_AUDIO") == PackageManager.PERMISSION_GRANTED) type |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;` : ""}
+      startForeground(1, n, type);
+    } else startForeground(1, n);
+    return START_NOT_STICKY;
+  }
+}
+`;
+
 // The app's own id on the phone, one per program, so apps don't replace
 // each other (the Java package stays PACKAGE, which the JNI names hang on).
 export const nativeAppId = (title: string) => `app.ters.${title.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^(\d)/, "_$1") || "page"}`;
@@ -44,14 +86,14 @@ android {
 `,
     "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-${asks ? ASKABLE : sound?.mic ? '  <uses-permission android:name="android.permission.RECORD_AUDIO" />\n' : ""}  <application android:label="${xml(title)}" android:icon="@mipmap/ic_launcher">
+${asks ? ASKABLE : sound?.mic ? '  <uses-permission android:name="android.permission.RECORD_AUDIO" />\n' : ""}${sound ? FOREGROUND(sound.mic) : ""}  <application android:label="${xml(title)}" android:icon="@mipmap/ic_launcher">
     <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" android:configChanges="uiMode|orientation|screenSize|screenLayout|smallestScreenSize">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
-  </application>
+${sound ? `    <service android:name=".SoundService" android:exported="false" android:foregroundServiceType="mediaPlayback${sound.mic ? "|microphone" : ""}" />\n` : ""}  </application>
 </manifest>
 `,
     "app/src/main/res/mipmap/ic_launcher.png": icon(192, rgb(hue, 0.45, 0.42)),
@@ -66,6 +108,7 @@ ${sound ? "# A page's sound (C217): AAudio, the app's assets, the log.\ntarget_c
     "app/src/main/cpp/page.c": `${c}\n${JNI_C}`,
     [`app/src/main/java/${dir}/MainActivity.java`]: ACTIVITY,
     ...(java ? { [`app/src/main/java/${dir}/Hosts.java`]: java } : {}),
+    ...(sound ? { [`app/src/main/java/${dir}/SoundService.java`]: soundService(sound.mic) } : {}),
     ...Object.fromEntries(Object.entries(sound?.files ?? {}).map(([a, b]) => [`app/src/main/assets/${a}`, b])),
     "README.md": `# ${title}, as a native Android app
 
@@ -162,8 +205,9 @@ static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ter
 #include <android/asset_manager_jni.h>
 #include <android/log.h>
 #include <pthread.h>
+#include <time.h>
 #define J_SOUNDS 64
-typedef struct { AAudioStream *out, *in; int n, waiting; float mono[1024], heard[1024]; } j_snd;
+typedef struct { AAudioStream *out, *in; int n, waiting, gen; float mono[1024], heard[1024]; } j_snd;
 static j_snd j_snds[J_SOUNDS];
 static AAssetManager *j_assets;
 static jobject j_assets_ref;
@@ -192,6 +236,55 @@ static void *j_snd_close(void *x) {
   for (int i = 0; i < 2; i++) if (s[i]) { AAudioStream_requestStop(s[i]); AAudioStream_close(s[i]); }
   free(s);
   return 0;
+}
+// The platform's sound latency (C260b), from each stream's timestamp, as
+// Oboe measures it: when the last frame written will be heard, less now,
+// and when the last frame read was heard, before now. A stream with no
+// timestamp yet counts its buffer.
+static double j_snd_delay(AAudioStream *s, int out) {
+  int32_t rate = AAudioStream_getSampleRate(s);
+  if (rate <= 0) return 0;
+  int64_t frame, at;
+  if (AAudioStream_getTimestamp(s, CLOCK_MONOTONIC, &frame, &at) != AAUDIO_OK) return (double)AAudioStream_getBufferSizeInFrames(s) / rate;
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  double now = (double)ts.tv_sec * 1e9 + (double)ts.tv_nsec;
+  int64_t mine = out ? AAudioStream_getFramesWritten(s) : AAudioStream_getFramesRead(s);
+  double when = (double)at + (double)(mine - frame) * 1e9 / rate, d = (out ? when - now : now - when) / 1e9;
+  return d > 0 ? d : 0;
+}
+// Sound p's latency, half a second after it starts and again later (its
+// timestamps come once its streams run, the microphone's once allowed),
+// to the page, while it is the same sound playing.
+typedef struct { j_snd *p; int gen; } j_measuring;
+static void *j_snd_measure(void *x) {
+  j_measuring *m = x;
+  for (int k = 0; k < 2; k++) {
+    usleep(k ? 1500000 : 500000);
+    ters_page_lock();
+    int same = m->p->out && m->p->gen == m->gen;
+    if (same) {
+      double d = j_snd_delay(m->p->out, 1) + (m->p->in ? j_snd_delay(m->p->in, 0) : 0);
+      __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d latency %.4f", m->p->n, d);
+      ters_page_sound_latency(d);
+    }
+    ters_page_unlock();
+    if (!same) break;
+  }
+  free(m);
+  return 0;
+}
+// How many sounds play, to the activity, which keeps a service of the
+// app's in the foreground while any does, so they play on with the
+// screen off (C260b).
+static int j_playing;
+static void j_sounding(int by) {
+  j_playing += by;
+  jclass k = (*ters_j)->GetObjectClass(ters_j, ters_a);
+  jmethodID m = (*ters_j)->GetMethodID(ters_j, k, "sounding", "(I)V");
+  if (m) (*ters_j)->CallVoidMethod(ters_j, ters_a, m, (jint)j_playing);
+  if ((*ters_j)->ExceptionCheck(ters_j)) (*ters_j)->ExceptionClear(ters_j);
+  (*ters_j)->DeleteLocalRef(ters_j, k);
 }
 // The microphone's stream for sound p, at rate.
 static int j_snd_mic(j_snd *p, int32_t rate) {
@@ -222,6 +315,7 @@ static double j_sound(void *c, int n, int on, int mic, const char *address, size
   if (n < 0 || n >= J_SOUNDS) { ters_sound_say(n, "too many sounds on one page"); return 0; }
   j_snd *p = &j_snds[n];
   if (!on) {
+    if (p->out) j_sounding(-1);
     AAudioStream **s = malloc(2 * sizeof *s);
     s[0] = p->out; s[1] = p->in; p->out = p->in = 0; p->waiting = 0;
     pthread_t t;
@@ -255,6 +349,11 @@ static double j_sound(void *c, int n, int on, int mic, const char *address, size
   r = AAudioStream_requestStart(p->out);
   if (r != AAUDIO_OK) { char why[160]; snprintf(why, sizeof why, "the speaker couldn't start: %s", AAudio_convertResultToText(r)); ters_sound_say(n, why); AAudioStream_close(p->out); p->out = 0; return 0; }
   __android_log_print(ANDROID_LOG_INFO, "ters", "sound %d playing at %d a second, %s", n, (int)rate, mic ? "from the microphone" : address ? address : "with no input");
+  j_measuring *m = malloc(sizeof *m);
+  m->p = p; m->gen = ++p->gen;
+  pthread_t t;
+  if (pthread_create(&t, 0, j_snd_measure, m)) free(m); else pthread_detach(t);
+  j_sounding(1);
   return rate;
 }
 // The person allowed the microphone, or not: what waited for it opens.
@@ -263,7 +362,7 @@ static void j_snd_allowed(int yes) {
     j_snd *p = &j_snds[n];
     if (!p->waiting || !p->out) continue;
     p->waiting = 0;
-    if (yes) j_snd_mic(p, AAudioStream_getSampleRate(p->out));
+    if (yes) { j_snd_mic(p, AAudioStream_getSampleRate(p->out)); j_sounding(0); }
     else ters_sound_say(n, "the microphone wasn't allowed: allow it in the app's settings, then tap again");
   }
 }
@@ -571,6 +670,21 @@ public class MainActivity extends Activity {
   @Override public void onBackPressed() { if (!moment("back")) super.onBackPressed(); }
   @Override protected void onPause() { super.onPause(); paused = true; moment("pause"); }
   @Override protected void onResume() { super.onResume(); if (paused) { paused = false; moment("resume"); } }
+
+  // A page's sound plays on with the screen off or the app left (C260b):
+  // while n sounds play (n > 0), the app's SoundService is in the
+  // foreground; asked again once the microphone is allowed, for it too.
+  // It stops with the activity, so no sound plays on with no page.
+  private boolean sounding;
+  void sounding(int n) {
+    if (Build.VERSION.SDK_INT < 26) return;
+    android.content.Intent i = new android.content.Intent().setClassName(this, "${PACKAGE}.SoundService");
+    try {
+      if (n > 0) { startForegroundService(i); sounding = true; }
+      else if (sounding) { stopService(i); sounding = false; }
+    } catch (RuntimeException e) { Log.w("ters", "the sound's service: " + e); }
+  }
+  @Override protected void onDestroy() { sounding(0); super.onDestroy(); }
 
   // Asking the person for a permission (L236b): 1 when they have given
   // it, 0 for one Android has no name for, or else Android's dialog asks

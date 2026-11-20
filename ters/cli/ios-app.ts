@@ -53,7 +53,7 @@ export function iosAppFolder(title: string, c: string, objc?: string, views: Ios
   <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
   <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string></array>
   <key>UILaunchScreen</key><dict/>
-${asks ? ASKABLE : sound?.mic ? MIC : ""}  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+${asks ? ASKABLE : sound?.mic ? MIC : ""}${sound ? "  <key>UIBackgroundModes</key><array><string>audio</string></array>\n" : ""}  <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 </dict>
 </plist>
 `,
@@ -121,6 +121,7 @@ const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
 void ters_sound_play(int n, const float *in, float *out, int frames);
 int ters_sound_heard(int n, double *in, double *out, double *by);
 int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate);
+void ters_page_sound_latency(double s);
 #include <stdatomic.h>
 #define S_SOUNDS 64
 #define S_RING 32768
@@ -146,6 +147,19 @@ static BOOL s_session(int n) {
   }];
   return YES;
 }
+// The platform's sound latency (C260b): the session's figures, the
+// output's and its buffer's, and the input's and its buffer's while the
+// microphone plays; now and again half a second later, as the route
+// settles.
+static void s_latency(void) {
+  AVAudioSession *a = AVAudioSession.sharedInstance;
+  double d = a.outputLatency + a.IOBufferDuration + (s_mic >= 0 ? a.inputLatency + a.IOBufferDuration : 0);
+  ters_page_sound_latency(d);
+}
+static void s_measure(void) {
+  s_latency();
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), dispatch_get_main_queue(), ^{ if (SE.running) s_latency(); });
+}
 // The microphone into sound n's ring, in the input node's format as it
 // comes (its first channel).
 static void s_listen(int n) {
@@ -167,6 +181,7 @@ static void s_listen(int n) {
   NSError *e = nil;
   if (!SE.running && ![SE startAndReturnError:&e]) { s_say(n, [@"the microphone couldn't start: " stringByAppendingString:s_why(e)]); return; }
   printf("sound %d hears the microphone\n", n);
+  s_measure();
 }
 static void s_start(int n, BOOL mic, double rate) {
   if (!s_on[n] || s_nodes[n]) return;
@@ -197,6 +212,7 @@ static void s_start(int n, BOOL mic, double rate) {
   NSError *e = nil;
   if (!SE.running && ![SE startAndReturnError:&e]) { s_say(n, [@"the speaker couldn't start: " stringByAppendingString:s_why(e)]); return; }
   printf("sound %d playing at %.0f a second\n", n, rate);
+  s_measure();
   if (!mic) return;
   AVAudioSessionRecordPermission p = AVAudioSession.sharedInstance.recordPermission;
   if (p == AVAudioSessionRecordPermissionGranted) { s_listen(n); return; }
