@@ -653,6 +653,22 @@ test("a list made under a seed passes `seeded` as it is, so dice's page splits (
   assert.equal(shown(c.code, c.info!, c.names), shown(p.code, info, names));
 });
 
+// C271: a group whose lists cross holding lists splits off with them
+// converted whole: the strum tuner's analysis (`refined`, reading its
+// spectrum and its templates, lists of lists, by `item at`) takes arrays,
+// so the program as first written is the fast one (1.2 s a window as
+// cons lists, 0.3 s as arrays), with the same readings.
+test("the strum tuner's analysis, reading lists of lists by position, takes arrays (C271)", async () => {
+  const { join } = await import("node:path");
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const p = loadProgram(join(import.meta.dirname, "../examples/strum-tuner"));
+  const names = p.pres.names, info = infer(p.code, names, undefined, p.options);
+  const c = withLibraryRepresentations(p.code, info, names, p.named("main"), p.own.defs, [], { hostMaps: true });
+  assert.equal(c.chosen.length, 1);
+  assert.match(c.chosen[0], /^List as array of List from .*\brefined\b/);
+  assert.deepEqual(c.info?.errors.map((e) => e.message), []);
+});
+
 // A priced function of one list (`length`) on a list a call has just
 // made costs no more steps than making it, so it isn't weighed by a loop
 // it is in, and isn't a job when every use is so.
