@@ -35,6 +35,7 @@ import { algebrasOf, type Algebra } from "../../ters/src/lang/grades.ts";
 import { EMBEDDING } from "../../ters/src/lang/std.ts";
 import type { CoreIR, DType, FType, LType, RType, SExpr, SFunc } from "./scalar.ts";
 import { OPS, isData, isFn, isRecord, kids, mapKids, mapLocals, tidied } from "./scalar.ts";
+import { keptMap } from "../../ters/src/kept.ts";
 
 // What a value may be: null nothing yet (no value reaches here), false a
 // Float64 that is always 0, true anything, or a record's fields, or a data
@@ -208,9 +209,109 @@ function unshared(algebras: Map<Id, Algebra>): (f: SFunc) => SFunc {
 // this in a browser, which has no `process`.
 export const envSet = (k: string): boolean => typeof process !== "undefined" && !!process.env?.[k];
 
+// Kept between compiles (plan doc "Incremental compile after edits"):
+// without an algebra, what is worked out here reads a number written in
+// the program only for whether it is 0 (or −0), and never reads a whole
+// number, a text, a truth value, or a function's definition, binders or
+// lambda, which a copy only carries. So the lowered program with those
+// left out is the key, and an edit that changes only them (a number
+// dragged in the editor, say) finds the answer again. Each of them is put
+// back from the program given, by its place in the key, and so is each
+// type object (later passes compare types by object).
+type Slots = { nodes: SExpr[]; ids: string[]; types: object[] };
+const LIT = new Set(["num", "int", "text", "bool"]);
+const isType = (v: object) => "key" in v && !("k" in v);
+// The program as the key writes it, and its slots in the order met.
+function keyOf(ir: CoreIR, roots: number[]): { key: string; slots: Slots } {
+  const slots: Slots = { nodes: [], ids: [], types: [] };
+  const embeddings = [...(ir.info.implementations ?? []).keys()].filter((k) => String(k).startsWith(EMBEDDING)).sort();
+  // Each type of the program written out once (elsewhere by its key).
+  const own = (ts: object[]) => ts.map((t) => { const { key, ...rest } = t as { key: string }; return { type: key, ...rest }; });
+  const key = JSON.stringify([embeddings, ir.funcs, ir.shapes, ...[ir.records, ir.arrays, ir.tables, ir.fns, ir.data, ir.escapes].map(own), roots], function (this: Record<string, unknown>, k, v) {
+    if (typeof v === "bigint") return `${v}n`;
+    if (k === "binders" && Array.isArray(v)) { for (const b of v) slots.ids.push(b ?? ""); return v.length; }
+    if (v && typeof v === "object") {
+      if (isType(v)) { slots.types.push(v); return (v as { key: string }).key; }
+      if (LIT.has((v as SExpr).k) && "v" in v) {
+        slots.nodes.push(v as SExpr);
+        const x = (v as SExpr & { v: unknown }).v;
+        return { k: (v as SExpr).k, v: (v as SExpr).k !== "num" ? null : Object.is(x, 0) ? 0 : Object.is(x, -0) ? -1 : 1 };
+      }
+      return v;
+    }
+    if (k === "lambda" || ("body" in this && "locals" in this && k === "def")) { slots.ids.push(v); return null; }
+    return v;
+  });
+  return { key, slots };
+}
+// Every slot of `out` is one of `slots`, or a 0 that zeroParts put.
+function heldBy(out: SFunc[], slots: Slots): boolean {
+  const nodes = new Set(slots.nodes), ids = new Set(slots.ids), types = new Set(slots.types);
+  let ok = true;
+  const walk = (v: unknown): void => {
+    if (!ok || !v || typeof v !== "object") return;
+    if (isType(v)) { if (!types.has(v)) ok = false; return; }
+    if (Array.isArray(v)) { v.forEach(walk); return; }
+    const e = v as SExpr & { v?: unknown; lambda?: string; binders?: string[] };
+    if (typeof e.lambda === "string" && !ids.has(e.lambda)) ok = false;
+    if (Array.isArray(e.binders) && e.binders.some((b) => b && !ids.has(b))) ok = false;
+    if (LIT.has(e.k) && "v" in e && !nodes.has(e) && !(e.k === "num" && e.v === 0)) { ok = false; return; }
+    for (const x of Object.values(v)) walk(x);
+  };
+  for (const f of out) { walk(f.params); walk(f.locals); walk(f.result); if (f.answer) walk(f.answer); if (!ids.has(f.def) || f.binders?.some((b) => b && !ids.has(b))) return false; walk(f.body); }
+  return ok;
+}
+// `out` with each slot of `was` put back as the program given has it.
+function putBack(out: SFunc[], was: Slots, now: Slots): SFunc[] {
+  const nodes = new Map<SExpr, SExpr>(), ids = new Map<string, string>(), types = new Map<object, object>();
+  was.types.forEach((t, n) => { if (t !== now.types[n]) types.set(t, now.types[n]); });
+  was.nodes.forEach((e, n) => { if (e !== now.nodes[n]) nodes.set(e, now.nodes[n]); });
+  was.ids.forEach((d, n) => { if (d !== now.ids[n]) ids.set(d, now.ids[n]); });
+  if (!nodes.size && !ids.size && !types.size) return out;
+  // Every field, as the key reads them (kids leaves some out).
+  const memo = new Map<object, unknown>();
+  const put = (v: unknown): unknown => {
+    if (!v || typeof v !== "object") return v;
+    if (isType(v)) return types.get(v) ?? v;
+    const n = nodes.get(v as SExpr);
+    if (n) return n;
+    if (memo.has(v)) return memo.get(v);
+    let r: unknown = v;
+    const id = (x: unknown) => (typeof x === "string" && ids.get(x)) || x;
+    if (Array.isArray(v)) { const xs = v.map(put); if (xs.some((x, i) => x !== v[i])) r = xs; }
+    else { const o = v as Record<string, unknown>; let c: Record<string, unknown> | null = null; for (const k in o) { const x = k === "lambda" ? id(o[k]) : k === "binders" && Array.isArray(o[k]) ? (((bs: unknown[]) => { const ys = bs.map(id); return ys.some((y, i) => y !== bs[i]) ? ys : bs; })(o[k] as unknown[])) : put(o[k]); if (x !== o[k]) (c ??= { ...o })[k] = x; } if (c) r = c; }
+    memo.set(v, r);
+    return r;
+  };
+  return out.map((f) => {
+    const def = ids.get(f.def) ?? f.def, binders = f.binders?.map((b) => (b && ids.get(b)) ?? b);
+    return { ...f, def, ...(binders ? { binders } : {}), params: put(f.params) as LType[], locals: put(f.locals) as LType[], result: put(f.result) as LType, ...(f.answer ? { answer: put(f.answer) as LType } : {}), body: put(f.body) as SExpr };
+  });
+}
+const sameList = <T>(a: T[], b: T[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+const sameShapes = (a: CoreIR["shapes"], b: CoreIR["shapes"]) => a.length === b.length && a.every((x, i) => x === b[i] || (x.t === b[i].t && sameList(x.caps, b[i].caps)));
+// Later passes may add locals to a function in place.
+const fresh = (fs: SFunc[]): SFunc[] => fs.map((f) => ({ ...f, params: [...f.params], locals: [...f.locals] }));
+const keptParts = keptMap<string, { funcs: SFunc[]; slots: Slots; copies: number; dropped: number }>();
+
 export function zeroParts(ir0: CoreIR, roots: number[]): { ir: CoreIR; copies: number; dropped: number } {
   const algebras = new Map<Id, Algebra>();
   try { for (const a of algebrasOf(ir0.code, ir0.info).values()) algebras.set(a.variant, a); } catch { /* no algebras */ }
+  if (algebras.size) return zeroPartsIn(ir0, roots, algebras);
+  const { key, slots } = keyOf(ir0, roots);
+  const was = keptParts.get(key);
+  if (was) {
+    const funcs = fresh(putBack(was.funcs, was.slots, slots));
+    return { ir: { ...ir0, funcs }, copies: was.copies, dropped: was.dropped };
+  }
+  const r = zeroPartsIn(ir0, roots, algebras);
+  if (sameShapes(r.ir.shapes, ir0.shapes) && sameList(r.ir.records, ir0.records) && heldBy(r.ir.funcs, slots)) {
+    if (keptParts.size >= 4) keptParts.clear();
+    keptParts.set(key, { funcs: fresh(r.ir.funcs), slots, copies: r.copies, dropped: r.dropped });
+  }
+  return r;
+}
+function zeroPartsIn(ir0: CoreIR, roots: number[], algebras: Map<Id, Algebra>): { ir: CoreIR; copies: number; dropped: number } {
   const ir: CoreIR = { ...ir0, funcs: inlineLeaves(ir0.funcs.map(unshared(algebras))) };
   const funcs = ir.funcs;
   // A closure's code, by its function type: what every apply of that type
