@@ -245,6 +245,10 @@ export interface AType { key: string; name: string; item: LType; index: number; 
 export interface TType { key: string; name: string; keyT: "int" | "text" | "f64" | RType | DType; value: LType; index: number; entries: DType[]; set: boolean }
 export type LType = SType | WType | RType | DType | FType | AType | TType;
 export const isArray = (t: LType): t is AType => typeof t === "object" && "item" in t;
+// An empty array: what a definition giving it gives may be shared even
+// where its type is written in place, as no write goes in place in one
+// with no items (owned-arrays.ts; G3f, `item at`'s stand-in in a loop).
+export const emptyArray = (e: SExpr): boolean => e.k === "rt" && /^array\.empty\.a\d+$/.test(e.fn);
 export const isTable = (t: LType): t is TType => typeof t === "object" && "keyT" in t;
 // Whether a list of a table's (its `entries`) holds its keys alone: a
 // set's items, or a map's `keys of`; otherwise (key, value) pairs.

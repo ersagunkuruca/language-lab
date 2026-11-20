@@ -23,7 +23,7 @@ import { oneHolder } from "../../ters/src/lang/one-holder.ts";
 import { ARRAY_OPS } from "../../ters/src/lang/std.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { ARRAY, INT, NUMBER, STRING } from "../../ters/src/lang/types.ts";
-import { kids, type CoreIR, type SExpr } from "./scalar.ts";
+import { isArray, kids, type CoreIR, type SExpr } from "./scalar.ts";
 
 const REPLACE = /^array\.replaceAt\.a(\d+)$/;
 
@@ -39,8 +39,10 @@ export function ownedArrays(ir: CoreIR, code: Code, info: Info, names: Record<Id
   const owned = new Set<number>();
   for (const a of used) {
     const t = ir.arrays[a]?.item;
-    const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : undefined;
-    if (item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item).ok) owned.add(a);
+    // Arrays as items too: the moths' cells, an array of each cell's moth
+    // numbers, filed into every tick (G3f).
+    const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : t && isArray(t) ? ARRAY : undefined;
+    if (item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item, false, undefined, true).ok) owned.add(a);
   }
   if (!owned.size) return n;
   let total = n;
@@ -70,7 +72,7 @@ function mapsInPlace(ir: CoreIR, code: Code, info: Info, names: Record<Id, strin
     if (!owned.has(a)) {
       const t = ir.arrays[a]?.item;
       const item = t === "int" || t === "int32" ? INT : t === "f64" ? NUMBER : t === "text" ? STRING : typeof t === "object" && t !== null && "def" in t ? (t as { def: Id }).def : undefined;
-      owned.set(a, !!item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item).ok);
+      owned.set(a, !!item && oneHolder(code, info, main, new Set([ARRAY]), jobs, changes, names, item, false, undefined, true).ok);
     }
     return owned.get(a)!;
   };

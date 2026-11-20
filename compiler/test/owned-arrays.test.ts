@@ -27,10 +27,12 @@ import { emitWasm } from "../src/wasm.ts";
 
 // main prints what `body` makes of a = array of [1, 2, 3]; each way, and
 // whether a replace was written in place.
-function both(body: (k: Lang, a: Id) => Id): { evaluator: string[]; compiled: string[]; wasm: string[]; owned: boolean } {
+function both(body: (k: Lang, a: Id, zeros: Id) => Id): { evaluator: string[]; compiled: string[]; wasm: string[]; owned: boolean } {
   const k = new Lang(LIBRARY.code);
+  // A definition that is an array, not a function.
+  const zeros = k.define(k.def("zeros"), k.call(ARRAY_OPS.of, k.listOf(k.int(0), k.int(0), k.int(0))));
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.let("a", k.call(ARRAY_OPS.of, k.listOf(k.int(1), k.int(2), k.int(3))), (a) => k.call(S.print, k.call(SHOW_ANY, body(k, a))))));
+  k.define(main, k.thunk(() => k.let("a", k.call(ARRAY_OPS.of, k.listOf(k.int(1), k.int(2), k.int(3))), (a) => k.call(S.print, k.call(SHOW_ANY, body(k, a, zeros))))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const evaluator: string[] = [], compiled: string[] = [];
@@ -65,6 +67,16 @@ test("an array read after it was changed keeps its versions", () => {
 
 test("a rest taken before the change shares the buffer, so the change keeps a version", () => {
   const r = both((k, a) => k.let("r", k.call(ARRAY_OPS.rest, a), (rest) => k.let("b", at(k, a, 1, 20), (b) => k.call(PAIR_V, b, rest))));
+  assert.equal(r.owned, true);
+  assert.deepEqual(r.compiled, r.evaluator);
+  assert.deepEqual(r.wasm, r.evaluator);
+});
+
+// A definition that is an array, named twice and replaced each time:
+// each naming a new array (G3f, the moths' `empty grid`), so in place,
+// and the second not seeing the first's change.
+test("an array a definition gives is a new one each time it is named", () => {
+  const r = both((k, _a, zeros) => k.call(PAIR_V, at(k, zeros, 0, 1), at(k, zeros, 1, 2)));
   assert.equal(r.owned, true);
   assert.deepEqual(r.compiled, r.evaluator);
   assert.deepEqual(r.wasm, r.evaluator);
