@@ -69,7 +69,11 @@ test("a first's fallback keeps its work: nothing is moved out of a lambda of no 
   k.define(pick, k.fn(["xs"], (xs) => k.call(S.first, k.thunk(() => k.call(S.oneOf, xs)), k.thunk(() => k.call(total, xs)))));
   const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  assert.equal(hoistInvariants(code, info, names).hoisted, 0);
+  // What the library's own definitions have moved out (the signals and
+  // tunings modules, #2878, have some) isn't this program's.
+  const lib = new Lang(LIBRARY.code), libCode = base(lib.code), libNames = baseNames(lib.names);
+  const library = hoistInvariants(libCode, infer(libCode, libNames, undefined, checkOptions), libNames).hoisted;
+  assert.equal(hoistInvariants(code, info, names).hoisted, library);
 });
 
 test("the hoisted program's types are carried, not checked again, and the verifier vouches for them (I203)", () => {
