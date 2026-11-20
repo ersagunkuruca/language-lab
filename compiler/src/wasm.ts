@@ -927,6 +927,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     ...section(10, codeSec),
     // fdlibm's tables, in the math functions' page.
     ...(math ? section(11, vec([[0x00, 0x41, ...s(MATH_AT + MATH_DATA_AT), 0x0b, ...vec(MATH_DATA.map((b) => [b]))]])) : []),
+    // Each function's name, for a profiler (TERS_WASM_NAMES set): the
+    // custom "name" section's function names.
+    ...(typeof process !== "undefined" && process.env.TERS_WASM_NAMES ? section(0, [...str("name"), ...section(1, vec([...funcs.map((f) => f.name), ...helpers.map((x) => x.name), ...rts.map((f) => f.name)].map((x, i) => [...u(fnIndex(i)), ...str(x)])))]) : []),
   ]);
 
   // ---- text, for reading

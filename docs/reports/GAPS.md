@@ -4373,6 +4373,16 @@ that never leave a function, and no finite check on a literal.
 **M5. WebAssembly is 14.6x.** Not profiled yet; likely M1, M2 and M4 at
 once, since it lowers the same IR.
 
+Profiled 2026-11-20 (G3e), 300 ticks of 3000 moths through Node's WASI,
+built with `TERS_WASM_NAMES=1` so the profile names functions. By then
+the run was 11.3x the C (1.75 s for 100 ticks). `array.replaceAt` was
+24%: filing the moths by cell copies the whole cells array for every
+moth, because WebAssembly has no counts and the one value `empty grid`,
+named every tick, isn't one holder's (G3f). The GC was 16%, mostly those
+copies. `met` and its loops over the cells were about 30% (M4, G3d).
+Small runtime functions Node's V8 doesn't inline, such as an array's
+item, `int.less` and `int.small`, were about 10% (G3g).
+
 **M6. The MCP offers the wrong type for a field two types share.**
 `l.place` with `Moth` and `Lamp` both having `place` asks `as`, and the
 first type it offers was Moth. Known since round 20's notes (the `as`
