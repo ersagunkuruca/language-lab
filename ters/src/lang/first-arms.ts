@@ -15,7 +15,7 @@
 // stays. Inside another search (all, count, first, optional) or a use,
 // nothing is taken: there every way may count.
 import type { Code, Id, Node } from "../model.ts";
-import { SCHEMA, subtree, freshId, isCall, dependenciesOfAll } from "../model.ts";
+import { SCHEMA, subtree, freshId, isCall, dependenciesOfAll, copyNodes, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, inferRewritten, type Info } from "./infer.ts";
 import { S } from "./std.ts";
@@ -30,7 +30,7 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   const typeOf = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   // A first whose thunk may choose.
   const sites: Id[] = [];
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n) || refTo(n.fn) !== S.first) continue;
     const th = node(n.args[0]);
     if (th?.kind === "lambda" && th.params.length === 0 && chooses(typeOf(th.id))) sites.push(n.id);
@@ -82,7 +82,7 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
     return open;
   };
   const open = new Set(sites.filter((s) => reach((code.nodes[s] as { args: Id[] }).args[0])));
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const outNames: Names = { ...names };
   // A copy of a tree, its choices taken at their first item and its
   // definitions with Choice their copies, outside other searches.

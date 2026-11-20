@@ -31,7 +31,7 @@
 // Prior art: serde's derive (David Tolnay, Erick Tryzelaar), Haskell
 // aeson's generic ToJSON/FromJSON; CREDITS.md.
 
-import { nodesWhere, isCall, type Code, type Id, type NodeOf } from "../model.ts";
+import { nodesWhere, isCall, type Code, type Id, type NodeOf, copyNodes, nodeValues, withNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { infer, type Info } from "./infer.ts";
@@ -234,9 +234,9 @@ export function jsonByType(code: Code, info: Info, names: Names): { code: Code; 
   };
   const showT = (t: Type): string => t.t === "con" ? [nm(t.id), ...t.args.map((a) => a.t === "con" && a.args.length ? `(${showT(a)})` : showT(a))].join(" ") : "?";
 
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   let changed = false;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n) || n.args.length !== 1) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || !OPS.has(f.target)) continue;
@@ -247,7 +247,7 @@ export function jsonByType(code: Code, info: Info, names: Names): { code: Code; 
     changed = true;
   }
   if (!changed) return { code, info, names };
-  const next: Code = { ...code, nodes: { ...nodes, ...k.code.nodes }, defs: [...code.defs, ...k.code.defs] };
+  const next: Code = { ...code, nodes: withNodes(nodes, k.code.nodes), defs: [...code.defs, ...k.code.defs] };
   const out = { ...names, ...k.names };
   return { code: next, info: infer(next, out, undefined, info.options), names: out };
 }

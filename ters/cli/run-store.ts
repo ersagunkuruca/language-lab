@@ -25,6 +25,7 @@ import { keptDir } from "../src/io.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { graphHash, libraryFiles } from "../src/lang/library-store.ts";
 import type { MainSpec, Printed } from "../../compiler/src/core-js.ts";
+import { nodeIds } from "../src/model.ts";
 
 // What a run needs: the printed program, which of its functions is main
 // and how it is called, and the names `show` prints cases with.
@@ -44,7 +45,7 @@ export function runKey(code: Code, names: Names, options: Options | undefined, m
   h.update(libraryFiles());
   const lib = LIBRARY.code.nodes;
   let shared = 0;
-  for (const id in code.nodes) { const n = code.nodes[id]; if (n === lib[id]) shared++; else h.update(JSON.stringify(n)); }
+  for (const id of nodeIds(code.nodes)) { const n = code.nodes[id]; if (n === lib[id]) shared++; else h.update(JSON.stringify(n)); }
   // A library node left out changes what is lowered too.
   h.update(`${shared}`);
   h.update(JSON.stringify(code.defs));

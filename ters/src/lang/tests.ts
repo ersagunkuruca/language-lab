@@ -21,6 +21,7 @@ import { Lang } from "./dsl.ts";
 import { CHOICE, instantiate, INT, NUMBER, STRING, type Type } from "./types.ts";
 import { parseValue } from "./values.ts";
 import { fractionCase } from "./prelude-ids.ts";
+import { withNodes } from "../model.ts";
 
 export const TEST_HANDLES = discharge("a test run by ters test", [CHECK, CHOICE],
   "the test runner handles Check, collecting every expect that failed, and runs each path a search takes");
@@ -292,7 +293,7 @@ export function checkedTests(code: Code, names: Names, tests: Id[]): { code: Cod
     ]), () => k.lit("")), [{ variant: ABORT_OP, names: ["what"], body: ([what]) => what }])));
     wrappers.set(d, w);
   }
-  return { code: { nodes: { ...code.nodes, ...k.code.nodes }, defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, wrappers };
+  return { code: { nodes: withNodes(code.nodes, k.code.nodes), defs: [...code.defs, ...k.code.defs] }, names: { ...names, ...k.names }, wrappers };
 }
 
 // An evaluator's value as compiled JavaScript takes it (core-js.ts): the

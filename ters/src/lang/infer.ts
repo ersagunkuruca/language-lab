@@ -15,7 +15,7 @@ import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Kind, Node, NodeOf, Use } from "../model.ts";
-import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf } from "../model.ts";
+import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf, copyNodes, nodeIds, nodeValues } from "../model.ts";
 import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, nodesOfKind, forgetKinds, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
@@ -196,7 +196,7 @@ let checkingUnder = false;
 const onLib = (code: Code, lib: Code) => {
   const off = layerOf(code) === lib ? offLayer(code) : undefined;
   if (off) { for (const id of off) if (id in lib.nodes) return false; return true; }
-  for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false;
+  for (const id of nodeIds(lib.nodes)) if (code.nodes[id] !== lib.nodes[id]) return false;
   return true;
 };
 // The library's check as a program sees it (I193): its skeleton, each
@@ -2886,7 +2886,7 @@ export function resultsDirection(code: Code, d: Id, names: Names = {}): { why: s
   // The same nodes as an earlier ask of d's: its effects stand (E253c: two
   // of physics' definitions with results took 26 ms of each edit's check).
   // A why isn't kept, since it says the names.
-  const mine = Object.values(nodes), was = directionsKept.get(d);
+  const mine = nodeValues(nodes), was = directionsKept.get(d);
   if (was && was.nodes.length === mine.length && was.nodes.every((n, i) => n === mine[i])) return { effects: was.effects };
   const add = (n: Node) => { nodes[n.id] = n; return n.id; };
   const given = Object.fromEntries(ins.map((p) => [p, add({ id: `${d}:given:${p}`, kind: "hole" })]));
@@ -2984,7 +2984,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   const filled = (f: Filling): Code => {
     if (last?.[0] === f) return last[1];
     undo?.();
-    forgetNodes(scratch ??= { ...code.nodes });
+    forgetNodes(scratch ??= copyNodes(code.nodes));
     const r = fillHole(code, {}, hole, f, {}, scratch);
     undo = r.undo;
     derivedFrom(r.code, code, subtree(r.code, hole), true);
@@ -3311,7 +3311,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   // programs keep and which is what the generic resolves to.
   // `by its ways` only for an implementation's field that has a way.
   const wayField = () => {
-    const call = Object.values(code.nodes).find((n): n is Call => isCall(n) && n.args.includes(hole));
+    const call = nodeValues(code.nodes).find((n): n is Call => isCall(n) && n.args.includes(hole));
     const v = call && code.nodes[call.fn]?.kind === "ref" ? code.nodes[(code.nodes[call.fn] as NodeOf<"ref">).target] : null;
     return v?.kind === "variant" && waysIn(code).has(v.fields[call!.args.indexOf(hole)]);
   };
@@ -3320,7 +3320,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
   const library = info.options?.library ? new Set(info.options.library) : null;
-  const atTop = Object.values(code.nodes).some((d) => d.kind === "def" && d.body === hole);
+  const atTop = nodeValues(code.nodes).some((d) => d.kind === "def" && d.body === hole);
   for (const [part, def] of info.owner) {
     const n = code.nodes[part];
     // An interface's constructor makes an implementation, so it's offered
@@ -3448,7 +3448,7 @@ function dependents(code: Code, group: Id[]): Set<Id> {
   const owner = ownerOfTypeParts(code);
   const usedBy = new Map<Id, Id[]>();
   const lib = layerOf(code);
-  const libAsIs = !!lib && !group.some((d) => d in lib.nodes) && Object.keys(code.nodes).every((id) => code.nodes[id] === lib.nodes[id] || !(id in lib.nodes));
+  const libAsIs = !!lib && !group.some((d) => d in lib.nodes) && nodeIds(code.nodes).every((id) => code.nodes[id] === lib.nodes[id] || !(id in lib.nodes));
   for (const d of code.defs) {
     if (libAsIs && d in lib!.nodes) continue;
     for (const id of subtree(code, d)) {
@@ -3625,15 +3625,15 @@ export function inferEdited(before: Code, next: Code, names: Names, info: Info, 
   } else {
     changed = new Set<Id>();
     let made = 0;
-    for (const id in next.nodes) if (next.nodes[id] !== before.nodes[id]) {
+    for (const id of nodeIds(next.nodes)) if (next.nodes[id] !== before.nodes[id]) {
       changed.add(id);
       if (!(id in before.nodes)) made++;
       if (changed.size > most) return null;
     }
     // A node gone: counted, then found.
-    let gone = Object.keys(before.nodes).length - (Object.keys(next.nodes).length - made);
+    let gone = nodeIds(before.nodes).length - (nodeIds(next.nodes).length - made);
     const noneGone = gone === 0;
-    if (gone > 0) for (const id in before.nodes) if (!(id in next.nodes)) { changed.add(id); if (changed.size > most) return null; if (--gone === 0) break; }
+    if (gone > 0) for (const id of nodeIds(before.nodes)) if (!(id in next.nodes)) { changed.add(id); if (changed.size > most) return null; if (--gone === 0) break; }
     derivedFrom(next, before, changed, noneGone);
   }
   const defs = new Set(next.defs), library = new Set(opts.library ?? []);
@@ -3775,7 +3775,7 @@ export function inferRewritten(before: Code, next: Code, names: Names, info: Inf
   // changed or made: every other node is the one before (model.ts derived).
   if (!derived.has(next)) {
     const touched = new Set<Id>(changed);
-    for (const id in next.nodes) if (!(id in before.nodes)) touched.add(id);
+    for (const id of nodeIds(next.nodes)) if (!(id in before.nodes)) touched.add(id);
     derivedFrom(next, before, touched, true);
   }
   let quick = infer(next, names, { from: info, only, layer: true }, info.options);

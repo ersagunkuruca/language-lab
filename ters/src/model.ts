@@ -291,6 +291,50 @@ export interface Code {
   defs: Id[];
 }
 
+// A version of a program's nodes may sit over another's (the library's,
+// the compiler redesign's program index): its prototype is the nodes under
+// it, and its own properties are only the nodes it adds or changes, so a
+// pass that changes a few copies those, not the ~50,000. Read a node as
+// always (`nodes[id]`, `id in nodes`); list them, count them and copy them
+// only with these, which see the nodes under too, in the order a merge of
+// the two gives (the nodes under first, then those added). A node taken
+// out of the nodes under is its own property, undefined.
+export const nodesUnder = (nodes: Record<Id, Node>): Record<Id, Node> | undefined => {
+  const p = Object.getPrototypeOf(nodes);
+  return p === Object.prototype || p === null ? undefined : p;
+};
+export function nodeIds(nodes: Record<Id, Node>): Id[] {
+  const under = nodesUnder(nodes);
+  if (!under) return Object.keys(nodes);
+  const out: Id[] = [];
+  for (const id of nodeIds(under)) if (nodes[id] !== undefined) out.push(id);
+  for (const id of Object.keys(nodes)) if (!(id in under) && nodes[id] !== undefined) out.push(id);
+  return out;
+}
+export const nodeValues = (nodes: Record<Id, Node>): Node[] => (nodesUnder(nodes) ? nodeIds(nodes).map((id) => nodes[id]) : Object.values(nodes));
+export const nodeEntries = (nodes: Record<Id, Node>): [Id, Node][] => (nodesUnder(nodes) ? nodeIds(nodes).map((id) => [id, nodes[id]]) : Object.entries(nodes));
+export const nodeCount = (nodes: Record<Id, Node>): number => (nodesUnder(nodes) ? nodeIds(nodes).length : Object.keys(nodes).length);
+// A copy to change: over the same nodes, its own copied.
+export const copyNodes = (nodes: Record<Id, Node>): Record<Id, Node> => {
+  const under = nodesUnder(nodes);
+  return under ? Object.assign(Object.create(under), nodes) : { ...nodes };
+};
+// A copy with `more` put in (a merge where `more` wins), each read whole.
+export function withNodes(nodes: Record<Id, Node>, ...more: Record<Id, Node>[]): Record<Id, Node> {
+  const out = copyNodes(nodes);
+  for (const m of more) {
+    if (nodesUnder(m) && nodesUnder(m) === nodesUnder(nodes)) Object.assign(out, m);
+    else for (const id of nodeIds(m)) out[id] = m[id];
+  }
+  return out;
+}
+// Takes a node out.
+export const dropNode = (nodes: Record<Id, Node>, id: Id): void => {
+  const under = nodesUnder(nodes);
+  if (under && id in under) (nodes as Record<Id, Node | undefined>)[id] = undefined;
+  else delete nodes[id];
+};
+
 // 130 random bits, as 26 base-32 characters (digits and a to v). At that
 // size two programs of a billion nodes each share an id with a chance of
 // about 1 in 10^21, so ids from different authors can be mixed freely.
@@ -511,7 +555,7 @@ export function ownerOfTypeParts(code: Code): Map<Id, Id> {
 // Semantic edit: swap the node at `id` for a new subtree, keeping the id so
 // everything attached to it (names, comments, hints, layout) stays attached.
 export function replace(code: Code, id: Id, build: (code: Code) => NodeData): Code {
-  const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const next: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   next.nodes[id] = { ...build(next), id } as Node;
   return next;
 }
@@ -519,7 +563,7 @@ export function replace(code: Code, id: Id, build: (code: Code) => NodeData): Co
 // Where `id` hangs in the tree: its parent and the slot it occupies.
 // A solve's given value hangs under its port's name (`key`, slot "given").
 export function parentOf(code: Code, id: Id): { parent: Id; slot: string; index?: number; key?: string } | null {
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (isCall(n)) {
       if (n.fn === id) return { parent: n.id, slot: "fn" };
       const i = n.args.indexOf(id);
@@ -565,7 +609,7 @@ export function parentAt(code: Code, id: Id): Parent | null {
 const ownParents = new WeakMap<Code, Map<Id, Parent>>();
 function parentAtFull(code: Code, id: Id): Parent | null {
   let m = parentIndex.get(code);
-  if (!m) parentIndex.set(code, (m = parentsOf(Object.values(code.nodes))));
+  if (!m) parentIndex.set(code, (m = parentsOf(nodeValues(code.nodes))));
   return m.get(id) ?? null;
 }
 function parentsOf(nodes: Iterable<Node>): Map<Id, Parent> {
@@ -587,7 +631,7 @@ function parentsOf(nodes: Iterable<Node>): Map<Id, Parent> {
 export function swapIn(code: Code, id: Id, replacement: Id): Code {
   const at = parentOf(code, id);
   if (!at) throw new Error(`${id} has no parent`);
-  const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const next: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   const p = { ...next.nodes[at.parent] } as Record<string, unknown>;
   if (at.slot === "args") {
     const args = [...(p.args as Id[])];
@@ -602,9 +646,9 @@ export function swapIn(code: Code, id: Id, replacement: Id): Code {
 // Drop nodes no def or builtin can reach (after deletes and replacements).
 export function collect(code: Code): Code {
   const keep = new Set<Id>();
-  for (const n of Object.values(code.nodes)) if (n.kind === "builtin") keep.add(n.id);
+  for (const n of nodeValues(code.nodes)) if (n.kind === "builtin") keep.add(n.id);
   for (const d of code.defs) for (const id of subtree(code, d)) keep.add(id);
-  return { nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => keep.has(id))), defs: code.defs };
+  return { nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => keep.has(id))), defs: code.defs };
 }
 
 export class MergeClash extends Error {
@@ -681,7 +725,7 @@ const picksOf = (code: Code, kind: string, keep: (n: Node) => boolean): Id[] => 
     // listing its ~44,000 nodes took 18 ms of each 20 ms scan: they are
     // listed once, as its picks are kept.
     let ns = derived.has(code) ? undefined : baseNodes.get(code.nodes);
-    if (!ns && !derived.has(code)) baseNodes.set(code.nodes, (ns = Object.values(code.nodes)));
+    if (!ns && !derived.has(code)) baseNodes.set(code.nodes, (ns = nodeValues(code.nodes)));
     all.set(kind, (out = ns ? ns.filter(keep).map((n) => n.id) : nodesWhere(code, kind, keep)));
   }
   return out;
@@ -699,7 +743,7 @@ function kindIndex(nodes: Record<Id, Node>) {
   if (!k) {
     k = { kinds: new Map(), at: new Map() };
     let i = 0;
-    for (const id in nodes) {
+    for (const id of nodeIds(nodes)) {
       const n = nodes[id];
       let ns = k.kinds.get(n.kind);
       if (!ns) { k.kinds.set(n.kind, (ns = [])); k.at.set(n.kind, []); }
@@ -737,7 +781,7 @@ export const layerOf = (code: Code): Code | undefined => layers.get(code);
 // `scanningOnLayer` reads it so.
 export const offLayer = (code: Code): Set<Id> | undefined => { const d = derived.get(code); return d?.stable ? d.changed : undefined; };
 const sizes = new WeakMap<object, number>();
-const sizeOf = (nodes: Record<Id, Node>) => { let n = sizes.get(nodes); if (n === undefined) sizes.set(nodes, (n = Object.keys(nodes).length)); return n; };
+const sizeOf = (nodes: Record<Id, Node>) => { let n = sizes.get(nodes); if (n === undefined) sizes.set(nodes, (n = nodeIds(nodes).length)); return n; };
 const changedOnLayer = new WeakMap<object, { layer: Code; changed: Set<Id> }>();
 // The targets some ref names, once per version of the nodes: on the
 // library's layer the layer's own, found once, and the program's (I167k:
@@ -751,10 +795,10 @@ export function refTargets(code: Code): Set<Id> {
   const layer = layers.get(code), own = layer && !derived.has(code) ? scanningOnLayer(code, () => offLayer(code)) : undefined;
   if (layer && own) {
     let under = refsKept.get(layer.nodes);
-    if (!under) refsKept.set(layer.nodes, (under = refsIn(Object.values(layer.nodes))));
+    if (!under) refsKept.set(layer.nodes, (under = refsIn(nodeValues(layer.nodes))));
     r = new Set(under);
     for (const t of refsIn([...own].map((id) => code.nodes[id]))) r.add(t);
-  } else r = refsIn(Object.values(code.nodes));
+  } else r = refsIn(nodeValues(code.nodes));
   refsKept.set(code.nodes, r);
   return r;
 }
@@ -762,7 +806,7 @@ export function refTargets(code: Code): Set<Id> {
 // layer's, else every node.
 export function ownNodes(code: Code): Node[] {
   const own = layers.get(code) && !derived.has(code) ? scanningOnLayer(code, () => offLayer(code)) : undefined;
-  return own ? [...own].flatMap((id) => (code.nodes[id] ? [code.nodes[id]] : [])) : Object.values(code.nodes);
+  return own ? [...own].flatMap((id) => (code.nodes[id] ? [code.nodes[id]] : [])) : nodeValues(code.nodes);
 }
 // The ids of a program on its layer that aren't the layer's as they are
 // there (its own nodes, a layer node it changed or dropped), or undefined
@@ -778,7 +822,7 @@ export function changedFromLayer(code: Code): Set<Id> | undefined {
     const under = layer.nodes;
     changed = new Set<Id>();
     let same = 0;
-    for (const id in code.nodes) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
+    for (const id of nodeIds(code.nodes)) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
     // A layer node gone is changed too; when every one is there as it was,
     // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
     if (same !== sizeOf(under)) for (const id in under) if (!(id in code.nodes)) changed.add(id);
@@ -800,7 +844,7 @@ export function scanningOnLayer<T>(code: Code, step: () => T): T {
 const parentsKept = new WeakMap<Code, (id: Id) => Id | undefined>();
 const parentsIn = (code: Code): Map<Id, Id> => {
   const m = new Map<Id, Id>();
-  for (const n of Object.values(code.nodes)) for (const c of children(n)) m.set(c, n.id);
+  for (const n of nodeValues(code.nodes)) for (const c of children(n)) m.set(c, n.id);
   return m;
 };
 export function parentLookup(code: Code): (id: Id) => Id | undefined {
@@ -824,7 +868,7 @@ export function parentLookup(code: Code): (id: Id) => Id | undefined {
 export function nodesWhere(code: Code, kind: string, keep: (n: Node) => boolean, kinds?: readonly Kind[]): Id[] {
   const from = derived.get(code);
   if (!from && kept.has(code)) return picksOf(code, kind, keep).slice();
-  if (!from) return (kinds ? nodesOfKinds(code, kinds) : Object.values(code.nodes)).filter(keep).map((n) => n.id);
+  if (!from) return (kinds ? nodesOfKinds(code, kinds) : nodeValues(code.nodes)).filter(keep).map((n) => n.id);
   const base = picksOf(from.base, kind, keep);
   const out = from.stable || from.same ? without(base, from.changed) : base.filter((id) => !from.changed.has(id) && code.nodes[id] && keep(code.nodes[id]));
   for (const id of from.changed) if (code.nodes[id] && keep(code.nodes[id])) out.push(id);

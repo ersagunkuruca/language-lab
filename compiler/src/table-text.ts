@@ -11,6 +11,7 @@ import { CASES, LIBRARY } from "../../ters/src/lang/library.ts";
 import { TEXT_OPS } from "../../ters/src/lang/std.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { reachedFrom, reachedWithShows } from "./scalar.ts";
+import { nodeValues, withNodes } from "../../ters/src/model.ts";
 
 const BY_TABLE: Record<Id, string> = {
   [TEXT_OPS.uppercase]: "table uppercase", [TEXT_OPS.lowercase]: "table lowercase", [TEXT_OPS.graphemes]: "table graphemes",
@@ -23,10 +24,10 @@ const tables = (): Record<Id, Id> => Object.fromEntries(Object.entries(BY_TABLE)
 // again (I308: the editor's Build targets waited 2.4 s for the library's
 // own uses of uppercase).
 export function tableText(code: Code, info: Info, names: Names, roots: Id[]): { code: Code; info: Info; names: Names } {
-  const used = (c: Code) => Object.values(c.nodes).filter((n) => n.kind === "ref" && BY_TABLE[n.target]);
+  const used = (c: Code) => nodeValues(c.nodes).filter((n) => n.kind === "ref" && BY_TABLE[n.target]);
   if (!used(reachedWithShows(code, roots, info)).length) return { code, info, names };
   const to = tables();
-  const nodes = { ...LIBRARY.code.nodes, ...code.nodes };
+  const nodes = withNodes(LIBRARY.code.nodes, code.nodes);
   for (const u of used({ ...code, nodes })) nodes[u.id] = { ...u, target: to[(u as { target: Id }).target] } as never;
   const defs = [...new Set([...LIBRARY.code.defs, ...code.defs])];
   const all = { ...LIBRARY.names, ...names };

@@ -23,7 +23,7 @@
 // case where every input is known.
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { children, fieldWayOf, freshId, isCall, isUse, subtree, type Call } from "../../ters/src/model.ts";
+import { children, fieldWayOf, freshId, isCall, isUse, subtree, type Call, copyNodes, nodeIds } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { evaluatorTicks, makeRunner, OutOfSteps, withSteps, type Data, type Value } from "../../ters/src/lang/run.ts";
@@ -49,7 +49,7 @@ export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; b
   const binders = new Set<Id>();
   // An effect's operations are variants of its typedef: they do something.
   const operations = new Set<Id>();
-  for (const id of Object.keys(nodes)) {
+  for (const id of nodeIds(nodes)) {
     const n = nodes[id];
     if (n.kind === "binder") binders.add(id);
     if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => operations.add(v));
@@ -113,7 +113,7 @@ export function bakeCalls(code: Code, info: Info, names: Names): { code: Code; b
   let work = 0;
   const runner = makeRunner(code, info, { print: () => {}, names, entered: () => { if (++work > limit) throw new OutOfSteps(); } });
   let limit = 0, spent = 0;
-  const out: Code = { nodes: { ...nodes }, defs: code.defs };
+  const out: Code = { nodes: copyNodes(nodes), defs: code.defs };
   const baked: Id[] = [];
   for (const { id, again } of found) {
     if (spent >= TOTAL) break;

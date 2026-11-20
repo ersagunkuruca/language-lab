@@ -14,7 +14,7 @@
 // neighbours (quadratic interpolation, J. O. Smith, "Spectral Audio Signal
 // Processing", 2011).
 
-import { merge, type Id } from "../model.ts";
+import { merge, type Id, nodeIds } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
@@ -30,7 +30,7 @@ export function buildSignals(pre: Module, nums: Module): Module {
   const lib = from(pre), num = from(nums);
   const map = lib("map"), length = lib("length"), append = lib("append"), zipped = lib("zipped"), take = lib("take"), numbered = lib("numbered"), sum = lib("sum");
   const polar = num("from polar"), conj = num("complex conjugate"), asComplex = num("as complex");
-  const complexV = Object.keys(nums.code.nodes).find((d) => nums.code.nodes[d].kind === "variant" && nums.names[d] === "complex")!;
+  const complexV = nodeIds(nums.code.nodes).find((d) => nums.code.nodes[d].kind === "variant" && nums.names[d] === "complex")!;
 
   const f = { add: (a: Id, b: Id) => k.call(B.add, a, b), sub: (a: Id, b: Id) => k.call(B.sub, a, b), mul: (a: Id, b: Id) => k.call(B.mul, a, b), div: (a: Id, b: Id) => k.call(B.div, a, b) };
   const i = { add: (a: Id, b: Id) => k.call(INT_OPS.add, a, b), sub: (a: Id, b: Id) => k.call(INT_OPS.sub, a, b), mul: (a: Id, b: Id) => k.call(INT_OPS.mul, a, b), less: (a: Id, b: Id) => k.call(INT_OPS.less, a, b), float: (a: Id) => k.call(INT_OPS.toNumber, a) };

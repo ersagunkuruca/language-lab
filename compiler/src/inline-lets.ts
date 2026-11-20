@@ -11,7 +11,7 @@
 // at most once (Peyton Jones and Marlow, "Secrets of the Glasgow Haskell
 // Compiler inliner", JFP 2002), kept to the lists a fold or fusion looks for.
 
-import { subtree, type Code, type Id, type NodeOf, isCall } from "../../ters/src/model.ts";
+import { subtree, type Code, type Id, type NodeOf, isCall, copyNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { STORAGES } from "../../ters/src/lang/represent.ts";
 
@@ -21,7 +21,7 @@ export function inlineLists(code: Code, info: Info): { code: Code; inlined: numb
   let inlined = 0;
   // One at a time, each on the code the last one left.
   for (let c = candidate(code, info); c; c = candidate(code, info)) {
-    const nodes = { ...code.nodes };
+    const nodes = copyNodes(code.nodes);
     nodes[c.ref] = { ...code.nodes[c.value], id: c.ref };
     nodes[c.let] = { ...nodes[c.body], id: c.let };
     code = { ...code, nodes };

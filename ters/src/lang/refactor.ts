@@ -5,7 +5,7 @@
 // adds a hole arm to every case analysis that needs one.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, portsOf } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, portsOf, copyNodes, dropNode, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Filling } from "./infer.ts";
 import { INT, NUMBER, STRING, type Type } from "./types.ts";
@@ -17,7 +17,7 @@ export interface Edit { code: Code; names: Names }
 // one (a palette checking one offer after another: infer.ts fillings);
 // `made` lists what was added, so it can be taken out again.
 function adder(code: Code, into?: Record<Id, Node>) {
-  const nodes = into ?? { ...code.nodes };
+  const nodes = into ?? copyNodes(code.nodes);
   const made: Id[] = [];
   const add = (n: NodeData): Id => {
     const id = freshId();
@@ -196,7 +196,7 @@ export function fillHole(code: Code, names: Names, hole: Id, f: Filling, library
   }
   const was = nodes[hole];
   nodes[hole] = { ...data, id: hole } as Node;
-  return { code: { nodes, defs: code.defs }, names: nn, undo: () => { for (const id of made) delete nodes[id]; nodes[hole] = was; } };
+  return { code: { nodes, defs: code.defs }, names: nn, undo: () => { for (const id of made) dropNode(nodes, id); nodes[hole] = was; } };
 }
 
 // Add a case to a data type. Every match and fold over that type that
@@ -213,7 +213,7 @@ export function addVariant(code: Code, names: Names, def: Id, name: string, fiel
   nodes[tdId] = { ...td, variants: [...td.variants, variant] };
   const next: Code = { nodes, defs: code.defs };
   const owner = ownerOfTypeParts(next);
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "match" && n.kind !== "fold") continue;
     if (n.kind === "match" && n.otherwise) continue;
     const first = n.arms[0] ? (code.nodes[n.arms[0]] as NodeOf<"arm">).variant : null;

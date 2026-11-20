@@ -5,7 +5,7 @@
 // operation nobody takes the rest of is answered at once, and costs
 // nothing kept (Koka's `ctl` beside its `fun`).
 
-import { derived, nodesWhere, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { derived, nodesWhere, type Code, type Id, type Node, type NodeOf, nodeIds, nodeValues } from "../model.ts";
 
 const cache = new WeakMap<Code["nodes"], { size: number; ops: Set<Id> }>();
 
@@ -16,9 +16,9 @@ export function laterOps(code: Code): Set<Id> {
   // layer's cases and operations, found once, and its own (L266: each
   // check counted and walked every node, the library's ~45,000).
   if (derived.has(code)) return opsIn(nodes, nodesWhere(code, "later ops", picked).map((id) => nodes[id]));
-  const size = Object.keys(nodes).length, had = cache.get(nodes);
+  const size = nodeIds(nodes).length, had = cache.get(nodes);
   if (had && had.size === size) return had.ops;
-  const ops = opsIn(nodes, Object.values(nodes));
+  const ops = opsIn(nodes, nodeValues(nodes));
   cache.set(nodes, { size, ops });
   return ops;
 }

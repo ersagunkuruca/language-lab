@@ -5,7 +5,7 @@ import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { merge, type Code, type Id } from "../src/model.ts";
+import { merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { conflictMarkersAt, markersMessage, parseSaved, printSaved, ProgramFileError } from "../src/saved.ts";
@@ -308,7 +308,7 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   // A map over a text's characters, a fold over them (C239).
   const q0 = withCharacterMaps(q01.code, q01.info, q01.names);
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
-  const handled = new Set(Object.values(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+  const handled = new Set(nodeValues(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
   const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, dataKeys: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: true });
   // A map writes into the array it was given (C60 c2): in place where
@@ -368,7 +368,7 @@ function printingMain(q: { code: Code; info: Info; names: Names }, main: Id): { 
   const root = k.def("main printed");
   const text = t?.t === "con" && t.id === STRING;
   k.define(root, k.thunk(() => k.call(S.print, text ? k.x(main) : k.call(SHOW_ANY, k.x(main)))));
-  const code = { nodes: { ...q.code.nodes, ...k.code.nodes }, defs: [...q.code.defs, ...k.code.defs] }, names = { ...q.names, ...k.names };
+  const code = { nodes: withNodes(q.code.nodes, k.code.nodes), defs: [...q.code.defs, ...k.code.defs] }, names = { ...q.names, ...k.names };
   return { q: { code, info: infer(code, names, undefined, q.info.options), names }, root };
 }
 
@@ -836,7 +836,7 @@ switch (command) {
     // app asks for the microphone if the page names one, and carries the
     // recordings it names from the program's folder, as build-web does.
     const sound = c.includes("ters_sound_play(") ? {
-      mic: Object.values(p.code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
+      mic: nodeValues(p.code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
       files: Object.fromEntries(recordings(p.code).filter((f) => statSync(path).isDirectory() && existsSync(join(path, f))).map((f) => [f, new Uint8Array(readFileSync(join(path, f)))])),
     } : undefined;
     for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {
@@ -976,19 +976,19 @@ switch (command) {
     // What the modules' authors say in their logs (L114a): a used version
     // marked broken is said, and isn't moved to.
     const logs = moduleLogs(path, store0);
-    const usedNow = new Set(Object.values(own.nodes).flatMap(pointsAt));
+    const usedNow = new Set(nodeValues(own.nodes).flatMap(pointsAt));
     for (const [v, why] of Object.entries(logs.broken)) if (usedNow.has(v)) console.log(`warn   ${p.names[v] ?? v} (${v}) is marked broken by its author: ${why}`);
     if (up) r = upgradeOwn(own, modules, p.names, new Set(Object.keys(logs.broken)));
     else {
       const name = rest.find((a) => !a.startsWith("--")) ?? fail("downgrade needs the name of what to move back");
-      const used = new Set(Object.values(own.nodes).flatMap(pointsAt));
+      const used = new Set(nodeValues(own.nodes).flatMap(pointsAt));
       const current = [...used].find((d) => p.names[d] === name && store0 && lineageOf(store0.lineages ?? {}, d)) ?? fail(`${p.title} uses nothing named ${name} that its store has versions of`);
       const back = previousVersion(store0!, current) ?? fail(`the store has no version of ${name} before this one`);
       const pins = Object.assign({}, ...modules.map((m) => m.pins));
       const u = upgrade(merge(...modules.map((m) => m.code), own), current, back, pins, p.names);
       if (!u.ok) fail(`${name} can't go back: ${u.reason}`);
-      const ids = new Set(Object.keys(own.nodes));
-      r = { own: { nodes: Object.fromEntries(Object.entries(u.code.nodes).filter(([id]) => ids.has(id))), defs: own.defs }, moved: [{ from: current, to: back, uses: u.uses }], refused: [] };
+      const ids = new Set(nodeIds(own.nodes));
+      r = { own: { nodes: Object.fromEntries(nodeEntries(u.code.nodes).filter(([id]) => ids.has(id))), defs: own.defs }, moved: [{ from: current, to: back, uses: u.uses }], refused: [] };
     }
     for (const x of r.refused) console.log(`kept   ${p.names[x.from] ?? x.from}: the newest version can't take its place, ${x.reason}`);
     if (!r.moved.length) { if (!r.refused.length) console.log("nothing to upgrade"); process.exitCode = r.refused.length ? 1 : 0; break; }

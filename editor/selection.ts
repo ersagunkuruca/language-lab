@@ -3,7 +3,7 @@
 // click in the Blocks pane is on, and the menu for the selected part from
 // the keyboard. What it reads of the editor comes through
 // `SelectionHost`.
-import { isCall, isUse, layerOf, offLayer, scanningOnLayer, SCHEMA, type Code, type Id, type Node } from "../ters/src/model.ts";
+import { isCall, isUse, layerOf, offLayer, scanningOnLayer, SCHEMA, type Code, type Id, type Node, nodeValues } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import * as T from "./typed.ts";
 import type { MenuTarget } from "./typedGraph.ts";
@@ -39,7 +39,7 @@ function parentsIn(code: Code, only?: Set<Id>) {
   const set = (c: Id | null | undefined, parent: Id, slot: string, index?: number) => { if (c && !m!.has(c)) m!.set(c, { parent, slot, ...(index !== undefined ? { index } : {}) }); };
   // Every child slot of every kind, as model.ts SCHEMA lists them (E228o),
   // not a list of kinds of its own: a slot a kind gains is known here too.
-  for (const n of only ? [...only].map((id) => code.nodes[id]).filter(Boolean) : Object.values(code.nodes)) {
+  for (const n of only ? [...only].map((id) => code.nodes[id]).filter(Boolean) : nodeValues(code.nodes)) {
     for (const [slot, how] of Object.entries(SCHEMA[n.kind] ?? {})) {
       if (how !== "child") continue;
       const v = (n as unknown as Record<string, unknown>)[slot];

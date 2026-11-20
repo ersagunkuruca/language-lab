@@ -21,6 +21,7 @@ import { ARITH, CHECK_OP, EMBEDDING, EMBEDDING_MAP } from "./std.ts";
 import { runTests, type TestResult } from "./tests.ts";
 import { shortcuts, type Edge } from "./diamonds.ts";
 import { NUMBER, type Type } from "./types.ts";
+import { withNodes } from "../model.ts";
 
 export interface EmbeddingLaw extends TestResult { embedding: string; law: string }
 
@@ -72,7 +73,7 @@ export function embeddingLaws(code: Code, info: Info, names: Names, only?: Set<I
     }));
     laws.push({ def: d, embedding: name, law: `as ${via}` });
   }
-  const full: Code = { nodes: { ...code.nodes, ...k.code.nodes }, defs: [...code.defs, ...laws.map((l) => l.def)] };
+  const full: Code = { nodes: withNodes(code.nodes, k.code.nodes), defs: [...code.defs, ...laws.map((l) => l.def)] };
   const all2: Names = { ...names, ...k.names };
   const checked = infer(full, all2);
   const bad = new Set(checked.errors.map((x) => x.id));

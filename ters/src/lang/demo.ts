@@ -3,7 +3,7 @@
 
 import { join } from "node:path";
 import { root } from "../io.ts";
-import { get, replace, type Id, type NodeOf, isCall, type Call } from "../model.ts";
+import { get, replace, type Id, type NodeOf, isCall, type Call, nodeValues } from "../model.ts";
 import { fillings, infer, type Filling } from "./infer.ts";
 import { loadProgram } from "./load.ts";
 import { addVariant, fillHole } from "./refactor.ts";
@@ -63,14 +63,14 @@ const added = addVariant(algebra.code, names, type, "tangent", [{ name: "of", ty
 const ti = infer(added.code, added.names);
 console.log(`\n  Add a case \`tangent\` to expression: ${ti.errors.length} errors, ${ti.holes.size} new holes, one in each fold that needs it:`);
 for (const [id, h] of ti.holes) {
-  const where = Object.values(added.code.nodes).find((n) => n.kind === "arm" && n.body === id) as NodeOf<"arm">;
+  const where = nodeValues(added.code.nodes).find((n) => n.kind === "arm" && n.body === id) as NodeOf<"arm">;
   const owner = added.code.defs.find((d) => JSON.stringify(added.code.nodes[d]).length && contains(added.code, d, where.id));
   console.log(`    ${added.names[owner!]}: tangent(${where.binds.map((b) => added.names[b]).join(", ")}) with ${where.results.filter(Boolean).map((r) => added.names[r!]).join(", ")} → □ : ${showType(h.expected, added.names)}`);
 }
 
 const each = algebra.named("for each");
 const lam = get(algebra.code, get(algebra.code, each, "def").body!, "lambda");
-const rec = Object.values(algebra.code.nodes).find((n) => isCall(n) && algebra.code.nodes[n.fn].kind === "ref" && (algebra.code.nodes[n.fn] as NodeOf<"ref">).target === each && n.args[0] !== lam.params[0] && algebra.code.nodes[n.args[0]].kind === "ref") as Call;
+const rec = nodeValues(algebra.code.nodes).find((n) => isCall(n) && algebra.code.nodes[n.fn].kind === "ref" && (algebra.code.nodes[n.fn] as NodeOf<"ref">).target === each && n.args[0] !== lam.params[0] && algebra.code.nodes[n.args[0]].kind === "ref") as Call;
 const looped = replace(algebra.code, rec.args[0], () => ({ kind: "ref", target: lam.params[0] }));
 console.log(`\n  for each recurses on the rest of the list: ${showType(ai.typeOf.get(each)!, names)}`);
 console.log(`  Make it recurse on the whole list instead:  ${showType(infer(looped, names).typeOf.get(each)!, names)}`);

@@ -17,7 +17,7 @@
 // (Asenov et al., "Precise version control of trees with line-based version
 // control systems", FASE 2017; GumTree and Spork for code trees).
 
-import { sameValue } from "./model.ts";
+import { sameValue, dropNode, nodeIds } from "./model.ts";
 type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 type Obj = { [k: string]: Json };
 

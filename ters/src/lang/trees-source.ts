@@ -7,7 +7,7 @@
 // and `tree of List` (list-tree.ts), for lists changed by position, and
 // `byte array of Bytes` (bytes-array.ts), for bytes read by position.
 
-import { merge, type Id } from "../model.ts";
+import { merge, type Id, nodeEntries } from "../model.ts";
 import { prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { buildTrees } from "./map-tree.ts";
@@ -44,6 +44,6 @@ export function buildTreesModule(preludeModule: Module): Module {
   // makeModule takes in what the trees use, the prelude's map, keep and
   // reverse among it; those stay the prelude's.
   const own = (id: Id) => !base.nodes[id];
-  const code = { nodes: Object.fromEntries(Object.entries(m.code.nodes).filter(([id]) => own(id))), defs: m.code.defs.filter(own) };
+  const code = { nodes: Object.fromEntries(nodeEntries(m.code.nodes).filter(([id]) => own(id))), defs: m.code.defs.filter(own) };
   return { ...m, code, pins: Object.fromEntries(Object.entries(m.pins).filter(([d]) => own(d))), representations };
 }

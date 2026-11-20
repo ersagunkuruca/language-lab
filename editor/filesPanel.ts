@@ -9,9 +9,10 @@ import { hashDef } from "../ters/src/hash.ts";
 import { savedForm } from "../ters/src/saved.ts";
 import { h } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
+import { nodeEntries } from "../ters/src/model.ts";
 
 // The program without the library's builtins, as code.json keeps it.
-export const userCode = (c: Code): Code => ({ nodes: Object.fromEntries(Object.entries(c.nodes).filter(([, n]) => n.kind !== "builtin")), defs: c.defs });
+export const userCode = (c: Code): Code => ({ nodes: Object.fromEntries(nodeEntries(c.nodes).filter(([, n]) => n.kind !== "builtin")), defs: c.defs });
 
 // A short hash of a file's text (FNV-1a), to see that it changed.
 export function fnv(s: string) {

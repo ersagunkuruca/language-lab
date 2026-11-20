@@ -19,7 +19,7 @@
 // here the steps are known definitions, so the rewrite is by the
 // consumer's shape rather than a foldr/build rule.
 
-import { children, mapIds, freshId, subtree, isCall, type Code, type Id, type Node } from "../../ters/src/model.ts";
+import { children, mapIds, freshId, subtree, isCall, type Code, type Id, type Node, copyNodes, dropNode } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { ARRAY_OPS, CONS, LIST } from "../../ters/src/lang/std.ts";
@@ -162,7 +162,7 @@ function folds(code: Code, info: Info, def: Id): Consumer | null {
 // consumer's at the call's instance of it; the fold's input and the rest
 // its arm binds are xs's, and each item is given to g first.
 function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: Consumer, xs: Id, g: Id): { code: Code; types: Map<Id, Type> | null } {
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const typed = made && typer(code, info, made, at, c, xs, g);
   // The consumer's fold copied, every id inside fresh.
   const ids = new Map<Id, Id>();
@@ -194,7 +194,7 @@ function rewrite(code: Code, info: Info, made: Map<Id, Type> | null, at: Id, c: 
   }
   nodes[at] = { ...fold, id: at };
   typed?.set(at, typed.of(at));
-  delete nodes[re(c.fold)];
+  dropNode(nodes, re(c.fold));
   return { code: { ...code, nodes }, types: typed ? typed.done() : null };
 }
 

@@ -3,7 +3,7 @@
 // the implementations a type has, the type pickers they use, and the
 // + New definition form. What it reads of the editor comes through
 // `StructureHost`.
-import { fieldWayOf, get, isCall, isPublished, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { fieldWayOf, get, isCall, isPublished, type Id, type Node, type NodeOf, nodeValues } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pos } from "./canvas.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
@@ -431,7 +431,7 @@ export function structure(host: StructureHost) {
       out.append(wc.el, h("div", { class: "acts" }, addWay));
       return out;
     } else if (n?.kind === "field") {
-      const variant = Object.values(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
+      const variant = nodeValues(code.nodes).find((v) => v.kind === "variant" && v.fields.includes(sel)) as NodeOf<"variant">;
       const type = info.owner.get(sel)!;
       const t = typePicker("f-field-type", type, names, n.type, () => { const sp = t.spec(); if (sp) runTop(info, Top.setFieldType(code, sh, sel, sp)); });
       const w = words(type);
@@ -494,9 +494,9 @@ export function structure(host: StructureHost) {
   function innerLambda(id: Id | null): NodeOf<"lambda"> | null {
     const n = id ? node(id) : null;
     if (n?.kind !== "lambda" || n.id === defBody(ui.def)?.id) return null;
-    return Object.values(doc().code.nodes).some((c) => isCall(c) && c.fn === n.id) ? null : n;
+    return nodeValues(doc().code.nodes).some((c) => isCall(c) && c.fn === n.id) ? null : n;
   }
-  const inputOf = (binder: Id) => Object.values(doc().code.nodes).find((l) => l.kind === "lambda" && l.params.includes(binder))?.id ?? null;
+  const inputOf = (binder: Id) => nodeValues(doc().code.nodes).find((l) => l.kind === "lambda" && l.params.includes(binder))?.id ?? null;
 
   // The library's type (data, effect or interface) of that name, if any.
   function libraryTypeNamed(name: string): Id | undefined {

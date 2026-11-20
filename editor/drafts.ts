@@ -18,7 +18,7 @@
 // Blender, Unreal Blueprints and Houdini.
 
 import type { Code, Id, Node } from "../ters/src/model.ts";
-import { freshId, subtree } from "../ters/src/model.ts";
+import { freshId, subtree, copyNodes, dropNode, nodeEntries } from "../ters/src/model.ts";
 
 export interface Drafts {
   // Each loose part, by the id of its definition: the definition it belongs to.
@@ -40,7 +40,7 @@ export function split(code: Code, of: Record<Id, Id>, home: Record<Id, Id> = {})
   const orphans = new Set(all.filter((d) => !loose.includes(d)).flatMap((d) => subtree(code, d)));
   const keep = Object.fromEntries(loose.map((d) => [d, of[d]]));
   return {
-    code: { nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => !ids.has(id) && !orphans.has(id))), defs: code.defs.filter((d) => !of[d]) },
+    code: { nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => !ids.has(id) && !orphans.has(id))), defs: code.defs.filter((d) => !of[d]) },
     drafts: { of: keep, home: Object.fromEntries(Object.entries(home).filter(([b]) => ids.has(b))), nodes: Object.fromEntries([...ids].map((id) => [id, code.nodes[id]])) },
   };
 }
@@ -64,7 +64,7 @@ export const looseOf = (code: Code, of: Record<Id, Id>, owner: Id): Id[] => code
 // caller's to fill (Delete leaves a hole there). Variables of `owner` it
 // uses become its inputs. `scope` is what's in reach at root.
 export function setLoose(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, owner: Id, root: Id, scope: Id[]): { code: Code; of: Record<Id, Id>; home: Record<Id, Id>; def: Id } {
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const inside = new Set(subtree(code, root));
   const outer = new Set(scope);
   const inputs = new Map<Id, Id>();
@@ -97,7 +97,7 @@ export function wireIn(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, def
   const lam = body.kind === "lambda" && body.params.length && body.params.every((p) => home[p]) ? body : null;
   const root = lam ? lam.body : d.body;
   const reach = new Set(scope);
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   if (lam) {
     for (const id of subtree(code, root)) {
       const n = nodes[id];
@@ -105,14 +105,14 @@ export function wireIn(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, def
       const v = home[n.target];
       nodes[id] = v && reach.has(v) ? { ...n, target: v } : { id, kind: "hole" };
     }
-    delete nodes[lam.id];
-    for (const p of lam.params) delete nodes[p];
+    dropNode(nodes, lam.id);
+    for (const p of lam.params) dropNode(nodes, p);
   }
-  delete nodes[def];
+  dropNode(nodes, def);
   // The hole takes the part's root: the root's node, under the hole's id,
   // so whatever pointed at the hole points at it.
   nodes[hole] = { ...nodes[root], id: hole } as Node;
-  delete nodes[root];
+  dropNode(nodes, root);
   const { [def]: _, ...rest } = of;
   const left = Object.fromEntries(Object.entries(home).filter(([p]) => nodes[p]));
   return { code: { nodes, defs: code.defs.filter((x) => x !== def) }, of: rest, home: left };
@@ -133,7 +133,7 @@ export function dropLoose(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, 
   const gone = new Set(subtree(code, def));
   const { [def]: _, ...rest } = of;
   return {
-    code: { nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => !gone.has(id))), defs: code.defs.filter((x) => x !== def) },
+    code: { nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => !gone.has(id))), defs: code.defs.filter((x) => x !== def) },
     of: rest,
     home: Object.fromEntries(Object.entries(home).filter(([p]) => !gone.has(p))),
   };

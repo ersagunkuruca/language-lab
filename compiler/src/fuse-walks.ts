@@ -37,7 +37,7 @@
 // eliminate trees", 1990), here by the walker's shape, as fuse-steps.ts
 // does for folds.
 
-import { freshId, isCall, subtree, mapIds, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import { freshId, isCall, subtree, mapIds, type Code, type Id, type Node, type NodeOf, copyNodes, dropNode } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info, type Options } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
@@ -141,7 +141,7 @@ function candidate(code: Code, info: Info, names: Names): (() => { code: Code; n
 }
 
 function rewrite(code: Code, names: Names, at: Id, w: Walker, how: Made): { code: Code; names: Names } {
-  const nodes: Record<Id, Node> = { ...code.nodes }, more: Names = {};
+  const nodes: Record<Id, Node> = copyNodes(code.nodes), more: Names = {};
   const call = code.nodes[at] as NodeOf<"call"> & { args: Id[] };
   const e = code.nodes[call.args[w.k]] as NodeOf<"call"> & { args: Id[] };
   const add = (x: Omit<Node, "id">, id = freshId()) => { nodes[id] = { id, ...x } as Node; return id; };
@@ -154,7 +154,7 @@ function rewrite(code: Code, names: Names, at: Id, w: Walker, how: Made): { code
     const lam = code.nodes[e.fn] as NodeOf<"lambda">;
     const inner = callOf(call.fn, call.args.map((a, i) => (i === w.k ? lam.body : a)));
     nodes[lam.id] = { ...lam, body: inner };
-    delete nodes[e.id];
+    dropNode(nodes, e.id);
     callOf(lam.id, e.args, at);
   } else if (how.how === "def") {
     // The definition's function copied in place, every id inside fresh.
@@ -164,7 +164,7 @@ function rewrite(code: Code, names: Names, at: Id, w: Walker, how: Made): { code
       nodes[now] = mapIds(code.nodes[old], (x) => ids.get(x) ?? x);
       if (names[old]) more[now] = names[old];
     }
-    delete nodes[e.fn];
+    dropNode(nodes, e.fn);
     callOf(ids.get(body)!, e.args, e.id);
   } else {
     const [xs, f] = e.args;
@@ -197,8 +197,8 @@ function rewrite(code: Code, names: Names, at: Id, w: Walker, how: Made): { code
     const lam = add({ kind: "lambda", params: [...ps, ...fvs], body: match } as Omit<Node, "id">);
     nodes[v] = { id: v, kind: "def", body: lam } as Node;
     defs.push(v);
-    delete nodes[e.id];
-    delete nodes[e.fn];
+    dropNode(nodes, e.id);
+    dropNode(nodes, e.fn);
     callOf(ref(v), [...call.args.map((a, i) => (i === w.k ? xs : a)), ...free.map(ref)], at);
   }
   return { code: { ...code, nodes, defs }, names: { ...names, ...more } };

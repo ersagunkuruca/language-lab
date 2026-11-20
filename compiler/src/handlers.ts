@@ -29,7 +29,7 @@
 // the cases use.
 
 import { laterOps } from "../../ters/src/lang/later-ops.ts";
-import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call } from "../../ters/src/model.ts";
+import { freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, copyNodes, nodeEntries } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { SIGS } from "../../ters/src/lang/std.ts";
 import { CONSOLE, DIVERGE, FILES, Subst, type Type } from "../../ters/src/lang/types.ts";
@@ -38,7 +38,7 @@ import { infer } from "../../ters/src/lang/infer.ts";
 type Names = Record<Id, string>;
 
 export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code; names: Names; fused: number } | null {
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const defs = [...code.defs];
   const newNames: Names = { ...names };
   const effectOf = (variant: Id): Id | null => {
@@ -106,7 +106,7 @@ export function fuseHandlers(code: Code, info: Info, names: Names): { code: Code
   });
   // A lambda called right where it's written: a let.
   const parentCall = new Map<Id, Id>();
-  for (const [id, n] of Object.entries(nodes)) if (isCall(n)) parentCall.set(n.fn, id);
+  for (const [id, n] of nodeEntries(nodes)) if (isCall(n)) parentCall.set(n.fn, id);
   const isLet = (lam: Id) => parentCall.has(lam);
 
   // Copy a subtree with fresh ids for everything in it; `swap` maps ids

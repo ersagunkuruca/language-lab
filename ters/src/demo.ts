@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { hashDef } from "./hash.ts";
 import { loadCode, loadPresentation, root } from "./io.ts";
-import { dependencies, get, replace, subtree, type Code, type Id, isCall } from "./model.ts";
+import { dependencies, get, replace, subtree, type Code, type Id, isCall, nodeIds } from "./model.ts";
 import { rename, type Presentation } from "./presentation.ts";
 import { B } from "./prelude.ts";
 import { renderGraph } from "./render/graph.ts";
@@ -99,7 +99,7 @@ const plainPres = loadPresentation(dir, { names: ["short", "descriptive"], style
   const two = subtree(code, lam.body).find((id) => { const n = code.nodes[id]; return n.kind === "lit" && n.value === 2; })!;
   const den = subtree(code, lam.body).find((id) => { const n = code.nodes[id]; return isCall(n) && n.args.includes(two); })!;
   const edited = replace(code, den, (c) => {
-    const ref = (t: Id) => { const id = `e${Object.keys(c.nodes).length}`; c.nodes[id] = { id, kind: "ref", target: t }; return id; };
+    const ref = (t: Id) => { const id = `e${nodeIds(c.nodes).length}`; c.nodes[id] = { id, kind: "ref", target: t }; return id; };
     return { kind: "call", fn: ref(B.add), args: [ref(lam.params[0]), ref(lam.params[0])] };
   });
   console.log(show(edited, plainPres, [x]));

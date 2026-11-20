@@ -12,7 +12,7 @@
 // thread hop runs in place, C41); this only marks the calls it may.
 
 import { originalOf, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
-import { nodesOfKind, subtree, type Code, type Id, type NodeOf, isCall } from "../model.ts";
+import { nodesOfKind, subtree, type Code, type Id, type NodeOf, isCall, nodeValues } from "../model.ts";
 import { preludeDef } from "./arith.ts";
 import type { Info } from "./infer.ts";
 import { ABORT, S, SIGS, writtenItems } from "./std.ts";
@@ -95,7 +95,7 @@ export type ListJob = "map" | "keep" | "all" | "any" | "first";
 export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
   // List's map, and the array's that a split puts in its place (C196).
   const kinds = new Map<Id | undefined, ListJob>([[preludeDef("map"), "map"], [preludeDef("array map"), "map"], [preludeDef("keep"), "keep"], [preludeDef("all pass"), "all"], [preludeDef("any pass"), "any"], [preludeDef("first where"), "first"]]), out = new Map<Id, ListJob>();
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n) || n.args.length !== 2) continue;
     const f = code.nodes[n.fn], l = code.nodes[n.args[1]];
     // Or the copy the arrays pass made of one (C93), or a split (C196) of
@@ -138,7 +138,7 @@ export function parallelFold(code: Code, info: Info, n: NodeOf<"fold">): boolean
 // search may abort, never run long.
 export function parallelCounts(code: Code, info: Info): Map<Id, "count" | "all" | "first"> {
   const out = new Map<Id, "count" | "all" | "first">();
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n) || !n.args.length) continue;
     const f = code.nodes[n.fn], l = code.nodes[n.args[0]];
     const target = f?.kind === "ref" ? (f as NodeOf<"ref">).target : undefined;
@@ -193,7 +193,7 @@ function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {
   const together = preludeDef("together");
   const out = new Map<Id, Set<Id>[]>();
   if (!together) return out;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n) || n.args.length !== 1) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || (f as NodeOf<"ref">).target !== together) continue;
@@ -217,7 +217,7 @@ function pureActions(code: Code, info: Info): Map<Id, Set<Id>[]> {
 // The call, and the positions of the two calls of f among its inputs.
 export function parallelHalves(code: Code, info: Info): Map<Id, [number, number]> {
   const out = new Map<Id, [number, number]>();
-  for (const d of Object.values(code.nodes)) {
+  for (const d of nodeValues(code.nodes)) {
     if (d.kind !== "def" || !d.body) continue;
     const lam = code.nodes[d.body];
     if (lam?.kind !== "lambda") continue;
@@ -257,7 +257,7 @@ export function parallelHalves(code: Code, info: Info): Map<Id, [number, number]
 // Each such fold, with those arms.
 export function parallelTreeFolds(code: Code, info: Info): Map<Id, Set<Id>> {
   const out = new Map<Id, Set<Id>>();
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "fold") continue;
     const arms = n.arms.map((a) => code.nodes[a] as NodeOf<"arm">);
     const effs = arms.map((a) => ownEffects(code, info, a.body));

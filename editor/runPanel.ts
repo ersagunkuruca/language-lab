@@ -6,7 +6,7 @@
 import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import manifest from "./examples.json" with { type: "json" };
 import FILES from "examples:files";
-import { changedFromLayer, type Code, type Id } from "../ters/src/model.ts";
+import { changedFromLayer, type Code, type Id, nodeValues } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import { FILES as FILES_EFFECT, NETWORK } from "../ters/src/lang/types.ts";
@@ -140,7 +140,7 @@ export function runPanel(host: RunHost) {
     let r = reading.get(code);
     // On the library's layer, only the nodes that aren't the library's (I167).
     const ids = changedFromLayer(code);
-    if (r === undefined) reading.set(code, (r = (ids ? [...ids].map((id) => code.nodes[id]) : Object.values(code.nodes)).some((n) => n?.kind === "ref" && (n.target === IO.readInput || n.target === IO.readLine) && !LIBRARY.code.nodes[n.id])));
+    if (r === undefined) reading.set(code, (r = (ids ? [...ids].map((id) => code.nodes[id]) : nodeValues(code.nodes)).some((n) => n?.kind === "ref" && (n.target === IO.readInput || n.target === IO.readLine) && !LIBRARY.code.nodes[n.id])));
     return r;
   }
   // Standard input as typed, or else the example's own (E275): the first

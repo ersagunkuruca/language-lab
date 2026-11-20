@@ -19,7 +19,7 @@
 // construct.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call, copyNodes, dropNode } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { fieldPaths } from "./records.ts";
@@ -40,7 +40,7 @@ export const usesSetSeveral = (code: Code) => settingSeveral(code).length > 0;
 export function setSeveral(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   const calls = settingSeveral(code).flatMap((id) => { const paths = severalAt(code, code.nodes[id]); return paths ? [{ id, paths }] : []; });
   if (!calls.length) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });
   const out: Names = { ...names };
@@ -65,7 +65,7 @@ export function setSeveral(code: Code, info: Info, names: Names): { code: Code; 
     nodes[id] = whole
       ? { id, kind: "call", fn: add({ kind: "lambda", params: [whole], body: nested }), args: [n.args[2]] }
       : { ...(nodes[nested] as Call), id };
-    if (!whole) delete nodes[nested];
+    if (!whole) dropNode(nodes, nested);
   }
   const next: Code = { ...code, nodes };
   return { code: next, info: infer(next, out, undefined, info.options), names: out };

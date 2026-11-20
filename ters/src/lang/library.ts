@@ -12,7 +12,7 @@ import numbers0 from "../../library/numbers.json" with { type: "json" };
 import signals0 from "../../library/signals.json" with { type: "json" };
 import tunings0 from "../../library/tunings.json" with { type: "json" };
 import { readSaved } from "../saved.ts";
-import { merge, shapeHooks, type Code, type Id } from "../model.ts";
+import { merge, shapeHooks, type Code, type Id, nodeEntries, nodeIds } from "../model.ts";
 import { fillLater, usesGiveTheirPorts } from "./ports.ts";
 import { WHOLE_LITERALS } from "./infer.ts";
 import { INT_CASES } from "./int-cases-ids.ts";
@@ -41,7 +41,7 @@ export const CASES = readSaved(cases0) as unknown as Module;
 export const NUMBERS = readSaved(numbers0) as unknown as Module;
 // The numbers module's types and their one case, by name (their ids are
 // their hashes).
-const numbersNode = (kind: string, name: string) => Object.keys(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === kind && NUMBERS.names[d] === name)!;
+const numbersNode = (kind: string, name: string) => nodeIds(NUMBERS.code.nodes).find((d) => NUMBERS.code.nodes[d].kind === kind && NUMBERS.names[d] === name)!;
 export const DUAL_V = numbersNode("variant", "dual");
 export const COMPLEX_V = numbersNode("variant", "complex");
 export const COMPLEX_TYPE = numbersNode("def", "Complex");
@@ -81,7 +81,7 @@ checkOnce(LIBRARY.code, LIBRARY.names, () => [filledLib()]);
 
 // A program's own part: what isn't in the library.
 export const ownPart = (code: Code): Code => ({
-  nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => !LIBRARY.code.nodes[id])),
+  nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => !LIBRARY.code.nodes[id])),
   defs: code.defs.filter((d) => !LIBRARY.code.nodes[d]),
 });
 

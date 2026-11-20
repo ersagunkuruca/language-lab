@@ -17,6 +17,7 @@ import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { effectOfOperation, hostCName, hostOp, ownOperations } from "./hosts.ts";
 import { HTML_V, INT_OPS, S } from "./std.ts";
+import { copyNodes, nodeValues } from "../model.ts";
 
 export const VIEW_TAG = "ters-view", VIEW_SEP = "\u001f";
 
@@ -26,9 +27,9 @@ export function nativeViews(code: Code, names: Names, answers: (op: Id) => boole
   const views = new Set(ownOperations(code).filter((op) => effectOfOperation(code, op) && hostOp(code, names, op).out.k === "view" && answers(op)));
   if (!views.size) return null;
   const k = new Lang(code);
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   let any = false;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "call" || !n.args) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || !views.has(f.target)) continue;

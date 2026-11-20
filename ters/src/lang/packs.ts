@@ -19,7 +19,7 @@
 // (Läufer, JFP 1996); Rust's `dyn Trait`, built the same way.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, isCall, nodesWhere } from "../model.ts";
+import { freshId, isCall, nodesWhere, copyNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { packingOf, type Packing } from "./packing.ts";
@@ -33,7 +33,7 @@ export const usesPacking = (code: Code) => packingsIn(code).length > 0;
 export function packsWritten(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   const packings = packingsIn(code);
   if (!packings.length) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const out: Names = { ...names };
   const defs = [...code.defs];
   const made: Id[] = [];

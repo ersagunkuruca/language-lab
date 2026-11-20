@@ -15,7 +15,7 @@
 // Like arith.ts, the program comes back unchanged when it has none.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, subtree, isCall, type Call } from "../model.ts";
+import { freshId, subtree, isCall, type Call, copyNodes, nodeIds } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, recursiveLet, type Info } from "./infer.ts";
 import { OverMap, type Scheme, type Type } from "./types.ts";
@@ -24,7 +24,7 @@ import { OverMap, type Scheme, type Type } from "./types.ts";
 // ones first, so an inner one that calls an outer one calls its
 // definition (the GPU, WebAssembly and C have no closures: scalar.ts, C54).
 function find(code: Code, every = false, kept = new Set<Id>()): { call: Call; i: number; p: Id } | null {
-  const ids = every ? code.defs.flatMap((d) => subtree(code, d)) : Object.keys(code.nodes);
+  const ids = every ? code.defs.flatMap((d) => subtree(code, d)) : nodeIds(code.nodes);
   for (const id of ids) {
     const n = code.nodes[id];
     if (!isCall(n) || code.nodes[n.fn]?.kind !== "lambda") continue;
@@ -41,7 +41,7 @@ export const hasRecursiveLet = (code: Code) => find(code) !== null;
 
 export function liftLets(code: Code, info: Info, names: Names = {}, every = false): { code: Code; info: Info; names: Names } {
   if (!find(code, every)) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const defs = [...code.defs];
   const out: Names = { ...names };
   const work = () => ({ nodes, defs });
@@ -120,7 +120,7 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
   const lifted = { nodes, defs };
   // Checked again where it changed: the lets' definitions and the ones it
   // made (infer.ts inferRewritten, I264).
-  const changed = Object.keys(nodes).filter((id) => id in code.nodes && nodes[id] !== code.nodes[id]);
+  const changed = nodeIds(nodes).filter((id) => id in code.nodes && nodes[id] !== code.nodes[id]);
   const checked = inferRewritten(code, lifted, out, info, changed, defs.slice(code.defs.length));
   // A library definition arith.ts resolved (pedal's `smaller`, at Float64)
   // keeps its id, and this check reads that id's type from the library's

@@ -4,7 +4,7 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget } from "../model.ts";
+import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget, copyNodes, dropNode, nodeEntries, nodeIds, nodeValues } from "../model.ts";
 import { BUILTIN_INPUTS, TUPLE_MAX } from "./std-ids.ts";
 import { tupleVariant, tuplePart } from "./std-values.ts";
 import { forgetSpine } from "./spine.ts";
@@ -72,7 +72,7 @@ export const answerKeys = (code: Code, n: Use): string[] => (n.body !== undefine
 // is left alone.
 // `own`: the nodes to look at (a program's own, not the library under it).
 // `wrote`: where to list the nodes it writes.
-export function fillUses(code: Code, own: Iterable<Id> = Object.keys(code.nodes), wrote?: Id[]): void {
+export function fillUses(code: Code, own: Iterable<Id> = nodeIds(code.nodes), wrote?: Id[]): void {
   for (const id of own) {
     const n = code.nodes[id];
     if (n?.kind !== "call" || !n.given || (n as { body?: Id }).body !== undefined) continue;
@@ -112,7 +112,7 @@ export function filled(code: Code): Code {
     if (derived.get(code)!.stable && out.nodes !== mirrors.get(code.nodes)?.nodes) filledOnce.set(code, out);
   }
   if (!out) {
-    const bare = bareIn(code, Object.keys(code.nodes));
+    const bare = bareIn(code, nodeIds(code.nodes));
     // The library filled now, if this is a program on it.
     if (bare.length && toFill && bare.some((id) => id in toFill!.nodes) && onBase(code, toFill)) baseNow();
     if (!bare.length) out = code;
@@ -124,7 +124,7 @@ export function filled(code: Code): Code {
       // On the filled library, so the passes that keep its work (arith.ts
       // seedFor) read through to it.
       onLayer(out, base.filled);
-    } else { out = { ...code, nodes: { ...code.nodes } }; fillUses(out, bare); }
+    } else { out = { ...code, nodes: copyNodes(code.nodes) }; fillUses(out, bare); }
     filledOnce.set(code, out);
   }
   return out;
@@ -146,23 +146,23 @@ function filledFrom(code: Code): Code {
   if (fb === from.base && !bare.length) return code;
   // A stable program is filled once and kept (filled above): its own copy.
   if (bare.length && from.stable) {
-    const out: Code = { ...code, nodes: { ...fb.nodes } };
+    const out: Code = { ...code, nodes: copyNodes(fb.nodes) };
     const put = [...from.changed];
-    for (const id of put) { if (id in code.nodes) out.nodes[id] = code.nodes[id]; else delete out.nodes[id]; }
+    for (const id of put) { if (id in code.nodes) out.nodes[id] = code.nodes[id]; else dropNode(out.nodes, id); }
     fillUses(out, bare, put);
     derivedFrom(out, fb, put);
     return out;
   }
   let m = mirrors.get(code.nodes);
-  if (!m || m.fb.nodes !== fb.nodes) mirrors.set(code.nodes, (m = { fb, nodes: { ...fb.nodes }, put: [] }));
+  if (!m || m.fb.nodes !== fb.nodes) mirrors.set(code.nodes, (m = { fb, nodes: copyNodes(fb.nodes), put: [] }));
   else {
-    for (const id of m.put) { if (id in fb.nodes) m.nodes[id] = fb.nodes[id]; else delete m.nodes[id]; }
+    for (const id of m.put) { if (id in fb.nodes) m.nodes[id] = fb.nodes[id]; else dropNode(m.nodes, id); }
     forgetSpine(m.nodes);
     forgetKinds(m.nodes);
   }
   m.fb = fb;
   m.put = [...from.changed];
-  for (const id of m.put) { if (id in code.nodes) m.nodes[id] = code.nodes[id]; else delete m.nodes[id]; }
+  for (const id of m.put) { if (id in code.nodes) m.nodes[id] = code.nodes[id]; else dropNode(m.nodes, id); }
   const out: Code = { ...code, nodes: m.nodes };
   // A bare use is filled in the same nodes, and what that wrote is put
   // back the next time too (E103: a copy of every node per offer was 2.5
@@ -178,13 +178,13 @@ function filledFrom(code: Code): Code {
 // check alone never needs).
 let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null, toFill: Code | null = null;
 const baseNow = () => { if (!base && toFill) fillOnce(toFill); return base; };
-const onBase = (code: Code, lib: Code) => { for (const id in lib.nodes) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
+const onBase = (code: Code, lib: Code) => { for (const id of nodeIds(lib.nodes)) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
 // The library filled by fillOnce, if it has been or is to be.
 export const filledLibrary = (): Code | undefined => baseNow()?.filled;
 export function fillOnce(lib: Code): Code {
-  const out: Code = { ...lib, nodes: { ...lib.nodes } };
-  fillUses(out, bareIn(lib, Object.keys(lib.nodes)));
-  base = { lib, filled: out, fills: Object.fromEntries(Object.entries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
+  const out: Code = { ...lib, nodes: copyNodes(lib.nodes) };
+  fillUses(out, bareIn(lib, nodeIds(lib.nodes)));
+  base = { lib, filled: out, fills: Object.fromEntries(nodeEntries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
   toFill = null;
   return out;
 }

@@ -54,7 +54,7 @@
 
 import { FN } from "../../../invertible/src/expr.js";
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { children, freshId, ownerOfTypeParts, useTarget, isCall, type Call, isUse, isBound } from "../model.ts";
+import { children, freshId, ownerOfTypeParts, useTarget, isCall, type Call, isUse, isBound, copyNodes, nodeIds, nodeValues } from "../model.ts";
 import { fieldShapes } from "./nested.ts";
 import type { Names } from "../presentation.ts";
 import { impl } from "../prelude.ts";
@@ -871,7 +871,7 @@ export function deriver(code: Code, names: Names = {}, lenient = false) {
 // f′ as a new definition next to f (and any helpers it needs, like g′ for
 // a g that f calls). Returns the code with them added, and their names.
 export function differentiate(code: Code, names: Names, def: Id, wrt = 0): { code: Code; names: Names; def: Id; defs: Id[] } {
-  const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const d = deriver(out, names);
   const id = d.partial(def, wrt);
   out.defs.push(...d.defs);
@@ -945,13 +945,13 @@ function knownLambda(code: Code, arg: Id): Id | null {
   return lam?.kind === "lambda" && lam.params.length === 1 ? lam.id : null;
 }
 export function smoothGradient(code: Code, arg: Id, variant: Id): boolean {
-  const scratch: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const scratch: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   try {
     const lam = knownLambda(scratch, arg);
     if (!lam) return false;
-    const before = new Set(Object.keys(scratch.nodes));
+    const before = new Set(nodeIds(scratch.nodes));
     deriver(scratch).gradient(lam, variant);
-    return !Object.values(scratch.nodes).some((n) => !before.has(n.id) && n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient));
+    return !nodeValues(scratch.nodes).some((n) => !before.has(n.id) && n.kind === "ref" && (n.target === S.derivative || n.target === S.gradient));
   } catch {
     return false;
   }
@@ -979,14 +979,14 @@ const derivativeCall = (code: Code, id: Id, which: Id = S.derivative): id is Id 
 // without Choice. A function value passed in (unknown until run time), or
 // floor, or data with several cases taken apart, keeps Choice.
 export function smoothDerivative(code: Code, arg: Id): boolean {
-  const scratch: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const scratch: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   try {
     const lam = knownFunction(scratch, arg);
     if (!lam) return false;
-    const before = new Set(Object.keys(scratch.nodes));
+    const before = new Set(nodeIds(scratch.nodes));
     deriver(scratch).lambda(lam, 0);
     // A call of a function value inside asks `derivative` again at run time.
-    return !Object.values(scratch.nodes).some((n) => !before.has(n.id) && n.kind === "ref" && n.target === S.derivative);
+    return !nodeValues(scratch.nodes).some((n) => !before.has(n.id) && n.kind === "ref" && n.target === S.derivative);
   } catch {
     return false;
   }
@@ -1004,13 +1004,13 @@ export function smoothDerivative(code: Code, arg: Id): boolean {
 export function expandDerivatives(code: Code, names: Names, variants: (call: Id) => Id | null = () => null): { code: Code; names: Names; expanded: Id[] } {
   const arg = (id: Id) => (code.nodes[id] as Call).args[0];
   const grads = new Map<Id, Id>();
-  for (const id of Object.keys(code.nodes)) {
+  for (const id of nodeIds(code.nodes)) {
     const v = derivativeCall(code, id, S.gradient) ? variants(id) : null;
     if (v && smoothGradient(code, arg(id), v)) grads.set(id, v);
   }
-  const calls = Object.keys(code.nodes).filter((id) => grads.has(id) || (derivativeCall(code, id) && smoothDerivative(code, arg(id))));
+  const calls = nodeIds(code.nodes).filter((id) => grads.has(id) || (derivativeCall(code, id) && smoothDerivative(code, arg(id))));
   if (!calls.length) return { code, names, expanded: [] };
-  const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const d = deriver(out, names);
   for (const id of calls) {
     const f = (out.nodes[id] as Call).args[0];

@@ -10,6 +10,7 @@ import type { Info } from "../ters/src/lang/infer.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { lowerScalar } from "../compiler/src/scalar.ts";
 import type { SentCode } from "./runCode.ts";
+import { dropNode, nodeIds } from "../ters/src/model.ts";
 
 // For each definition: null where it runs, else why it doesn't; on a GPU,
 // then on WebAssembly and C.
@@ -37,11 +38,11 @@ export function receivedOnto(s: SentCode, before: Code | null): Code {
     if (had && had !== lib[id] && JSON.stringify(had) === JSON.stringify(s.own[id])) nodes[id] = had;
     else { nodes[id] = s.own[id]; same = false; }
   }
-  for (const id of s.gone) delete nodes[id];
+  for (const id of s.gone) dropNode(nodes, id);
   if (same && before) {
     let n = 0;
-    for (const id in before.nodes) if (before.nodes[id] !== lib[id]) n++;
-    if (n === Object.keys(s.own).length && Object.keys(before.nodes).length === Object.keys(nodes).length) return before;
+    for (const id of nodeIds(before.nodes)) if (before.nodes[id] !== lib[id]) n++;
+    if (n === Object.keys(s.own).length && nodeIds(before.nodes).length === nodeIds(nodes).length) return before;
   }
   return { nodes, defs: same && before ? before.defs : s.defs };
 }

@@ -24,7 +24,7 @@
 // rather than written.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call, copyNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { preludeDef } from "./arith.ts";
 import { infer, type Info } from "./infer.ts";
@@ -47,7 +47,7 @@ export function setThrough(code: Code, info: Info, names: Names): { code: Code; 
   const calls = settingThrough(code).flatMap((id) => { const r = throughAt(code, code.nodes[id]); return r ? [{ id, ...r }] : []; });
   const inverse = preludeDef("inverse");
   if (!calls.length || !inverse || !code.nodes[inverse]) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });
   const out: Names = { ...names };

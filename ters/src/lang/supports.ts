@@ -23,11 +23,12 @@ import type { Info } from "./infer.ts";
 import { FALSE, S, TRUE } from "./std-ids.ts";
 import type { Type } from "./types.ts";
 import { ownOperations, effectOfOperation, pureEffect, hostCName, type Hosts } from "./hosts.ts";
+import { copyNodes, nodeValues } from "../model.ts";
 
 // The effects the program declared that it, or the platform, answers.
 // `hostHas(op)`: whether the platform's host file answers that operation.
 export function answeredEffects(code: Code, hostHas: (op: Id) => boolean): Set<Id> {
-  const handled = new Set(Object.values(code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+  const handled = new Set(nodeValues(code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const byEffect = new Map<Id, Id[]>();
   for (const op of ownOperations(code)) { const e = effectOfOperation(code, op); if (e) byEffect.set(e, [...(byEffect.get(e) ?? []), op]); }
   const out = new Set<Id>();
@@ -51,10 +52,10 @@ export function supported(t: Type | undefined, code: Code, answered: Set<Id>): b
 // on a written answer replaced by the branch it takes. Null when the
 // program asks nothing. `info` is its check, for the functions' types.
 export function answerSupports(code: Code, info: Info, answered: Set<Id>): Code | null {
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   let asked = false;
   const answers = new Map<Id, boolean>();
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "call" || !n.args || n.args.length !== 1) continue;
     const f = code.nodes[n.fn];
     if (f?.kind !== "ref" || f.target !== S.supports) continue;
@@ -69,7 +70,7 @@ export function answerSupports(code: Code, info: Info, answered: Set<Id>): Code 
   // hold another such match, copied whole).
   for (let changed = true; changed;) {
     changed = false;
-    for (const n of Object.values(nodes)) {
+    for (const n of nodeValues(nodes)) {
       if (n.kind !== "match" || n.name || !answers.has(n.scrutinee)) continue;
       const b = answers.get(n.scrutinee)!;
       const arm = n.arms.map((a) => nodes[a] as NodeOf<"arm">).find((a) => a.variant === (b ? TRUE : FALSE));

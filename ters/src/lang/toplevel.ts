@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf } from "../model.ts";
+import { conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf, copyNodes, dropNode, nodeValues } from "../model.ts";
 import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
@@ -26,7 +26,7 @@ export type Top = { ok: true; code: Code; names: Names; select: Id; note: string
 export interface TypeSpec { target: Id; args: TypeSpec[] }
 
 function builder(code: Code) {
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const add = (n: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...n } as Node; return id; };
   return { nodes, add };
 }
@@ -51,7 +51,7 @@ export function nameClash(code: Code, names: Names, id: Id, rawName: string): st
   const def = ownerOfTypeParts(code).get(id) ?? code.defs.find((d) => subtree(code, d).includes(id));
   if (!def) return null;
   const peers = n.kind === "field"
-    ? Object.values(code.nodes).find((v): v is NodeOf<"variant"> => v.kind === "variant" && v.fields.includes(id))?.fields ?? []
+    ? nodeValues(code.nodes).find((v): v is NodeOf<"variant"> => v.kind === "variant" && v.fields.includes(id))?.fields ?? []
     : n.kind === "binder" ? scopesWith(code, def, id)
     : subtree(code, def).filter((o) => code.nodes[o]?.kind === n.kind);
   if (!peers.some((o) => o !== id && names[o] === name)) return null;
@@ -157,7 +157,7 @@ export function usesOfDefinition(code: Code, def: Id): Id[] {
   const own = new Set(subtree(code, def));
   const owner = ownerOfTypeParts(code);
   const into = (t: Id | null | undefined) => !!t && (t === def || owner.get(t) === def);
-  return Object.values(code.nodes).filter((n) => {
+  return nodeValues(code.nodes).filter((n) => {
     if (own.has(n.id)) return false;
     switch (n.kind) {
       case "ref": case "tref": return into(n.target);
@@ -243,7 +243,7 @@ export function toggleValue(code: Code, names: Names, def: Id): Top {
   if (body.kind === "lambda" && (body.params.length || body.results?.length)) return { ok: false, reason: `${nameOf(names, def)} has inputs; only one with none can be a value` };
   const { nodes, add } = builder(code);
   const own = new Set(subtree(code, def));
-  const calls = Object.values(code.nodes).filter((n): n is Call => isCall(n) && !n.args.length && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === def);
+  const calls = nodeValues(code.nodes).filter((n): n is Call => isCall(n) && !n.args.length && code.nodes[n.fn]?.kind === "ref" && (code.nodes[n.fn] as NodeOf<"ref">).target === def);
   const called = new Set(calls.map((c) => c.fn));
   if (body.kind === "lambda") {
     nodes[def] = { ...d, body: body.body };
@@ -272,7 +272,7 @@ export function removeParameter(code: Code, names: Names, def: Id, param: Id, le
   // button is drawn (I167).
   let next: Code | undefined;
   const made = () => {
-    const nodes = { ...code.nodes };
+    const nodes = copyNodes(code.nodes);
     for (const r of uses) nodes[r.id] = { id: r.id, kind: "hole" };
     nodes[lam.id] = { ...lam, params: lam.params.filter((p) => p !== param) };
     for (const c of calls) nodes[c.id] = { ...c, args: c.args.filter((_, j) => j !== i) };
@@ -295,7 +295,7 @@ export function moveParameter(code: Code, names: Names, def: Id, param: Id, by: 
   const calls = scanningOnLayer(code, () => callsOf(code, def));
   let next: Code | undefined;
   const made = () => {
-    const nodes = { ...code.nodes };
+    const nodes = copyNodes(code.nodes);
     nodes[lam.id] = { ...lam, params: swap(lam.params) };
     for (const c of calls) nodes[c.id] = { ...c, args: swap(c.args) };
     return { nodes, defs: code.defs };
@@ -320,10 +320,10 @@ export function removeCase(code: Code, names: Names, type: Id, variant: Id): Top
   if (td.variants.length === 1) return { ok: false, reason: "a type needs at least one case" };
   const made = refsTo(code, variant).length;
   if (made) return { ok: false, reason: `${nameOf(names, variant)} is made in ${made} place${made === 1 ? "" : "s"}; change those first` };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   nodes[td.id] = { ...td, variants: td.variants.filter((v) => v !== variant) };
   let arms = 0;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "match" && n.kind !== "fold") continue;
     const keep = n.arms.filter((a) => (code.nodes[a] as NodeOf<"arm">).variant !== variant);
     if (keep.length === n.arms.length) continue;
@@ -396,11 +396,11 @@ export function addField(code: Code, names: Names, type: Id, variant: Id, rawNam
   // field holds the type itself).
   const recursive = typeof t !== "function" && isRecursive(code, type, t);
   let arms = 0;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "arm" || n.variant !== variant) continue;
     const b = add({ kind: "binder" });
     nn[b] = name;
-    const inFold = Object.values(code.nodes).some((m) => m.kind === "fold" && m.arms.includes(n.id));
+    const inFold = nodeValues(code.nodes).some((m) => m.kind === "fold" && m.arms.includes(n.id));
     let r: Id | null = null;
     if (inFold && recursive) { r = add({ kind: "binder" }); nn[r] = `${name}′`; }
     // An operation answered later keeps the rest last (ANSWERED-LATER.md).
@@ -417,10 +417,10 @@ export function removeField(code: Code, names: Names, variant: Id, field: Id): T
   const i = v.fields.indexOf(field);
   if (i < 0) return { ok: false, reason: "that isn't a field of this case" };
   if (refsTo(code, field).length) return { ok: false, reason: `${nameOf(names, field)} is read directly somewhere; change that first` };
-  const arms = Object.values(code.nodes).filter((n): n is NodeOf<"arm"> => n.kind === "arm" && n.variant === variant);
+  const arms = nodeValues(code.nodes).filter((n): n is NodeOf<"arm"> => n.kind === "arm" && n.variant === variant);
   const used = arms.filter((a) => [a.binds[i], a.results[i]].some((b) => b && refsTo(code, b).length)).length;
   if (used) return { ok: false, reason: `${used} arm${used === 1 ? " uses" : "s use"} ${nameOf(names, field)}; clear those uses first` };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   nodes[variant] = { ...v, fields: v.fields.filter((f) => f !== field) };
   for (const a of arms) nodes[a.id] = { ...a, binds: a.binds.filter((_, j) => j !== i), results: a.results.filter((_, j) => j !== i) };
   const calls = callsOf(code, variant);
@@ -459,7 +459,7 @@ export function setReturns(code: Code, names: Names, variant: Id, t: TypeSpec | 
 export function setPrivate(code: Code, names: Names, variant: Id, on: boolean): Top {
   const v = code.nodes[variant];
   if (v?.kind !== "variant") return { ok: false, reason: "that isn't a case of a type" };
-  const type = Object.values(code.nodes).find((t) => t.kind === "typedef" && t.variants.includes(variant)) as NodeOf<"typedef"> | undefined;
+  const type = nodeValues(code.nodes).find((t) => t.kind === "typedef" && t.variants.includes(variant)) as NodeOf<"typedef"> | undefined;
   if (type?.effect || type?.interface) return { ok: false, reason: `${nameOf(names, variant)} is ${type.effect ? "an operation of an effect" : "an interface's"}: only a data type's cases are private` };
   if (!!v.private === on) return { ok: false, reason: `${nameOf(names, variant)} is ${on ? "private" : "public"} already` };
   const { private: _, ...open } = v;
@@ -477,7 +477,7 @@ export function makeSteps(code: Code, names: Names, effect: Id): Top {
   const made = `steps of ${nameOf(names, effect)}`;
   if (code.defs.some((d) => names[d] === made)) return { ok: false, reason: `${made} is made already` };
   const k = new Lang(code);
-  k.code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  k.code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   k.names = { ...names };
   const st = stepsOf(k, effect);
   return { ok: true, code: k.code, names: k.names, select: st.steps,
@@ -489,12 +489,12 @@ export function setLater(code: Code, names: Names, variant: Id, on: boolean): To
   if (v?.kind !== "variant") return { ok: false, reason: "that isn't an operation" };
   if (on && !v.returns) return { ok: false, reason: `${nameOf(names, variant)} never returns, so there is no rest to answer later` };
   if (!!v.later === on) return { ok: false, reason: `${nameOf(names, variant)} is answered ${on ? "later" : "at once"} already` };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const nn: Names = { ...names };
   const { later: _, ...now } = v;
   nodes[variant] = on ? { ...v, later: true } : now;
   let arms = 0;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind !== "arm" || n.variant !== variant) continue;
     if (on) {
       const b = freshId();
@@ -504,8 +504,8 @@ export function setLater(code: Code, names: Names, variant: Id, on: boolean): To
     } else {
       const rest = n.binds.at(-1)!;
       if (n.binds.length !== v.fields.length + 1) continue;
-      if (Object.values(code.nodes).some((m) => m.kind === "ref" && m.target === rest)) return { ok: false, reason: `a case of ${nameOf(names, variant)} uses its rest: take that out first` };
-      delete nodes[rest];
+      if (nodeValues(code.nodes).some((m) => m.kind === "ref" && m.target === rest)) return { ok: false, reason: `a case of ${nameOf(names, variant)} uses its rest: take that out first` };
+      dropNode(nodes, rest);
       nodes[n.id] = { ...n, binds: n.binds.slice(0, -1), results: n.results.slice(0, -1) };
     }
     arms++;
@@ -649,7 +649,7 @@ export function addTypeParameter(code: Code, names: Names, type: Id, rawName: st
       note: `${nameOf(names, variant)} has its own type ${name} now, fresh at each call: give an input or what it gives back the type ${name}.` };
   }
   const own = new Set(subtree(code, type));
-  const uses = Object.values(code.nodes).filter((n): n is NodeOf<"tref"> => n.kind === "tref" && n.target === type);
+  const uses = nodeValues(code.nodes).filter((n): n is NodeOf<"tref"> => n.kind === "tref" && n.target === type);
   const outside = uses.filter((u) => !own.has(u.id));
   if (outside.length) {
     const owners = defOwners(code);
@@ -669,17 +669,17 @@ export function removeTypeParameter(code: Code, names: Names, type: Id, param: I
   if (at < 0 && !op) return { ok: false, reason: "that isn't one of its type parameters" };
   if (td.interface) return { ok: false, reason: "an interface takes one type, its a" };
   // The type's own uses of itself pass it on (`Tree a` in Tree a): those go with it.
-  const passed = new Set(at < 0 ? [] : Object.values(code.nodes).flatMap((n) => n.kind === "tref" && n.target === type && n.args[at] ? [n.args[at]] : []));
-  const used = Object.values(code.nodes).some((n) => n.kind === "tref" && n.target === param && !passed.has(n.id));
+  const passed = new Set(at < 0 ? [] : nodeValues(code.nodes).flatMap((n) => n.kind === "tref" && n.target === type && n.args[at] ? [n.args[at]] : []));
+  const used = nodeValues(code.nodes).some((n) => n.kind === "tref" && n.target === param && !passed.has(n.id));
   if (used) return { ok: false, reason: `a type in ${nameOf(names, type)} still names ${nameOf(names, param)}; change it first` };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   if (op) {
     const rest = op.params!.filter((p) => p !== param);
     const { params: _, ...bare } = op;
     nodes[op.id] = rest.length ? { ...op, params: rest } : bare;
   } else {
     nodes[td.id] = { ...td, params: td.params.filter((p) => p !== param) };
-    for (const n of Object.values(code.nodes)) if (n.kind === "tref" && n.target === type && n.args.length > at) nodes[n.id] = { ...n, args: n.args.filter((_, i) => i !== at) };
+    for (const n of nodeValues(code.nodes)) if (n.kind === "tref" && n.target === type && n.args.length > at) nodes[n.id] = { ...n, args: n.args.filter((_, i) => i !== at) };
   }
   const next = collect({ nodes, defs: code.defs });
   const nn = Object.fromEntries(Object.entries(names).filter(([id]) => next.nodes[id]));
@@ -738,7 +738,7 @@ export function moveStep(code: Code, names: Names, step: Id, by: -1 | 1): Top {
   else outer = self;
   if (!self && !letAround(code, step)) return { ok: false, reason: "it isn't a step of an action" };
   if (!outer) return { ok: false, reason: by < 0 ? "it's already the first step" : "it's already the last step" };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const v0 = outer.call.args[0], b0 = outer.lam.params[0];
   const inner = code.nodes[outer.lam.body];
   const next = isCall(inner) ? letOf(code, inner.args[0] ?? "") : null;

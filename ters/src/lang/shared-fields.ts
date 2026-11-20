@@ -19,7 +19,7 @@
 // keep each case's fields apart, as the language did before.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { nodesWhere, freshId, isCall, type Call } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call, copyNodes, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { S, SET } from "./std.ts";
@@ -59,7 +59,7 @@ export const usesSharedFields = (code: Code) => nodesWhere(code, "shared field",
 
 export function sharedFields(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   if (!usesSharedFields(code)) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const defs = [...code.defs];
   const out: Names = { ...names };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
@@ -99,7 +99,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
   // set(p ↦ p.to.value, i, x) = with to(i, set(t ↦ t.value, i.to, x)),
   // a step on a field of a one-case type its own `with`. Each value is bound
   // once, by a lambda applied to it.
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n) || n.args.length !== 3 || (code.nodes[n.fn] as { target?: Id })?.target !== SET) continue;
     const path = fieldPath(code, n.args[0]);
     if (!path || !path.some((f) => shared(f))) continue;
@@ -119,7 +119,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
     touched.push(n.id);
     changed = true;
   }
-  for (const n of Object.values(nodes)) {
+  for (const n of nodeValues(nodes)) {
     if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "field") continue;
     const sh = shared(n.target);
     if (!sh) continue;

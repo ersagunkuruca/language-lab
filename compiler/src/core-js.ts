@@ -41,7 +41,7 @@ import { withInverses } from "./inverses.ts";
 import { withOperationLambdas } from "./operation-values.ts";
 import { withCharacterMaps } from "./character-maps.ts";
 import { hoistInvariants } from "./hoist.ts";
-import { ownerOfTypeParts, type Code, type Id, type NodeOf, type Use } from "../../ters/src/model.ts";
+import { ownerOfTypeParts, type Code, type Id, type NodeOf, type Use, nodeIds } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";

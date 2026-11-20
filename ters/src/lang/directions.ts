@@ -13,7 +13,7 @@
 // one predicate with a definition per mode, promised to agree.
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, isBound } from "../model.ts";
+import { conditionResults, directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, isBound, copyNodes, nodeValues } from "../model.ts";
 import { derivedFrom, nodesWhere, portsOf, subtree } from "../model.ts";
 import { S } from "./std.ts";
 
@@ -58,7 +58,7 @@ function fieldDirection(code: Code, n: Use, f: NodeOf<"field">): Retargeted | nu
     return ins.length === given.length && ins.every((i) => given.includes(i));
   };
   if (reads(f)) return null;
-  const v = Object.values(code.nodes).find((x): x is NodeOf<"variant"> => x.kind === "variant" && x.fields.includes(f.id));
+  const v = nodeValues(code.nodes).find((x): x is NodeOf<"variant"> => x.kind === "variant" && x.fields.includes(f.id));
   const ports = (g: NodeOf<"field">) => [...(portNames(code.nodes, g) ?? [])].sort().join();
   for (const id of v?.fields ?? []) {
     const g = code.nodes[id];
@@ -109,7 +109,7 @@ export function useDirections(code: Code): Code {
     if (!asked(n)) continue;
     const r = directionFor(code, n, ways);
     if (!r) continue;
-    nodes ??= { ...code.nodes };
+    nodes ??= copyNodes(code.nodes);
     nodes[n.id] = r.use;
     nodes[n.fn] = { id: n.fn, kind: "ref", target: r.target };
     rewritten.push(n.id, n.fn);

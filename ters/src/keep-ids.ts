@@ -18,7 +18,7 @@
 // differencing", ASE 2014), simplified to a tree whose root is fixed.
 
 import type { Code, Id, Node } from "./model.ts";
-import { SCHEMA, mapIds, subtree } from "./model.ts";
+import { SCHEMA, mapIds, subtree, nodeEntries } from "./model.ts";
 import type { Names } from "./presentation.ts";
 
 export function keptIds(before: Code, after: Code, names: Names, root: Id): { code: Code; names: Names } {
@@ -93,7 +93,7 @@ export function keptIds(before: Code, after: Code, names: Names, root: Id): { co
   if (!to.size) return { code: after, names };
   const f = (id: Id) => to.get(id) ?? id;
   const nodes: Record<Id, Node> = {}, back = new Set(to.values());
-  for (const [id, n] of Object.entries(after.nodes)) {
+  for (const [id, n] of nodeEntries(after.nodes)) {
     // An old node left behind by the hole gives way to its match.
     if (back.has(id) && !newSet.has(id)) continue;
     // Only the new tree holds or points at its new ids.

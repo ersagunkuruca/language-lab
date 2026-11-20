@@ -15,7 +15,7 @@
 
 import { COPIED_FROM, originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "./prelude-ids.ts";
 import { stableIds } from "../stable-ids.ts";
-import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call } from "../model.ts";
+import { bindsOf, children, ownerOfTypeParts, dependencies, dependenciesOfAll, layerOf, onLayer, freshId, idsMadeBy, mapIds, merge, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isUse, isCall, type Call, copyNodes, nodeEntries, withNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { checksKept, infer, type Info } from "./infer.ts";
 import { Lang } from "./dsl.ts";
@@ -256,11 +256,11 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const lists = chosen.find((r) => r.of === LIST), boundary = lists && listBoundary(code, info, defs, lists, asked)!;
   let copies: Id[] = [];
   if (boundary) {
-    let withBoundary: Code = { nodes: { ...code.nodes, ...boundary.nodes }, defs: [...code.defs, ...boundary.made] };
+    let withBoundary: Code = { nodes: withNodes(code.nodes, boundary.nodes), defs: [...code.defs, ...boundary.made] };
     const c = loopsOnto(withBoundary, info, names, defs, lists);
     if (c) {
-      withBoundary = { nodes: { ...withBoundary.nodes, ...c.nodes }, defs: [...withBoundary.defs, ...c.made] };
-      code = { nodes: { ...code.nodes, ...c.nodes }, defs: [...code.defs, ...c.made] };
+      withBoundary = { nodes: withNodes(withBoundary.nodes, c.nodes), defs: [...withBoundary.defs, ...c.made] };
+      code = { nodes: withNodes(code.nodes, c.nodes), defs: [...code.defs, ...c.made] };
       names = { ...names, ...c.names };
       defs = [...defs, ...c.made];
     }
@@ -291,7 +291,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // Known by their originals' ids too (pure-branches.ts): each takes and
     // gives its lists as the original does.
     for (const d of library) COPIED_FROM.set(f(d), originalOf(d));
-    const nodes = { ...withBoundary.nodes };
+    const nodes = copyNodes(withBoundary.nodes);
     for (const d of library) for (const id of subtree(withBoundary, d)) { const n = mapIds(withBoundary.nodes[id], f); nodes[n.id] = n; }
     for (const d of defs) for (const id of subtree(withBoundary, d)) nodes[id] = mapIds(withBoundary.nodes[id], f);
     // The boundary's changes are the copies'; the library's own stay as
@@ -304,7 +304,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const back = new Map([...fresh].map(([a, b]) => [b, a]));
     const lc = loopsOnto(code, info, names, copies, lists, (to, from) => { const t = info.typeOf.get(back.get(from) ?? from); if (t) info.typeOf.set(to, t); });
     if (lc) {
-      code = { nodes: { ...code.nodes, ...lc.nodes }, defs: [...code.defs, ...lc.made] };
+      code = { nodes: withNodes(code.nodes, lc.nodes), defs: [...code.defs, ...lc.made] };
       names = { ...names, ...lc.names };
       copies = [...copies, ...lc.made];
     }
@@ -315,7 +315,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   const bounds = chosen.filter((r) => r.of !== LIST).map((r) => plainBoundary(code, defs, r, names)!);
   const copyOf = new Map(bounds.flatMap((b) => [...b.copyOf]));
   const meanings = asMeanings(k, code, info, names, chosen, copyOf);
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const typeOf = (id: Id) => { const t = info.typeOf.get(id); return t && info.subst.zonk(t); };
   const rowOf = (id: Id) => { const t = typeOf(id); return t?.t === "con" ? chosen.find((r) => r.of === t.id) : undefined; };
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
@@ -372,7 +372,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     own = [...own, inner];
   }
   const made = k.code.defs.filter((d) => !code.nodes[d]);
-  const all = { nodes: { ...k.code.nodes, ...nodes }, defs: [...code.defs, ...copied, ...made] };
+  const all = { nodes: withNodes(k.code.nodes, nodes), defs: [...code.defs, ...copied, ...made] };
   // The way back from a builtin's list (listBoundary's `made`) is written
   // on List, and stays so.
   const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : [])];
@@ -885,7 +885,7 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
       { variant: NIL, names: [], body: () => k.x(rep.impl[NIL]) },
       { variant: CONS, names: ["item", "rest"], results: [null, "the rest stored"], body: ([x], [, r]) => k.call(rep.impl[CONS], x, r!) },
     ])));
-    Object.assign(nodes, Object.fromEntries(Object.entries(k.code.nodes).filter(([id]) => !code.nodes[id])));
+    Object.assign(nodes, Object.fromEntries(nodeEntries(k.code.nodes).filter(([id]) => !code.nodes[id])));
     made.push(d);
     return (back = d);
   };

@@ -12,7 +12,7 @@
 // unchanged when it has none, and the nodes the person wrote keep their ids.
 
 import type { Bound, Code, Id, Node, NodeOf } from "../model.ts";
-import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts, subtree } from "../model.ts";
+import { fieldPorts, freshId, isCall, nodesWhere, parentLookup, portsOf as definedPorts, subtree, copyNodes, dropNode } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { TRUE } from "./std.ts";
@@ -77,7 +77,7 @@ function inlineRelation(code: Code): NodeOf<"lambda"> | null {
 // became (infer.ts checks the definition's direction for the lambda).
 export function liftRelations(code: Code, names: Names, lifted?: Map<Id, Id>): { code: Code; names: Names } {
   if (!inlineRelation(code)) return { code, names };
-  const nodes: Record<Id, Node> = { ...code.nodes }, defs = [...code.defs], out: Names = { ...names };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes), defs = [...code.defs], out: Names = { ...names };
   const binder = (like: Id): Id => { const id = freshId(); nodes[id] = { ...(nodes[like] as NodeOf<"binder">), id }; out[id] = out[like] ?? "x"; return id; };
   const ref = (target: Id): Id => { const id = freshId(); nodes[id] = { id, kind: "ref", target }; return id; };
   for (let fn = inlineRelation({ nodes, defs }); fn; fn = inlineRelation({ nodes, defs })) {
@@ -114,7 +114,7 @@ export function resultsAsFunctions(code: Code, info: Info, names: Names): { code
   ({ code, names } = liftRelations(code, names));
   const todo = refsToRewrite(code);
   if (!todo.length) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
   // The use of `target` given `args`, its results gathered.
   const use = (target: Id, ports: { ins: string[]; outs: string[] }, args: Id[]): Bare => {
@@ -128,7 +128,7 @@ export function resultsAsFunctions(code: Code, info: Info, names: Names): { code
   for (const { ref: n, ports, parent } of todo) {
     if (isCall(parent) && parent.fn === n.id && parent.args.length === ports.ins.length) {
       // A call: it becomes the use, keeping the call's id.
-      delete nodes[n.id];
+      dropNode(nodes, n.id);
       nodes[parent.id] = { ...use(n.target, ports, parent.args), id: parent.id } as Node;
       continue;
     }

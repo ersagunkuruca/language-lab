@@ -17,7 +17,7 @@
 // up and the evaluator's derive stays (it ships the program's nodes).
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { children, freshId, isCall, subtree, type Call } from "../../ters/src/model.ts";
+import { children, freshId, isCall, subtree, type Call, copyNodes, nodeIds } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
@@ -55,7 +55,7 @@ const askedOf = (code: Code, id: Id): typeof S.derivative | typeof S.gradient | 
 const derivativeCall = (code: Code, id: Id): boolean => askedOf(code, id) !== null;
 
 export function carriedDerivatives(code: Code, info: Info, names: Names, roots: Id[]): Carried | null {
-  const ids = Object.keys(code.nodes);
+  const ids = nodeIds(code.nodes);
   const calls = ids.filter((id) => derivativeCall(code, id));
   if (!calls.length) return null;
   const type = (id: Id) => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
@@ -116,7 +116,7 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
     const inside = new Set(subtree(code, lam));
     return [...new Set([...inside].flatMap((x) => { const n = code.nodes[x]; return n.kind === "ref" && code.nodes[n.target]?.kind === "binder" && !inside.has(n.target) ? [n.target] : []; }))];
   };
-  const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const d = deriver(out, names, true), made: Names = {};
   const derivativeOf: Carried["derivativeOf"] = new Map();
   // The lambdas the program reaches from its roots.
@@ -136,10 +136,10 @@ export function carriedDerivatives(code: Code, info: Info, names: Names, roots: 
     const asked = sigs.get(sig(type(id)));
     if (n.params.length !== 1 || !asked) continue;
     if (p && isCall(code.nodes[p]) && (code.nodes[p] as Call).fn === id) continue;
-    const before = new Set(Object.keys(out.nodes));
+    const before = new Set(nodeIds(out.nodes));
     try {
       const dl = asked.gradient ? d.gradient(id, asked.gradient) : d.lambda(id, 0);
-      const fresh = Object.keys(out.nodes).filter((x) => !before.has(x));
+      const fresh = nodeIds(out.nodes).filter((x) => !before.has(x));
       if (fresh.some((x) => derivativeCall(out, x))) continue;
       // A definition of its own, so the checker types it: over what the
       // lambda captures, as inputs of its own standing for them, when it

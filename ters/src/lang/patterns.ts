@@ -4,7 +4,7 @@
 // else, becomes that match's cases in its place; an inner otherwise is _
 // there. The rows are the leaves of the decision tree, in its order.
 
-import { freshId, parentLookup, scanningOnLayer, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { freshId, parentLookup, scanningOnLayer, mapIds, subtree, type Code, type Id, type Node, type NodeOf, copyNodes, dropNode, nodeIds } from "../model.ts";
 import type { Info } from "./infer.ts";
 import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 
@@ -124,7 +124,7 @@ export function sharedPlaces(code: Code, info: Info | null, m: NodeOf<"match">):
 // from → to, so their names can go with them, and how many places changed.
 export function sameEverywhere(before: Code, after: Code, info: Info | null): { code: Code; copied: [Id, Id][]; places: number } {
   const none = { code: after, copied: [], places: 0 };
-  const changed = Object.keys(after.nodes).filter((id) => before.nodes[id] !== after.nodes[id]);
+  const changed = nodeIds(after.nodes).filter((id) => before.nodes[id] !== after.nodes[id]);
   if (!changed.length) return none;
   // Each node's parent, from the library's parents found once where the
   // program is on it (T14h: two walks of every node at each edit).
@@ -148,12 +148,12 @@ export function sameEverywhere(before: Code, after: Code, info: Info | null): { 
     const edited = ps.filter((p, i) => shape(code, now[i]!) !== old);
     if (edited.length !== 1 || reads(code, inPlace(code, edited[0])!, edited[0].binds)) continue;
     const from = inPlace(code, edited[0])!, ids = subtree(code, from);
-    const nodes = { ...code.nodes };
+    const nodes = copyNodes(code.nodes);
     for (const p of ps) {
       if (p === edited[0]) continue;
       const fresh = new Map(ids.map((x) => [x, freshId()]));
       for (const x of ids) { const c = mapIds(code.nodes[x], (y) => fresh.get(y) ?? y); nodes[c.id] = c; copied.push([x, c.id]); }
-      for (const x of subtree(code, inPlace(code, p)!)) delete nodes[x];
+      for (const x of subtree(code, inPlace(code, p)!)) dropNode(nodes, x);
       nodes[p.parent] = { ...nodes[p.parent], [p.slot]: fresh.get(from)! } as Node;
     }
     code = { nodes, defs: code.defs };

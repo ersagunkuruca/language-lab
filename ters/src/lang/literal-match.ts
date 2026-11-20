@@ -23,7 +23,7 @@
 // aren't all listed.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { nodesWhere, freshId } from "../model.ts";
+import { nodesWhere, freshId, copyNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { FALSE, S, TRUE } from "./std.ts";
@@ -39,7 +39,7 @@ export const usesLiteralMatch = (code: Code) => byValueIn(code).length > 0;
 export function literalMatch(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   const matches = byValueIn(code).map((id) => code.nodes[id]) as NodeOf<"match">[];
   if (!matches.length) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const out: Names = { ...names };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });
