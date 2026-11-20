@@ -928,7 +928,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     // A table only read, as an array is (round 13 P5). Data walked by a
     // loop, each round going on with the input or a part of it (C241:
     // scan's tree lookups and list walks), checked below with the rounds.
-    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (rounds.length && isData(t) && shared(t)) || (isArray(t) && same(j)) || (isTable(t) && (!rounds.length || same(j))) ? [j] : [])));
+    const c = new Set(f.params.flatMap((t, j) => ((!rounds.length && shared(t)) || (rounds.length && isData(t) && shared(t)) || (rounds.length && isRecord(t) && shared(t) && same(j)) || (isArray(t) && same(j)) || (isTable(t) && (!rounds.length || same(j))) ? [j] : [])));
     if (c.size) lent.set(i, c);
   }
   // Whether e uses local j other than as a field's record or a lent input.
