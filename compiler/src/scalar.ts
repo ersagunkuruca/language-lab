@@ -1647,7 +1647,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // (C42), where its items are worth sharing by what each took the
         // last time (map.worth); otherwise the map as compiled, which is
         // the faster for the small maps a loop makes many of.
-        if (opts.host && !fibers && !given.has(n.id) && (parallelList ??= parallelLists(code, info)).has(n.id)) {
+        if (opts.host && !fibers && !given.has(n.id) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
           const tx = stype(zonk(n.args[0])), t = stype(zonk(id));
           if (tx && t) {
             // The list once, as a local; the function as written, made
@@ -1693,7 +1693,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         // And a keep (C202), its items that pass in order; all pass and
         // any pass, the first test that decides.
-        const job = opts.threads ? (parallelList ??= parallelLists(code, info)).get(n.id) : undefined;
+        const job = opts.threads ? (parallelList ??= parallelLists(code, info, !!opts.threads)).get(n.id) : undefined;
         if (job === "map" || job === "keep" || job === "all" || job === "any" || job === "first") {
           const t = stype(zonk(id)), tx = stype(zonk(n.args[0]));
           if (t && (job === "all" || job === "any" ? tx && isArray(tx) : isArray(t))) return { k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } };
@@ -5063,7 +5063,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const known = reaching.get(def);
     if (known !== undefined) return known;
     reaching.set(def, false);
-    const lists = (parallelList ??= parallelLists(code, info)), folds = (foldsShared ??= parallelFolds(code, info));
+    const lists = (parallelList ??= parallelLists(code, info, !!opts.threads)), folds = (foldsShared ??= parallelFolds(code, info));
     const r = subtree(code, def).some((id) => {
       if (lists.has(id) || folds.has(id) || countsShared().has(id)) return true;
       const n = code.nodes[id];

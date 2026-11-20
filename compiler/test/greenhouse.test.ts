@@ -42,3 +42,12 @@ test("greenhouse native: a moth read by number for `met` is lent, its stand-in m
   assert.doesNotMatch(loop, /item_at|Thing_dup/, "no call to item at and no count taken");
   assert.match(loop, /\} else \{[^}]*lab_nothing\(\)/, "the stand-in only past the end");
 });
+
+test("greenhouse native: the pool's update, its map calling the function its caller gives, runs on threads (C266)", () => {
+  if (skip) return;
+  const out = join(dir, "threads");
+  ran(process.execPath, [lab, "native", folder, "-o", out]);
+  const c = ran("cat", [`${out}.c`]);
+  const update = /static Pool lab_updated_in_pool\([^)]*\) \{[^]*?\n}\n/.exec(c)![0];
+  assert.match(update, /lab_par_map_\d+\(/);
+});

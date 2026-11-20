@@ -61,7 +61,7 @@ import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, ty
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (reservedNames).
-export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
@@ -280,7 +280,41 @@ static void lab_freeze(void) {
   if (lab_fz_cap < lab_mk_n) { lab_fz_cap = lab_mk_n; lab_fz = realloc(lab_fz, lab_fz_cap * sizeof *lab_fz); if (!lab_fz) lab_oom(); }
   for (size_t k = 0; k < lab_mk_n; k++) { lab_fz[k] = lab_mk[k]->rc; lab_mk[k]->rc = 0; }
 }
-static void lab_thaw(void) { for (size_t k = 0; k < lab_mk_n; k++) lab_mk[k]->rc = lab_fz[k]; }`;
+static void lab_thaw(void) { for (size_t k = 0; k < lab_mk_n; k++) lab_mk[k]->rc = lab_fz[k]; }
+// A map whose answers hold cells is frozen too (C266): its answers are
+// what it makes that lives on, so once thawed, each count it didn't take
+// of what it shares is taken by walking them (lab__hold), in what it made
+// (each cell once) down to what it shares (still marked): each such
+// reference one count more. Its own items and function are given back
+// after, as ever.
+static _Thread_local lab_cell **lab__hd = 0, **lab__hs = 0;
+static _Thread_local size_t lab__hd_n = 0, lab__hd_cap = 0, lab__hs_n = 0, lab__hs_cap = 0;
+static void lab__holds(lab_cell *c);
+static int lab__hseen(lab_cell *c) {
+  if (2 * (lab__hs_n + 1) > lab__hs_cap) {
+    size_t cap = lab__hs_cap ? 2 * lab__hs_cap : 256;
+    lab_cell **was = lab__hs, **t = calloc(cap, sizeof *t);
+    if (!t) lab_oom();
+    for (size_t k = 0; k < lab__hs_cap; k++) if (was[k]) { size_t h = ((uintptr_t)was[k] >> 4) * 0x9E3779B97F4A7C15ull & (cap - 1); while (t[h]) h = (h + 1) & (cap - 1); t[h] = was[k]; }
+    free(was); lab__hs = t; lab__hs_cap = cap;
+  }
+  size_t h = ((uintptr_t)c >> 4) * 0x9E3779B97F4A7C15ull & (lab__hs_cap - 1);
+  while (lab__hs[h]) { if (lab__hs[h] == c) return 1; h = (h + 1) & (lab__hs_cap - 1); }
+  lab__hs[h] = c; lab__hs_n++;
+  return 0;
+}
+static void lab__hold(lab_cell *c) {
+  if (!c || !c->rc) return;
+  if (c->rc & LAB_SHARED) { c->rc++; return; }
+  if (lab__hseen(c)) return;
+  if (lab__hd_n == lab__hd_cap) { lab__hd_cap = lab__hd_cap ? 2 * lab__hd_cap : 64; lab__hd = realloc(lab__hd, lab__hd_cap * sizeof *lab__hd); if (!lab__hd) lab_oom(); }
+  lab__hd[lab__hd_n++] = c;
+}
+static inline void lab__int_hold(lab_int x) { if (!LAB_IS_SMALL(x)) lab__hold((lab_cell *)LAB_BIG(x)); }
+static void lab__held(void) {
+  while (lab__hd_n) lab__holds(lab__hd[--lab__hd_n]);
+  if (lab__hs_n) { memset(lab__hs, 0, lab__hs_cap * sizeof *lab__hs); lab__hs_n = 0; }
+}`;
 
 // The threads a map's items are shared out on (L101): started at the
 // first map worth it and kept, as many as the cores less one (or
@@ -779,6 +813,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // A number or a flag holds no counts: nothing to mark (a map of an
   // array of Float64s, queens' columns).
   const share = (t: LType, x: string) => (!counted(t) ? "" : cell(t) ? `lab_share(${x});` : t === "int" ? `lab_int_share(${x});` : `${sname.get((t as RType).key)}_share(${x});`);
+  // And a count taken of what a frozen map shares, from its answers (C266).
+  const hold = (t: LType, x: string) => (!counted(t) ? "" : cell(t) ? `lab__hold(${x});` : t === "int" ? `lab__int_hold(${x});` : `${sname.get((t as RType).key)}__hold(${x});`);
   // The type of a runtime function's answer.
   const rtType = (fn: string): LType => {
     const col = COL_FN.exec(fn);
@@ -1058,10 +1094,10 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       `static inline ${n} ${n}_dup(${n} r) { ${parts.map((x) => `${dup(x.t, x.at)};`).join(" ")} return r; }`,
       `static inline void ${n}_drop(${n} r) { ${parts.map((x) => drop(x.t, x.at)).join(" ")} }`,
       `static inline void ${n}_dec(${n} r) { ${parts.map((x) => dec(x.t, x.at)).join(" ")} }`,
-      ...(threads ? [`static inline void ${n}_share(${n} r) { ${parts.map((x) => share(x.t, x.at)).join(" ")} }`] : []),
+      ...(threads ? [`static inline void ${n}_share(${n} r) { ${parts.map((x) => share(x.t, x.at)).join(" ")} }`, `static inline void ${n}__hold(${n} r) { ${parts.map((x) => hold(x.t, x.at)).join(" ")} }`] : []),
     );
   }
-  const fieldsOf: string[] = [], sharesOf: string[] = [];
+  const fieldsOf: string[] = [], sharesOf: string[] = [], holdsOf: string[] = [];
   const kidsOf = (out: string[], each: (t: LType, x: string) => string) => {
     for (const d of data.values()) {
       const arms = d.cases.map((c, j) => {
@@ -1084,6 +1120,13 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   kidsOf(fieldsOf, dec);
   if (threads) {
     kidsOf(sharesOf, share);
+    kidsOf(holdsOf, hold);
+    for (const b of boxes) holdsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${hold(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
+    for (const t of tables.values()) {
+      const T = `lab_Table_t${t.index}`, k = counted(t.keyT) ? hold(t.keyT, "b->ks[j]") : "";
+      const v = (x: string) => (counted(t.value) ? hold(t.value, x) : "");
+      holdsOf.push(`case ${tnum.get(`table ${t.key}`)}: { ${T} *v = (${T} *)c; lab_Store_t${t.index} *b = v->cur; if (b) { for (uint32_t j = 0; j < b->cap; j++) if (b->st[j] == 1) { ${k} ${v("b->vs[j]")} } } else { ${k.replace("b->ks[j]", "v->key")} if (v->had) { ${v("v->old")} } lab__hold(v->next); } } break;`);
+    }
     for (const k of boxes.map((b) => b.key)) sharesOf.push(`case ${tnum.get(k)}: lab_share_no = 1; break;`);
     // A table read on the threads (examples/herd's map, its function
     // reading the animals): its newest version, whose store nobody changes
@@ -1091,7 +1134,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     for (const t of tables.values()) sharesOf.push(`case ${tnum.get(`table ${t.key}`)}: ${tableUsed(t) ? `lab__share_t${t.index}(c);` : "lab_share_no = 1;"} break;`);
   }
   // A text's view gives up its base (I222).
-  if (ints) { fieldsOf.push("case LAB_TEXT_T: lab_dec(((lab_text *)c)->base); break;"); if (threads) sharesOf.push("case LAB_TEXT_T: lab_share(((lab_text *)c)->base); break;"); }
+  if (ints) { fieldsOf.push("case LAB_TEXT_T: lab_dec(((lab_text *)c)->base); break;"); if (threads) { sharesOf.push("case LAB_TEXT_T: lab_share(((lab_text *)c)->base); break;"); holdsOf.push("case LAB_TEXT_T: lab__hold(((lab_text *)c)->base); break;"); } }
   for (const b of boxes) fieldsOf.push(counted(b.fields[0].t) ? `case ${tnum.get(b.key)}: ${dec(b.fields[0].t, `((${sname.get(b.key)} *)c)->f0`)} break;` : "");
   for (const t of tables.values()) {
     const T = `lab_Table_t${t.index}`, k = counted(t.keyT) ? dec(t.keyT, "b->ks[j]") : "";
@@ -1127,7 +1170,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...counts,
     ...(opts.page ? [READS_C] : []),
     ...(cells ? [`static void lab_fields(lab_cell *c) { switch (c->type) { ${fieldsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
-    ...(threads ? [...[...tables.values()].filter(tableUsed).map((t) => `static void lab__share_t${t.index}(lab_cell *c);`), `static void lab_shares(lab_cell *c) { switch (c->type) { ${sharesOf.filter(Boolean).join(" ")} default: break; } }`] : []),
+    ...(threads ? [...[...tables.values()].filter(tableUsed).map((t) => `static void lab__share_t${t.index}(lab_cell *c);`), `static void lab_shares(lab_cell *c) { switch (c->type) { ${sharesOf.filter(Boolean).join(" ")} default: break; } }`, `static void lab__holds(lab_cell *c) { switch (c->type) { ${holdsOf.filter(Boolean).join(" ")} default: break; } }`] : []),
     ...(text.some((t) => t.includes("lab_none")) ? [`static ${TL}int lab_none = 0; // no answer inside a search (C166)`] : []),
     ...(int32Used.size || text.some((t) => t.includes("lab_fuel")) ? [`static ${TL}double lab_fuel = INFINITY; // outside any budget, as much as it takes`] : []),
     ...[...int32Used].map((op) => INT32_C[op]!),
@@ -1994,9 +2037,10 @@ int main(int argc, char **argv) {
     // Drops for the locals live here that `rest` and `after` don't use.
     const drops = (live: Set<number>, rest: Set<number>, after: Set<number>, d: string) =>
       [...live].filter((j) => !rest.has(j) && !after.has(j)).map((j) => `${d}${drop(f.locals[j], local(j))}`);
-    // An item read from an array that outlives it, into a record local
-    // only read or lent on (C265: the greenhouse's moth read by number for
-    // `met`): the item as it is in the array, no count taken, and none
+    // An item read from an array that outlives it, into a local only read
+    // or lent on (C265: the greenhouse's moth read by number for `met`;
+    // C266: a cell's moth numbers, read for each moth around it, whose
+    // count changed atomically from every thread): the item as it is in the array, no count taken, and none
     // given back. Past the end, the stand-in is the local's own, and a flag
     // says to drop it.
     const peeked = (e: SExpr & { k: "let" }, pre: string[], d: string, after: Set<number>): boolean => {
@@ -2005,7 +2049,10 @@ int main(int argc, char **argv) {
       const r = v.body, m = r.k === "rt" && !r.host ? ARRAY_FN.exec(r.fn) : null;
       if (!m || m[1] !== "at" || r.k !== "rt" || r.args[0].k !== "local" || typeOf(r.args[1], f.locals) !== "int") return false;
       const a = r.args[0].i;
-      if (!isCounted(e.i) || !isRecord(f.locals[e.i]) || owns(e.body, e.i) || (isCounted(a) && !after.has(a))) return false;
+      // A record, or an array or table (only read, as owns says; data is
+      // taken apart by a case, so not that).
+      const t = f.locals[e.i];
+      if (!isCounted(e.i) || !(isRecord(t) || isArray(t) || isTable(t)) || owns(e.body, e.i) || (isCounted(a) && !after.has(a))) return false;
       const live = union(after, without(free(e.body), e.i));
       if ([...free(v.otherwise)].some((j) => !live.has(j))) return false;
       const has = `array.has.a${m[2]}`, peek = `array.peek.a${m[2]}`;
@@ -3979,11 +4026,12 @@ static int lab_range_${gi}(int64_t n, lab_cell *a) {
     const rd = ta.item === "int" ? `lab__rd_a${ta.index}(b, v->s + (uint32_t)k)` : `b->it[v->s + (uint32_t)k]`;
     const failed = `lab_st${fuelled ? " || lab_fuel != INFINITY" : ""}`;
     // While the threads run the items, what they share isn't counted at
-    // all (lab_freeze, as a count's job, I216) when an answer holds no
-    // cell, so nothing made there keeps one of them: else every item took
-    // and gave back counts of the map's closure and what it captured,
+    // all (lab_freeze, as a count's job, I216): else every item took and
+    // gave back counts of the map's closure and what it captured,
     // atomically, on the same few cells from every thread (moths: about
-    // 4.8 a moth each way, GAPS.md game round 1 M3, G3c).
+    // 4.8 a moth each way, GAPS.md game round 1 M3, G3c). Answers that
+    // hold cells (the greenhouse's things, C266) then take the counts of
+    // what they keep of it (lab__hold).
     // A test that decides (C202c) says so in stop, the highest such slot,
     // the first in order: a thread past it takes no more items.
     // The threads take the items in runs, the last first (G3c): one
@@ -4077,7 +4125,12 @@ ${job === "map" ? `  // Already on the threads (a map inside a map's item, moths
     lab_share(f);
     for (k = 0; k < left; k++) ${share(ta.item, "j.in[k]")}
     lab_shared();
-    if (!lab_share_no) { j.next = left; j.run = left / (8 * ((int64_t)lab_pool_n + 1)); if (j.run < 1) j.run = 1;${counted(out) ? "" : " lab_freeze();"} lab_pool_run(lab_par_work_${n}, &j);${counted(out) ? "" : " lab_thaw();"} }
+    if (!lab_share_no) {
+      j.next = left; j.run = left / (8 * ((int64_t)lab_pool_n + 1)); if (j.run < 1) j.run = 1;
+      lab_freeze(); lab_pool_run(lab_par_work_${n}, &j); lab_thaw();${counted(out) ? `
+      for (k = 0; k < left; k++) if (!j.bad[k]) ${hold(out, "j.out[k]")}
+      lab__held();` : ""}
+    }
   }
 ${tests ? `  for (k = left - 1; k >= 0; k--) {
     if (j.bad[k]) {

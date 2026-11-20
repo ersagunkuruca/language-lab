@@ -26,12 +26,16 @@ const ALONE: ReadonlySet<Id> = new Set([ABORT, DIVERGE]);
 // (a builtin's signature, a definition's generalized type, an operation's
 // effect). Its type can't say: unified with together's, every action's row
 // is the whole list's, Await and all. Null when it calls a function it was
-// given or one computed, whose effects only the caller knows.
-export function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
+// given or one computed, whose effects only the caller knows, unless
+// `given` says what every function given for that input does (C266).
+export type Given = (binder: Id) => Set<Id> | null;
+export function ownEffects(code: Code, info: Info, body: Id, given?: Given): Set<Id> | null {
   const out = new Set<Id>();
   const binders = new Set<Id>();
   for (const id of subtree(code, body)) { const n = code.nodes[id]; if (n?.kind === "lambda") n.params.forEach((p) => binders.add(p)); }
   const effsOf = (t: Type | undefined) => { if (t?.t === "fn") t.eff.effs.forEach((e) => out.add(e)); };
+  // The refs called, each a given function's call where `given` knows it.
+  const called = new Set<Id>();
   for (const id of subtree(code, body)) {
     const n = code.nodes[id];
     if (isCall(n)) {
@@ -41,9 +45,16 @@ export function ownEffects(code: Code, info: Info, body: Id): Set<Id> | null {
       if (f?.kind === "lambda") continue;
       if (f?.kind !== "ref") return null;
       const target = code.nodes[f.target];
+      if (target?.kind === "binder" && !binders.has(target.id) && given) {
+        const g = given(target.id);
+        if (!g) return null;
+        g.forEach((e) => out.add(e));
+        called.add(f.id);
+        continue;
+      }
       if (!target || target.kind === "binder" || target.kind === "lambda") return null;
     }
-    if (n?.kind !== "ref") continue;
+    if (n?.kind !== "ref" || called.has(n.id)) continue;
     const target = code.nodes[n.target];
     if (!target) continue;
     // A function from outside the action, given to something it calls
@@ -92,7 +103,11 @@ export function parallelTogethers(code: Code, info: Info): Set<Id> {
 // test that may run long may not be run on an item past it: their tests
 // may abort, never run long.
 export type ListJob = "map" | "keep" | "all" | "any" | "first";
-export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
+// `given` (C266, on C's threads): a function given by the caller (the
+// pool's `updated in pool(pool, f)`, its map calling f) is known by what
+// every caller gives for it.
+export function parallelLists(code: Code, info: Info, callers = false): Map<Id, ListJob> {
+  const given = callers ? givenEffects(code, info) : undefined;
   // List's map, and the array's that a split puts in its place (C196).
   const kinds = new Map<Id | undefined, ListJob>([[preludeDef("map"), "map"], [preludeDef("array map"), "map"], [preludeDef("keep"), "keep"], [preludeDef("all pass"), "all"], [preludeDef("any pass"), "any"], [preludeDef("first where"), "first"]]), out = new Map<Id, ListJob>();
   for (const n of nodeValues(code.nodes)) {
@@ -104,11 +119,49 @@ export function parallelLists(code: Code, info: Info): Map<Id, ListJob> {
     const split = target && kinds.get(originalOf(SPLIT_COPIED_FROM.get(target) ?? target));
     const kind = target ? kinds.get(originalOf(target)) ?? (split === "all" || split === "any" || split === "first" ? split : undefined) : undefined;
     if (!kind || l?.kind !== "lambda" || l.params.length !== 1) continue;
-    const own = ownEffects(code, info, l.body);
+    const own = ownEffects(code, info, l.body, given);
     const stops = kind === "all" || kind === "any" || kind === "first";
     if (own && [...own].every((e) => ALONE.has(e)) && !(own.has(DIVERGE) && (stops || own.has(ABORT)))) out.set(n.id, kind);
   }
   return out;
+}
+// What the functions given for a definition's input do (C266): the input
+// of a definition (its body a lambda) only ever called directly, and at
+// each call a lambda written there, a definition, or an input of the
+// caller's known the same way. Null where any isn't.
+export function givenEffects(code: Code, info: Info): Given {
+  const inputOf = new Map<Id, { def: Id; j: number }>();
+  for (const d of nodesOfKind(code, "def")) {
+    const b = d.body != null ? code.nodes[d.body] : undefined;
+    if (b?.kind === "lambda") (b as NodeOf<"lambda">).params.forEach((p: Id, j: number) => inputOf.set(p, { def: d.id, j }));
+  }
+  // Each definition's calls, and whether it is ever used other than called.
+  const calls = new Map<Id, { args: Id[] }[]>(), loose = new Set<Id>(), fns = new Set<Id>();
+  for (const n of nodeValues(code.nodes)) if (isCall(n)) { const f = code.nodes[n.fn]; if (f?.kind === "ref") { fns.add(f.id); const c = calls.get(f.target) ?? []; c.push(n); calls.set(f.target, c); } }
+  for (const n of nodeValues(code.nodes)) if (n.kind === "ref" && inputOf.size && !fns.has(n.id) && code.nodes[n.target]?.kind === "def") loose.add(n.target);
+  const memo = new Map<Id, Set<Id> | null>(), going = new Set<Id>();
+  const given: Given = (binder) => {
+    if (memo.has(binder)) return memo.get(binder)!;
+    const at = inputOf.get(binder);
+    if (!at || loose.has(at.def) || going.has(binder)) return null;
+    going.add(binder);
+    let out: Set<Id> | null = new Set<Id>();
+    for (const c of calls.get(at.def) ?? []) {
+      const a = code.nodes[c.args[at.j]];
+      let e: Set<Id> | null = null;
+      if (a?.kind === "lambda") e = ownEffects(code, info, a.body, given);
+      else if (a?.kind === "ref" && code.nodes[a.target]?.kind === "def" && !SIGS[a.target]) {
+        const scheme = info.schemes.get(a.target), t = scheme ? (info.subst ? info.subst.zonk(scheme.type) : scheme.type) : undefined;
+        e = t?.t === "fn" ? new Set(t.eff.effs) : null;
+      } else if (a?.kind === "ref" && code.nodes[a.target]?.kind === "binder") e = given(a.target);
+      if (!e) { out = null; break; }
+      e.forEach((x) => out!.add(x));
+    }
+    going.delete(binder);
+    memo.set(binder, out);
+    return out;
+  };
+  return given;
 }
 export const parallelMaps = (code: Code, info: Info): Set<Id> => new Set([...parallelLists(code, info)].filter(([, k]) => k === "map").map(([id]) => id));
 
