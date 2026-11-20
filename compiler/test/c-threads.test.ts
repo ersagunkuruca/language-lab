@@ -88,6 +88,18 @@ test("a map's items run on threads, sharing a big Int and a list, and give the e
   assert.equal(one.threads, 0);
 });
 
+// Every item's answer is the big Int the items share (C266): the map is
+// frozen while the threads run, so no count of it is taken there; each
+// answer's is taken after, and the array printed is the evaluator's.
+test("a map whose answers keep what its items share, on threads, counts it once they are done (C266)", { skip }, () => {
+  const p = program(12, (k, x, big, list, work) => k.if(k.call(INT_OPS.less, k.call(INT_OPS.add, k.call(INT_OPS.mul, work, k.int(0)), x), k.int(100)), k.call(INT_OPS.add, k.call(INT_OPS.mul, k.call(lib("sum"), list), k.int(0)), big), x));
+  assert.match(p.evaluator, /^1208925819614629174706176\n\[1208925819614629174706176, /);
+  const many = p.run("3");
+  assert.equal(many.out, p.evaluator);
+  assert.ok(many.threads > 0, "no item ran on another thread");
+  assert.equal(p.run("0").out, p.evaluator);
+});
+
 // A map of Float64s: its items hold no counts, so none is marked shared
 // (it was `undefined_share`, which didn't link: a search's map of
 // queens' columns).
