@@ -52,14 +52,19 @@ export function untaggedLoops(ir: CoreIR, wasm = false): number {
         if (e.k === "let" && e.value.k === "rt" && STEP.has(e.value.fn) && e.value.args.length === 2 && e.value.args.every(ok) && e.value.args.some((a) => a.k === "local")) counts.add(e.i);
         kids(e).forEach(walk);
       })(f.body);
-      const keep = new Set([...params].filter((j) => calls.every((c) => { const a = c.args[j]; return small(a) || (a.k === "local" && all().has(a.i)); })));
+      // A round's count given as it is, or stepped in place (C267: the
+      // greenhouse's walk over a cell's moth numbers, `from + 1` given
+      // straight to the next round).
+      const stepped = (a: SExpr) => a.k === "rt" && STEP.has(a.fn) && a.args.length === 2 && a.args.every((x) => small(x) || (x.k === "local" && all().has(x.i))) && a.args.some((x) => x.k === "local");
+      const keep = new Set([...params].filter((j) => calls.every((c) => { const a = c.args[j]; return small(a) || (a.k === "local" && all().has(a.i)) || stepped(a); })));
       if (keep.size === params.size) break;
       params = keep;
     }
     // Worth it only where a count is stepped.
-    if (!params.size || !counts.size) continue;
     const w = new Set([...params, ...counts]);
-    const raw = (e: SExpr): SExpr => (e.k === "local" && w.has(e.i) ? e : small(e) ? { k: "rt", fn: "i64.lit", args: [e] } : rw(e));
+    const step = (a: SExpr): a is SExpr & { k: "rt" } => a.k === "rt" && STEP.has(a.fn) && a.args.length === 2 && a.args.every((x) => small(x) || (x.k === "local" && w.has(x.i))) && a.args.some((x) => x.k === "local");
+    if (!params.size || (!counts.size && !calls.some((c) => [...params].some((j) => step(c.args[j]))))) continue;
+    const raw = (e: SExpr): SExpr => (e.k === "local" && w.has(e.i) ? e : small(e) ? { k: "rt", fn: "i64.lit", args: [e] } : step(e) ? { k: "rt", fn: e.fn === "int.add" ? "i64.add" : "i64.sub", args: e.args.map(raw) } : rw(e));
     const isCount = (e: SExpr) => e.k === "local" && w.has(e.i);
     const g = ir.funcs.length;
     const rw = (e: SExpr): SExpr => {

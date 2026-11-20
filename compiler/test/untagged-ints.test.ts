@@ -52,3 +52,17 @@ test("divisors' counted loop checks only the product finite", () => {
   const body = c.slice(at, c.indexOf("\n}\n", at));
   assert.equal(body.match(/lab_stop\(/g)?.length, 1);
 });
+
+// C267: the greenhouse's walk over a cell's moth numbers gives `from + 1`
+// straight to its next round, with no let: still a count.
+test("a count stepped where it is given to the next round is an int64_t on C (greenhouse)", () => {
+  const ex = join(import.meta.dirname, "../gaps/greenhouse"), out = join(mkdtempSync(join(tmpdir(), "untagged-")), "greenhouse");
+  const made = spawnSync(process.execPath, [ters, "native", ex, "-o", out], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr);
+  const c = readFileSync(`${out}.c`, "utf8"), at = c.search(/static Flock lab_gathered_from_counted_b\([^)]*int64_t p4\) \{/);
+  assert.ok(at > 0);
+  const body = c.slice(at, c.indexOf("\n}\n", at));
+  assert.match(body, /p4 = \w+;/);
+  assert.match(body, /lab__i64_add\(p4, INT64_C\(1\)\)/);
+  assert.doesNotMatch(body, /lab_int_add/);
+});
