@@ -987,6 +987,11 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
   const mono = new Map<Id, Type>();
   // A let's binders whose value is generic, and their schemes (L224).
   const letSchemes = new Map<Id, Scheme>();
+  // A let's binders whose value is a function written there (L279): a call
+  // of one does what the function does inside the row around the call,
+  // not as that row, so a call inside a view (`part`, whose row is View)
+  // doesn't make every other call of it do all View may.
+  const letFns = new Set<Id>();
   // Each binder given to a call, where (L29 closingUse).
   // Built from the group being checked, the only place its inputs are used
   // (a whole program's nodes on every check made the palette's rechecks of
@@ -1470,6 +1475,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
         const pre = new Map<number, Type>();
         if (!early && !applied && fnLam?.kind === "lambda" && fnLam.params.length === n.args.length) n.args.forEach((a, i) => {
           if (code.nodes[a]?.kind !== "lambda") return;
+          letFns.add(fnLam.params[i]);
           const t = letValue(n, a, i, env, row);
           pre.set(i, t);
           const around = { vars: new Set<number>(), rows: new Set<number>() };
@@ -1611,7 +1617,7 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
           // does only what it names: its row goes inside this one, as a
           // search's does, so this code may do more beside the call (I153).
           let here = callRow;
-          if (!search && fr.t === "fn" && s.resolveRow(fr.eff).tail === null) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
+          if (!search && ((fr.t === "fn" && s.resolveRow(fr.eff).tail === null) || (given?.kind === "ref" && letFns.has(given.target)))) { here = s.freshRow(); s.subs.push({ from: here, to: row, at: id }); }
           try {
             try { s.unify(fr, { t: "fn", params, ret, eff: here }); }
             catch (e) { if (!(e instanceof TypeError) || e.constructor !== TypeError || back || fr.t !== "fn" || fr.params.length !== params.length || !liftLate(n, fr, params)) throw e; s.unify(fr, { t: "fn", params, ret, eff: here }); }

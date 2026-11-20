@@ -29,7 +29,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
-| L Language and library | "Build a tuner, metronome and looper app" | C260b, L271b, C271, C273, L279 |
+| L Language and library | "Build a tuner, metronome and looper app" | C260b, L271b, C271, C273 |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -188,7 +188,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L279 | A function made in a let and called both inside a `part` and outside it takes on what `part` handles: in the frets page, `frets now = () => frets of(…)` called in `part(() => …)` and in the page's table gave main `-[Cells, Choice, Diverge, Network, Log, Settings, Time]`, and the page wouldn't build ("main can't be a page: unhandled effect: Choice"), though frets of has no effect; as definitions taking the cells it builds. A let-bound lambda's effects should be its own at each call (generalised, as a definition's are) | L278 | P2 | M |  |
 
 ### Ersagun's current asks
 
@@ -197,7 +196,7 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: C260b, L271b, C271 and C273 beside them, and L279, found by the frets page (L278, done). The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: C260b, L271b, C271 and C273 beside them, the frets page (L278) and L279 are done. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|

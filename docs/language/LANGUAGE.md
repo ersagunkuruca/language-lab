@@ -743,7 +743,9 @@ moving a helper into a definition or out of it never changes what
 type-checks. What it reads from around it keeps one type: in `let plus =
 (x) ↦ x + n`, x is n's type. What it does is one row for all its uses
 (a use that prints makes it a function that may print everywhere), as
-compiled code calls a function one way. Any other value (a list, a call's result)
+compiled code calls a function one way; each call does that row inside
+the row around it, so a call under a handler (in a `part`, inside
+`first`) doesn't give the other calls what the handler handles (L279). Any other value (a list, a call's result)
 keeps one type, as in ML (Wright's value restriction): it is worked out
 once, so all its uses see the same value. Types
 are inferred from the tree and never stored, the same way names and layout
