@@ -21,6 +21,7 @@
 
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
+import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
 import { intRanges } from "./int-ranges.ts";
 import { ownedArrays } from "./owned-arrays.ts";
@@ -731,6 +732,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // Parts always 0 (a vector's bivector parts) dropped, with a copy of a
   // function for each set of parts its callers give (zero-parts.ts, L43).
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
+  // A read or write at an item path, given the path's parts (C273).
+  if (!envSet("NO_ITEM_PATHS")) itemPaths(ir);
   // Small pure functions put in place, so that sharing reaches across
   // them (C194); then a pure call made twice with the same inputs, made
   // once (C189).
