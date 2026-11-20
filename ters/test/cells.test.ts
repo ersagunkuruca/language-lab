@@ -206,6 +206,23 @@ test("handOver writes the changed cells to the cells made in the same order", ()
   assert.equal(to.peek(d2), 0);
 });
 
+// E279a: the same page's next version, edited, takes over what was done on
+// the last; an edit that adds or takes away a cell starts it afresh.
+test("handOver between versions carries only when both made as many cells", () => {
+  const from = new Cells(equal), to = new Cells(equal), more = new Cells(equal);
+  from.kept = []; to.kept = []; more.kept = [];
+  const [a1, b1] = [from.cell(1), from.cell(10)];
+  const [a2, b2] = [to.cell(1), to.cell(20)];
+  const [a3] = [more.cell(1), more.cell(10), more.cell(0)];
+  from.write(a1, 2); from.write(b1, 11);
+  // b's first value was edited, so b starts from its new one.
+  assert.equal(handOver(from.kept, to.kept, to, true), 1);
+  assert.equal(to.peek(a2), 2);
+  assert.equal(to.peek(b2), 20);
+  assert.equal(handOver(from.kept, more.kept, more, true), -1);
+  assert.equal(more.peek(a3), 1);
+});
+
 // ---------------------------------------------------------------- kept plainly (L99e)
 
 test("cells kept plainly: a write is a store, nothing is compared, and undo still works", () => {

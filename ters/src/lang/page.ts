@@ -11,7 +11,7 @@ import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { browserWorld, type Store } from "./browser.ts";
-import { carried, Cells, nodeOf } from "./cells.ts";
+import { carried, Cells, handOver, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
 import { equal, OutOfSteps, pageProblem, runMain, type Value, type World } from "./run.ts";
@@ -76,6 +76,10 @@ export interface PageOptions {
   replay?: LogEntry[];
   // Keep the cells the page starts with, for handOver (cells.ts).
   keepCells?: boolean;
+  // The cells of the page this one replaces, an earlier version of the
+  // same program (E279a): what was done on it is handed over once main
+  // and the first drawing are done (cells.ts handOver, whole).
+  handFrom?: Cells["kept"];
   // The log kept as a window (I239b, WORLD-LOG-WINDOW.md): a snapshot
   // every `seconds`, the last `keep` kept. `clock` is a test's.
   window?: { seconds: number; keep: number; clock?: () => number };
@@ -106,6 +110,9 @@ export interface Preview {
   cells: Cells;
   // The cells it started with, when asked (keepCells).
   kept?: Cells["kept"];
+  // With handFrom: how many cells were carried, or -1 when the edit
+  // changed which cells there are and the page started afresh.
+  handed?: number;
   // Its log's window and snapshots, when asked (window), and stepping
   // through it (I239c).
   window?: LogWindow<PageSnapshot>;
@@ -174,6 +181,7 @@ export function showPage(o: PageOptions): Preview {
   const kept = cells.kept;
   made = kept ?? [];
   cells.kept = null;
+  const handed = o.handFrom && kept ? handOver(o.handFrom, kept, cells, true) : undefined;
   if (o.replay) replayEvents(root, o.replay);
   // The run's start as a snapshot too: the cells' first values and the
   // generator as main left it, since a step replays from the first event.
@@ -181,7 +189,7 @@ export function showPage(o: PageOptions): Preview {
   if (window && o.stepFrom) window.snapshots = takenUp(o.stepFrom, made);
   const steps = window && logging ? stepper(window, root, cells, made, logging.random, browser, (s, w) => { stepping = s; asking = w ?? answered; }) : undefined;
   if (steps && o.stepFrom) steps.to(steps.events());
-  return { root, cells, kept: o.keepCells ? kept : undefined, window, steps, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
+  return { root, cells, kept: o.keepCells ? kept : undefined, handed, window, steps, stop: () => { stopped = true; sound?.stop(); }, hush: sound ? () => sound.hush() : undefined };
 }
 
 // Stepping a page through the window of its log (I239c,
