@@ -541,3 +541,27 @@ test("a page's sound in C plays its block function on another thread, with the p
   assert.equal(shown(3), "0");
   assert.equal(shown(2), "2");
 });
+
+// The platform's sound latency in a native page (C260b): `my sound
+// latency()` is 0 until the screen measures it once a sound plays, and a
+// view showing it is drawn again at the next frame.
+test("a native page's `my sound latency` is what the screen measured, shown at the next frame (C260b)", { skip }, async () => {
+  const { MY_LATENCY_OP, S } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("div", [], [
+    el("button", [prop("id", "none"), k.call(HTML_V.listen, k.x(HTML_V.noInput), k.fn(["b", "rate"], (b) => b))], [k.call(HTML_V.text, k.thunk(() => k.lit("none")))]),
+    el("p", [prop("id", "latency")], [k.call(HTML_V.part, k.thunk(() => k.call(HTML_V.text, k.thunk(() => k.call(S.show, k.call(MY_LATENCY_OP))))))]),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["click:none", "latency:0.0125", "frames:1:16"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  const pages = r.stdout.toString().split("\x1e"), shown = (k: number) => /lab-part[^\n]*\n\s*text [^"]*"([^"]*)"/.exec(pages[pages.length - k])?.[1];
+  assert.equal(shown(3), "0");
+  assert.equal(shown(2), "0.0125");
+});

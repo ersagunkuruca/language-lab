@@ -1803,6 +1803,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", op: "environmentVariable", aborts: false, args: args(), t };
         }
+        // The platform's sound latency (C260b): the world's, in C too,
+        // where a native app's screen measures it.
+        if ((opts.host || opts.handlers) && target === MY_LATENCY_OP) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: "mySoundLatency", aborts: false, args: [], t };
+        }
         // The person's locale and time zone (L214b2, L188), a file's bytes
         // (L189c), a fetched text, for JavaScript from the core IR: the
         // world's, as the evaluator answers them.

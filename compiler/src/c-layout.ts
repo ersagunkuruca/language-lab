@@ -1470,8 +1470,9 @@ void ters_ui_resize(double width, int dark) { ters_page_lock(); ters__ui_resize(
 // input:ID:TEXT, pointerdown:ID:X,Y and pointermove:ID:X,Y (X, Y from its
 // top left), frames:N:MS (N frames MS apart on a clock of its own, which
 // animations run on), and pointer:down|move|up:X,Y at a point on the page,
-// in a picture). Texts measure as if each character were half a font
-// size wide, so places that hang on texts are near a browser's, not equal.
+// in a picture, and latency:S, a sound's latency in seconds). Texts
+// measure as if each character were half a font size wide, so places
+// that hang on texts are near a browser's, not equal.
 // The first argument may be width:N (360 by default) and dark.
 export const UI_HEADLESS_C = String.raw`
 typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
@@ -1641,6 +1642,14 @@ int main(int argc, char **argv) {
       continue;
     }
 #ifdef TERS_BLOCK
+    if (!strcmp(s, "latency")) {
+      // latency:S, the platform's sound latency in seconds, as a screen
+      // measures it (C260b).
+      ters_page_sound_latency(atof(id));
+      free(s);
+      u_show(root);
+      continue;
+    }
     if (!strcmp(s, "play") && more) {
       // play:N:FRAMES: what sound n plays, its first samples and loudness.
       u_playing p = { atoi(id), atoi(more), 0 };

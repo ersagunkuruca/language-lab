@@ -5,7 +5,8 @@
 # taps (or TAPS, split at |), each a text (the view showing it), "square:N" (a view N dp
 # square, as tumble's tiles are; the first one, or the k-th with #k), "scroll:N" (N dp down)
 # or "drag:N#k:DX,DY" (a finger down on that square, moved DX, DY dp, and up), or
-# "swipe:X,Y,DX,DY" (from that point on the screen, in px).
+# "swipe:X,Y,DX,DY" (from that point on the screen, in px), or "screen-off:N" (the screen
+# off N seconds, the app's services listed meanwhile: a page's sound plays on, C260b).
 import os, re, subprocess, sys, time, difflib
 
 def adb(*a):
@@ -50,6 +51,13 @@ for i, t in enumerate(taps):
         w = adb("shell", "wm", "size"); W, H = [int(v) for v in re.findall(r"(\d+)x(\d+)", w)[-1]]
         adb("shell", "input", "swipe", str(W // 2), str(H * 3 // 4), str(W // 2), str(int(H * 3 // 4 - float(t[7:]) * density)), "800")
         time.sleep(2); before = dump(f"after{i}"); print(f"scrolled {t[7:]} dp"); print("\n".join(lines(before)[:60])); continue
+    if t.startswith("screen-off:"):
+        adb("shell", "input", "keyevent", "KEYCODE_SLEEP")
+        print(f"screen off {t[11:]} s")
+        time.sleep(float(t[11:]))
+        print(adb("shell", "dumpsys", "activity", "services", app)[-3000:])
+        adb("shell", "input", "keyevent", "KEYCODE_WAKEUP"); adb("shell", "wm", "dismiss-keyguard")
+        time.sleep(2); before = dump(f"after{i}"); print("screen on"); continue
     drag = None
     if t.startswith("swipe:"):
         x, y, dx, dy = [int(v) for v in t[6:].split(",")]

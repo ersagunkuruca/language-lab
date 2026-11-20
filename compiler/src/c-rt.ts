@@ -883,6 +883,12 @@ static double lab_world_now(void) {
   if (lab__log_begin("now")) { lab__log_answer(); fprintf(lab_log, "%.17g", ms); lab__log_close(); }
   return ms;
 }` },
+  // The platform's sound latency in seconds (`my sound latency`, C260b):
+  // 0 on a command line, as a browser's where the platform reports none;
+  // a native app's screen sets it once a sound plays
+  // (ters_page_sound_latency).
+  "world.mySoundLatency": { uses: [], c: `static double lab_sound_latency;
+static double lab_world_mySoundLatency(void) { return lab_sound_latency; }` },
   "world.sleep": { uses: ["world.log"], c: `#include <time.h>
 static double lab_world_sleep(double ms) {
   if (lab__log_begin("wait")) { fprintf(lab_log, "%.17g", ms); lab__log_write(); }

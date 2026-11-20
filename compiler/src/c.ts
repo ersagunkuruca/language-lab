@@ -1474,6 +1474,15 @@ void ters_sound_say(int n, const char *why) {
 }
 // The sounds main put on the page.
 int ters_sound_count(void) { return ters_nsnd; }
+// The platform's sound latency in seconds, as the screen measures it once
+// a sound plays (C260b): what my sound latency() answers, and what
+// the page shows at the next frame.
+static int ters_relatency;
+void ters_page_sound_latency(double s) {
+  ters_page_lock();
+  ${rts.has("world.mySoundLatency") ? "if (s != lab_sound_latency) { lab_sound_latency = s; ters_relatency = 1; }" : "(void)s;"}
+  ters_page_unlock();
+}
 // One block: the input as a List Float64 to the block function, and what
 // it gives to the speaker. A block that stops, or gives other than 128
 // samples, plays silence (and says so once).
@@ -1833,10 +1842,10 @@ static int ters__page_clock(void) { return ters_clock || (ters_moving && ters_mo
 static int ters__page_frame(void) {
   int moving = ters_moving && ters_moving(0), sounding = ters_sounding();
   if (!ters_clock && !moving && !sounding) return 0;
-  if (ters_clock || (sounding && lab_nwr)) {
+  if (ters_clock || (sounding && ${sound ? "(lab_nwr || ters_relatency)" : "lab_nwr"})) {
     ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
     ters_refresh(ters_root);
-    lab_nwr = 0;
+    lab_nwr = 0;${sound ? " ters_relatency = 0;" : ""}
     ters_clock = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"};
     if (ters_after) ters_after();
   }
