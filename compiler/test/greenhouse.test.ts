@@ -31,3 +31,14 @@ test("greenhouse: 900 ticks of 2000 moths, compiled and native, plants eaten", (
   ran(process.execPath, [lab, "native", folder, "-o", join(dir, "g")]);
   assert.equal(ran(join(dir, "g"), ["900", "2000"]), want);
 });
+
+test("greenhouse native: a moth read by number for `met` is lent, its stand-in made only past the end (C265, C268)", () => {
+  if (skip) return;
+  const out = join(dir, "lent");
+  ran(process.execPath, [lab, "native", folder, "-o", out]);
+  const c = ran("cat", [`${out}.c`]);
+  const loop = /static Flock lab_gathered_from_b\([^)]*\) \{[^]*?\n}\n/.exec(c)![0];
+  assert.match(loop, /lab_array_peek_a\d+\(p0, /, "the moth read as it is in the array");
+  assert.doesNotMatch(loop, /item_at|Thing_dup/, "no call to item at and no count taken");
+  assert.match(loop, /\} else \{[^}]*lab_nothing\(\)/, "the stand-in only past the end");
+});
