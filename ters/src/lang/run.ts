@@ -48,7 +48,7 @@ import { answeredEffects, jsHostHas, supported } from "./supports.ts";
 import { answerFromHost, effectOfOperation, hostedEffects, pureEffect, pureHosts, stdHosted, type Hosts } from "./hosts.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
-import { Cells, NoValue, Pending, changeAt, itemPathOf, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
+import { Cells, ITEM_OPS, NoValue, Pending, changeAt, itemPathOf, listEdits, nodeOf, pathValue, stepsOf } from "./cells.ts";
 import { seededGenerator, worldRandom, type Generator as RandomGenerator } from "./random.ts";
 import { fieldIndex, fieldPath, placePath, setPath } from "./records.ts";
 import { CELLS, CHOICE, DIVERGE, INT, NETWORK, Subst, WORLD, type Type } from "./types.ts";
@@ -97,6 +97,9 @@ export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value)
     [CELL_OPS.keyPath]: (p, by, k) => pathValue([...stepsOf(p)!, { key: k, by: stepsOf(by)! }]),
     [CELL_OPS.readAt]: (c, p) => noValue(() => cells.readAt(c, stepsOf(p)!, LISTS) as Value),
     [CELL_OPS.writeAt]: (c, p, v) => (cells.edit(c, stepsOf(p)!, () => v, LISTS), unit),
+    // Read at and write at an item path given its parts (C273).
+    [ITEM_OPS.readItem]: (c, p, i) => noValue(() => cells.readItem(c, stepsOf(p)!, Number(i), LISTS) as Value),
+    [ITEM_OPS.writeItem]: (c, p, i, v) => (cells.writeItem(c, stepsOf(p)!, Number(i), v, LISTS), unit),
     [CELL_OPS.changed]: (v, p, x) => changeAt(v, stepsOf(p)!, () => x, LISTS),
     [CELL_OPS.insertAt]: (c, p, i, v) => (cells.edit(c, stepsOf(p)!, (l) => toList(listEdits.insert(fromList(l), Number(i), v)), LISTS, { at: stepsOf(p)!, kind: "insert", i: Number(i) }), unit),
     [CELL_OPS.removeAt]: (c, p, i) => (cells.edit(c, stepsOf(p)!, (l) => { const xs = listEdits.remove(fromList(l), Number(i)); return xs && toList(xs); }, LISTS, { at: stepsOf(p)!, kind: "remove", i: Number(i) }), unit),

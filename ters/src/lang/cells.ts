@@ -167,6 +167,9 @@ export const pathValue = (steps: Step[]): Value => {
   (p as unknown as Record<symbol, Step[]>)[PATH] = steps;
   return p as unknown as Value;
 };
+// A read or write at item i of the list at a path, given the path and i
+// (compiler/src/item-paths.ts, C273): no item path made.
+export const ITEM_OPS = { readItem: "builtin.cells.readItem", writeItem: "builtin.cells.writeItem" } as const;
 // Item i of the list at path p.
 export const itemPathOf = (p: Value, i: number): Value => {
   const s = stepsOf(p)!;
@@ -628,6 +631,34 @@ export class Cells {
     t.list = undefined;
     if (this.onWrite) this.onWrite(this.order.get(n)!, part, [{ item: i }]);
     if (!this.plain) this.wake(n, at, what, undefined, part);
+  }
+
+  // What's at item i of the list at `base` in a cell's value: readAt
+  // there. A tape's item read outside any reader makes no steps (C273: a
+  // looper reads its tape each sample).
+  readItem(c: Value, base: Step[], i: number, lists: Lists): Value | undefined {
+    const n = nodeOf(c), t = n && base.length === 0 ? tapeOf(n) : undefined;
+    if (t && (this.plain || this.current === null) && !n!.compute && n!.error === undefined) return t.items[i];
+    return this.readAt(c, [...base, { item: i }], lists);
+  }
+
+  // Item i of the list at `base` in a cell's value written: edit there.
+  // On a tape no reader or journal waits on, in place with no path made
+  // (C273).
+  writeItem(c: Value, base: Step[], i: number, v: Value, lists: Lists): void {
+    const n = nodeOf(c);
+    if (n && base.length === 0 && !n.compute && !this.journal && n.observers.size === 0) {
+      const t = taped(n, lists);
+      if (!(i >= 0 && i < t.items.length)) return;
+      const part = this.plain ? v : this.plainOf(v);
+      if (this.same(t.items[i], part)) return;
+      setItem(t, i, part);
+      t.list = undefined;
+      if (this.onWrite) this.onWrite(this.order.get(n)!, part, [{ item: i }]);
+      if (!this.plain && !this.batching) this.flush();
+      return;
+    }
+    this.edit(c, [...base, { item: i }], () => v, lists);
   }
 
   // Items from..from+count of the list a cell holds, without reading it

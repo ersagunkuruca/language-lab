@@ -16,7 +16,8 @@ import { fromList, LIST_SHAPE, makeRunner, toList, type Value } from "../src/lan
 import { BOOL, CELL_OPS, S, SHOW_ANY } from "../src/lang/std.ts";
 import { STRING, showType } from "../src/lang/types.ts";
 import { subtree, type Id } from "../src/model.ts";
-import { compiledDefs } from "../../compiler/src/core-js.ts";
+import { compiledDefs, lowerCore } from "../../compiler/src/core-js.ts";
+import { kids, type SExpr } from "../../compiler/src/scalar.ts";
 import { applyWrite, Wrote } from "../src/lang/sound-thread.ts";
 
 
@@ -244,6 +245,42 @@ test("compiled JavaScript applies the same edits", async () => {
   // the evaluator's way and back (L276).
   const v = compiledDefs(p.code, clean, p.names, ["demo"]).demo();
   assert.deepEqual(listOf(v as Value), EXPECTED);
+});
+
+// A read and a write at an item path, given in place and by a function of
+// the index (a looper's `at item`): compiled as readItem and writeItem
+// (C273), the path made by neither, and a formula reading item 1 woken by
+// a write there and not by one elsewhere.
+test("read at and write at an item compile to the item's parts, with the evaluator's answers", async () => {
+  const k = new Lang(LIBRARY.code);
+  const whole = () => k.call(CELL_OPS.path, k.fn(["t"], (t) => t));
+  const atItem = k.def("at item");
+  k.define(atItem, k.fn(["i"], (i) => k.call(CELL_OPS.itemPath, whole(), i)));
+  const demo = k.def("demo");
+  k.define(demo, k.fn([], () => k.let("xs", k.call(CELL_OPS.cell, k.list(k.int(1), k.int(2), k.int(3))), (xs) =>
+    k.let("second", k.call(CELL_OPS.formula, k.fn([], () => k.call(S.all, k.thunk(() => k.call(CELL_OPS.readAt, xs, k.call(atItem, k.int(1))))))), (second) => {
+      const show = () => k.call(SHOW_ANY, k.call(CELL_OPS.read, xs));
+      const one = (i: number) => k.call(SHOW_ANY, k.call(S.all, k.thunk(() => k.call(CELL_OPS.readAt, xs, k.call(CELL_OPS.itemPath, whole(), k.int(i))))));
+      return k.list(
+        k.call(SHOW_ANY, k.call(CELL_OPS.read, second)),
+        k.seq(k.call(CELL_OPS.writeAt, xs, k.call(atItem, k.int(0)), k.int(10)), k.call(SHOW_ANY, k.call(CELL_OPS.read, second))),
+        k.seq(k.call(CELL_OPS.writeAt, xs, k.call(CELL_OPS.itemPath, whole(), k.int(1)), k.int(20)), k.call(SHOW_ANY, k.call(CELL_OPS.read, second))),
+        k.seq(k.call(CELL_OPS.writeAt, xs, k.call(atItem, k.int(7)), k.int(70)), show()),
+        one(2), one(9));
+    }))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const expected = ["[2]", "[2]", "[20]", "[10, 20, 3]", "[3]", "[]"];
+  const r = makeRunner(code, info, { print: () => {}, names });
+  const [v] = r.call(r.value(demo));
+  assert.deepEqual(listOf(v), expected);
+  assert.deepEqual(listOf(compiledDefs(code, info, names, ["demo"]).demo() as Value), expected);
+  const ir = lowerCore(code, info, names, [demo]);
+  const ops: string[] = [];
+  const walk = (e: SExpr) => { if (e.k === "rt" && /builtin\.cells\.(readAt|writeAt|readItem|writeItem)/.test(e.fn)) ops.push(e.fn.split(":")[1]); kids(e).forEach(walk); };
+  ir.funcs.forEach((f) => walk(f.body));
+  assert.deepEqual(ops.sort(), ["builtin.cells.readItem", "builtin.cells.readItem", "builtin.cells.readItem", "builtin.cells.writeItem", "builtin.cells.writeItem", "builtin.cells.writeItem"]);
 });
 
 const isUnder = (p: ReturnType<typeof program>, d: Id, id: Id) => subtree(p.code, d).includes(id);
