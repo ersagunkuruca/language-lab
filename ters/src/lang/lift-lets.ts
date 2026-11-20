@@ -120,7 +120,7 @@ export function liftLets(code: Code, info: Info, names: Names = {}, every = fals
   const lifted = { nodes, defs };
   // Checked again where it changed: the lets' definitions and the ones it
   // made (infer.ts inferRewritten, I264).
-  const changed = nodeIds(nodes).filter((id) => id in code.nodes && nodes[id] !== code.nodes[id]);
+  const changed = nodeIds(nodes).filter((id) => code.nodes[id] !== undefined && nodes[id] !== code.nodes[id]);
   const checked = inferRewritten(code, lifted, out, info, changed, defs.slice(code.defs.length));
   // A library definition arith.ts resolved (pedal's `smaller`, at Float64)
   // keeps its id, and this check reads that id's type from the library's

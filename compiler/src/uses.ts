@@ -77,7 +77,7 @@ function carried(code: Code, out: Code, info: Info): Info | null {
   for (const id of nodeIds(out.nodes)) {
     const was = code.nodes[id], n = out.nodes[id];
     if (n === was || !isUse(n) || !was || !isUse(was) || was.body !== undefined || n.body === undefined) continue;
-    if (!lib || !(id in lib.nodes)) { if (!give(id, n)) return null; continue; }
+    if (!lib || lib.nodes[id] === undefined) { if (!give(id, n)) return null; continue; }
     const binds = Object.values(n.binds ?? {});
     const made = [...binds, ...binds.map((_, i) => `${id}.part.${Object.keys(n.binds!)[i]}`), ...(binds.length === 1 ? [] : [n.body, (out.nodes[n.body] as Call).fn])];
     typeOf.later(made, () => { if (!give(id, n)) throw new Error(`the library's use ${id} doesn't give the tuple of its ports' types`); });
@@ -86,7 +86,7 @@ function carried(code: Code, out: Code, info: Info): Info | null {
   // them: a check given of more code (the library's, before the program was
   // cut to what its roots reach) names some it doesn't, which arith.ts would
   // resolve a literal to (order.test's fractions).
-  const implementations = info.implementations && new Map([...info.implementations].filter(([, d]) => d in out.nodes));
+  const implementations = info.implementations && new Map([...info.implementations].filter(([, d]) => out.nodes[d] !== undefined));
   return { ...info, typeOf, ...(implementations ? { implementations } : {}) };
 }
 

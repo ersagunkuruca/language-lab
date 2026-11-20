@@ -32,7 +32,7 @@
 // do.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { conditionResults, fieldWayOf, isUse, isCall, bindsOf, copyNodes, nodeEntries, nodeIds, nodeValues } from "../model.ts";
+import { nodesOfKindIn, conditionResults, fieldWayOf, isUse, isCall, bindsOf, copyNodes, nodeEntries, nodeIds, nodeValues } from "../model.ts";
 import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
@@ -78,7 +78,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
   const ty = (id: Id) => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   const defValues = new Map<Id, PV | null>();
   const lists = new Set<Id>(), effectOps = new Set<Id>();
-  for (const n of nodeValues(nodes)) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => effectOps.add(v));
+  for (const n of nodesOfKindIn(nodes, "typedef")) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => effectOps.add(v));
   // Recursive data (a list, a tree): what a table or a basis is written as.
   for (const d of code.defs) {
     const t = nodes[(nodes[d] as NodeOf<"def">)?.body ?? ""];
@@ -329,7 +329,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
     prune();
     if (carried && !(typeof process !== "undefined" && process.env?.TERS_RECHECK) && typedAll(code, info, carried)) {
       const typeOf = new OverMap(info.typeOf);
-      for (const [id, t] of carried) if (id in code.nodes) typeOf.set(id, t);
+      for (const [id, t] of carried) if (code.nodes[id] !== undefined) typeOf.set(id, t);
       info = { ...info, typeOf };
       good = { code, names, info, rounded: [...good.rounded, ...(pending ?? [])] };
       pending = null;
@@ -420,7 +420,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
   const origin = new Map<Id, Id>();
   const ty = (id: Id) => info.subst.zonk(info.typeOf.get(origin.get(id) ?? id) ?? { t: "var", v: -1 });
   const ctx: Ctx = { code: out, names: outNames, defValues: new Map(), effectOps: new Set(), ty };
-  for (const n of nodeValues(nodes)) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => ctx.effectOps.add(v));
+  for (const n of nodesOfKindIn(nodes, "typedef")) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => ctx.effectOps.add(v));
   // Data arguments are told apart by what they are made of.
   const known = (a: Id): string | null => {
     if (!closedTree(out, a)) return null;
@@ -525,7 +525,7 @@ function oneCase(code: Code, variant: Id): boolean {
   let cases = recordCases.get(code.nodes);
   if (!cases) {
     cases = new Set();
-    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && !n.effect && n.variants.length === 1) cases.add(n.variants[0]);
+    for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef" && !n.effect && n.variants.length === 1) cases.add(n.variants[0]);
     recordCases.set(code.nodes, cases);
   }
   return cases.has(variant);

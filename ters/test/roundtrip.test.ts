@@ -11,7 +11,7 @@ import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
 import type { Code, Id, Node } from "../src/model.ts";
-import { isUse, nodeValues } from "../src/model.ts";
+import { plainNodes, isUse, nodeValues } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { pointsAt } from "../src/lang/modules.ts";
@@ -54,7 +54,7 @@ test("every example saves and opens as the same program", () => {
     const opened = fromFile(text, () => library);
     assert.ok(!("error" in opened), `${ex}: ${"error" in opened ? opened.error : ""}`);
     if ("error" in opened) continue;
-    assert.deepEqual(opened.code.nodes, p.code.nodes, `${ex}: nodes`);
+    assert.deepEqual(plainNodes(opened.code.nodes), plainNodes(p.code.nodes), `${ex}: nodes`);
     assert.deepEqual(opened.code.defs, p.code.defs, `${ex}: definitions`);
     assert.deepEqual(opened.file.names, p.pres.names, `${ex}: names`);
     assert.deepEqual(opened.file.comments, p.pres.comments, `${ex}: comments`);

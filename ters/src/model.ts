@@ -328,29 +328,103 @@ export const nodesUnder = (nodes: Record<Id, Node>): Record<Id, Node> | undefine
 const firstIds = new WeakMap<object, Id[]>();
 // The ids of nodes others sit over, listed once: nodes under others are
 // never changed (a change is made in a version over them).
-const underIdsKept = new WeakMap<object, Id[]>();
-const underIds = (under: Record<Id, Node>): Id[] => { let ids = underIdsKept.get(under); if (!ids) underIdsKept.set(under, (ids = nodeIds(under))); return ids; };
+const underKept = new WeakMap<object, { ids: Id[]; values: Node[]; at: Map<Id, number> }>();
+const underOf = (under: Record<Id, Node>) => {
+  let u = underKept.get(under);
+  if (!u) {
+    const ids = nodeIds(under), values = ids.map((id) => under[id]), at = new Map<Id, number>();
+    ids.forEach((id, i) => at.set(id, i));
+    underKept.set(under, (u = { ids, values, at }));
+  }
+  return u;
+};
+const underIds = (under: Record<Id, Node>): Id[] => underOf(under).ids;
+// A version over another, read as the merge it stands for: the ids it
+// lists first, the positions under it it changes (a node, or undefined
+// for one taken out), and the ids it adds after. Read from its own ids
+// only; the nodes under are listed once (underOf).
+function overParts(nodes: Record<Id, Node>, under: Record<Id, Node>) {
+  const raw = rawNodes(nodes), first = firstIds.get(raw), u = underOf(under);
+  if (checkNodes && ((!nodesUnder(under) && Object.keys(under).length !== u.ids.length) || u.ids.some((id, i) => under[id] !== u.values[i]))) throw new Error("nodes others sit over changed: copy them (model.ts copyNodes) before changing them");
+  const changed: [number, Node | undefined][] = [], added: Id[] = [];
+  const before = first && new Set(first);
+  for (const id of Object.keys(raw)) {
+    const i = u.at.get(id);
+    if (i !== undefined) { if (raw[id] !== u.values[i]) changed.push([i, raw[id]]); }
+    else if (!before?.has(id) && raw[id] !== undefined) added.push(id);
+  }
+  return { raw, first: first?.filter((id) => raw[id] !== undefined), u, changed, added };
+}
 export function nodeIds(nodes: Record<Id, Node>): Id[] {
   const under = nodesUnder(nodes);
   if (!under) return Object.keys(nodes);
-  const out: Id[] = [];
-  const raw = rawNodes(nodes), first = firstIds.get(raw);
-  if (first) for (const id of first) if (nodes[id] !== undefined) out.push(id);
-  for (const id of underIds(under)) if (nodes[id] !== undefined) out.push(id);
-  const before = first && new Set(first);
-  for (const id of Object.keys(raw)) if (!(id in under) && !before?.has(id) && nodes[id] !== undefined) out.push(id);
-  return out;
+  const { first, u, changed, added } = overParts(nodes, under);
+  let ids = u.ids;
+  if (changed.some((c) => c[1] === undefined)) { const out = new Set(changed.filter((c) => c[1] === undefined).map((c) => c[0])); ids = ids.filter((_, i) => !out.has(i)); }
+  return first?.length ? [...first, ...ids, ...added] : added.length ? ids.concat(added) : ids.slice();
+}
+// Whether every node of `lib` is in `nodes` as it is there (a program
+// on the library): read from the own nodes of each version over it, when
+// `nodes` sits over it; else walked, its ids listed once when it is plain
+// (the library's never change).
+export function holdsAll(nodes: Record<Id, Node>, lib: Record<Id, Node>): boolean {
+  let over: Record<Id, Node> | undefined = nodes;
+  while (over && over !== lib) over = nodesUnder(over);
+  if (over) {
+    for (let v = nodes; v !== lib; v = nodesUnder(v)!) for (const id of Object.keys(rawNodes(v))) if (lib[id] !== undefined && nodes[id] !== lib[id]) return false;
+    return true;
+  }
+  for (const id of nodesUnder(lib) ? nodeIds(lib) : underOf(lib).ids) if (nodes[id] !== lib[id]) return false;
+  return true;
+}
+// The ids whose node differs between two versions, read from their own
+// nodes when one sits over the other or both over the same nodes: in
+// `next`'s order, then those gone in `before`'s order, as a walk of both
+// gives them. Undefined when neither is so.
+export function changedOver(before: Record<Id, Node>, next: Record<Id, Node>): Id[] | undefined {
+  const under = nodesUnder(next);
+  if (!under) return undefined;
+  const order = (v: Record<Id, Node>) => {
+    const { first, u, added } = overParts(v, under), F = first?.length ?? 0, at = new Map<Id, number>();
+    first?.forEach((id, i) => at.set(id, i));
+    added.forEach((id, i) => at.set(id, F + u.ids.length + i));
+    return (id: Id) => at.get(id) ?? F + u.at.get(id)!;
+  };
+  if (under === before) {
+    const { first, u, changed, added } = overParts(next, before);
+    const there = changed.filter((c) => c[1] !== undefined).sort((a, b) => a[0] - b[0]).map((c) => u.ids[c[0]]);
+    const gone = changed.filter((c) => c[1] === undefined).sort((a, b) => a[0] - b[0]).map((c) => u.ids[c[0]]);
+    return [...(first ?? []), ...there, ...added, ...gone];
+  }
+  if (nodesUnder(before) !== under) return undefined;
+  const ids = new Set([...Object.keys(rawNodes(before)), ...Object.keys(rawNodes(next))].filter((id) => before[id] !== next[id]));
+  const inNext = [...ids].filter((id) => next[id] !== undefined), gone = [...ids].filter((id) => next[id] === undefined);
+  const n = order(next), b = order(before);
+  return [...inNext.sort((x, y) => n(x) - n(y)), ...gone.sort((x, y) => b(x) - b(y))];
 }
 // The ids a version over another holds itself (changed, added or taken
 // out), in no set order; every id when it is over none.
 export const ownNodeIds = (nodes: Record<Id, Node>): Id[] => Object.keys(rawNodes(nodes));
-export const nodeValues = (nodes: Record<Id, Node>): Node[] => (nodesUnder(nodes) ? nodeIds(nodes).map((id) => nodes[id]) : Object.values(nodes));
+export function nodeValues(nodes: Record<Id, Node>): Node[] {
+  const under = nodesUnder(nodes);
+  if (!under) return Object.values(nodes);
+  const { raw, first, u, changed, added } = overParts(nodes, under);
+  let values: (Node | undefined)[] = u.values.slice();
+  for (const [i, n] of changed) values[i] = n;
+  if (changed.some((c) => c[1] === undefined)) values = values.filter((n) => n !== undefined);
+  for (const id of added) values.push(raw[id]);
+  return (first?.length ? [...first.map((id) => raw[id]), ...values] : values) as Node[];
+}
 export const nodeEntries = (nodes: Record<Id, Node>): [Id, Node][] => (nodesUnder(nodes) ? nodeIds(nodes).map((id) => [id, nodes[id]]) : Object.entries(nodes));
+// A plain object of the nodes a version holds, for comparing or sending.
+export const plainNodes = (nodes: Record<Id, Node>): Record<Id, Node> => (nodesUnder(nodes) ? Object.fromEntries(nodeEntries(nodes)) : nodes);
 export const nodeCount = (nodes: Record<Id, Node>): number => (nodesUnder(nodes) ? nodeIds(nodes).length : Object.keys(nodes).length);
 // A copy to change: over the same nodes, its own copied.
 export const copyNodes = (nodes: Record<Id, Node>): Record<Id, Node> => {
   const under = nodesUnder(nodes);
-  if (!under) return { ...nodes };
+  // A plain version copied is read as never changed after (a pass copies
+  // what it is given before changing it): the copy sits over it.
+  if (!under) return checked(Object.create(nodes));
   const out = Object.assign(Object.create(under), rawNodes(nodes)), first = firstIds.get(rawNodes(nodes));
   if (first) firstIds.set(out, first);
   return checked(out);
@@ -708,7 +782,7 @@ export function swapIn(code: Code, id: Id, replacement: Id): Code {
 // Drop nodes no def or builtin can reach (after deletes and replacements).
 export function collect(code: Code): Code {
   const keep = new Set<Id>();
-  for (const n of nodeValues(code.nodes)) if (n.kind === "builtin") keep.add(n.id);
+  for (const n of nodesOfKindIn(code.nodes, "builtin")) if (n.kind === "builtin") keep.add(n.id);
   for (const d of code.defs) for (const id of subtree(code, d)) keep.add(id);
   return { nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => keep.has(id))), defs: code.defs };
 }
@@ -816,9 +890,13 @@ const baseNodes = new WeakMap<object, Node[]>();
 // or builtins reads those, not the ~50,000 nodes again (machine's compile
 // walked every node some 30 times, a few ms a walk). Like every scan kept
 // for a version, it holds while the nodes aren't changed in place.
-const kindsKept = new WeakMap<object, { kinds: Map<string, Node[]>; at: Map<string, number[]> }>();
-function kindIndex(nodes: Record<Id, Node>) {
+type KindIndex = { kinds: Map<string, Node[]>; at: Map<string, number[]> };
+const kindsKept = new WeakMap<object, KindIndex>();
+function kindIndex(nodes: Record<Id, Node>): KindIndex {
   let k = kindsKept.get(nodes);
+  const under = k ? undefined : nodesUnder(nodes);
+  // Not kept: read from its own nodes each time, it holds after a change in place.
+  if (under && !nodesUnder(under)) return kindsOver(nodes, under);
   if (!k) {
     k = { kinds: new Map(), at: new Map() };
     let i = 0;
@@ -833,10 +911,42 @@ function kindIndex(nodes: Record<Id, Node>) {
   }
   return k;
 }
+// A version over plain nodes: their index (kept, as they never change)
+// with the version's own nodes put in, a kind none of them is or was
+// shared as it is. Positions only order: those under are shifted past the
+// ones listed first, the ones added come after.
+function kindsOver(nodes: Record<Id, Node>, under: Record<Id, Node>): KindIndex {
+  const uk = kindIndex(under), { raw, first, u, changed, added } = overParts(nodes, under);
+  if (!changed.length && !added.length && !first?.length) return uk;
+  const touched = new Set<string>();
+  for (const [i, n] of changed) { touched.add(u.values[i].kind); if (n) touched.add(n.kind); }
+  for (const id of first ?? []) touched.add(raw[id].kind);
+  for (const id of added) touched.add(raw[id].kind);
+  const k = { kinds: new Map(uk.kinds), at: new Map(uk.at) }, gone = new Set(changed.map((c) => c[0]));
+  const F = first?.length ?? 0, U = u.ids.length;
+  for (const kind of touched) {
+    const ns: Node[] = [], at: number[] = [];
+    first?.forEach((id, j) => { if (raw[id].kind === kind) { ns.push(raw[id]); at.push(j); } });
+    const into = changed.filter(([, n]) => n?.kind === kind).sort((a, b) => a[0] - b[0]);
+    const uns = uk.kinds.get(kind) ?? none, uat = uk.at.get(kind) ?? [];
+    let j = 0;
+    for (let x = 0; x < uns.length; x++) {
+      const p = uat[x];
+      for (; j < into.length && into[j][0] < p; j++) { ns.push(into[j][1]!); at.push(F + into[j][0]); }
+      if (!gone.has(p)) { ns.push(uns[x]); at.push(F + p); }
+    }
+    for (; j < into.length; j++) { ns.push(into[j][1]!); at.push(F + into[j][0]); }
+    added.forEach((id, i) => { if (raw[id].kind === kind) { ns.push(raw[id]); at.push(F + U + i); } });
+    if (ns.length) { k.kinds.set(kind, ns); k.at.set(kind, at); } else { k.kinds.delete(kind); k.at.delete(kind); }
+  }
+  return k;
+}
 const none: Node[] = [];
 export function nodesOfKind<K extends Kind>(code: Code, kind: K): readonly NodeOf<K>[] {
   return (kindIndex(code.nodes).kinds.get(kind) ?? none) as NodeOf<K>[];
 }
+// The same, of a version of the nodes.
+export const nodesOfKindIn = (nodes: Record<Id, Node>, kind: Kind): readonly Node[] => kindIndex(nodes).kinds.get(kind) ?? none;
 // The nodes of any of `kinds`, in their order in the nodes.
 function nodesOfKinds(code: Code, kinds: readonly string[]): Node[] {
   if (kinds.length === 1) return (kindIndex(code.nodes).kinds.get(kinds[0]) ?? none).slice();
@@ -904,7 +1014,7 @@ export function changedFromLayer(code: Code): Set<Id> | undefined {
     for (const id of nodeIds(code.nodes)) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
     // A layer node gone is changed too; when every one is there as it was,
     // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
-    if (same !== sizeOf(under)) for (const id in under) if (!(id in code.nodes)) changed.add(id);
+    if (same !== sizeOf(under)) for (const id of nodeIds(under)) if (code.nodes[id] === undefined) changed.add(id);
     changedOnLayer.set(code.nodes, { layer, changed });
   }
   return changed;

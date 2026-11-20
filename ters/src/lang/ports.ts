@@ -4,7 +4,7 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget, copyNodes, dropNode, nodeEntries, nodeIds, nodeValues, nodesOver, nodesUnder, ownNodeIds, withNodes } from "../model.ts";
+import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget, copyNodes, dropNode, nodeEntries, nodeIds, nodeValues, nodesOver, nodesUnder, ownNodeIds, withNodes, holdsAll } from "../model.ts";
 import { BUILTIN_INPUTS, TUPLE_MAX } from "./std-ids.ts";
 import { tupleVariant, tuplePart } from "./std-values.ts";
 import { forgetSpine } from "./spine.ts";
@@ -148,7 +148,7 @@ function filledFrom(code: Code): Code {
   if (bare.length && from.stable) {
     const out: Code = { ...code, nodes: copyNodes(fb.nodes) };
     const put = [...from.changed];
-    for (const id of put) { if (id in code.nodes) out.nodes[id] = code.nodes[id]; else dropNode(out.nodes, id); }
+    for (const id of put) { if (code.nodes[id] !== undefined) out.nodes[id] = code.nodes[id]; else dropNode(out.nodes, id); }
     fillUses(out, bare, put);
     derivedFrom(out, fb, put);
     return out;
@@ -156,13 +156,13 @@ function filledFrom(code: Code): Code {
   let m = mirrors.get(code.nodes);
   if (!m || m.fb.nodes !== fb.nodes) mirrors.set(code.nodes, (m = { fb, nodes: copyNodes(fb.nodes), put: [] }));
   else {
-    for (const id of m.put) { if (id in fb.nodes) m.nodes[id] = fb.nodes[id]; else dropNode(m.nodes, id); }
+    for (const id of m.put) { if (fb.nodes[id] !== undefined) m.nodes[id] = fb.nodes[id]; else dropNode(m.nodes, id); }
     forgetSpine(m.nodes);
     forgetKinds(m.nodes);
   }
   m.fb = fb;
   m.put = [...from.changed];
-  for (const id of m.put) { if (id in code.nodes) m.nodes[id] = code.nodes[id]; else dropNode(m.nodes, id); }
+  for (const id of m.put) { if (code.nodes[id] !== undefined) m.nodes[id] = code.nodes[id]; else dropNode(m.nodes, id); }
   const out: Code = { ...code, nodes: m.nodes };
   // A bare use is filled in the same nodes, and what that wrote is put
   // back the next time too (E103: a copy of every node per offer was 2.5
@@ -178,12 +178,7 @@ function filledFrom(code: Code): Code {
 // check alone never needs).
 let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null, toFill: Code | null = null;
 const baseNow = () => { if (!base && toFill) fillOnce(toFill); return base; };
-const onBase = (code: Code, lib: Code) => {
-  // Over the library's nodes: only its own can differ.
-  if (nodesUnder(code.nodes) === lib.nodes) { for (const id of ownNodeIds(code.nodes)) if (id in lib.nodes && code.nodes[id] !== lib.nodes[id]) return false; return true; }
-  for (const id of nodeIds(lib.nodes)) if (code.nodes[id] !== lib.nodes[id]) return false;
-  return true;
-};
+const onBase = (code: Code, lib: Code) => holdsAll(code.nodes, lib.nodes);
 // The library filled by fillOnce, if it has been or is to be.
 export const filledLibrary = (): Code | undefined => baseNow()?.filled;
 export function fillOnce(lib: Code): Code {

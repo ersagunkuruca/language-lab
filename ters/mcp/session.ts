@@ -14,7 +14,7 @@ import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, Node, NodeOf } from "../src/model.ts";
-import { children, collect, freshId, parentLookup, parentOf, portNames, portsOf, scanningOnLayer, subtree, swapIn, isCall, type Call, type NodeData, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../src/model.ts";
+import { nodesOfKindIn, children, collect, freshId, parentLookup, parentOf, portNames, portsOf, scanningOnLayer, subtree, swapIn, isCall, type Call, type NodeData, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -642,7 +642,7 @@ export class Session {
     const { head, cases } = casesOf(text, "handle");
     const all = baseNames(names);
     const ops = new Map<string, NodeOf<"variant">>();
-    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && n.effect) for (const v of n.variants) { const op = code.nodes[v]; if (op?.kind === "variant" && all[v] && !ops.has(norm(all[v]))) ops.set(norm(all[v]), op); }
+    for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef" && n.effect) for (const v of n.variants) { const op = code.nodes[v]; if (op?.kind === "variant" && all[v] && !ops.has(norm(all[v]))) ops.set(norm(all[v]), op); }
     const nodes = copyNodes(code.nodes), out: Names = { ...names };
     const add = (n: Record<string, unknown>): Id => { const id = freshId(); nodes[id] = { id, ...n } as never; return id; };
     const fills: [Id, string][] = [];
@@ -760,7 +760,7 @@ export class Session {
     const head = norm(m[1]);
     // A field with ports of the program's (an interface's operation), else a
     // definition with results.
-    const fields = nodeValues(code.nodes).filter((n) => n.kind === "field" && !!portNames(code.nodes, n)?.length && all[n.id] === head);
+    const fields = nodesOfKindIn(code.nodes, "field").filter((n) => n.kind === "field" && !!portNames(code.nodes, n)?.length && all[n.id] === head);
     const defs = code.defs.filter((d) => all[d] === head && portsOf(code.nodes, d));
     const target = fields.length === 1 ? fields[0].id : defs.length === 1 ? defs[0] : null;
     if (!target) return null;
@@ -1347,12 +1347,12 @@ function dropUnreached(before: Code, after: Code): Code {
   if (after.defs.length !== before.defs.length || after.defs.some((d, i) => before.defs[i] !== d)) return collect(after);
   const was = new Set<Id>(), now = new Set<Id>();
   for (const id of nodeIds(after.nodes)) if (after.nodes[id] !== before.nodes[id]) { for (const c of children(after.nodes[id])) now.add(c); if (before.nodes[id]) for (const c of children(before.nodes[id])) was.add(c); }
-  for (const id of nodeIds(before.nodes)) if (!(id in after.nodes)) for (const c of children(before.nodes[id])) was.add(c);
+  for (const id of nodeIds(before.nodes)) if (after.nodes[id] === undefined) for (const c of children(before.nodes[id])) was.add(c);
   // So with a node the edit made that nothing holds (one it made and then
   // replaced).
   const defs = new Set(after.defs);
-  const lost = [...was].filter((c) => !now.has(c) && c in after.nodes);
-  for (const id of nodeIds(after.nodes)) if (!(id in before.nodes) && !now.has(id) && !defs.has(id) && after.nodes[id].kind !== "builtin") lost.push(id);
+  const lost = [...was].filter((c) => !now.has(c) && after.nodes[c] !== undefined);
+  for (const id of nodeIds(after.nodes)) if (before.nodes[id] === undefined && !now.has(id) && !defs.has(id) && after.nodes[id].kind !== "builtin") lost.push(id);
   if (!lost.length) return after;
   const nodes = copyNodes(after.nodes);
   const drop = (id: Id) => { const n = nodes[id]; if (!n) return; dropNode(nodes, id); for (const c of children(n)) if (!now.has(c)) drop(c); };

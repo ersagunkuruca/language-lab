@@ -143,11 +143,11 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   for (const k of info.implementations?.keys() ?? []) {
     if (under.implementations?.has(k)) continue;
     const rest = k.slice(k.indexOf("|") + 1), con = rest.startsWith("@") ? rest.slice(1) : null;
-    if (!con || con in lib.nodes || con.startsWith("builtin.")) return null;
+    if (!con || lib.nodes[con] !== undefined || con.startsWith("builtin.")) return null;
   }
   // A program's check sets the library's definitions' types again; they
   // must be the library's.
-  for (const [id, t] of info.typeOf.own()) if (id in lib.nodes) { const u = under.typeOf.get(id); if (t !== u && JSON.stringify(t) !== JSON.stringify(u)) return null; }
+  for (const [id, t] of info.typeOf.own()) if (lib.nodes[id] !== undefined) { const u = under.typeOf.get(id); if (t !== u && JSON.stringify(t) !== JSON.stringify(u)) return null; }
   let byCost = seeds.get(under);
   if (!byCost) seeds.set(under, (byCost = new Map()));
   if (!byCost.has(costOf)) {
@@ -177,7 +177,7 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
         // Its types name the variables of the library's bodies, typed one
         // at a time (infer.ts libraryLater): what their checks found goes
         // with it, for a run that types none of them (I313).
-        return { ...m, nodes: changed, gone: nodeIds(lib.nodes).filter((id) => !(id in m.nodes)), facts: bodyFacts(under) };
+        return { ...m, nodes: changed, gone: nodeIds(lib.nodes).filter((id) => m.nodes[id] === undefined), facts: bodyFacts(under) };
       });
       if (kept) {
         const { gone, nodes: changed, facts, ...rest } = kept;
@@ -236,7 +236,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   const typeOf = seed ? new Map(seed.typeOf) : readThrough(info.typeOf);
   if (seed) for (const [id, t] of (info.typeOf as OverMap<Id, Type>).own()) if (!(id in seed.layer.nodes)) typeOf.set(id, t);
   const schemes = new Map(info.schemes);
-  if (seed) for (const [id, sc] of seed.schemes) if (!(id in code.nodes)) schemes.set(id, sc);
+  if (seed) for (const [id, sc] of seed.schemes) if (code.nodes[id] === undefined) schemes.set(id, sc);
   const divergent = new Set(info.divergent);
   if (seed) for (const id of seed.divergent) divergent.add(id);
   const outNames: Names = { ...names, ...(seed?.names ?? {}) };

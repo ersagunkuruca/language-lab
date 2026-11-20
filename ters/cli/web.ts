@@ -3,7 +3,7 @@
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import type { Code, Id } from "../src/model.ts";
-import { isCall, nodeValues } from "../src/model.ts";
+import { isCall, nodeValues, nodesOfKindIn } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import type { Info } from "../src/lang/infer.ts";
 import { pageShell, type SavedScripts } from "../src/lang/page.ts";
@@ -16,7 +16,7 @@ const esbuild = () => import("esbuild").catch(() => { throw new Error("a page ne
 const at = (path: string) => JSON.stringify(join(here, path));
 // A page with sound (AUDIO.md, A2) also carries its program bundled for the
 // audio thread (core-sound.ts), which runs main again there.
-const hasSound = (code: Code) => nodeValues(code.nodes).some((n) => n.kind === "ref" && (n.target === HTML_V.listen || n.target === HTML_V.listenStereo));
+const hasSound = (code: Code) => nodesOfKindIn(code.nodes, "ref").some((n) => n.kind === "ref" && (n.target === HTML_V.listen || n.target === HTML_V.listenStereo));
 // The recordings a page plays from files beside it (`recording("strum.wav")`):
 // `ters build-web` copies them from the program's folder next to the page.
 export function recordings(code: Code): string[] {

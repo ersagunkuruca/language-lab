@@ -23,12 +23,12 @@ import type { Info } from "./infer.ts";
 import { FALSE, S, TRUE } from "./std-ids.ts";
 import type { Type } from "./types.ts";
 import { ownOperations, effectOfOperation, pureEffect, hostCName, type Hosts } from "./hosts.ts";
-import { copyNodes, nodeValues } from "../model.ts";
+import { nodesOfKindIn, copyNodes, nodeValues } from "../model.ts";
 
 // The effects the program declared that it, or the platform, answers.
 // `hostHas(op)`: whether the platform's host file answers that operation.
 export function answeredEffects(code: Code, hostHas: (op: Id) => boolean): Set<Id> {
-  const handled = new Set(nodeValues(code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+  const handled = new Set(nodesOfKindIn(code.nodes, "arm").flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const byEffect = new Map<Id, Id[]>();
   for (const op of ownOperations(code)) { const e = effectOfOperation(code, op); if (e) byEffect.set(e, [...(byEffect.get(e) ?? []), op]); }
   const out = new Set<Id>();

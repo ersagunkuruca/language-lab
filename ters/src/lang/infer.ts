@@ -15,7 +15,7 @@ import { diamonds, type Edge } from "./diamonds.ts";
 import { sharing } from "./shared-fields.ts";
 import { PARTIAL, signAnalysis } from "./signs.ts";
 import type { Bound, Code, Id, Kind, Node, NodeOf, Use } from "../model.ts";
-import { directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf, copyNodes, nodeIds, nodeValues } from "../model.ts";
+import { nodesOfKindIn, directionOf, isUse, useTarget, isCall, fieldPorts, portNames, type Call, bindsOf, bodyOf, copyNodes, nodeIds, nodeValues, changedOver, holdsAll } from "../model.ts";
 import { isPublished, conditionResults, dependencies, derived, layerOf, nodesWhere, nodesOfKind, forgetKinds, parentLookup, offLayer, ownerOfTypeParts, portsOf, scanOnce, scanningOnLayer, subtree } from "../model.ts";
 import { liftRelations } from "./results-fn.ts";
 import type { Names } from "../presentation.ts";
@@ -195,9 +195,8 @@ let checkingUnder = false;
 // program is on the library just when none of them is one of its.
 const onLib = (code: Code, lib: Code) => {
   const off = layerOf(code) === lib ? offLayer(code) : undefined;
-  if (off) { for (const id of off) if (id in lib.nodes) return false; return true; }
-  for (const id of nodeIds(lib.nodes)) if (code.nodes[id] !== lib.nodes[id]) return false;
-  return true;
+  if (off) { for (const id of off) if (lib.nodes[id] !== undefined) return false; return true; }
+  return holdsAll(code.nodes, lib.nodes);
 };
 // The library's check as a program sees it (I193): its skeleton, each
 // definition's type from its pin, made without typing a body (0.4 s of
@@ -3320,7 +3319,7 @@ function* fillingSteps(code: Code, info: Info, hole: Id): Generator<void, Fillin
   const insiders = info.options?.insiders ? new Set(info.options.insiders) : null;
   const outside = !!insiders && !h.group.every((d) => insiders.has(d));
   const library = info.options?.library ? new Set(info.options.library) : null;
-  const atTop = nodeValues(code.nodes).some((d) => d.kind === "def" && d.body === hole);
+  const atTop = nodesOfKindIn(code.nodes, "def").some((d) => d.kind === "def" && d.body === hole);
   for (const [part, def] of info.owner) {
     const n = code.nodes[part];
     // An interface's constructor makes an implementation, so it's offered
@@ -3448,7 +3447,7 @@ function dependents(code: Code, group: Id[]): Set<Id> {
   const owner = ownerOfTypeParts(code);
   const usedBy = new Map<Id, Id[]>();
   const lib = layerOf(code);
-  const libAsIs = !!lib && !group.some((d) => d in lib.nodes) && nodeIds(code.nodes).every((id) => code.nodes[id] === lib.nodes[id] || !(id in lib.nodes));
+  const libAsIs = !!lib && !group.some((d) => lib.nodes[d] !== undefined) && nodeIds(code.nodes).every((id) => code.nodes[id] === lib.nodes[id] || lib.nodes[id] === undefined);
   for (const d of code.defs) {
     if (libAsIs && d in lib!.nodes) continue;
     for (const id of subtree(code, d)) {
@@ -3618,28 +3617,32 @@ export function inferEdited(before: Code, next: Code, names: Names, info: Info, 
   // What the edit changed: as the program was derived from the one before
   // (model.ts derived, a filling written into a copy), else found.
   const from = derived.get(next);
-  let changed: Set<Id>;
+  let changed: Set<Id>, over: Id[] | undefined;
   if (from) {
     if (from.base !== before || !from.same || from.changed.size > most) return null;
     changed = from.changed;
+  } else if ((over = changedOver(before.nodes, next.nodes))) {
+    if (over.length > most) return null;
+    changed = new Set(over);
+    derivedFrom(next, before, changed, !over.some((id) => next.nodes[id] === undefined));
   } else {
     changed = new Set<Id>();
     let made = 0;
     for (const id of nodeIds(next.nodes)) if (next.nodes[id] !== before.nodes[id]) {
       changed.add(id);
-      if (!(id in before.nodes)) made++;
+      if (before.nodes[id] === undefined) made++;
       if (changed.size > most) return null;
     }
     // A node gone: counted, then found.
     let gone = nodeIds(before.nodes).length - (nodeIds(next.nodes).length - made);
     const noneGone = gone === 0;
-    if (gone > 0) for (const id of nodeIds(before.nodes)) if (!(id in next.nodes)) { changed.add(id); if (changed.size > most) return null; if (--gone === 0) break; }
+    if (gone > 0) for (const id of nodeIds(before.nodes)) if (next.nodes[id] === undefined) { changed.add(id); if (changed.size > most) return null; if (--gone === 0) break; }
     derivedFrom(next, before, changed, noneGone);
   }
   const defs = new Set(next.defs), library = new Set(opts.library ?? []);
   const up = { before: scanningOnLayer(before, () => parentLookup(before)), next: parentLookup(next) };
   const defOf = (id: Id): Id | undefined => {
-    const parent = id in next.nodes && !(id in before.nodes) ? up.next : up.before;
+    const parent = next.nodes[id] !== undefined && before.nodes[id] === undefined ? up.next : up.before;
     let at: Id | undefined = id;
     while (at !== undefined && !defs.has(at)) at = parent(at);
     return at;
@@ -3677,7 +3680,7 @@ export function inferEdited(before: Code, next: Code, names: Names, info: Info, 
     return false;
   };
   for (const id of changed) {
-    const was = own(before, id in before.nodes ? id : undefined), now = own(next, id in next.nodes ? id : undefined);
+    const was = own(before, before.nodes[id] !== undefined ? id : undefined), now = own(next, next.nodes[id] !== undefined ? id : undefined);
     if (was === now) continue;
     const d = defOf(id)!;
     if (now !== undefined && reachesBack(next, now, d)) return null;
@@ -3735,13 +3738,13 @@ export function inferEdited(before: Code, next: Code, names: Names, info: Info, 
   // errors, which ones are found depends on the order the groups are
   // checked in, which an edit can change (buffer's final, defined in terms
   // of itself, and applied made to use it), so that is checked whole.
-  const kept = info.errors.filter((e) => { const d = e.id in before.nodes ? defOf(e.id) : undefined; return d === undefined || !only.has(d); });
+  const kept = info.errors.filter((e) => { const d = before.nodes[e.id] !== undefined ? defOf(e.id) : undefined; return d === undefined || !only.has(d); });
   if (kept.length) return null;
   const found = quick.errors.filter((e) => { const d = defOf(e.id); return d !== undefined && only.has(d); });
   quick.errors = [...kept, ...found];
   // So with the holes and the lifts through embeddings: each node's, of the
   // definitions not checked again, is as it was.
-  const keptHere = (id: Id) => { const d = id in before.nodes ? defOf(id) : undefined; return d !== undefined && !only.has(d); };
+  const keptHere = (id: Id) => { const d = before.nodes[id] !== undefined ? defOf(id) : undefined; return d !== undefined && !only.has(d); };
   for (const [id, h] of info.holes) if (!quick.holes.has(id) && keptHere(id)) quick.holes.set(id, h);
   if (info.embedded) for (const [id, e] of info.embedded) if (!quick.embedded?.has(id) && keptHere(id)) (quick.embedded ??= new Map()).set(id, e);
   editedDepth.set(quick, depth);
@@ -3765,7 +3768,7 @@ export function inferRewritten(before: Code, next: Code, names: Names, info: Inf
   const only = new Set<Id>(made);
   for (const id of changed) {
     // A node the rewrite made is inside one it changed, or a definition it made.
-    if (!(id in before.nodes)) continue;
+    if (before.nodes[id] === undefined) continue;
     let at: Id | undefined = id;
     while (at !== undefined && !defs.has(at)) at = parent(at);
     if (at === undefined) return whole();
@@ -3775,7 +3778,7 @@ export function inferRewritten(before: Code, next: Code, names: Names, info: Inf
   // changed or made: every other node is the one before (model.ts derived).
   if (!derived.has(next)) {
     const touched = new Set<Id>(changed);
-    for (const id of nodeIds(next.nodes)) if (!(id in before.nodes)) touched.add(id);
+    for (const id of nodeIds(next.nodes)) if (before.nodes[id] === undefined) touched.add(id);
     derivedFrom(next, before, touched, true);
   }
   let quick = infer(next, names, { from: info, only, layer: true }, info.options);
