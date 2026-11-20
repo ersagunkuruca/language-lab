@@ -11,7 +11,7 @@
 // none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, isCall, type Call } from "../model.ts";
+import { freshId, isCall, type Call, copyNodes, dropNode, nodeIds } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { OverMap, OverSet } from "./types.ts";
@@ -26,11 +26,11 @@ type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : ne
 // program's own, not those of the check it is on (the library's, which
 // has none when its resolving is kept: arith.ts).
 export function spreadTuples(code: Code, info: Info, names: Names, own = false): { code: Code; info: Info; names: Names } {
-  const ids = own && info.spread instanceof OverSet ? [...info.spread.own()] : Object.keys(code.nodes).filter((id) => info.spread?.has(id));
+  const ids = own && info.spread instanceof OverSet ? [...info.spread.own()] : nodeIds(code.nodes).filter((id) => info.spread?.has(id));
   const calls = ids.filter((id) => isCall(code.nodes[id]));
-  const reshaped = own && info.reshape instanceof OverMap ? [...info.reshape.own()].filter(([id]) => code.nodes[id]) : Object.keys(code.nodes).flatMap((id) => { const r = info.reshape?.get(id); return r ? [[id, r] as const] : []; });
+  const reshaped = own && info.reshape instanceof OverMap ? [...info.reshape.own()].filter(([id]) => code.nodes[id]) : nodeIds(code.nodes).flatMap((id) => { const r = info.reshape?.get(id); return r ? [[id, r] as const] : []; });
   if (!calls.length && !reshaped.length) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
   // A function given at the other shape (L137) gets a wrapper where it is
   // given: the input keeps its id, as the wrapper, and what was there moves
@@ -58,7 +58,7 @@ export function spreadTuples(code: Code, info: Info, names: Names, own = false):
     const parts = (target: Id) => Array.from({ length: size }, (_, i) => add({ kind: "call", fn: add({ kind: "ref", target: tuplePart(size, i) }), args: [add({ kind: "ref", target })] }));
     if (given?.kind === "ref") {
       // A name already: read its parts where it was.
-      delete nodes[n.args[0]];
+      dropNode(nodes, n.args[0]);
       nodes[id] = { ...n, args: parts(given.target) };
       continue;
     }

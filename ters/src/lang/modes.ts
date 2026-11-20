@@ -34,7 +34,7 @@
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import steadyModes from "../../library/steady-modes.json" with { type: "json" };
-import { children, dependencies, dependenciesOfAll, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf } from "../model.ts";
+import { children, dependencies, dependenciesOfAll, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf, nodeValues } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -282,7 +282,7 @@ function letsOf(code: Code): Map<Id, Named> {
     for (const id of from.changed) if (nodes[id]) add(nodes[id]);
   } else {
     out = new Map();
-    for (const n of Object.values(nodes)) add(n);
+    for (const n of nodeValues(nodes)) add(n);
   }
   letsKept.set(code, out);
   return out;
@@ -354,8 +354,8 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   // what changed: the scan of every node was most of each offer's plan.
   const from = derived.get(code), base = from && baseSlots(from.base);
   const refresh = base
-    ? () => { for (const n of Object.values(nodes)) if (!seen.has(n.id) && (!base.seen.has(n.id) || from!.changed.has(n.id))) scan(n); }
-    : () => { for (const n of Object.values(nodes)) if (!seen.has(n.id)) scan(n); };
+    ? () => { for (const n of nodeValues(nodes)) if (!seen.has(n.id) && (!base.seen.has(n.id) || from!.changed.has(n.id))) scan(n); }
+    : () => { for (const n of nodeValues(nodes)) if (!seen.has(n.id)) scan(n); };
   if (base) {
     under = base.parent;
     for (const id of from!.changed) if (nodes[id]) scan(nodes[id]);

@@ -5,12 +5,12 @@
 // the targets see ordinary handlers. A name never leaves its handler
 // (L213b2), so every use of it is inside the copy's handler.
 
-import { freshId, mapIds, subtree, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { freshId, mapIds, subtree, type Code, type Id, type NodeOf, copyNodes, nodeValues } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 
 export function unnameHandlers(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
-  const named = Object.values(code.nodes).filter((n): n is NodeOf<"match"> => n.kind === "match" && !!n.name);
+  const named = nodeValues(code.nodes).filter((n): n is NodeOf<"match"> => n.kind === "match" && !!n.name);
   if (!named.length) return { code, info, names };
   // Each operation's effect, by its definition.
   const effectOf = new Map<Id, Id>();
@@ -18,7 +18,7 @@ export function unnameHandlers(code: Code, info: Info, names: Names): { code: Co
     const def = code.nodes[d], td = def?.kind === "def" && def.body ? code.nodes[def.body] : null;
     if (td?.kind === "typedef" && td.effect) for (const v of td.variants) effectOf.set(v, d);
   }
-  const nodes = { ...code.nodes }, defs = [...code.defs], nn = { ...names };
+  const nodes = copyNodes(code.nodes), defs = [...code.defs], nn = { ...names };
   for (const m of named) {
     const arms = m.arms.map((a) => nodes[a] as NodeOf<"arm">);
     const effect = arms.map((a) => effectOf.get(a.variant)).find((e) => e);
@@ -33,7 +33,7 @@ export function unnameHandlers(code: Code, info: Info, names: Names): { code: Co
     defs.push(fresh.get(effect)!);
     for (const a of arms) if (fresh.has(a.variant)) nodes[a.id] = { ...a, variant: fresh.get(a.variant)! };
     // Its operations given the name: the copy's, without it.
-    for (const n of Object.values(nodes)) {
+    for (const n of nodeValues(nodes)) {
       if (n.kind !== "call" || !n.args?.length) continue;
       const f = nodes[n.fn], first = nodes[n.args[0]];
       if (f?.kind !== "ref" || !fresh.has(f.target) || first?.kind !== "ref" || first.target !== m.name) continue;

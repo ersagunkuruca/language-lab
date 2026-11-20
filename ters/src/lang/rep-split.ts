@@ -22,7 +22,7 @@
 // variables represented differently (Schonberg, Schwartz and Sharir, 1981).
 
 import { SPLIT_COPIED_FROM, originalOf } from "./prelude-ids.ts";
-import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf, copyNodes, nodeValues, withNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { BY_VALUE, listBoundary, loopsOnto, withTrees } from "./library-reps.ts";
@@ -43,7 +43,7 @@ export interface Split { code: Code; names: Names; seeds: Id[]; copies: Id[]; ty
 export function splitLists(code: Code, info: Info, names: Names, own: Id[], main: Id, seeds: Id[], rep: Representation, deep = false): Split | null {
   if (!rep.meaning || !rep.store) return null;
   code = withTrees(code, [rep]);
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const isDef = (d: Id) => code.nodes[d]?.kind === "def";
   const isType = (d: Id) => isDef(d) && code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]?.kind === "typedef";
   // The representation's own code stays as it is.
@@ -252,7 +252,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   // clinic's check for running). A call wrapped below moves to its inner id.
   let callOf: Map<Id, Id> | null = null;
   const callOfFn = (fn: Id) => {
-    if (!callOf) { callOf = new Map(); for (const p of Object.values(nodes)) if (isCall(p)) callOf.set(p.fn, p.id); }
+    if (!callOf) { callOf = new Map(); for (const p of nodeValues(nodes)) if (isCall(p)) callOf.set(p.fn, p.id); }
     const p = callOf.get(fn);
     return p !== undefined && isCall(nodes[p]) && (nodes[p] as { fn: Id }).fn === fn ? p : undefined;
   };
@@ -342,7 +342,7 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   const types = [...aTypes];
   const boundary = listBoundary(out, typed, aDefs, rep, [], new Set(own.filter(isType)), new Set([...[...asWritten].filter((d) => !aw.has(d)), rep.meaning, rep.store, ...k.code.defs]));
   if (!boundary) return null;
-  out = { nodes: { ...out.nodes, ...boundary.nodes }, defs: [...out.defs, ...boundary.made] };
+  out = { nodes: withNodes(out.nodes, boundary.nodes), defs: [...out.defs, ...boundary.made] };
   out = represent(out, [...aDefs, ...types], rep, [...boundary.made, ...boundary.edges, ...k.code.defs, ...bDefs, ...[...asWritten].filter((d) => !aw.has(d)), ...own.filter((d) => isType(d) && !aTypes.has(d))]);
   return { code: out, names: { ...outNames, ...loopNames, ...k.names, ...Object.fromEntries(boundary.made.map((d) => [d, "stored list"])) }, seeds: seedsNow, copies: shared.map(f), types };
 }

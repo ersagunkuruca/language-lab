@@ -10,7 +10,7 @@
 // known (a hole, an unknown target) stays without, and isn't compiled.
 
 import type { Call, Code, Id, Use } from "../../ters/src/model.ts";
-import { isUse } from "../../ters/src/model.ts";
+import { isUse, nodeIds } from "../../ters/src/model.ts";
 import { OverMap, type Type } from "../../ters/src/lang/types.ts";
 import { tupleType } from "../../ters/src/lang/std-values.ts";
 import type { Names } from "../../ters/src/presentation.ts";
@@ -74,7 +74,7 @@ function carried(code: Code, out: Code, info: Info): Info | null {
     });
     return true;
   };
-  for (const id in out.nodes) {
+  for (const id of nodeIds(out.nodes)) {
     const was = code.nodes[id], n = out.nodes[id];
     if (n === was || !isUse(n) || !was || !isUse(was) || was.body !== undefined || n.body === undefined) continue;
     if (!lib || !(id in lib.nodes)) { if (!give(id, n)) return null; continue; }

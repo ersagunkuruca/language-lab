@@ -16,7 +16,7 @@
 // to the compiler and the page runtime by their ids, and a type a builtin
 // makes or takes is built by its runtime as the original, so they stay.
 
-import { dependenciesOfAll, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf } from "../model.ts";
+import { dependenciesOfAll, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, copyNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { LIBRARY } from "./library.ts";
@@ -88,7 +88,7 @@ export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id
   const fresh = new Map<Id, Id>();
   for (const d of copiedDefs) for (const id of subtree(code, d)) fresh.set(id, freshId());
   const f = (id: Id) => fresh.get(id) ?? id;
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   for (const d of copiedDefs) for (const id of subtree(code, d)) { const n = mapIds(code.nodes[id], f); nodes[n.id] = n; }
   for (const d of own) for (const id of subtree(code, d)) nodes[id] = mapIds(code.nodes[id], f);
   const copies = [...copiedDefs].map(f);

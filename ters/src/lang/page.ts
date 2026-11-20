@@ -290,6 +290,7 @@ export function pageShell(title: string, ...scripts: string[]): string {
 // What a page looks like before its own style (page-base.ts).
 export { PAGE_BASE } from "./page-base.ts";
 import { PAGE_BASE } from "./page-base.ts";
+import { nodeValues } from "../model.ts";
 
 // The same document with `body` already drawn in it: `ters run` on a page
 // gives this with no scripts, the page as static HTML.
@@ -383,7 +384,7 @@ export function soundFile(runtime: Runtime, code0: Code, info0: Info, names0: Na
 const sounds = new WeakMap<Code, boolean>();
 export const hasSound = (code: Code): boolean => {
   let r = sounds.get(code);
-  if (r === undefined) sounds.set(code, (r = Object.values(code.nodes).some((n) => n.kind === "ref" && (n.target === HTML_V.listen || n.target === HTML_V.listenStereo))));
+  if (r === undefined) sounds.set(code, (r = nodeValues(code.nodes).some((n) => n.kind === "ref" && (n.target === HTML_V.listen || n.target === HTML_V.listenStereo))));
   return r;
 };
 

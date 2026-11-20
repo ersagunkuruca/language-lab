@@ -16,7 +16,7 @@
 // `ofNat n | negSucc n`, which these two cases are.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { derived, freshId, layerOf, nodesWhere, scanningOnLayer } from "../model.ts";
+import { derived, freshId, layerOf, nodesWhere, scanningOnLayer, copyNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { FALSE, INT_OPS, TRUE } from "./std.ts";
@@ -40,7 +40,7 @@ export function intCases(code: Code, info: Info, names: Names): { code: Code; in
   if (!INT_CASES.type) return { code, info, names };
   const found = usesIn(code).map((id) => code.nodes[id]);
   if (!found.length) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const out: Names = { ...names };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
   const ref = (target: Id) => add({ kind: "ref", target });

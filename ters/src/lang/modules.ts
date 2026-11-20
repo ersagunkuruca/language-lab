@@ -21,7 +21,7 @@
 // Unison's (https://www.unison-lang.org/docs/the-big-idea/); visibility and
 // pins are what REVIEW.md §4.5 and §4.6 add.
 
-import { children, collect, freshId, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse, bindsOf } from "../model.ts";
+import { children, collect, freshId, isPublished, mapIds, merge, subtree, type Code, type Id, type Node, type NodeOf, isUse, bindsOf, copyNodes, nodeEntries, nodeValues, nodeIds } from "../model.ts";
 import { defDeps, defGroups, hashes, RECIPE, recipeOf } from "../hash.ts";
 import { layer, type Comments, type Names } from "../presentation.ts";
 import { infer } from "./infer.ts";
@@ -67,8 +67,8 @@ export interface Module {
 
 export type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
 
-const nodeIds = (code: Code, def: Id) => subtree(code, def);
-const hasHole = (code: Code, def: Id) => nodeIds(code, def).some((id) => code.nodes[id]?.kind === "hole");
+const idsUnder = (code: Code, def: Id) => subtree(code, def);
+const hasHole = (code: Code, def: Id) => idsUnder(code, def).some((id) => code.nodes[id]?.kind === "hole");
 
 // ------------------------------------------------------------------ publish
 
@@ -100,12 +100,12 @@ export function publish(code: Code, names: Names, defs: Id[], base: Code, units 
   const rename = new Map<Id, Id>();
   for (const d of drafts) {
     const id = `@${h.get(d)}`;
-    nodeIds(code, d).forEach((n, i) => rename.set(n, i === 0 ? id : `${id}:${i}`));
+    idsUnder(code, d).forEach((n, i) => rename.set(n, i === 0 ? id : `${id}:${i}`));
   }
   const next = renameCode(code, rename);
   const info = infer(next, names);
   const published = drafts.map((d) => rename.get(d)!);
-  const inside = new Set(published.flatMap((d) => nodeIds(next, d)));
+  const inside = new Set(published.flatMap((d) => idsUnder(next, d)));
   const bad = info.errors.find((e) => inside.has(e.id));
   if (bad) return { ok: false, reason: `${nm(bad.id)}: ${bad.message}` };
   return { ok: true, code: next, names: renameKeys(names, rename), rename, published, pins: pinsOf(info, published, units ? next : undefined) };
@@ -115,7 +115,7 @@ export function publish(code: Code, names: Names, defs: Id[], base: Code, units 
 export function renameCode(code: Code, rename: Map<Id, Id>): Code {
   const f = (id: Id) => rename.get(id) ?? id;
   const nodes: Record<Id, Node> = {};
-  for (const n of Object.values(code.nodes)) { const m = mapIds(n, f); nodes[m.id] = m; }
+  for (const n of nodeValues(code.nodes)) { const m = mapIds(n, f); nodes[m.id] = m; }
   return { nodes, defs: [...new Set(code.defs.map(f))] };
 }
 
@@ -131,7 +131,7 @@ export function renameKeys<T>(table: Record<string, T>, rename: Map<Id, Id>): Re
 // (what a generic operation resolves to, arith.ts), and not offered.
 export function makeModule(title: string, code: Code, names: Names, exports: Id[], pins: Pins, comments: Comments = {}, helpers: Id[] = []): Module {
   const defs = defGroups(code, [...exports, ...helpers]).flat().filter(isPublished);
-  const ids = new Set(defs.flatMap((d) => nodeIds(code, d)));
+  const ids = new Set(defs.flatMap((d) => idsUnder(code, d)));
   const pick = <T>(t: Record<Id, T>) => Object.fromEntries(Object.entries(t).filter(([k]) => ids.has(k)));
   return {
     format: MODULE_FORMAT, version: 1, title,
@@ -240,14 +240,14 @@ export function verify(m: Module, base: Code, checkPins = false): string | null 
   const seen = new Set<Id>();
   for (const d of m.code.defs) {
     if (`@${memo.get(d)}` !== d) return `${m.names[d] ?? d} was changed after it was published: its content hashes to @${memo.get(d)}`;
-    for (const [i, id] of nodeIds(code, d).entries()) {
+    for (const [i, id] of idsUnder(code, d).entries()) {
       if (id !== (i === 0 ? d : `${d}:${i}`)) return `node ${id} is out of place in ${m.names[d] ?? d}`;
       seen.add(id);
     }
   }
-  const stray = Object.keys(m.code.nodes).find((id) => !seen.has(id));
+  const stray = nodeIds(m.code.nodes).find((id) => !seen.has(id));
   if (stray) return `node ${stray} belongs to no definition`;
-  for (const n of Object.values(m.code.nodes)) {
+  for (const n of nodeValues(m.code.nodes)) {
     const missing = pointsAt(n).find((t) => !code.nodes[t]);
     if (missing) return `node ${n.id} points at ${missing}, which isn't in the module or the base`;
   }
@@ -258,7 +258,7 @@ export function verify(m: Module, base: Code, checkPins = false): string | null 
   for (const d of m.code.defs) if (!m.pins[d] && !isType(d)) return `${m.names[d] ?? d} has no pin`;
   if (checkPins) {
     const info = infer(code);
-    const own = new Set(m.code.defs.flatMap((d) => nodeIds(code, d)));
+    const own = new Set(m.code.defs.flatMap((d) => idsUnder(code, d)));
     const bad = info.errors.find((e) => own.has(e.id));
     if (bad) return `${m.names[bad.id] ?? bad.id}: ${bad.message}`;
     for (const d of m.code.defs) if (pinKey(info.schemes.get(d)) !== pinKey(m.pins[d])) return `${m.names[d] ?? d} isn't pinned to its type`;
@@ -306,7 +306,7 @@ export function library(base: Code, baseNames: Names, modules: Module[]): Librar
 // was found in: what a saved file lists, so a missing one can be named.
 export function needs(own: Code, lib: Library): Record<Id, string> {
   const out: Record<Id, string> = {};
-  for (const n of Object.values(own.nodes)) for (const t of pointsAt(n)) {
+  for (const n of nodeValues(own.nodes)) for (const t of pointsAt(n)) {
     if (!isPublished(t) || own.nodes[t]) continue;
     const def = t.split(":")[0];
     const m = lib.modules.find((x) => x.code.defs.includes(def));
@@ -330,14 +330,14 @@ export function adopt(code: Code, names: Names, lib: Library, comments: Comments
   for (const d of drafts) {
     const p = `@${h.get(d)}`;
     if (!lib.code.nodes[p]) continue;
-    const mine = nodeIds(code, d), theirs = nodeIds(lib.code, p);
+    const mine = idsUnder(code, d), theirs = idsUnder(lib.code, p);
     if (mine.length !== theirs.length) continue;
     mine.forEach((id, i) => rename.set(id, theirs[i]));
     adopted.push(d);
   }
   if (!adopted.length) return { code, names, comments, adopted };
-  const gone = new Set(adopted.flatMap((d) => nodeIds(code, d)));
-  const kept: Code = { nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => !gone.has(id))), defs: code.defs.filter((d) => !gone.has(d)) };
+  const gone = new Set(adopted.flatMap((d) => idsUnder(code, d)));
+  const kept: Code = { nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => !gone.has(id))), defs: code.defs.filter((d) => !gone.has(d)) };
   const next = renameCode(kept, rename);
   const theirs = new Set(rename.values());
   const own = (t: Record<string, string>, same: Record<string, string>) => Object.fromEntries(Object.entries(renameKeys(t, rename)).filter(([k, v]) => !(theirs.has(k) && same[k] === v)));
@@ -512,10 +512,10 @@ export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names =
   const params = (d: Node) => (d.kind === "def" && d.body && code.nodes[d.body]?.kind === "lambda" ? (code.nodes[d.body] as { params: Id[] }).params : []);
   const pa = params(old), pb = params(neu);
   const rename = new Map<Id, Id>([[from, to], ...pa.map((p, i) => [p, pb[i]] as [Id, Id])]);
-  const keep = new Set([...nodeIds(code, from), ...nodeIds(code, to)]);
+  const keep = new Set([...idsUnder(code, from), ...idsUnder(code, to)]);
   let uses = 0;
-  const nodes = { ...code.nodes };
-  for (const n of Object.values(code.nodes)) {
+  const nodes = copyNodes(code.nodes);
+  for (const n of nodeValues(code.nodes)) {
     if (keep.has(n.id)) continue;
     const m = mapIds(n, (id) => (id === n.id ? id : rename.get(id) ?? id));
     if (JSON.stringify(m) !== JSON.stringify(n)) { nodes[n.id] = m; uses++; }
@@ -529,12 +529,12 @@ export function upgrade(code: Code, from: Id, to: Id, pins: Pins, names: Names =
 // The program's own nodes only come back; the caller checks and tests it.
 export interface Moved { from: Id; to: Id; uses: number }
 export function upgradeOwn(own: Code, modules: Module[], names: Names = {}, broken: ReadonlySet<Id> = new Set()): { own: Code; moved: Moved[]; refused: { from: Id; to: Id; reason: string }[] } {
-  const ownIds = new Set(Object.keys(own.nodes));
+  const ownIds = new Set(nodeIds(own.nodes));
   const pins: Pins = Object.assign({}, ...modules.map((m) => m.pins));
   const lines = modules.flatMap((m) => Object.values(m.lineages ?? {}));
   let work = merge(...modules.map((m) => m.code), own);
   const moved: Moved[] = [], refused: { from: Id; to: Id; reason: string }[] = [];
-  const uses = (code: Code) => new Set(Object.values(code.nodes).filter((n) => ownIds.has(n.id)).flatMap(pointsAt));
+  const uses = (code: Code) => new Set(nodeValues(code.nodes).filter((n) => ownIds.has(n.id)).flatMap(pointsAt));
   // Data types first (L17): a newer version of a type the program uses is
   // taken through its author's migration, and the functions over it after,
   // with their old pins read at the new type.
@@ -564,7 +564,7 @@ export function upgradeOwn(own: Code, modules: Module[], names: Names = {}, brok
       }
     }
   }
-  return { own: { nodes: Object.fromEntries(Object.entries(work.nodes).filter(([id]) => ownIds.has(id))), defs: own.defs }, moved, refused };
+  return { own: { nodes: Object.fromEntries(nodeEntries(work.nodes).filter(([id]) => ownIds.has(id))), defs: own.defs }, moved, refused };
 }
 
 // The names a program shows after an upgrade (SHARING.md §5, L112). Names
@@ -608,7 +608,7 @@ export function addToStore(store: Module | null, own: Code, modules: Module[]): 
   const inModules = (d: Id) => from.some((m) => m.code.nodes[d]);
   const used = defGroups(code, own.defs).flat().filter((d) => isPublished(d) && inModules(d));
   const defs = [...new Set([...(store?.code.defs ?? []), ...used])];
-  const nodes = Object.fromEntries(defs.flatMap((d) => nodeIds(code, d)).map((id) => [id, code.nodes[id]]));
+  const nodes = Object.fromEntries(defs.flatMap((d) => idsUnder(code, d)).map((id) => [id, code.nodes[id]]));
   const pick = <T>(t: Record<Id, T>) => Object.fromEntries(Object.entries(t).filter(([k]) => nodes[k.split("/")[0]]));
   // Each lineage's versions the program has had, in the module's order.
   const lineages: Record<Id, Id[]> = Object.fromEntries(Object.entries(store?.lineages ?? {}).map(([l, vs]) => [l, [...vs]]));
@@ -686,7 +686,7 @@ export function migrateType(code: Code, ownIds: Set<Id>, from: Id, to: Id, by: I
     for (const f of fieldsOf(v)) { const g = fieldsOf(w).find((x) => names[x] === names[f]); if (g) fields.set(f, g); }
   }
   const oldVariants = new Set(a.variants), oldFields = new Set(a.variants.flatMap(fieldsOf));
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const fnOfCall = new Set<Id>();
   for (const id of ownIds) { const n = code.nodes[id]; if (n?.kind === "call" && !isUse(n)) fnOfCall.add(n.fn); }
   const problems: string[] = [];

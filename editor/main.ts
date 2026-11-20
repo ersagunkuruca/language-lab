@@ -15,7 +15,7 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { changedFromLayer, children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf } from "../ters/src/model.ts";
+import { changedFromLayer, children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf, copyNodes, nodeEntries, nodeIds, nodeValues, withNodes } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -323,7 +323,7 @@ function onToday(d: Doc): Doc {
   d = { ...d, code: onTodaysIds(d.code), names: onTodaysIds(d.names) };
   const under = baseOf(d);
   return { ...d, code: {
-    nodes: { ...under.nodes, ...Object.fromEntries(Object.entries(d.code.nodes).filter(([id]) => own(id))) },
+    nodes: { ...under.nodes, ...Object.fromEntries(nodeEntries(d.code.nodes).filter(([id]) => own(id))) },
     defs: [...under.defs, ...d.code.defs.filter(own)],
   } };
 }
@@ -331,7 +331,7 @@ function onToday(d: Doc): Doc {
 // Every id a node names is there: its children, and what a ref or a solve
 // refers to.
 function resolves(code: Code): boolean {
-  return Object.values(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : isUse(n) ? [useTarget(code.nodes, n)] : [])].every((c) => code.nodes[c]));
+  return nodeValues(code.nodes).every((n) => [...children(n), ...(n.kind === "ref" ? [n.target] : isUse(n) ? [useTarget(code.nodes, n)] : [])].every((c) => code.nodes[c]));
 }
 
 const START: Record<Program, string> = Object.fromEntries(manifest.programs.flatMap((p) => (p.start ? [[p.program, p.start]] : [])));
@@ -537,7 +537,7 @@ const kept = (d: Doc): Doc => {
   // at: the program's own are among them (I167: 20 ms an edit, walking
   // every node).
   const ids = changedFromLayer(d.code);
-  if (!code) keptCode.set(d.code, (code = { nodes: Object.fromEntries((ids ? [...ids] : Object.keys(d.code.nodes)).filter((id) => own(id) && d.code.nodes[id]).map((id) => [id, d.code.nodes[id]])), defs: d.code.defs.filter(own) }));
+  if (!code) keptCode.set(d.code, (code = { nodes: Object.fromEntries((ids ? [...ids] : nodeIds(d.code.nodes)).filter((id) => own(id) && d.code.nodes[id]).map((id) => [id, d.code.nodes[id]])), defs: d.code.defs.filter(own) }));
   return { ...d, code };
 };
 const UNSAVED = "Not kept in this browser: its storage is full. Save file keeps this program; deleting a program you no longer need makes room.";
@@ -651,7 +651,7 @@ function upgrades(): string[] {
   const r = upgradeFile(ownCode(), doc, doc.names.short, () => null);
   return r.moved.map((m) => `${pres().names[m.from] ?? m.from} (version ${versionOf(ms, m.from)} to ${versionOf(ms, m.to)})`);
 }
-const ownCode = (): Code => { const c = prog(), b = baseOf(doc); return { nodes: Object.fromEntries(Object.entries(c.nodes).filter(([id]) => !b.nodes[id])), defs: c.defs.filter((d) => !b.nodes[d]) }; };
+const ownCode = (): Code => { const c = prog(), b = baseOf(doc); return { nodes: Object.fromEntries(nodeEntries(c.nodes).filter(([id]) => !b.nodes[id])), defs: c.defs.filter((d) => !b.nodes[d]) }; };
 
 // The program onto its modules' newest versions, as ters upgrade does
 // (L111): kept only if it still checks and its tests pass; every version
@@ -659,7 +659,7 @@ const ownCode = (): Code => { const c = prog(), b = baseOf(doc); return { nodes:
 function upgradeModules() {
   const ms = fileModules(doc);
   const r = upgradeFile(ownCode(), doc, doc.names.short, (o) => {
-    const code = { nodes: { ...doc.code.nodes, ...o.nodes }, defs: doc.code.defs };
+    const code = { nodes: withNodes(doc.code.nodes, o.nodes), defs: doc.code.defs };
     const names = layer<Names>(pres().names, doc.names.short);
     const info = T.infer(code, names);
     if (info.errors.length) return `${info.errors.length} error${info.errors.length === 1 ? "" : "s"} after it (${info.errors[0].message})`;
@@ -672,7 +672,7 @@ function upgradeModules() {
   const said = r.moved.map((m) => `${pres().names[m.to] ?? m.to} to version ${versionOf(ms, m.to)} (${m.uses} use${m.uses === 1 ? "" : "s"})`).join(", ");
   const kept = r.refused.map((x) => ` ${pres().names[x.from] ?? x.from} stays: ${x.reason}.`).join("");
   const renamed = r.renamed.length ? ` Its author renamed ${r.renamed.map((x) => `${x.from} to ${x.to}`).join(", ")}; your names are kept.` : "";
-  commit({ code: { nodes: { ...doc.code.nodes, ...r.own.nodes }, defs: doc.code.defs }, names: { ...doc.names, short: r.names }, store: r.store }, Object.keys(r.own.nodes),
+  commit({ code: { nodes: withNodes(doc.code.nodes, r.own.nodes), defs: doc.code.defs }, names: { ...doc.names, short: r.names }, store: r.store }, nodeIds(r.own.nodes),
     `Upgraded: moved ${said}. It checks and its tests pass; every version it had is in its store, saved with it.${kept}${renamed}`);
 }
 
@@ -1110,7 +1110,7 @@ const { LIMIT, backwardsPanel, knownPorts, portText, runBackwards, stopSearch } 
 const typeParams_ = new WeakMap<Code, Set<Id>>();
 const isTypeParam = (id: Id) => {
   let ps = typeParams_.get(doc.code);
-  if (!ps) typeParams_.set(doc.code, (ps = new Set(Object.values(doc.code.nodes).flatMap((n) => (n.kind === "typedef" || n.kind === "variant") ? n.params ?? [] : []))));
+  if (!ps) typeParams_.set(doc.code, (ps = new Set(nodeValues(doc.code.nodes).flatMap((n) => (n.kind === "typedef" || n.kind === "variant") ? n.params ?? [] : []))));
   return ps.has(id);
 };
 function kindLabel(id: Id): string {
@@ -1234,7 +1234,7 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
 
   const callee = calleeDef(id) ?? (n.kind === "ref" && node(n.target)?.kind === "variant" ? info.owner.get(n.target) ?? null : null);
   // The call itself, or its head (the name clicked to select it).
-  const call = inlinable(doc.code, id) ? id : n.kind === "ref" ? Object.values(doc.code.nodes).find((c) => isCall(c) && c.fn === id && inlinable(doc.code, c.id))?.id : undefined;
+  const call = inlinable(doc.code, id) ? id : n.kind === "ref" ? nodeValues(doc.code.nodes).find((c) => isCall(c) && c.fn === id && inlinable(doc.code, c.id))?.id : undefined;
   if ((callee && callee !== ui.def) || call) out.append(h("div", { class: "acts" },
     callee && callee !== ui.def ? h("button", { class: "btn", type: "button", "data-act": "goto", "data-target": callee }, `Open ${namer.name(callee)}`) : null,
     call ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call, title: "Draw the call as the definition's body, in place. A view only." }, (doc.layout.inline ?? []).includes(call) ? "Collapse" : "Show inline") : null));
@@ -1307,8 +1307,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
 
   // Nested patterns: a case's field opens into its type's cases, and a
   // match whose cases all say the same thing closes up (PATTERNS.md).
-  const caseField = n.kind === "binder" && Object.values(doc.code.nodes).some((a) => a.kind === "arm" && a.binds.includes(id)) && T.dataTypeOf(doc.code, info, id);
-  const joinable = n.kind === "match" ? id : n.kind === "arm" ? Object.values(doc.code.nodes).find((m) => m.kind === "match" && m.arms.includes(id))?.id : undefined;
+  const caseField = n.kind === "binder" && nodeValues(doc.code.nodes).some((a) => a.kind === "arm" && a.binds.includes(id)) && T.dataTypeOf(doc.code, info, id);
+  const joinable = n.kind === "match" ? id : n.kind === "arm" ? nodeValues(doc.code.nodes).find((m) => m.kind === "match" && m.arms.includes(id))?.id : undefined;
   const join = joinable ? T.joinCases(doc.code, doc.names.short, info, joinable) : null;
   if (caseField || join?.ok) {
     const deeper = caseField ? T.matchDeeper(doc.code, doc.names.short, info, id) : null;
@@ -1440,7 +1440,7 @@ function valueArmAdded(match: Id): (T.TEdit & { ok: true }) | null {
   const first = m?.kind === "match" ? (node(m.arms[0]) as NodeOf<"arm"> | undefined) : undefined;
   const v = first?.value ? node(first.value) : null;
   if (m?.kind !== "match" || v?.kind !== "lit") return null;
-  const nodes = { ...doc.code.nodes }, value = freshId(), arm = freshId(), body = freshId();
+  const nodes = copyNodes(doc.code.nodes), value = freshId(), arm = freshId(), body = freshId();
   nodes[value] = typeof v.value === "string" && v.of !== INT ? { id: value, kind: "lit", value: "" } : { id: value, kind: "lit", value: 0, ...(v.of ? { of: v.of } : {}) };
   nodes[body] = { id: body, kind: "hole" };
   nodes[arm] = { id: arm, kind: "arm", variant: value, value, binds: [], results: [], body };
@@ -1465,7 +1465,7 @@ function paletteFor(hole: Id, m: NonNullable<UI["menu"]>) {
 // The step a numbered dot stands for: the value its let binds; anything
 // else is its own step.
 function stepAt(id: Id): Id {
-  for (const n of Object.values(doc.code.nodes)) {
+  for (const n of nodeValues(doc.code.nodes)) {
     const f = isCall(n) ? doc.code.nodes[n.fn] : undefined;
     const i = f?.kind === "lambda" ? f.params.indexOf(id) : -1;
     if (i >= 0) return (n as Call).args[i];
@@ -1585,7 +1585,7 @@ async function embedLink(): Promise<string> {
   const base = location.href.split(/[?#]/)[0], def = encodeURIComponent(doc.names.short[ui.def] ?? "");
   if (isExample(doc.program) && !doc.edited) return `${base}?embed&program=${encodeURIComponent(doc.program)}&def=${def}`;
   const json = JSON.stringify({
-    code: { nodes: Object.fromEntries(Object.entries(doc.code.nodes).filter(([id]) => OWN(id))), defs: doc.code.defs.filter(OWN) },
+    code: { nodes: Object.fromEntries(nodeEntries(doc.code.nodes).filter(([id]) => OWN(id))), defs: doc.code.defs.filter(OWN) },
     names: Object.fromEntries(Object.entries(doc.names.short).filter(([id]) => OWN(id))),
     comments: doc.comments,
   });
@@ -1891,7 +1891,7 @@ function graphHooks(info: T.Info) {
       const up = parentOf(doc.code, id);
       if (up?.slot === "args" && T.turnable(doc.code, up.parent)) return (applyT(T.turnAround(doc.code, doc.names.short, info, up.parent, up.index!)), true);
       // The use itself (one with no body, L211), or the one binding id.
-      const s = isUse(doc.code.nodes[id]) ? doc.code.nodes[id] : Object.values(doc.code.nodes).find((n) => isUse(n) && Object.values(n.binds ?? {}).includes(id));
+      const s = isUse(doc.code.nodes[id]) ? doc.code.nodes[id] : nodeValues(doc.code.nodes).find((n) => isUse(n) && Object.values(n.binds ?? {}).includes(id));
       return s ? (applyT(T.turnBack(doc.code, doc.names.short, info, s.id)), true) : false;
     },
     // Whether a wire can go there, asked for each input a drag passes: the

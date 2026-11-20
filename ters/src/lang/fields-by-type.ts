@@ -21,7 +21,7 @@
 // generic step is written out per type once, as GHC's deriving does.
 
 import type { Code, Id, Node } from "../model.ts";
-import { nodesWhere, freshId, isCall } from "../model.ts";
+import { nodesWhere, freshId, isCall, copyNodes, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { CONS, FIELDS, NIL } from "./std.ts";
@@ -56,7 +56,7 @@ function typesAt(code: Code, info: Info, call: Id): { whole: Type; part: Type } 
 
 export function fieldsByType(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names } {
   if (!usesFieldsByType(code)) return { code, info, names };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const defs = [...code.defs];
   const out: Names = { ...names };
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };
@@ -64,7 +64,7 @@ export function fieldsByType(code: Code, info: Info, names: Names): { code: Code
   const made = new Map<string, Id>();
   let changed = false;
   const touched: Id[] = [];
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isCall(n)) continue;
     const fnNode = code.nodes[n.fn];
     if (fnNode?.kind !== "ref" || !OPS.has(fnNode.target)) continue;

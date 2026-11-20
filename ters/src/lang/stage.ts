@@ -32,7 +32,7 @@
 // do.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../model.ts";
-import { conditionResults, fieldWayOf, isUse, isCall, bindsOf } from "../model.ts";
+import { conditionResults, fieldWayOf, isUse, isCall, bindsOf, copyNodes, nodeEntries, nodeIds, nodeValues } from "../model.ts";
 import { children, freshId, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, type Op } from "../prelude.ts";
@@ -73,12 +73,12 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
   const nodes = code.nodes;
   const staged: Id[] = [], rounded: Id[] = [];
   let types: Map<Id, Type> | null = new Map();
-  const out: Code = { nodes: { ...nodes }, defs: [...code.defs] };
+  const out: Code = { nodes: copyNodes(nodes), defs: [...code.defs] };
   const outNames: Names = { ...names };
   const ty = (id: Id) => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   const defValues = new Map<Id, PV | null>();
   const lists = new Set<Id>(), effectOps = new Set<Id>();
-  for (const n of Object.values(nodes)) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => effectOps.add(v));
+  for (const n of nodeValues(nodes)) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => effectOps.add(v));
   // Recursive data (a list, a tree): what a table or a basis is written as.
   for (const d of code.defs) {
     const t = nodes[(nodes[d] as NodeOf<"def">)?.body ?? ""];
@@ -91,7 +91,7 @@ export function stageCalls(code: Code, info: Info, names: Names, only?: Id[], co
 
   const shape = shapeOf(code, info);
 
-  for (const id of only ?? Object.keys(nodes)) {
+  for (const id of only ?? nodeIds(nodes)) {
     const n = nodes[id];
     if (!isCall(n)) continue;
     const f = nodes[n.fn];
@@ -308,7 +308,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   let pending: Id[] | null = null;
   // Nodes made here that nothing reaches any more (calls staged a second
   // time, attempts that stopped) are dropped before each check.
-  const given = new Set(Object.keys(code.nodes));
+  const given = new Set(nodeIds(code.nodes));
   // What calls given a copy were, kept while they may go back.
   let keep: Id[] = [];
   const prune = () => {
@@ -318,7 +318,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
     given.forEach(walk);
     keep.forEach(walk);
     const nodes: Code["nodes"] = {};
-    for (const [id, n] of Object.entries(code.nodes)) if (seen.has(id)) nodes[id] = n;
+    for (const [id, n] of nodeEntries(code.nodes)) if (seen.has(id)) nodes[id] = n;
     code = { nodes, defs: code.defs };
   };
   // The types of the nodes staged since the last check, when each staged
@@ -362,7 +362,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
   // Copies for the calls given data, and for the calls inside them given it
   // in turn, then checked (their calls need types) and their calls worked
   // out; the program is checked once more at the end.
-  const calls = Object.keys(code.nodes).filter((id) => isCall(code.nodes[id]));
+  const calls = nodeIds(code.nodes).filter((id) => isCall(code.nodes[id]));
   const copies = specialiseCalls(code, info, names, calls);
   if (copies.copies.length) {
     ({ code, names } = copies);
@@ -381,7 +381,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
       const back = copies.sites.filter(([id, , c]) => !paid.has(c) && !staged.has(id));
       if (back.length) {
         const unpaid = new Set(copies.copies.filter((c) => !paid.has(c)).flatMap((c) => [c, ...(copies.holders.get(c) ?? [])]));
-        code = { nodes: { ...code.nodes }, defs: code.defs.filter((d) => !unpaid.has(d)) };
+        code = { nodes: copyNodes(code.nodes), defs: code.defs.filter((d) => !unpaid.has(d)) };
         for (const [id, n] of back) code.nodes[id] = n;
         // A call put back carries its types too (putBack), read in the
         // program with them all put back: one may be inside another's
@@ -411,7 +411,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
 // world it is used in gets its own compiled copy, as C++ templates and
 // MLton's whole-program specialisation do (prior art).
 export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[]): { code: Code; names: Names; copies: Id[]; inner: Id[]; sites: [Id, Node, Id, Id | null][]; holders: Map<Id, Id[]> } {
-  const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const outNames: Names = { ...names };
   const nodes = out.nodes;
   const lists = recursiveVariants(code);
@@ -420,7 +420,7 @@ export function specialiseCalls(code: Code, info: Info, names: Names, calls: Id[
   const origin = new Map<Id, Id>();
   const ty = (id: Id) => info.subst.zonk(info.typeOf.get(origin.get(id) ?? id) ?? { t: "var", v: -1 });
   const ctx: Ctx = { code: out, names: outNames, defValues: new Map(), effectOps: new Set(), ty };
-  for (const n of Object.values(nodes)) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => ctx.effectOps.add(v));
+  for (const n of nodeValues(nodes)) if (n.kind === "typedef" && n.effect) n.variants.forEach((v) => ctx.effectOps.add(v));
   // Data arguments are told apart by what they are made of.
   const known = (a: Id): string | null => {
     if (!closedTree(out, a)) return null;
@@ -525,7 +525,7 @@ function oneCase(code: Code, variant: Id): boolean {
   let cases = recordCases.get(code.nodes);
   if (!cases) {
     cases = new Set();
-    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && !n.effect && n.variants.length === 1) cases.add(n.variants[0]);
+    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && !n.effect && n.variants.length === 1) cases.add(n.variants[0]);
     recordCases.set(code.nodes, cases);
   }
   return cases.has(variant);

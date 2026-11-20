@@ -21,7 +21,7 @@
 // recursion): a cheap e is quicker in the loop, as a fold of a map is made
 // one (fuse-steps.ts, C207c) for that reason, before this.
 
-import { children, dependencies, freshId, nodesOfKind, subtree, isCall, type Code, type Id, type Node, type NodeOf } from "../../ters/src/model.ts";
+import { children, dependencies, freshId, nodesOfKind, subtree, isCall, type Code, type Id, type Node, type NodeOf, copyNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
@@ -36,7 +36,7 @@ export function shareFoldItems(code: Code, info: Info): { code: Code; shared: nu
   // fold that passes the rest. (Most programs have none: the walk and the
   // copy are of all the program's nodes, L266.)
   let reached: Set<Id> | undefined, copy: Record<Id, Node> | undefined;
-  const at = (id: Id) => (copy ?? code.nodes)[id], edit = () => (copy ??= { ...code.nodes });
+  const at = (id: Id) => (copy ?? code.nodes)[id], edit = () => (copy ??= copyNodes(code.nodes));
   let shared = 0;
   for (const n of nodesOfKind(code, "fold")) {
     const id = n.id;

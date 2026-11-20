@@ -9,7 +9,7 @@
 // "<original>~<call>", so it can't be edited by accident, and a call inside
 // it can be shown inline too.
 
-import { isCall, subtree, type Call, type Code, type Id, type Node } from "../ters/src/model.ts";
+import { isCall, subtree, type Call, type Code, type Id, type Node, copyNodes } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 
 export interface InlineView {
@@ -32,7 +32,7 @@ export function inlinable(code: Code, call: Id): Id | null {
 }
 
 export function inlineView(code: Code, names: Names, calls: Id[]): InlineView {
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const out: Names = { ...names };
   const from = new Map<Id, Id>();
   for (const call of calls) {

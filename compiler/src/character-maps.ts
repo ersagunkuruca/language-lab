@@ -14,7 +14,7 @@
 // deforestation, 1990; CREDITS.md.)
 
 import type { Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { freshId, isCall } from "../../ters/src/model.ts";
+import { freshId, isCall, copyNodes, nodeEntries } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -28,11 +28,11 @@ export function characterMaps(code: Code, names: Names): { code: Code; names: Na
   let out: Code | null = null;
   const more: Names = {};
   const target = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "ref" ? n.target : null; };
-  for (const [id, n] of Object.entries(code.nodes)) {
+  for (const [id, n] of nodeEntries(code.nodes)) {
     if (!isCall(n) || !n.args || n.args.length !== 2 || LIBRARY.code.nodes[id] || target(n.fn) !== MAP) continue;
     const xs = code.nodes[n.args[0]];
     if (!xs || !isCall(xs) || target(xs.fn) !== TEXT_OPS.characters || xs.args?.length !== 1) continue;
-    out ??= { nodes: { ...code.nodes }, defs: [...code.defs] };
+    out ??= { nodes: copyNodes(code.nodes), defs: [...code.defs] };
     const o = out;
     const add = (x: Omit<Node, "id">) => { const nid = freshId(); o.nodes[nid] = { id: nid, ...x } as Node; return nid; };
     const ref = (t: Id) => add({ kind: "ref", target: t } as Omit<Node, "id">);

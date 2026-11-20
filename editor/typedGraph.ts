@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { children, isCall, isUse, ownerOfTypeParts, portsOf, useTarget, type Call } from "../ters/src/model.ts";
+import { children, isCall, isUse, ownerOfTypeParts, portsOf, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX } from "../ters/src/lang/std.ts";
@@ -378,7 +378,7 @@ function lets(code: Code) {
   let m = letsOf.get(code.nodes);
   if (!m) {
     m = { value: new Map(), refs: new Map(), reader: new Map(), holder: new Map() };
-    for (const n of Object.values(code.nodes)) {
+    for (const n of nodeValues(code.nodes)) {
       if (isCall(n)) {
         const l = code.nodes[n.fn];
         if (l?.kind === "lambda") l.params.forEach((b, i) => { if (n.args[i]) { m!.value.set(b, n.args[i]); m!.holder.set(n.args[i], b); } });

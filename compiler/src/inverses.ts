@@ -15,7 +15,7 @@
 // partial evaluation (Futamura, 1971; Jones, Gomard and Sestoft, 1993).
 
 import type { Bound, Code, Id, Node, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, freshId, isCall, SCHEMA, subtree } from "../../ters/src/model.ts";
+import { dependencies, freshId, isCall, SCHEMA, subtree, copyNodes, dropNode, nodeIds } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -29,7 +29,7 @@ const prelude = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d]
 const INVERSE = prelude("inverse"), CONJUGATE = prelude("conjugate"), SPACED = prelude("spaced");
 
 export function expandInverses(code: Code, names: Names): { code: Code; names: Names; expanded: Id[] } {
-  const out: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const out: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const more: Names = {};
   const add = (n: Omit<Node, "id">) => { const id = freshId(); out.nodes[id] = { id, ...n } as Node; return id; };
   const ref = (target: Id) => add({ kind: "ref", target } as Omit<Node, "id">);
@@ -79,13 +79,13 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     if (l?.kind === "lambda") l.params.forEach((b, at) => enclosing.set(b, { def: d, at }));
   }
   const viaInput = new Map<string, { def: Id; at: number }>();
-  for (const id of Object.keys(out.nodes)) {
+  for (const id of nodeIds(out.nodes)) {
     const c = calls(INVERSE, id) ?? calls(CONJUGATE, id), f0 = c ? out.nodes[c.args[0]] : undefined;
     const e = f0?.kind === "ref" ? enclosing.get(f0.target) : undefined;
     if (e && !LIBRARY.code.nodes[e.def]) viaInput.set(`${e.def} ${e.at}`, e);
   }
   for (const { def, at } of viaInput.values()) {
-    const sites = Object.keys(out.nodes).filter((x) => calls(def, x));
+    const sites = nodeIds(out.nodes).filter((x) => calls(def, x));
     const given = sites.map((x) => { const arg: Id = (out.nodes[x] as NodeOf<"call">).args?.[at] ?? "", a = out.nodes[arg]; const t = a?.kind === "ref" ? out.nodes[a.target] : undefined; return t?.kind === "def" || t?.kind === "builtin" ? (a as NodeOf<"ref">).target : null; });
     if (!sites.length || given.some((x) => !x)) continue;
     const made = new Map<Id, Id>();
@@ -105,7 +105,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     });
   }
   const expanded: Id[] = [];
-  for (const id of Object.keys(code.nodes)) {
+  for (const id of nodeIds(code.nodes)) {
     const c = calls(CONJUGATE, id);
     if (!c || c.args.length !== 2) continue;
     const fl = out.nodes[c.args[0]], lam = fl?.kind === "lambda" && fl.params.length === 1;
@@ -127,7 +127,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
   // core-solve.ts).
   let modeAn: ReturnType<typeof analyzer> | undefined;
   const single = (f: Id, known: string[]) => {
-    const v = (modeAn ??= analyzer({ nodes: { ...out.nodes }, defs: [...out.defs] }, names)).ofMode(f, known);
+    const v = (modeAn ??= analyzer({ nodes: copyNodes(out.nodes), defs: [...out.defs] }, names)).ofMode(f, known);
     return !!v && v.ends && !v.stuck.length && !v.dynamic.length && !v.answers.many;
   };
   const around = (fn: Id): { f: Id; params: Id[]; at: number; args: Id[]; printer: boolean } | null => {
@@ -202,7 +202,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
     Object.assign(more, k.names);
     return (unspaced = d);
   };
-  for (const id of Object.keys(out.nodes)) {
+  for (const id of nodeIds(out.nodes)) {
     const c = calls(INVERSE, id);
     if (!c || c.args.length !== 2) continue;
     const f0 = out.nodes[c.args[0]];
@@ -214,7 +214,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
       const read = k.let("text", c.args[1], (t) => k.let("x", k.call(TEXT_OPS.readNumber, k.x(t)), (x) => k.if(k.call(S.equal, k.call(S.show, k.x(x)), k.x(t)), k.x(x), k.call(S.fail))));
       Object.assign(out.nodes, k.code.nodes);
       out.nodes[id] = { ...out.nodes[read], id } as Node;
-      delete out.nodes[read];
+      dropNode(out.nodes, read);
       Object.assign(more, k.names);
       expanded.push(id);
       continue;
@@ -241,7 +241,7 @@ export function expandInverses(code: Code, names: Names): { code: Code; names: N
       ]);
       Object.assign(out.nodes, k.code.nodes);
       out.nodes[id] = { ...out.nodes[read], id } as Node;
-      delete out.nodes[read];
+      dropNode(out.nodes, read);
       Object.assign(more, k.names);
       expanded.push(id);
       continue;

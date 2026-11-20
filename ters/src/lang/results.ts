@@ -5,7 +5,7 @@
 // that part. Without names the part reads by its place, results.first.
 
 import type { Code, Id, Node, NodeOf, Call } from "../model.ts";
-import { isCall, isUse } from "../model.ts";
+import { isCall, isUse, nodeValues } from "../model.ts";
 import { answerKeys } from "./ports.ts";
 import { TUPLE_MAX } from "./std.ts";
 import { tuplePart } from "./std-values.ts";
@@ -16,7 +16,7 @@ function letValue(code: Code, b: Id): Id | undefined {
   let m = lets.get(code.nodes);
   if (!m) {
     m = new Map();
-    for (const c of Object.values(code.nodes)) if (isCall(c)) { const l = code.nodes[c.fn]; if (l?.kind === "lambda") l.params.forEach((p, i) => c.args[i] && m!.set(p, c.args[i])); }
+    for (const c of nodeValues(code.nodes)) if (isCall(c)) { const l = code.nodes[c.fn]; if (l?.kind === "lambda") l.params.forEach((p, i) => c.args[i] && m!.set(p, c.args[i])); }
     lets.set(code.nodes, m);
   }
   return m.get(b);

@@ -23,7 +23,7 @@
 // keep working, and the meaning hash is of the program as written.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, isUse, isBound, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf } from "../model.ts";
+import { conditionResults, isUse, isBound, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf, copyNodes, dropNode, nodeIds, nodeValues } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
 import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
@@ -173,17 +173,17 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
         const m = make();
         if (!m) return null;
         const changed: Record<Id, Node> = {};
-        for (const id in m.nodes) if (m.nodes[id] !== lib.nodes[id]) changed[id] = m.nodes[id];
+        for (const id of nodeIds(m.nodes)) if (m.nodes[id] !== lib.nodes[id]) changed[id] = m.nodes[id];
         // Its types name the variables of the library's bodies, typed one
         // at a time (infer.ts libraryLater): what their checks found goes
         // with it, for a run that types none of them (I313).
-        return { ...m, nodes: changed, gone: Object.keys(lib.nodes).filter((id) => !(id in m.nodes)), facts: bodyFacts(under) };
+        return { ...m, nodes: changed, gone: nodeIds(lib.nodes).filter((id) => !(id in m.nodes)), facts: bodyFacts(under) };
       });
       if (kept) {
         const { gone, nodes: changed, facts, ...rest } = kept;
         if (facts) joinBodyFacts(under, facts);
-        const nodes: Record<Id, Node> = { ...lib.nodes };
-        for (const id of gone) delete nodes[id];
+        const nodes: Record<Id, Node> = copyNodes(lib.nodes);
+        for (const id of gone) dropNode(nodes, id);
         for (const id in changed) nodes[id] = Object.isFrozen(changed[id]) ? changed[id] : Object.freeze(changed[id]);
         r = { ...rest, nodes };
       } else r = null;
@@ -226,7 +226,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   if (snapshot && (code !== given.code || info !== given.info)) return { code, info, names };
   const s = info.subst;
   const own = seed ? [...changed!] : [];
-  const nodes: Record<Id, Node> = seed ? { ...seed.nodes } : { ...code.nodes };
+  const nodes: Record<Id, Node> = seed ? copyNodes(seed.nodes) : copyNodes(code.nodes);
   for (const id of own) nodes[id] = code.nodes[id];
   const defs = seed ? [...seed.defs, ...code.defs.filter((d) => !(d in seed!.layer.nodes))] : [...code.defs];
   // Read through to the check's rather than copied, unless it is kept
@@ -470,16 +470,16 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
       const call = add({ kind: "call", fn: add({ kind: "ref", target }, { t: "fn", params: ins.map((g) => typeOf.get(g) ?? num), ret: resT, eff: pure }), args: ins }, resT);
       // With no body (L211d) the use is the call itself: its result is
       // the one port, or the tuple of them.
-      if (n.body === undefined) { nodes[id] = { ...nodes[call], id } as Node; delete nodes[call]; delete nodes[n.fn]; return; }
+      if (n.body === undefined) { nodes[id] = { ...nodes[call], id } as Node; dropNode(nodes, call); dropNode(nodes, n.fn); return; }
       const bodyT = typeOf.get(n.body) ?? num;
       const binders = fp1.outs.map((o, i) => bindsOf(n)[String(o)] ?? add({ kind: "binder" }, outT[i]));
       const inner = add({ kind: "lambda", params: binders, body: n.body }, { t: "fn", params: outT, ret: bodyT, eff: pure });
-      if (k === 1) { nodes[id] = { id, kind: "call", fn: inner, args: [call] } as Node; delete nodes[n.fn]; return; }
+      if (k === 1) { nodes[id] = { id, kind: "call", fn: inner, args: [call] } as Node; dropNode(nodes, n.fn); return; }
       const r = add({ kind: "binder" }, resT);
       const parts = fp1.outs.map((_, i) => add({ kind: "call", fn: add({ kind: "ref", target: `std.tuple${k}.tuple.${["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth"][i]}` }, { t: "fn", params: [resT], ret: outT[i], eff: pure }), args: [add({ kind: "ref", target: r }, resT)] }, outT[i]));
       const outer = add({ kind: "lambda", params: [r], body: add({ kind: "call", fn: inner, args: parts }, bodyT) }, { t: "fn", params: [resT], ret: bodyT, eff: pure });
       nodes[id] = { id, kind: "call", fn: outer, args: [call] } as Node;
-      delete nodes[n.fn];
+      dropNode(nodes, n.fn);
       return;
     }
     if (lam?.kind !== "lambda") throw new Error(`${names[useTarget(nodes, n)] ?? useTarget(nodes, n)} is given by ${names[target] ?? target}, which isn't a definition of its ports`);
@@ -662,7 +662,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     let list = add({ kind: "ref", target: NIL }, listT);
     for (let i = width - 1; i >= 0; i--) list = add({ kind: "call", fn: add({ kind: "ref", target: CONS }, consT), args: [unit(i), list] }, listT);
     const arg = nodes[n.args[0]];
-    if (arg.kind === "lit" || arg.kind === "ref") { nodes[id] = { ...nodes[list], id } as Node; delete nodes[list]; }
+    if (arg.kind === "lit" || arg.kind === "ref") { nodes[id] = { ...nodes[list], id } as Node; dropNode(nodes, list); }
     else {
       // (x ↦ the list)(x), so what x does still happens.
       const b = add({ kind: "binder" }, x);
@@ -727,7 +727,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     const added = (m: Names) => Object.fromEntries(Object.entries(m).filter(([id]) => !(id in names)));
     // Shared by every program's resolving from here on, so frozen: a
     // reader that wrote into one would change the next program's.
-    for (const id in nodes) if (nodes[id] !== code.nodes[id]) Object.freeze(nodes[id]);
+    for (const id of nodeIds(nodes)) if (nodes[id] !== code.nodes[id]) Object.freeze(nodes[id]);
     return { layer: true, nodes, defs, typeOf, schemes, divergent, names: added(outNames), copies, opAt, copyOf, lifted, chosen };
   }
   // What's left open is Float64 (a definition's own id is its Float64
@@ -743,7 +743,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   };
   // Read through to the check's, the nodes the program has (a library
   // body it doesn't reach isn't typed for this).
-  if (typeOf instanceof OverMap) { for (const id in nodes) { const t = typeOf.get(id); if (t) typeOf.set(id, open(t)); } }
+  if (typeOf instanceof OverMap) { for (const id of nodeIds(nodes)) { const t = typeOf.get(id); if (t) typeOf.set(id, open(t)); } }
   else for (const [id, t] of typeOf) typeOf.set(id, open(t));
   for (const [d, sc] of schemes) {
     // One left as it was keeps its scheme, so resolving the program again
@@ -789,7 +789,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
 // type, the type an operation in it is at) stays.
 function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
   if (!info.embedded?.size) return { code, info };
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const typeOf = new OverMap(info.typeOf);
   const none = { effs: [], tail: null };
   // map(x) of the embedding, its nodes named after `at`.
@@ -840,7 +840,7 @@ function insertEmbeddings(code: Code, info: Info): { code: Code; info: Info } {
     typeOf.set(lam, lifted);
     return lam;
   };
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     // A pinned definition's body (L208c4), and a call's inputs.
     if (n.kind === "def" && n.body && info.embedded.has(n.body)) nodes[n.id] = { ...n, body: lift(n.body) };
     if (n.kind !== "call" || !n.args?.some((a) => info.embedded!.has(a))) continue;

@@ -20,7 +20,7 @@
 // doesn't keep it in.
 
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { fieldWayOf, isUse, isCall, type Call } from "../../ters/src/model.ts";
+import { fieldWayOf, isUse, isCall, type Call, copyNodes } from "../../ters/src/model.ts";
 import { freshId, parentLookup, subtree } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { infer, type Info } from "../../ters/src/lang/infer.ts";
@@ -29,7 +29,7 @@ import { SIGS } from "../../ters/src/lang/std.ts";
 import { envSet } from "./zero-parts.ts";
 
 export function hoistInvariants(code: Code, info: Info, names: Names): { code: Code; info: Info; names: Names; hoisted: number } {
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const ty = (id: Id): Type => info.subst.zonk(info.typeOf.get(id) ?? { t: "var", v: -1 });
   // Can only give its value: a call of a definition or builtin whose own
   // type has no effect, not even Diverge, and which takes no function (so

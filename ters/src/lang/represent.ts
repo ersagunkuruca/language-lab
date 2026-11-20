@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids } from "../model.ts";
+import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
@@ -167,11 +167,11 @@ export const HEAD = "head of ";
 function bySource(code: Code, kept: WeakMap<Code, Map<Id, Id[]>>, from: (code: Code, n: Node, put: (id: Id) => void) => void): Set<Id> {
   const r = new Set<Id>();
   const layer = layerOf(code), changed = layer && changedFromLayer(code);
-  if (!layer || !changed) { for (const n of Object.values(code.nodes)) from(code, n, (id) => r.add(id)); return r; }
+  if (!layer || !changed) { for (const n of nodeValues(code.nodes)) from(code, n, (id) => r.add(id)); return r; }
   let base = kept.get(layer);
   if (!base) {
     kept.set(layer, (base = new Map()));
-    for (const n of Object.values(layer.nodes)) { const got: Id[] = []; from(layer, n, (id) => got.push(id)); if (got.length) base.set(n.id, got); }
+    for (const n of nodeValues(layer.nodes)) { const got: Id[] = []; from(layer, n, (id) => got.push(id)); if (got.length) base.set(n.id, got); }
   }
   const again = new Set<Id>(changed), up = parentLookup(layer);
   for (const id of changed) if (id in layer.nodes) for (let at = up(id); at !== undefined && !again.has(at); at = up(at)) again.add(at);
@@ -565,7 +565,7 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   if (rep.impl.match) notePieces(code, [rep.impl.match]);
   const t = rep.of;
   const variants = new Set(variantsOf(code, t));
-  const nodes: Record<Id, Node> = { ...code.nodes };
+  const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const add = (n: NodeData): Id => {
     const id = freshId();
     nodes[id] = { ...n, id } as Node;

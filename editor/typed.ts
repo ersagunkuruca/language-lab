@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn } from "../ters/src/model.ts";
+import { children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn, copyNodes, dropNode, nodeIds, nodeValues } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, inferEdited, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -254,7 +254,7 @@ export const programOptions = () => lastOptions?.options;
 
 // A published definition is named by its content, so it can't change: an
 // edit that would change one is refused.
-const published = Object.values(LIBRARY.code.nodes).filter((n) => isPublished(n.id));
+const published = nodeValues(LIBRARY.code.nodes).filter((n) => isPublished(n.id));
 export function changesPublished(code: Code): Id | null {
   const n = published.find((n) => code.nodes[n.id] !== n && JSON.stringify(code.nodes[n.id]) !== JSON.stringify(n));
   return n ? n.id.split(":")[0] : null;
@@ -447,7 +447,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
 // be html's Attribute's too).
 function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed, defId?: Id): Typed {
   const variantOf = new Map<Id, Id>();
-  for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
+  for (const v of nodeValues(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
   // The type a meaning of one input takes: a field's case's, or a
   // function's one input's when it is a type.
   const takes = new Map<Id, Id | null>();
@@ -567,7 +567,7 @@ function overloaded(t: Typed, names: Names): string[] {
 export function whyNotHere(code: Code, names: Names, info: Info, hole: Id, text: string): string | null {
   const all = { ...display, ...names };
   const target = Object.keys(all).find((d) => all[d] === text.trim() && code.nodes[d]);
-  if (!target || !Object.values(code.nodes).some((n) => isCall(n) && n.fn === hole)) return null;
+  if (!target || !nodeValues(code.nodes).some((n) => isCall(n) && n.fn === hole)) return null;
   const r = fill(code, names, info, hole, { kind: "ref", target, type: { t: "var", v: -1 } }, text.trim());
   return r.ok ? null : `${text.trim()} doesn't fit here: ${r.reason}`;
 }
@@ -626,7 +626,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
     root = front; gone = [a.nil];
   } else return null;
   next = swapIn(next, id, root);
-  for (const g of [id, n.fn, ...gone]) delete next.nodes[g];
+  for (const g of [id, n.fn, ...gone]) dropNode(next.nodes, g);
   return guardTyped(info, next, names, root, a && b && a.cells.length && b.cells.length ? "Simplified: one list, written out." : "Simplified: appending an empty list changes nothing.");
 }
 
@@ -645,7 +645,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
   let cases: Map<Id, Id> | undefined;
   const caseOf = (op: Id) => {
     if (code.nodes[op]?.kind !== "field") return undefined;
-    cases ??= new Map(Object.values(code.nodes).flatMap((v) => v.kind === "variant" ? v.fields.map((f) => [f, v.id] as [Id, Id]) : []));
+    cases ??= new Map(nodeValues(code.nodes).flatMap((v) => v.kind === "variant" ? v.fields.map((f) => [f, v.id] as [Id, Id]) : []));
     return cases.get(op);
   };
   const takes = (op: Id, i: number, n: number) => { const v = caseOf(op); if (v) return n === 1 ? info.owner.get(v) ?? null : null; const f = typeOfOp(op); return f && f.params.length === n ? head(f.params[i]) : null; };
@@ -863,7 +863,7 @@ function firstFitting(top: Typed, fits: (t: Typed) => boolean): Typed | null {
 // shared by several types (E186): "a Card", "a Quick".
 function fieldOwners(code: Code, info: Info, names: Names) {
   const ownerOf = new Map<Id, Id>();
-  for (const v of Object.values(code.nodes)) if (v.kind === "variant") for (const f of v.fields) ownerOf.set(f, v.id);
+  for (const v of nodeValues(code.nodes)) if (v.kind === "variant") for (const f of v.fields) ownerOf.set(f, v.id);
   const shared = (op: Id) => { const n = names[op]; return n !== undefined && Object.keys(names).filter((id) => names[id] === n && code.nodes[id]?.kind === "field").length > 1; };
   return (t: Typed): string[] => {
     const out = new Set<string>();
@@ -1302,7 +1302,7 @@ function isOperation(code: Code, id: Id): boolean {
   let ops = operationsOf.get(code);
   if (!ops) {
     ops = new Set();
-    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? []) ops.add(f);
+    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? []) ops.add(f);
     operationsOf.set(code, ops);
   }
   return ops.has(id);
@@ -1430,7 +1430,7 @@ function written(code: Code, names: Names, info: Info, hole: Id, text: string, t
   // A copy of the nodes, each written into it noted: the program is then
   // one derived from `code` by those (model.ts derived), and its check is
   // made over code's (I304, infer.ts inferEdited).
-  const copy = { ...code.nodes }, touched = new Set<Id>();
+  const copy = copyNodes(code.nodes), touched = new Set<Id>();
   const nodes = new Proxy(copy, { set: (t, k, v) => { touched.add(k as Id); (t as Record<Id, Node>)[k as Id] = v; return true; } });
   // Each whole number keeps the digits it was typed with (I236), so one
   // past 2⁵³ stays exact as an Int wherever it is: `[12345678901234567891,
@@ -1581,7 +1581,7 @@ export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: C
   const open = slots.filter((x) => code.nodes[x]?.kind === "hole");
   if (!open.length) return { ok: false, reason: "that has no empty input to put it in" };
   const part = freshId();
-  const base: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const base: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   for (const x of subtree(kept, at)) base.nodes[x] = kept.nodes[x];
   base.nodes[at] = code.nodes[at];
   const { id: _, ...was } = kept.nodes[at];
@@ -1590,7 +1590,7 @@ export function wrapInto(code: Code, names: Names, before: Info, at: Id, kept: C
   for (const slot of open) {
     for (const thunk of [false, true]) {
       const next = replace(base, slot, () => (thunk ? { kind: "lambda", params: [], body: part } : was as NodeData));
-      if (!thunk) delete next.nodes[part];
+      if (!thunk) dropNode(next.nodes, part);
       const r = guardTyped(before, next, names, at, wrapper.kind === "lambda" ? (inserted ? "Inserted a function after it: it is the body." : "Wrapped it in a function: it is the body.")
         : `${inserted ? "Inserted the call after it: it feeds one of its inputs" : "Wrapped it in the call: it is one of its inputs"}${thunk ? ", as () => it, since a function of nothing goes there" : ""}.`);
       if (r.ok) return r;
@@ -1624,7 +1624,7 @@ export type LooseEdit = TEdit & { of?: Record<Id, Id>; home?: Record<Id, Id>; ow
 // (BACKLOG I117). Their labels as the rows print them.
 export function sharedCases(code: Code, names: Names, info: Info | null, id: Id): { label: string; parent: Id; slot: "body" | "otherwise" }[] {
   const up = new Map<Id, Id>();
-  for (const n of Object.values(code.nodes)) for (const c of children(n)) up.set(c, n.id);
+  for (const n of nodeValues(code.nodes)) for (const c of children(n)) up.set(c, n.id);
   for (let x = up.get(id); x; x = up.get(x)) {
     const m = code.nodes[x];
     if (m?.kind !== "match") continue;
@@ -1895,7 +1895,7 @@ export function copyOf(code: Code, names: Names, id: Id): Clip {
 export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Clip, hole: Id): TEdit {
   if (code.nodes[hole]?.kind !== "hole") return { ok: false, reason: "select a hole to paste into" };
   const scope = new Set(scopeAt(code, defId, hole));
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const nn = { ...names };
   const map = new Map<Id, Id>();
   let lost = 0;
@@ -1948,7 +1948,7 @@ export function paste(code: Code, names: Names, info: Info, defId: Id, clip: Cli
 export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id, as?: Id): TEdit {
   const type = dataTypeOf(code, info, on) ?? (as && untyped(info, on) ? as : null);
   if (!type) return { ok: false, reason: "that variable's type has no cases" };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const nn = { ...names };
   const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
   const mk = (d: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...d } as Node; return id; };
@@ -1965,7 +1965,7 @@ export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id, 
 // row's pattern opens into its type's cases, each row starting as a copy
 // of the row's body. Split on it, from the field.
 export function matchDeeper(code: Code, names: Names, info: Info, field: Id): TEdit {
-  const arm = Object.values(code.nodes).find((n): n is NodeOf<"arm"> => n.kind === "arm" && n.binds.includes(field));
+  const arm = nodeValues(code.nodes).find((n): n is NodeOf<"arm"> => n.kind === "arm" && n.binds.includes(field));
   if (!arm) return { ok: false, reason: "it isn't a field of a case" };
   if (subtree(code, arm.body).some((x) => (code.nodes[x] as { target?: Id }).target === field)) return { ok: false, reason: `its row reads ${names[field] ?? "it"} whole, so it can't open into its cases` };
   const r = splitOn(code, names, info, arm.body, field);
@@ -2144,7 +2144,7 @@ export function dotHandles(code: Code, defId: Id, names: Names): Names {
   return out;
 }
 
-export const usesOf = (code: Code, b: Id): Id[] => Object.values(code.nodes).filter((n) => n.kind === "ref" && n.target === b).map((n) => n.id);
+export const usesOf = (code: Code, b: Id): Id[] => nodeValues(code.nodes).filter((n) => n.kind === "ref" && n.target === b).map((n) => n.id);
 
 // The innermost body around `slot` (a function's, a case's, a let's): a
 // let put there sees what `slot` sees, since only bodies bind names.
@@ -2429,7 +2429,7 @@ export function addActionStep(code: Code, names: Names, info: Info, step: Id): T
   const one = (id: Id | undefined) => { const n = id ? code.nodes[id] : undefined; return n?.kind === "lambda" && n.params.length === 1; };
   const at = parentOf(code, step), p = at ? code.nodes[at.parent] : undefined;
   const x = at?.slot === "args" && isCall(p) && p.args.length === 1 && one(p.fn) ? p.id
-    : at?.slot === "body" && one(at.parent) && Object.values(code.nodes).some((c) => isCall(c) && c.fn === at.parent && c.args.length === 1) ? step
+    : at?.slot === "body" && one(at.parent) && nodeValues(code.nodes).some((c) => isCall(c) && c.fn === at.parent && c.args.length === 1) ? step
     // A function whose whole body is one action, (e) => write(a, x): its
     // first step (E190).
     : at?.slot === "body" && p?.kind === "lambda" && isCall(code.nodes[step]) && performs(info, p.id) ? step
@@ -2471,7 +2471,7 @@ export function removeDot(code: Code, names: Names, info: Info, defId: Id, dot: 
   const lam = code.nodes[l.fn] as NodeOf<"lambda">;
   const i = lam.params.indexOf(dot);
   const value = l.args[i];
-  let next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  let next: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   next.nodes[lam.id] = { ...lam, params: lam.params.filter((_, j) => j !== i) };
   next.nodes[l.id] = { ...l, args: l.args.filter((_, j) => j !== i) };
   next = swapIn(next, uses[0], value);
@@ -2490,7 +2490,7 @@ function dropDot(code: Code, names: Names, info: Info, defId: Id, of: Record<Id,
   const lam = code.nodes[l.fn] as NodeOf<"lambda">;
   const i = lam.params.indexOf(dot), value = l.args[i];
   const scope = scopeAt(code, defId, l.id);
-  let next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  let next: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   next.nodes[lam.id] = { ...lam, params: lam.params.filter((_, j) => j !== i) };
   next.nodes[l.id] = { ...l, args: l.args.filter((_, j) => j !== i) };
   if (lam.params.length === 1) next = swapIn(next, l.id, lam.body);
@@ -2594,7 +2594,7 @@ export function implement(code: Code, names: Names, info: Info, iface: Id, type:
   if (info.implementations?.has(implementationKey(iface, type))) return { ok: false, reason: `${at} has ${all[iface]} already` };
   const variant = td.variants[0];
   const ops = (code.nodes[variant] as NodeOf<"variant">).fields;
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const add = (n: NodeData) => { const id = freshId(); nodes[id] = { id, ...n } as Node; return id; };
   const holes = ops.map(() => add({ kind: "hole" }));
   const def = add({ kind: "def", body: add({ kind: "call", fn: add({ kind: "ref", target: variant }), args: holes }) });
@@ -2793,7 +2793,7 @@ export function moveItemTo(code: Code, names: Names, info: Info, row: Row, from:
   const [it] = order.splice(from, 1);
   order.splice(to, 0, it);
   const places = row.items.map((i) => parentOf(code, i)!);
-  const next: Code = { nodes: { ...code.nodes }, defs: code.defs };
+  const next: Code = { nodes: copyNodes(code.nodes), defs: code.defs };
   places.forEach((p, i) => {
     const n = next.nodes[p.parent] as Call;
     const args = [...n.args];
@@ -2813,7 +2813,7 @@ export function duplicate(code: Code, names: Names, info: Info, def: Id): TEdit 
   if (d?.kind !== "def" || !d.body || !code.defs.includes(def)) return { ok: false, reason: "only a definition is duplicated" };
   if (isPublished(def)) return { ok: false, reason: "it comes from the library: Copy into the program instead" };
   if (code.nodes[d.body].kind === "typedef") return { ok: false, reason: "the copy's cases would share the original's names: make a new type with + New definition" };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const nn = { ...names };
   const copy = freshId();
   const body = copyTree(code, nodes, nn, d.body, new Map([[def, copy]]));
@@ -2835,13 +2835,13 @@ export function duplicate(code: Code, names: Names, info: Info, def: Id): TEdit 
 export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, name: string): TEdit {
   const d = code.nodes[def];
   if (d?.kind !== "def" || !d.body || !isPublished(def)) return { ok: false, reason: "only a published definition is copied in; your own you can edit" };
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const nn = { ...names };
   const copy = freshId();
   // Names of what the copy binds come from the library's names.
   const all: Names = { ...LIBRARY.names, ...display, ...names };
   const body = copyTree(code, nodes, all, d.body, new Map([[def, copy]]));
-  for (const id of Object.keys(nodes)) if (!code.nodes[id] && all[id] !== undefined) nn[id] = all[id];
+  for (const id of nodeIds(nodes)) if (!code.nodes[id] && all[id] !== undefined) nn[id] = all[id];
   nodes[copy] = { id: copy, kind: "def", body };
   const taken = new Set(Object.values({ ...display, ...names }));
   let label = `my ${name}`;
@@ -2849,7 +2849,7 @@ export function copyIntoProgram(code: Code, names: Names, info: Info, def: Id, n
   nn[copy] = label;
   // The program's own calls switch to the copy; the library's don't.
   let uses = 0;
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (n.kind === "ref" && n.target === def && !LIBRARY.code.nodes[n.id]) { nodes[n.id] = { ...n, target: copy }; uses++; }
   }
   const next: Code = { nodes, defs: [...code.defs, copy] };
@@ -2908,7 +2908,7 @@ export function waysOfImplementation(code: Code, impl: Id): { field: Id; given: 
   if (!isCall(body)) return null;
   const fn = code.nodes[body.fn], variant = fn?.kind === "ref" ? code.nodes[fn.target] : null;
   if (variant?.kind !== "variant") return null;
-  const iface = Object.values(code.nodes).find((t) => t.kind === "typedef" && t.interface && t.variants.includes(variant.id));
+  const iface = nodeValues(code.nodes).find((t) => t.kind === "typedef" && t.interface && t.variants.includes(variant.id));
   if (!iface) return null;
   const pick = pickWays(code, waysIn(code), variant, body.args);
   return variant.fields.map((f, i) => ({ field: f, given: !leftToWays(code, body.args[i]), way: pick.get(f) ?? null, missing: !pick.has(f) }));
@@ -2947,7 +2947,7 @@ export function putInside(code: Code, names: Names, info: Info, def: Id): TEdit 
   const d = code.nodes[def] as NodeOf<"def"> & { body: Id };
   const host = where.host, h = code.nodes[host] as NodeOf<"def">;
   if (!h.body) return { ok: false, reason: "the definition using it has no body" };
-  const nodes = { ...code.nodes }, nn: Names = { ...names };
+  const nodes = copyNodes(code.nodes), nn: Names = { ...names };
   const b = freshId();
   nodes[b] = { id: b, kind: "binder" };
   nn[b] = names[def] ?? display[def] ?? "part";
@@ -2959,7 +2959,7 @@ export function putInside(code: Code, names: Names, info: Info, def: Id): TEdit 
   nodes[let_] = { id: let_, kind: "call", fn, args: [d.body] };
   if (top?.kind === "lambda") nodes[top.id] = { ...top, body: let_ };
   else nodes[host] = { ...h, body: let_ };
-  delete nodes[def];
+  dropNode(nodes, def);
   delete nn[def];
   const next: Code = { nodes, defs: code.defs.filter((x) => x !== def) };
   return guardTyped(info, next, nn, host, `Put ${nn[b]} inside ${names[host] ?? display[host] ?? "the definition using it"}, as a let around its body: Make definition takes it out again.`);
@@ -2994,7 +2994,7 @@ export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id
   const base = (boundTo && names[boundTo] && names[boundTo] !== "_" ? names[boundTo] : `${names[defId] ?? "a"} part`);
   let label = base;
   for (let k = 2; taken.has(label); k++) label = `${base} ${k}`;
-  const nodes = { ...code.nodes };
+  const nodes = copyNodes(code.nodes);
   const nn: Names = { ...names };
   const def = freshId();
   nn[def] = label;
@@ -3023,7 +3023,7 @@ export function liftToDefinition(code: Code, names: Names, info: Info, defId: Id
     nodes[call] = { id: call, kind: "call", fn: ref(def), args: [...used.map(ref), ...own.map(ref)] };
     site = freshId();
     nodes[site] = { id: site, kind: "lambda", params: own, body: call };
-    delete nodes[lam];
+    dropNode(nodes, lam);
   }
   // Swapped in before the definition is added, so the place found is
   // where it was, not the new definition holding it.

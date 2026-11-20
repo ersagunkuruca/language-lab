@@ -20,7 +20,7 @@
 // opened with a newer version of what it uses is offered the upgrade
 // (`upgradeFile`, E254); a file without them opens as before.
 
-import { isPublished, merge, SHAPE, type Code, type Id, type Node } from "./model.ts";
+import { isPublished, merge, SHAPE, type Code, type Id, type Node, nodeEntries, nodeValues } from "./model.ts";
 import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { addToStore, MODULE_FORMAT, needs, pointsAt, upgradeNames, upgradeOwn, verify, type Module, type Moved } from "./lang/modules.ts";
@@ -64,7 +64,7 @@ export const fileModules = (f: { modules?: Module[]; store?: Module }): Module[]
 // The program's own nodes: everything not in `base`.
 export function own(code: Code, base: Code): Code {
   return {
-    nodes: Object.fromEntries(Object.entries(code.nodes).filter(([id]) => !base.nodes[id])),
+    nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => !base.nodes[id])),
     defs: code.defs.filter((d) => !base.defs.includes(d)),
   };
 }
@@ -126,7 +126,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
   let drafts: Drafts | undefined;
   if (dr) {
     const nodes = dr.nodes as Record<Id, Node>;
-    const ok = Object.values(nodes).every((n) => isObj(n) && typeof n.kind === "string" && pointsAt(n).every((t) => !t || code.nodes[t] || nodes[t]));
+    const ok = nodeValues(nodes).every((n) => isObj(n) && typeof n.kind === "string" && pointsAt(n).every((t) => !t || code.nodes[t] || nodes[t]));
     if (ok) drafts = { of: dr.of as Record<Id, Id>, home: strings(dr.home) ? (dr.home as Record<Id, Id>) : {}, nodes };
   }
   const file: ProgramFile = {
