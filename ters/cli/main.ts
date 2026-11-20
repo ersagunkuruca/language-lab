@@ -58,6 +58,7 @@ const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({}
 const { mapsInPlaceCounted, ownedArrays } = compiles ? await import("../../compiler/src/owned-arrays.ts") : ({} as typeof import("../../compiler/src/owned-arrays.ts"));
 const { consLoops } = compiles ? await import("../../compiler/src/cons-loops.ts") : ({} as typeof import("../../compiler/src/cons-loops.ts"));
 const { arrayOffsets } = compiles ? await import("../../compiler/src/array-offsets.ts") : ({} as typeof import("../../compiler/src/array-offsets.ts"));
+const { keptItems } = compiles ? await import("../../compiler/src/kept-items.ts") : ({} as typeof import("../../compiler/src/kept-items.ts"));
 const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts") : ({} as typeof import("../../compiler/src/deep-loops.ts"));
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
@@ -316,6 +317,8 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   // An array a function walks by its rests, read by position, with no
   // view made a step (C196 on JavaScript; G3a here).
   if (!process.env.NO_OFFSETS) arrayOffsets(lowered, { ints: true });
+  // `keep` over an array's items a loop pushing the kept ones (G1b1).
+  if (!process.env.NO_KEPT_ITEMS) keptItems(lowered, { ints: true });
   if (!wasm) {
     mapsInPlaceCounted(lowered);
     // And an array of records whose loops read and write it field by

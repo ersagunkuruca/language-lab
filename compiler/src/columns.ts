@@ -200,7 +200,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean)
     const items = new Map<number, true>();
     const fold = folds.get(i);
     let ok = true;
-    const bad = () => { if (ok && typeof process !== "undefined" && process.env.COLUMNS_WHY) console.error("columns:", r.name, "kept rows, for", e0?.k, "in", funcs[i].def); ok = false; };
+    const bad = () => { if (ok && typeof process !== "undefined" && process.env.COLUMNS_WHY) console.error("columns:", r.name, "kept rows, for", e0?.k === "rt" ? e0.fn : e0?.k, "in", funcs[i].name); ok = false; };
     let e0: SExpr | undefined;
     const isItem = (e: SExpr) => e.k === "local" && items.has(e.i);
     let terminal: SExpr | undefined;
