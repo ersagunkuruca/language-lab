@@ -500,6 +500,26 @@ test("a let's function is generic, as a definition is", () => {
   assert.notDeepEqual(q.errors, []);
 });
 
+// L279: a let's function called under a handler and outside it does what
+// it does at each call: the handler's row isn't taken on by the other
+// (the frets page's `frets now`, called in a part and in the page, made
+// main do all a view may).
+test("a let's function called under a handler and outside it does only its own at each", () => {
+  const types: Record<string, Id> = {};
+  const p = program((k) => {
+    // Diverge, which may happen while a Choice is open.
+    const spin = k.def("spin");
+    k.define(spin, k.fn(["n"], (n) => k.call(spin, k.call(B.add, n, k.lit(1)))));
+    const d = k.def("both");
+    k.define(d, k.fn(["n"], (n) => k.let("now", k.fn([], () => k.call(spin, n)), (now) =>
+      k.call(PAIR_V, k.call(S.first, k.thunk(() => k.call(now)), k.thunk(() => k.lit(0))), k.call(now)))));
+    types.both = d;
+  });
+  assert.deepEqual(p.errors, []);
+  assert.ok(!p.effects(types.both).includes(CHOICE), p.type(types.both));
+  assert.ok(p.effects(types.both).includes(DIVERGE), p.type(types.both));
+});
+
 // L29: a use that closes a function input's row is made first, so a call
 // of it under a handler before that use doesn't give it the handler's row.
 test("a function in a variable: a use that closes its row wins whichever use comes first", () => {
