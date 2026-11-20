@@ -84,8 +84,8 @@ export function pagePanels(host: PageHost) {
   }
 
   // A program whose main takes nothing and returns an Html is a page
-  // (WEB.md): shown live above Run, run by the evaluator, and run again from
-  // the start after every edit. Its own <style> and its body rules need a
+  // (WEB.md): shown live above Run, run by the evaluator, and run again
+  // after every edit, keeping what was done on it (E279a, startPage). Its own <style> and its body rules need a
   // document of their own, so it's drawn in a frame. The editor redraws
   // everything on each change, which empties a frame put back in the page, so
   // the page's elements are made in a document that outlives renders and are
@@ -98,6 +98,18 @@ export function pagePanels(host: PageHost) {
     maker: document.implementation.createHTMLDocument("page"),
     // What the page was started with, to build the interpreted page again.
     started: null as { info: T.Info; main: Id } | null,
+    // The cells of the page an edit replaced, for the new version to take
+    // over (E279a): null after Restart, or when it ran for no version.
+    handFrom: null as Cells["kept"] | null,
+    // It couldn't: the edit added or took away a cell, so this version
+    // started from the beginning, as the status says.
+    afresh: false,
+    // The page showing is the last version's, compiled, kept running while
+    // this version compiles, to take over from it directly (E279a): an
+    // interpreted page in between would hold lists as the evaluator does,
+    // which the compiled page's cells can't be handed (cells.ts handOver
+    // carries only cells made with the same value).
+    deferred: false,
     for: null as Code | null, root: null as globalThis.Node | null, now: null as Preview | null, program: null as Program | null,
     // This run's log (C172e): the world's answers and the events its
     // handlers were given, in order, from the interpreted page and then
@@ -134,8 +146,12 @@ export function pagePanels(host: PageHost) {
           if (pageSoon !== want) return;
           pageSoon = null;
           if (prog() !== want || page.for === want) return;
+          // What was done on the page goes on in the new version (E279a);
+          // after Restart (page.for null) it starts from the beginning.
+          const from = page.for ? page.now?.kept ?? null : null;
+          if (from && page.now && compiledNow.has(page.now) && !hasSound(want) && corePageRuntimeText()) return compileOver(info, main, from);
           leavePage();
-          startPage(info, main);
+          startPage(info, main, from);
           render();
         };
         if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
@@ -206,8 +222,10 @@ export function pagePanels(host: PageHost) {
       // Out of the frame before the frame goes, so its buttons keep their handlers.
       if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
       keptPages.get(page.program)?.now?.stop();
-      keptPages.set(page.program, { for: page.for, root: page.root, now: page.now });
+      // One still showing its last version (E279a) is started again on return.
+      keptPages.set(page.program, { for: page.deferred ? null as never : page.for, root: page.root, now: page.now });
     } else page.now?.stop();
+    page.deferred = false;
     page.now = null;
     page.root = null;
     page.for = null;
@@ -226,9 +244,11 @@ export function pagePanels(host: PageHost) {
       code: run?.code ?? prog(), info: run?.info ?? info, names: run?.names ?? pres().names, main, program: titleOf(doc()),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimes(), recordings: "apps/",
       frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
+      handFrom: stepFrom ? undefined : page.handFrom ?? undefined,
     });
   }
-  function startPage(info: T.Info, main: Id) {
+  // `handFrom`: the cells of the page an edit replaced (E279a).
+  function startPage(info: T.Info, main: Id, handFrom: Cells["kept"] | null = null) {
     page.now?.stop();
     page.now = null;
     page.root = null;
@@ -237,6 +257,8 @@ export function pagePanels(host: PageHost) {
     page.status.title = "", page.status.textContent = "";
     page.log = [];
     page.started = { info, main };
+    page.handFrom = handFrom;
+    page.afresh = false;
     // One that takes longer than DRAW_WITHIN to draw interpreted waits
     // for its compiled page (I307): Countdown solved for 6.6 s on the
     // editor's thread, which nothing could be clicked in meanwhile. A page
@@ -254,6 +276,7 @@ export function pagePanels(host: PageHost) {
     try {
       page.now = interpreted(info, main, undefined, undefined, slow ? drawWithin() : undefined);
       page.root = page.now.root as unknown as globalThis.Node;
+      if (page.now.handed !== undefined && page.now.handed < 0) { page.afresh = true; afresh(); }
     } catch (e) {
       if (!(e instanceof TooSlow)) { sayStopped("The page stopped", e); return; }
       page.log = [];
@@ -262,6 +285,34 @@ export function pagePanels(host: PageHost) {
       return;
     }
     compilePage(main);
+  }
+  // The edit's version compiled while the last one's page goes on, and
+  // swapped in for it, handed its cells (swapCompiled).
+  function compileOver(info: T.Info, main: Id, from: NonNullable<Cells["kept"]>) {
+    page.for = prog();
+    page.started = { info, main };
+    page.handFrom = from;
+    page.afresh = false;
+    page.deferred = true;
+    compilePage(main, true);
+    if (page.deferred) page.status.title = "", page.status.textContent = "Compiling…";
+    render();
+  }
+  // It didn't compile: the page starts interpreted, handed what it can.
+  function notDeferred(): boolean {
+    if (!page.deferred || !page.started) return false;
+    page.deferred = false;
+    const { info, main } = page.started;
+    page.now?.stop();
+    startPage(info, main, page.handFrom);
+    renderSoon();
+    return true;
+  }
+  // Said under the page while it shows: this version couldn't take over
+  // what was done on the last, so it started from the beginning.
+  function afresh() {
+    page.status.textContent = "Restarted";
+    page.status.title = "The edit added or took away a cell, so the page started from the beginning";
   }
   // A page that didn't draw interpreted in time, and has no compiled page
   // after all: drawn interpreted however long it takes, saying why.
@@ -309,6 +360,8 @@ export function pagePanels(host: PageHost) {
   // page with sound stays interpreted, since here its sound plays from the
   // evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
   const compiledPages = new WeakMap<Code, CompiledPage | null>(); // null: it didn't compile
+  // The pages showing that are compiled ones.
+  const compiledNow = new WeakSet<Preview>();
   let compiling: Worker | null = null;
   // That compile's program, which Open in a tab waits for (savedFor),
   // settled when it ends either way.
@@ -328,6 +381,7 @@ export function pagePanels(host: PageHost) {
     const made = compiledPages.get(code);
     if (made !== undefined) {
       if (made) swapCompiled(code, made);
+      else if (notDeferred()) return;
       else if (!page.now) interpretAnyway("Interpreted · couldn't compile");
       return;
     }
@@ -448,6 +502,7 @@ export function pagePanels(host: PageHost) {
       settle();
       if (page.for !== code) return;
       if ("program" in m) swapCompiled(code, m);
+      else if (notDeferred()) return;
       else if (page.now) page.status.title = "", page.status.textContent = "Interpreted · couldn't compile", page.status.title = m.error;
       else interpretAnyway(`Interpreted, slowly: the page couldn't be compiled (${m.error}).`);
     };
@@ -461,7 +516,7 @@ export function pagePanels(host: PageHost) {
   // elements are made in the same document as the interpreted page's and go
   // into the frame the same way: its script's call of startCorePage is
   // caught, and what it was given mounted here (core-page.ts mountCorePage).
-  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; stop(): void };
+  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void };
   // The program as the compiled page runs it, its lists and Maps chosen
   // (coreMain.ts checkedForRun), for each version of the program: a few
   // seconds the first time (bounce 2 s), at once after.
@@ -479,7 +534,7 @@ export function pagePanels(host: PageHost) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: page.now?.kept ?? undefined };
+      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
       const core = new Function(`${pageRuntime(corePageRuntimes(), made.program)}\nreturn $core;`)() as Core & Record<string, unknown>;
       let given: unknown[] | null = null;
       new Function("$core", made.program)({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
@@ -489,6 +544,7 @@ export function pagePanels(host: PageHost) {
     } catch (e) {
       m?.stop();
       compiledPages.set(code, null);
+      if (notDeferred()) return;
       if (!page.now) return interpretAnyway(`Interpreted, slowly: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`);
       sayStopped("Interpreted: the compiled page stopped", e);
       return;
@@ -498,12 +554,16 @@ export function pagePanels(host: PageHost) {
     // Its log a window too, which an interpreted page built at its last
     // event steps through (I239f, page.ts showPage stepFrom).
     const mounted = m;
-    page.now = { root: m.root, cells: null as never, stop: m.stop, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
+    page.deferred = false;
+    page.now = { root: m.root, cells: null as never, kept: m.kept, stop: m.stop, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
+    compiledNow.add(page.now);
     page.root = m.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
     // Nothing shown before (one too slow interpreted): put in the frame.
     else renderSoon();
     page.status.title = "", page.status.textContent = "";
+    if (m.handed < 0) page.afresh = true;
+    if (page.afresh) afresh();
     drawSteps();
   }
 

@@ -64,12 +64,12 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
 // hands over what was done on it (cells.ts handOver), as page-runtime.ts
 // mountPage does for compile.ts's. `kept` is the cells made while main ran,
 // in order; `stop` ends its frames. `handFrom`: the interpreted page's
-// cells, what was done on it handed over (cells.ts handOver). Given a `window`, its log is kept as
+// cells, what was done on it handed over (cells.ts handOver); `handWhole`, when they are an earlier version of the program (E279a). Given a `window`, its log is kept as
 // one (I239f, WORLD-LOG-WINDOW.md §2), each snapshot its cells' values in
 // the order they were made (as handOver carries them) and the
 // generator's state, so the interpreted page can be built at a snapshot
 // and stepped from there (page.ts showPage `stepFrom`).
-export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]> }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void } {
+export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void } {
   let stopped = false;
   const cells = new Cells(equal);
   // The run's log (C172e), as page.ts showPage keeps it: as a window, or
@@ -91,7 +91,7 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   made = kept;
   cells.kept = null;
   // How many cells were handed over, for the caller to say.
-  const handed = o.handFrom ? handOver(o.handFrom, kept, cells) : 0;
+  const handed = o.handFrom ? handOver(o.handFrom, kept, cells, o.handWhole) : 0;
   // Its start as a snapshot too, as page.ts keeps it: the cells as handed
   // over, the generator as main left it.
   if (window) window.snapshots[0] = { at: start, state: window.take() };

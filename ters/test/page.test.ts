@@ -543,3 +543,20 @@ test("the conjugation page: twice the light, a turn about the centre, softer hig
   click(root, "New sound");
   assert.deepEqual([bars("in"), bars("out")], [8, 8]);
 });
+
+// E279a: an edit in the editor starts the page's next version handed the
+// last one's cells, so what was done on it goes on.
+test("a page's next version takes over the last one's cells (handFrom)", () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples", "dice"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  const show = (handFrom?: ReturnType<typeof showPage>["kept"]) => showPage({ code: p.code, info, names: p.pres.names, main, program: "dice", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, keepCells: true, handFrom });
+  const first = show();
+  (first.root as FakeEl).find("hundred").fire("click");
+  const said = (first.root as FakeEl).find("status").textContent;
+  assert.match(said, /^Rolls: 100;/);
+  const next = show(first.kept);
+  assert.ok(next.handed! > 0);
+  assert.equal((next.root as FakeEl).find("status").textContent, said);
+  first.stop(); next.stop();
+});

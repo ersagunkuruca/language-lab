@@ -1126,8 +1126,16 @@ export class Cells {
 // the same value (so the two engines hold it the same way) and the value
 // is plain data: a function or a cell inside can't be carried across.
 // Returns how many were carried.
+//
+// `whole` (E279a): the two pages are two versions of a program, the
+// second the first edited, so a cell's place says which it is only when
+// both made as many cells. When they didn't (an edit added or took away
+// a cell), nothing is carried and it returns -1: the page starts afresh.
+// A cell made with another value than before (the edit changed it) starts
+// from its new one, as above.
 type Kept = NonNullable<Cells["kept"]>;
-export function handOver(a: Kept, b: Kept, to: Pick<Cells, "write" | "batch">): number {
+export function handOver(a: Kept, b: Kept, to: Pick<Cells, "write" | "batch">, whole = false): number {
+  if (whole && a.length !== b.length) return -1;
   const moves: [Value, Value][] = [];
   for (let i = 0; i < Math.min(a.length, b.length); i++) {
     const n = nodeOf(a[i].cell);
