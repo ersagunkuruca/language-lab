@@ -15,11 +15,20 @@
 // stays. Inside another search (all, count, first, optional) or a use,
 // nothing is taken: there every way may count.
 import type { Code, Id, Node } from "../model.ts";
-import { SCHEMA, subtree, freshId, isCall, dependenciesOfAll, copyNodes, nodeValues } from "../model.ts";
+import { parentLookup, SCHEMA, subtree, freshId, isCall, dependenciesOfAll, copyNodes, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, inferRewritten, type Info } from "./infer.ts";
 import { S } from "./std.ts";
 import { CHOICE, type Type } from "./types.ts";
+import { defsKey } from "./def-keys.ts";
+import { keptMap } from "../kept.ts";
+
+// The searches whose firsts stay, kept between compiles (the incremental
+// compile, part 2) by the keys of the definitions holding them and what
+// those reach, which is all the trial below reads, and the check's
+// options: after an edit elsewhere, machine's 19 firsts aren't tried again.
+const noneTaken = keptMap<string, true>();
+const optionsKey = (o: Info["options"]) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : Array.isArray(v) && v.every((x) => typeof x === "string") ? [...v].sort() : v));
 
 const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
 
@@ -36,6 +45,11 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
     if (th?.kind === "lambda" && th.params.length === 0 && chooses(typeOf(th.id))) sites.push(n.id);
   }
   if (!sites.length) return { code, info, names, taken: 0 };
+  const parent = parentLookup(code), defs = new Set(code.defs), holding = new Set<Id>();
+  for (const s of sites) { let at: Id | undefined = s; while (at !== undefined && !defs.has(at)) at = parent(at); if (at !== undefined) holding.add(at); }
+  const read = new Set([...holding, ...dependenciesOfAll(code, [...holding])]);
+  const key = `${optionsKey(info.options)}\n${defsKey(code, info, [...read].filter((d) => code.nodes[d]?.kind === "def").sort())}`;
+  if (noneTaken.has(key)) return { code, info, names, taken: 0 };
   // The nodes a search's own ways are under: a search's thunks and a use.
   const barrier = (n: Node) => (isCall(n) && SEARCHES.has(refTo(n.fn) ?? "")) || (n.kind === "call" && n.given !== undefined);
   // What a node is once each choice takes its first way: one of([a, …]) is
@@ -126,14 +140,17 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   const stillChooses = (c: Info, th: Id) => { const t = c.typeOf.get(th), z = t && c.subst.zonk(t); return z?.t !== "fn" || c.subst.resolveRow(z.eff).effs.includes(CHOICE); };
   const mayTake = (c: Info) => [...thunks].filter(([s, th]) => !open.has(s) && !stillChooses(c, th));
   try { checked = inferRewritten(code, out, outNames, info, sites, made, dependenciesOfAll(code, sites.map((s) => (code.nodes[s] as { args: Id[] }).args[0]))); } catch { return { code, info, names, taken: 0 }; }
-  if (mayTake(checked).length) try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
+  // A first the trial may take is asked of the whole program, whose
+  // answer the key doesn't cover: not kept.
+  const whole = mayTake(checked).length > 0;
+  if (whole) try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
   const take = new Set(mayTake(checked).map(([s]) => s));
   let taken = 0;
   for (const [s, th] of thunks) {
     if (take.has(s)) { nodes[s] = { ...nodes[(nodes[th] as { body: Id }).body], id: s } as Node; taken++; }
     else nodes[s] = code.nodes[s];
   }
-  if (!taken) return { code, info, names, taken: 0 };
+  if (!taken) { if (!whole) noneTaken.set(key, true); return { code, info, names, taken: 0 }; }
   out = { ...out, nodes };
   try { checked = inferRewritten(code, out, outNames, info, sites, made); } catch { return { code, info, names, taken: 0 }; }
   // Checked again, the program as it came may have problems its first
