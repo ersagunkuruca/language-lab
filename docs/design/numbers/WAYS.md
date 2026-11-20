@@ -121,6 +121,8 @@ share one sincos when a program uses both sin and cos. The editor shows
 the pick per field, as it will show the representation chooser's. It
 never lets a program pick one (Ersagun 2026-10-30, on representations:
 "I don't want explicit selection, I want the compiler to choose").
+Since 2026-11-20 a pick may be tuned in the schedule beside the
+program, never in the code (SCHEDULE-2026-11-20.md).
 
 ## The ways must agree
 
