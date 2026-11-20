@@ -21,7 +21,25 @@ test("keep over an array's items is a loop pushing the kept ones (G1b1)", () => 
   const loop = ir.funcs.find((f) => f.name === "keep·is moth.value.kept");
   assert.ok(loop, ir.funcs.map((f) => f.name).join(", "));
   assert.ok(ir.funcs.some((f) => f.name === "keep·is moth.value" && f.body.k === "call" && ir.funcs[f.body.fn] === loop), "keep calls its loop");
-  assert.ok(found(loop.body, (e) => e.k === "rt" && /^array\.push\.a\d+$/.test(e.fn)), "the kept item pushed");
-  assert.ok(found(loop.body, (e) => e.k === "rt" && /^array\.get\.a\d+$/.test(e.fn)), "the item read by position");
+  assert.ok(found(loop.body, (e) => e.k === "rt" && /^array\.c?push\.a\d+$/.test(e.fn)), "the kept item pushed");
+  assert.ok(found(loop.body, (e) => e.k === "rt" && /^array\.(get|cget\d+)\.a\d+$/.test(e.fn)), "the item read by position");
   assert.ok(!found(loop.body, (e) => e.k === "rt" && /^(array\.(items|of)\.a\d+|choose\.split)$/.test(e.fn)), "no list between");
+});
+
+// G1b2: the arrays those loops build, and `pool items`, are columns that
+// grow as they are pushed onto: the greenhouse's Things read by field,
+// with no row per Thing.
+test("arrays built by pushes are columns that grow (G1b2)", () => {
+  const p = load("../../compiler/gaps/greenhouse"), main = p.named("main");
+  const r = represented({ title: "greenhouse", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: representationsIn(p.code, p.info, p.pres.names, p.own.defs), options: p.options }, main, true);
+  const ir = lowerCore(r.code, r.info, r.names, [main]);
+  const thing = ir.arrays.find((a) => typeof a.item === "object" && "name" in a.item && a.item.name === "Thing")!;
+  const a = `.a${thing.index}`;
+  // The loops making and reading them: columns only.
+  const ops = (name: string) => { const f = ir.funcs.find((g) => g.name === name); assert.ok(f, name); const fns: string[] = []; found(f.body, (e) => { if (e.k === "rt" && e.fn.endsWith(a)) fns.push(e.fn); return false; }); return fns; };
+  for (const name of ["keep·is moth.value.kept", "pool items from$from", "gathered$from"]) {
+    const fns = ops(name);
+    assert.ok(fns.length && fns.every((fn) => /^array\.c(push|get\d+|length|in|build)\./.test(fn)), `${name}: ${fns.join(", ")}`);
+  }
+  assert.ok(ops("pool items from$from").some((fn) => fn.startsWith("array.cpush")), "pool items pushed going down");
 });
