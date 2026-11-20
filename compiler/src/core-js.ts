@@ -1202,9 +1202,9 @@ export function solverCode(ir: CoreIR, js: string): Code {
   const roots = [...js.matchAll(/R\.rt\("(?:solve|solveOne|solveAll|derive):([^"]*)"/g)].map((m) => JSON.parse(`"${m[1]}"`) as string);
   const lambdas = lambdasLookedIn(ir);
   roots.push(...(lambdas ?? [...js.matchAll(/\\?"lambda\\?":\\?"([^"\\]*)/g)].map((m) => JSON.parse(`"${m[1]}"`) as string)));
-  const seen = new Set<string>(roots.filter((r) => r in nodes)), todo = [...seen];
+  const seen = new Set<string>(roots.filter((r) => nodes[r] !== undefined)), todo = [...seen];
   const walk = (v: unknown): void => {
-    if (typeof v === "string") { if (v in nodes && !seen.has(v)) { seen.add(v); todo.push(v); } }
+    if (typeof v === "string") { if (nodes[v] !== undefined && !seen.has(v)) { seen.add(v); todo.push(v); } }
     else if (Array.isArray(v)) v.forEach(walk);
     else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { walk(k); walk(x); }
   };
@@ -1212,7 +1212,7 @@ export function solverCode(ir: CoreIR, js: string): Code {
   // lambda's definition (relate.ts, modes.ts), and every interface's
   // implementations (show and compare of a value find them by its type).
   const owner = ownerOfTypeParts(ir.code);
-  const add = (id: string | undefined) => { if (id && id in nodes && !seen.has(id)) { seen.add(id); todo.push(id); } };
+  const add = (id: string | undefined) => { if (id && nodes[id] !== undefined && !seen.has(id)) { seen.add(id); todo.push(id); } };
   for (const d of ir.info.implementations?.values() ?? []) add(d);
   // A derivative's rules name the builtins they differentiate by id
   // (builtin.pow), not through a node, so it gets them all.
@@ -1220,7 +1220,7 @@ export function solverCode(ir: CoreIR, js: string): Code {
   // its slope, +, the parts of a record): not reached from the program's
   // own nodes when only a derivative uses them.
   if (/R\.rt\("derive:/.test(js)) {
-    for (const id of Object.keys(nodes)) if (id.startsWith("builtin.")) add(id);
+    for (const id of nodeIds(ir.code.nodes)) if (id.startsWith("builtin.")) add(id);
     for (const id of [FIRST, SECOND, PAIR_V, ...Object.values(ARITH), S.mapParts, S.zipParts, S.fail, S.total, S.abs, S.floor, S.float32, S.mod]) add(id);
   }
   for (let before = -1; before !== seen.size; ) {

@@ -56,7 +56,7 @@ import { laterOps as laterOpsOf } from "../../ters/src/lang/later-ops.ts";
 import { answerKeys, givenInOrder } from "../../ters/src/lang/ports.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
 import type { Code, Id, NodeOf } from "../../ters/src/model.ts";
-import { dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use, nodeValues } from "../../ters/src/model.ts";
+import { nodesOfKindIn, dependencies, nodesOfKind, portsOf, subtree, isCall, type Call, isUse, useTarget, type Use, nodeValues, dropNode } from "../../ters/src/model.ts";
 import { bindsOf, bodyOf, withBodies } from "./uses.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import type { Info, Options } from "../../ters/src/lang/infer.ts";
@@ -912,7 +912,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // case for one of its operations; otherwise a perform of one by name
   // (board's `file exists`) is the builtin that performs it, the world's
   // (C137d19).
-  const arms = new Set(nodeValues(code.nodes).flatMap((n) => (n.kind === "arm" && n.variant ? [n.variant] : [])));
+  const arms = new Set(nodesOfKindIn(code.nodes, "arm").flatMap((n) => (n.kind === "arm" && n.variant ? [n.variant] : [])));
   const notOwn = (n: NodeOf<"def">, td: NodeOf<"typedef">) => n.id.startsWith("std.") || (BUILTIN_EFFECTS.includes(n.id) && !td.variants.some((v) => arms.has(v)));
   const builtinOf = new Map(Object.entries(OP_OF_BUILTIN).map(([b, v]) => [v, b]));
   const tailOps = new Map<Id, Id>(), answeredLater = laterOpsOf(code);
@@ -927,11 +927,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Random too, where the program handles it (Pig's `recorded into`): a
   // draw no handler of the program's answers is the world's, as before.
   // Not with `seeded` as well, whose draws aren't on that stack.
-  const handlesRandom = (!!opts.host || !!opts.handlers) && nodeValues(code.nodes).some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
+  const handlesRandom = (!!opts.host || !!opts.handlers) && nodesOfKindIn(code.nodes, "arm").some((n) => n.kind === "arm" && n.variant === RANDOM_OP);
   if (handlesRandom) tailOps.set(RANDOM_OP, RANDOM);
   // The person's settings too (L214b2), where the program answers them: an
   // ask no handler of the program's answers is the world's.
-  if (opts.host && nodeValues(code.nodes).some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP || n.variant === MY_LATENCY_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); tailOps.set(MY_LATENCY_OP, SETTINGS); }
+  if (opts.host && nodesOfKindIn(code.nodes, "arm").some((n) => n.kind === "arm" && (n.variant === MY_LOCALE_OP || n.variant === MY_ZONE_OP || n.variant === MY_LATENCY_OP))) { tailOps.set(MY_LOCALE_OP, SETTINGS); tailOps.set(MY_ZONE_OP, SETTINGS); tailOps.set(MY_LATENCY_OP, SETTINGS); }
   // Check too, where the program handles it (T7e2: `ters test --compiled`
   // runs a test under a handler of its expects).
   if (opts.host && nodesOfKind(code, "arm").some((n) => n.variant === CHECK_OP)) tailOps.set(CHECK_OP, CHECK);
@@ -1980,7 +1980,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             info.typeOf.set(call, info.typeOf.get(id)!);
             const kept = code.nodes[id];
             code.nodes[id] = { ...n, scrutinee: call, otherwise: null };
-            try { return expr(id, env, f, tail); } finally { code.nodes[id] = kept; }
+            try { return expr(id, env, f, tail); } finally { code.nodes[id] = kept; dropNode(code.nodes, call); }
           }
           // One that does: the runtime's handler runs it once the
           // computation has finished, with the handler taken off.

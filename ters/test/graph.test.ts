@@ -56,7 +56,7 @@ const grabbed = (svg: El, id: Id) => svg.all().find((e) => e.getAttribute("data-
 const frames = (svg: El, el: El) => { const out: El[] = []; for (let e = el.parentElement; e; e = e.parentElement) for (const c of e.children) if (/\brg\b/.test(c.getAttribute("class") ?? "")) out.push(c); return out; };
 
 const calls = p.code.nodes;
-const safe = Object.values(calls).find((n) => isCall(n) && calls[n.fn].kind === "ref" && p.pres.names[(calls[n.fn] as { target: Id }).target] === "safe")!.id;
+const safe = nodeValues(calls).find((n) => isCall(n) && calls[n.fn].kind === "ref" && p.pres.names[(calls[n.fn] as { target: Id }).target] === "safe")!.id;
 
 const frameOf = (svg: El, id: Id) => svg.all().find((e) => e.getAttribute("data-frame") === id)!;
 const box = (svg: El, el: El) => { const a = at(svg, el); return { ...a, w: Number(el.getAttribute("width")), h: Number(el.getAttribute("height")) }; };
@@ -73,7 +73,7 @@ for (const to of [{ x: 400, y: 300 }, { x: -90, y: -40 }, { x: 20, y: 500 }]) {
     // Every frame around it holds it.
     const b = box(after, grabbed(after, safe));
     const around: Id[] = [];
-    for (const n of Object.values(calls)) if ((n.kind === "lambda" || n.kind === "arm") && JSON.stringify(n).length && contains(n.id, safe)) around.push(n.id);
+    for (const n of nodeValues(calls)) if ((n.kind === "lambda" || n.kind === "arm") && JSON.stringify(n).length && contains(n.id, safe)) around.push(n.id);
     around.push(def);
     for (const f of around.map((id) => frameOf(after, id)).filter(Boolean)) {
       const fb = box(after, f);
@@ -92,7 +92,7 @@ function contains(outer: Id, inner: Id): boolean {
 
 test("a frame's parameters sit on its left edge", () => {
   const svg = draw({ [safe]: { x: -200, y: 40 } });
-  const arm = Object.values(calls).find((n) => n.kind === "arm" && contains(n.id, safe) && n.binds.length) as { id: Id; binds: Id[] };
+  const arm = nodeValues(calls).find((n) => n.kind === "arm" && contains(n.id, safe) && n.binds.length) as { id: Id; binds: Id[] };
   const f = box(svg, frameOf(svg, arm.id));
   for (const b of arm.binds) {
     const c = svg.all().find((e) => e.tagName === "circle" && e.getAttribute("data-src") === b && /\bsrc\b/.test(e.getAttribute("class") ?? ""))!;
@@ -114,7 +114,7 @@ test("a binding shown as let and get nodes has get nodes and no wires to its use
 // its arguments were dragged (to the right of the call, for instance).
 test("wires leave from the outputs they belong to, after any move", () => {
   const offsets: Record<Id, { x: number; y: number }> = {};
-  for (const n of Object.values(calls)) if (isCall(n) && calls[n.fn].kind === "ref") offsets[n.id] = { x: 260, y: 20 };
+  for (const n of nodeValues(calls)) if (isCall(n) && calls[n.fn].kind === "ref") offsets[n.id] = { x: 260, y: 20 };
   const svg = draw(offsets);
   const outs = svg.all().filter((e) => e.tagName === "circle" && /\boutp\b/.test(e.getAttribute("class") ?? "")).map((c) => at(svg, c));
   const starts = svg.all().filter((e) => e.tagName === "path" && /^tw\b/.test(e.getAttribute("class") ?? "") && !/use/.test(e.getAttribute("class") ?? ""))
@@ -130,7 +130,7 @@ test("wires leave from the outputs they belong to, after any move", () => {
 test("a folded frame is one box where the frame was, with its wires in on the left and out on the right", () => {
   const open = draw({});
   // The biggest frame around safe, other than the definition's.
-  const around = Object.values(calls).filter((n) => (n.kind === "lambda" || n.kind === "arm") && contains(n.id, safe) && frameOf(open, n.id));
+  const around = nodeValues(calls).filter((n) => (n.kind === "lambda" || n.kind === "arm") && contains(n.id, safe) && frameOf(open, n.id));
   const f = around.map((n) => n.id).sort((a, b) => box(open, frameOf(open, b)).w - box(open, frameOf(open, a)).w)[0];
   const was = box(open, frameOf(open, f));
   const svg = draw({}, [], [f]);

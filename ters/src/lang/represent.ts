@@ -174,7 +174,7 @@ function bySource(code: Code, kept: WeakMap<Code, Map<Id, Id[]>>, from: (code: C
     for (const n of nodeValues(layer.nodes)) { const got: Id[] = []; from(layer, n, (id) => got.push(id)); if (got.length) base.set(n.id, got); }
   }
   const again = new Set<Id>(changed), up = parentLookup(layer);
-  for (const id of changed) if (id in layer.nodes) for (let at = up(id); at !== undefined && !again.has(at); at = up(at)) again.add(at);
+  for (const id of changed) if (layer.nodes[id] !== undefined) for (let at = up(id); at !== undefined && !again.has(at); at = up(at)) again.add(at);
   for (const [src, ids] of base) if (!again.has(src)) for (const id of ids) r.add(id);
   for (const id of again) { const n = code.nodes[id]; if (n) from(code, n, (x) => r.add(x)); }
   return r;

@@ -15,7 +15,7 @@ import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import mathStyle from "../ters/styles/math.json" with { type: "json" };
 import plainStyle from "../ters/styles/plain.json" with { type: "json" };
 import lispStyle from "../ters/styles/lisp.json" with { type: "json" };
-import { changedFromLayer, children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf, copyNodes, nodeEntries, nodeIds, nodeValues, withNodes } from "../ters/src/model.ts";
+import { nodesOfKindIn, changedFromLayer, children, directionOf, freshId, ID_PATTERN, isCall, isUse, portsOf, useTarget, type Call, merge, parentOf, resolveRefs, subtree, type Code, type Id, type Node, type NodeOf, copyNodes, nodeEntries, nodeIds, nodeValues, withNodes } from "../ters/src/model.ts";
 import { INT } from "../ters/src/lang/types.ts";
 import { layer, type Comments, type Hints, type Names, type Presentation, type Style } from "../ters/src/presentation.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
@@ -1110,7 +1110,7 @@ const { LIMIT, backwardsPanel, knownPorts, portText, runBackwards, stopSearch } 
 const typeParams_ = new WeakMap<Code, Set<Id>>();
 const isTypeParam = (id: Id) => {
   let ps = typeParams_.get(doc.code);
-  if (!ps) typeParams_.set(doc.code, (ps = new Set(nodeValues(doc.code.nodes).flatMap((n) => (n.kind === "typedef" || n.kind === "variant") ? n.params ?? [] : []))));
+  if (!ps) typeParams_.set(doc.code, (ps = new Set(nodesOfKindIn(doc.code.nodes, "typedef").flatMap((n) => (n.kind === "typedef" || n.kind === "variant") ? n.params ?? [] : []))));
   return ps.has(id);
 };
 function kindLabel(id: Id): string {
@@ -1307,8 +1307,8 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
 
   // Nested patterns: a case's field opens into its type's cases, and a
   // match whose cases all say the same thing closes up (PATTERNS.md).
-  const caseField = n.kind === "binder" && nodeValues(doc.code.nodes).some((a) => a.kind === "arm" && a.binds.includes(id)) && T.dataTypeOf(doc.code, info, id);
-  const joinable = n.kind === "match" ? id : n.kind === "arm" ? nodeValues(doc.code.nodes).find((m) => m.kind === "match" && m.arms.includes(id))?.id : undefined;
+  const caseField = n.kind === "binder" && nodesOfKindIn(doc.code.nodes, "arm").some((a) => a.kind === "arm" && a.binds.includes(id)) && T.dataTypeOf(doc.code, info, id);
+  const joinable = n.kind === "match" ? id : n.kind === "arm" ? nodesOfKindIn(doc.code.nodes, "match").find((m) => m.kind === "match" && m.arms.includes(id))?.id : undefined;
   const join = joinable ? T.joinCases(doc.code, doc.names.short, info, joinable) : null;
   if (caseField || join?.ok) {
     const deeper = caseField ? T.matchDeeper(doc.code, doc.names.short, info, id) : null;

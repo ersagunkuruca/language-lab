@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
-import { get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call, useOf, nodeValues } from "../src/model.ts";
+import { plainNodes, get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call, useOf, nodeValues } from "../src/model.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -130,7 +130,7 @@ test("a case analysis is created with every case, and a new case reaches every a
   assert.equal(edit.names[arm.results[0]!], "of′");
 
   // Without the gesture (adding the variant by hand), the checker says so.
-  const raw = structuredClone(p.code);
+  const raw = structuredClone({ ...p.code, nodes: plainNodes(p.code.nodes) });
   const tdId = get(raw, type, "def").body!;
   (raw.nodes[tdId] as NodeOf<"typedef">).variants.push(edit.variant);
   for (const id of subtree(edit.code, edit.variant)) raw.nodes[id] = edit.code.nodes[id];

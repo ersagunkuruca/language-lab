@@ -5,7 +5,7 @@ import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
+import { nodesOfKindIn, merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { conflictMarkersAt, markersMessage, parseSaved, printSaved, ProgramFileError } from "../src/saved.ts";
@@ -308,7 +308,7 @@ function nativeLowered(main: Id, wasm = false, page = false) {
   // A map over a text's characters, a fold over them (C239).
   const q0 = withCharacterMaps(q01.code, q01.info, q01.names);
   const { q, root } = !page && valueMain(q0.info, main) ? printingMain(q0, main) : { q: q0, root: main };
-  const handled = new Set(nodeValues(q.code.nodes).flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
+  const handled = new Set(nodesOfKindIn(q.code.nodes, "arm").flatMap((n) => (n.kind === "arm" ? [n.variant] : [])));
   const hosted = new Set(ownOperations(q.code).flatMap((op) => (handled.has(op) ? [] : effectOfOperation(q.code, op) ?? [])));
   const lowered = lowerScalar(q.code, q.info, q.names, [root], { data: true, dataKeys: true, releases: true, handlers: true, hosted, threads: !wasm, cells: true, closureArgs: true });
   // A map writes into the array it was given (C60 c2): in place where
@@ -836,7 +836,7 @@ switch (command) {
     // app asks for the microphone if the page names one, and carries the
     // recordings it names from the program's folder, as build-web does.
     const sound = c.includes("ters_sound_play(") ? {
-      mic: nodeValues(p.code.nodes).some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
+      mic: nodesOfKindIn(p.code.nodes, "ref").some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
       files: Object.fromEntries(recordings(p.code).filter((f) => statSync(path).isDirectory() && existsSync(join(path, f))).map((f) => [f, new Uint8Array(readFileSync(join(path, f)))])),
     } : undefined;
     for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {

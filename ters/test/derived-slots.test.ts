@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { nodesWhere, replace, subtree, type NodeOf, isCall, isUse, copyNodes, nodeValues } from "../src/model.ts";
+import { plainNodes, nodesWhere, replace, subtree, type NodeOf, isCall, isUse, copyNodes, nodeValues } from "../src/model.ts";
 import { useDirections } from "../src/lang/directions.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
@@ -57,7 +57,7 @@ test("a filled program's solves and calls are those a full scan finds", () => {
       assert.deepEqual([...nodesWhere(r.code, k, (n) => is(n))].sort(), scan);
     }
     const fresh = { nodes: copyNodes(r.code.nodes), defs: r.code.defs };
-    assert.deepEqual(useDirections(r.code).nodes, useDirections(fresh).nodes);
+    assert.deepEqual(plainNodes(useDirections(r.code).nodes), plainNodes(useDirections(fresh).nodes));
     r.undo();
   }
 });

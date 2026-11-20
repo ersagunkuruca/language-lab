@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../ters/src/model.ts";
+import { nodesOfKindIn, children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, inferEdited, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -447,7 +447,7 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
 // be html's Attribute's too).
 function fieldsByProbe(code: Code, names: Names, info: Info, hole: Id, t: Typed, defId?: Id): Typed {
   const variantOf = new Map<Id, Id>();
-  for (const v of nodeValues(code.nodes)) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
+  for (const v of nodesOfKindIn(code.nodes, "variant")) if (v.kind === "variant") for (const f of v.fields) variantOf.set(f, v.id);
   // The type a meaning of one input takes: a field's case's, or a
   // function's one input's when it is a type.
   const takes = new Map<Id, Id | null>();
@@ -645,7 +645,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
   let cases: Map<Id, Id> | undefined;
   const caseOf = (op: Id) => {
     if (code.nodes[op]?.kind !== "field") return undefined;
-    cases ??= new Map(nodeValues(code.nodes).flatMap((v) => v.kind === "variant" ? v.fields.map((f) => [f, v.id] as [Id, Id]) : []));
+    cases ??= new Map(nodesOfKindIn(code.nodes, "variant").flatMap((v) => v.kind === "variant" ? v.fields.map((f) => [f, v.id] as [Id, Id]) : []));
     return cases.get(op);
   };
   const takes = (op: Id, i: number, n: number) => { const v = caseOf(op); if (v) return n === 1 ? info.owner.get(v) ?? null : null; const f = typeOfOp(op); return f && f.params.length === n ? head(f.params[i]) : null; };
@@ -863,7 +863,7 @@ function firstFitting(top: Typed, fits: (t: Typed) => boolean): Typed | null {
 // shared by several types (E186): "a Card", "a Quick".
 function fieldOwners(code: Code, info: Info, names: Names) {
   const ownerOf = new Map<Id, Id>();
-  for (const v of nodeValues(code.nodes)) if (v.kind === "variant") for (const f of v.fields) ownerOf.set(f, v.id);
+  for (const v of nodesOfKindIn(code.nodes, "variant")) if (v.kind === "variant") for (const f of v.fields) ownerOf.set(f, v.id);
   const shared = (op: Id) => { const n = names[op]; return n !== undefined && Object.keys(names).filter((id) => names[id] === n && code.nodes[id]?.kind === "field").length > 1; };
   return (t: Typed): string[] => {
     const out = new Set<string>();
@@ -1302,7 +1302,7 @@ function isOperation(code: Code, id: Id): boolean {
   let ops = operationsOf.get(code);
   if (!ops) {
     ops = new Set();
-    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? []) ops.add(f);
+    for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant"> | undefined)?.fields ?? []) ops.add(f);
     operationsOf.set(code, ops);
   }
   return ops.has(id);
@@ -2144,7 +2144,7 @@ export function dotHandles(code: Code, defId: Id, names: Names): Names {
   return out;
 }
 
-export const usesOf = (code: Code, b: Id): Id[] => nodeValues(code.nodes).filter((n) => n.kind === "ref" && n.target === b).map((n) => n.id);
+export const usesOf = (code: Code, b: Id): Id[] => nodesOfKindIn(code.nodes, "ref").filter((n) => n.kind === "ref" && n.target === b).map((n) => n.id);
 
 // The innermost body around `slot` (a function's, a case's, a let's): a
 // let put there sees what `slot` sees, since only bodies bind names.
@@ -2908,7 +2908,7 @@ export function waysOfImplementation(code: Code, impl: Id): { field: Id; given: 
   if (!isCall(body)) return null;
   const fn = code.nodes[body.fn], variant = fn?.kind === "ref" ? code.nodes[fn.target] : null;
   if (variant?.kind !== "variant") return null;
-  const iface = nodeValues(code.nodes).find((t) => t.kind === "typedef" && t.interface && t.variants.includes(variant.id));
+  const iface = nodesOfKindIn(code.nodes, "typedef").find((t) => t.kind === "typedef" && t.interface && t.variants.includes(variant.id));
   if (!iface) return null;
   const pick = pickWays(code, waysIn(code), variant, body.args);
   return variant.fields.map((f, i) => ({ field: f, given: !leftToWays(code, body.args[i]), way: pick.get(f) ?? null, missing: !pick.has(f) }));

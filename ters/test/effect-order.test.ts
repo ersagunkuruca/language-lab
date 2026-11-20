@@ -10,7 +10,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Session } from "../mcp/session.ts";
-import { subtree } from "../src/model.ts";
+import { plainNodes, subtree } from "../src/model.ts";
 
 class El {
   attrs = new Map<string, string>();
@@ -70,10 +70,10 @@ test("calls with effects are numbered in the order they run: inputs left to righ
 
 test("off, nothing is numbered, and turning it on changes no code", () => {
   const s = program('print(show(random()))');
-  const before = JSON.stringify(s.code);
+  const before = JSON.stringify({ ...s.code, nodes: plainNodes(s.code.nodes) });
   assert.deepEqual(numbered(s, false), []);
   assert.equal(numbered(s).length, 2);
-  assert.equal(JSON.stringify(s.code), before);
+  assert.equal(JSON.stringify({ ...s.code, nodes: plainNodes(s.code.nodes) }), before);
 });
 
 test("a function written in place numbers its own calls from 1, as it runs when it's called", () => {

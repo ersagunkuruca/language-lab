@@ -1,4 +1,4 @@
-import { children, type Code, type Id, type Node, nodeValues } from "../model.ts";
+import { nodesOfKindIn, children, type Code, type Id, type Node, nodeValues } from "../model.ts";
 
 // The prelude definitions the passes and the solver find by name
 // (arith.ts preludeDef): fractions' and grammars' pieces, `inverse`,
@@ -85,8 +85,8 @@ export function fractionCase(code: Code): { variant: Id; type: Id } | undefined 
         // else among every node (L266: two scans of each program checked).
         const typeOf = (d: Node | undefined) => { const b = d?.kind === "def" && d.body ? code.nodes[d.body] : undefined; return b?.kind === "typedef" && b.variants.includes(x.variant) ? b : undefined; };
         const owner = code.defs.map((id) => code.nodes[id]).find((d) => typeOf(d));
-        const t = owner ? typeOf(owner) : nodeValues(code.nodes).find((d) => d.kind === "typedef" && d.variants.includes(x.variant));
-        const d = owner ?? (t && nodeValues(code.nodes).find((d) => d.kind === "def" && d.body === t.id));
+        const t = owner ? typeOf(owner) : nodesOfKindIn(code.nodes, "typedef").find((d) => d.kind === "typedef" && d.variants.includes(x.variant));
+        const d = owner ?? (t && nodesOfKindIn(code.nodes, "def").find((d) => d.kind === "def" && d.body === t.id));
         if (t) found = { variant: x.variant, type: d?.id ?? t.id };
         if (t && d) read.push([t.id, t], [d.id, d]);
         else read.length = 0;

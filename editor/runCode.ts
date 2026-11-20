@@ -13,7 +13,7 @@ export type SentCode = { own: Record<Id, Node>; gone: Id[]; defs: Id[] };
 export function sendCode(code: Code): SentCode {
   const lib = LIBRARY.code.nodes, own: Record<Id, Node> = {}, gone: Id[] = [];
   for (const id of nodeIds(code.nodes)) if (code.nodes[id] !== lib[id]) own[id] = code.nodes[id];
-  for (const id in lib) if (!(id in code.nodes)) gone.push(id);
+  for (const id in lib) if (code.nodes[id] === undefined) gone.push(id);
   return { own, gone, defs: code.defs };
 }
 

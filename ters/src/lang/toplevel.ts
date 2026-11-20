@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf, copyNodes, dropNode, nodeValues, withNodes } from "../model.ts";
+import { nodesOfKindIn, conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf, copyNodes, dropNode, nodeValues, withNodes } from "../model.ts";
 import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
@@ -400,7 +400,7 @@ export function addField(code: Code, names: Names, type: Id, variant: Id, rawNam
     if (n.kind !== "arm" || n.variant !== variant) continue;
     const b = add({ kind: "binder" });
     nn[b] = name;
-    const inFold = nodeValues(code.nodes).some((m) => m.kind === "fold" && m.arms.includes(n.id));
+    const inFold = nodesOfKindIn(code.nodes, "fold").some((m) => m.kind === "fold" && m.arms.includes(n.id));
     let r: Id | null = null;
     if (inFold && recursive) { r = add({ kind: "binder" }); nn[r] = `${name}′`; }
     // An operation answered later keeps the rest last (ANSWERED-LATER.md).
@@ -459,7 +459,7 @@ export function setReturns(code: Code, names: Names, variant: Id, t: TypeSpec | 
 export function setPrivate(code: Code, names: Names, variant: Id, on: boolean): Top {
   const v = code.nodes[variant];
   if (v?.kind !== "variant") return { ok: false, reason: "that isn't a case of a type" };
-  const type = nodeValues(code.nodes).find((t) => t.kind === "typedef" && t.variants.includes(variant)) as NodeOf<"typedef"> | undefined;
+  const type = nodesOfKindIn(code.nodes, "typedef").find((t) => t.kind === "typedef" && t.variants.includes(variant)) as NodeOf<"typedef"> | undefined;
   if (type?.effect || type?.interface) return { ok: false, reason: `${nameOf(names, variant)} is ${type.effect ? "an operation of an effect" : "an interface's"}: only a data type's cases are private` };
   if (!!v.private === on) return { ok: false, reason: `${nameOf(names, variant)} is ${on ? "private" : "public"} already` };
   const { private: _, ...open } = v;
@@ -504,7 +504,7 @@ export function setLater(code: Code, names: Names, variant: Id, on: boolean): To
     } else {
       const rest = n.binds.at(-1)!;
       if (n.binds.length !== v.fields.length + 1) continue;
-      if (nodeValues(code.nodes).some((m) => m.kind === "ref" && m.target === rest)) return { ok: false, reason: `a case of ${nameOf(names, variant)} uses its rest: take that out first` };
+      if (nodesOfKindIn(code.nodes, "ref").some((m) => m.kind === "ref" && m.target === rest)) return { ok: false, reason: `a case of ${nameOf(names, variant)} uses its rest: take that out first` };
       dropNode(nodes, rest);
       nodes[n.id] = { ...n, binds: n.binds.slice(0, -1), results: n.results.slice(0, -1) };
     }
@@ -669,8 +669,8 @@ export function removeTypeParameter(code: Code, names: Names, type: Id, param: I
   if (at < 0 && !op) return { ok: false, reason: "that isn't one of its type parameters" };
   if (td.interface) return { ok: false, reason: "an interface takes one type, its a" };
   // The type's own uses of itself pass it on (`Tree a` in Tree a): those go with it.
-  const passed = new Set(at < 0 ? [] : nodeValues(code.nodes).flatMap((n) => n.kind === "tref" && n.target === type && n.args[at] ? [n.args[at]] : []));
-  const used = nodeValues(code.nodes).some((n) => n.kind === "tref" && n.target === param && !passed.has(n.id));
+  const passed = new Set(at < 0 ? [] : nodesOfKindIn(code.nodes, "tref").flatMap((n) => n.kind === "tref" && n.target === type && n.args[at] ? [n.args[at]] : []));
+  const used = nodesOfKindIn(code.nodes, "tref").some((n) => n.kind === "tref" && n.target === param && !passed.has(n.id));
   if (used) return { ok: false, reason: `a type in ${nameOf(names, type)} still names ${nameOf(names, param)}; change it first` };
   const nodes = copyNodes(code.nodes);
   if (op) {
@@ -679,7 +679,7 @@ export function removeTypeParameter(code: Code, names: Names, type: Id, param: I
     nodes[op.id] = rest.length ? { ...op, params: rest } : bare;
   } else {
     nodes[td.id] = { ...td, params: td.params.filter((p) => p !== param) };
-    for (const n of nodeValues(code.nodes)) if (n.kind === "tref" && n.target === type && n.args.length > at) nodes[n.id] = { ...n, args: n.args.filter((_, i) => i !== at) };
+    for (const n of nodesOfKindIn(code.nodes, "tref")) if (n.kind === "tref" && n.target === type && n.args.length > at) nodes[n.id] = { ...n, args: n.args.filter((_, i) => i !== at) };
   }
   const next = collect({ nodes, defs: code.defs });
   const nn = Object.fromEntries(Object.entries(names).filter(([id]) => next.nodes[id]));

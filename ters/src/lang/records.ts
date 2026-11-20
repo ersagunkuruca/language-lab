@@ -4,7 +4,7 @@
 // the projections rather than written (REVIEW.md §5.3). The checker accepts
 // only a field or a path of fields, so every update has exactly one answer.
 
-import { children, ownerOfTypeParts, type Code, type Id, type NodeOf, isCall, type Call, nodeValues } from "../model.ts";
+import { nodesOfKindIn, children, ownerOfTypeParts, type Code, type Id, type NodeOf, isCall, type Call, nodeValues } from "../model.ts";
 
 // The fields `id` reads, outermost first, if it is a field or a lambda of
 // one parameter that only takes fields of it; otherwise null. With
@@ -71,7 +71,7 @@ export function isOperation(code: Code, field: Id): boolean {
   let ops = operations.get(code);
   if (!ops) {
     ops = new Set();
-    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant">).fields) ops.add(f);
+    for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef" && n.interface) for (const v of n.variants) for (const f of (code.nodes[v] as NodeOf<"variant">).fields) ops.add(f);
     operations.set(code, ops);
   }
   return ops.has(field);
@@ -86,7 +86,7 @@ export function implementationOps(code: Code, fn: Id): Id[] | null {
   let m = cases.get(code);
   if (!m) {
     m = new Map();
-    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && n.interface) for (const v of n.variants) m.set(v, (code.nodes[v] as NodeOf<"variant">).fields);
+    for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef" && n.interface) for (const v of n.variants) m.set(v, (code.nodes[v] as NodeOf<"variant">).fields);
     cases.set(code, m);
   }
   return m.get(f.target) ?? null;

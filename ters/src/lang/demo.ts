@@ -3,7 +3,7 @@
 
 import { join } from "node:path";
 import { root } from "../io.ts";
-import { get, replace, type Id, type NodeOf, isCall, type Call, nodeValues } from "../model.ts";
+import { nodesOfKindIn, get, replace, type Id, type NodeOf, isCall, type Call, nodeValues } from "../model.ts";
 import { fillings, infer, type Filling } from "./infer.ts";
 import { loadProgram } from "./load.ts";
 import { addVariant, fillHole } from "./refactor.ts";
@@ -63,7 +63,7 @@ const added = addVariant(algebra.code, names, type, "tangent", [{ name: "of", ty
 const ti = infer(added.code, added.names);
 console.log(`\n  Add a case \`tangent\` to expression: ${ti.errors.length} errors, ${ti.holes.size} new holes, one in each fold that needs it:`);
 for (const [id, h] of ti.holes) {
-  const where = nodeValues(added.code.nodes).find((n) => n.kind === "arm" && n.body === id) as NodeOf<"arm">;
+  const where = nodesOfKindIn(added.code.nodes, "arm").find((n) => n.kind === "arm" && n.body === id) as NodeOf<"arm">;
   const owner = added.code.defs.find((d) => JSON.stringify(added.code.nodes[d]).length && contains(added.code, d, where.id));
   console.log(`    ${added.names[owner!]}: tangent(${where.binds.map((b) => added.names[b]).join(", ")}) with ${where.results.filter(Boolean).map((r) => added.names[r!]).join(", ")} → □ : ${showType(h.expected, added.names)}`);
 }

@@ -19,7 +19,7 @@ import { bytesValue, plainBytes } from "./bytes.ts";
 import { plainRequest, responseValue, type PlainRequest, type PlainResponse } from "./network.ts";
 import { bordered } from "./border.ts";
 import { answerKeys, givenInOrder } from "./ports.ts";
-import { dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf, copyNodes, nodeValues } from "../model.ts";
+import { nodesOfKindIn, dependencies, subtree, type Code, type Id, type NodeOf, type Use, useTarget, isCall, type Call, isUse, bindsOf, copyNodes, nodeValues } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { impl, preludeNames } from "../prelude.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
@@ -256,7 +256,7 @@ const algebraicOf = (v: Data): Alg.Algebraic => ({ p: fromList(v.fields[0]).map(
 // Each case's place in its type, for compareValues.
 export function variantOrder(code: Code): Map<Id, number> {
   const out = new Map<Id, number>();
-  for (const n of nodeValues(code.nodes)) if (n.kind === "typedef") n.variants.forEach((v, i) => out.set(v, i));
+  for (const n of nodesOfKindIn(code.nodes, "typedef")) if (n.kind === "typedef") n.variants.forEach((v, i) => out.set(v, i));
   return out;
 }
 export const ORDER_VALUES = [ORDER_V.before, ORDER_V.same, ORDER_V.after].map((tag) => ({ tag, fields: [] as Value[] }));
