@@ -23,6 +23,7 @@ import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
+import { keptItems } from "./kept-items.ts";
 import { intRanges } from "./int-ranges.ts";
 import { ownedArrays } from "./owned-arrays.ts";
 import { columns } from "./columns.ts";
@@ -740,6 +741,8 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   if (!envSet("NO_INLINE")) inlineSmall(ir);
   // A choice over a range's items as one Float64, no list (C207s).
   if (!envSet("NO_RANGE_CHOICES")) rangeChoices(ir, true);
+  // `keep` over an array's items a loop pushing the kept ones (G1b1).
+  if (!envSet("NO_KEPT_ITEMS")) keptItems(ir);
   // And a loop folding a Bool with `and` stopping once it's false (C207m).
   if (!envSet("NO_EARLY_AND")) earlyAnd(ir);
   // And `array of range x` of Ints filled with no list (C228, as C207v
