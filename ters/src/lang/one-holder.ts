@@ -55,6 +55,8 @@ export interface OneHolder { ok: boolean; problems: string[] }
 // machine.counts)`), changes that value: it is written in place (C93 s5,
 // owned-records.ts). Its other fields are read first, as arguments are.
 // `rebuilt` gets the binders so changed.
+// `fresh`: a definition that is a value of these types is made anew each
+// time it is named, not worked out once.
 const reachedKept = new WeakMap<Code, Map<Id, Set<Id>>>();
 // A definition's nodes, kept per program: each type asked walks them.
 const nodesKept = new WeakMap<Code, Map<Id, Id[]>>();
@@ -81,7 +83,7 @@ function namesIn(code: Code, d: Id): Set<Id> {
   }
   return r;
 }
-export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>): OneHolder {
+export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>, fresh = false): OneHolder {
   const nodes = code.nodes;
   const nm = (id: Id) => names[id] ?? id;
   const problems: string[] = [];
@@ -415,10 +417,15 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
 
   // A definition that is a value, not a function, is one value wherever it
   // is named (a printer works it out once, core-js.ts C137d17): two names
-  // for one value of these types.
+  // for one value of these types. With `fresh`, a printer works one that
+  // is itself of these types out each time it is named (core-js.ts and
+  // wasm.ts, for an array written in place, G3f: the moths' `empty grid`),
+  // so it is a new value each time; one holding them still is one.
   for (const d of reached) {
     const def = nodes[d] as NodeOf<"def">;
     if (!def.body || jobs.has(d) || lambdaOf(d) || nodes[def.body]?.kind === "typedef") continue;
+    const z = fresh ? info.subst.zonk(info.typeOf.get(d)!) : undefined;
+    if (z?.t === "con" && types.has(z.id)) continue;
     if (mentions(info.typeOf.get(d))) problems.push(`${nm(d)} is one value wherever it is named`);
   }
 

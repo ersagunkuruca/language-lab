@@ -16,8 +16,12 @@
 // Bools and always answers (no Int that may give up past 32 bits, no
 // finiteness check); bit for bit the same, since each is worked out the
 // same way once.
+//
+// Not a call giving an array: one-holder.ts counts each call as a new
+// array, which owned-arrays.ts may then write in place (G3f: `zeros`
+// named twice, each replaced, would be one array changed twice).
 
-import { OPS, type CoreIR, type Op, type SExpr } from "./scalar.ts";
+import { isArray, OPS, type CoreIR, type Op, type SExpr } from "./scalar.ts";
 
 const ONE = ["cond", "then", "else", "value", "body", "rec", "fn", "scrut", "otherwise", "ok", "reason", "arm", "release", "list", "dflt"] as const;
 const MANY = ["args", "items", "caps", "arms"] as const;
@@ -166,7 +170,7 @@ export function shareCalls(ir: CoreIR, opts: { ops?: boolean; calls?: boolean } 
       // Each candidate call with its path from the body: the slots taken.
       const seen = new Map<string, { node: SExpr; paths: [SExpr, Slot][][] }>();
       const walk = (e: SExpr, path: [SExpr, Slot][]) => {
-        if (e.k === "call" ? opts.calls !== false && !e.cps && !e.tail && pure.has(e.fn) && e.args.every(opts.ops ? (a) => pureTree(a, pure) : simple) : opts.ops && e.k === "op" && works(e) && pureTree(e, pure) && readsOf(e).size > 0) {
+        if (e.k === "call" ? opts.calls !== false && !e.cps && !e.tail && pure.has(e.fn) && !isArray(ir.funcs[e.fn].result) && e.args.every(opts.ops ? (a) => pureTree(a, pure) : simple) : opts.ops && e.k === "op" && works(e) && pureTree(e, pure) && readsOf(e).size > 0) {
           const k = said(e);
           const s = seen.get(k) ?? { node: e, paths: [] };
           s.paths.push(path);

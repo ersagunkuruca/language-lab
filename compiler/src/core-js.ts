@@ -50,7 +50,7 @@ import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { BRANCH_NAMES, BRANCH_WORLDS, branches } from "./core-branches.ts";
@@ -221,6 +221,12 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
   // what to call instead; past DEPTH plain calls deep, a call runs that
   // copy, and R.drive keeps the calls waiting in an array.
   const deep = deepFuncs(ir.funcs);
+  // Arrays of a type written in place (owned-arrays.ts): a definition
+  // giving one gives a new one each time it is named, as one-holder.ts
+  // reads it (G3f).
+  const written = new Set<number>();
+  const writes = (e: SExpr): void => { if (e.k === "rt") { const m = /^array\.(replaceOwned|pushFrontOwned)\.a(\d+)$/.exec(e.fn); if (m) written.add(Number(m[2])); } kids(e).forEach(writes); };
+  ir.funcs.forEach((f) => writes(f.body));
   const gens = names.map((n) => `${n}$h`);
   // A closure's code with a heap copy has it as `.h`, and a heap copy's
   // apply that may call back into its cycle runs it on the heap (R.aph).
@@ -698,7 +704,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // A definition that isn't a function is worked out once, at its first
     // use, as compile.ts has it (`??=`): sheet's `symbols`, a set made from
     // a written list, was made again for every character (C137d17).
-    if (f.value && !cycle && !deep.has(i) && !f.partial && !f.spends && !f.budgeted && !params.length) {
+    if (f.value && !cycle && !deep.has(i) && !f.partial && !f.spends && !f.budgeted && !params.length && !(isArray(f.result) && written.has(f.result.index) && !emptyArray(f.body))) {
       return [`let ${names[i]}$v;`, `function ${names[i]}() { return ${names[i]}$v ??= ${names[i]}$w(); }`, `function ${names[i]}$w() {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
     }
     return [`function${cycle ? "*" : ""} ${cycle ? gens[i] : names[i]}(${params.join(", ")}) {`, ...(locals.length ? [`  let ${locals.join(", ")};`] : []), ...body, "}"].join("\n");
