@@ -95,6 +95,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 
 | doc | what it is | status |
 |---|---|---|
+| [SCHEDULE-2026-11-20.md](design/data/SCHEDULE-2026-11-20.md) | A schedule beside the program: the compiler's picks and their parameters, tuned by a person with the meaning kept | designed (L280a to L280i) |
 | [REPRESENTATIONS.md](design/data/REPRESENTATIONS.md) | How a value is stored, written in the language; the compiler chooses, never the program | built (L108a to L108d; lists as arrays, C30) |
 | [TEXT-2026-11-03.md](design/data/TEXT-2026-11-03.md) | Text decisions: code-point equality with NFC where text enters, case by locale argument, graphemes, collation as a separate order | built (L185, L214) |
 | [DATA-STRUCTURES.md](design/data/DATA-STRUCTURES.md) | Maps, sets and more as meanings with representations | built (Map and Set as trees and hash tables, L61); HAMT and RRB measured, not needed (L212) |
