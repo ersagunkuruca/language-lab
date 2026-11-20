@@ -14,7 +14,7 @@ import { showTypeWithUnits } from "../src/lang/unit-types.ts";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import type { Code, Id, Node, NodeOf } from "../src/model.ts";
-import { children, collect, freshId, parentLookup, parentOf, portNames, portsOf, scanningOnLayer, subtree, swapIn, isCall, type Call, type NodeData } from "../src/model.ts";
+import { children, collect, freshId, parentLookup, parentOf, portNames, portsOf, scanningOnLayer, subtree, swapIn, isCall, type Call, type NodeData, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { sameEverywhere, sharedPlaces } from "../src/lang/patterns.ts";
 import type { Comments, Names, Presentation, Style } from "../src/presentation.ts";
 import { root } from "../src/io.ts";
@@ -97,7 +97,7 @@ export class Session {
     this.info = T.guardedInfo(this.code, this.pins) ?? T.infer(this.code, { ...LIBRARY.names, ...this.allNames });
     checked.set(this.code, this.info);
     // Shortest unique prefixes, over the program's own nodes.
-    const ids = Object.keys(this.code.nodes).filter((id) => !LIBRARY.code.nodes[id]).sort();
+    const ids = nodeIds(this.code.nodes).filter((id) => !LIBRARY.code.nodes[id]).sort();
     this.short.clear();
     ids.forEach((id, i) => {
       const common = (o?: string) => { if (!o) return 0; let k = 0; while (k < id.length && id[k] === o[k]) k++; return k; };
@@ -381,7 +381,7 @@ export class Session {
     // An implementation's field left to the interface's ways (WAYS.md):
     // the editor's text reader doesn't take it (I183), so it is put in
     // here; the checker says if no way grounds it.
-    if (norm(t) === "by its ways") return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: S.byItsWays } }, defs: code.defs } };
+    if (norm(t) === "by its ways") return { ok: true, names, code: { nodes: withNodes(code.nodes, { [hole]: { id: hole, kind: "ref", target: S.byItsWays } }), defs: code.defs } };
     const nested = this.nestedIn(code, names, hole, t, def, as);
     if (nested) return nested;
     const r = T.fillValue(code, names, editorInfo(code, names), hole, t, def);
@@ -409,7 +409,7 @@ export class Session {
     const near = T.scopeAt(code, def, hole).filter((b) => all[b] === norm(t)).at(-1)
       ?? code.defs.find((d) => all[d] === norm(t) && !LIBRARY.code.nodes[d]) ?? code.defs.find((d) => all[d] === norm(t));
     if (!near) return r;
-    return { ok: true, names, code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "ref", target: near } }, defs: code.defs } };
+    return { ok: true, names, code: { nodes: withNodes(code.nodes, { [hole]: { id: hole, kind: "ref", target: near } }), defs: code.defs } };
   }
 
   // A match where a value goes, not only where a line or a case's body
@@ -434,14 +434,14 @@ export class Session {
     const wrapped = params.reduceRight((body, p) => `((${p}) => ${body})(□)`, around.trim());
     const r = this.fillOne(code, names, hole, wrapped, def, as);
     if (!r.ok) return r;
-    const nodes = { ...r.code.nodes }, out: Names = { ...r.names };
+    const nodes = copyNodes(r.code.nodes), out: Names = { ...r.names };
     const bound: Id[] = [];
     for (const _ of groups) {
       const call = nodes[hole], fn = isCall(call) ? nodes[call.fn] : undefined;
       if (!isCall(call) || fn?.kind !== "lambda" || fn.params.length !== 1 || call.args.length !== 1) return { ok: false, reason: `${t.trim()} doesn't read with its matches taken out` };
       bound.push(fn.params[0]);
       nodes[hole] = { ...nodes[fn.body], id: hole } as Node;
-      for (const x of [fn.body, fn.id, ...call.args]) delete nodes[x];
+      for (const x of [fn.body, fn.id, ...call.args]) dropNode(nodes, x);
     }
     const inside = subtree({ nodes, defs: r.code.defs }, hole);
     const slots: Id[] = [];
@@ -450,7 +450,7 @@ export class Session {
       if (uses.length !== 1) return { ok: false, reason: `${t.trim()} doesn't read with its matches taken out` };
       nodes[uses[0]] = { id: uses[0], kind: "hole" } as Node;
       slots.push(uses[0]);
-      delete nodes[p]; delete out[p];
+      dropNode(nodes, p); delete out[p];
     }
     let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: { nodes, defs: r.code.defs }, names: out };
     for (const [i, g] of groups.entries()) {
@@ -515,7 +515,7 @@ export class Session {
     let closers = "";
     while (depth < 0 && /[)\]}]\s*$/.test(body)) { body = body.replace(/\s*$/, ""); closers = body.slice(-1) + closers; body = body.slice(0, -1); depth++; }
     const around = [...lines.slice(0, at), `${lines[at].replace(/\s*$/, "")} □${closers}`, ...lines.slice(end)].join("\n");
-    const before = new Set(Object.keys(code.nodes));
+    const before = new Set(nodeIds(code.nodes));
     const r = this.fill(code, names, hole, around, def, as);
     if (!r.ok) return r;
     // The new hole that is a function's body: where the body goes.
@@ -601,7 +601,7 @@ export class Session {
     if (!type) return { ok: false, reason: `no data type has just the cases ${written.join(", ")}: a fold writes every case` };
     const td = code.nodes[(code.nodes[type] as NodeOf<"def">).body!] as NodeOf<"typedef">;
     const self = new Set([type, td.id]);
-    const nodes = { ...code.nodes }, out: Names = { ...names };
+    const nodes = copyNodes(code.nodes), out: Names = { ...names };
     const add = (n: Record<string, unknown>): Id => { const id = freshId(); nodes[id] = { id, ...n } as never; return id; };
     const fills: [Id, string][] = [];
     const scrutinee = add({ kind: "hole" });
@@ -642,8 +642,8 @@ export class Session {
     const { head, cases } = casesOf(text, "handle");
     const all = baseNames(names);
     const ops = new Map<string, NodeOf<"variant">>();
-    for (const n of Object.values(code.nodes)) if (n.kind === "typedef" && n.effect) for (const v of n.variants) { const op = code.nodes[v]; if (op?.kind === "variant" && all[v] && !ops.has(norm(all[v]))) ops.set(norm(all[v]), op); }
-    const nodes = { ...code.nodes }, out: Names = { ...names };
+    for (const n of nodeValues(code.nodes)) if (n.kind === "typedef" && n.effect) for (const v of n.variants) { const op = code.nodes[v]; if (op?.kind === "variant" && all[v] && !ops.has(norm(all[v]))) ops.set(norm(all[v]), op); }
+    const nodes = copyNodes(code.nodes), out: Names = { ...names };
     const add = (n: Record<string, unknown>): Id => { const id = freshId(); nodes[id] = { id, ...n } as never; return id; };
     const fills: [Id, string][] = [];
     const scrutinee = add({ kind: "hole" });
@@ -760,7 +760,7 @@ export class Session {
     const head = norm(m[1]);
     // A field with ports of the program's (an interface's operation), else a
     // definition with results.
-    const fields = Object.values(code.nodes).filter((n) => n.kind === "field" && !!portNames(code.nodes, n)?.length && all[n.id] === head);
+    const fields = nodeValues(code.nodes).filter((n) => n.kind === "field" && !!portNames(code.nodes, n)?.length && all[n.id] === head);
     const defs = code.defs.filter((d) => all[d] === head && portsOf(code.nodes, d));
     const target = fields.length === 1 ? fields[0].id : defs.length === 1 ? defs[0] : null;
     if (!target) return null;
@@ -778,7 +778,7 @@ export class Session {
       else if (a[i] === "," && !depth) { parts.push(a.slice(from, i)); from = i + 1; }
     }
     parts.push(a.slice(from));
-    const nodes = { ...code.nodes };
+    const nodes = copyNodes(code.nodes);
     const given: Record<string, Id> = {};
     const fills: [Id, string][] = [];
     for (const part of parts) {
@@ -903,7 +903,7 @@ export class Session {
       const r = before === def ? T.addStep(this.code, this.names, info, def) : this.stepBefore(info, def, before);
       if (!r.ok || !r.dot) return r.ok ? { ok: false, reason: "no step added" } : r;
       const names = { ...r.names, [r.dot]: name.trim() || "_" };
-      const let_ = Object.values(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
+      const let_ = nodeValues(r.code.nodes).find((n): n is Call => isCall(n) && (r.code.nodes[n.fn] as { params?: Id[] }).params?.[0] === r.dot)!;
       const hole = let_.args[0];
       if (!value.trim()) return { ok: true, code: r.code, names };
       return this.fill(r.code, names, hole, value, def);
@@ -957,7 +957,7 @@ export class Session {
       if (kase) return this.withFields(this.withOwn(r, def, td.variants[0], kase.own), def, td.variants[0], kase.fields);
       if (op?.[2]) {
         const v = r.code.nodes[td.variants[0]] as NodeOf<"variant">;
-        const nodes = { ...r.code.nodes };
+        const nodes = copyNodes(r.code.nodes);
         const add = (n: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...n } as NodeOf<"hole">; return id; };
         const f = v.fields[0];
         nodes[f] = { ...(nodes[f] as NodeOf<"field">), type: this.typeIn(op[2], r.code, r.names, def)(add) };
@@ -971,7 +971,7 @@ export class Session {
   // Appliance`, binders on the case and the types `Appliance a`.
   private withOwn(r: { ok: true; code: Code; names: Names }, type: Id, variant: Id, own: [string, string[]][]): { ok: true; code: Code; names: Names } {
     if (!own.length) return r;
-    const nodes = { ...r.code.nodes }, names = { ...r.names };
+    const nodes = copyNodes(r.code.nodes), names = { ...r.names };
     const add = (n: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...n } as NodeOf<"hole">; return id; };
     const known = typeNames(r.code, baseNames(r.names), r.code.defs.filter((d) => !LIBRARY.code.nodes[d]));
     const params: Id[] = [], has: Id[] = [];
@@ -1061,9 +1061,9 @@ export class Session {
     const ps = ports.map((p) => p.trim());
     // The names go on the field's function type (L182c3).
     if (t?.kind !== "tfun") return ps.length ? { ok: false, reason: `${names[field] ?? "it"} has no inputs` } : { ok: true, code, names };
-    if (!ps.length) { const { ports: _, ...plain } = t; return { ok: true, code: { nodes: { ...code.nodes, [f.type]: plain }, defs: code.defs }, names }; }
+    if (!ps.length) { const { ports: _, ...plain } = t; return { ok: true, code: { nodes: withNodes(code.nodes, { [f.type]: plain }), defs: code.defs }, names }; }
     if (ps.length !== n) return { ok: false, reason: `${names[field] ?? "it"} has ${n ? `${n - 1} inputs and a result` : "no inputs"}: give ${n} ports, the inputs' then the result's` };
-    return { ok: true, code: { nodes: { ...code.nodes, [f.type]: { ...t, ports: ps } }, defs: code.defs }, names };
+    return { ok: true, code: { nodes: withNodes(code.nodes, { [f.type]: { ...t, ports: ps } }), defs: code.defs }, names };
   }
 
   // A way of an operation (WAYS.md): a new definition with a hole for its
@@ -1121,7 +1121,7 @@ export class Session {
     if (!r.ok && r.reason === "a name alone is listed already") {
       const target = this.resolve(text);
       if (this.code.nodes[target]?.kind !== "def") throw new Error(`${text.trim()} isn't a definition`);
-      r = { ok: true, code: { ...made.code, nodes: { ...made.code.nodes, [hole]: { id: hole, kind: "ref", target } as NodeOf<"ref"> } }, names: made.names, note: "" };
+      r = { ok: true, code: { ...made.code, nodes: withNodes(made.code.nodes, { [hole]: { id: hole, kind: "ref", target } as NodeOf<"ref"> }) }, names: made.names, note: "" };
     }
     if (!r.ok) throw new Error(r.reason);
     const info = infer(r.code, baseNames(r.names), undefined, optionsWith(this.pins));
@@ -1346,16 +1346,16 @@ const viewed = new WeakMap<Code, Map<Id, string[]>>();
 function dropUnreached(before: Code, after: Code): Code {
   if (after.defs.length !== before.defs.length || after.defs.some((d, i) => before.defs[i] !== d)) return collect(after);
   const was = new Set<Id>(), now = new Set<Id>();
-  for (const id in after.nodes) if (after.nodes[id] !== before.nodes[id]) { for (const c of children(after.nodes[id])) now.add(c); if (before.nodes[id]) for (const c of children(before.nodes[id])) was.add(c); }
-  for (const id in before.nodes) if (!(id in after.nodes)) for (const c of children(before.nodes[id])) was.add(c);
+  for (const id of nodeIds(after.nodes)) if (after.nodes[id] !== before.nodes[id]) { for (const c of children(after.nodes[id])) now.add(c); if (before.nodes[id]) for (const c of children(before.nodes[id])) was.add(c); }
+  for (const id of nodeIds(before.nodes)) if (!(id in after.nodes)) for (const c of children(before.nodes[id])) was.add(c);
   // So with a node the edit made that nothing holds (one it made and then
   // replaced).
   const defs = new Set(after.defs);
   const lost = [...was].filter((c) => !now.has(c) && c in after.nodes);
-  for (const id in after.nodes) if (!(id in before.nodes) && !now.has(id) && !defs.has(id) && after.nodes[id].kind !== "builtin") lost.push(id);
+  for (const id of nodeIds(after.nodes)) if (!(id in before.nodes) && !now.has(id) && !defs.has(id) && after.nodes[id].kind !== "builtin") lost.push(id);
   if (!lost.length) return after;
-  const nodes = { ...after.nodes };
-  const drop = (id: Id) => { const n = nodes[id]; if (!n) return; delete nodes[id]; for (const c of children(n)) if (!now.has(c)) drop(c); };
+  const nodes = copyNodes(after.nodes);
+  const drop = (id: Id) => { const n = nodes[id]; if (!n) return; dropNode(nodes, id); for (const c of children(n)) if (!now.has(c)) drop(c); };
   for (const id of lost) drop(id);
   return { nodes, defs: after.defs };
 }

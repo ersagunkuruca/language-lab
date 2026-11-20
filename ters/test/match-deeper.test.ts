@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { replace, subtree, type NodeOf } from "../src/model.ts";
+import { replace, subtree, type NodeOf, nodeValues } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { matchRows, patternText, shape } from "../src/lang/patterns.ts";
@@ -15,7 +15,7 @@ test("match deeper opens a field of a row into its cases, and join cases puts it
   const p = loadProgram(join(root, "examples", "conjugate"));
   const bands = p.named("bands");
   const more = subtree(p.code, bands).find((x) => p.pres.names[x] === "more" && p.code.nodes[x].kind === "binder")!;
-  const arm = Object.values(p.code.nodes).find((n): n is NodeOf<"arm"> => n.kind === "arm" && n.binds.includes(more))!;
+  const arm = nodeValues(p.code.nodes).find((n): n is NodeOf<"arm"> => n.kind === "arm" && n.binds.includes(more))!;
   const outer = subtree(p.code, bands).map((x) => p.code.nodes[x]).find((n): n is NodeOf<"match"> => n.kind === "match")!;
   // The row reads more whole (bands(more)), so it can't open as it is.
   assert.equal(matchDeeper(p.code, p.pres.names, infer(p.code, p.pres.names), more).ok, false);

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, type Id, type NodeOf, isCall, type Call } from "../src/model.ts";
+import { get, type Id, type NodeOf, isCall, type Call, nodeValues, withNodes } from "../src/model.ts";
 import { JOBS } from "../src/lang/std.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -84,16 +84,16 @@ test("the program writes its representations, and a job of the wrong type is ref
   assert.equal(names[binary.impl[SUCC]], "succ′");
   assert.equal(names[int.impl.match], "match Nat (Int)");
   assert.deepEqual([binary.cost[named("multiply")], unary.cost.fold, binary.cost.space], ["log² n", "n", "log n"]);
-  const succJob = Object.values(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as { target?: Id }).target === JOBS.job
+  const succJob = nodeValues(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as { target?: Id }).target === JOBS.job
     && (p.code.nodes[n.args[1]] as { target?: Id }).target === binary.impl[SUCC]) as Call;
-  const wrong = { ...p.code, nodes: { ...p.code.nodes, [succJob.args[1]]: { id: succJob.args[1], kind: "ref" as const, target: p.named("integer′") } } };
+  const wrong = { ...p.code, nodes: withNodes(p.code.nodes, { [succJob.args[1]]: { id: succJob.args[1], kind: "ref" as const, target: p.named("integer′") } }) };
   const errors = infer(wrong, names).errors.map((e) => e.message);
   assert.deepEqual(errors, ["this does (Nat) -> Nat's job at Binary, so its type is (Binary) -> Binary, not (Binary) -> Int"]);
   // A job done by a function written in place, not a definition's name,
   // would be read as no job at all (examples/waiting's `two nobody`).
   const k = new Lang(p.code);
   const inPlace = k.fn(["b"], (b) => k.call(binary.impl[SUCC], k.x(b)));
-  const written = { ...p.code, nodes: { ...p.code.nodes, ...k.code.nodes, [succJob.id]: { ...succJob, args: [succJob.args[0], inPlace, succJob.args[2]] } } };
+  const written = { ...p.code, nodes: withNodes(p.code.nodes, { ...k.code.nodes, [succJob.id]: { ...succJob, args: [succJob.args[0], inPlace, succJob.args[2]] } }) };
   assert.deepEqual(infer(written, names).errors.map((e) => e.message), ["a representation's job names a definition: give this one a name of its own and use the name"]);
 });
 

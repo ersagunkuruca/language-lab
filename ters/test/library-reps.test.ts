@@ -16,7 +16,7 @@ import { withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { COPIED_FROM } from "../src/lang/prelude-ids.ts";
 import { COMPARE, CONS, INT_OPS, LIST, NIL, PAIR_V, S, SET, SHOW_ANY } from "../src/lang/std.ts";
 import { DIVERGE, NUMBER, STRING } from "../src/lang/types.ts";
-import { dependencies, subtree, type Id, isCall } from "../src/model.ts";
+import { dependencies, subtree, type Id, isCall, nodeEntries } from "../src/model.ts";
 
 const L = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -892,7 +892,7 @@ test("a definition recurring through a stored list's match runs 50,000 deep comp
   const reached = new Set<Id>([main, ...dependencies(c.code, main)]);
   const defs = c.code.defs.filter((d) => reached.has(d));
   const dropped = new Set(c.code.defs.filter((d) => !reached.has(d)).flatMap((d) => subtree(c.code, d)));
-  const cut = { nodes: Object.fromEntries(Object.entries(c.code.nodes).filter(([x]) => !dropped.has(x))), defs };
+  const cut = { nodes: Object.fromEntries(nodeEntries(c.code.nodes).filter(([x]) => !dropped.has(x))), defs };
   assert.ok(cut.defs.length < c.code.defs.length);
   const info3 = infer(cut, c.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...c.insiders] });
   assert.ok(!info3.divergent.has(count), "count surely finishes in the program cut");

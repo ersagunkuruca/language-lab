@@ -5,12 +5,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { SCHEMA, children, type Node } from "../src/model.ts";
+import { SCHEMA, children, type Node, nodeValues } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 
 test("every attribute the library's nodes carry is in the schema", () => {
   const unknown = new Set<string>();
-  for (const n of Object.values(LIBRARY.code.nodes) as Node[]) {
+  for (const n of nodeValues(LIBRARY.code.nodes) as Node[]) {
     const slots = SCHEMA[n.kind] as Record<string, string> | undefined;
     if (!slots) { unknown.add(n.kind); continue; }
     for (const a of Object.keys(n)) if (a !== "id" && a !== "kind" && !(a in slots)) unknown.add(`${n.kind}.${a}`);

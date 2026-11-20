@@ -17,7 +17,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { subtree, type Id } from "../src/model.ts";
+import { subtree, type Id, nodeValues } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 
@@ -71,8 +71,8 @@ test("one definition at two types, through their implementations, evaluated and 
 test("resolved, an operation is a direct call: no interface is left and no record is built", () => {
   const p = program();
   const r = resolveArithmetic(p.code, p.info, p.names);
-  const ops = new Set(Object.values(p.code.nodes).filter((n) => n.kind === "field" && /^(half|twice)$/.test(p.names[n.id] ?? "")).map((n) => n.id));
-  const variant = Object.values(p.code.nodes).find((n) => n.kind === "variant" && p.names[n.id] === "halving")!.id;
+  const ops = new Set(nodeValues(p.code.nodes).filter((n) => n.kind === "field" && /^(half|twice)$/.test(p.names[n.id] ?? "")).map((n) => n.id));
+  const variant = nodeValues(p.code.nodes).find((n) => n.kind === "variant" && p.names[n.id] === "halving")!.id;
   // In what runs (everything but the implementations themselves), nothing
   // refers to the interface's operations or builds its record.
   const impls = new Set([at(p, "halving at pair"), at(p, "halving at float64")]);

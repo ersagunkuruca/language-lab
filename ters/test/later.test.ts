@@ -18,6 +18,7 @@ import { CONSOLE, DIVERGE, NUMBER, STRING, showType } from "../src/lang/types.ts
 import { compiledMain } from "../../compiler/src/core-js.ts";
 import { B } from "../src/prelude.ts";
 import { addField, setLater } from "../src/lang/toplevel.ts";
+import { nodeValues } from "../src/model.ts";
 
 const lib = (name: string) => LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === name)!;
 
@@ -414,15 +415,15 @@ test("answered later, set and unset in the editor: each case gets the rest, afte
     return collect;
   });
   assert.deepEqual(p.errors, []);
-  const op = Object.values(p.code.nodes).find((n) => n.kind === "variant" && p.names[n.id] === "yield")!.id;
-  const arm = () => Object.values(on.code.nodes).find((n) => n.kind === "arm" && n.variant === op) as { binds: Id[] };
+  const op = nodeValues(p.code.nodes).find((n) => n.kind === "variant" && p.names[n.id] === "yield")!.id;
+  const arm = () => nodeValues(on.code.nodes).find((n) => n.kind === "arm" && n.variant === op) as { binds: Id[] };
   let on = setLater(p.code, p.names, op, true) as Extract<ReturnType<typeof setLater>, { ok: true }>;
   assert.ok(on.ok);
   assert.deepEqual(infer(on.code, on.names, undefined, checkOptions).errors.map((e) => e.message), []);
   assert.deepEqual(arm().binds.map((b) => on.names[b]), ["item", "rest"]);
   assert.match(renderBlocks(on.code, { names: on.names, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as never, infer(on.code, on.names), p.def("collect")), /yield\(item\) with rest →/);
   // A new input goes before the rest.
-  const typeOf = Object.values(on.code.nodes).find((n) => n.kind === "typedef" && n.variants.includes(op))!;
+  const typeOf = nodeValues(on.code.nodes).find((n) => n.kind === "typedef" && n.variants.includes(op))!;
   const def = on.code.defs.find((d) => (on.code.nodes[d] as { body?: Id }).body === typeOf.id)!;
   on = addField(on.code, on.names, def, op, "weight", { target: NUMBER, args: [] }) as typeof on;
   assert.ok(on.ok);

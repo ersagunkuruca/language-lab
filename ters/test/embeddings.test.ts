@@ -19,6 +19,7 @@ import { relate } from "../src/lang/relate.ts";
 import type { Pins } from "../src/lang/signatures.ts";
 import { INT, NUMBER, type Type } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
+import { nodeIds } from "../src/model.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 const near = lib("near");
@@ -29,7 +30,7 @@ function program(build: (k: Lang) => void | Pins) {
   const pins = build(k);
   const code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names, undefined, pins ? { ...checkOptions, pins } : checkOptions);
-  return { code, names, info, own: new Set(Object.keys(k.code.nodes)) };
+  return { code, names, info, own: new Set(nodeIds(k.code.nodes)) };
 }
 
 test("the library's embeddings keep + − · and <, the ones each pair of types has", () => {

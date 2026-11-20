@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { replace, subtree, type NodeOf, isCall, type Call } from "../src/model.ts";
+import { replace, subtree, type NodeOf, isCall, type Call, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { renderLet } from "../src/render/letseq.ts";
 import { fillValue, infer } from "../../editor/typed.ts";
@@ -231,7 +231,7 @@ test("typed as float64 of an open number takes no number type no one asked for",
     const r = fillValue(code, names, infer(code, names), hole, text, f);
     assert.ok(r.ok, !r.ok ? r.reason : "");
     if (!r.ok) continue;
-    const used = Object.values(r.code.nodes).flatMap((x) => (x.kind === "ref" && !code.nodes[x.id] ? [x.target] : []));
+    const used = nodeValues(r.code.nodes).flatMap((x) => (x.kind === "ref" && !code.nodes[x.id] ? [x.target] : []));
     assert.ok(used.includes("builtin.int.toNumber"), `${text}: ${used.join(" ")}`);
   }
 });
@@ -250,7 +250,7 @@ test("typed case name alone is its constructor as a function", async () => {
   const r = fillValue(code, names, infer(code, names), hole, "map([1, 2], some)", f);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
-  assert.ok(Object.values(r.code.nodes).some((x) => x.kind === "ref" && x.target === SOME && !code.nodes[x.id]));
+  assert.ok(nodeValues(r.code.nodes).some((x) => x.kind === "ref" && x.target === SOME && !code.nodes[x.id]));
 });
 
 // A field read on a call's result is the result type's (E216): machine's
@@ -351,7 +351,7 @@ test("typed lists and constructors take value definitions by name", async () => 
   for (const text of ['[save name, "x"]', "some(save name)"]) {
     const r = fillValue(code, names, infer(code, names), hole, text, f);
     assert.ok(r.ok, `${text}: ${!r.ok ? r.reason : ""}`);
-    if (r.ok) assert.ok(Object.values(r.code.nodes).some((n) => n.kind === "ref" && n.target === name), text);
+    if (r.ok) assert.ok(nodeValues(r.code.nodes).some((n) => n.kind === "ref" && n.target === name), text);
   }
 });
 
@@ -382,8 +382,8 @@ test("a case read back is the program's own, not the library's of that name", as
   const k = new Lang();
   k.type("Stage", [], [["todo", []], ["finished", []]]);
   const code = base(k.code), names = baseNames(k.names);
-  const mine = Object.keys(k.code.nodes).find((id) => k.names[id] === "finished")!;
-  assert.ok(Object.keys(code.nodes).some((id) => id !== mine && names[id] === "finished"), "the library has a finished too");
+  const mine = nodeIds(k.code.nodes).find((id) => k.names[id] === "finished")!;
+  assert.ok(nodeIds(code.nodes).some((id) => id !== mine && names[id] === "finished"), "the library has a finished too");
   const r = parseValue("finished", code, names);
   assert.ok("value" in r && (r.value as { tag: string }).tag === mine);
 });
@@ -407,7 +407,7 @@ test("typed steps and a step before a one-action body", async () => {
   const lam = r.code.nodes[call.fn] as NodeOf<"lambda">;
   assert.equal(r.names[lam.params[0]], "_");
   // (a) => print("b") alone: a step goes before it.
-  const one = { ...r.code, nodes: { ...r.code.nodes, [hole]: { ...r.code.nodes[lam.body], id: hole } } };
+  const one = { ...r.code, nodes: withNodes(r.code.nodes, { [hole]: { ...r.code.nodes[lam.body], id: hole } }) };
   const s = addActionStep(one, r.names, infer(one, r.names), hole);
   assert.ok(s.ok, !s.ok ? s.reason : "");
 });
@@ -448,7 +448,7 @@ test("typed 1500.0 is a Float64", async () => {
   // In a list too, each keeps its point (E195).
   const l = fillValue(code, names, infer(code, names), hole, "[1.0, 2.0]", f);
   assert.ok(l.ok, !l.ok ? l.reason : "");
-  if (l.ok) assert.equal(Object.values(l.code.nodes).filter((n) => n.kind === "lit" && n.of === NUMBER).length, 2);
+  if (l.ok) assert.equal(nodeValues(l.code.nodes).filter((n) => n.kind === "lit" && n.of === NUMBER).length, 2);
 });
 
 // A name several types share, in a stub its one caller passes a Text:
@@ -490,7 +490,7 @@ test("a call of a shared name says which meaning it took", async () => {
   const { tookType } = await import("../../editor/typed.ts");
   const p = loadProgram(join(root, "..", "compiler/gaps/clinic"));
   const info = infer(p.code, p.pres.names);
-  const calls = Object.values(p.own.nodes).filter((n): n is Call => isCall(n) && p.code.nodes[n.fn]?.kind === "ref");
+  const calls = nodeValues(p.own.nodes).filter((n): n is Call => isCall(n) && p.code.nodes[n.fn]?.kind === "ref");
   const named = (name: string) => calls.find((c) => p.pres.names[(p.code.nodes[c.fn] as NodeOf<"ref">).target] === name)!;
   assert.equal(tookType(p.code, info, p.pres.names, named("as float64").id), "as float64 : (Int) -> Float64");
   assert.equal(tookType(p.code, info, p.pres.names, named("heap size").id), null);
@@ -507,7 +507,7 @@ test("typed range(n) of an open n is Int's", async () => {
   let hole = "";
   k.define(f, k.fn(["n"], () => (hole = k.hole())));
   const code = base(k.code), names = baseNames(k.names);
-  const used = (text: string) => { const r = fillValue(code, names, infer(code, names), hole, text, f); assert.ok(r.ok, text); return r.ok ? Object.values(r.code.nodes).flatMap((x) => (x.kind === "ref" && !code.nodes[x.id] ? [x.target] : [])) : []; };
+  const used = (text: string) => { const r = fillValue(code, names, infer(code, names), hole, text, f); assert.ok(r.ok, text); return r.ok ? nodeValues(r.code.nodes).flatMap((x) => (x.kind === "ref" && !code.nodes[x.id] ? [x.target] : [])) : []; };
   assert.ok(used("range(n)").includes("builtin.int.range"));
   assert.ok(used("range(2.5)").includes("builtin.range"));
   assert.ok(used("n + 1").includes("builtin.arith.add"));
@@ -524,7 +524,7 @@ test("typed text is stored in NFC", () => {
   const r = fillValue(open, names, infer(open, names), lit.id, '"café"', main);
   assert.ok(r.ok, !r.ok ? r.reason : "");
   if (!r.ok) return;
-  const filled = Object.values(r.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "string" && n.value.startsWith("caf"));
+  const filled = nodeValues(r.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "string" && n.value.startsWith("caf"));
   assert.equal((filled as NodeOf<"lit">).value, "café");
 });
 
@@ -680,7 +680,7 @@ test("typed text reads a relation written where it is used", async () => {
 test("typed text reads a function as a value, a quoted name, and a rack of overloaded calls", () => {
   const p = loadProgram(join(root, "..", "compiler", "gaps", "break"));
   const d = "tryDef", h = "tryHole";
-  const code = { nodes: { ...p.code.nodes, [d]: { id: d, kind: "def", body: h }, [h]: { id: h, kind: "hole" } } as never, defs: [...p.code.defs, d] };
+  const code = { nodes: withNodes(p.code.nodes, { [d]: { id: d, kind: "def", body: h }, [h]: { id: h, kind: "hole" } }) as never, defs: [...p.code.defs, d] };
   const names = { ...p.pres.names, [d]: "try" };
   const info = infer(code, names);
   const reads = (text: string) => {

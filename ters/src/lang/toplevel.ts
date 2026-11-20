@@ -13,7 +13,7 @@
 // any other edit.
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
-import { conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf, copyNodes, dropNode, nodeValues } from "../model.ts";
+import { conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf, copyNodes, dropNode, nodeValues, withNodes } from "../model.ts";
 import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
@@ -463,7 +463,7 @@ export function setPrivate(code: Code, names: Names, variant: Id, on: boolean): 
   if (type?.effect || type?.interface) return { ok: false, reason: `${nameOf(names, variant)} is ${type.effect ? "an operation of an effect" : "an interface's"}: only a data type's cases are private` };
   if (!!v.private === on) return { ok: false, reason: `${nameOf(names, variant)} is ${on ? "private" : "public"} already` };
   const { private: _, ...open } = v;
-  return { ok: true, code: { nodes: { ...code.nodes, [variant]: on ? { ...v, private: true } : open }, defs: code.defs }, names, select: variant,
+  return { ok: true, code: { nodes: withNodes(code.nodes, { [variant]: on ? { ...v, private: true } : open }), defs: code.defs }, names, select: variant,
     note: on ? `${nameOf(names, variant)} is private: this program builds it, and a program that uses the type builds one with this program's functions.` : `${nameOf(names, variant)} is public: anyone may build it.` };
 }
 
@@ -525,7 +525,7 @@ export function setPure(code: Code, names: Names, effect: Id, on: boolean): Top 
   const waits = td.variants.find((v) => { const op = code.nodes[v] as NodeOf<"variant">; return !op.returns || op.later; });
   if (on && waits) return { ok: false, reason: `${nameOf(names, waits)} doesn't give an answer at once, so it isn't a function of its inputs` };
   const { pure: _, ...rest } = td;
-  return { ok: true, code: { nodes: { ...code.nodes, [td.id]: on ? { ...td, pure: true } : rest }, defs: code.defs }, names, select: effect,
+  return { ok: true, code: { nodes: withNodes(code.nodes, { [td.id]: on ? { ...td, pure: true } : rest }), defs: code.defs }, names, select: effect,
     note: on ? `${nameOf(names, effect)} is pure now: its operations are in no row, answered by the program's host (hosts/js.js) on your word that each is a function of its inputs. Never for the clock, files, the network or randomness.` : `${nameOf(names, effect)} is in every row that performs it again.` };
 }
 
@@ -572,7 +572,7 @@ export function setWay(code: Code, names: Names, def: Id, way: { cost: number | 
   if (d?.kind !== "def" || !fieldWayOf(code.nodes, def)) return { ok: false, reason: "that isn't a way of an operation" };
   if (way?.cost != null && !(Number.isFinite(way.cost) && way.cost >= 0)) return { ok: false, reason: "a cost is a number, 0 or more" };
   const { way: wayOf, cost: _, ...plain } = d, field = wayOf!;
-  const nodes = { ...code.nodes, [def]: way ? { ...plain, way: field, ...(way.cost != null ? { cost: way.cost } : {}) } : plain };
+  const nodes = withNodes(code.nodes, { [def]: way ? { ...plain, way: field, ...(way.cost != null ? { cost: way.cost } : {}) } : plain });
   return { ok: true, code: { nodes, defs: code.defs }, names, select: def,
     note: way ? `${nameOf(names, def)} costs ${way.cost ?? "the usual"}${way.cost != null ? " plus what it uses" : ""}.` : `${nameOf(names, def)} is an ordinary definition now, no longer a way of ${nameOf(names, field)}.` };
 }
@@ -613,7 +613,7 @@ export function dropDirection(code: Code, names: Names, def: Id): Top {
   const direction = directionOf(code.nodes, def);
   if (d?.kind !== "def" || !direction) return { ok: false, reason: "that isn't a direction of a relation" };
   const { way: _, cost: __, ...plain } = d;
-  return { ok: true, code: { nodes: { ...code.nodes, [def]: plain }, defs: code.defs }, names, select: def,
+  return { ok: true, code: { nodes: withNodes(code.nodes, { [def]: plain }), defs: code.defs }, names, select: def,
     note: `${nameOf(names, def)} is an ordinary definition now, no longer a direction of ${nameOf(names, direction)}.` };
 }
 

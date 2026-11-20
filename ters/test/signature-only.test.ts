@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { isCall, subtree, type Code, type Id, type Node } from "../src/model.ts";
+import { isCall, subtree, type Code, type Id, type Node, nodeIds } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
@@ -69,13 +69,13 @@ test("no example writes an identity matrix out", () => {
 });
 
 test("no library module writes an identity matrix out", () => {
-  assert.deepEqual(identities(LIBRARY.code, Object.keys(LIBRARY.code.nodes)), []);
+  assert.deepEqual(identities(LIBRARY.code, nodeIds(LIBRARY.code.nodes)), []);
 });
 
 test("the test finds one: a 4-part basis written out", () => {
   const nodes: Record<Id, Node> = {};
   const add = (n: Node) => (nodes[n.id] = n).id;
-  const lit = (v: number) => add({ id: `l${Object.keys(nodes).length}`, kind: "lit", value: v } as Node);
+  const lit = (v: number) => add({ id: `l${nodeIds(nodes).length}`, kind: "lit", value: v } as Node);
   const rec = (i: number) => add({ id: `r${i}`, kind: "call", fn: "flat", args: [0, 1, 2, 3].map((j) => lit(i === j ? 1 : 0)) } as Node);
   const list = add({ id: "list", kind: "call", fn: "std.list.literal", args: [0, 1, 2, 3].map(rec) } as Node);
   assert.deepEqual(identities({ nodes, defs: [] }, [list]), ["list"]);
@@ -84,11 +84,11 @@ test("the test finds one: a 4-part basis written out", () => {
 test("and one written in rows, as a 2 × 2 matrix's units", () => {
   const nodes: Record<Id, Node> = {};
   const add = (n: Node) => (nodes[n.id] = n).id;
-  const lit = (v: number) => add({ id: `l${Object.keys(nodes).length}`, kind: "lit", value: v } as Node);
+  const lit = (v: number) => add({ id: `l${nodeIds(nodes).length}`, kind: "lit", value: v } as Node);
   const rec = (i: number) => add({ id: `r${i}`, kind: "call", fn: "mat2", args: [0, 1, 2, 3].map((j) => lit(i === j ? 1 : 0)) } as Node);
   const row = (r: number) => add({ id: `row${r}`, kind: "call", fn: "std.list.literal", args: [0, 1].map((c) => rec(r * 2 + c)) } as Node);
   const rows = add({ id: "rows", kind: "call", fn: "std.list.literal", args: [0, 1].map(row) } as Node);
-  assert.deepEqual(identities({ nodes, defs: [] }, Object.keys(nodes)), ["rows"]);
+  assert.deepEqual(identities({ nodes, defs: [] }, nodeIds(nodes)), ["rows"]);
 });
 
 test("each example's algebra is at its record type, not generic", () => {

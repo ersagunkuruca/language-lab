@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { get, subtree, type Code, type Id, type NodeOf, isUse, useTarget } from "../src/model.ts";
+import { get, subtree, type Code, type Id, type NodeOf, isUse, useTarget, nodeValues } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -223,7 +223,7 @@ test("every relational solve in the examples has a mode that isn't stuck, and it
     const p = load(e);
     const own = parseSaved<Code>(readFileSync(join(root, "examples", e, "code.json"), "utf8"));
     const a = analyzer(p.code, p.pres.names);
-    for (const n of Object.values(own.nodes)) {
+    for (const n of nodeValues(own.nodes)) {
       // A solve a relation's direction answers is a call of it (POLAR.md,
       // directions.ts): impact's `gap at` solved for s is `first touch`.
       if (!isUse(n) || directionFor(p.code, n) || planSolve(p.code, n).mode !== "relational") continue;

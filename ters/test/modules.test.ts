@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { isPublished, merge, MergeClash, subtree, type Code, type Id, type Node, type NodeOf, type Call } from "../src/model.ts";
+import { isPublished, merge, MergeClash, subtree, type Code, type Id, type Node, type NodeOf, type Call, nodeEntries, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import { hashDef } from "../src/hash.ts";
 import { hex, sha256 } from "../src/sha256.ts";
@@ -66,7 +66,7 @@ test("a change to a std declaration adds a version and keeps the old, and html, 
   const base = merge(CORE, PRELUDE.code);
   assert.equal(verify(HTML_MODULE, base), null);
   const attr = base.nodes["std.attribute"] as NodeOf<"def">;
-  const changed: Code = { ...base, nodes: { ...base.nodes, [attr.body!]: { ...base.nodes[attr.body!], unique: "another Attribute" } as Node } };
+  const changed: Code = { ...base, nodes: withNodes(base.nodes, { [attr.body!]: { ...base.nodes[attr.body!], unique: "another Attribute" } as Node }) };
   const before = addVersions({}, base, ["std.attribute", "std.list"]);
   const after = addVersions(before, changed, ["std.attribute", "std.list"]);
   assert.equal(after["std.attribute"].length, 2);
@@ -189,7 +189,7 @@ test("the examples use the prelude instead of carrying their own copies", () => 
     const p = loadProgram(join(root, "examples", name));
     const own = new Set(p.own.defs.map((d) => p.pres.names[d]));
     for (const lib of ["for each", "map", "keep", "show numbers"]) assert.ok(!own.has(lib), `${name} still has its own ${lib}`);
-    assert.ok(Object.values(p.own.nodes).some((n) => n.kind === "ref" && isPublished(n.target)), `${name} uses nothing published`);
+    assert.ok(nodeValues(p.own.nodes).some((n) => n.kind === "ref" && isPublished(n.target)), `${name} uses nothing published`);
     assert.deepEqual(infer(p.code, p.pres.names, undefined, checkOptions).errors, [], name);
   }
   // and still run
@@ -233,7 +233,7 @@ test("sameAs: a draft with a library definition's hash, or another draft's, is s
   // Edited into x + x, sq matches nothing, and square nothing either.
   const lam = code.nodes[(code.nodes[sq] as NodeOf<"def">).body!] as NodeOf<"lambda">;
   const op = (code.nodes[lam.body] as Call).fn;
-  const edited = { ...code, nodes: { ...code.nodes, [op]: { ...code.nodes[op], target: B.add } as Node } };
+  const edited = { ...code, nodes: withNodes(code.nodes, { [op]: { ...code.nodes[op], target: B.add } as Node }) };
   const after = sameAs(edited, LIBRARY);
   assert.equal(after.get(sq), undefined);
   assert.equal(after.get(square), undefined);
@@ -295,7 +295,7 @@ test("a pin holds a definition's type: a change that breaks it is an error there
   // the body now returns text
   const body = (code.nodes[area] as { body: Id }).body;
   const lam = code.nodes[body] as { body: Id };
-  const changed: Code = { nodes: { ...code.nodes, [lam.body]: { id: lam.body, kind: "lit", value: "big" } }, defs: code.defs };
+  const changed: Code = { nodes: withNodes(code.nodes, { [lam.body]: { id: lam.body, kind: "lit", value: "big" } }), defs: code.defs };
   const unpinned = infer(changed, k.names);
   assert.ok(unpinned.errors.some((e) => subtree(changed, user).includes(e.id)), "without a pin the caller breaks");
   const pinned = infer(changed, baseNames(k.names), undefined, { pins });
@@ -303,10 +303,10 @@ test("a pin holds a definition's type: a change that breaks it is an error there
   assert.equal(pinned.errors[0].id, area);
   assert.match(pinned.errors[0].message, /area is pinned to \(Float64\) -> Float64, and this makes it \(a\) -> Text/);
   // A body more general than its pin is fine: the pin promises less.
-  const id: Code = { nodes: { ...code.nodes, [lam.body]: { id: lam.body, kind: "ref", target: (code.nodes[body] as { params: Id[] }).params[0] } }, defs: code.defs };
+  const id: Code = { nodes: withNodes(code.nodes, { [lam.body]: { id: lam.body, kind: "ref", target: (code.nodes[body] as { params: Id[] }).params[0] } }), defs: code.defs };
   assert.deepEqual(infer(id, k.names, undefined, { pins }).errors, []);
   // Doing more than the pin allows is not.
-  const prints: Code = { nodes: { ...code.nodes, [lam.body]: { id: lam.body, kind: "call", fn: "p.f", args: [] }, "p.f": { id: "p.f", kind: "ref", target: S.fail } }, defs: code.defs };
+  const prints: Code = { nodes: withNodes(code.nodes, { [lam.body]: { id: lam.body, kind: "call", fn: "p.f", args: [] }, "p.f": { id: "p.f", kind: "ref", target: S.fail } }), defs: code.defs };
   assert.match(infer(prints, k.names, undefined, { pins }).errors[0]?.message ?? "", /pinned/);
 });
 
@@ -324,7 +324,7 @@ test("checking stops at pins: an edit inside a pinned definition checks only it 
   infer(p.code, p.pres.names, undefined, opts);
   // an edit that keeps the type: a number literal inside evaluate
   const lit = subtree(p.code, evaluate).find((id) => p.code.nodes[id].kind === "lit" && typeof (p.code.nodes[id] as { value: unknown }).value === "number")!;
-  const code = { nodes: { ...p.code.nodes, [lit]: { ...p.code.nodes[lit], value: 7 } as never }, defs: p.code.defs };
+  const code = { nodes: withNodes(p.code.nodes, { [lit]: { ...p.code.nodes[lit], value: 7 } as never }), defs: p.code.defs };
   const misses = cache.misses;
   const kept = infer(code, p.pres.names, undefined, opts);
   assert.equal(cache.misses - misses, 1);
@@ -339,7 +339,7 @@ test("checking stops at pins: an edit inside a pinned definition checks only it 
   const cache2 = new CheckCache();
   infer(c0, names, undefined, { ...checkOptions, cache: cache2 });
   const fl = ((c0.nodes[(c0.nodes[f] as { body: Id }).body]) as { body: Id }).body;
-  const c1: Code = { nodes: { ...c0.nodes, [fl]: { id: fl, kind: "lit", value: "text" } }, defs: c0.defs };
+  const c1: Code = { nodes: withNodes(c0.nodes, { [fl]: { id: fl, kind: "lit", value: "text" } }), defs: c0.defs };
   const m2 = cache2.misses;
   const r = infer(c1, names, undefined, { ...checkOptions, cache: cache2 });
   assert.ok(cache2.misses - m2 >= 2, "f and g are checked again");
@@ -353,7 +353,7 @@ test("a module's helpers are used where they are, and never offered in the palet
   const code = base(k.code);
   const names = baseNames(k.names);
   const info = infer(code, names, undefined, checkOptions);
-  const hole = Object.values(k.code.nodes).find((n) => n.kind === "hole")!.id;
+  const hole = nodeValues(k.code.nodes).find((n) => n.kind === "hole")!.id;
   const offered = new Set(fillings(code, info, hole).flatMap((f) => ("target" in f ? [f.target] : [])));
   assert.ok(offered.has(prelude("reverse")));
   assert.ok(!offered.has(prelude("reverse onto")));
@@ -389,7 +389,7 @@ test("upgrade moves a program to a new version only when the type is the same", 
   assert.ok(up.ok, up.ok ? "" : (up as { reason?: string }).reason);
   if (up.ok) {
     // main's use, and the library's own (the signals module's DFT sums).
-    const inLibrary = Object.values(LIBRARY.code.nodes).filter((n) => !n.id.startsWith(prelude("sum")) && JSON.stringify(n).includes(`"${prelude("sum")}"`)).length;
+    const inLibrary = nodeValues(LIBRARY.code.nodes).filter((n) => !n.id.startsWith(prelude("sum")) && JSON.stringify(n).includes(`"${prelude("sum")}"`)).length;
     assert.equal(up.uses, 1 + inLibrary);
     const out: string[] = [];
     runMain(up.code, infer(up.code), main, { print: (s) => out.push(s) });
@@ -418,7 +418,7 @@ test("a program moves onto a newer version whose pin is at least as general, and
   bob.define(main, bob.thunk(() => bob.call(v1, bob.lit(4))));
   const up = upgradeOwn(bob.code, [m2]);
   assert.deepEqual(up.moved.map((x) => [x.from, x.to]), [[v1, v2]]);
-  assert.ok(Object.values(up.own.nodes).some((n) => n.kind === "ref" && n.target === v2));
+  assert.ok(nodeValues(up.own.nodes).some((n) => n.kind === "ref" && n.target === v2));
   // Version 3: Float64 only again, narrower than version 2: a program on 2 stays.
   k.define(twice, k.fn(["x"], (x) => k.call(B.add, x, x)));
   const m3 = step(m2);
@@ -473,8 +473,8 @@ test("a program's store keeps every version it used: it runs without the module,
   assert.equal(previousVersion(store, v2), v1);
   const back = upgrade(merge(store.code, up.own), v2, v1, store.pins);
   assert.ok(back.ok);
-  const own = { nodes: Object.fromEntries(Object.entries(back.code.nodes).filter(([id]) => up.own.nodes[id])), defs: up.own.defs };
-  assert.ok(Object.values(own.nodes).some((n) => n.kind === "ref" && n.target === v1));
+  const own = { nodes: Object.fromEntries(nodeEntries(back.code.nodes).filter(([id]) => up.own.nodes[id])), defs: up.own.defs };
+  assert.ok(nodeValues(own.nodes).some((n) => n.kind === "ref" && n.target === v1));
   assert.deepEqual(run(own), ["42"]);
 });
 
@@ -489,7 +489,7 @@ test("a program on a type whose fields changed moves through the author's migrat
   k.define(norm, k.fn(["p"], (p) => k.call(B.add, sq(k.call(P.f["point.x"], p)), sq(k.call(P.f["point.y"], p)))));
   const step = (prev: Module | null, defs: Id[]) => { const r = publishVersion(prev, "points", base(k.code), baseNames(k.names), defs, LIBRARY.code, LIBRARY.pins); assert.ok(r.ok, r.ok ? "" : r.reason); return r.module; };
   const m1 = step(null, [P.def, norm]);
-  const at1 = (name: string) => m1.code.defs.concat(Object.keys(m1.code.nodes)).find((d) => m1.names[d] === name)!;
+  const at1 = (name: string) => m1.code.defs.concat(nodeIds(m1.code.nodes)).find((d) => m1.names[d] === name)!;
   const [point1, x1, y1, norm1] = [at1("point"), at1("x"), at1("y"), at1("norm")];
   // Version 2: a third field, and its migration.
   (k as unknown as { known: Code }).known = merge((k as unknown as { known: Code }).known, m1.code);
@@ -529,7 +529,7 @@ test("a saved file lists what it uses from modules, and opening it without them 
   const file = JSON.parse(text);
   assert.equal(file.version, 2);
   assert.deepEqual(Object.values(file.needs), ["length from prelude"]);
-  assert.equal(Object.keys(file.code.nodes).filter(isPublished).length, 0);
+  assert.equal(nodeIds(file.code.nodes).filter(isPublished).length, 0);
   const opened = fromFile(text, () => LIBRARY.code);
   assert.ok(!("error" in opened));
   const without = fromFile(text, () => CORE);
@@ -556,7 +556,7 @@ test("the editor refuses an edit that would change published code", async () => 
   const code = base({ nodes: {}, defs: [] });
   assert.equal(changesPublished(code), null);
   const lit = subtree(code, prelude("length")).find((id) => code.nodes[id].kind === "lit")!;
-  assert.equal(changesPublished({ nodes: { ...code.nodes, [lit]: { ...code.nodes[lit], value: 5 } as never }, defs: code.defs }), prelude("length"));
+  assert.equal(changesPublished({ nodes: withNodes(code.nodes, { [lit]: { ...code.nodes[lit], value: 5 } as never }), defs: code.defs }), prelude("length"));
 });
 
 // E254: a saved file carries the modules it uses beyond the library and
@@ -577,7 +577,7 @@ test("a saved file using version 1 of a module's definition, opened with version
   bob.define(main, bob.thunk(() => bob.call(S.print, bob.call(SHOW_ANY, bob.call(v1, bob.lit(21))))));
   const text = toFile({ title: "Doubles", typed: true, code: base(bob.code), names: bob.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2] }, LIBRARY.code);
   const saved = JSON.parse(text);
-  assert.equal(Object.keys(saved.code.nodes).filter(isPublished).length, 0, "the module's nodes are in its module, not the program's own");
+  assert.equal(nodeIds(saved.code.nodes).filter(isPublished).length, 0, "the module's nodes are in its module, not the program's own");
   assert.deepEqual(Object.values(saved.needs), ["twice from doubling"]);
   const opened = fromFile(text, () => LIBRARY.code);
   assert.ok(!("error" in opened), "error" in opened ? opened.error : "");
@@ -591,7 +591,7 @@ test("a saved file using version 1 of a module's definition, opened with version
   assert.deepEqual(run(up.own), { out: ["42"] });
   assert.deepEqual(Object.values(up.store.lineages!), [[v1, v2]]);
   // Saved again: the store goes with it, and opens.
-  const again = fromFile(toFile({ title: "Doubles", typed: true, code: { nodes: { ...opened.code.nodes, ...up.own.nodes }, defs: opened.code.defs }, names: up.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2], store: up.store }, LIBRARY.code), () => LIBRARY.code);
+  const again = fromFile(toFile({ title: "Doubles", typed: true, code: { nodes: withNodes(opened.code.nodes, up.own.nodes), defs: opened.code.defs }, names: up.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, modules: [m2], store: up.store }, LIBRARY.code), () => LIBRARY.code);
   assert.ok(!("error" in again) && again.file.store && !upgradeFile(again.file.code, again.file, up.names, () => null).ok, "nothing more to upgrade");
   // A check that fails keeps it where it was.
   const kept = upgradeFile(own, opened.file, bob.names, () => "main fails");

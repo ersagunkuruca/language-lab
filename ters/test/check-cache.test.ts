@@ -10,7 +10,7 @@ import { CheckCache } from "../src/lang/check-cache.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { base, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { OverMap, showIn } from "../src/lang/types.ts";
-import { subtree, type Code, type Id, type Node } from "../src/model.ts";
+import { subtree, type Code, type Id, type Node, copyNodes, nodeEntries, withNodes } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 
 const own = <V>(m: Map<Id, V> | undefined): [Id, V][] => (m ? [...(m instanceof OverMap ? m.own() : m.entries())] : []);
@@ -53,7 +53,7 @@ function edit(code: Code, mine: Id[], r: () => number): Code {
   if (kind < 0.4 && lits.length) { const l = pick(lits) as Node & { kind: "lit"; value: number }; n = { ...l, value: pick([0, 1, 2, 0.5, 7, -3, l.value + 1]) }; }
   else if (kind < 0.8 && refs.length) n = { ...(pick(refs) as Node & { kind: "ref" }), target: pick(mine) };
   else n = { id: pick(exprs).id, kind: "hole" } as Node;
-  return { ...code, nodes: { ...code.nodes, [n.id]: n } };
+  return { ...code, nodes: withNodes(code.nodes, { [n.id]: n }) };
 }
 
 const libDefs = new Set(LIBRARY.code.defs);
@@ -105,7 +105,7 @@ test("a program on the library's layer checks as the same nodes off it (E253)", 
   // and look only at the program's own nodes.
   for (const example of ["tumble", "constructions"]) {
     const p = loadProgram(join(root, "examples", example));
-    const plain: Code = { nodes: { ...p.code.nodes }, defs: [...p.code.defs] };
+    const plain: Code = { nodes: copyNodes(p.code.nodes), defs: [...p.code.defs] };
     assert.deepEqual(seen(infer(p.code, p.pres.names, undefined, checkOptions), p.pres.names), seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names), example);
   }
 });
@@ -115,8 +115,8 @@ test("a program on the library's layer finds its units' conflicts as off it (E25
   // library's: physics with a length declared as a time.
   const p = loadProgram(join(root, "examples", "physics"));
   const id = "488golel4ceggodsb7h00un604";
-  const own: Code = { nodes: { ...p.own.nodes, [id]: { ...p.own.nodes[id], unit: { s: 1 } } as Node }, defs: p.own.defs };
-  const code = base(own), plain: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const own: Code = { nodes: withNodes(p.own.nodes, { [id]: { ...p.own.nodes[id], unit: { s: 1 } } as Node }), defs: p.own.defs };
+  const code = base(own), plain: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const on = seen(infer(code, p.pres.names, undefined, checkOptions), p.pres.names);
   assert.ok(on.errors.some((e) => /unit/.test(e)), JSON.stringify(on.errors));
   assert.deepEqual(on, seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names));
@@ -126,7 +126,7 @@ test("the editor checks a program merged onto the library on its layer, as off i
   const T = await import("../../editor/typed.ts");
   const { layerOf, merge } = await import("../src/model.ts");
   const p = loadProgram(join(root, "examples", "constructions"));
-  const code = merge(LIBRARY.code, p.own), plain: Code = { nodes: { ...code.nodes }, defs: [...code.defs] };
+  const code = merge(LIBRARY.code, p.own), plain: Code = { nodes: copyNodes(code.nodes), defs: [...code.defs] };
   const on = seen(T.infer(code, p.pres.names), p.pres.names);
   assert.equal(layerOf(code), LIBRARY.code);
   assert.deepEqual(on, seen(infer(plain, p.pres.names, undefined, checkOptions), p.pres.names));
@@ -138,14 +138,14 @@ test("a hole's fillings on the library's layer are those off it (E253e)", async 
   const p = loadProgram(join(root, "examples", "sort"));
   const r = Top.newDefinition(p.code, p.pres.names, "double", { kind: "function", params: ["x"] });
   assert.ok(r.ok);
-  const plain: Code = { nodes: { ...r.code.nodes }, defs: [...r.code.defs] };
+  const plain: Code = { nodes: copyNodes(r.code.nodes), defs: [...r.code.defs] };
   const offers = (code: Code) => {
     const info = infer(code, r.names, undefined, checkOptions);
     const hole = subtree(code, code.defs.at(-1)!).find((id) => info.holes.has(id))!;
     return fillings(code, info, hole).map((f) => `${f.kind} ${"target" in f ? f.target : ""} ${"arity" in f ? f.arity : ""}`);
   };
   // The program's own nodes, put back on the library's layer.
-  const own: Code = { nodes: Object.fromEntries(Object.entries(r.code.nodes).filter(([id]) => !LIBRARY.code.nodes[id])), defs: r.code.defs.filter((d) => !LIBRARY.code.nodes[d]) };
+  const own: Code = { nodes: Object.fromEntries(nodeEntries(r.code.nodes).filter(([id]) => !LIBRARY.code.nodes[id])), defs: r.code.defs.filter((d) => !LIBRARY.code.nodes[d]) };
   const on = offers(base(own));
   assert.ok(on.length > 100, String(on.length));
   assert.deepEqual(on, offers(plain));
@@ -186,7 +186,7 @@ test("an edit to a constant keeps other groups; an edit to an implementation rec
   // The constant changed: `compared` is kept, `capped` is checked again.
   const lit = (code0.nodes[limit] as Node & { body: Id }).body;
   const hits = cache.hits;
-  check({ ...code0, nodes: { ...code0.nodes, [lit]: { ...code0.nodes[lit], value: 4 } as Node } });
+  check({ ...code0, nodes: withNodes(code0.nodes, { [lit]: { ...code0.nodes[lit], value: 4 } as Node }) });
   assert.ok(cache.hits > hits, "the groups that don't read limit are kept");
   // The implementation changed (another order): every group is checked again.
   const hits2 = cache.hits;
@@ -194,7 +194,7 @@ test("an edit to a constant keeps other groups; an edit to an implementation rec
   k.define(lower, k.fn(["a", "b"], (a, b) => level(a, (la) => level(b, (lb) => k.call(INT_OPS.less, la, lb)))));
   const code1 = base(k.code);
   const body = (code1.nodes[impl] as Node & { body: Id }).body, call = code1.nodes[body] as Node & { args: Id[] };
-  check({ ...code1, nodes: { ...code1.nodes, [call.args[0]]: { id: call.args[0], kind: "ref", target: lower } as Node } });
+  check({ ...code1, nodes: withNodes(code1.nodes, { [call.args[0]]: { id: call.args[0], kind: "ref", target: lower } as Node }) });
   assert.equal(cache.hits, hits2, "no group is kept across an implementation's edit");
 });
 

@@ -8,6 +8,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { capped, sweep } from "./helpers.ts";
 import { addDot, dotHandles, isDot, removeDot, usesOf, useVar } from "../../editor/typed.ts";
+import { nodeIds, withNodes } from "../src/model.ts";
 
 const load = (name: string) => loadProgram(join(root, "examples", name));
 const output = (code: Code, names: Record<Id, string>, main: Id) => {
@@ -55,7 +56,7 @@ for (const program of ["queens", "relations", "physics"]) test(`${program}: a do
     if (tried % every === 1 % every) assert.deepEqual(output(r.code, r.names, main), before);
     const back = removeDot(r.code, r.names, after, d, dot);
     assert.ok(back.ok, back.ok ? "" : back.reason);
-    assert.equal(Object.keys(back.code.nodes).length, Object.keys(p.code.nodes).length);
+    assert.equal(nodeIds(back.code.nodes).length, nodeIds(p.code.nodes).length);
   }
 });
 
@@ -117,7 +118,7 @@ test("taking off a dot's last wire sets its value loose, and the dot goes", asyn
   assert.equal(parts.length, 1, "its value lies loose");
   assert.equal(off.of![parts[0]], main);
   // Remove the dot on a dot no wire leaves sets its value loose too.
-  const zero: Code = { ...dotted.code, nodes: { ...dotted.code.nodes, [use]: { id: use, kind: "hole" } } };
+  const zero: Code = { ...dotted.code, nodes: withNodes(dotted.code.nodes, { [use]: { id: use, kind: "hole" } }) };
   const gone = removeDot(zero, dotted.names, infer(zero, dotted.names), main, dot, { of: {}, home: {} });
   assert.ok(gone.ok && !isDot(gone.code, main, dot) && Object.keys(gone.of ?? {}).length === 1, gone.ok ? "" : gone.reason);
   // With its one wire, Remove the dot puts the value back on it.

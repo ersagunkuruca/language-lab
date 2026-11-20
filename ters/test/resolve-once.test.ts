@@ -14,16 +14,17 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { showIn } from "../src/lang/types.ts";
 import type { Code, Id } from "../src/model.ts";
+import { nodeIds } from "../src/model.ts";
 
 // What a resolved program is, with fresh ids replaced by what they name.
 function seen(code: Code, before: Code, names: Record<Id, string>, show: (id: Id) => string) {
   const label = (id: Id) => (id in before.nodes ? id : `(${names[id] ?? "new"})`);
-  const kept = Object.keys(before.nodes).map((id) => {
+  const kept = nodeIds(before.nodes).map((id) => {
     const n = code.nodes[id] as unknown as Record<string, unknown> | undefined;
     if (!n) return `${id} gone`;
     return `${id} ${n.kind} ${typeof n.target === "string" ? label(n.target) : ""} ${show(id)}`;
   });
-  const copies = Object.keys(code.nodes).filter((id) => !(id in before.nodes) && code.nodes[id].kind === "def").map((id) => names[id] ?? "?");
+  const copies = nodeIds(code.nodes).filter((id) => !(id in before.nodes) && code.nodes[id].kind === "def").map((id) => names[id] ?? "?");
   return { kept: kept.sort(), copies: copies.sort(), defs: code.defs.length };
 }
 
@@ -33,7 +34,7 @@ function seen(code: Code, before: Code, names: Record<Id, string>, show: (id: Id
 // every copy read "@… at type.number").
 test("the library's copies have the library's names whoever resolves first", () => {
   const p = loadProgram(join(root, "examples", "queens"));
-  const copies = (r: ReturnType<typeof resolveArithmetic>) => Object.keys(r.code.nodes).filter((id) => !(id in p.code.nodes) && r.code.nodes[id].kind === "def").map((id) => r.names[id]).sort();
+  const copies = (r: ReturnType<typeof resolveArithmetic>) => nodeIds(r.code.nodes).filter((id) => !(id in p.code.nodes) && r.code.nodes[id].kind === "def").map((id) => r.names[id]).sort();
   // First in this file, so nothing here has made it yet.
   resolveArithmetic(p.code, infer(p.code, p.pres.names, undefined, checkOptions));
   const named = copies(resolveArithmetic(p.code, infer(p.code, p.pres.names, undefined, checkOptions), p.pres.names));
@@ -45,7 +46,7 @@ const EXAMPLES = (process.env.ALL ? readdirSync(join(root, "examples")) : ["quee
 for (const example of EXAMPLES) test(`${example}: resolving on the library's own resolving is resolving from scratch`, () => {
   let p: ReturnType<typeof loadProgram>;
   try { p = loadProgram(join(root, "examples", example)); } catch { return; }
-  if (!Object.keys(p.code.nodes).length) return;
+  if (!nodeIds(p.code.nodes).length) return;
   const run = () => {
     const info = infer(p.code, p.pres.names, undefined, checkOptions);
     const r = resolveArithmetic(p.code, info, p.pres.names);

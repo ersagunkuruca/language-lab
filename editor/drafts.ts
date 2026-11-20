@@ -18,7 +18,7 @@
 // Blender, Unreal Blueprints and Houdini.
 
 import type { Code, Id, Node } from "../ters/src/model.ts";
-import { freshId, subtree, copyNodes, dropNode, nodeEntries } from "../ters/src/model.ts";
+import { freshId, subtree, copyNodes, dropNode, nodeEntries, withNodes } from "../ters/src/model.ts";
 
 export interface Drafts {
   // Each loose part, by the id of its definition: the definition it belongs to.
@@ -51,7 +51,7 @@ export function join(code: Code, d: Drafts): Code {
   const loose = Object.keys(d.of).filter((x) => d.nodes[x]?.kind === "def" && code.defs.includes(d.of[x]));
   const ids = new Set(loose.flatMap((x) => subtree({ nodes: d.nodes, defs: loose }, x)));
   return {
-    nodes: { ...code.nodes, ...Object.fromEntries([...ids].map((id) => [id, d.nodes[id]])) },
+    nodes: withNodes(code.nodes, { ...Object.fromEntries([...ids].map((id) => [id, d.nodes[id]])) }),
     defs: [...code.defs, ...loose],
   };
 }
@@ -123,7 +123,7 @@ export function wireIn(code: Code, of: Record<Id, Id>, home: Record<Id, Id>, def
 export function newLoose(code: Code, of: Record<Id, Id>, owner: Id): { code: Code; of: Record<Id, Id>; def: Id; hole: Id } {
   const hole = freshId(), def = freshId();
   return {
-    code: { nodes: { ...code.nodes, [hole]: { id: hole, kind: "hole" }, [def]: { id: def, kind: "def", body: hole } as Node }, defs: [...code.defs, def] },
+    code: { nodes: withNodes(code.nodes, { [hole]: { id: hole, kind: "hole" }, [def]: { id: def, kind: "def", body: hole } as Node }), defs: [...code.defs, def] },
     of: { ...of, [def]: owner }, def, hole,
   };
 }

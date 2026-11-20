@@ -18,7 +18,7 @@ import { bladeMask } from "../src/lang/grades.ts";
 import { renameCode } from "../src/lang/modules.ts";
 import { ALGEBRA, SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import { subtree, type Code, type Id } from "../src/model.ts";
+import { subtree, type Code, type Id, withNodes } from "../src/model.ts";
 import { compiledDefs } from "../../compiler/src/core-js.ts";
 
 const L = LIBRARY.code, N = LIBRARY.names;
@@ -32,7 +32,7 @@ test("the prelude's Clifford definitions copied under new ids check and give the
   const ids = clifford.flatMap((d) => subtree(L, d));
   const rename = new Map(ids.map((id, i) => [id, `copied${i}x`]));
   const copy = renameCode({ nodes: Object.fromEntries(ids.map((id) => [id, L.nodes[id]])), defs: clifford }, rename);
-  const k = new Lang({ nodes: { ...L.nodes, ...copy.nodes }, defs: [...L.defs, ...copy.defs] });
+  const k = new Lang({ nodes: withNodes(L.nodes, copy.nodes), defs: [...L.defs, ...copy.defs] });
   for (const d of clifford) k.names[rename.get(d)!] = `my ${N[d]}`;
   const mine = (name: string) => rename.get(lib(name))!;
 
@@ -68,7 +68,7 @@ test("the prelude's Clifford definitions copied under new ids check and give the
     k.define(k.def(`${who} masked`), k.fn(["v", "w"], (v, w) => k.call(f("clifford outer"), k.x(al), k.call(f("clifford grade"), k.x(al), k.int(1), v), k.call(f("clifford grade"), k.x(al), k.int(1), w))));
   }
   const own = base(k.code);
-  const code: Code = { nodes: { ...own.nodes, ...copy.nodes }, defs: [...own.defs, ...copy.defs] }, nm = baseNames(k.names);
+  const code: Code = { nodes: withNodes(own.nodes, copy.nodes), defs: [...own.defs, ...copy.defs] }, nm = baseNames(k.names);
   const info = infer(code, nm, undefined, optionsWith(pins));
   assert.deepEqual(info.errors.map((e) => `${nm[e.id] ?? e.id}: ${e.message}`), []);
   const at = (n: string) => code.defs.find((d) => nm[d] === n)!;

@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { isUse } from "../src/model.ts";
+import { isUse, nodeValues, withNodes } from "../src/model.ts";
 import type { Presentation, Style } from "../src/presentation.ts";
 import blocksStyle from "../styles/blocks.json" with { type: "json" };
 import { Lang } from "../src/lang/dsl.ts";
@@ -145,7 +145,7 @@ test("the palette offers a use of a definition with results, and fills it in", a
   const pres: Presentation = { names: e.names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
   assert.match(renderBlocks(e.code, pres, filled, main), /‹sum and difference result› = ‹sum and difference›\(s = □, d = □\)\n\s*□/);
   // Written as L211 decided: the use gives its results, with no binds or body (L211k).
-  const written = Object.values(e.code.nodes).filter((n) => isUse(n) && !code.nodes[n.id]);
+  const written = nodeValues(e.code.nodes).filter((n) => isUse(n) && !code.nodes[n.id]);
   assert.equal(written.length, 1);
   assert.ok(written.every((n) => isUse(n) && n.binds === undefined && n.body === undefined));
 });
@@ -163,7 +163,7 @@ test("a relation written where it is used is the function of its declared direct
   const code: Code = base(k.code), names = baseNames(k.names);
   const info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
-  const lam = Object.values(code.nodes).find((n) => n.kind === "lambda" && n.results?.length && names[n.params[0]] === "s")!;
+  const lam = nodeValues(code.nodes).find((n) => n.kind === "lambda" && n.results?.length && names[n.params[0]] === "s")!;
   assert.equal(showType(info.typeOf.get(lam.id)!, names), "(Float64, Float64) -> (Float64, Float64)");
   const pres: Presentation = { names, comments: {}, hints: {}, style: blocksStyle as unknown as Style };
   assert.match(renderBlocks(code, pres, info, plain), /\(s, d\) → a, b = s = a \+ b and d = a − b/);
@@ -209,7 +209,7 @@ test("a definition's direction is asked again when a node it reaches changes (E2
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const lam = p.code.nodes[(p.code.nodes[p.sd] as NodeOf<"def">).body!] as NodeOf<"lambda">;
   const both = p.code.nodes[lam.body] as NodeOf<"call">;
-  const code: Code = base({ nodes: { ...p.k.code.nodes, [lam.id]: { ...lam, body: both.args![0] } }, defs: p.k.code.defs });
+  const code: Code = base({ nodes: withNodes(p.k.code.nodes, { [lam.id]: { ...lam, body: both.args![0] } }), defs: p.k.code.defs });
   const errs = infer(code, p.names).errors.filter((e) => e.id === p.sd).map((e) => e.message);
   assert.equal(errs.length, 1, String(errs));
   assert.match(errs[0], /results can't all be found from s, d/);

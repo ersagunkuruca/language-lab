@@ -12,6 +12,7 @@ import { makeRunner, type Value } from "../src/lang/run.ts";
 import { descentReader } from "../src/lang/descent.ts";
 import { INT_OPS, S } from "../src/lang/std.ts";
 import { INT } from "../src/lang/types.ts";
+import { withNodes } from "../src/model.ts";
 
 // blank: "" first, or a space, tab or line end and a blank after it.
 // pair text(a, b): "[a,b]" first, with any blank around each number, and
@@ -23,7 +24,7 @@ k.define(blank, k.fn([], () => k.if(k.call(S.oneOf, k.list(k.false, k.true)), k.
 const Pair = k.type("Pair", [], [["pair", [["a", () => k.tref(INT)], ["b", () => k.tref(INT)]]]]);
 const printer = k.def("pair text");
 k.define(printer, k.fn(["p"], (p) => k.match(p, [{ variant: Pair.v.pair, names: ["a", "b"], body: ([a, b]) => cat(k.lit("["), k.call(blank), k.call(INT_OPS.show, a), k.call(blank), k.call(S.oneOf, k.list(k.lit(","), k.lit(";"))), k.call(blank), k.call(INT_OPS.show, b), k.call(blank), k.lit("]")) }])));
-const code = { nodes: { ...LIBRARY.code.nodes, ...k.code.nodes }, defs: [...LIBRARY.code.defs, ...k.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] };
+const code = { nodes: withNodes(LIBRARY.code.nodes, k.code.nodes), defs: [...LIBRARY.code.defs, ...k.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] };
 const names = { ...LIBRARY.names, ...k.names };
 const r = makeRunner(code, infer(code, names), { print: () => {}, names });
 const read = descentReader(code, printer, names);
@@ -45,7 +46,7 @@ test("the written reader reads a Choice piece as descent does (L72e2b)", async (
   const { writeReader } = await import("../src/lang/reader.ts");
   const { showValue } = await import("../src/lang/run.ts");
   const w = writeReader(code, printer, names);
-  const all = { nodes: { ...code.nodes, ...w.code.nodes }, defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
+  const all = { nodes: withNodes(code.nodes, w.code.nodes), defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
   const info = infer(all, allNames);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const rr = makeRunner(all, info, { print: () => {}, names: allNames });

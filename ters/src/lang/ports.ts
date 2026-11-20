@@ -4,7 +4,7 @@
 // position.
 
 import type { Code, Id, Node, Use } from "../model.ts";
-import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget, copyNodes, dropNode, nodeEntries, nodeIds, nodeValues } from "../model.ts";
+import { derived, derivedFrom, fieldPorts, forgetKinds, isBound, onLayer, useTarget, copyNodes, dropNode, nodeEntries, nodeIds, nodeValues, nodesOver, nodesUnder, ownNodeIds, withNodes } from "../model.ts";
 import { BUILTIN_INPUTS, TUPLE_MAX } from "./std-ids.ts";
 import { tupleVariant, tuplePart } from "./std-values.ts";
 import { forgetSpine } from "./spine.ts";
@@ -119,7 +119,7 @@ export function filled(code: Code): Code {
     else if (base && bare.some((id) => id in base!.lib.nodes) && onBase(code, base.lib)) {
       // The library's own uses are filled once, in the same nodes for
       // every program, so its kept check stays under (infer.ts under).
-      out = { ...code, nodes: { ...code.nodes, ...base.fills } };
+      out = { ...code, nodes: withNodes(code.nodes, base.fills) };
       fillUses(out, bare.filter((id) => !(id in base!.lib.nodes)));
       // On the filled library, so the passes that keep its work (arith.ts
       // seedFor) read through to it.
@@ -178,13 +178,19 @@ function filledFrom(code: Code): Code {
 // check alone never needs).
 let base: { lib: Code; filled: Code; fills: Record<Id, Node> } | null = null, toFill: Code | null = null;
 const baseNow = () => { if (!base && toFill) fillOnce(toFill); return base; };
-const onBase = (code: Code, lib: Code) => { for (const id of nodeIds(lib.nodes)) if (code.nodes[id] !== lib.nodes[id]) return false; return true; };
+const onBase = (code: Code, lib: Code) => {
+  // Over the library's nodes: only its own can differ.
+  if (nodesUnder(code.nodes) === lib.nodes) { for (const id of ownNodeIds(code.nodes)) if (id in lib.nodes && code.nodes[id] !== lib.nodes[id]) return false; return true; }
+  for (const id of nodeIds(lib.nodes)) if (code.nodes[id] !== lib.nodes[id]) return false;
+  return true;
+};
 // The library filled by fillOnce, if it has been or is to be.
 export const filledLibrary = (): Code | undefined => baseNow()?.filled;
 export function fillOnce(lib: Code): Code {
-  const out: Code = { ...lib, nodes: copyNodes(lib.nodes) };
+  // Over the library's nodes, its fills its own.
+  const out: Code = { ...lib, nodes: nodesOver(lib.nodes, {}) };
   fillUses(out, bareIn(lib, nodeIds(lib.nodes)));
-  base = { lib, filled: out, fills: Object.fromEntries(nodeEntries(out.nodes).filter(([id, n]) => lib.nodes[id] !== n)) };
+  base = { lib, filled: out, fills: Object.fromEntries(ownNodeIds(out.nodes).map((id) => [id, out.nodes[id]] as const).filter(([id, n]) => lib.nodes[id] !== n)) };
   toFill = null;
   return out;
 }

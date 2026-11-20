@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { FN } from "../../invertible/src/expr.js";
 import { root } from "../src/io.ts";
-import { get, replace, type Code, type Id, type NodeOf, type Call, type Use, isUse, useTarget } from "../src/model.ts";
+import { get, replace, type Code, type Id, type NodeOf, type Call, type Use, isUse, useTarget, nodeValues } from "../src/model.ts";
 import { impl } from "../src/prelude.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -356,13 +356,13 @@ test("differentiate: recursion, functions passed in, and what isn't differentiab
 // read it as port number 19718686 and the editor stopped drawing.
 test("a parameter whose id is all digits is labelled by its name", () => {
   const { code, pres: { names } } = load("backwards");
-  for (const n of Object.values(code.nodes)) {
+  for (const n of nodeValues(code.nodes)) {
     if (!isUse(n)) continue;
     for (const k of [...Object.keys(n.given), ...answerKeys(code, n)]) {
       assert.equal(typeof portLabel(code, names, useTarget(code.nodes, n), k), "string", `${n.id} ${k}`);
     }
   }
-  const greet = Object.values(code.nodes).find((n): n is Use => isUse(n) && answerKeys(code, n).includes("19718686"))!;
+  const greet = nodeValues(code.nodes).find((n): n is Use => isUse(n) && answerKeys(code, n).includes("19718686"))!;
   assert.equal(portLabel(code, names, useTarget(code.nodes, greet), "19718686"), names["19718686"]);
   assert.equal(portLabel(code, names, "builtin.concat", "1"), "b");
 });

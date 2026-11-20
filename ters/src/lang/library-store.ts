@@ -16,6 +16,7 @@ import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, wri
 import { dirname, join, resolve } from "node:path";
 import { deserialize, serialize } from "node:v8";
 import type { Code, Id } from "../model.ts";
+import { nodeEntries, nodesUnder } from "../model.ts";
 import { bundle, bundleHash, keptDir, root } from "../io.ts";
 import { keepLibraryChecks, type Info, type LibraryCheck, type LibraryStore, type Options } from "./infer.ts";
 import type { Closed, GroupStore } from "./check-cache.ts";
@@ -80,7 +81,7 @@ const codeHash = (code: Code) => {
   if (code === LIBRARY.code) return `library ${libraryFiles()}`;
   if (code === filledLibrary()) return `filled library ${libraryFiles()}`;
   let k = codes.get(code);
-  if (!k) { const h = createHash("sha1"); h.update(JSON.stringify(code.defs)); h.update(JSON.stringify(code.nodes)); codes.set(code, (k = h.digest("hex"))); }
+  if (!k) { const h = createHash("sha1"); h.update(JSON.stringify(code.defs)); h.update(JSON.stringify(nodesUnder(code.nodes) ? Object.fromEntries(nodeEntries(code.nodes)) : code.nodes)); codes.set(code, (k = h.digest("hex"))); }
   return k;
 };
 const ids = (xs: Iterable<Id> | undefined) => (xs ? [...xs].sort() : null);

@@ -12,7 +12,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { elaborate, verify, type Elaboration } from "../src/lang/verify.ts";
 import { DIVERGE, STRING, type Type } from "../src/lang/types.ts";
-import { subtree, type Node } from "../src/model.ts";
+import { subtree, type Node, nodeValues, withNodes } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { INT_OPS } from "../src/lang/std.ts";
@@ -78,7 +78,7 @@ test("a written list, an effect's operation, an interface's and a handler are ch
   const info = infer(p.code, p.pres.names, undefined, checkOptions).layer!;
   const e = elaborate(LIBRARY.code, info);
   const code = LIBRARY.code;
-  const refTo = (pick: (target: string) => boolean) => Object.values(code.nodes).find((n) => n.kind === "ref" && e.types.has(n.id) && pick(n.target))!.id;
+  const refTo = (pick: (target: string) => boolean) => nodeValues(code.nodes).find((n) => n.kind === "ref" && e.types.has(n.id) && pick(n.target))!.id;
   const list = refTo((x) => x === "builtin.list.of"), op = refTo((x) => code.nodes[x]?.kind === "variant" && x === "std.await.await");
   // An interface's operation: a field of a type written as an interface.
   const interfaces = new Set(code.defs.flatMap((d) => { const b = code.nodes[(code.nodes[d] as { body?: string }).body ?? ""]; return b?.kind === "typedef" && b.interface ? b.variants.flatMap((v) => (code.nodes[v] as { fields: string[] }).fields) : []; }));
@@ -86,7 +86,7 @@ test("a written list, an effect's operation, an interface's and a handler are ch
   const toText = (t: Type) => t.t === "fn" ? { ...t, ret: text } : text;
   // A handler: a match of an effect's operations.
   const effectOps = new Set(code.defs.flatMap((d) => { const b = code.nodes[(code.nodes[d] as { body?: string }).body ?? ""]; return b?.kind === "typedef" && b.effect ? b.variants : []; }));
-  const handler = Object.values(code.nodes).find((n) => n.kind === "match" && e.types.has(n.id) && n.arms.some((a) => effectOps.has((code.nodes[a] as { variant: string }).variant)))!.id;
+  const handler = nodeValues(code.nodes).find((n) => n.kind === "match" && e.types.has(n.id) && n.arms.some((a) => effectOps.has((code.nodes[a] as { variant: string }).variant)))!.id;
   for (const [id, change] of [[list, (t: Type) => t.t === "fn" ? { ...t, ret: text } : t], [op, (t: Type) => t.t === "fn" ? { ...t, eff: { effs: [], tail: null } } : t], [iop, toText], [handler, (t: Type) => (t.t === "con" && t.id === text.id ? { t: "con", id: "std.unit", args: [] } : text) as Type]] as const) {
     const changed: Elaboration = { ...e, types: new Map(e.types).set(id, change(e.types.get(id)!)) };
     assert.ok(verify(code, changed).problems.some((x) => x.id === id), `${id} let through`);
@@ -117,6 +117,6 @@ test("a recursion whose type leaves out Diverge is checked to end", () => {
   // count down's call given n, not n - 1: every type as it was.
   const call = subtree(code, down).find((id) => { const n = code.nodes[id]; return n?.kind === "call" && (code.nodes[n.fn] as { target?: string }).target === down; })!;
   const sub = (code.nodes[call] as { args: string[] }).args[0], nRef = (code.nodes[sub] as { args: string[] }).args[0];
-  const changed = { ...code, nodes: { ...code.nodes, [call]: { ...code.nodes[call], args: [nRef] } as Node } };
+  const changed = { ...code, nodes: withNodes(code.nodes, { [call]: { ...code.nodes[call], args: [nRef] } as Node }) };
   assert.deepEqual(verify(changed, e, own).problems.map((x) => [x.id, x.rule]), [[down, "a recursion whose type leaves out Diverge ends"]]);
 });

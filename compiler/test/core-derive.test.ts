@@ -23,6 +23,7 @@ import { closeSync, mkdtempSync, openSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
+import { nodeIds } from "../../ters/src/model.ts";
 
 test("derivative and gradient of a function value, and a second derivative, as the evaluator gives them", () => {
   const k = new Lang();
@@ -50,7 +51,7 @@ test("derivative and gradient of a function value, and a second derivative, as t
   // Printed, it is given only the nodes the closures it looks inside
   // reach (C167d), and says the same.
   const shown = printed(core), n = Object.keys(shown.code!.nodes).length;
-  assert.ok(n > 0 && n < Object.keys(core.code.nodes).length / 2, `${n} nodes`);
+  assert.ok(n > 0 && n < nodeIds(core.code.nodes).length / 2, `${n} nodes`);
   const g = loadPrinted(shown, { print: () => {} }, shown.code)[core.funcs.findIndex((h) => h.def === at2 && !h.inner)];
   for (const x of [0, 1, 2, -1.5]) assert.equal(g(x), ev(x), `printed, at ${x}`);
 });

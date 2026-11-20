@@ -10,11 +10,11 @@ import { tmpdir } from "node:os";
 import { Session } from "../mcp/session.ts";
 import { parseSaved, printSaved } from "../src/saved.ts";
 import { mergeFiles } from "../src/merge-files.ts";
-import { subtree, type Code, type Id } from "../src/model.ts";
+import { subtree, type Code, type Id, nodeIds } from "../src/model.ts";
 
 const dice = () => { const d = join(mkdtempSync(join(tmpdir(), "keep-ids-")), "dice"); cpSync(join(import.meta.dirname, "..", "examples", "dice"), d, { recursive: true }); return d; };
 const saved = (d: string) => parseSaved(readFileSync(join(d, "code.json"), "utf8")) as unknown as Code;
-const changed = (a: Code, b: Code) => [...new Set([...Object.keys(a.nodes), ...Object.keys(b.nodes)])].filter((k) => JSON.stringify(a.nodes[k]) !== JSON.stringify(b.nodes[k]));
+const changed = (a: Code, b: Code) => [...new Set([...nodeIds(a.nodes), ...nodeIds(b.nodes)])].filter((k) => JSON.stringify(a.nodes[k]) !== JSON.stringify(b.nodes[k]));
 // die's body: floor(random() · 6) + 1.
 const body = (s: Session): Id => { const die = s.own.find((x) => s.allNames[x] === "die")!; const l = s.code.nodes[(s.code.nodes[die] as { body: Id }).body]; return l.kind === "lambda" ? l.body : l.id; };
 

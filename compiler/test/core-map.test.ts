@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { load } from "../src/program.ts";
 import { coreMap, lowerCore } from "../src/core-js.ts";
+import { nodeIds } from "../../ters/src/model.ts";
 
 test("the compiled module's map names each function's node and each stop's (C143c)", () => {
   const p = load("calc"), main = p.named("main");
@@ -77,7 +78,7 @@ test("a compiled module carries no node ids: its own cases by number, its stops 
   assert.equal(r.status, 0, r.stderr);
   const js = readFileSync(join(dir, "chapters.mjs"), "utf8");
   const ours = js.slice(js.search(/^(?:var|const|let) defs = \(function/m));
-  const ids = new Set(Object.keys(ir.code.nodes).filter((id) => /^[a-z0-9]{26}$/.test(id)));
+  const ids = new Set(nodeIds(ir.code.nodes).filter((id) => /^[a-z0-9]{26}$/.test(id)));
   assert.deepEqual([...ours.matchAll(/"([a-z0-9]{26})"/g)].map((x) => x[1]).filter((x) => ids.has(x)), []);
   assert.match(ours, /\.prototype\.tag = \d+;/);
   assert.doesNotMatch(ours, /R2?\.stop\(\w+, "/);
@@ -89,7 +90,7 @@ test("a saved page's script carries no node ids; the preview's keeps its stops' 
   const { corePageScript } = await import("../src/core-js.ts");
   const p = load("dice"), main = p.named("main");
   const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
-  const ids = new Set(Object.keys(ir.code.nodes).filter((id) => /^[a-z0-9]{26}$/.test(id)));
+  const ids = new Set(nodeIds(ir.code.nodes).filter((id) => /^[a-z0-9]{26}$/.test(id)));
   const idsIn = (js: string) => [...js.matchAll(/"([a-z0-9]{26})"/g)].map((x) => x[1]).filter((x) => ids.has(x));
   assert.deepEqual(idsIn(corePageScript(ir, p.pres.names[main], "$core", "dice", undefined, undefined, true)), []);
   assert.ok(idsIn(corePageScript(ir, p.pres.names[main], "$core", "dice")).length > 0);

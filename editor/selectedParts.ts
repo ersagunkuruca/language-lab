@@ -3,7 +3,7 @@
 // unit, and what the open definition is the same as. What they read of the
 // editor comes through `SelectedHost`.
 import type { Code, Id, Node } from "../ters/src/model.ts";
-import { ownNodes } from "../ters/src/model.ts";
+import { ownNodes, withNodes } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Namer } from "../ters/src/render/namer.ts";
 import { formatUnit, infer as unitInfer, NAMED, type Unit } from "../ters/src/units.ts";
@@ -39,7 +39,7 @@ export function selectedParts(host: SelectedHost) {
     const n = node(id) as Node & { unit?: Unit };
     const { unit: _, ...rest } = n;
     const next: Node = unit ? { ...rest, unit } as Node : rest as Node;
-    const code: Code = { nodes: { ...doc().code.nodes, [id]: next }, defs: doc().code.defs };
+    const code: Code = { nodes: withNodes(doc().code.nodes, { [id]: next }), defs: doc().code.defs };
     return T.guardTyped(info, code, doc().names.short, id, unit
       ? `Declared ${formatUnit(unit)}. Units are part of the type, so everything connected to it now has to agree.`
       : "Cleared the declared unit; it's inferred from what it's connected to again.");

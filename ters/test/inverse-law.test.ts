@@ -21,6 +21,7 @@ import { CHECK_OP, S } from "../src/lang/std.ts";
 import { runTests } from "../src/lang/tests.ts";
 import { CHOICE, DIVERGE, NUMBER, type Type } from "../src/lang/types.ts";
 import { sweep } from "./helpers.ts";
+import { withNodes } from "../src/model.ts";
 
 const examples = readdirSync(join(root, "examples")).filter((e) => existsSync(join(root, "examples", e, "code.json"))).sort();
 
@@ -40,7 +41,7 @@ for (const ex of sweep(examples)) {
     };
     const exact = law("inverse undoes", (answers, y) => k.call(contains, answers, y));
     const close = law("inverse undoes near", (answers, y) => k.call(anyPass, answers, k.fn(["v"], (v) => k.call(near, v, y))));
-    const code = { ...p.code, nodes: { ...p.code.nodes, ...k.code.nodes }, defs: [...p.code.defs, ...k.code.defs] };
+    const code = { ...p.code, nodes: withNodes(p.code.nodes, k.code.nodes), defs: [...p.code.defs, ...k.code.defs] };
     const names = { ...p.pres.names, ...k.names }, info = infer(code, names);
     assert.deepEqual(info.errors.map((e) => e.message), []);
     // The program's own pure one-input functions, by what they give.

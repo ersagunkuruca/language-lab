@@ -9,6 +9,7 @@ import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
 import { S } from "../src/lang/std.ts";
 import { join, looseOf, setLoose, split } from "../../editor/drafts.ts";
+import { copyNodes, nodeIds, withNodes } from "../src/model.ts";
 
 // greet = (name) => "Hi " ++ (name ++ "!")
 function greet(): { code: Code; names: Names } {
@@ -30,7 +31,7 @@ test("a part set loose is a definition of its own, taking the variables it used 
   const { code, names } = greet();
   // Take name ++ "!" out of greet, leaving a hole where it was.
   const r = setLoose(code, {}, {}, "greet", "inner", ["name"]);
-  const holed: Code = { ...r.code, nodes: { ...r.code.nodes, outer: { ...(r.code.nodes.outer as Call), args: ["hi", "gap"] }, gap: { id: "gap", kind: "hole" } } };
+  const holed: Code = { ...r.code, nodes: withNodes(r.code.nodes, { outer: { ...(r.code.nodes.outer as Call), args: ["hi", "gap"] }, gap: { id: "gap", kind: "hole" } }) };
   assert.deepEqual(looseOf(holed, r.of, "greet"), [r.def]);
   const lam = holed.nodes[(holed.nodes[r.def] as NodeOf<"def">).body!] as NodeOf<"lambda">;
   assert.equal(lam.kind, "lambda", "it takes name as an input");
@@ -46,10 +47,10 @@ test("a part set loose is a definition of its own, taking the variables it used 
   assert.deepEqual(drafts.of, { [r.def]: "greet" });
   assert.equal(drafts.home[lam.params[0]], "name");
   const back = join(disk, drafts);
-  assert.deepEqual(new Set(Object.keys(back.nodes)), new Set(Object.keys(holed.nodes)));
+  assert.deepEqual(new Set(nodeIds(back.nodes)), new Set(nodeIds(holed.nodes)));
   assert.deepEqual(back.defs, holed.defs);
   // A loose part whose definition is gone goes too.
-  const gone = join({ nodes: { ...disk.nodes }, defs: disk.defs.filter((d: Id) => d !== "greet") }, { ...drafts });
+  const gone = join({ nodes: copyNodes(disk.nodes), defs: disk.defs.filter((d: Id) => d !== "greet") }, { ...drafts });
   assert.ok(!gone.defs.includes(r.def));
 });
 
@@ -122,7 +123,7 @@ test("a loose part may be a function: a lambda at its top that isn't its inputs 
   const withInputs = setLoose(code, {}, {}, "greet", "inner", ["name"]);
   assert.equal(looseParts(withInputs.code, withInputs.def, withInputs.home)!.params.length, 1);
   // Wired into a hole, it goes in whole: the lambda, its parameter and all.
-  const holed: Code = { ...r.code, nodes: { ...r.code.nodes, gap: { id: "gap", kind: "hole" }, greet: { id: "greet", kind: "def", body: "gap" } } };
+  const holed: Code = { ...r.code, nodes: withNodes(r.code.nodes, { gap: { id: "gap", kind: "hole" }, greet: { id: "greet", kind: "def", body: "gap" } }) };
   const w = wireIn(holed, r.of, r.home, r.def, "gap", [])!;
   const n = w.code.nodes.gap as NodeOf<"lambda">;
   assert.equal(n.kind, "lambda");
