@@ -565,3 +565,48 @@ test("a native page's `my sound latency` is what the screen measured, shown at t
   assert.equal(shown(3), "0");
   assert.equal(shown(2), "0.0125");
 });
+
+// A sound in stereo in C (C269): its block function given a pair of
+// blocks and giving a pair back, left and right on the screen's two
+// channels; a mono input (the microphone here) comes in on both sides.
+test("a page's sound in stereo in C plays its pair of blocks on two channels (C269)", { skip }, async () => {
+  const { ARITH, CONS, NIL, PAIR_V, FIRST, SECOND } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const scaled = k.def("scaled");
+  k.define(scaled, k.fn(["g", "xs"], (g, xs) => k.match(xs, [
+    { variant: NIL, names: [], body: () => k.list() },
+    { variant: CONS, names: ["x", "rest"], body: ([x, rest]) => k.call(CONS, k.call(ARITH.mul, g, x), k.call(scaled, g, rest)) },
+  ])));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("div", [], [
+    // The left as it came, the right at a quarter.
+    el("button", [prop("id", "mic"), k.call(HTML_V.listenStereo, k.x(HTML_V.microphone), k.fn(["p", "rate"], (p) => k.call(PAIR_V, k.call(FIRST, p), k.call(scaled, k.lit(0.25), k.call(SECOND, p)))))], [text("mic")]),
+    el("button", [prop("id", "both"), k.call(HTML_V.listenStereo, k.call(HTML_V.recording, k.lit("both.wav")), k.fn(["p", "rate"], (p) => k.call(PAIR_V, k.call(FIRST, p), k.call(scaled, k.lit(0.25), k.call(SECOND, p)))))], [text("both")]),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  // A stereo WAV at 48000 a second, 0.25 on the left and -0.5 on the right.
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const at = mkdtempSync(join(tmpdir(), "stereo-")), n = 4800, wav = Buffer.alloc(44 + 4 * n);
+  wav.write("RIFF", 0); wav.writeUInt32LE(36 + 4 * n, 4); wav.write("WAVEfmt ", 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(2, 22);
+  wav.writeUInt32LE(48000, 24); wav.writeUInt32LE(192000, 28); wav.writeUInt16LE(4, 32); wav.writeUInt16LE(16, 34); wav.write("data", 36); wav.writeUInt32LE(4 * n, 40);
+  for (let i = 0; i < n; i++) { wav.writeInt16LE(8192, 44 + 4 * i); wav.writeInt16LE(-16384, 46 + 4 * i); }
+  writeFileSync(join(at, "both.wav"), wav);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["click:mic", "play:0:48000", "click:both", "play:1:1024"], { cwd: at });
+  assert.equal(r.status, 0, r.stderr.toString());
+  const lines = r.stdout.toString().split("\n").filter((s) => /^(sound|played|right) /.test(s));
+  assert.equal(lines[0], "sound 0 on microphone", r.stderr.toString());
+  const left = lines[1].split(" ").slice(2, 6).map(Number), right = lines[2].split(" ").slice(2, 6).map(Number), sine = (i: number) => 0.5 * Math.sin((2 * Math.PI * 441 * i) / 48000);
+  left.forEach((x, i) => assert.ok(Math.abs(x - sine(i)) < 1e-6, `${x} ${sine(i)}`));
+  right.forEach((x, i) => assert.ok(Math.abs(x - 0.25 * sine(i)) < 1e-6, `${x} ${0.25 * sine(i)}`));
+  // A stereo recording keeps its sides: the left as it is, the right at a quarter.
+  assert.equal(lines[3], "sound 1 on both.wav");
+  assert.match(lines[4], /^played 1: 0\.250000 0\.250000 0\.250000 0\.250000 /);
+  assert.equal(lines[5], "right 1: -0.125000 -0.125000 -0.125000 -0.125000");
+});

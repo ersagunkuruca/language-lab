@@ -120,7 +120,6 @@ New targets and speed rank below every language item (Ersagun,
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C262 | Bigger-program round on the instrument app: FFT, YIN and the looper's buffer compiled against hand-written JS and C; gaps to GAPS.md | Ersagun 2026-11-17 | P3 | M |  |
-| C269 | A sound in stereo (L270) in a native app: c.ts plays only `listen`, and says a `listen in stereo` plays only in a browser for now | Ersagun 2026-11-17 | P3 | S |  |
 
 ### Speed of compiled code
 
@@ -193,7 +192,7 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: L271b beside them; the frets page (L278), L279, C271, C273 and C260b are done. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: L271b beside them; the frets page (L278), L279, C271, C273, C260b and C269 are done. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|

@@ -216,6 +216,11 @@ What a page's parts become under route A:
   much it changed what came in. Example: pedal's A strum plays on the
   Android emulator and the iPhone simulator, Clean changing nearly
   nothing and Harder changing more (2026-11-12).
+- **C269. Stereo.** Done: a `listen in stereo` plays in a C page as in a
+  browser: its block function is given a pair of blocks and gives a pair
+  back (`ters_sound_play_stereo`), a mono input on both sides, and a
+  recording's first two channels kept apart. AAudio plays the right on
+  its stream's second channel; on iOS the sound's node has two.
 - **C260b. Latency and the screen off.** Done: `my sound latency()` in
   a C page is what the screen measured once a sound plays, 0 till then
   and on a command line (`ters_page_sound_latency`, shown at the next
