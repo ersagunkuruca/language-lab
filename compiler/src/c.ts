@@ -55,6 +55,7 @@ import { TICKET_V } from "../../ters/src/lang/std.ts";
 // that calls it.
 
 import { FDLIBM_C } from "./c-math.ts";
+import { itemReads } from "./item-reads.ts";
 import { LAYOUT_C, UI_HEADLESS_C } from "./c-layout.ts";
 import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, type ListNames } from "./c-rt.ts";
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
@@ -64,7 +65,7 @@ export const C_RUNTIME = ["mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "fr
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
-export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["array_slice_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["chunks_job_", true], ["chunks_work_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
+export const C_OWN_PREFIXES: [string, boolean][] = [["Store_t", false], ["Table_t", false], ["array_at_a", false], ["array_atb_a", false], ["array_c", true], ["array_clength_a", false], ["array_cnew_a", false], ["array_empty_a", false], ["array_first_a", false], ["array_get_a", false], ["array_getb_a", false], ["array_has_a", false], ["array_items_a", false], ["array_length_a", false], ["array_lengthb_a", false], ["array_of_a", false], ["array_peek_a", false], ["array_pushFront_a", false], ["array_push_a", false], ["array_rangeF_a", false], ["array_range_a", false], ["array_replaceAt_a", false], ["array_rest_a", false], ["array_slice_a", false], ["b", false], ["both_", true], ["both_alone_", true], ["both_job_", true], ["both_one_", true], ["both_quick_", true], ["both_r_", true], ["both_top_", true], ["chunks_job_", true], ["chunks_work_", true], ["host_", true], ["m", false], ["merge_t", false], ["par_", true], ["print_", true], ["range_", true], ["range_work_", true], ["read_", true], ["s", false], ["split_", true], ["table_at_t", false], ["table_atb_t", false], ["table_empty_t", false], ["table_entries_t", false], ["table_has_t", false], ["table_put_t", false], ["table_remove_t", false], ["table_size_t", false], ["together_job_", true], ["together_one_", true], ["together_quick_", true], ["together_work_", true]];
 import { runtime } from "./wasm-rt.ts";
 import type { HostOps } from "./core-rt.ts";
 import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts";
@@ -636,7 +637,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const int32Used = new Set<Op>();
   let i64Used = false; let i64vUsed = false; let i64RangeUsed = false;
   // And the names this file's own runtime parts define (I214).
-  const used = new Set<string>([...C_RUNTIME, "iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...reservedNames(), ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
+  const used = new Set<string>([...C_RUNTIME, "iadd", "isub", "imul", "ineg", "iabs", "new", "free", "unused", "block", "block_end", "dup", "dec", "drop", "fields", "oom", "live", "st", "reason", "fuel", "mod", "in", "out", "bits", "run", "code", "argc", "argv", "hex", "hexd", "word", "token", ...reservedNames(), ...lowered.arrays.flatMap((_, i) => ["empty", "of", "range", "rangeF", "getb", "atb", "has", "peek", "items", "length", "lengthb", "at", "push", "first", "rest", "pushFront", "get", "replaceAt"].map((op) => `array_${op}_a${i}`)), ...lowered.tables.flatMap((t, i) => [...["empty", "put", "remove", "has", "size", "at", "atb"].map((op) => `table_${op}_t${i}`), ...t.entries.map((_, j) => `table_entries_t${i}_e${j}`), `Table_t${i}`, `Store_t${i}`, ...["find", "change", "grow", "hash", "eq", "cmp", "sort", "isort", "made", "store", "reroot", "room", "gone"].map((h) => `_${h}_t${i}`), ...t.entries.flatMap((_, j) => lowered.arrays.map((_, k) => `_keys_t${i}_e${j}_a${k}`))])]);
   // A type's name is printed bare, so it must not be one of C's either.
   const ident = (hint: string, bare = false) => {
     let base = hint.normalize("NFKD").replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "f";
@@ -765,7 +766,14 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   const cell = (t: LType) => t === "text" || isData(t) || isFn(t) || isArray(t) || isTable(t) || (isRecord(t) && !!t.mutable);
   const counted = (t: LType): boolean => cell(t) || t === "int" || (isRecord(t) && t.fields.some((x) => counted(x.t)));
   const dup = (t: LType, x: string) => (cell(t) ? `lab_dup(${x})` : t === "int" ? `lab_int_dup(${x})` : isRecord(t) && counted(t) ? `${sname.get(t.key)}_dup(${x})` : x);
-  const drop = (t: LType, x: string) => (cell(t) ? `lab_drop(${x});` : t === "int" ? `lab_int_drop(${x});` : `${sname.get((t as RType).key)}_drop(${x});`);
+  // A local that may hold its value without a count (an item read lent,
+  // C265), with the flag set when it holds a count after all.
+  const flagged = new Map<string, string>();
+  const drop = (t: LType, x: string) => {
+    const s = cell(t) ? `lab_drop(${x});` : t === "int" ? `lab_int_drop(${x});` : `${sname.get((t as RType).key)}_drop(${x});`;
+    const fl = flagged.get(x);
+    return fl ? `if (${fl}) ${s}` : s;
+  };
   const dec = (t: LType, x: string) => (cell(t) ? `lab_dec(${x});` : t === "int" ? `lab_int_dec(${x});` : `${sname.get((t as RType).key)}_dec(${x});`);
   // The same, marking what it reaches shared (L101, SHARE_C).
   // A number or a flag holds no counts: nothing to mark (a map of an
@@ -898,6 +906,9 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
+  // `item at` put in place, its stand-in made only past the end (C265,
+  // C268; item-reads.ts).
+  if (!(typeof process !== "undefined" && process.env.NO_ITEM_READS)) itemReads({ ...lowered, funcs }, kept);
   for (const i of kept) funcs[i].body = sunk(readFirst(funcs[i], funcs));
   // A call whose answer is let to a local and given back as it is, at the
   // end of a function, is a tail call (C242): a tree's lookup going on
@@ -1886,6 +1897,7 @@ int main(int argc, char **argv) {
     const local = (j: number) => (j < f.params.length ? `p${j}` : `l${j}`);
     let temps = 0, labels = 0;
     const decls: string[] = [];
+    flagged.clear();
     const temp = (t: LType) => { const n = `t${temps++}`; decls.push(`  ${ty(t)} ${n};`); return n; };
     // Every local is declared once at the top: a let in one branch of an
     // if is still one variable.
@@ -1925,6 +1937,32 @@ int main(int argc, char **argv) {
     // Drops for the locals live here that `rest` and `after` don't use.
     const drops = (live: Set<number>, rest: Set<number>, after: Set<number>, d: string) =>
       [...live].filter((j) => !rest.has(j) && !after.has(j)).map((j) => `${d}${drop(f.locals[j], local(j))}`);
+    // An item read from an array that outlives it, into a record local
+    // only read or lent on (C265: the greenhouse's moth read by number for
+    // `met`): the item as it is in the array, no count taken, and none
+    // given back. Past the end, the stand-in is the local's own, and a flag
+    // says to drop it.
+    const peeked = (e: SExpr & { k: "let" }, pre: string[], d: string, after: Set<number>): boolean => {
+      const v = e.value;
+      if (v.k !== "attempt" || v.spent || v.resumes || v.ok.k !== "local" || v.ok.i !== v.res) return false;
+      const r = v.body, m = r.k === "rt" && !r.host ? ARRAY_FN.exec(r.fn) : null;
+      if (!m || m[1] !== "at" || r.k !== "rt" || r.args[0].k !== "local" || typeOf(r.args[1], f.locals) !== "int") return false;
+      const a = r.args[0].i;
+      if (!isCounted(e.i) || !isRecord(f.locals[e.i]) || owns(e.body, e.i) || (isCounted(a) && !after.has(a))) return false;
+      const live = union(after, without(free(e.body), e.i));
+      if ([...free(v.otherwise)].some((j) => !live.has(j))) return false;
+      const has = `array.has.a${m[2]}`, peek = `array.peek.a${m[2]}`;
+      arrayFns.add(has).add(peek);
+      const [k] = args([r.args[1]], pre, d, live);
+      const kt = temp("int"), x = local(e.i), fl = `${x}_own`;
+      if (!decls.includes(`  int ${fl};`)) decls.push(`  int ${fl};`);
+      pre.push(`${d}${kt} = ${k};`, `${d}if (${cName(has)}(${local(a)}, ${kt})) {`, `${d}  ${x} = ${cName(peek)}(${local(a)}, ${kt});`, `${d}  ${fl} = 0;`, `${d}} else {`, `${d}  lab_int_drop(${kt});`);
+      const other: string[] = [];
+      const y = ex(v.otherwise, other, d + "  ", live);
+      pre.push(...other, `${d}  ${x} = ${y};`, `${d}  ${fl} = 1;`, `${d}}`);
+      flagged.set(x, fl);
+      return true;
+    };
 
     // Where no answer goes, innermost last (none: out of the function),
     // and the owned temporaries an expression is holding while its other
@@ -2428,6 +2466,7 @@ int main(int argc, char **argv) {
           if (rest) return ex(rest, pre, d, after);
           const raw = aliased(e);
           if (raw) { pre.push(`${d}${local(e.i)} = ${raw};`); return ex(e.body, pre, d, after); }
+          if (peeked(e, pre, d, after)) return ex(e.body, pre, d, after);
           const body = free(e.body);
           pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
           if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
@@ -2501,6 +2540,9 @@ int main(int argc, char **argv) {
             if (as(a)) { xs[k] = local((a as Extract<SExpr, { k: "local" }>).i); return; }
             const v = temp(funcs[e.fn].params[k]);
             pre.push(`${d}${v} = ${xs[k]};`);
+            // A lent item read (peeked) held through the call is its flag's.
+            const fl = a.k === "local" ? flagged.get(local(a.i)) : undefined;
+            if (fl) flagged.set(v, fl);
             xs[k] = v;
             held.push({ t: funcs[e.fn].params[k], v });
           });
@@ -2654,6 +2696,7 @@ int main(int argc, char **argv) {
         if (rest) return [...pre, ...block(rest, to, d, after)];
         const raw = aliased(e);
         if (raw) return [`${d}${local(e.i)} = ${raw};`, ...block(e.body, to, d, after)];
+        if (peeked(e, pre, d, after)) return [...pre, ...block(e.body, to, d, after)];
         const body = free(e.body);
         pre.push(`${d}${local(e.i)} = ${ex(e.value, pre, d, union(after, without(body, e.i)))};`);
         if (isCounted(e.i) && !body.has(e.i) && !after.has(e.i)) pre.push(`${d}${drop(f.locals[e.i], local(e.i))}`);
@@ -4157,6 +4200,10 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   return r;
 }`);
     if (has("length")) out.push(`static lab_int lab_array_length_a${i}(lab_cell *a) { lab_int n = LAB_SMALL(((${V} *)a)->n); lab_drop(a); return n; }`);
+    // Whether k is a position in the array, and item k as it is there,
+    // no count taken (C265, peeked).
+    if (has("has")) out.push(`static inline int lab_array_has_a${i}(lab_cell *a, lab_int k) { return LAB_IS_SMALL(k) && LAB_VAL(k) >= 0 && LAB_VAL(k) < (int64_t)((${V} *)a)->n; }`);
+    if (has("peek")) out.push(`static inline ${T} lab_array_peek_a${i}(lab_cell *a, lab_int k) { return ${rd(`((${B} *)((${V} *)a)->b)`, `((${V} *)a)->s + LAB_VAL(k)`)}; }`);
     if (has("lengthb")) out.push(`static inline lab_int lab_array_lengthb_a${i}(lab_cell *a) { return LAB_SMALL(((${V} *)a)->n); }`);
     // No answer past the end.
     if (has("at")) out.push(`static ${T} lab_array_at_a${i}(lab_cell *a, lab_int k) {
