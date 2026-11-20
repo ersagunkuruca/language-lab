@@ -323,7 +323,7 @@ function onToday(d: Doc): Doc {
   d = { ...d, code: onTodaysIds(d.code), names: onTodaysIds(d.names) };
   const under = baseOf(d);
   return { ...d, code: {
-    nodes: { ...under.nodes, ...Object.fromEntries(nodeEntries(d.code.nodes).filter(([id]) => own(id))) },
+    nodes: withNodes(under.nodes, { ...Object.fromEntries(nodeEntries(d.code.nodes).filter(([id]) => own(id))) }),
     defs: [...under.defs, ...d.code.defs.filter(own)],
   } };
 }

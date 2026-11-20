@@ -13,7 +13,7 @@ import { CheckCache } from "../src/lang/check-cache.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented } from "../cli/represented.ts";
 import { lowerCore, coreModule } from "../../compiler/src/core-js.ts";
-import { freshId, idsMadeBy, subtree, type Code } from "../src/model.ts";
+import { freshId, idsMadeBy, subtree, type Code, nodeIds } from "../src/model.ts";
 import { stableIds } from "../src/stable-ids.ts";
 
 const root = fileURLToPath(new URL("../examples/", import.meta.url));
@@ -61,7 +61,7 @@ test("stableIds names a rewrite's new nodes by what they hold, whatever ids it d
   };
   const a = once(), b = once();
   assert.deepEqual(a, b);
-  assert.equal(Object.keys(a.nodes).length, 6);
+  assert.equal(nodeIds(a.nodes).length, 6);
   const use = a.nodes[(a.nodes.main as { body: string }).body];
   assert.equal(use.kind === "ref" && a.nodes[use.target]?.kind, "def");
 });

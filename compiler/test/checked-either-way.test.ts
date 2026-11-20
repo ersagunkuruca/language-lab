@@ -15,7 +15,7 @@ import { loadProgram } from "../../ters/src/lang/load.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { representationsIn } from "../../ters/src/lang/represent.ts";
 import { resolveArithmetic } from "../../ters/src/lang/arith.ts";
-import { subtree, type Code, type Id, type NodeOf } from "../../ters/src/model.ts";
+import { subtree, type Code, type Id, type NodeOf, withNodes } from "../../ters/src/model.ts";
 import { represented } from "../../ters/cli/represented.ts";
 import { coreModule, lowerCore } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
@@ -39,7 +39,7 @@ for (const example of ["fibonacci", "collatz", "bounce"]) test(`${example}: an e
   let compared = 0;
   for (const id of lits.slice(0, 2)) {
     const l = p.code.nodes[id] as NodeOf<"lit">;
-    const next: Code = { ...p.code, nodes: { ...p.code.nodes, [id]: { ...l, value: (l.value as number) + 1 } } };
+    const next: Code = { ...p.code, nodes: withNodes(p.code.nodes, { [id]: { ...l, value: (l.value as number) + 1 } }) };
     const edited = inferEdited(p.code, next, names, before, p.options);
     const whole = infer(next, names, undefined, p.options);
     if (!edited || whole.errors.length) continue;

@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { get, type Code, type Id, type NodeData } from "../src/model.ts";
+import { get, type Code, type Id, type NodeData, nodeValues } from "../src/model.ts";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames } from "../src/lang/load.ts";
@@ -386,7 +386,7 @@ test("nested data: a rose tree folds, and the children's folded values are a lis
   assert.deepEqual(p.errors, []);
   assert.equal(p.type(p.size), "(tree) -> Float64");
   assert.ok(!p.effects(p.size).includes(DIVERGE));
-  const arm = Object.values(p.code.nodes).find((n) => n.kind === "arm" && n.variant === p.node && n.results[1] && p.names[n.results[1]] === "sizes") as { results: Id[] };
+  const arm = nodeValues(p.code.nodes).find((n) => n.kind === "arm" && n.variant === p.node && n.results[1] && p.names[n.results[1]] === "sizes") as { results: Id[] };
   assert.equal(showType(p.info.typeOf.get(arm.results[1])!, p.names), "List Float64");
   assert.deepEqual(p.run(), ["4 3"]);
 });

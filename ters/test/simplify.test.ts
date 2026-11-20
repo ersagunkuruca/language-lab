@@ -9,6 +9,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { CONS, NIL } from "../src/lang/std.ts";
 import { blocksText, blocksOf } from "../src/lang/render.ts";
 import { setDisplayNames, simplify } from "../../editor/typed.ts";
+import { withNodes } from "../src/model.ts";
 
 const APPEND = Object.keys(LIBRARY.names).find((id) => LIBRARY.names[id] === "append" && LIBRARY.code.nodes[id]?.kind === "def")!;
 
@@ -38,7 +39,7 @@ for (const [front, back, reads] of [[[1, 2], [3], "[1, 2, 3]"], [[], [3], "[3]"]
 
 test("nothing to simplify in append(xs, xs): neither list is written out", () => {
   const { code } = program([1], [2]);
-  const nodes: Code["nodes"] = { ...code.nodes, ys: { id: "ys", kind: "def", body: "y0" }, y0: { id: "y0", kind: "call", fn: "y1", args: ["y2", "y3"] }, y1: { id: "y1", kind: "ref", target: APPEND }, y2: { id: "y2", kind: "ref", target: "xs" }, y3: { id: "y3", kind: "ref", target: "xs" } };
+  const nodes: Code["nodes"] = withNodes(code.nodes, { ys: { id: "ys", kind: "def", body: "y0" }, y0: { id: "y0", kind: "call", fn: "y1", args: ["y2", "y3"] }, y1: { id: "y1", kind: "ref", target: APPEND }, y2: { id: "y2", kind: "ref", target: "xs" }, y3: { id: "y3", kind: "ref", target: "xs" } });
   const c2: Code = { nodes, defs: [...code.defs, "ys"] };
   assert.equal(simplify(c2, names, infer(c2, baseNames(names), undefined, checkOptions), "y0"), null);
 });

@@ -299,34 +299,96 @@ export interface Code {
 // only with these, which see the nodes under too, in the order a merge of
 // the two gives (the nodes under first, then those added). A node taken
 // out of the nodes under is its own property, undefined.
+// TERS_CHECK_NODES=1 (tests): each version over another is a proxy that
+// refuses to be listed but through these, so a pass still spreading or
+// listing a program's nodes as an object (and so missing the nodes under)
+// fails where it does it.
+const checkNodes = typeof process !== "undefined" && !!process.env?.TERS_CHECK_NODES;
+const unchecked = new WeakMap<object, Record<Id, Node>>();
+const rawNodes = (nodes: Record<Id, Node>): Record<Id, Node> => unchecked.get(nodes) ?? nodes;
+const checked = (nodes: Record<Id, Node>): Record<Id, Node> => {
+  if (!checkNodes) return nodes;
+  const p = new Proxy(nodes, { ownKeys() { throw new Error("a program's nodes listed as an object: use model.ts nodeIds, copyNodes or withNodes"); } });
+  unchecked.set(p, nodes);
+  return p;
+};
+// Nodes over `under`: those of `mine` that aren't the same node there.
+export function nodesOver(under: Record<Id, Node>, mine: Record<Id, Node>): Record<Id, Node> {
+  const out: Record<Id, Node> = Object.create(under);
+  for (const id of nodeIds(mine)) { const n = mine[id]; if (under[id] !== n) out[id] = n; }
+  return checked(out);
+}
 export const nodesUnder = (nodes: Record<Id, Node>): Record<Id, Node> | undefined => {
   const p = Object.getPrototypeOf(nodes);
   return p === Object.prototype || p === null ? undefined : p;
 };
+// A version over another may list some of its own nodes before those
+// under it (a merge of a module's nodes and then a program's: library-reps
+// withTrees): those, in order.
+const firstIds = new WeakMap<object, Id[]>();
+// The ids of nodes others sit over, listed once: nodes under others are
+// never changed (a change is made in a version over them).
+const underIdsKept = new WeakMap<object, Id[]>();
+const underIds = (under: Record<Id, Node>): Id[] => { let ids = underIdsKept.get(under); if (!ids) underIdsKept.set(under, (ids = nodeIds(under))); return ids; };
 export function nodeIds(nodes: Record<Id, Node>): Id[] {
   const under = nodesUnder(nodes);
   if (!under) return Object.keys(nodes);
   const out: Id[] = [];
-  for (const id of nodeIds(under)) if (nodes[id] !== undefined) out.push(id);
-  for (const id of Object.keys(nodes)) if (!(id in under) && nodes[id] !== undefined) out.push(id);
+  const raw = rawNodes(nodes), first = firstIds.get(raw);
+  if (first) for (const id of first) if (nodes[id] !== undefined) out.push(id);
+  for (const id of underIds(under)) if (nodes[id] !== undefined) out.push(id);
+  const before = first && new Set(first);
+  for (const id of Object.keys(raw)) if (!(id in under) && !before?.has(id) && nodes[id] !== undefined) out.push(id);
   return out;
 }
+// The ids a version over another holds itself (changed, added or taken
+// out), in no set order; every id when it is over none.
+export const ownNodeIds = (nodes: Record<Id, Node>): Id[] => Object.keys(rawNodes(nodes));
 export const nodeValues = (nodes: Record<Id, Node>): Node[] => (nodesUnder(nodes) ? nodeIds(nodes).map((id) => nodes[id]) : Object.values(nodes));
 export const nodeEntries = (nodes: Record<Id, Node>): [Id, Node][] => (nodesUnder(nodes) ? nodeIds(nodes).map((id) => [id, nodes[id]]) : Object.entries(nodes));
 export const nodeCount = (nodes: Record<Id, Node>): number => (nodesUnder(nodes) ? nodeIds(nodes).length : Object.keys(nodes).length);
 // A copy to change: over the same nodes, its own copied.
 export const copyNodes = (nodes: Record<Id, Node>): Record<Id, Node> => {
   const under = nodesUnder(nodes);
-  return under ? Object.assign(Object.create(under), nodes) : { ...nodes };
+  if (!under) return { ...nodes };
+  const out = Object.assign(Object.create(under), rawNodes(nodes)), first = firstIds.get(rawNodes(nodes));
+  if (first) firstIds.set(out, first);
+  return checked(out);
 };
 // A copy with `more` put in (a merge where `more` wins), each read whole.
 export function withNodes(nodes: Record<Id, Node>, ...more: Record<Id, Node>[]): Record<Id, Node> {
+  const over = joinedOver([nodes, ...more]);
+  if (over) return over;
   const out = copyNodes(nodes);
-  for (const m of more) {
-    if (nodesUnder(m) && nodesUnder(m) === nodesUnder(nodes)) Object.assign(out, m);
-    else for (const id of nodeIds(m)) out[id] = m[id];
-  }
+  for (const m of more) for (const id of nodeIds(m)) out[id] = m[id];
   return out;
+}
+// Several versions put together, the later winning, as nodes over those
+// under one of them (each other one over the same or over none), or null
+// when none is over any. Each is read for its own nodes only; the nodes of
+// those before the first that is over some are listed first (nodeIds), as
+// a merge of plain objects gives them. `clashes`: a merge's, two different
+// nodes under one id.
+function joinedOver(parts: Record<Id, Node>[], clashes?: Id[]): Record<Id, Node> | null {
+  const at = parts.findIndex((p) => nodesUnder(p));
+  if (at < 0) return null;
+  const under = nodesUnder(parts[at])!;
+  if (!parts.every((p) => !nodesUnder(p) || nodesUnder(p) === under)) return null;
+  const out: Record<Id, Node> = Object.create(under), mine = rawNodes(out), first: Id[] = [];
+  const seen = new Set<Id>();
+  parts.forEach((p, i) => {
+    const over = !!nodesUnder(p);
+    const pf = over ? firstIds.get(rawNodes(p)) : undefined;
+    for (const id of over ? [...(pf ?? []), ...Object.keys(rawNodes(p))] : Object.keys(p)) {
+      const n = p[id];
+      if (clashes) { const old = Object.hasOwn(mine, id) ? mine[id] : i > at ? under[id] : undefined; if (old && n && old !== n && !sameNode(old, n)) clashes.push(id); }
+      if (!seen.has(id) && !(id in under) && (i < at || (i === at && pf?.includes(id)))) first.push(id);
+      seen.add(id);
+      if (n !== under[id] || Object.hasOwn(mine, id)) mine[id] = n;
+    }
+  });
+  if (first.length) firstIds.set(mine, [...new Set(first)]);
+  return checked(out);
 }
 // Takes a node out.
 export const dropNode = (nodes: Record<Id, Node>, id: Id): void => {
@@ -662,8 +724,15 @@ export class MergeClash extends Error {
 // Put programs together. The same node in two of them (a shared library)
 // is fine; two different nodes under one id is refused, never overwritten.
 export function merge(...codes: Code[]): Code {
-  const nodes: Record<Id, Node> = {};
   const clashes: Id[] = [];
+  // Over the nodes under one of them (joinedOver).
+  const over = joinedOver(codes.map((c) => c.nodes), clashes);
+  if (over) {
+    if (clashes.length) throw new MergeClash(clashes);
+    return { nodes: over, defs: [...new Set(codes.flatMap((c) => c.defs))] };
+  }
+  const nodes: Record<Id, Node> = {};
+
   for (const c of codes) {
     const from = c.nodes;
     for (const id in from) {
@@ -674,6 +743,16 @@ export function merge(...codes: Code[]): Code {
   }
   if (clashes.length) throw new MergeClash(clashes);
   return { nodes, defs: [...new Set(codes.flatMap((c) => c.defs))] };
+}
+
+// A program over a layer of code under it (the library): `merge(layer,
+// code)` as nodes over the layer's, with only the program's own nodes its
+// own (no copy of the ~50,000).
+export function mergeOver(layer: Code, code: Code): Code {
+  const clashes: Id[] = [];
+  for (const id of nodeIds(code.nodes)) { const old = layer.nodes[id], n = code.nodes[id]; if (old && old !== n && !sameNode(old, n)) clashes.push(id); }
+  if (clashes.length) throw new MergeClash(clashes);
+  return { nodes: nodesOver(layer.nodes, code.nodes), defs: [...new Set([...layer.defs, ...code.defs])] };
 }
 
 // Whatever order its keys were read or built in (a saved node's are

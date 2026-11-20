@@ -13,6 +13,7 @@ import { ARITH, CELL_OPS, DIVIDE, EMBEDDING_V, FALSE, FIELDS, INT_OPS, JSON_OPS,
 import { tupleVariant } from "../src/lang/std-values.ts";
 import type { Id, NodeData } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
+import { dropNode } from "../src/model.ts";
 
 const bools = (k: Lang, b: string, extra: Parameters<Lang["match"]>[1] = []) =>
   k.match(b, [{ variant: TRUE, names: [], body: () => k.lit(1) }, { variant: FALSE, names: [], body: () => k.lit(2) }, ...extra]);
@@ -103,7 +104,7 @@ const SMALLEST: Record<string, (k: Lang) => unknown> = {
   "job-not-named": (k) => { const B = k.type("Box", [], [["box", [["n", () => k.tref("type.int")]]]]); const m = k.def("box meaning"); k.define(m, k.fn(["b"], (b) => k.call(LIB("utf8 of"), k.call(INT_OPS.show, k.call(B.f["box.n"], b))))); k.define(k.def("box of Bytes"), k.call(REPRESENTATION_V, k.x(m), k.x(`${COST}.linear`), k.list(k.call(JOBS.job, k.x(LIB("byte count")), k.fn(["b"], () => k.int(0)), k.x(`${COST}.constant`))))); },
   "job-wrong-type": (k) => { const B = k.type("Box", [], [["box", [["n", () => k.tref("type.int")]]]]); const m = k.def("box meaning"); k.define(m, k.fn(["b"], (b) => k.call(LIB("utf8 of"), k.call(INT_OPS.show, k.call(B.f["box.n"], b))))); const bad = k.def("box count"); k.define(bad, k.fn(["b"], () => k.lit("x"))); k.define(k.def("box of Bytes"), k.call(REPRESENTATION_V, k.x(m), k.x(`${COST}.linear`), k.list(k.call(JOBS.job, k.x(LIB("byte count")), k.x(bad), k.x(`${COST}.constant`))))); },
   // A definition deleted after something was made to use it.
-  "points-at-nothing": (k) => { const g = k.def("gone"); k.define(g, k.lit(1)); k.define(k.def("p"), k.thunk(() => k.x(g))); delete k.code.nodes[g]; k.code.defs.splice(k.code.defs.indexOf(g), 1); },
+  "points-at-nothing": (k) => { const g = k.def("gone"); k.define(g, k.lit(1)); k.define(k.def("p"), k.thunk(() => k.x(g))); dropNode(k.code.nodes, g); k.code.defs.splice(k.code.defs.indexOf(g), 1); },
   "name-on-plain-match": (k) => k.define(k.def("p"), k.fn(["b"], (b) => { const m = k.if(b, k.lit(1), k.lit(2)); (k.code.nodes[m] as { name?: string }).name = (k as unknown as { binder: (n: string) => string }).binder("n"); return m; })),
   "named-operation-inputs": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.handleNamed("n", (n) => k.call(a.op.ask, k.x(n), k.lit(1)), answered(k, a, () => k.lit(1))))); },
   "release-given-something": (k) => { const a = ask(k); k.define(k.def("p"), k.thunk(() => k.match(k.call(a.op.ask), [...answered(k, a, () => k.lit(1)), { variant: RELEASE_V, names: ["x"], body: () => k.x("std.unit.unit") }]))); },

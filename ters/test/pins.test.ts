@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
-import { replace, subtree, type Code, type Id } from "../src/model.ts";
+import { replace, subtree, type Code, type Id, nodeValues } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { LIBRARY } from "../src/lang/library.ts";
@@ -58,7 +58,7 @@ test("copying a published definition in: the program's calls use the copy, and i
     const copy = r.select!;
     assert.equal(r.names[copy], `my ${name}`);
     assert.ok(r.code.defs.includes(copy) && !LIBRARY.code.nodes[copy]);
-    const own = Object.values(r.code.nodes).filter((n) => !LIBRARY.code.nodes[n.id]);
+    const own = nodeValues(r.code.nodes).filter((n) => !LIBRARY.code.nodes[n.id]);
     assert.ok(!own.some((n) => n.kind === "ref" && n.target === def), "no own call is left on the published one");
     assert.ok(own.some((n) => n.kind === "ref" && n.target === copy));
     assert.deepEqual(T.infer(r.code, r.names).errors, []);

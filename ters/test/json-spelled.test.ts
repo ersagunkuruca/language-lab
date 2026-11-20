@@ -8,6 +8,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { infer } from "../src/lang/infer.ts";
 import { makeRunner, showValue, type Value } from "../src/lang/run.ts";
 import { descentReader } from "../src/lang/descent.ts";
+import { withNodes } from "../src/model.ts";
 
 const L = (name: string) => Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === name && ["def", "builtin"].includes(LIBRARY.code.nodes[d]?.kind ?? ""))!;
 const code = LIBRARY.code, names = LIBRARY.names;
@@ -41,7 +42,7 @@ test("json spelled read backwards reads blanks and escapes as json read does (L7
 test("json spelled's written reader reads as descent does (L72e2b)", async () => {
   const { writeReader } = await import("../src/lang/reader.ts");
   const w = writeReader(code, L("json spelled"), names);
-  const all = { nodes: { ...code.nodes, ...w.code.nodes }, defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
+  const all = { nodes: withNodes(code.nodes, w.code.nodes), defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
   const info = infer(all, allNames);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const rr = makeRunner(all, info, { print: () => {}, names: allNames });

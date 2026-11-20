@@ -6,7 +6,7 @@
 // checked by re-inferring the whole program and refused if it adds an error.
 
 import type { Code, Id, Node, NodeData, NodeOf } from "../ters/src/model.ts";
-import { children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn, copyNodes, dropNode, nodeIds, nodeValues } from "../ters/src/model.ts";
+import { children, collect, derived, derivedFrom, freshId, layerOf, onLayer, parentAt, parentLookup, parentOf, portsOf, scanningOnLayer, refTargets, replace, subtree, swapIn, copyNodes, dropNode, nodeIds, nodeValues, withNodes } from "../ters/src/model.ts";
 import type { Names, Notation, Presentation } from "../ters/src/presentation.ts";
 import blocksStyle from "../ters/styles/blocks.json" with { type: "json" };
 import { fillings, fillingsInPieces, implementationKey, implementationOf, infer as check, inferEdited, type Filling, type Info, type Options } from "../ters/src/lang/infer.ts";
@@ -610,7 +610,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
     else {
       root = freshId();
       const fn = freshId();
-      next = { ...code, nodes: { ...code.nodes, [fn]: { id: fn, kind: "ref", target: S.listOf }, [root]: { id: root, kind: "call", fn, args: [...xs!, ...ys!] } } };
+      next = { ...code, nodes: withNodes(code.nodes, { [fn]: { id: fn, kind: "ref", target: S.listOf }, [root]: { id: root, kind: "call", fn, args: [...xs!, ...ys!] } }) };
     }
     next = collect(swapIn(next, id, root));
     return guardTyped(info, next, names, root, xs?.length && ys?.length ? "Simplified: one list, written out." : "Simplified: appending an empty list changes nothing.");
@@ -622,7 +622,7 @@ export function simplify(code: Code, names: Names, info: Info, id: Id): TEdit | 
   else if (b && !b.cells.length) { root = front; gone = [back]; next = code; }
   else if (a && b) {
     const last = code.nodes[a.cells.at(-1)!] as Call;
-    next = { ...code, nodes: { ...code.nodes, [last.id]: { ...last, args: [last.args[0], back] } } };
+    next = { ...code, nodes: withNodes(code.nodes, { [last.id]: { ...last, args: [last.args[0], back] } }) };
     root = front; gone = [a.nil];
   } else return null;
   next = swapIn(next, id, root);
@@ -1640,7 +1640,7 @@ export function sharedCases(code: Code, names: Names, info: Info | null, id: Id)
 // others keeping the value they share.
 export function ownBody(code: Code, names: Names, info: Info, c: { label: string; parent: Id; slot: "body" | "otherwise" }): LooseEdit {
   const hole = freshId();
-  const nodes = { ...code.nodes, [hole]: { id: hole, kind: "hole" } as Node, [c.parent]: { ...code.nodes[c.parent], [c.slot]: hole } as Node };
+  const nodes = withNodes(code.nodes, { [hole]: { id: hole, kind: "hole" } as Node, [c.parent]: { ...code.nodes[c.parent], [c.slot]: hole } as Node });
   const r = guardTyped(info, collect({ nodes, defs: code.defs }), names, hole, `${c.label} has a body of its own now: fill the hole. The other cases keep the value they share; Undo puts it back.`);
   return r.ok ? { ...r, own: true } : r;
 }
@@ -1702,7 +1702,7 @@ export function unwire(code: Code, names: Names, info: Info, def: Id, of: Record
   const at = holder(code, of, def, slot);
   // The value moves out under a new id, so the hole can keep the input's.
   const moved = freshId();
-  const nodes = { ...code.nodes, [moved]: { ...code.nodes[slot], id: moved } as Node };
+  const nodes = withNodes(code.nodes, { [moved]: { ...code.nodes[slot], id: moved } as Node });
   const x = setLoose({ ...code, nodes }, of, home, of[at] ?? def, moved, scopeAt(code, at, slot));
   const e = guardTyped(info, replace(x.code, slot, () => ({ kind: "hole" })), inputNames(names, home, x.home), slot, "Took it off: the input is a hole, and the value lies loose at the end of the text.");
   return e.ok ? { ...e, of: x.of, home: x.home } : e;
@@ -2009,7 +2009,7 @@ function spreadInto(code: Code, names: Names, info: Info, binder: Id, slot: Id):
   if (z?.t !== "con" || !/^std\.tuple\d$/.test(z.id) || !isCall(p) || !p.args.includes(slot)) return null;
   if (p.args.length !== z.args.length || p.args.some((a) => code.nodes[a]?.kind !== "hole")) return null;
   const r = freshId();
-  const next = collect(replace({ ...code, nodes: { ...code.nodes, [r]: { id: r, kind: "ref", target: binder } } }, p.id, () => ({ kind: "call", fn: p.fn, args: [r] })));
+  const next = collect(replace({ ...code, nodes: withNodes(code.nodes, { [r]: { id: r, kind: "ref", target: binder } }) }, p.id, () => ({ kind: "call", fn: p.fn, args: [r] })));
   const nm = display[binder] ?? names[binder] ?? "it";
   return guardTyped(info, next, names, p.id, `Wired ${nm} in as all ${p.args.length} inputs: its parts, in order.`);
 }
@@ -2451,7 +2451,7 @@ export function setResults(code: Code, names: Names, info: Info, def: Id, result
   const d = code.nodes[def] as NodeOf<"def">;
   const { results: _, ...lam } = code.nodes[d.body!] as NodeOf<"lambda">;
   const params = lam.params, rs = params.filter((p) => results.includes(p));
-  const nodes = { ...code.nodes, [lam.id]: rs.length ? { ...lam, results: rs } : lam };
+  const nodes = withNodes(code.nodes, { [lam.id]: rs.length ? { ...lam, results: rs } : lam });
   const nm = (id: Id) => names[id] ?? display[id] ?? id;
   return guardTyped(info, { ...code, nodes }, names, def, rs.length ? `${nm(def)} gives ${rs.map(nm).join(", ")} from ${params.filter((p) => !rs.includes(p)).map(nm).join(", ") || "nothing"}.` : `${nm(def)} has no results: a predicate on all its ports again.`);
 }
@@ -2697,7 +2697,7 @@ export function addItem(code: Code, names: Names, info: Info, row: Row, at: numb
   let made: Node;
   if (row.flat) {
     const n = code.nodes[row.root] as Call;
-    next = { nodes: { ...code.nodes, [row.root]: { ...n, args: [...n.args.slice(0, at), hole, ...n.args.slice(at)] } }, defs: code.defs };
+    next = { nodes: withNodes(code.nodes, { [row.root]: { ...n, args: [...n.args.slice(0, at), hole, ...n.args.slice(at)] } }), defs: code.defs };
     next.nodes[hole] = { id: hole, kind: "hole" };
     const where = at >= row.items.length ? "at the end" : at === 0 ? "first" : `as the ${ordinal(at + 1)}`;
     return guardTyped(info, next, names, hole, `A new item ${where}: fill its hole.`);
@@ -2745,7 +2745,7 @@ export function removeItem(code: Code, names: Names, info: Info, row: Row, at: n
   let next: Code;
   if (row.flat) {
     const n = code.nodes[row.root] as Call;
-    next = { nodes: { ...code.nodes, [row.root]: { ...n, args: n.args.filter((_, i) => i !== at) } }, defs: code.defs };
+    next = { nodes: withNodes(code.nodes, { [row.root]: { ...n, args: n.args.filter((_, i) => i !== at) } }), defs: code.defs };
   } else if (row.kind === "list") {
     const cell = row.spine[at];
     if (!parentOf(code, cell)) return { ok: false, reason: "this list can't lose its first item here" };

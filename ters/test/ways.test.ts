@@ -16,6 +16,7 @@ import { B } from "../src/prelude.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compiledEach, plainValue } from "../../compiler/src/core-js.ts";
+import { nodeValues } from "../src/model.ts";
 
 
 // An angle of the program's own, a record of one Float64: + − part by
@@ -98,7 +99,7 @@ test("a written field is a way like any other: a target where cos costs more, or
 test("a way's declared cost counts: a way costing 10 loses to the written field even where that builtin costs 5", async () => {
   const { pickWays, waysIn } = await import("../src/lang/ways.ts");
   const code = base(new Lang(LIBRARY.code).code);
-  for (const n of Object.values(code.nodes)) if (n.kind === "def" && n.way) code.nodes[n.id] = { ...n, cost: 10 };
+  for (const n of nodeValues(code.nodes)) if (n.kind === "def" && n.way) code.nodes[n.id] = { ...n, cost: 10 };
   const trigF = code.defs.find((d) => LIBRARY.names[d] === "trig at float64")!;
   const body = code.nodes[(code.nodes[trigF] as { body: Id }).body] as { fn: Id; args: Id[] };
   const variant = code.nodes[(code.nodes[body.fn] as { target: Id }).target] as never as Parameters<typeof pickWays>[2];

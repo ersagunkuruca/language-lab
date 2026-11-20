@@ -8,7 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { Code, Node } from "../src/model.ts";
-import { merge } from "../src/model.ts";
+import { merge, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { onTodaysIds } from "../src/lang/std.ts";
 import { infer as wholeCheck } from "../src/lang/infer.ts";
@@ -50,12 +50,12 @@ test("sent again, a program's unchanged nodes are last time's, and an edit's ans
   const first = receivedOnto(sendCode(code), null);
   assert.equal(receivedOnto(sendCode(first), first), first, "the same program is the same code");
   // An edit: a number in one definition changed.
-  const lit = Object.values(first.nodes).find((n): n is Node & { kind: "lit"; value: number } => n.kind === "lit" && typeof n.value === "number" && !LIBRARY.code.nodes[n.id] && n.value === 2)!;
+  const lit = nodeValues(first.nodes).find((n): n is Node & { kind: "lit"; value: number } => n.kind === "lit" && typeof n.value === "number" && !LIBRARY.code.nodes[n.id] && n.value === 2)!;
   assert.ok(lit, "tumble has a 2");
-  const edited: Code = { ...first, nodes: { ...first.nodes, [lit.id]: { ...lit, value: 3 } } };
+  const edited: Code = { ...first, nodes: withNodes(first.nodes, { [lit.id]: { ...lit, value: 3 } }) };
   const second = receivedOnto(sendCode(edited), first);
-  const same = Object.keys(second.nodes).filter((id) => second.nodes[id] === first.nodes[id]).length;
-  assert.equal(same, Object.keys(second.nodes).length - 1, "only the edited node is new");
+  const same = nodeIds(second.nodes).filter((id) => second.nodes[id] === first.nodes[id]).length;
+  assert.equal(same, nodeIds(second.nodes).length - 1, "only the edited node is new");
   infer(first, names);
   const over = infer(second, names);
   const whole = wholeCheck(second, names, undefined, programOptions());

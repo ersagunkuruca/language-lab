@@ -3,7 +3,7 @@
 // the implementations a type has, the type pickers they use, and the
 // + New definition form. What it reads of the editor comes through
 // `StructureHost`.
-import { fieldWayOf, get, isCall, isPublished, type Id, type Node, type NodeOf, nodeValues } from "../ters/src/model.ts";
+import { fieldWayOf, get, isCall, isPublished, type Id, type Node, type NodeOf, nodeValues, withNodes } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pos } from "./canvas.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
@@ -374,7 +374,7 @@ export function structure(host: StructureHost) {
       const same = theirs.map(([v, f]) => {
         const spec = typeSpecOf(get(code, f, "field").type);
         const r = spec ? Top.addField(code, sh, type, sel, names[f] ?? "field", spec) : { ok: false as const, reason: "its type can't be written here" };
-        const shared: Top.Top = r.ok ? (() => { const made = (r.code.nodes[sel] as NodeOf<"variant">).fields.at(-1)!; return { ...r, code: { ...r.code, nodes: { ...r.code.nodes, [made]: { ...(r.code.nodes[made] as NodeOf<"field">), same: f } } }, note: `${r.note} It is ${names[v] ?? v}'s ${names[f] ?? "field"}, the same one: .${names[f] ?? "field"} reads it on either case.` }; })() : r;
+        const shared: Top.Top = r.ok ? (() => { const made = (r.code.nodes[sel] as NodeOf<"variant">).fields.at(-1)!; return { ...r, code: { ...r.code, nodes: withNodes(r.code.nodes, { [made]: { ...(r.code.nodes[made] as NodeOf<"field">), same: f } }) }, note: `${r.note} It is ${names[v] ?? v}'s ${names[f] ?? "field"}, the same one: .${names[f] ?? "field"} reads it on either case.` }; })() : r;
         return edit(`${names[f] ?? "field"}, as ${names[v] ?? v}'s`, `The same field as ${names[v] ?? v}'s ${names[f] ?? "field"} (${typeText(get(code, f, "field").type, names)})`, shared, () => runTop(info, shared));
       });
       out.append(c.el, h("label", { class: "field", for: "f-new-field-type" }, h("span", {}, "Type"), t.el), h("div", { class: "acts" }, add),

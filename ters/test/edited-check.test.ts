@@ -10,7 +10,7 @@ import { infer, inferEdited, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { showIn } from "../src/lang/types.ts";
-import { subtree, type Code, type Id, type Node } from "../src/model.ts";
+import { subtree, type Code, type Id, type Node, withNodes } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 
 const libDefs = new Set(LIBRARY.code.defs);
@@ -52,7 +52,7 @@ function edit(code: Code, mine: Id[], r: () => number): Code {
   else if (kind < 0.8 && holes.length) n = { id: pick(holes).id, kind: "lit", value: pick([0, 1, 2.5]) } as Node;
   else if (exprs.length) n = { id: pick(exprs).id, kind: "hole" } as Node;
   else return code;
-  return { ...code, nodes: { ...code.nodes, [n.id]: n } };
+  return { ...code, nodes: withNodes(code.nodes, { [n.id]: n }) };
 }
 
 const RUNS: [string, number][] = process.env.EDITED_RUNS ? JSON.parse(process.env.EDITED_RUNS) : [["tumble", 5], ["sort", 7], ["wc", 476], ["buffer", 92], ["collatz", 84]];

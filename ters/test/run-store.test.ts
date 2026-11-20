@@ -17,6 +17,7 @@ import { representationsIn } from "../src/lang/represent.ts";
 import { nodeWorld } from "../src/lang/world.ts";
 import { keepRun, keptRun, runKey } from "../cli/run-store.ts";
 import { lowerCore, printedMain, runCoreMain, runPrintedMain } from "../../compiler/src/core-js.ts";
+import { nodeValues, withNodes } from "../src/model.ts";
 
 const wc = join(import.meta.dirname, "../examples/wc");
 const dir = mkdtempSync(join(tmpdir(), "run-store-"));
@@ -47,8 +48,8 @@ test("the same program has the same key; an edit, a rename or another main, anot
   const a = loaded(), b = loaded(), main = a.own.find((d) => a.names[d] === "main")!;
   const key = runKey(a.code, a.names, a.options, main);
   assert.equal(runKey(b.code, b.names, b.options, main), key);
-  const lit = Object.values(a.code.nodes).find((n): n is NodeOf<"lit"> => n.kind === "lit" && typeof n.value === "number")!;
-  const edited: Code = { ...a.code, nodes: { ...a.code.nodes, [lit.id]: { ...lit, value: (lit.value as number) + 1 } } };
+  const lit = nodeValues(a.code.nodes).find((n): n is NodeOf<"lit"> => n.kind === "lit" && typeof n.value === "number")!;
+  const edited: Code = { ...a.code, nodes: withNodes(a.code.nodes, { [lit.id]: { ...lit, value: (lit.value as number) + 1 } }) };
   assert.notEqual(runKey(edited, a.names, a.options, main), key);
   assert.notEqual(runKey(a.code, { ...a.names, [main]: "start" }, a.options, main), key);
   const other = a.own.find((d) => d !== main)!;

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
 import type { Code, Id, NodeOf } from "../src/model.ts";
-import { isCall, isUse } from "../src/model.ts";
+import { isCall, isUse, nodeValues, withNodes } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 
@@ -202,7 +202,7 @@ test("a use with no body has an output per produced port, wired to what reads ea
       const dot = lam.params[0], ports = answerKeys(l.code, use as never);
       if (ports.length < 1 || ports.length > 8) continue;
       const readers: [Id, number][] = [];
-      for (const r of Object.values(nodes)) {
+      for (const r of nodeValues(nodes)) {
         if (ports.length === 1) { if (r.kind === "ref" && r.target === dot) readers.push([r.id, 0]); continue; }
         if (r.kind !== "call" || r.given || r.args.length !== 1) continue;
         const f = nodes[r.fn], from = nodes[r.args[0]];
@@ -266,8 +266,8 @@ test("a one-port use read by two inputs is drawn with its dot", async () => {
       assert.equal(drawn(r.code, r.names, d, dot), false, `${u}: read once, no dot`);
       // Read by a second input too, both reads inputs of one call (any
       // call: the drawing doesn't ask its type): the dot is drawn.
-      const lam = Object.values(r.code.nodes).find((x) => x.kind === "lambda" && x.params.includes(dot)) as NodeOf<"lambda">;
-      const both = { ...r.code.nodes, f2: { id: "f2", kind: "ref", target: d }, r2: { id: "r2", kind: "ref", target: dot }, c2: { id: "c2", kind: "call", fn: "f2", args: [lam.body, "r2"] }, [lam.id]: { ...lam, body: "c2" } } as Code["nodes"];
+      const lam = nodeValues(r.code.nodes).find((x) => x.kind === "lambda" && x.params.includes(dot)) as NodeOf<"lambda">;
+      const both = withNodes(r.code.nodes, { f2: { id: "f2", kind: "ref", target: d }, r2: { id: "r2", kind: "ref", target: dot }, c2: { id: "c2", kind: "call", fn: "f2", args: [lam.body, "r2"] }, [lam.id]: { ...lam, body: "c2" } }) as Code["nodes"];
       assert.ok(drawn({ ...r.code, nodes: both }, r.names, d, dot), `${u}: read twice, its dot is drawn`);
       tried++;
     }

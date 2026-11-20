@@ -6,7 +6,7 @@ import { infer } from "../src/lang/infer.ts";
 import { makeRunner } from "../src/lang/run.ts";
 import { hashDef } from "../src/hash.ts";
 import { loadCode, loadPresentation, root } from "../src/io.ts";
-import { get, merge, replace, type Code, type Id } from "../src/model.ts";
+import { get, merge, replace, type Code, type Id, nodeValues } from "../src/model.ts";
 import { rename, type Presentation } from "../src/presentation.ts";
 import { B, prelude, preludeNames } from "../src/prelude.ts";
 import { renderLet } from "../src/render/letseq.ts";
@@ -61,7 +61,7 @@ test("independently written, differently named copies hash the same", () => {
 
 test("a real change changes the hash", () => {
   const { code, def } = discriminant(["a", "b", "c"]);
-  const four = Object.values(code.nodes).find((n) => n.kind === "lit" && n.value === 4)!;
+  const four = nodeValues(code.nodes).find((n) => n.kind === "lit" && n.value === 4)!;
   const edited = replace(code, four.id, () => ({ kind: "lit", value: 5 }));
   assert.notEqual(hashDef(code, def), hashDef(edited, def));
 });
@@ -87,7 +87,7 @@ test("comments and step names are keyed by node, so they survive an edit", () =>
   const code = loadCode(dir);
   const p = loadPresentation(dir, { names: ["short", "descriptive"], style: "plain" });
   const x = code.defs[1];
-  const two = Object.values(code.nodes).find((n) => n.kind === "lit" && n.value === 2)!;
+  const two = nodeValues(code.nodes).find((n) => n.kind === "lit" && n.value === 2)!;
   const edited = replace(code, two.id, () => ({ kind: "lit", value: 3 }));
   const out = renderLet(edited, p, x);
   assert.match(out, /denominator = 3 \* ‹leading coefficient›/);

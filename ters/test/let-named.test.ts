@@ -10,6 +10,7 @@ import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { addDot } from "../../editor/typed.ts";
+import { nodeValues } from "../src/model.ts";
 
 const output = (code: Code, names: Record<Id, string>, main: Id) => {
   const out: string[] = [];
@@ -22,7 +23,7 @@ test("a dot on polar's equal keeps for some y, angle: polar(1, y, 2, angle) true
   const polar = p.named("polar"), main = p.named("main");
   const info = infer(p.code, p.pres.names);
   // The equal of y = length · sin(angle), the second of the and.
-  const equals = Object.values(p.own.nodes).filter((n) => n.kind === "ref" && n.target === "builtin.equal").map((n) => n.id);
+  const equals = nodeValues(p.own.nodes).filter((n) => n.kind === "ref" && n.target === "builtin.equal").map((n) => n.id);
   const before = output(p.code, p.pres.names, main);
   let dotted = 0;
   for (const at of equals) {

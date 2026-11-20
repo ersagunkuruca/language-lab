@@ -13,6 +13,7 @@ import { infer } from "../src/lang/infer.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { CHECK_OP, S } from "../src/lang/std.ts";
 import { runTests } from "../src/lang/tests.ts";
+import { withNodes } from "../src/model.ts";
 
 test("with fuel bounds a search's later answers too", () => {
   const p = loadProgram(join(root, "examples", "dice"));
@@ -21,7 +22,7 @@ test("with fuel bounds a search's later answers too", () => {
   const law = k.def("inverse undoes");
   k.define(law, k.fn(["f", "x"], (f, x) => k.let("y", k.call(f, x), (y) =>
     k.call(CHECK_OP, k.equal(k.call(f, k.call(S.fuel, k.int(10), k.thunk(() => k.call(inverse, f, y)))), y), k.lit("f(inverse(f, f(x))) is f(x)")))));
-  const code = { ...p.code, nodes: { ...p.code.nodes, ...k.code.nodes }, defs: [...p.code.defs, ...k.code.defs] };
+  const code = { ...p.code, nodes: withNodes(p.code.nodes, k.code.nodes), defs: [...p.code.defs, ...k.code.defs] };
   const names = { ...p.pres.names, ...k.names }, info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const t0 = performance.now();

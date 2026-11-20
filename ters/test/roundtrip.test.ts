@@ -11,7 +11,7 @@ import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
 import type { Code, Id, Node } from "../src/model.ts";
-import { isUse } from "../src/model.ts";
+import { isUse, nodeValues } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, checkOptions, loadProgram } from "../src/lang/load.ts";
 import { pointsAt } from "../src/lang/modules.ts";
@@ -38,7 +38,7 @@ test("pointsAt reports every id a node holds", () => {
   const kinds = new Set<string>();
   for (const ex of examples) {
     const { code } = loadProgram(join(root, "examples", ex));
-    for (const n of Object.values(code.nodes)) {
+    for (const n of nodeValues(code.nodes)) {
       kinds.add(isUse(n) ? "use" : n.kind);
       const points = new Set(pointsAt(n));
       for (const id of held(n, code)) assert.ok(points.has(id), `${ex}: a ${n.kind} node (${n.id}) holds ${id}, which pointsAt doesn't report`);

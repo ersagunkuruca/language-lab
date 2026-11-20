@@ -11,6 +11,7 @@ import type { Names } from "../src/presentation.ts";
 import { tupleType } from "../src/lang/std-values.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { parseUnit } from "../src/units.ts";
+import { nodeEntries } from "../src/model.ts";
 
 export type Build = (add: (n: NodeData) => Id) => Id;
 
@@ -40,7 +41,7 @@ export function typeNames(code: Code, names: Names, own: Id[]): Map<string, Id> 
   const put = (id: Id) => { const n = names[id]; if (n && !out.has(n)) out.set(n, id); };
   for (const d of own) if (code.nodes[(code.nodes[d] as { body?: Id }).body ?? ""]?.kind === "typedef") put(d);
   for (const d of code.defs) if (code.nodes[(code.nodes[d] as { body?: Id }).body ?? ""]?.kind === "typedef") put(d);
-  for (const [id, n] of Object.entries(code.nodes)) if (n.kind === "builtin" && /^(type|effect)\./.test(id)) put(id);
+  for (const [id, n] of nodeEntries(code.nodes)) if (n.kind === "builtin" && /^(type|effect)\./.test(id)) put(id);
   return out;
 }
 

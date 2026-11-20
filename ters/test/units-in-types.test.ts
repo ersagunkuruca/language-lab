@@ -16,7 +16,7 @@ import { hashDef } from "../src/hash.ts";
 import { ARITH } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import { formatUnit, parseUnit, signatureUnits } from "../src/units.ts";
-import { isPublished } from "../src/model.ts";
+import { isPublished, copyNodes } from "../src/model.ts";
 
 test("a unit reads back as formatUnit writes it", () => {
   for (const s of ["m", "m/s", "m/s²", "N", "1/s", "m²·kg"]) assert.equal(formatUnit(parseUnit(s)!), s);
@@ -56,7 +56,7 @@ test("a value made with a field takes its unit, and the unit is part of the type
   const errors = infer(code, names, undefined, checkOptions).errors;
   // Only the 5 s given as a distance is refused.
   assert.deepEqual(errors.map((e) => [e.id, e.message]), [[(code.nodes[(code.nodes[(code.nodes[made] as { body: string }).body] as { body: string }).body] as { args: string[] }).args[0], "the field's type says m, but this is s"]]);
-  const plain = { ...code, nodes: { ...code.nodes } };
+  const plain = { ...code, nodes: copyNodes(code.nodes) };
   const tref = (code.nodes[(code.nodes[T.f["run.distance"]] as { type: string }).type]);
   plain.nodes[tref.id] = { ...tref, unit: undefined } as typeof tref;
   assert.notEqual(hashDef(code, T.def), hashDef(plain, T.def));

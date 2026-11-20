@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { analyze } from "../../invertible/src/index.js";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
-import { get, replace, type Code, type Id } from "../src/model.ts";
+import { get, replace, type Code, type Id, nodeValues, withNodes } from "../src/model.ts";
 import { relationFor } from "../src/lang/equations.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, loadProgram } from "../src/lang/load.ts";
@@ -137,11 +137,11 @@ test("units: declared on parameters and numbers, inferred through predicates and
   assert.equal(formatUnit(f.unit(named("drift"))!), "m");
   assert.equal(formatUnit(f.unit(named("drop"))!), "m");
   // A plain number where a length is needed is a type error.
-  const measured = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.value === 29.62 && n.unit)!;
+  const measured = nodeValues(p.code.nodes).find((n) => n.kind === "lit" && n.value === 29.62 && n.unit)!;
   const plain = replace(p.code, measured.id, () => ({ kind: "lit", value: 29.62 }));
   assert.ok(infer(plain, p.pres.names).errors.some((e) => /declared m|units don't agree|plain number/.test(e.message)));
   // A refusal names the units on both sides.
-  const speed = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.value === 5 && n.unit)!;
+  const speed = nodeValues(p.code.nodes).find((n) => n.kind === "lit" && n.value === 5 && n.unit)!;
   const seconds = replace(p.code, speed.id, () => ({ kind: "lit", value: 5, unit: { s: 1 } }));
   const msgs = infer(seconds, p.pres.names).errors.map((e) => e.message);
   assert.ok(msgs.includes("declared m/s, but the rest makes it s"), msgs.join("; "));
@@ -165,7 +165,7 @@ test("units: a recursive call isn't unfolded again, so checking stays fast when 
   assert.ok(r.ok);
   if (!r.ok) return;
   const hole = r.select!;
-  const code: Code = { ...r.code, nodes: { ...r.code.nodes, mainref: { id: "mainref", kind: "ref", target: main }, [hole]: { id: hole, kind: "call", fn: "mainref", args: [] } } };
+  const code: Code = { ...r.code, nodes: withNodes(r.code.nodes, { mainref: { id: "mainref", kind: "ref", target: main }, [hole]: { id: hole, kind: "call", fn: "mainref", args: [] } }) };
   // Timed against the same defs without the recursive call, so a slow
   // runner slows both: unfolding the group again would be many times over.
   const b0 = Date.now();

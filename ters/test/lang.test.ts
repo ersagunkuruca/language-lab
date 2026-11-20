@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { hashDef } from "../src/hash.ts";
 import { root } from "../src/io.ts";
-import { get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call, useOf } from "../src/model.ts";
+import { get, replace, subtree, type Code, type Id, type NodeOf, isCall, type Call, useOf, nodeValues } from "../src/model.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
 import { base, baseNames, loadProgram } from "../src/lang/load.ts";
 import { addVariant, fillHole } from "../src/lang/refactor.ts";
@@ -59,7 +59,7 @@ test("every filling the palette offers keeps the program free of errors", () => 
   for (const name of ["algebra"]) {
     const p = load(name);
     // Every third arm body and function body (all of them takes ~30s).
-    const targets = Object.values(p.own.nodes).flatMap((n) => (n.kind === "arm" || n.kind === "lambda" ? [n.body] : [])).filter((_, i) => i % 3 === 0);
+    const targets = nodeValues(p.own.nodes).flatMap((n) => (n.kind === "arm" || n.kind === "lambda" ? [n.body] : [])).filter((_, i) => i % 3 === 0);
     // Five of the targets, rotating with the run, each with eight of its
     // fillings (T12); every target nightly, still with eight each: all of
     // a target's fillings, a few hundred since the library grew, ran the
@@ -126,7 +126,7 @@ test("a case analysis is created with every case, and a new case reaches every a
   assert.equal(info.holes.size, 4);
   for (const h of info.holes.values()) assert.ok(h.expected.t === "con");
   // The fold's new arm knows `of` is recursive, so it gets a folded value too.
-  const arm = Object.values(edit.code.nodes).find((n) => n.kind === "arm" && n.variant === edit.variant && n.results[0]) as NodeOf<"arm">;
+  const arm = nodeValues(edit.code.nodes).find((n) => n.kind === "arm" && n.variant === edit.variant && n.results[0]) as NodeOf<"arm">;
   assert.equal(edit.names[arm.results[0]!], "of′");
 
   // Without the gesture (adding the variant by hand), the checker says so.
@@ -175,7 +175,7 @@ test("totality is inferred: recursion on a smaller piece is total, anything else
   const info = infer(p.code, p.pres.names);
   assert.ok(!info.divergent.has(each));
   // Recurse on the whole list instead of the rest: no longer smaller.
-  const recursive = Object.values(p.code.nodes).find((n) => isCall(n) && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === each && p.code.nodes[n.args[0]].kind === "ref" && n.args[0] !== lam.params[0]) as Call;
+  const recursive = nodeValues(p.code.nodes).find((n) => isCall(n) && p.code.nodes[n.fn].kind === "ref" && (p.code.nodes[n.fn] as NodeOf<"ref">).target === each && p.code.nodes[n.args[0]].kind === "ref" && n.args[0] !== lam.params[0]) as Call;
   const code = replace(p.code, recursive.args[0], () => ({ kind: "ref", target: lam.params[0] }));
   const after = infer(code, p.pres.names);
   assert.ok(after.divergent.has(each));
@@ -338,7 +338,7 @@ test("a chain of matches, each taking apart a field of the last, reads as one ro
   assert.match(parse, /^ {4}\[date, account, cents, memo\] → entry\(date, account, amount\(cents, n\), memo\)$/m);
   assert.doesNotMatch(parse, /match ‹after/);
   // The five cases that all say it's a bad line read once, as what's left.
-  assert.ok(Object.values(l.code.nodes).filter((x) => x.kind === "ref" && l.pres.names[x.target] === "bad line" && subtree(l.code, l.named("parse")).includes(x.id)).length > 1);
+  assert.ok(nodeValues(l.code.nodes).filter((x) => x.kind === "ref" && l.pres.names[x.target] === "bad line" && subtree(l.code, l.named("parse")).includes(x.id)).length > 1);
   assert.deepEqual(parse.split("\n").filter((x) => x.includes("→")).map((x) => x.trim().split(" →")[0]), ["[date, account, cents, memo]", "otherwise"]);
   assert.match(parse, /^ {4}otherwise → ‹bad line›\(n\)$/m);
   const main = text("main");

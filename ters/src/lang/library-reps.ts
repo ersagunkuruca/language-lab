@@ -1132,7 +1132,7 @@ export function treesFor(code: Code, rows: Representation[]): Code {
   // from each (merged, the two were copied whole for it: L266).
   const keep = new Set<Id>();
   const roots = rows.flatMap((r) => [...(r.def ? [r.def] : []), ...Object.values(r.impl), ...(r.meaning ? [r.meaning] : []), ...Object.values(r.byType ?? {}), ...Object.values(r.heads ?? {}), ...(r.store ? [r.store] : [])]);
-  const at = (id: Id): Node | undefined => (Object.hasOwn(code.nodes, id) ? code.nodes[id] : TREES.code.nodes[id]);
+  const at = (id: Id): Node | undefined => code.nodes[id] ?? TREES.code.nodes[id];
   const owners = [ownerOfTypeParts(code), ownerOfTypeParts(TREES.code)];
   const reached = (root: Id): Set<Id> => {
     const seen = new Set<Id>();

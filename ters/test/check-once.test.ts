@@ -9,6 +9,7 @@ import { checkOnce, infer, type Info } from "../src/lang/infer.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { checkOptions, loadProgram } from "../src/lang/load.ts";
 import { showIn } from "../src/lang/types.ts";
+import { withNodes } from "../src/model.ts";
 
 const seen = (info: Info, names: Record<string, string>) => ({
   errors: info.errors.map((e) => e.message).sort(),
@@ -29,6 +30,6 @@ for (const example of ["queens", "physics", "tumble"]) test(`${example}: a check
 test("a program that changes a library node is checked whole", () => {
   const p = loadProgram(join(root, "examples", "queens"));
   const keep = p.named("keep");
-  const code = { ...p.code, nodes: { ...p.code.nodes, [keep]: { ...p.code.nodes[keep] } } };
+  const code = { ...p.code, nodes: withNodes(p.code.nodes, { [keep]: { ...p.code.nodes[keep] } }) };
   assert.deepEqual(infer(code, p.pres.names).errors, []);
 });

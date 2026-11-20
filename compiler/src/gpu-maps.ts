@@ -18,6 +18,7 @@ import { DIVERGE, type Type } from "../../ters/src/lang/types.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { lowerScalar, type CoreIR } from "./scalar.ts";
 import { emitWgsl } from "./wgsl.ts";
+import { withNodes } from "../../ters/src/model.ts";
 
 // caps: what the function captured, in the closure's order, each an Int
 // or a Bool, which the kernel is given after the item.
@@ -69,7 +70,7 @@ export function gpuMaps(ir: CoreIR): Record<number, GpuMap> {
       const id = `gpu.${m.site}` as Id, lifted = `gpu.${m.site}.λ` as Id;
       const capTypes = m.caps.map((b) => { const ct = ir.info.typeOf.get(b); return ct && ir.info.subst.zonk(ct); });
       if (capTypes.some((ct) => !ct)) continue;
-      const code: Code = { ...ir.code, defs: [...ir.code.defs, id], nodes: { ...ir.code.nodes, [lifted]: { ...lam, id: lifted, params: [...lam.params, ...m.caps] }, [id]: { id, kind: "def", body: lifted } } };
+      const code: Code = { ...ir.code, defs: [...ir.code.defs, id], nodes: withNodes(ir.code.nodes, { [lifted]: { ...lam, id: lifted, params: [...lam.params, ...m.caps] }, [id]: { id, kind: "def", body: lifted } }) };
       const ft: Type = { ...t, params: [...t.params, ...(capTypes as Type[])] };
       const info: Info = { ...ir.info, typeOf: new Map(ir.info.typeOf).set(id, ft).set(lifted, ft) };
       const names = { ...(ir as { names?: Names }).names, [id]: `map ${m.site}` } as Names;

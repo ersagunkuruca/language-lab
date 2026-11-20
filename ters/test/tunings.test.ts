@@ -8,8 +8,9 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { fromList, toList, type Data, type Value } from "../src/lang/run.ts";
 import { FIFTY_THREE } from "../src/lang/tunings-source.ts";
 import { both } from "./library-call.ts";
+import { nodeIds } from "../src/model.ts";
 
-const variant = (name: string) => Object.keys(LIBRARY.code.nodes).find((d) => LIBRARY.code.nodes[d].kind === "variant" && LIBRARY.names[d] === name)!;
+const variant = (name: string) => nodeIds(LIBRARY.code.nodes).find((d) => LIBRARY.code.nodes[d].kind === "variant" && LIBRARY.names[d] === name)!;
 const ratio = (a: number, b: number): Data => ({ tag: variant("ratio"), fields: [a, b] });
 const reading = (v: Value) => { const [name, step, octave, off, target] = (v as Data).fields; return { name, step: Number(step), octave: Number(octave), off: off as number, target: target as number }; };
 const close = (a: number, b: number, tol = 1e-6) => assert.ok(Math.abs(a - b) < tol, `${a} vs ${b}`);

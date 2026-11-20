@@ -11,6 +11,7 @@ import { makeRunner, showValue, type Value } from "../src/lang/run.ts";
 import { descentReader } from "../src/lang/descent.ts";
 import { INT_OPS, LIST, S } from "../src/lang/std.ts";
 import { INT } from "../src/lang/types.ts";
+import { withNodes } from "../src/model.ts";
 
 const L = (name: string) => Object.keys(LIBRARY.names).find((d) => LIBRARY.names[d] === name && ["def", "builtin"].includes(LIBRARY.code.nodes[d]?.kind ?? ""))!;
 
@@ -22,7 +23,7 @@ k.define(printer, k.fn(["tree"], (t) => k.match(t, [
   { variant: Tree.v.leaf, names: ["n"], body: ([n]) => k.call(INT_OPS.show, n) },
   { variant: Tree.v.node, names: ["kids"], body: ([kids]) => k.call(S.concat, k.lit("["), k.call(S.concat, k.call(L("join all"), k.call(L("map"), kids, k.x(printer)), k.lit(",")), k.lit("]"))) },
 ])));
-const code = { nodes: { ...LIBRARY.code.nodes, ...k.code.nodes }, defs: [...LIBRARY.code.defs, ...k.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] };
+const code = { nodes: withNodes(LIBRARY.code.nodes, k.code.nodes), defs: [...LIBRARY.code.defs, ...k.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] };
 const names = { ...LIBRARY.names, ...k.names };
 const r = makeRunner(code, infer(code, names), { print: () => {}, names });
 const shown = (v: Value) => showValue(v, code, names);
@@ -46,7 +47,7 @@ test("a list with a separator and no item after it, or no closing bracket, has n
 test("the written reader reads the nested lists as descent does (L72b2)", async () => {
   const { writeReader } = await import("../src/lang/reader.ts");
   const w = writeReader(code, printer, names);
-  const all = { nodes: { ...code.nodes, ...w.code.nodes }, defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
+  const all = { nodes: withNodes(code.nodes, w.code.nodes), defs: [...code.defs, ...w.code.defs.filter((d) => !code.defs.includes(d))] }, allNames = { ...names, ...w.names };
   const info = infer(all, allNames);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const rr = makeRunner(all, info, { print: () => {}, names: allNames });
@@ -68,7 +69,7 @@ test("Float64s read back by descent as show writes them (L72c)", async () => {
     { variant: V.v.one, names: ["x"], body: ([x]) => k2.call(S.show, x) },
     { variant: V.v.many, names: ["items"], body: ([items]) => k2.call(S.concat, k2.lit("("), k2.call(S.concat, k2.call(L("join all"), k2.call(L("map"), items, k2.x(pr)), k2.lit(" ")), k2.lit(")"))) },
   ])));
-  const c2 = { nodes: { ...LIBRARY.code.nodes, ...k2.code.nodes }, defs: [...LIBRARY.code.defs, ...k2.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, n2 = { ...LIBRARY.names, ...k2.names };
+  const c2 = { nodes: withNodes(LIBRARY.code.nodes, k2.code.nodes), defs: [...LIBRARY.code.defs, ...k2.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, n2 = { ...LIBRARY.names, ...k2.names };
   const r2 = makeRunner(c2, infer(c2, n2), { print: () => {}, names: n2 });
   const rd = descentReader(c2, pr, n2);
   for (const line of ["1", "-2.5", "0.3", "(1 2.25 (-0.5) ())", "1e-12", "(3 1e-7)"]) {
@@ -81,7 +82,7 @@ test("Float64s read back by descent as show writes them (L72c)", async () => {
   // The written reader (reader.ts, L72c2) reads them the same.
   const { writeReader } = await import("../src/lang/reader.ts");
   const w = writeReader(c2, pr, n2);
-  const all = { nodes: { ...c2.nodes, ...w.code.nodes }, defs: [...c2.defs, ...w.code.defs.filter((d) => !c2.defs.includes(d))] }, allNames = { ...n2, ...w.names };
+  const all = { nodes: withNodes(c2.nodes, w.code.nodes), defs: [...c2.defs, ...w.code.defs.filter((d) => !c2.defs.includes(d))] }, allNames = { ...n2, ...w.names };
   const info = infer(all, allNames);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const rr = makeRunner(all, info, { print: () => {}, names: allNames });
@@ -100,7 +101,7 @@ test("json quoted text reads back by descent, its escapes too (L72d)", async () 
   const Q = k3.type("Quoted", [], [["quoted", [["t", () => k3.tref(STRING)]]]]);
   const pr = k3.def("quoted text");
   k3.define(pr, k3.fn(["q"], (q) => k3.match(q, [{ variant: Q.v.quoted, names: ["t"], body: ([t]) => k3.call(L("json quoted"), t) }])));
-  const c3 = { nodes: { ...LIBRARY.code.nodes, ...k3.code.nodes }, defs: [...LIBRARY.code.defs, ...k3.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, n3 = { ...LIBRARY.names, ...k3.names };
+  const c3 = { nodes: withNodes(LIBRARY.code.nodes, k3.code.nodes), defs: [...LIBRARY.code.defs, ...k3.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, n3 = { ...LIBRARY.names, ...k3.names };
   const r3 = makeRunner(c3, infer(c3, n3), { print: () => {}, names: n3 });
   const rd = descentReader(c3, pr, n3);
   const print = (t: string) => [...(r3.call(r3.value(pr), { tag: Q.v.quoted, fields: [t] }) as Iterable<Value>)][0] as string;
@@ -135,7 +136,7 @@ test("json printed's written reader reads as descent does (L72d2)", async () => 
   const { writeReader } = await import("../src/lang/reader.ts");
   const jp = L("json spelled");
   const w = writeReader(LIBRARY.code, jp, LIBRARY.names);
-  const all = { nodes: { ...LIBRARY.code.nodes, ...w.code.nodes }, defs: [...LIBRARY.code.defs, ...w.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, allNames = { ...LIBRARY.names, ...w.names };
+  const all = { nodes: withNodes(LIBRARY.code.nodes, w.code.nodes), defs: [...LIBRARY.code.defs, ...w.code.defs.filter((d) => !LIBRARY.code.defs.includes(d))] }, allNames = { ...LIBRARY.names, ...w.names };
   const info = infer(all, allNames);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const rr = makeRunner(all, info, { print: () => {}, names: allNames });

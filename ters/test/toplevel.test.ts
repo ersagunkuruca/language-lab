@@ -1,7 +1,7 @@
 import { RATIONAL_TYPE } from "../src/lang/library.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isPublished, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, type Use, isUse, useTarget } from "../src/model.ts";
+import { isPublished, subtree, type Code, type Id, type Node, type NodeOf, isCall, type Call, type Use, isUse, useTarget, nodeIds, nodeValues, withNodes } from "../src/model.ts";
 import { B } from "../src/prelude.ts";
 import type { Names } from "../src/presentation.ts";
 import { fillings, infer, type Filling } from "../src/lang/infer.ts";
@@ -54,7 +54,7 @@ class Session {
   }
   number(def: Id, x: number) {
     const lit = this.fill(def, (f) => f.kind === "lit" && f.of === "number");
-    this.code = { ...this.code, nodes: { ...this.code.nodes, [lit.id]: { id: lit.id, kind: "lit", value: x } } };
+    this.code = { ...this.code, nodes: withNodes(this.code.nodes, { [lit.id]: { id: lit.id, kind: "lit", value: x } }) };
   }
 }
 const call = (target: Id) => (f: Filling) => f.kind === "call" && f.target === target;
@@ -76,7 +76,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
   s.fill(area, call(ARITH.mul));
   s.number(area, 3);
   s.fill(area, call(ARITH.mul));
-  const binds = (variant: Id) => (Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === variant) as NodeOf<"arm">).binds;
+  const binds = (variant: Id) => (nodeValues(s.code.nodes).find((n) => n.kind === "arm" && n.variant === variant) as NodeOf<"arm">).binds;
   s.fill(area, ref(binds(circle)[0]));
   s.fill(area, ref(binds(circle)[0]));
   // square(side) → side · side
@@ -100,7 +100,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // A new input: every call to area gets a hole for it, so the program
   // stays well-formed; removing it again drops the argument.
   const scale = s.ok(Top.addParameter(s.code, s.names, area, "scale"));
-  const areaCall = Object.values(s.code.nodes).find((n) => isCall(n) && (s.code.nodes[n.fn] as NodeOf<"ref">).target === area) as Call;
+  const areaCall = nodeValues(s.code.nodes).find((n) => isCall(n) && (s.code.nodes[n.fn] as NodeOf<"ref">).target === area) as Call;
   assert.equal(areaCall.args.length, 2);
   assert.equal(s.code.nodes[areaCall.args[1]].kind, "hole");
   s.ok(Top.moveParameter(s.code, s.names, area, scale, -1));
@@ -114,7 +114,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
   // A field added to circle: the constructor call gets a hole, the arm a
   // binder. Removing it drops both.
   const label = s.ok(Top.addField(s.code, s.names, shape, circle, "label", { target: "type.string", args: [] }));
-  const made = Object.values(s.code.nodes).find((n) => isCall(n) && (s.code.nodes[n.fn] as NodeOf<"ref">)?.target === circle) as Call;
+  const made = nodeValues(s.code.nodes).find((n) => isCall(n) && (s.code.nodes[n.fn] as NodeOf<"ref">)?.target === circle) as Call;
   assert.equal(made.args.length, 2);
   assert.equal(binds(circle).length, 2);
   s.ok(Top.removeField(s.code, s.names, circle, label));
@@ -129,7 +129,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
     const lam = () => s.code.nodes[(s.code.nodes[area] as NodeOf<"def">).body!] as NodeOf<"lambda">;
     const t = new Session();
     t.code = s.code; t.names = s.names;
-    const p = lam().params[0], used = Object.values(s.code.nodes).filter((n) => n.kind === "ref" && n.target === p).map((n) => n.id);
+    const p = lam().params[0], used = nodeValues(s.code.nodes).filter((n) => n.kind === "ref" && n.target === p).map((n) => n.id);
     t.ok(Top.removeParameter(t.code, t.names, area, p, true));
     assert.equal((t.code.nodes[(t.code.nodes[area] as NodeOf<"def">).body!] as NodeOf<"lambda">).params.length, 0);
     for (const u of used) assert.equal(t.code.nodes[u].kind, "hole");
@@ -141,7 +141,7 @@ test("a program written from nothing: a data type, a function over it, and a mai
   s.ok(Top.removeCase(s.code, s.names, shape, sq.variant));
   assert.equal(binds(circle).length, 1);
   // (the program's own match: the prelude's published code has some too)
-  assert.equal((Object.values(s.code.nodes).find((n) => n.kind === "match" && !isPublished(n.id)) as NodeOf<"match">).arms.length, 1);
+  assert.equal((nodeValues(s.code.nodes).find((n) => n.kind === "match" && !isPublished(n.id)) as NodeOf<"match">).arms.length, 1);
   // main can go (nothing uses it), then area, then Shape.
   for (const d of [main, area, shape]) s.ok(Top.deleteDefinition(s.code, s.names, d));
   assert.deepEqual(s.code.defs, base({ nodes: {}, defs: [] }).defs);
@@ -183,7 +183,7 @@ test("a function written inside a body gets inputs added, moved and removed, as 
   const v = s.def("v");
   // v = (a) => □, a function value nothing passes arguments to.
   const hole = s.holes(v)[0];
-  s.code = { ...s.code, nodes: { ...s.code.nodes, [hole]: { id: hole, kind: "lambda", params: ["p_a"], body: "p_body" }, p_a: { id: "p_a", kind: "binder" }, p_body: { id: "p_body", kind: "hole" } } };
+  s.code = { ...s.code, nodes: withNodes(s.code.nodes, { [hole]: { id: hole, kind: "lambda", params: ["p_a"], body: "p_body" }, p_a: { id: "p_a", kind: "binder" }, p_body: { id: "p_body", kind: "hole" } }) };
   s.names = { ...s.names, p_a: "a" };
   const b = s.ok(Top.addParameter(s.code, s.names, hole, "b"));
   assert.match(s.refused(Top.addParameter(s.code, s.names, hole, "b")), /this function already has an input named b/);
@@ -243,7 +243,7 @@ test("a program saved to a file opens again as the same program, and a broken fi
   assert.deepEqual(infer(r.code, baseNames(r.file.names)).errors, []);
 
   const broken = JSON.parse(text);
-  const some = Object.keys(broken.code.nodes).find((k) => isCall(broken.code.nodes[k]))!;
+  const some = nodeIds(broken.code.nodes).find((k) => isCall(broken.code.nodes[k]))!;
   broken.code.nodes[some].fn = "nowhere";
   const e = fromFile(JSON.stringify(broken), () => empty);
   assert.ok("error" in e && /points at nowhere/.test(e.error));
@@ -290,7 +290,7 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   const h = s.holes(size)[0];
   void h;
   s.fill(size, call(ARITH.mul));
-  const cons = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
+  const cons = nodeValues(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
   s.fill(size, ref(cons.binds[0]));
   s.number(size, 10);
   const all = s.all();
@@ -302,7 +302,7 @@ test("values on wires: every node that ran shows its value; the arm not taken sh
   assert.equal(t.result, 40);
   assert.equal(t.values.get(cons.binds[0]), 4);
   assert.equal(t.values.get(cons.body), 40);
-  const nil = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.nil" && !isPublished(n.id)) as NodeOf<"arm">;
+  const nil = nodeValues(s.code.nodes).find((n) => n.kind === "arm" && n.variant === "std.list.nil" && !isPublished(n.id)) as NodeOf<"arm">;
   assert.equal(t.values.has(nil.body), false);
   assert.equal(t.values.get(xs) !== undefined, true);
   assert.ok("error" in parseValue("[4, ", s.code, all));
@@ -325,7 +325,7 @@ test("insertion sort, the textbook algorithm, written with palette picks and a t
   const e = fillHole(s.code, s.names, s.holes(insert)[0], offers.find((f) => f.kind === "fold" && f.on === items && f.type === "std.list")!, baseNames({}));
   s.code = e.code; s.names = e.names;
   // The arm binders are named after the library's fields.
-  const arm = Object.values(s.code.nodes).find((n) => n.kind === "arm" && n.variant === CONS && !isPublished(n.id)) as NodeOf<"arm">;
+  const arm = nodeValues(s.code.nodes).find((n) => n.kind === "arm" && n.variant === CONS && !isPublished(n.id)) as NodeOf<"arm">;
   assert.deepEqual([...arm.binds, arm.results[1]!].map((b) => s.names[b]), ["head", "tail", "tail′"]);
   s.fill(insert, call(CONS)); s.fill(insert, ref(x)); s.fill(insert, ref(NIL));
   // if x < head: a match on a value given next, whose scrutinee is a hole.
@@ -357,7 +357,7 @@ test("show inline: a call drawn as its callee's body is a let, and type-checks t
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/sort"));
   const insert = p.named("insert");
-  const call = Object.values(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as NodeOf<"ref">).target === insert)!.id;
+  const call = nodeValues(p.code.nodes).find((n) => isCall(n) && (p.code.nodes[n.fn] as NodeOf<"ref">).target === insert)!.id;
   const v = inlineView(p.code, p.pres.names, [call]);
   const c = v.code.nodes[call] as Call;
   assert.equal(v.code.nodes[c.fn].kind, "lambda");
@@ -417,7 +417,7 @@ test("an effect of your own: declared, given back a type, and handled by a match
   s.fill(answer, (f) => f.kind === "match" && f.on === null && f.type === Ask);
   s.fill(answer, call(ask));
   const lit = s.fill(answer, (f) => f.kind === "lit" && f.of === "text");
-  s.code = { ...s.code, nodes: { ...s.code.nodes, [lit.id]: { id: lit.id, kind: "lit", value: "width" } } };
+  s.code = { ...s.code, nodes: withNodes(s.code.nodes, { [lit.id]: { id: lit.id, kind: "lit", value: "width" } }) };
   s.number(answer, 30);
   const info = s.info();
   assert.deepEqual(info.errors, []);
@@ -448,7 +448,7 @@ test("an input added to a function that is solved somewhere is given there as a 
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
   const fall = p.named("fall");
-  const solves = (code: Code) => Object.values(code.nodes).filter((n): n is Use => isUse(n) && useTarget(code.nodes, n) === fall);
+  const solves = (code: Code) => nodeValues(code.nodes).filter((n): n is Use => isUse(n) && useTarget(code.nodes, n) === fall);
   assert.ok(solves(p.code).length, "landing times solves fall");
   const before = infer(p.code, p.pres.names).errors.length;
   const r = Top.addParameter(p.code, p.pres.names, fall, "mass");
@@ -516,7 +516,7 @@ test("a field of a one-case type is in the palette as the function that reads it
   s.fill(n, call(pages));
   s.fill(n, call(chapter));
   const lit = s.fill(n, (f) => f.kind === "lit" && f.of === "int");
-  s.code = { ...s.code, nodes: { ...s.code.nodes, [lit.id]: { id: lit.id, kind: "lit", value: 12, of: "type.int" } } };
+  s.code = { ...s.code, nodes: withNodes(s.code.nodes, { [lit.id]: { id: lit.id, kind: "lit", value: 12, of: "type.int" } }) };
   assert.equal(s.info().errors.length, 0);
   assert.equal(showValue(runMain(s.code, s.info(), n), s.code, s.all()), "12");
   // A tuple reads the same way.
@@ -548,12 +548,12 @@ test("a match inside a match on the same type names its binders apart", () => {
   const second = s.def("second");
   const xs = Object.keys(s.names).find((k) => s.names[k] === "xs")!;
   s.fill(second, (f) => f.kind === "match" && f.on === xs && f.type === "std.list");
-  const arm = (Object.values(s.code.nodes) as Node[]).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
+  const arm = (nodeValues(s.code.nodes) as Node[]).find((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)) as NodeOf<"arm">;
   const tail = arm.binds[1];
   // Fill the nil arm first, then match on tail in the cons arm.
   s.number(second, 0);
   s.fill(second, (f) => f.kind === "match" && f.on === tail);
-  const named = (Object.values(s.code.nodes) as Node[]).filter((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)).map((n) => (n as NodeOf<"arm">).binds.map((b) => s.names[b]).join(", "));
+  const named = (nodeValues(s.code.nodes) as Node[]).filter((n) => n.kind === "arm" && n.variant === "std.list.cons" && !isPublished(n.id)).map((n) => (n as NodeOf<"arm">).binds.map((b) => s.names[b]).join(", "));
   assert.deepEqual(named.sort(), ["head 2, tail 2", "head, tail"]);
 });
 
@@ -569,8 +569,8 @@ test("a whole number typed where an Int goes fills it as an Int; a fraction is r
   const { loadProgram } = await import("../src/lang/load.ts");
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/wc"));
-  const lit = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.of === INT && !isPublished(n.id))!;
-  const code: Code = { ...p.code, nodes: { ...p.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const lit = nodeValues(p.code.nodes).find((n) => n.kind === "lit" && n.of === INT && !isPublished(n.id))!;
+  const code: Code = { ...p.code, nodes: withNodes(p.code.nodes, { [lit.id]: { id: lit.id, kind: "hole" } }) };
   const info = infer(code, p.pres.names);
   const def = code.defs.find((d) => subtree(code, d).includes(lit.id));
   const r = T.fillValue(code, p.pres.names, info, lit.id, "0", def);
@@ -593,20 +593,20 @@ test("a big whole number typed inside a value or edited keeps its digits as an I
   const r = T.fillValue(s.code, s.all(), s.info(), hole, "[12345678901234567891, 2]", big);
   assert.ok(r.ok, r.ok ? "" : r.reason);
   if (!r.ok) return;
-  const lits = Object.values(r.code.nodes).filter((n): n is NodeOf<"lit"> => n.kind === "lit" && subtree(r.code, big).includes(n.id)).map((n) => [n.value, n.of]);
+  const lits = nodeValues(r.code.nodes).filter((n): n is NodeOf<"lit"> => n.kind === "lit" && subtree(r.code, big).includes(n.id)).map((n) => [n.value, n.of]);
   assert.deepEqual(lits, [["12345678901234567891", INT], [2, undefined]]);
   const info = infer(r.code, s.all());
   // At an Int's place, inside an expression: 1 + 12345678901234567891.
   const wc = (await import("../src/lang/load.ts")).loadProgram((await import("node:path")).join(import.meta.dirname, "../examples/wc"));
-  const lit = Object.values(wc.code.nodes).find((n) => n.kind === "lit" && n.of === INT && !isPublished(n.id))!;
-  const code: Code = { ...wc.code, nodes: { ...wc.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const lit = nodeValues(wc.code.nodes).find((n) => n.kind === "lit" && n.of === INT && !isPublished(n.id))!;
+  const code: Code = { ...wc.code, nodes: withNodes(wc.code.nodes, { [lit.id]: { id: lit.id, kind: "hole" } }) };
   const def = code.defs.find((d) => subtree(code, d).includes(lit.id));
   const sum = T.fillValue(code, wc.pres.names, infer(code, wc.pres.names), lit.id, "12345678901234567891 - 12345678901234567890", def);
   assert.ok(sum.ok, sum.ok ? "" : sum.reason);
   if (sum.ok) assert.deepEqual(subtree(sum.code, lit.id).map((id) => sum.code.nodes[id]).filter((n) => n.kind === "lit").map((n) => (n as NodeOf<"lit">).value), ["12345678901234567891", "12345678901234567890"]);
   // A literal edited: an untyped one past 2⁵³ becomes an Int of its digits.
   const two = subtree(r.code, big).find((id) => { const n = r.code.nodes[id]; return n.kind === "lit" && n.value === 2; })!;
-  const untyped: Code = { ...r.code, nodes: { ...r.code.nodes, [two]: { id: two, kind: "lit", value: 2 } } };
+  const untyped: Code = { ...r.code, nodes: withNodes(r.code.nodes, { [two]: { id: two, kind: "lit", value: 2 } }) };
   const edited = T.setLit(untyped, s.all(), infer(untyped, s.all()), two, "98765432109876543210");
   assert.ok(edited.ok, edited.ok ? "" : edited.reason);
   if (edited.ok) assert.deepEqual(edited.code.nodes[two], { id: two, kind: "lit", value: "98765432109876543210", of: INT });
@@ -652,8 +652,8 @@ test("arithmetic typed where a value goes is calls of the operators: 2 × (3 −
   const { loadProgram } = await import("../src/lang/load.ts");
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/physics"));
-  const lit = Object.values(p.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "number" && !n.unit && !isPublished(n.id))!;
-  const code: Code = { ...p.code, nodes: { ...p.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const lit = nodeValues(p.code.nodes).find((n) => n.kind === "lit" && typeof n.value === "number" && !n.unit && !isPublished(n.id))!;
+  const code: Code = { ...p.code, nodes: withNodes(p.code.nodes, { [lit.id]: { id: lit.id, kind: "hole" } }) };
   const r = T.fillValue(code, p.pres.names, infer(code, p.pres.names), lit.id, "2 × (3 − 1) - -1");
   assert.ok(r.ok, r.ok ? "" : r.reason);
   if (!r.ok) return;
@@ -765,8 +765,8 @@ test("a call with no inputs is read where a value is typed: die() + 1", async ()
   const { loadProgram } = await import("../src/lang/load.ts");
   const { join } = await import("node:path");
   const p = loadProgram(join(import.meta.dirname, "../examples/dice"));
-  const lit = Object.values(p.code.nodes).find((n) => n.kind === "lit" && n.value === 7 && !isPublished(n.id))!;
-  const code: Code = { ...p.code, nodes: { ...p.code.nodes, [lit.id]: { id: lit.id, kind: "hole" } } };
+  const lit = nodeValues(p.code.nodes).find((n) => n.kind === "lit" && n.value === 7 && !isPublished(n.id))!;
+  const code: Code = { ...p.code, nodes: withNodes(p.code.nodes, { [lit.id]: { id: lit.id, kind: "hole" } }) };
   const info = infer(code, p.pres.names);
   for (const text of ["die()", "die() + 1", "1 + die()"]) {
     const r = T.fillValue(code, p.pres.names, info, lit.id, text);
@@ -978,7 +978,7 @@ test("a relation's other direction: the same ports, others given, a hole for how
   s.ok(Top.newDefinition(s.code, s.names, "polar", { kind: "function", params: ["length", "angle", "x", "y"] }));
   const polar = s.def("polar");
   const lam = s.code.nodes[(s.code.nodes[polar] as NodeOf<"def">).body!] as NodeOf<"lambda">;
-  s.code = { ...s.code, nodes: { ...s.code.nodes, [lam.id]: { ...lam, results: lam.params.slice(2) } } };
+  s.code = { ...s.code, nodes: withNodes(s.code.nodes, { [lam.id]: { ...lam, results: lam.params.slice(2) } }) };
   assert.match(s.refused(Top.addDirection(s.code, s.names, polar, [2, 3], "")), /own direction/);
   assert.match(s.refused(Top.addDirection(s.code, s.names, polar, [], "")), /at least one result/);
   const back = s.ok(Top.addDirection(s.code, s.names, polar, [0, 1], ""));

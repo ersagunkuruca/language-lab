@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { replace, subtree, type NodeOf, isCall, type Call } from "../src/model.ts";
+import { replace, subtree, type NodeOf, isCall, type Call, nodeValues } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { renderLet } from "../src/render/letseq.ts";
 import { fillValue, infer } from "../../editor/typed.ts";
@@ -16,7 +16,7 @@ test("typed text reads a function written out", () => {
   const { code } = p, names = p.pres.names, main = p.named("main");
   // The program's own call of keep, not one in the library.
   const mine = new Set(JSON.parse(readFileSync(join(root, "examples", "queens", "code.json"), "utf8")).defs.flatMap((d: string) => subtree(code, d)));
-  const keep = Object.values(code.nodes).find((n) => mine.has(n.id) && isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "keep") as Call;
+  const keep = nodeValues(code.nodes).find((n) => mine.has(n.id) && isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "keep") as Call;
   const hole = keep.args[1];
   const open = replace(code, hole, () => ({ kind: "hole" }));
   const info = infer(open, names);
@@ -33,7 +33,7 @@ test("typed text reads a function written out", () => {
   // No inputs: () => 0 where a function of nothing goes.
   // The program's own `first`, not one of the prelude's.
   const own = new Set(JSON.parse(readFileSync(join(root, "examples", "queens", "code.json"), "utf8")).defs.flatMap((d: string) => subtree(code, d)));
-  const first = Object.values(code.nodes).find((n) => own.has(n.id) && isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "first") as Call;
+  const first = nodeValues(code.nodes).find((n) => own.has(n.id) && isCall(n) && names[(code.nodes[n.fn] as NodeOf<"ref">).target] === "first") as Call;
   const open2 = replace(code, first.args[1], () => ({ kind: "hole" }));
   assert.ok(fillValue(open2, names, infer(open2, names), first.args[1], "() => nil", main).ok);
 });

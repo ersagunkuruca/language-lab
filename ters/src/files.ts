@@ -20,7 +20,7 @@
 // opened with a newer version of what it uses is offered the upgrade
 // (`upgradeFile`, E254); a file without them opens as before.
 
-import { isPublished, merge, SHAPE, type Code, type Id, type Node, nodeEntries, nodeValues } from "./model.ts";
+import { isPublished, merge, SHAPE, type Code, type Id, type Node, nodeEntries, nodeValues, withNodes } from "./model.ts";
 import type { Comments, Names } from "./presentation.ts";
 import { LIBRARY } from "./lang/library.ts";
 import { addToStore, MODULE_FORMAT, needs, pointsAt, upgradeNames, upgradeOwn, verify, type Module, type Moved } from "./lang/modules.ts";
@@ -106,7 +106,7 @@ export function fromFile(text: string, baseFor: (typed: boolean) => Code): { fil
   }
   const mods = fileModules({ modules, store });
   const base = mods.length ? merge(base0, ...mods.map((m) => m.code)) : base0;
-  const code: Code = { nodes: { ...base.nodes, ...(c.nodes as Record<Id, Node>) }, defs: [...base.defs, ...(c.defs as Id[])] };
+  const code: Code = { nodes: withNodes(base.nodes, { ...(c.nodes as Record<Id, Node>) }), defs: [...base.defs, ...(c.defs as Id[])] };
   for (const d of c.defs as Id[]) if (code.nodes[d]?.kind !== "def") return { error: `definition ${d} is missing` };
   // Every id the program points at must be there. A published one that
   // isn't comes from a module that isn't loaded.

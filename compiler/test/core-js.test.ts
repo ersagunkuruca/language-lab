@@ -24,7 +24,7 @@ import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { subtree, type Id } from "../../ters/src/model.ts";
+import { subtree, type Id, copyNodes, nodeIds } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { represented } from "../../ters/cli/represented.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
@@ -69,7 +69,7 @@ function nearer(p: ReturnType<typeof load>): ReturnType<typeof load> {
   };
   walk((p.code.nodes[goal] as { body: Id }).body);
   assert.deepEqual(lits.map((id) => (p.code.nodes[id] as { value: number }).value), [8, 9, 2, 8], "agent's goal of: (8, 9) and (2, 8)");
-  const nodes = { ...p.code.nodes };
+  const nodes = copyNodes(p.code.nodes);
   [3, 3, 7, 2].forEach((v, i) => (nodes[lits[i]] = { ...nodes[lits[i]], value: v } as never));
   const code = { ...p.code, nodes };
   return { ...p, code, info: infer(code, p.pres.names, undefined, p.options) };
@@ -81,7 +81,7 @@ function nearer(p: ReturnType<typeof load>): ReturnType<typeof load> {
 // and `ters test` checks each representation's jobs against Nat's own.
 function smaller(p: ReturnType<typeof load>): ReturnType<typeof load> {
   const main = p.own.defs.find((d) => p.pres.names[d] === "main")!;
-  const nodes = { ...p.code.nodes };
+  const nodes = copyNodes(p.code.nodes);
   let changed = 0;
   for (const id of subtree(p.code, main)) {
     const n = nodes[id] as unknown as { kind: string; value?: unknown };
@@ -296,7 +296,7 @@ test("for some in JavaScript from the core IR: the evaluator's relational interp
   assert.deepEqual([...l.refused.values()], []);
   const r = makeRunner(code, info, { print: () => {}, names });
   const fs = loadCoreJs(l), shown = printed(l), small = loadPrinted(shown, undefined, shown.code, info);
-  assert.ok(Object.keys(shown.code!.nodes).length < Object.keys(code.nodes).length / 10);
+  assert.ok(Object.keys(shown.code!.nodes).length < nodeIds(code.nodes).length / 10);
   const asked: [Id, number[]][] = [[root, [4]], [root, [2]], [root, [0]], [between, [5, 3]], [between, [5, 1]], [between, [-3, 0]]];
   for (const [def, xs] of asked) {
     const fi = l.funcs.findIndex((g) => g.def === def && !g.inner);

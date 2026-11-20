@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { root } from "../src/io.ts";
-import { subtree, type NodeOf } from "../src/model.ts";
+import { subtree, type NodeOf, nodeValues, withNodes } from "../src/model.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { matchRows, sharedOtherwise } from "../src/lang/patterns.ts";
 import { infer, ownBody, sharedCases, splitOn, untyped } from "../../editor/typed.ts";
@@ -18,7 +18,7 @@ test("one of the cases an otherwise stands for gets its own body", () => {
   const p = loadProgram(join(root, "examples", "calc"));
   const { code } = p, names = p.pres.names;
   const own = new Set(JSON.parse(readFileSync(join(root, "examples", "calc", "code.json"), "utf8")).defs.flatMap((d: string) => subtree(code, d)));
-  const m = Object.values(code.nodes).find((n): n is NodeOf<"match"> => n.kind === "match" && own.has(n.id) && sharedOtherwise(code, matchRows(code, null, n), n.otherwise ?? undefined).folded.length >= 2)!;
+  const m = nodeValues(code.nodes).find((n): n is NodeOf<"match"> => n.kind === "match" && own.has(n.id) && sharedOtherwise(code, matchRows(code, null, n), n.otherwise ?? undefined).folded.length >= 2)!;
   const shared = sharedOtherwise(code, matchRows(code, null, m), m.otherwise ?? undefined);
   const cases = sharedCases(code, names, null, shared.otherwise!);
   assert.equal(cases.length, shared.folded.length);
@@ -77,7 +77,7 @@ test("unfilled cases keep their own holes after the first is filled", () => {
   if (!r.ok) return;
   const m = r.code.nodes[lam.body] as NodeOf<"match">;
   const first = m.arms.map((a) => r.code.nodes[a] as NodeOf<"arm">)[0];
-  const code = { ...r.code, nodes: { ...r.code.nodes, [first.body]: { id: first.body, kind: "lit" as const, value: 1 } } };
+  const code = { ...r.code, nodes: withNodes(r.code.nodes, { [first.body]: { id: first.body, kind: "lit" as const, value: 1 } }) };
   const shared = sharedOtherwise(code, matchRows(code, null, m), m.otherwise ?? undefined);
   assert.deepEqual(shared.folded, []);
   assert.equal(shared.rows.length, m.arms.length);

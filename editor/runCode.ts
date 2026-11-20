@@ -6,7 +6,7 @@
 // which a copy of every node, made by postMessage, always did.
 import type { Code, Id, Node } from "../ters/src/model.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { dropNode, nodeIds } from "../ters/src/model.ts";
+import { dropNode, nodeIds, withNodes } from "../ters/src/model.ts";
 
 export type SentCode = { own: Record<Id, Node>; gone: Id[]; defs: Id[] };
 
@@ -18,7 +18,7 @@ export function sendCode(code: Code): SentCode {
 }
 
 export function receivedCode(s: SentCode): Code {
-  const nodes: Record<Id, Node> = { ...LIBRARY.code.nodes, ...s.own };
+  const nodes: Record<Id, Node> = withNodes(LIBRARY.code.nodes, { ...s.own });
   for (const id of s.gone) dropNode(nodes, id);
   return { nodes, defs: s.defs };
 }

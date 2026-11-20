@@ -12,7 +12,7 @@ import { base, baseNames } from "../src/lang/load.ts";
 import { runMain } from "../src/lang/run.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { tuplePart } from "../src/lang/std-values.ts";
-import { SHAPE_STEPS } from "../src/model.ts";
+import { SHAPE_STEPS, nodeValues } from "../src/model.ts";
 import { showType } from "../src/lang/types.ts";
 import { B } from "../src/prelude.ts";
 
@@ -184,7 +184,7 @@ test("a saved use whose port's binder carries a unit moves too, the binder a let
   // The unit still counts: x in metres plus a second is told so.
   const sec = Object.values(saved).find((n) => (n as NodeOf<"lit">).kind === "lit" && (n as NodeOf<"lit">).value === 10) as NodeOf<"lit">;
   const wrong = base({ nodes: { ...(saved as Code["nodes"]), [sec.id]: { ...sec, unit: { s: 1 } } }, defs: k.code.defs });
-  const mul = Object.values(wrong.nodes).find((n) => n.kind === "call" && (n as NodeOf<"call">).args?.includes(sec.id)) as NodeOf<"call">;
+  const mul = nodeValues(wrong.nodes).find((n) => n.kind === "call" && (n as NodeOf<"call">).args?.includes(sec.id)) as NodeOf<"call">;
   wrong.nodes["plus"] = { id: "plus", kind: "ref", target: B.add };
   wrong.nodes[mul.id] = { ...mul, fn: "plus" };
   assert.match(infer(wrong, names).errors.map((e) => e.message).join("\n"), /m can't meet s/);

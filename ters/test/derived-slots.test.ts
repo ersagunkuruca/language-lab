@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { root } from "../src/io.ts";
-import { nodesWhere, replace, subtree, type NodeOf, isCall, isUse } from "../src/model.ts";
+import { nodesWhere, replace, subtree, type NodeOf, isCall, isUse, copyNodes, nodeValues } from "../src/model.ts";
 import { useDirections } from "../src/lang/directions.ts";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer, fillings } from "../src/lang/infer.ts";
@@ -19,15 +19,15 @@ test("a filled program's solve verdicts are those of the same program built afre
   const hole = subtree(p.code, fall).find((x) => isCall(p.code.nodes[x]) && subtree(p.code, x).length > 3)!;
   const code = replace(p.code, hole, () => ({ kind: "hole" }));
   const info = infer(code, p.pres.names);
-  const solves = Object.values(code.nodes).filter(isUse);
+  const solves = nodeValues(code.nodes).filter(isUse);
   const offers = fillings(code, info, hole).slice(0, 40);
   assert.ok(offers.length > 10);
-  const scratch = { ...code.nodes };
+  const scratch = copyNodes(code.nodes);
   let differ = 0;
   for (const o of offers) {
     const r = fillHole(code, {}, hole, o, {}, scratch);
     derivedFrom(r.code, code, subtree(r.code, hole));
-    const fresh = { nodes: { ...r.code.nodes }, defs: r.code.defs };
+    const fresh = { nodes: copyNodes(r.code.nodes), defs: r.code.defs };
     for (const s of solves) {
       const a = JSON.stringify(solveMode(r.code, s)), b = JSON.stringify(solveMode(fresh, s));
       assert.equal(a, b);
@@ -47,16 +47,16 @@ test("a filled program's solves and calls are those a full scan finds", () => {
   const hole = subtree(p.code, fall).find((x) => isCall(p.code.nodes[x]) && subtree(p.code, x).length > 3)!;
   const code = replace(p.code, hole, () => ({ kind: "hole" }));
   const info = infer(code, p.pres.names);
-  const scratch = { ...code.nodes };
+  const scratch = copyNodes(code.nodes);
   const kinds = [["use", isUse], ["call", isCall]] as const;
   for (const o of fillings(code, info, hole).slice(0, 40)) {
     const r = fillHole(code, {}, hole, o, {}, scratch);
     derivedFrom(r.code, code, subtree(r.code, hole));
     for (const [k, is] of kinds) {
-      const scan = Object.values(r.code.nodes).filter((n) => is(n)).map((n) => n.id).sort();
+      const scan = nodeValues(r.code.nodes).filter((n) => is(n)).map((n) => n.id).sort();
       assert.deepEqual([...nodesWhere(r.code, k, (n) => is(n))].sort(), scan);
     }
-    const fresh = { nodes: { ...r.code.nodes }, defs: r.code.defs };
+    const fresh = { nodes: copyNodes(r.code.nodes), defs: r.code.defs };
     assert.deepEqual(useDirections(r.code).nodes, useDirections(fresh).nodes);
     r.undo();
   }
