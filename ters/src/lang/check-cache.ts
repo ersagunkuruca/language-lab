@@ -158,7 +158,7 @@ const textNumbers = new Map<string, number>();
 // numbers are its own, the texts the same.
 const numberTexts = new Map<number, string>();
 let textCount = 0;
-const defText = (code: Code, d: Id): number => {
+export const defText = (code: Code, d: Id): number => {
   const ids = subtree(code, d);
   const was = defTexts.get(d);
   if (was && was.nodes.length === ids.length && ids.every((id, i) => code.nodes[id] === was.nodes[i])) return was.n;

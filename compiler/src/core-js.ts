@@ -19,6 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
 import { itemPaths } from "./item-paths.ts";
@@ -719,6 +720,11 @@ import { reachedImplementing } from "../../ters/src/lang/reached.ts";
 export { reachedImplementing };
 
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
+  // Definitions' keys (def-keys.ts) write the ids the passes below make by
+  // place, not as made.
+  return keysOver(code.nodes, () => lowerCoreIn(code, info, names, roots));
+}
+function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
   // Work a lambda redoes on every call though nothing in it changes, done
   // once before (hoist.ts, C81), as compile.ts has it: sheet's columns
   // used, walked again for every row (C137d16). On what the roots reach,
