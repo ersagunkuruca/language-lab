@@ -21,11 +21,12 @@
 
 import type { CoreIR, LType, RType, SExpr, SFunc } from "./scalar.ts";
 import { isRecord, kids, mapKids, mapLocals, tidied } from "./scalar.ts";
-import { PURE_OPS, SAFE_RT } from "./share-calls.ts";
+import { PURE_OPS, pureFuncs, SAFE_RT } from "./share-calls.ts";
 
 const MAX_SIZE = 80, MAX_PARTS = 8;
 const size = (e: SExpr): number => 1 + kids(e).reduce((n, k) => n + size(k), 0);
 const COLUMN = /^array\.c(in|get\d+|length)\.a\d+$/;
+const AT = /^array\.at\.a(\d+)$/;
 // A value with nothing bound in it, worked out from locals by pure
 // arithmetic and reads: safe to work out again.
 const flat = (e: SExpr): boolean => {
@@ -35,6 +36,9 @@ const flat = (e: SExpr): boolean => {
     case "op": return PURE_OPS.has(e.op) && e.args.every(flat);
     case "make": return e.into === undefined && !e.t.mutable && e.args.every(flat);
     case "rt": return !e.host && (SAFE_RT(e.fn) || COLUMN.test(e.fn)) && e.args.every(flat);
+    // A pure function's call (the stand-in `nobody`, `nothing`): worked
+    // out where a part of it is read, so only past the end (C268).
+    case "call": return !e.cps && pure.has(e.fn) && e.args.every(flat);
     default: return false;
   }
 };
@@ -54,8 +58,11 @@ const typeAt = (t: LType, path: number[]): LType => path.reduce<LType>((x, i) =>
 const getAt = (e: SExpr, t: LType, path: number[]): SExpr => path.reduce<{ e: SExpr; t: LType }>(({ e, t }, i) => ({ e: { k: "get", rec: e, t: t as RType, i }, t: (t as RType).fields[i].t }), { e, t }).e;
 const splittable = (t: LType): t is RType => isRecord(t) && !t.mutable && t.fields.length > 0;
 
+// The program's pure functions, while chosenParts runs.
+let pure: Set<number> = new Set();
 export function chosenParts(ir: CoreIR): number {
   let n = 0;
+  pure = pureFuncs(ir);
   // A function whose body may be put in place for V.
   const inlinable = (g: SFunc) => !g.inner && !g.partial && !g.spends && !g.budgeted && !g.multi && !g.piece && !g.value && g.bail === undefined && size(g.body) <= MAX_SIZE && choice(g.body);
   ir.funcs.forEach((f, fi) => {
@@ -70,6 +77,7 @@ export function chosenParts(ir: CoreIR): number {
     f.body = go(f.body);
     if (n > before) f.body = tidied(f, fi).body;
   });
+  pure = new Set();
   return n;
 }
 
@@ -137,10 +145,21 @@ function at(f: SFunc, v: SExpr, t: LType, p: number[], ren: Map<number, number>,
     case "let": {
       const i = f.locals.push(f.locals[v.i]) - 1, value = re(v.value), inner = new Map(ren).set(v.i, i);
       const m = value.k === "make" ? new Map(made).set(i, value) : made;
-      return { k: "let", i, value, body: at(f, v.body, t, p, inner, m) };
+      const body = at(f, v.body, t, p, inner, m);
+      // A record made, read here only at its parts: not made at all.
+      return value.k === "make" && !reads(body, i) ? body : { k: "let", i, value, body };
     }
     case "if": return { k: "if", cond: re(v.cond), then: at(f, v.then, t, p, ren, made), else: at(f, v.else, t, p, ren, made), t: typeAt(t, p) };
     case "attempt": {
+      // `item at` read at a part: the position checked, then the part read
+      // from the item where it is (the greenhouse's moth by number, read
+      // for its place and its velocity), with no try and no item made.
+      const b = v.body;
+      if (b.k === "rt" && AT.test(b.fn) && b.args.length === 2 && b.args.every(flat)) {
+        const [xs, k] = b.args.map(re), n = AT.exec(b.fn)![1];
+        const cond: SExpr = { k: "op", op: "and", args: [{ k: "op", op: "not", args: [{ k: "rt", fn: "int.less", args: [k, { k: "int", v: 0n }] }] }, { k: "rt", fn: "int.less", args: [k, { k: "rt", fn: `array.length.a${n}`, args: [xs] }] }] };
+        return { k: "if", cond, then: getAt({ k: "rt", fn: `array.get.a${n}`, args: [xs, k] }, t, p), else: at(f, v.otherwise, t, p, ren, made), t: typeAt(t, p) };
+      }
       const res = f.locals.push(typeAt(t, p)) - 1, body = at(f, v.body, t, p, ren, made), otherwise = at(f, v.otherwise, t, p, ren, made);
       return answers(body, otherwise) ?? { k: "attempt", body, res, ok: { k: "local", i: res }, otherwise, t: typeAt(t, p) };
     }
@@ -150,6 +169,8 @@ function at(f: SFunc, v: SExpr, t: LType, p: number[], ren: Map<number, number>,
     default: return getAt(re(v), t, p);
   }
 }
+
+const reads = (e: SExpr, i: number): boolean => (e.k === "local" && e.i === i) || kids(e).some((x) => reads(x, i));
 
 // An attempt whose body has no answer only where it says so (`item at`'s
 // check, `if j is one of them then … else no answer`): that place is the
