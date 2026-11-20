@@ -189,8 +189,10 @@ test("fingerprint works out its numbers' walks on workers and hashes them in tur
 test("pond's plans are made on workers from its fish sent by shape, the same pond as in turn (C216)", async () => {
   // Its fish are a pool of optional records holding records and Ints:
   // they cross as each one's shape and its numbers (branches-rt.ts byShape).
+  // Stored as rows: as columns (G3d, columns.ts `whole`) its fish and
+  // patches stay on this thread, by design (C60: columns over workers).
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
-  const made = await run([ters, "compile", join(here, "../gaps/pond"), "-o", "pond.mjs"], {}, dir);
+  const made = await run([ters, "compile", join(here, "../gaps/pond"), "-o", "pond.mjs"], { NO_WHOLE_COLUMNS: "1" }, dir);
   assert.equal(made[2], 0, made[1]);
   const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
   assert.equal(side[0], alone[0]);
@@ -257,14 +259,15 @@ test("queens-count counts its boards by the first row's columns on workers, the 
 });
 
 // A search inside the one a count splits keeps every item of its own
-// choices, wherever it runs (C43).
+// choices, wherever it runs (C43). Each answer's work outlasts a worker's
+// start (about 0.6 s, the runtime loaded), or the main thread does them all.
 test("a count split by its first choice counts a search inside it whole (C43)", async () => {
   const file = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
     const main = k.def("main");
     k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(S.count, k.thunk(() =>
       k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(8))), (x) =>
         k.let("ys", k.call(S.all, k.thunk(() => k.call(S.oneOf, k.call(INT_OPS.range, x)))), (ys) =>
-          k.call(B.add, k.call(INT_OPS.toNumber, k.call(S.oneOf, ys)), k.call(B.mul, work(k, 300000, 1), k.lit(0)))))))))));
+          k.call(B.add, k.call(INT_OPS.toNumber, k.call(S.oneOf, ys)), k.call(B.mul, work(k, 1500000, 1), k.lit(0)))))))))));
     return main;
   }, false);
   assert.match(readFileSync(file, "utf8"), /R\.rt\("count\.search"[\s\S]*R\.rt\("all\.search"/);
@@ -285,7 +288,7 @@ test("a search whose first choice has one item with answers shares out its secon
       k.let("x", k.call(S.oneOf, k.call(INT_OPS.range, k.int(2))), (x) =>
         k.let("y", k.call(S.oneOf, k.call(INT_OPS.range, k.call(INT_OPS.mul, k.call(INT_OPS.sub, k.int(1), x), k.int(6)))), (y) =>
           k.let("z", k.call(S.oneOf, k.call(INT_OPS.range, y)), (z) =>
-            k.call(B.add, k.call(INT_OPS.toNumber, k.call(INT_OPS.add, k.call(INT_OPS.add, x, k.call(INT_OPS.mul, y, k.int(10))), z)), k.call(B.mul, work(k, 300000, 1), k.lit(0))))))))))));
+            k.call(B.add, k.call(INT_OPS.toNumber, k.call(INT_OPS.add, k.call(INT_OPS.add, x, k.call(INT_OPS.mul, y, k.int(10))), z)), k.call(B.mul, work(k, 1500000, 1), k.lit(0))))))))))));
     return main;
   }, false);
   assert.match(readFileSync(file, "utf8"), /R\.rt\("all\.search"/);

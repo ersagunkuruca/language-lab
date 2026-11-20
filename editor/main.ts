@@ -2248,9 +2248,13 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
   const body = defBody(ui.def), copy = body ? mainCopies.get(doc.code)?.get(body.id) : undefined;
   const given = !!givenOf(ui.def) || !(body as NodeOf<"lambda">).params.length;
   if (given && info.divergent.has(ui.def)) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
-  const ms = given ? GIVEN_MS : TRACE_MS, end = performance.now() + ms;
+  const ms = given ? GIVEN_MS : TRACE_MS;
   const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${given ? `${ms / 1000} s` : `${ms} ms`} the graph waits; Run main runs it in full` });
-  return trace(doc.code, info, ui.def, args, quietWorld(), () => { if (performance.now() > end) throw slow(); }, !!copy);
+  // Timed from its first step: what the runner makes first (the library's
+  // arithmetic resolved, once a page, arith.ts) isn't the run's (I327:
+  // choiceAction's fraction sum stopped at its first step, 3.4 s in).
+  let end = 0;
+  return trace(doc.code, info, ui.def, args, quietWorld(), () => { const now = performance.now(); if (!end) end = now + ms; else if (now > end) throw slow(); }, !!copy);
 }
 
 // Run main (editor/runPanel.ts, E228i).

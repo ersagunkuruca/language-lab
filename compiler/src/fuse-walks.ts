@@ -105,20 +105,22 @@ function walker(code: Code, info: Info, def: Id): Walker | null {
 
 // How the list e is made: by map or flat map, maybe inside lets or a call
 // of a definition that only computes. null when it isn't.
-type Made = { how: "list"; fn: Id } | { how: "let" } | { how: "def"; def: Id };
+// `f`: the function the list is made by, however deep.
+type Made = ({ how: "list"; fn: Id } | { how: "let" } | { how: "def"; def: Id }) & { f: Id };
 function made(code: Code, info: Info, e: Id, deep = 0): Made | null {
   const n = code.nodes[e];
   if (!isCall(n) || !n.args || deep > DEEP) return null;
   const fn = code.nodes[n.fn], target = refTo(code, n.fn);
-  if ((target === MAP || target === FLAT_MAP) && n.args.length === 2) return { how: "list", fn: target };
-  if (fn?.kind === "lambda" && !fn.results && fn.params.length === n.args.length) return made(code, info, fn.body, deep + 1) && { how: "let" };
+  if ((target === MAP || target === FLAT_MAP) && n.args.length === 2) return { how: "list", fn: target, f: n.args[1] };
+  if (fn?.kind === "lambda" && !fn.results && fn.params.length === n.args.length) { const m = made(code, info, fn.body, deep + 1); return m && { how: "let", f: m.f }; }
   if (!target) return null;
   const d = code.nodes[target];
   if (d?.kind !== "def" || !d.body || !onlyComputes(typeEffects(info, target))) return null;
   const lam = code.nodes[d.body];
   if (lam?.kind !== "lambda" || lam.results || lam.params.length !== n.args.length) return null;
   if (subtree(code, d.body).some((x) => refTo(code, x) === target)) return null;
-  return made(code, info, lam.body, deep + 1) && { how: "def", def: target };
+  const m = made(code, info, lam.body, deep + 1);
+  return m && { how: "def", def: target, f: m.f };
 }
 
 function candidate(code: Code, info: Info, names: Names): (() => { code: Code; names: Names }) | null {
@@ -134,10 +136,37 @@ function candidate(code: Code, info: Info, names: Names): (() => { code: Code; n
     if (!w || n.args.length !== w.params.length) continue;
     const how = made(code, info, n.args[w.k]);
     if (!how) continue;
+    // A map whose function loops on each item is kept: its items can be
+    // made at once, shared out on workers (branches, map.pure), and each
+    // item's work outweighs the list saved (I329: pond's plans, each fish's
+    // a walk of the pond, made in turn between the plans applied, took
+    // pond 100 40 from 1.8 to 5.8 s).
+    if (loopsPerItem(how.f)) continue;
     if (!n.args.every((a) => onlyComputes(does(code, info, a)))) continue;
     return () => rewrite(code, names, id, w, how);
   }
   return null;
+
+  // Whether f calls, here or through the definitions it calls, one that
+  // calls itself: work on each item not bounded by what's written.
+  function loopsPerItem(f: Id): boolean {
+    const seen = new Map<Id, boolean>();
+    const loops = (d: Id, path: Set<Id>): boolean => {
+      if (path.has(d)) return true;
+      const known = seen.get(d);
+      if (known !== undefined) return known;
+      const body = (code.nodes[d] as NodeOf<"def">).body;
+      path.add(d);
+      const r = !!body && calls(body).some((t) => loops(t, path));
+      path.delete(d);
+      seen.set(d, r);
+      return r;
+    };
+    // The definitions called inside e but map and flat map, which this
+    // pass walks through.
+    const calls = (e: Id) => [...new Set(subtree(code, e).map((x) => refTo(code, x)).filter((t): t is Id => !!t && t !== MAP && t !== FLAT_MAP && code.nodes[t]?.kind === "def"))];
+    return calls(f).some((t) => loops(t, new Set()));
+  }
 }
 
 function rewrite(code: Code, names: Names, at: Id, w: Walker, how: Made): { code: Code; names: Names } {

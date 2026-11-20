@@ -2148,7 +2148,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const ts = [...n.args, id].map((a) => stype(zonk(a)));
     ts.forEach((t, i) => { if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk([...n.args, id][i]))}`); });
     const deep = ts.some((t) => typeof t === "object" && boolInside(t!));
-    if (deep && !HOST_CELLS.has(target)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
+    // One that hands the data to a function of ours (each, each of: a row's
+    // item, as a view) isn't: what that function is given would be the
+    // evaluator's, its Bools not turned (I328: the compiled outline's steps
+    // read as undefined, every line done).
+    const handsOn = sig?.t === "fn" && sig.params.some((p) => p.t === "fn");
+    if (deep && (!HOST_CELLS.has(target) || handsOn)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;
     return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? ":deep" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
