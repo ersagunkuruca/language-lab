@@ -36,7 +36,7 @@
 import { bordered } from "../../ters/src/lang/border.ts";
 import { Aborted, type Runtime, type World } from "../../ters/src/lang/run.ts";
 import { MATH_DATA, MATH_DATA_AT } from "./wasm-math.ts";
-import { assemble, byteSlots, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
+import { assemble, byteSlots, inlined, POW5, runtime, textBytes, WASI_IMPORTS, wasiStop, type RtFn, type VT } from "./wasm-rt.ts";
 
 // Where the math functions' page starts in WASI's memory: after its fixed
 // area (iovecs, sizes), before its buffer.
@@ -315,6 +315,13 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // not on the array the runtime's own functions use.
   if (rtNames.includes("number.js.raw")) need("number.js");
   const rts: RtFn[] = rtNames.map(rt);
+  // A small one called with locals, put in place (G3g, wasm-rt.ts inlined).
+  const rtOf = new Map(rts.map((g) => [g.name, g])), noInline = typeof process !== "undefined" && !!process.env.NO_INLINE_RT;
+  const inPlace = (e: SExpr, names: (i: number) => string) => {
+    if (e.k !== "rt" || noInline || !e.args.every((a) => a.k === "local")) return null;
+    const g = rtOf.get(e.fn), at = e.args.map((a) => (a as { i: number }).i);
+    return g ? inlined(g, resolver(g), at, at.map(names)) : null;
+  };
   // Ryū's tables, for number.js: an i64 array type and a global holding them.
   const ryu = rtNames.includes("number.mulshift");
   const worldReason = worldOps.some((x) => x.aborts);
@@ -765,6 +772,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         }
         const fast = intFast(e, (i) => ["", [0x20, ...u(i)]], ["", [0x10, ...u(resolve.func(e.fn))]]);
         if (fast) return fast.flatMap((x) => x[1]);
+        const put = inPlace(e, String);
+        if (put) return put.code;
       }
       return [...e.args.flatMap(code1), 0x10, ...u(resolve.func(e.fn)), ...(/^handler:/.test(e.fn) ? [0xfb, 0x16, ...s(cloIndex.get((e.host!.t as FType).key)!)] : []), ...(runtime(e.fn).partial ? check(d, fl) : [])];
       case "bool": return [0x41, ...s(e.v ? 1 : 0)];
@@ -965,6 +974,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         }
         const fast = intFast(e, (i) => [`local.get ${local(f, i)}`, []], [`call $${e.fn}`, []]);
         if (fast) return fast.map((x) => `${d}${x[0]}`).join("\n");
+        const put = inPlace(e, (i) => local(f, i));
+        if (put) return put.wat.map((x) => `${d}${x}`).join("\n");
       }
       return [...e.args.map(w), `${d}call $${e.fn}`, ...(/^handler:/.test(e.fn) ? [`${d}ref.cast (ref ${sname(cloIndex.get((e.host!.t as FType).key)!)})`] : []), ...(runtime(e.fn).partial ? check(ld) : [])].join("\n");
       case "bool": return `${d}i32.const ${e.v ? 1 : 0}`;

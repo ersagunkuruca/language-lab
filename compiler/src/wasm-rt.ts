@@ -109,7 +109,8 @@ const sLeb = (n: bigint): number[] => {
 };
 
 // The function's code (locals and body) as bytes, and its text.
-export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
+// `at`: the locals of a caller its parameters are, for inlined (G3g).
+export function assemble(f: RtFn, r: Resolve, at?: number[]): { code: number[]; wat: string } {
   const names = [...f.params, ...f.locals].map(([n]) => n);
   const out: number[] = [];
   const lines = f.body.split("\n").map((l) => l.replace(/;;.*/, "").trim().replace(/@(\w+)(?:\+(\d+))?/g, (_, n: string, k?: string) => String(r.at(n) + Number(k ?? 0)))).filter(Boolean);
@@ -128,7 +129,7 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
       const a = args[i];
       if (a === undefined) throw new Error(`${f.name}: ${op} needs ${kind}`);
       switch (kind) {
-        case "local": { const j = names.indexOf(a.slice(1)); if (j < 0) throw new Error(`${f.name}: no local ${a}`); out.push(...u(j)); break; }
+        case "local": { const j = names.indexOf(a.slice(1)); if (j < 0) throw new Error(`${f.name}: no local ${a}`); out.push(...u(at ? at[j] : j)); break; }
         case "func": out.push(...u(r.func(a.slice(1)))); break;
         case "global": out.push(...u(r.global(a.slice(1)))); break;
         case "type": {
@@ -165,6 +166,27 @@ export function assemble(f: RtFn, r: Resolve): { code: number[]; wat: string } {
     "  )",
   ].join("\n");
   return { code, wat };
+}
+
+// A small runtime function put in place where it is called with locals
+// (G3g): an array's item and length, which V8 doesn't inline (moths on
+// WebAssembly, about 10% in calls), as compiled JavaScript reads an array
+// in place (core-js.ts). Only a straight run of instructions that reads
+// its parameters and sets nothing: its bytes with the caller's locals for
+// its parameters, and its text with their names. Prior art: any inliner;
+// V8's own inlines bigger functions than these where it does.
+const STRAIGHT = /^(if|else|end|block|loop|br|br_if|br_table|return|return_call|return_call_ref|local\.set|local\.tee|unreachable)$/;
+export function inlined(f: RtFn, r: Resolve, at: number[], names: string[]): { code: number[]; wat: string[] } | null {
+  if (f.locals.length || f.partial || f.native || f.params.length !== at.length) return null;
+  const lines = f.body.split("\n").map((l) => l.replace(/;;.*/, "").trim()).filter(Boolean);
+  if (lines.length > 12 || lines.some((l) => STRAIGHT.test(l.split(/\s+/)[0]))) return null;
+  const { code, wat } = assemble(f, r, at);
+  const params = f.params.map(([n]) => n);
+  return {
+    // No locals' runs (one 0), and no end.
+    code: code.slice(1, -1),
+    wat: wat.split("\n").slice(1, -1).map((l) => l.trim().replace(/^local\.get \$(\S+)$/, (_, n: string) => `local.get ${names[params.indexOf(n)]}`)),
+  };
 }
 
 // Instructions for a text constant (array.new_fixed), from its UTF-8 bytes.
