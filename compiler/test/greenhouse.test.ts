@@ -51,3 +51,12 @@ test("greenhouse native: the pool's update, its map calling the function its cal
   const update = /static Pool lab_updated_in_pool\([^)]*\) \{[^]*?\n}\n/.exec(c)![0];
   assert.match(update, /lab_par_map_\d+\(/);
 });
+
+test("greenhouse JS: a moth read by number at its parts is checked in place, no try, its stand-in made only past the end (C268)", () => {
+  const code = ran("cat", [js]);
+  const body = code.split(/\n(?= {2}function f\d+\()/).find((f) => /^ {2}function f\d+\(l0, l1, l2, l3, l4\) \{\n {4}let [^\n]*\n {4}for \(; ; \) \{/.test(f) && f.includes('"met"'));
+  assert.ok(body, "the loop gathering moths near a moth");
+  assert.doesNotMatch(body, /try \{/, "no attempt left");
+  assert.match(body, /if \(!\(l\d+ < 0\) && l\d+ < \(/, "the position checked");
+  assert.doesNotMatch(body.split("for (; ; )")[1].split("let t0")[0], /f\d+\(\);/, "no stand-in made before the check");
+});
