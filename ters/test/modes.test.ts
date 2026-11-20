@@ -275,9 +275,11 @@ test("forward, a definition ends exactly when the checker finds no Diverge of it
       n++;
       const diverges = t.eff.effs.includes(DIVERGE);
       if (v.ends && diverges && viaInverse(d)) continue;
-      // Reading a cell may not end (it may be a formula), which the mode of
-      // a function with its cell given doesn't see.
-      if (v.ends && diverges && subtree(p.code, d).some((x) => (p.code.nodes[x] as Partial<NodeOf<"ref">>).target === CELL_OPS.read)) continue;
+      // Reading a cell, whole or at a place in it, may not end (it may be
+      // a formula), which the mode of a function with its cell given
+      // doesn't see.
+      const readsCell = (t?: Id) => t === CELL_OPS.read || t === CELL_OPS.readAt;
+      if (v.ends && diverges && subtree(p.code, d).some((x) => readsCell((p.code.nodes[x] as Partial<NodeOf<"ref">>).target))) continue;
       if (v.stuck.length || v.ends === diverges) disagree.push(`${e}: ${p.pres.names[d]}: ${describeVerdict(v)}, typed ${diverges ? "" : "without "}Diverge`);
     }
   }

@@ -34,7 +34,7 @@
 
 import type { Code, Id, Node, NodeOf, Use } from "../model.ts";
 import steadyModes from "../../library/steady-modes.json" with { type: "json" };
-import { children, dependencies, dependenciesOfAll, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf, nodeValues } from "../model.ts";
+import { children, dependencies, dependenciesOfAll, derived, derivedFrom, ownerOfTypeParts, subtree, useTarget, isCall, isPublished, type Call, isUse, bindsOf, bodyOf, nodeValues, fieldPorts } from "../model.ts";
 import { NUMERIC } from "./equations.ts";
 import { planSolve, type SolvePlan } from "./solve.ts";
 import { computedForward } from "./directions.ts";
@@ -987,6 +987,10 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
       case S.oneOf: return sided(text, sides, call, [{ needs: [0], gives: [1], answers: MANY, sizes: within(0, [1], () => [true]) }]);
       case S.fail: return { text, slots: [slot(n.id)], exec: call, ready: (st) => ({ gives: st.known.has(slot(n.id)) ? [] : [slot(n.id)], answers: { fail: true, many: false }, ends: true, cost: 0 }) };
       case S.first: case S.all: case S.count: case S.optional: return sided(text, sides, call, [forwardOf(0)]);
+      // Handlers that run their action here, as it is: it ends when the
+      // action does (`seeded(seed, action)`, `while waiting(action, shown)`).
+      case S.seeded: return sided(text, sides, call, [forwardOf(1)]);
+      case S.whileWaiting: return sided(text, sides, call, [forwardOf(0)]);
       case S.fuel: return sided(text, sides, call, [{ needs: ins, gives: [o], answers: MANY }]);
       case S.exists: {
         const f = fnArg(0);
@@ -1203,6 +1207,11 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
   function solveVerdict(n: Use, ctx?: Ctx): Verdict | null {
     // Equations the solver plans before running: its plan says how many
     // answers, and its search ends (solve.ts).
+    // An interface's field with results is answered by the type's own
+    // definition, in the direction the field declares: one answer, and it
+    // ends (infer.ts solveType, POLAR.md).
+    const t = nodes[useTarget(nodes, n)];
+    if (t?.kind === "field" && fieldPorts(nodes, t)) return { answers: ONE, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
     let plan: SolvePlan | null = null;
     try { plan = planSolve(code, n); } catch { return null; }
     if (plan.mode === "solver") return { answers: { fail: plan.canFail, many: plan.many }, ends: true, loops: [], stuck: [], dynamic: [], order: [], plan: NO_PLAN };
