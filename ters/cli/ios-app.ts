@@ -119,6 +119,8 @@ function foreignViews(views: IosView[]): string {
 // detaching a node waits for a render that may be waiting for the lock.
 const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
 void ters_sound_play(int n, const float *in, float *out, int frames);
+void ters_sound_play_stereo(int n, const float *in, const float *in2, float *out, float *out2, int frames);
+int ters_sound_stereo(int n);
 int ters_sound_heard(int n, double *in, double *out, double *by);
 int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate);
 void ters_page_sound_latency(double s);
@@ -186,9 +188,11 @@ static void s_listen(int n) {
 static void s_start(int n, BOOL mic, double rate) {
   if (!s_on[n] || s_nodes[n]) return;
   s_ring *r = s_rings[n];
-  AVAudioFormat *f = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:rate channels:1];
+  // Two channels for a sound in stereo (C269), its left and right.
+  BOOL two = !!ters_sound_stereo(n);
+  AVAudioFormat *f = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:rate channels:two ? 2 : 1];
   AVAudioSourceNode *node = [[AVAudioSourceNode alloc] initWithFormat:f renderBlock:^OSStatus(BOOL *silent, const AudioTimeStamp *t, AVAudioFrameCount frames, AudioBufferList *out) {
-    float *o = out->mBuffers[0].mData;
+    float *o = out->mBuffers[0].mData, *o2 = two && out->mNumberBuffers > 1 ? out->mBuffers[1].mData : 0;
     for (AVAudioFrameCount at = 0; at < frames;) {
       AVAudioFrameCount k = frames - at < 4096 ? frames - at : 4096;
       const float *in = 0;
@@ -200,10 +204,10 @@ static void s_start(int n, BOOL mic, double rate) {
         atomic_store(&r->r, rd);
         in = r->heard;
       }
-      ters_sound_play(n, in, o + at, (int)k);
+      ters_sound_play_stereo(n, in, 0, o + at, o2 ? o2 + at : 0, (int)k);
       at += k;
     }
-    for (UInt32 b = 1; b < out->mNumberBuffers; b++) memcpy(out->mBuffers[b].mData, o, frames * sizeof(float));
+    for (UInt32 b = o2 ? 2 : 1; b < out->mNumberBuffers; b++) memcpy(out->mBuffers[b].mData, o, frames * sizeof(float));
     return noErr;
   }];
   s_nodes[n] = node;

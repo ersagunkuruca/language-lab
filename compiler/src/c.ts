@@ -1244,7 +1244,18 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     };
     const sin = SF ? listOf(SF.params[0]) : null, sout = SF ? listOf(SF.result) : null;
     // Its second input is the rate it plays at, samples a second (L269).
-    const sound = !!(SF && IN && sin && sout && SF.params[1] === "f64" && fname.has(SF.key));
+    const mono = !!(SF && IN && sin && sout && SF.params[1] === "f64" && fname.has(SF.key));
+    // In stereo (L270, C269): each block a pair of lists, left and right.
+    const SF2 = ls >= 0 ? (A.cases[ls].fields[1].t as FType) : null;
+    // The pair is a record, a struct by value.
+    const pairOf = (t: LType) => {
+      if (!isRecord(t) || t.mutable || t.fields.length !== 2) return null;
+      const l = listOf(t.fields[0].t), r = listOf(t.fields[1].t);
+      return l && r ? { name: ty(t), l, r } : null;
+    };
+    const pin = SF2 ? pairOf(SF2.params[0]) : null, pout = SF2 ? pairOf(SF2.result) : null;
+    const stereo = !!(SF2 && IN && pin && pout && SF2.params[1] === "f64" && fname.has(SF2.key));
+    const sound = mono || stereo;
     // A canvas's paint (G2): its function's marks, each as numbers and
     // texts the host reads (ters_host's marks).
     const pa = ci(A, "std.attribute.paint"), MF = pa >= 0 ? (A.cases[pa].fields[0].t as FType) : null;
@@ -1456,7 +1467,7 @@ ${sound ? `// A page's sound (C217, AUDIO.md): each listen main put on an elemen
 #include <string.h>
 #define TERS_BLOCK 128
 #define TERS_SOUND_H (1 << 24)
-typedef struct ters_snd { lab_cell *play; void *view; int mic, on, at, handler; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK]; float *rec; size_t rn, rp; double rate, sq_in, sq_out, sq_by, heard_in, heard_out, heard_by; long counted; int heard; char said[200]; } ters_snd;
+typedef struct ters_snd { lab_cell *play; void *view; int mic, on, at, handler, stereo; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK], in2[TERS_BLOCK], out2[TERS_BLOCK]; float *rec, *rec2; size_t rn, rp; double rate, sq_in, sq_out, sq_by, heard_in, heard_out, heard_by; long counted; int heard; char said[200]; } ters_snd;
 static ters_snd *ters_snds;
 static int ters_nsnd;
 // What went wrong with sound n, once for each reason: on stderr, and on
@@ -1486,45 +1497,71 @@ void ters_page_sound_latency(double s) {
 // One block: the input as a List Float64 to the block function, and what
 // it gives to the speaker. A block that stops, or gives other than 128
 // samples, plays silence (and says so once).
-static void ters_snd_block(ters_snd *s) {
-  lab_cell *l = (lab_cell *)&${sin?.nil};
-  for (int k = TERS_BLOCK; k-- > 0;) { ${sin?.cons} *c = lab_new(sizeof(${sin?.cons}), ${sin?.type}, ${sin?.tag}); c->f${sin?.head} = s->in[k]; c->f${sin?.rest} = l; l = (lab_cell *)c; }
-  lab_dup(s->play);
-  lab_cell *r = ${SF ? call(SF, "s->play", ["l", "s->rate"]) : "0"};
-  if (lab_st) {
-    char why[200];
-    if (lab_st == 2) snprintf(why, sizeof why, "a block stopped, and played silence: %.*s", (int)LAB_TN(lab_reason), (const char *)LAB_TB(lab_reason));
-    else snprintf(why, sizeof why, "a block had no answer, and played silence");
-    lab_st = 0;
-    ters_snd_said(s, why, 0);
-    memset(s->out, 0, sizeof s->out);
-    return;
-  }
+${[sin, pin?.l, pin?.r].filter((x, i, xs) => x && xs.findIndex((y) => y?.d === x.d) === i).map((t) => `static lab_cell *ters_snd_list${t!.type}(const float *x) {
+  lab_cell *l = (lab_cell *)&${t!.nil};
+  for (int k = TERS_BLOCK; k-- > 0;) { ${t!.cons} *c = lab_new(sizeof(${t!.cons}), ${t!.type}, ${t!.tag}); c->f${t!.head} = x[k]; c->f${t!.rest} = l; l = (lab_cell *)c; }
+  return l;
+}
+`).join("")}${[sout, pout?.l, pout?.r].filter((x, i, xs) => x && xs.findIndex((y) => y?.d === x.d) === i).map((t) => `// A block's samples into out: how many it gave.
+static int ters_snd_samples${t!.type}(lab_cell *r, float *out) {
   int n = 0;
-  for (lab_cell *x = r; x->tag == ${sout?.tag}; x = ((${sout?.cons} *)x)->f${sout?.rest}) { if (n < TERS_BLOCK) s->out[n] = (float)((${sout?.cons} *)x)->f${sout?.head}; n++; }
-  lab_drop(r);
+  for (lab_cell *x = r; x->tag == ${t!.tag}; x = ((${t!.cons} *)x)->f${t!.rest}) { if (n < TERS_BLOCK) out[n] = (float)((${t!.cons} *)x)->f${t!.head}; n++; }
+  return n;
+}
+`).join("")}// A block that stopped or had no answer plays silence, and says so once.
+static void ters_snd_stopped(ters_snd *s) {
+  char why[200];
+  if (lab_st == 2) snprintf(why, sizeof why, "a block stopped, and played silence: %.*s", (int)LAB_TN(lab_reason), (const char *)LAB_TB(lab_reason));
+  else snprintf(why, sizeof why, "a block had no answer, and played silence");
+  lab_st = 0;
+  ters_snd_said(s, why, 0);
+  memset(s->out, 0, sizeof s->out); memset(s->out2, 0, sizeof s->out2);
+}
+static void ters_snd_block(ters_snd *s) {
+  lab_dup(s->play);
+  int n;
+  ${stereo ? `if (s->stereo) {
+    // The pair in, and the pair out: its right first, so a short one says.
+    ${pin!.name} p = { ters_snd_list${pin!.l.type}(s->in), ters_snd_list${pin!.r.type}(s->in2) };
+    ${pout!.name} q = ${call(SF2!, "s->play", ["p", "s->rate"])};
+    if (lab_st) { ters_snd_stopped(s); return; }
+    int m = ters_snd_samples${pout!.r.type}(q.f1, s->out2);
+    n = ters_snd_samples${pout!.l.type}(q.f0, s->out);
+    if (m != TERS_BLOCK) n = m;
+    ${drop(SF2!.result, "q")}
+  } else ` : ""}{
+    ${mono ? `lab_cell *r = ${call(SF!, "s->play", ["ters_snd_list" + sin!.type + "(s->in)", "s->rate"])};
+    if (lab_st) { ters_snd_stopped(s); return; }
+    n = ters_snd_samples${sout!.type}(r, s->out);
+    lab_drop(r);` : "n = 0;"}
+  }
   if (n != TERS_BLOCK) {
     char why[80];
     snprintf(why, sizeof why, "a block gave %d samples for %d, and played silence", n, TERS_BLOCK);
     ters_snd_said(s, why, 0);
-    memset(s->out, 0, sizeof s->out);
+    memset(s->out, 0, sizeof s->out); memset(s->out2, 0, sizeof s->out2);
   }
 }
-// frames samples of sound n into out, on the screen's audio thread: from
-// in (the microphone's, mono) or the recording, a block behind, as the
-// block function plays them 128 at a time. Silence while it's stopped.
-void ters_sound_play(int n, const float *in, float *out, int frames) {
+// frames samples of sound n into out (and out2, the right, when given),
+// on the screen's audio thread: from in (the microphone's; in2 its
+// right, or in again) or the recording, a block behind, as the block
+// function plays them 128 at a time. Silence while it's stopped. A sound
+// in mono plays the same on both sides; one in stereo plays its left on
+// a screen that gives no out2.
+static void ters__sound_play(int n, const float *in, const float *in2, float *out, float *out2, int frames) {
   ters_page_lock();
   ters_snd *s = n >= 0 && n < ters_nsnd && ters_snds[n].on ? &ters_snds[n] : 0;
   for (int i = 0; i < frames; i++) {
-    if (!s) { out[i] = 0; continue; }
+    if (!s) { out[i] = 0; if (out2) out2[i] = 0; continue; }
     float x = s->mic ? (in ? in[i] : 0) : s->rn ? s->rec[s->rp] : 0;
+    float x2 = s->mic ? (in2 ? in2[i] : x) : s->rn && s->rec2 ? s->rec2[s->rp] : x;
     if (!s->mic && s->rn && ++s->rp == s->rn) s->rp = 0;
     // out[i] is what the block function made of the input a block ago,
     // the sample this x takes the place of.
     float was = s->in[s->at];
-    s->in[s->at] = x;
+    s->in[s->at] = x; s->in2[s->at] = x2;
     out[i] = s->out[s->at];
+    if (out2) out2[i] = s->stereo ? s->out2[s->at] : out[i];
     s->sq_in += (double)x * x; s->sq_out += (double)out[i] * out[i]; s->sq_by += (double)(out[i] - was) * (out[i] - was);
     if (++s->at == TERS_BLOCK) { ters_snd_block(s); s->at = 0; }
   }
@@ -1534,6 +1571,10 @@ void ters_sound_play(int n, const float *in, float *out, int frames) {
   }
   ters_page_unlock();
 }
+void ters_sound_play(int n, const float *in, float *out, int frames) { ters__sound_play(n, in, 0, out, 0, frames); }
+void ters_sound_play_stereo(int n, const float *in, const float *in2, float *out, float *out2, int frames) { ters__sound_play(n, in, in2, out, out2, frames); }
+// Whether sound n is in stereo: its screen gives it two channels.
+int ters_sound_stereo(int n) { ters_page_lock(); int r = n >= 0 && n < ters_nsnd && ters_snds[n].stereo; ters_page_unlock(); return r; }
 // How loud sound n's input and output were over the last second it
 // played (root mean square), and how much the output differs from its
 // input (the root mean square of their difference, 0 when it plays what
@@ -1546,7 +1587,8 @@ int ters_sound_heard(int n, double *in, double *out, double *by) {
   return r;
 }
 // A recording for sound n, as a WAV file's bytes (PCM of 8 to 32 bits,
-// or 32-bit floats, any channels mixed to one), at the rate it plays at.
+// or 32-bit floats), at the rate it plays at: any channels mixed to one,
+// or for a sound in stereo its first two left and right.
 // 0 when they aren't one (ters_sound_say has said why).
 static uint32_t ters_le(const unsigned char *b, int n) { uint32_t x = 0; for (int i = n; i-- > 0;) x = x << 8 | b[i]; return x; }
 int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate) {
@@ -1571,8 +1613,9 @@ int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate)
     return 0;
   }
   size_t frames = dn / (size_t)(width * ch);
-  float *mono = malloc(sizeof *mono * (frames ? frames : 1));
-  if (!mono) lab_oom();
+  int two = s->stereo && ch >= 2;
+  float *side[2] = { malloc(sizeof(float) * (frames ? frames : 1)), two ? malloc(sizeof(float) * (frames ? frames : 1)) : 0 };
+  if (!side[0] || (two && !side[1])) lab_oom();
   for (size_t i = 0; i < frames; i++) {
     double sum = 0;
     for (int c = 0; c < ch; c++) {
@@ -1581,17 +1624,22 @@ int ters_sound_recording(int n, const unsigned char *b, size_t len, double rate)
       if (fmt == 3) { float f; memcpy(&f, p, 4); v = f; }
       else if (width == 1) v = (p[0] - 128) / 128.0;
       else { uint32_t u = ters_le(p, width); int sh = 32 - 8 * width; v = (double)((int32_t)(u << sh) >> sh) / (double)(1u << (8 * width - 1)); }
+      if (two && c < 2) side[c][i] = (float)v;
       sum += v;
     }
-    mono[i] = (float)(sum / ch);
+    if (!two) side[0][i] = (float)(sum / ch);
   }
   // At the rate it plays at, each sample between the two nearest.
   size_t rn = frames ? (size_t)((double)frames * rate / from) : 0;
-  float *r = malloc(sizeof *r * (rn ? rn : 1));
-  if (!r) lab_oom();
-  for (size_t i = 0; i < rn; i++) { double t = (double)i * from / rate; size_t k = (size_t)t; double w = t - (double)k; r[i] = (float)(mono[k] * (1 - w) + (k + 1 < frames ? mono[k + 1] : mono[k]) * w); }
-  free(mono);
-  free(s->rec); s->rec = r; s->rn = rn; s->rp = 0;
+  float *r[2] = { 0, 0 };
+  for (int c = 0; c < 1 + two; c++) {
+    const float *x = side[c];
+    r[c] = malloc(sizeof(float) * (rn ? rn : 1));
+    if (!r[c]) lab_oom();
+    for (size_t i = 0; i < rn; i++) { double t = (double)i * from / rate; size_t k = (size_t)t; double w = t - (double)k; r[c][i] = (float)(x[k] * (1 - w) + (k + 1 < frames ? x[k + 1] : x[k]) * w); }
+    free(side[c]);
+  }
+  free(s->rec); free(s->rec2); s->rec = r[0]; s->rec2 = r[1]; s->rn = rn; s->rp = 0;
   ters_page_unlock();
   return 1;
 }
@@ -1604,7 +1652,7 @@ static void ters_snd_toggle(int k) {
     ters_h->set_attribute(ters_h->ctx, s->view, "data-playing", 12, "false", 5);
     return;
   }
-  memset(s->in, 0, sizeof s->in); memset(s->out, 0, sizeof s->out);
+  memset(s->in, 0, sizeof s->in); memset(s->out, 0, sizeof s->out); memset(s->in2, 0, sizeof s->in2); memset(s->out2, 0, sizeof s->out2);
   s->at = 0; s->rp = 0; s->sq_in = s->sq_out = s->sq_by = 0; s->counted = 0; s->heard = 0; s->said[0] = 0;
   ters_h->set_attribute(ters_h->ctx, s->view, "data-said", 9, "", 0);
   s->on = 1;
@@ -1618,15 +1666,16 @@ static void ters_snd_toggle(int k) {
   s->rate = rate;
   ters_h->set_attribute(ters_h->ctx, s->view, "data-playing", 12, "true", 4);
 }
-// A listen on element m: its sound, started by a tap (a click handler of
-// its own runs too).
-static void ters_snd_add(ters_m *m, lab_cell *a) {
+// A listen on element m (in stereo or not), its input to and block
+// function play: its sound, started by a tap (a click handler of its
+// own runs too).
+static void ters_snd_add(ters_m *m, lab_cell *to, lab_cell *play, int stereo) {
   ters_snds = realloc(ters_snds, sizeof *ters_snds * (size_t)(ters_nsnd + 1));
   if (!ters_snds) lab_oom();
   ters_snd *s = &ters_snds[ters_nsnd];
   memset(s, 0, sizeof *s);
-  s->play = ${field(A, li, 1, "a")}; lab_dup(s->play);
-  lab_cell *to = ${field(A, li, 0, "a")};
+  s->play = play; lab_dup(s->play);
+  s->stereo = stereo;
   s->mic = to->tag == ${mic};
   if (to->tag == ${rec}) { lab_cell *t = ${field(IN!, rec, 0, "to")}; s->an = LAB_TN(t); s->address = malloc(s->an + 1); if (!s->address) lab_oom(); memcpy(s->address, LAB_TB(t), s->an); s->address[s->an] = 0; }
   s->view = m->view;
@@ -1671,10 +1720,9 @@ static void ters_fill(ters_m *m, lab_cell *h) {
     if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
     else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
     ${paint ? `else if (a->tag == ${pa}) { t->f = ${field(A, pa, 0, "a")}; lab_dup(t->f); ters_paint(m, t->f); }` : ""}
-    ${ls >= 0 ? `else if (a->tag == ${ls}) fputs("a sound in stereo plays only in a browser for now (ters build-web)\\n", stderr);` : ""}
     else ${sound ? `if (ters_parts) fputs("a listen inside a part doesn't play: put it where main returns it\\n", stderr);` : `fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);`}
   }
-  ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) if (${field(LA, la.c, la.head, "x")}->tag == ${li}) ters_snd_add(m, ${field(LA, la.c, la.head, "x")});
+  ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) { lab_cell *a = ${field(LA, la.c, la.head, "x")};${mono ? ` if (a->tag == ${li}) ters_snd_add(m, ${field(A, li, 0, "a")}, ${field(A, li, 1, "a")}, 0);` : ""}${stereo ? ` if (a->tag == ${ls}) ters_snd_add(m, ${field(A, ls, 0, "a")}, ${field(A, ls, 1, "a")}, 1);` : ""} }
   ` : ""}j = 0;
   for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) { m->kids[j] = ters_mount(${field(LH, lh.c, lh.head, "x")}); ters_h->append(ters_h->ctx, m->view, m->kids[j]->view); }
 }

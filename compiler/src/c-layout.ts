@@ -1597,14 +1597,14 @@ static double u_sound(void *c, int n, int on, int mic, const char *a, size_t an)
   free(b);
   return ok ? 48000 : 0;
 }
-typedef struct { int n, frames; float *out; } u_playing;
+typedef struct { int n, frames; float *out, *out2; } u_playing;
 static void *u_play(void *x) {
   u_playing *p = x;
   float in[100];
   for (int at = 0; at < p->frames; at += 100) {
     int k = p->frames - at < 100 ? p->frames - at : 100;
     for (int i = 0; i < k; i++) in[i] = (float)(0.5 * sin(2 * 3.141592653589793 * 441 * (at + i) / 48000.0));
-    ters_sound_play(p->n, in, p->out + at, k);
+    ters_sound_play_stereo(p->n, in, 0, p->out + at, p->out2 + at, k);
   }
   return 0;
 }
@@ -1652,15 +1652,18 @@ int main(int argc, char **argv) {
     }
     if (!strcmp(s, "play") && more) {
       // play:N:FRAMES: what sound n plays, its first samples and loudness.
-      u_playing p = { atoi(id), atoi(more), 0 };
+      u_playing p = { atoi(id), atoi(more), 0, 0 };
       p.out = calloc((size_t)p.frames + 1, sizeof *p.out);
+      p.out2 = calloc((size_t)p.frames + 1, sizeof *p.out2);
       pthread_t t; pthread_create(&t, 0, u_play, &p); pthread_join(t, 0);
       double sq = 0; for (int i = 0; i < p.frames; i++) sq += (double)p.out[i] * p.out[i];
       printf("played %d:", p.n);
       for (int i = 128; i < 128 + 4 && i < p.frames; i++) printf(" %.6f", p.out[i]);
       printf(" rms %.6f\n", p.frames ? sqrt(sq / p.frames) : 0);
+      // In stereo, the right too (C269).
+      if (ters_sound_stereo(p.n)) { printf("right %d:", p.n); for (int i = 128; i < 128 + 4 && i < p.frames; i++) printf(" %.6f", p.out2[i]); printf("\n"); }
       double hi, ho, hb; if (ters_sound_heard(p.n, &hi, &ho, &hb)) printf("heard %d: in %.4f out %.4f changed %.4f\n", p.n, hi, ho, hb);
-      free(p.out); free(s);
+      free(p.out); free(p.out2); free(s);
       u_show(root);
       continue;
     }

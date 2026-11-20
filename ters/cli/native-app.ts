@@ -207,7 +207,7 @@ static int j_ask(void *c, const char *what, size_t n) { (void)c; jstring t = ter
 #include <pthread.h>
 #include <time.h>
 #define J_SOUNDS 64
-typedef struct { AAudioStream *out, *in; int n, waiting, gen; float mono[1024], heard[1024]; } j_snd;
+typedef struct { AAudioStream *out, *in; int n, waiting, gen; float mono[1024], right[1024], heard[1024]; } j_snd;
 static j_snd j_snds[J_SOUNDS];
 static AAssetManager *j_assets;
 static jobject j_assets_ref;
@@ -223,8 +223,10 @@ static aaudio_data_callback_result_t j_snd_cb(AAudioStream *st, void *user, void
       for (int32_t i = got < 0 ? 0 : got; i < k; i++) p->heard[i] = 0;
       in = p->heard;
     }
-    ters_sound_play(p->n, in, p->mono, k);
-    for (int32_t i = 0; i < k; i++) for (int c = 0; c < ch; c++) out[(at + i) * ch + c] = p->mono[i];
+    // Left and right (C269): a sound in mono gives the same on both, and
+    // plays on every channel; one in stereo its right on the second.
+    ters_sound_play_stereo(p->n, in, 0, p->mono, p->right, k);
+    for (int32_t i = 0; i < k; i++) for (int c = 0; c < ch; c++) out[(at + i) * ch + c] = c == 1 ? p->right[i] : p->mono[i];
     at += k;
   }
   double a, b, d;
