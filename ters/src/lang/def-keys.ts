@@ -43,6 +43,10 @@ function nodesText(code: Code, d: Id): string {
 }
 
 export function defKey(code: Code, info: Info, d: Id): string {
+  return `${nodesText(code, d)}${info.divergent.has(d) ? "!" : ""}:${typesText(code, info, d)}`;
+}
+// Each node's type written out, variables numbered as they come.
+function typesText(code: Code, info: Info, d: Id): string {
   const vars = new Map<number, number>();
   const v = (n: number) => { let k = vars.get(n); if (k === undefined) vars.set(n, (k = vars.size)); return k; };
   const row = (r: Row): string => {
@@ -58,7 +62,23 @@ export function defKey(code: Code, info: Info, d: Id): string {
   };
   let types = "";
   for (const id of subtreeKept(code, d)) { const t = info.typeOf.get(id); types += t ? show(t) : "-"; types += ";"; }
-  return `${nodesText(code, d)}${info.divergent.has(d) ? "!" : ""}:${types}`;
+  return types;
+}
+
+// Several definitions as one text with each literal's value left out, for
+// what never reads one: every id that isn't `kept`'s written by the place
+// it first comes (`placed`), so a program whose ids are named by their
+// contents (stable-ids.ts, a literal's value among them) or made at random
+// is written the same.
+export function blindText(code: Code, info: Info, ds: Id[], kept: (id: Id) => boolean): { text: string; placed: Id[] } {
+  const at = new Map<Id, string>(), placed: Id[] = [];
+  const f = (id: Id) => { if (kept(id)) return id; let k = at.get(id); if (k === undefined) { at.set(id, (k = `#${placed.length}`)); placed.push(id); } return k; };
+  const parts: string[] = [];
+  for (const d of ds) {
+    parts.push(`${f(d)}${info.divergent.has(d) ? "!" : ""}:${typesText(code, info, d)}`);
+    for (const id of subtreeKept(code, d)) { const n = mapIds(code.nodes[id], f); parts.push(JSON.stringify(n.kind === "lit" ? { ...n, value: typeof n.value } : n)); }
+  }
+  return { text: parts.join("\n"), placed };
 }
 
 // The keys of several definitions as one, in an order of their own (a made

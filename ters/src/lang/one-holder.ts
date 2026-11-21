@@ -34,7 +34,10 @@
 // Moura, 2019) decide ownership from the program.
 
 import type { Code, Id, NodeOf } from "../model.ts";
-import { subtree, isCall, type Call, isUse, isBound, bindsOf } from "../model.ts";
+import { subtree, isCall, type Call, isUse, isBound, bindsOf, nodesOfKind } from "../model.ts";
+import { blindText } from "./def-keys.ts";
+import { LIBRARY } from "./library.ts";
+import { keptMap } from "../kept.ts";
 import type { Info } from "./infer.ts";
 import { COMPARE, S, SHOW_ANY, SIGS } from "./std.ts";
 import { CHOICE, Subst, type Type } from "./types.ts";
@@ -83,7 +86,77 @@ function namesIn(code: Code, d: Id): Set<Id> {
   }
   return r;
 }
+// The definitions main reaches.
+// Found once per program and entry: owned-arrays.ts asks for each type
+// of array, owned-records.ts for each record (L266).
+function reachedFrom(code: Code, entry: Id): Set<Id> {
+  const nodes = code.nodes;
+  let byEntry = reachedKept.get(code);
+  if (!byEntry) reachedKept.set(code, (byEntry = new Map()));
+  let reached = byEntry.get(entry);
+  if (!reached) {
+    const found = (reached = new Set<Id>());
+    const reach = (d: Id) => {
+      if (found.has(d) || nodes[d]?.kind !== "def") return;
+      found.add(d);
+      for (const t of namesIn(code, d)) reach(t);
+    };
+    reach(entry);
+    byEntry.set(entry, reached);
+  }
+  return reached;
+}
+
+// Answers kept between compiles (plan doc "Incremental compile after
+// edits"): what is asked, and the definitions reached and the program's
+// types as their keys (def-keys.ts) with literals left out, since the
+// answer never reads one. An edit that changes only numbers finds it
+// again. The ids a rewrite made (new each compile) in what `rebuilt`
+// gets and the problems' words are kept by their place in the keys.
+// The program's part of the key, once per check and entry: a number for
+// the definitions' keys.
+const programKeys = new WeakMap<Info, WeakMap<Code, Map<Id, { reached: Id[]; made: Id[]; place: Map<Id, string>; program: number }>>>();
+const keyNumbers = keptMap<string, number>();
+function programKey(code: Code, info: Info, entry: Id) {
+  let byCode = programKeys.get(info);
+  if (!byCode) programKeys.set(info, (byCode = new WeakMap()));
+  let byEntry = byCode.get(code);
+  if (!byEntry) byCode.set(code, (byEntry = new Map()));
+  let r = byEntry.get(entry);
+  if (!r) {
+    const reached = [...reachedFrom(code, entry)];
+    const typedefs = nodesOfKind(code, "typedef").map((t) => t.id);
+    const lib = LIBRARY.code.nodes;
+    const { text, placed: made } = blindText(code, info, [...reached, ...typedefs], (id) => lib[id] !== undefined || id.startsWith("builtin."));
+    const place = new Map(made.map((id, k) => [id, `\u0000${k}\u0000`]));
+    let program = keyNumbers.get(text);
+    if (program === undefined) { if (keyNumbers.size >= 16) keyNumbers.clear(); keyNumbers.set(text, (program = nextKey++)); }
+    byEntry.set(entry, (r = { reached, made, place, program }));
+  }
+  return r;
+}
+let nextKey = 0;
+const answers = keptMap<string, { ok: boolean; problems: string[]; rebuilt: string[] }>();
 export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>, fresh = false): OneHolder {
+  const { reached, made, place, program } = programKey(code, info, entry);
+  const asked = [entry, [...types].sort(), [...jobs].sort(), [...changes].sort(), item ?? null, rebuilds, fresh, !!rebuilt].map((x) => (typeof x === "string" ? place.get(x) ?? x : x));
+  const named = [...reached, ...types].filter((d) => names[d] !== undefined).map((d) => [place.get(d) ?? d, names[d]]).sort();
+  const key = JSON.stringify([asked, named, program]);
+  const back = (s: string) => s.replace(/\u0000(\d+)\u0000/g, (_, k) => made[+k]);
+  const was = answers.get(key);
+  if (was) {
+    for (const b of was.rebuilt) rebuilt?.add(back(b));
+    return { ok: was.ok, problems: was.problems.map(back) };
+  }
+  const got = new Set<Id>();
+  const r = oneHolderIn(code, info, entry, types, jobs, changes, names, item, rebuilds, rebuilt ? got : undefined, fresh);
+  for (const b of got) rebuilt!.add(b);
+  const placed = (s: string) => (place.size ? s.replace(/[0-9a-v]{26}/g, (id) => place.get(id) ?? id) : s);
+  if (answers.size >= 64) answers.clear();
+  answers.set(key, { ok: r.ok, problems: r.problems.map(placed), rebuilt: [...got].map((b) => place.get(b) ?? b) });
+  return r;
+}
+function oneHolderIn(code: Code, info: Info, entry: Id, types: Set<Id>, jobs: Set<Id>, changes: Map<Id, number>, names: Record<Id, string> = {}, item?: Id, rebuilds = false, rebuilt?: Set<Id>, fresh = false): OneHolder {
   const nodes = code.nodes;
   const nm = (id: Id) => names[id] ?? id;
   const problems: string[] = [];
@@ -123,22 +196,7 @@ export function oneHolder(code: Code, info: Info, entry: Id, types: Set<Id>, job
     return z.t === "var" || (z.t === "con" ? z.args.some(open) : z.params.some(open) || open(z.ret));
   };
 
-  // The definitions main reaches.
-  // Found once per program and entry: owned-arrays.ts asks for each type
-  // of array, owned-records.ts for each record (L266).
-  let byEntry = reachedKept.get(code);
-  if (!byEntry) reachedKept.set(code, (byEntry = new Map()));
-  let reached = byEntry.get(entry);
-  if (!reached) {
-    const found = (reached = new Set<Id>());
-    const reach = (d: Id) => {
-      if (found.has(d) || nodes[d]?.kind !== "def") return;
-      found.add(d);
-      for (const t of namesIn(code, d)) reach(t);
-    };
-    reach(entry);
-    byEntry.set(entry, reached);
-  }
+  const reached = reachedFrom(code, entry);
   const lambdaOf = (d: Id) => { const n = nodes[d]; const b = n?.kind === "def" && n.body ? nodes[n.body] : null; return b?.kind === "lambda" ? b : null; };
 
   // What a function does with a parameter: the parts of it it reads or
