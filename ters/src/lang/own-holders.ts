@@ -18,7 +18,8 @@
 
 import { dependenciesOfAll, freshId, mapIds, subtree, type Code, type Id, type Node, type NodeOf, copyNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
-import { infer, type Info } from "./infer.ts";
+import { checksKept, infer, type Info } from "./infer.ts";
+import { stableIds } from "../stable-ids.ts";
 import { LIBRARY } from "./library.ts";
 import { COPIED_FROM, originalOf } from "./prelude-ids.ts";
 import { LIST, POOL, QUEUE, SIGS } from "./std.ts";
@@ -91,11 +92,27 @@ export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id
   const nodes: Record<Id, Node> = copyNodes(code.nodes);
   for (const d of copiedDefs) for (const id of subtree(code, d)) { const n = mapIds(code.nodes[id], f); nodes[n.id] = n; }
   for (const d of own) for (const id of subtree(code, d)) nodes[id] = mapIds(code.nodes[id], f);
-  const copies = [...copiedDefs].map(f);
-  for (const d of copiedDefs) COPIED_FROM.set(f(d), originalOf(d));
-  const out: Code = { nodes, defs: [...code.defs, ...copies] };
-  const outNames: Names = { ...names };
+  let copies = [...copiedDefs].map(f);
+  let out: Code = { nodes, defs: [...code.defs, ...copies] };
+  let outNames: Names = { ...names };
   for (const [from, to] of fresh) { const n = names[from] ?? LIBRARY.names[from]; if (n !== undefined) outNames[to] = n; }
+  // The copies named by what they hold (stable-ids.ts) where checks are
+  // kept, so the check below, and every check after it, finds their groups
+  // kept from the last compile: with new ids each compile, greenhouse-page
+  // checked 400 groups again after every edit.
+  if (checksKept(info.options)) {
+    const s = stableIds(out, new Set(fresh.values()), copies, own);
+    if (s.rename.size) {
+      const g = (id: Id) => s.rename.get(id) ?? id;
+      out = s.code;
+      copies = copies.map(g);
+      const renamed: Names = {};
+      for (const k in outNames) renamed[g(k)] = outNames[k];
+      outNames = renamed;
+      for (const [from, to] of fresh) fresh.set(from, g(to));
+    }
+  }
+  for (const d of copiedDefs) COPIED_FROM.set(fresh.get(d)!, originalOf(d));
   const checked = infer(out, outNames, undefined, { ...info.options, units: false });
   if (checked.errors.length > info.errors.length) return null;
   return { code: out, names: outNames, own: [...own, ...copies], info: checked, copied: types.map((d) => names[d] ?? LIBRARY.names[d] ?? d) };

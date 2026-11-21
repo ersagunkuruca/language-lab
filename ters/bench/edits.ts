@@ -22,7 +22,8 @@ const dirOf = (name: string) => [join(ROOT, "ters/examples", name), join(ROOT, "
 // Checks kept, as the editor and `ters` keep them (their rewrites' new
 // ids named by what they hold, so a compile of the same program gives the
 // same program).
-cacheChecks(new CheckCache(4000));
+const CC = new CheckCache(4000);
+cacheChecks(CC);
 
 export interface Times { check: number; choice: number; lower: number; print: number }
 export function compile(code: Code, names: Record<Id, string>, options: object, main: Id, own: Id[], before?: { code: Code; info: Info }): { text: string; info: Info; times: Times } {
@@ -70,7 +71,10 @@ if (import.meta.main) {
     let count = 0;
     for (let r = 0; r < rep; r++) for (let i = 0; i < lits.length && i / step < n; i += step) {
       const next = edited(code, lits[i], r);
+      const h0 = CC.hits, m0 = CC.misses;
       const got = compile(next, p.pres.names, p.options, main, own, { code, info: last.info });
+      // CCLOG=1: the groups each recompile found kept, and those it checked.
+      if (process.env.CCLOG) console.error(`groups kept ${CC.hits - h0}, checked ${CC.misses - m0}`);
       for (const k of Object.keys(sum) as (keyof Times)[]) sum[k] += got.times[k];
       count++;
       code = next;
