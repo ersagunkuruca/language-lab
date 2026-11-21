@@ -160,6 +160,8 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
     cells: Value[] = [];
     // Samples played since the page was last sent what was written.
     since = 0;
+    // Stopped by the page: it plays no more, and the browser lets it go.
+    stopped = false;
     constructor(options: { processorOptions: { index: number; answers?: Answers } }) {
       super();
       try {
@@ -168,7 +170,8 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
         this.play = a.fields[1] as never;
         this.stereo = a.tag === HTML_V.listenStereo;
         this.cells = p.cells;
-        this.port.onmessage = (e: MessageEvent<Write | { latency: number }>) => {
+        this.port.onmessage = (e: MessageEvent<Write | { latency: number } | { stop: true }>) => {
+          if ("stop" in e.data) { this.stopped = true; return; }
           if ("latency" in e.data) { latency = e.data.latency; return; }
           const cell = p.cells[e.data.cell];
           if (!cell) return;
@@ -184,6 +187,7 @@ export function startSoundOn(host: SoundHost, seed = 1): void {
       this.port.postMessage({ said: why });
     }
     process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+      if (this.stopped) return false;
       const out = outputs[0], n = out[0].length;
       const input = inputs[0]?.[0] ?? new Float32Array(n);
       if (!this.play) return true;

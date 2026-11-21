@@ -13,6 +13,7 @@
 // Then examples/looper (L276): its microphone hears the speakers 50 ms
 // late, as a microphone held to them does; Measure finds that round trip,
 // the same again, and says a round trip changing under it is unsteady;
+// stopped, it stays stopped, and started again it moves at its pace;
 // a pass records a tone, the track plays it back, and Undo takes it away
 // and puts it back. Then examples/strum-tuner (L277): a microphone that
 // is six sawtooth strings, each a few cents off, read string by string.
@@ -290,6 +291,20 @@ try {
   await new Promise((r) => setTimeout(r, 300));
   const redone = await loudness();
   check("the looper plays back what it recorded, and Undo takes it away and puts it back", silent < 0.01 && played > 0.1 && undone < 0.01 && redone > 0.1 && drawn > 20, { silent, played, undone, redone, drawn });
+  // Start again stops it, and it stays stopped: a stopped sound's
+  // processor went on running, so a second start had two moving the loop.
+  const where = () => run<number>(`parseFloat(document.querySelector(".where progress").value)`);
+  await run(`document.querySelector("button.start").click()`);
+  await until("stopping", `document.querySelector("button.start").dataset.playing === "false"`);
+  await new Promise((r) => setTimeout(r, 200));
+  const stopped = [await where()];
+  for (let i = 0; i < 4; i++) { await new Promise((r) => setTimeout(r, 150)); stopped.push(await where()); }
+  await run(`document.querySelector("button.start").click()`);
+  await until("playing again", `document.querySelector("button.start").dataset.playing === "true"`);
+  const t0 = await where(), s0 = Date.now();
+  await new Promise((r) => setTimeout(r, 300));
+  const moved = ((await where()) - t0 + 1) % 1, seconds = (Date.now() - s0) / 1000;
+  check("stopped, the looper stays where it is; started again, it moves at its pace", new Set(stopped).size === 1 && Math.abs(moved - seconds) < 0.15, { stopped, moved, seconds });
 
   // The strum tuner: six strings sounding at once, each off by its own cents.
   await send("Page.navigate", { url: `http://127.0.0.1:${port}/strum-tuner.html` });

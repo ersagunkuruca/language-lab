@@ -174,7 +174,11 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           node.connect(ctx.destination);
           playing.add(node);
           const quiet = from.node && (a.fields[0] as Data).tag === HTML_V.microphone ? silence(ctx, from.node, () => say("the microphone sends silence: is it muted (a headset often has a switch on its cable), or is another input chosen in the system's sound settings?")) : () => {};
-          const end = () => { quiet(); from.stop(); from.node?.disconnect(); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); };
+          // Stopped, its processor is told so and stops (a disconnected
+          // one asking to be kept alive goes on running, writing the
+          // page's cells beside the next one started), and what it still
+          // sends is not taken.
+          const end = () => { quiet(); from.stop(); from.node?.disconnect(); node.port.onmessage = null; node.port.postMessage({ stop: true }); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); };
           on = { stop: end };
           going.add(end);
           // Stopped while it was starting: nothing plays.
