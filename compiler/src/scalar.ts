@@ -911,7 +911,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // and what it was given in the reason: Abort's reason, or the operation
   // as a value of the effect's own type (`escapes`, from 1).
   const opOf = new Map<Id, Id>();
-  for (const n of nodeValues(code.nodes)) {
+  // The definitions, in their order, from the nodes' kept index (model.ts
+  // nodesOfKindIn): each scan of all 50,000 nodes here was 5 ms a compile.
+  const allDefs = nodesOfKindIn(code.nodes, "def") as NodeOf<"def">[];
+  for (const n of allDefs) {
     if (n.kind !== "def" || !n.body) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return !x.returns && !x.later; })) td.variants.forEach((v: Id) => opOf.set(v, n.id));
@@ -936,7 +939,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Without `host`, only the effects `hosted` names (C's hosts/c.c).
   // And the file `with open file` keeps open (L213c3), the library's.
   // With `handlers` (C, L213c4), the program's own too, on C's stack.
-  for (const n of opts.host || opts.handlers ? nodeValues(code.nodes) : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
+  for (const n of opts.host || opts.handlers ? allDefs : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
     if (n.kind !== "def" || !n.body || (n.id.startsWith("std.") ? !((opts.host || opts.handlers) && n.id === OPEN_FILE) : code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">))) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !answeredLater.has(v); })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
@@ -971,7 +974,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
   const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
-  for (const n of opts.host || fibers ? nodeValues(code.nodes) : []) {
+  for (const n of opts.host || fibers ? allDefs : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
@@ -992,7 +995,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const tailOwn = new Set(opts.handlers ? [...tailOps.values()].filter((e) => !opts.hosted?.has(e)) : []);
   let drawn = false;
   // Every effect's operations, for refusing what isn't lowered yet.
-  const effectOps = new Set(nodeValues(code.nodes).flatMap((n) => {
+  const effectOps = new Set(allDefs.flatMap((n) => {
     const td = n.kind === "def" && n.body ? code.nodes[n.body] : null;
     return td?.kind === "typedef" && td.effect ? td.variants : [];
   }));
