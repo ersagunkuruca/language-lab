@@ -54,8 +54,26 @@ interface Walker { def: Id; params: Id[]; k: number; m: number; head: Id; step: 
 
 export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): { code: Code; info: Info; names: Names; made: Id[] } {
   const before = new Set(code.defs);
+  // Each definition's calls a candidate may be, kept between rounds for
+  // the definitions a round left alone (greenhouse-page: 18 rounds over
+  // the library's nodes too, 0.25 s a compile).
+  const calls = new Map<Id, Id[]>(), defsOf = new Map<Id, Id[]>();
+  const callsOf = (d: Id): Id[] => {
+    let xs = calls.get(d);
+    if (xs) return xs;
+    xs = [];
+    for (const id of subtree(code, d)) {
+      let ds = defsOf.get(id);
+      if (!ds) defsOf.set(id, (ds = []));
+      ds.push(d);
+      const n = code.nodes[id];
+      if (isCall(n) && n.args && !LIBRARY.code.nodes[id]) xs.push(id);
+    }
+    calls.set(d, xs);
+    return xs;
+  };
   for (let round = 0; round < 40; round++) {
-    const c = candidate(code, info, names);
+    const c = candidate(code, info, names, callsOf);
     if (!c) break;
     const next = c();
     // Checked again only where the round changed it, over the check
@@ -65,6 +83,8 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     const changed = info.options === opts ? changedOver(code.nodes, next.code.nodes) : undefined;
     const checked = changed ? inferRewritten(code, next.code, next.names, info, changed.filter((id) => code.nodes[id] !== undefined), next.code.defs.filter((d) => !code.defs.includes(d))) : infer(next.code, next.names, undefined, opts);
     if (checked.errors.length > info.errors.length) break;
+    if (changed) for (const id of changed) for (const d of defsOf.get(id) ?? []) calls.delete(d);
+    else calls.clear();
     ({ code, names } = next);
     info = checked;
   }
@@ -128,12 +148,13 @@ function made(code: Code, info: Info, e: Id, deep = 0): Made | null {
   return m && { how: "def", def: target, f: m.f };
 }
 
-function candidate(code: Code, info: Info, names: Names): (() => { code: Code; names: Names }) | null {
+function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[]): (() => { code: Code; names: Names }) | null {
   const walkers = new Map<Id, Walker | null>();
-  const reached = new Set(code.defs.flatMap((d) => subtree(code, d)));
-  for (const id of reached) {
-    const n = code.nodes[id];
-    if (!isCall(n) || !n.args || LIBRARY.code.nodes[id]) continue;
+  const seen = new Set<Id>();
+  for (const d of code.defs) for (const id of callsOf(d)) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const n = code.nodes[id] as NodeOf<"call"> & { args: Id[] };
     const t = refTo(code, n.fn);
     if (!t || code.nodes[t]?.kind !== "def") continue;
     if (!walkers.has(t)) walkers.set(t, walker(code, info, t));
