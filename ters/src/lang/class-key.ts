@@ -5,12 +5,13 @@
 // (what the check may tell from it), no text or truth value. A pass keeps
 // what it found by this and what else it reads (the check's options), so
 // an edit of a number (the editor's drag) finds it again.
-import type { Code, Node } from "../model.ts";
+import { nodeValues, type Code, type Node } from "../model.ts";
 import { LIBRARY } from "./library.ts";
 
 export function classKey(code: Code, also: unknown): string {
   const own: Node[] = [];
-  for (const id in code.nodes) { const n = code.nodes[id]; if (LIBRARY.code.nodes[id] !== n) own.push(n); }
+  // Listed as model.ts lists a version's nodes (TERS_CHECK_NODES refuses `in`).
+  for (const n of nodeValues(code.nodes)) if (LIBRARY.code.nodes[n.id] !== n) own.push(n);
   return JSON.stringify([code.defs, own, also], function (this: { kind?: string }, k, v) {
     if (k !== "value" || this.kind !== "lit") return v;
     if (typeof v === "number") return Object.is(v, -0) ? "-0" : `${Number.isInteger(v) ? "i" : "f"}${Math.sign(v)}`;

@@ -1074,6 +1074,7 @@ export function scanningOnLayer<T>(code: Code, step: () => T): T {
 // Each node's parent, as a lookup. For a derived program, its base's
 // parents, found once, beside those of the nodes changed.
 const parentsKept = new WeakMap<Code, (id: Id) => Id | undefined>();
+const underParents = new WeakMap<object, Map<Id, Id>>();
 const parentsIn = (code: Code): Map<Id, Id> => {
   const m = new Map<Id, Id>();
   for (const n of nodeValues(code.nodes)) for (const c of children(n)) m.set(c, n.id);
@@ -1082,7 +1083,19 @@ const parentsIn = (code: Code): Map<Id, Id> => {
 export function parentLookup(code: Code): (id: Id) => Id | undefined {
   const from = derived.get(code);
   if (!from && kept.has(code)) { let p = parentsKept.get(code); if (!p) { const m = parentsIn(code); parentsKept.set(code, (p = (id) => m.get(id))); } return p; }
-  if (!from) { const m = parentsIn(code); return (id) => m.get(id); }
+  if (!from) {
+    // Nodes over others (which never change): theirs found once, beside
+    // those of the nodes it holds itself (a lowering's ~20 lookups each
+    // walked greenhouse-page's 50,000 nodes).
+    const under = nodesUnder(code.nodes);
+    if (!under) { const m = parentsIn(code); return (id) => m.get(id); }
+    let below = underParents.get(under);
+    if (!below) underParents.set(under, (below = parentsIn({ nodes: under, defs: [] })));
+    const raw = rawNodes(code.nodes), own = new Set(Object.keys(raw)), mine = new Map<Id, Id>();
+    for (const id of own) { const n = raw[id]; if (n) for (const c of children(n)) mine.set(c, id); }
+    const b = below;
+    return (id) => { const p = mine.get(id); if (p !== undefined) return p; const q = b.get(id); return q !== undefined && !own.has(q) ? q : undefined; };
+  }
   // A base itself derived (a program on the library's layer, the base of
   // a palette's fillings) is looked up through its own base in turn.
   let under = parentsKept.get(from.base);
