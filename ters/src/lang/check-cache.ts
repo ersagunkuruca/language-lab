@@ -192,7 +192,8 @@ export interface GroupStore { load(key: string): Closed | undefined; save(key: s
 export type { Closed };
 
 // A check of a whole program kept by groups too, while `keepingWhole`
-// runs: the lowering's checks of what the roots reach (stage.ts), on no
+// runs (a lowering, a choice of representations, where checks are kept):
+// the lowering's checks of what the roots reach (stage.ts), on no
 // layer, are most of a compile after an edit (greenhouse-page's 0.25 s),
 // and their groups are those of the last compile but one or two.
 let wholeKept = false;
