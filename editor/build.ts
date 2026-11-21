@@ -17,6 +17,8 @@
 //                  a page that solves asks for them (E280)
 //   library.*.js   the library's JSON, read by the editor and Run's worker
 //                  (E281)
+//   example-files/ the example programs, a file a folder, read when one is
+//                  opened (E282)
 //   checks.json    the library's checks a fresh page reads (keptChecks.ts,
 //                  I213)
 //   apps/*.html    web apps written in the language (the programs
@@ -35,7 +37,7 @@ import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
 import { represented } from "../ters/cli/represented.ts";
 import { representationsIn } from "../ters/src/lang/represent.ts";
-import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
+import { examplesPlugin, exampleFiles, type Manifest } from "./examplesPlugin.ts";
 import { shadersBuilt } from "./shadersBuilt.ts";
 import { prebuild } from "./prebuild.ts";
 
@@ -87,7 +89,27 @@ const runtimeFile = (id: string, t: string) => {
   writeFileSync(site + name, `labRuntime(${JSON.stringify(id)}, ${JSON.stringify(t)});\n`);
   return `<script type="text/plain" id="${id}" data-src="${name}"></script>\n`;
 };
-const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
+// The examples, a file a folder, read when opened (E282, exampleFiles.ts).
+// Before the editor's script, the page reads those its first drawing asks
+// for: the program it reopens (main.ts STORE's `current`, written first),
+// one a link asks for (`?program=`), and the first example, which main.ts
+// makes before either. document.write, so they run before the script.
+rmSync(site + "example-files", { recursive: true, force: true });
+mkdirSync(site + "example-files");
+const files = exampleFiles(manifest, (name, t) => writeFileSync(site + name, t));
+const folders = Object.fromEntries(manifest.programs.filter((p) => p.editor !== false && p.folders?.length).map((p) => [p.program, p.folders]));
+const first = manifest.programs.find((p) => p.editor !== false)!.program;
+const exampleStart = `<script type="application/json" id="lab-example-files">${JSON.stringify(files)}</script>
+<script>(() => {
+  const files = ${JSON.stringify(files)}, folders = ${JSON.stringify(folders)};
+  const want = [${JSON.stringify(first)}, "numbers"];
+  try { const m = /^\\{"current":("(?:[^"\\\\]|\\\\.)*")/.exec((localStorage.getItem("projectional-editor-v5") ?? "").slice(0, 400)); if (m) want.push(JSON.parse(m[1])); } catch {}
+  const asked = new URLSearchParams(location.search).get("program"); if (asked) want.push(asked);
+  self.labExamples = {}; self.labExample = (f, t) => { self.labExamples[f] = t; };
+  for (const f of new Set(want.flatMap((p) => folders[p] ?? []))) if (files[f]) document.write('<script src="' + files[f] + '"><\\/script>');
+})();</script>
+`;
+const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleStart;
 // The text kept beside the parsed library, for the worker (newWorker).
 const libraryText = JSON.stringify(Object.fromEntries([...shared].sort().map(([k, f]) => [k, JSON.parse(readFileSync(f, "utf8"))])));
 const libraryName = `library.${createHash("sha1").update(libraryText).digest("hex").slice(0, 12)}.js`;

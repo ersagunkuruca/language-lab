@@ -17,6 +17,9 @@ export interface NavHost {
   // An example as shipped (examples.json), for one not opened yet.
   initialFor(k: Program): Doc;
   isExample(k: Program): boolean;
+  // Whether an example's files are read, and reading them (exampleFiles.ts).
+  exampleHere(k: Program): boolean;
+  readExamples(ks: Program[]): Promise<void>;
   // The examples the editor lists: key and label.
   examples(): [Program, string][];
   // The key prefix of the programs you made.
@@ -26,7 +29,7 @@ export interface NavHost {
 }
 
 export function navigatorPanel(host: NavHost) {
-  const { doc, docs, ui, ownDefs, defBody, titleOf, initialFor, isExample, examples, mine, isLibrary } = host;
+  const { doc, docs, ui, ownDefs, defBody, titleOf, initialFor, isExample, exampleHere, readExamples, examples, mine, isLibrary } = host;
   // Programs and their definitions are one outline, the same rows at two
   // depths: the open program lists its definitions under it. It scrolls on
   // its own and filters as you type, so it stays one column however many
@@ -46,7 +49,7 @@ export function navigatorPanel(host: NavHost) {
   }
   // An example not opened yet is read as shipped, without saving it.
   const shipped = new Map<Program, Doc>();
-  const otherDoc = (k: Program) => docs()[k] ?? (isExample(k) ? shipped.get(k) ?? shipped.set(k, initialFor(k)).get(k)! : null);
+  const otherDoc = (k: Program) => docs()[k] ?? (isExample(k) && exampleHere(k) ? shipped.get(k) ?? shipped.set(k, initialFor(k)).get(k)! : null);
 
   function navigator(p: Presentation) {
     const row = (attrs: Record<string, string>, on: boolean, ...kids: Kid[]) =>
@@ -74,9 +77,16 @@ export function navigatorPanel(host: NavHost) {
     const filter = () => {
       const q = find.value.trim().toLowerCase();
       ui.find = find.value;
-      if (q) for (const [k, g] of others.splice(0)) {
-        const other = otherDoc(k);
-        if (other) g.append(...defNames(other).map(([d, name]) => row({ "data-goto": d, "data-program": k, hidden: "" }, false, name)));
+      if (q) {
+        // The examples not read yet are read at the first search (E282),
+        // and the search runs again when they are.
+        const later: typeof others = [];
+        for (const [k, g] of others.splice(0)) {
+          const other = otherDoc(k);
+          if (other) g.append(...defNames(other).map(([d, name]) => row({ "data-goto": d, "data-program": k, hidden: "" }, false, name)));
+          else if (isExample(k)) later.push([k, g]);
+        }
+        if (later.length) { others.push(...later); void readExamples(later.map(([k]) => k)).then(() => { if (find.isConnected) filter(); }, () => {}); }
       }
       for (const r of list.querySelectorAll<HTMLElement>(".nav-row")) {
         const hit = r.textContent!.toLowerCase().includes(q);

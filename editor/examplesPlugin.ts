@@ -5,14 +5,12 @@
 // there if the folder has it. Every build of main.ts adds this plugin
 // (editor/build.ts, ters/test/editor-page.ts, ters/test/draws.test.ts).
 //
-// "inline" puts them in the script. "page" (the site, E204) reads each
-// from a JSON script element of the page, `lab-example-<folder>`, the
-// first time it is asked: the browser keeps such an element as text and
-// nothing parses it until then, where the script's own objects were all
-// parsed before the first drawing. build.ts writes the elements
-// (exampleTags).
+// "inline" puts them in the script. "page" (the site) reads each from
+// `self.labExamples`, which a folder's own file fills when it's read
+// (E282, exampleFiles.ts): build.ts writes the files (exampleFiles).
 
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import type { Plugin } from "../ters/node_modules/esbuild/lib/main.js";
 
 const editor = new URL(".", import.meta.url).pathname;
@@ -42,7 +40,7 @@ export const examplesPlugin = (manifest: Manifest, mode: "inline" | "page" = "in
   setup(b) {
     b.onResolve({ filter: /^examples:files$/ }, (a) => ({ path: a.path, namespace: "examples" }));
     b.onLoad({ filter: /.*/, namespace: "examples" }, () => {
-      if (mode === "page") return { contents: `const read = {};\nexport default (f) => read[f] ??= JSON.parse(document.getElementById("lab-example-" + f.replace(/\\//g, "-")).textContent);\n`, loader: "js" };
+      if (mode === "page") return { contents: `export default (f) => { const t = self.labExamples?.[f]; if (!t) throw new Error("the example " + f + " isn't read yet"); return t; };\n`, loader: "js" };
       const imports: string[] = [], entries: string[] = [];
       for (const f of foldersOf(manifest)) {
         const own: string[] = [];
@@ -62,14 +60,16 @@ export const examplesPlugin = (manifest: Manifest, mode: "inline" | "page" = "in
   },
 });
 
-// The page's JSON elements, one a folder, for "page". A `<` is only ever
-// in a JSON string, where \u003c means the same, so none can end the
-// element early.
-export function exampleTags(manifest: Manifest): string {
-  return foldersOf(manifest).map((f) => {
-    const tables = exampleTables(manifest, f);
-    return `<script type="application/json" id="lab-example-${idOf(f)}">${JSON.stringify(tables).replace(/</g, "\\u003c")}</script>\n`;
-  }).join("");
+// The site's files, one a folder (E282): each a script that hands its
+// tables to `labExample`, named by its content so a browser keeps it
+// across deploys that don't change it. Gives folder to file.
+export function exampleFiles(manifest: Manifest, write: (name: string, text: string) => void): Record<string, string> {
+  return Object.fromEntries(foldersOf(manifest).map((f) => {
+    const json = JSON.stringify(exampleTables(manifest, f));
+    const name = `example-files/${idOf(f)}.${createHash("sha1").update(json).digest("hex").slice(0, 12)}.js`;
+    write(name, `labExample(${JSON.stringify(f)}, JSON.parse(${JSON.stringify(json)}));\n`);
+    return [f, name];
+  }));
 }
 
 // A folder's tables as the editor reads them ("examples:files").
