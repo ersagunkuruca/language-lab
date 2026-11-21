@@ -8,7 +8,7 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import type * as T from "./typed.ts";
 import type { Doc, Program, UI } from "./main.ts";
 import { h } from "./dom.ts";
-import { corePageRuntimes, corePageRuntimeText, coreWorkletRuntimes, newWorker } from "./runViews.ts";
+import { corePageRuntimes, coreWorkletRuntimes, hasCoreRuntime, loadSolving, newWorker } from "./runViews.ts";
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
@@ -16,8 +16,9 @@ import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltHas, prebuiltIndex, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
 import { checkedForRun } from "./coreMain.ts";
-import { PAGE_BASE, hasSound, pageMain, pageRuntime, savedPageFile, showPage, TooSlow, type Preview, type SavedScripts } from "../ters/src/lang/page.ts";
+import { PAGE_BASE, hasSound, NeedsSolver, pageMain, pageRuntime, savedPageFile, showPage, TooSlow, type Preview, type SavedScripts } from "../ters/src/lang/page.ts";
 import type { Doc as PageDoc, Node_ } from "../ters/src/lang/html.ts";
+import { scriptSolves } from "../compiler/src/core-js.ts";
 import { eventsIn, isEvent, type LogEntry, type LogWindow, type PlacedSnapshot } from "../ters/src/lang/worldlog.ts";
 // The page's log kept as a window (I239b): a snapshot every 10 seconds, the
 // last 30 (about five minutes) kept, interpreted or compiled.
@@ -149,7 +150,7 @@ export function pagePanels(host: PageHost) {
           // What was done on the page goes on in the new version (E279a);
           // after Restart (page.for null) it starts from the beginning.
           const from = page.for ? page.now?.kept ?? null : null;
-          if (from && page.now && compiledNow.has(page.now) && !hasSound(want) && corePageRuntimeText()) return compileOver(info, main, from);
+          if (from && page.now && compiledNow.has(page.now) && !hasSound(want) && hasCoreRuntime()) return compileOver(info, main, from);
           leavePage();
           startPage(info, main, from);
           render();
@@ -268,7 +269,7 @@ export function pagePanels(host: PageHost) {
     // (prebuilt.ts): it shows once it's read, and isn't drawn interpreted
     // first (I311: Countdown's took 0.4 s of the editor's thread on
     // opening, to be replaced a moment later).
-    if (slow && corePageRuntimeText() && prebuiltHas(prebuiltKey("page", prog(), { main }, pins()))) {
+    if (slow && hasCoreRuntime() && prebuiltHas(prebuiltKey("page", prog(), { main }, pins()))) {
       compilePage(main, true);
       if (!page.now) page.status.title = "", page.status.textContent = "Loading…";
       return;
@@ -278,6 +279,14 @@ export function pagePanels(host: PageHost) {
       page.root = page.now.root as unknown as globalThis.Node;
       if (page.now.handed !== undefined && page.now.handed < 0) { page.afresh = true; afresh(); }
     } catch (e) {
+      if (e instanceof NeedsSolver) {
+        // Its sound solves: the worklet's runtime with the solver is read
+        // first (E280), then the page starts as it would have.
+        const want = page.for;
+        page.status.title = "", page.status.textContent = "Loading…";
+        void loadSolving(e.which).then(() => { if (page.for === want && !page.now) { startPage(info, main, handFrom); render(); } }, (err) => sayStopped("The page stopped", err));
+        return;
+      }
       if (!(e instanceof TooSlow)) { sayStopped("The page stopped", e); return; }
       page.log = [];
       compilePage(main, true);
@@ -374,7 +383,7 @@ export function pagePanels(host: PageHost) {
     settle();
     asks++;
     const code = prog();
-    if (!corePageRuntimeText()) return interpretAnyway("Interpreted · no compiler here");
+    if (!hasCoreRuntime()) return interpretAnyway("Interpreted · no compiler here");
     if (!page.now && !waiting) return;
     if (page.now?.hush || hasSound(code)) { page.status.title = "", page.status.textContent = "Interpreted · sound";
       page.status.title = "A page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
@@ -535,7 +544,10 @@ export function pagePanels(host: PageHost) {
     let m;
     try {
       const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
-      const core = new Function(`${pageRuntime(corePageRuntimes(), made.program)}\nreturn $core;`)() as Core & Record<string, unknown>;
+      const runtime = pageRuntime(corePageRuntimes(), made.program);
+      // One that solves waits for its runtime to be read (E280).
+      if (!runtime) { void loadSolving("page").then(() => { if (compiledPages.get(code) === made && prog() === code) swapCompiled(code, made); }, (err) => sayStopped("The compiled page stopped", err)); return; }
+      const core = new Function(`${runtime}\nreturn $core;`)() as Core & Record<string, unknown>;
       let given: unknown[] | null = null;
       new Function("$core", made.program)({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
       if (!given) throw new Error("the core IR's script started no page");
@@ -592,13 +604,15 @@ export function pagePanels(host: PageHost) {
     const main = info && pageMain(ownDefs(), info, pres().names);
     if (!info || !main) return;
     const failed = (why: string) => { ui.note = `The page couldn't be compiled: ${why}.`; ui.refused = true; render(); };
-    if (!corePageRuntimeText()) return failed("this editor has no core IR runtime");
+    if (!hasCoreRuntime()) return failed("this editor has no core IR runtime");
     const code = prog(), title = titleOf(doc()), name = `${slug(title)}.html`;
     // The tab opened now, while the click allows it: one opened when the
     // page is ready may be taken for a popup and blocked.
     const tab = open ? window.open("", "_blank") : null;
     if (tab) { tab.document.title = `${title}: compiling`; tab.document.body.textContent = `Compiling ${title}…`; }
-    void savedFor(code, main).then((made) => {
+    void savedFor(code, main).then(async (made) => {
+      // The runtimes with the solver, read if the page or its sound solves (E280).
+      if (scriptSolves(made.script) || (made.sound !== undefined && scriptSolves(made.sound))) await loadSolving(scriptSolves(made.script) ? "both" : "worklet");
       const url = URL.createObjectURL(new Blob([savedPageFile(title, made, corePageRuntimes(), coreWorkletRuntimes())], { type: "text/html" }));
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       if (open) {

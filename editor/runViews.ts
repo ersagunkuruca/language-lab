@@ -26,17 +26,46 @@ declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by edit
 // line of this file runs.)
 export function newWorker(): Worker { const f = newWorker as { url?: string }; return new Worker(f.url ??= URL.createObjectURL(new Blob([runtimeText("lab-run-worker") || RUN_WORKER], { type: "text/javascript" }))); }
 // The site's page keeps them as text elements instead (build.ts, E204), so
-// the script it parses before the first drawing is 8 MB shorter.
-function runtimeText(id: string) { return document.getElementById(id)?.textContent || ""; }
+// the script it parses before the first drawing is 8 MB shorter. The two
+// with the solver are files of their own (E280): their element names the
+// file (`data-src`), and its text is here once `loadRuntime` read it.
+const loaded = new Map<string, string>();
+function runtimeText(id: string) { return document.getElementById(id)?.textContent || loaded.get(id) || ""; }
+const runtimeSrc = (id: string) => (typeof document === "object" && document.getElementById(id)?.getAttribute("data-src")) || null;
+const loading = new Map<string, Promise<void>>();
+// A script tag, not a fetch, so a page opened from file:// reads it too.
+function loadRuntime(id: string): Promise<void> {
+  const src = runtimeSrc(id);
+  if (!src || runtimeText(id)) return Promise.resolve();
+  let p = loading.get(id);
+  if (!p) loading.set(id, (p = new Promise<void>((done, failed) => {
+    (globalThis as { labRuntime?: (id: string, text: string) => void }).labRuntime ??= (k, t) => { loaded.set(k, t); };
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => { s.remove(); if (loaded.has(id)) done(); else failed(new Error(`${src} gave no runtime`)); };
+    s.onerror = () => { s.remove(); loading.delete(id); failed(new Error(`${src} couldn't be read`)); };
+    document.head.appendChild(s);
+  })));
+  return p;
+}
+// The runtimes with the solver, read: for a page, a sound, or both.
+export const loadSolving = (which: "page" | "worklet" | "both" = "both"): Promise<void> =>
+  Promise.all([which !== "worklet" && loadRuntime("lab-core-page-runtime"), which !== "page" && loadRuntime("lab-core-worklet-runtime")]).then(() => undefined);
+// Whether a page that solves can be given its runtime now.
+export const solvingHere = (which: "page" | "worklet") => !runtimeSrc(`lab-core-${which}-runtime`) || !!runtimeText(`lab-core-${which}-runtime`);
 // The core IR's page and audio runtimes (cli/web.ts corePageRuntime,
 // coreWorkletRuntime, E244); "" means none here.
 export function corePageRuntimeText() { return runtimeText("lab-core-page-runtime") || CORE_PAGE_RUNTIME; }
 export function coreWorkletRuntimeText() { return runtimeText("lab-core-worklet-runtime") || CORE_WORKLET_RUNTIME; }
+// Whether this editor compiles pages at all: a test's build has none.
+export const hasCoreRuntime = () => !!(runtimeSrc("lab-core-page-runtime") || corePageRuntimeText());
 // Each with its build without the solver beside it (page.ts Runtime): a
-// page that solves nothing is given that one, 160 KB, not 750.
-export function corePageRuntimes(): Runtime { return both(corePageRuntimeText(), runtimeText("lab-core-page-plain-runtime") || CORE_PAGE_PLAIN_RUNTIME); }
-export function coreWorkletRuntimes(): Runtime { return both(coreWorkletRuntimeText(), runtimeText("lab-core-worklet-plain-runtime") || CORE_WORKLET_PLAIN_RUNTIME); }
-const both = (solving: string, plain: string): Runtime => (solving && plain ? { solving, plain } : solving);
+// page that solves nothing is given that one, 160 KB, not 750. Before the
+// one with the solver is read, its place is "": who gives a page that
+// solves waits for `loadSolving` first.
+export function corePageRuntimes(): Runtime { return both(corePageRuntimeText(), runtimeText("lab-core-page-plain-runtime") || CORE_PAGE_PLAIN_RUNTIME, "page"); }
+export function coreWorkletRuntimes(): Runtime { return both(coreWorkletRuntimeText(), runtimeText("lab-core-worklet-plain-runtime") || CORE_WORKLET_PLAIN_RUNTIME, "worklet"); }
+const both = (solving: string, plain: string, which: "page" | "worklet"): Runtime => (plain && (solving || !solvingHere(which)) ? { solving, plain } : solving);
 
 // Where a read of a text run backwards stopped (L70c): its line, marked
 // at the place, and what was looked for there.
