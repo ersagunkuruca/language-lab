@@ -37,9 +37,9 @@
 // eliminate trees", 1990), here by the walker's shape, as fuse-steps.ts
 // does for folds.
 
-import { freshId, isCall, subtree, mapIds, type Code, type Id, type Node, type NodeOf, copyNodes, dropNode } from "../../ters/src/model.ts";
+import { freshId, isCall, subtree, mapIds, type Code, type Id, type Node, type NodeOf, copyNodes, dropNode, changedOver } from "../../ters/src/model.ts";
 import type { Names } from "../../ters/src/presentation.ts";
-import { infer, type Info, type Options } from "../../ters/src/lang/infer.ts";
+import { infer, inferRewritten, type Info, type Options } from "../../ters/src/lang/infer.ts";
 import { preludeDef } from "../../ters/src/lang/arith.ts";
 import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import { DIVERGE, type Type } from "../../ters/src/lang/types.ts";
@@ -58,7 +58,12 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     const c = candidate(code, info, names);
     if (!c) break;
     const next = c();
-    const checked = infer(next.code, next.names, undefined, opts);
+    // Checked again only where the round changed it, over the check
+    // before (infer.ts inferRewritten): a round adds a definition and
+    // changes a call or two, and the whole program was checked each round
+    // (greenhouse-page: 18 rounds, 0.9 s a compile).
+    const changed = info.options === opts ? changedOver(code.nodes, next.code.nodes) : undefined;
+    const checked = changed ? inferRewritten(code, next.code, next.names, info, changed.filter((id) => code.nodes[id] !== undefined), next.code.defs.filter((d) => !code.defs.includes(d))) : infer(next.code, next.names, undefined, opts);
     if (checked.errors.length > info.errors.length) break;
     ({ code, names } = next);
     info = checked;
