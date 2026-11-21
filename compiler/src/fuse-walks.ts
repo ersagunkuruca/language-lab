@@ -45,6 +45,7 @@ import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import { DIVERGE, type Type } from "../../ters/src/lang/types.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { does } from "./fuse-steps.ts";
+import { keptMap } from "../../ters/src/kept.ts";
 
 const MAP = preludeDef("map"), FLAT_MAP = preludeDef("flat map");
 // How deep a list may be made inside lets and calls and still be found.
@@ -72,10 +73,32 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     calls.set(d, xs);
     return xs;
   };
+  // The rounds of the last compile of this program but for its numbers,
+  // texts and truth values, which nothing here reads, taken again with
+  // one check after: an edit of a number (the editor's drag) found the
+  // same 18 walks of greenhouse-page, a check after each (0.5 s).
+  const key = fuseKey(code, opts);
+  const was = roundsKept.get(key);
+  if (was) {
+    const given = { code, names };
+    const changed = new Set<Id>();
+    let whole = info.options !== opts;
+    for (const r of was) {
+      const next = rewrite(code, names, r.at, r.w, r.how);
+      const c = whole ? undefined : changedOver(code.nodes, next.code.nodes);
+      if (c) for (const id of c) changed.add(id); else whole = true;
+      ({ code, names } = next);
+    }
+    const made = code.defs.filter((d) => !before.has(d));
+    const checked = whole ? infer(code, names, undefined, opts) : inferRewritten(given.code, code, names, info, [...changed].filter((id) => given.code.nodes[id] !== undefined), made);
+    if (checked.errors.length <= info.errors.length) return { code, info: checked, names, made };
+    ({ code, names } = given);
+  }
+  const rounds: Round[] = [];
   for (let round = 0; round < 40; round++) {
     const c = candidate(code, info, names, callsOf);
     if (!c) break;
-    const next = c();
+    const next = rewrite(code, names, c.at, c.w, c.how);
     // Checked again only where the round changed it, over the check
     // before (infer.ts inferRewritten): a round adds a definition and
     // changes a call or two, and the whole program was checked each round
@@ -83,11 +106,13 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     const changed = info.options === opts ? changedOver(code.nodes, next.code.nodes) : undefined;
     const checked = changed ? inferRewritten(code, next.code, next.names, info, changed.filter((id) => code.nodes[id] !== undefined), next.code.defs.filter((d) => !code.defs.includes(d))) : infer(next.code, next.names, undefined, opts);
     if (checked.errors.length > info.errors.length) break;
+    rounds.push(c);
     if (changed) for (const id of changed) for (const d of defsOf.get(id) ?? []) calls.delete(d);
     else calls.clear();
     ({ code, names } = next);
     info = checked;
   }
+  if (rounds.length) { if (roundsKept.size >= 4) roundsKept.clear(); roundsKept.set(key, rounds); }
   return { code, info, names, made: code.defs.filter((d) => !before.has(d)) };
 }
 
@@ -148,7 +173,24 @@ function made(code: Code, info: Info, e: Id, deep = 0): Made | null {
   return m && { how: "def", def: target, f: m.f };
 }
 
-function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[]): (() => { code: Code; names: Names }) | null {
+type Round = { at: Id; w: Walker; how: Made };
+const roundsKept = keptMap<string, Round[]>();
+// The program as the rounds read it: every node but the library's as it
+// is there, a number by whether it is whole, its sign and whether it is
+// 0 (what the check may tell from it), no text or truth value; and the
+// check's options.
+function fuseKey(code: Code, opts: Options): string {
+  const own: Node[] = [];
+  for (const id in code.nodes) { const n = code.nodes[id]; if (LIBRARY.code.nodes[id] !== n) own.push(n); }
+  return JSON.stringify([code.defs, own, optionsText(opts)], function (this: { kind?: string }, k, v) {
+    if (k !== "value" || this.kind !== "lit") return v;
+    if (typeof v === "number") return Object.is(v, -0) ? "-0" : `${Number.isInteger(v) ? "i" : "f"}${Math.sign(v)}`;
+    return typeof v;
+  });
+}
+const optionsText = (o: Options) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : v));
+
+function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[]): Round | null {
   const walkers = new Map<Id, Walker | null>();
   const seen = new Set<Id>();
   for (const d of code.defs) for (const id of callsOf(d)) {
@@ -169,7 +211,7 @@ function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[
     // pond 100 40 from 1.8 to 5.8 s).
     if (loopsPerItem(how.f)) continue;
     if (!n.args.every((a) => onlyComputes(does(code, info, a)))) continue;
-    return () => rewrite(code, names, id, w, how);
+    return { at: id, w, how };
   }
   return null;
 
