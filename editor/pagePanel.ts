@@ -150,7 +150,7 @@ export function pagePanels(host: PageHost) {
           // What was done on the page goes on in the new version (E279a);
           // after Restart (page.for null) it starts from the beginning.
           const from = page.for ? page.now?.kept ?? null : null;
-          if (from && page.now && compiledNow.has(page.now) && !hasSound(want) && hasCoreRuntime()) return compileOver(info, main, from);
+          if (from && page.now && compiledNow.has(page.now) && hasCoreRuntime()) return compileOver(info, main, from);
           leavePage();
           startPage(info, main, from);
           render();
@@ -268,8 +268,11 @@ export function pagePanels(host: PageHost) {
     // A shipped example's page was compiled when the site was built
     // (prebuilt.ts): it shows once it's read, and isn't drawn interpreted
     // first (I311: Countdown's took 0.4 s of the editor's thread on
-    // opening, to be replaced a moment later).
-    if (slow && hasCoreRuntime() && prebuiltHas(prebuiltKey("page", prog(), { main }, pins()))) {
+    // opening, to be replaced a moment later). A page with sound is
+    // always shown compiled where the editor compiles (E285): drawn
+    // interpreted it had no time limit, and the looper's took 19 s of the
+    // editor's thread before anything else drew.
+    if (hasCoreRuntime() && (!slow || prebuiltHas(prebuiltKey("page", prog(), { main }, pins())))) {
       compilePage(main, true);
       if (!page.now) page.status.title = "", page.status.textContent = "Loading…";
       return;
@@ -385,8 +388,6 @@ export function pagePanels(host: PageHost) {
     const code = prog();
     if (!hasCoreRuntime()) return interpretAnyway("Interpreted · no compiler here");
     if (!page.now && !waiting) return;
-    if (page.now?.hush || hasSound(code)) { page.status.title = "", page.status.textContent = "Interpreted · sound";
-      page.status.title = "A page with sound plays from the interpreter in the editor, so it can be slower here. Open in a tab runs it compiled."; return; }
     const made = compiledPages.get(code);
     if (made !== undefined) {
       if (made) swapCompiled(code, made);
@@ -525,7 +526,7 @@ export function pagePanels(host: PageHost) {
   // elements are made in the same document as the interpreted page's and go
   // into the frame the same way: its script's call of startCorePage is
   // caught, and what it was given mounted here (core-page.ts mountCorePage).
-  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void };
+  type Mounted = { root: Node_; cells: Pick<Cells, "write" | "batch">; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void };
   // The program as the compiled page runs it, its lists and Maps chosen
   // (coreMain.ts checkedForRun), for each version of the program: a few
   // seconds the first time (bounce 2 s), at once after.
@@ -545,8 +546,12 @@ export function pagePanels(host: PageHost) {
     try {
       const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
       const runtime = pageRuntime(corePageRuntimes(), made.program);
+      // A page with sound: its audio thread's script after the worklet's
+      // runtime (page.ts coreWorkletFile), its recordings under apps/ (E285).
+      const sound = made.sound !== undefined ? pageRuntime(coreWorkletRuntimes(), made.sound) : null;
       // One that solves waits for its runtime to be read (E280).
-      if (!runtime) { void loadSolving("page").then(() => { if (compiledPages.get(code) === made && prog() === code) swapCompiled(code, made); }, (err) => sayStopped("The compiled page stopped", err)); return; }
+      if (!runtime || sound === "") { void loadSolving(!runtime ? (sound === "" ? "both" : "page") : "worklet").then(() => { if (compiledPages.get(code) === made && prog() === code) swapCompiled(code, made); }, (err) => sayStopped("The compiled page stopped", err)); return; }
+      if (sound !== null) Object.assign(o, { worklet: `${sound}\n${made.sound}`, recordings: "apps/" });
       const core = new Function(`${runtime}\nreturn $core;`)() as Core & Record<string, unknown>;
       let given: unknown[] | null = null;
       new Function("$core", made.program)({ ...core, startCorePage: (...a: unknown[]) => { given = a; } });
@@ -567,7 +572,7 @@ export function pagePanels(host: PageHost) {
     // event steps through (I239f, page.ts showPage stepFrom).
     const mounted = m;
     page.deferred = false;
-    page.now = { root: m.root, cells: null as never, kept: m.kept, stop: m.stop, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
+    page.now = { root: m.root, cells: null as never, kept: m.kept, stop: m.stop, hush: m.hush, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
     compiledNow.add(page.now);
     page.root = m.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);

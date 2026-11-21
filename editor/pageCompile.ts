@@ -13,14 +13,18 @@ import { checkedForRun } from "./coreMain.ts";
 
 // `saved`: the same page as Open in a tab and Save page give it (page.ts
 // savedScripts), from the same lowering.
-export type CompiledPage = { program: string; core: true; saved: SavedScripts };
+// `sound`: a page with sound's audio thread script (core-js.ts
+// coreSoundScript), which the preview puts after the worklet's runtime
+// (E285: such a page was previewed only interpreted, the looper's main
+// alone 13 s of the editor's thread).
+export type CompiledPage = { program: string; core: true; saved: SavedScripts; sound?: string };
 
 export function compilePageProgram(code: Code, names: Names, pins: Pins, main: Id): CompiledPage {
   const { ir, names: shown } = lowered(code, names, pins, main);
-  return { program: corePageScript(ir, shown[main], "$core", ""), core: true, saved: savedScripts(ir, shown[main], false) };
+  const saved = savedScripts(ir, shown[main], hasSound(code));
+  return { program: corePageScript(ir, shown[main], "$core", ""), core: true, saved, ...(saved.sound !== undefined ? { sound: saved.sound } : {}) };
 }
-// The page as saved alone: a page with sound's, which the preview doesn't
-// compile (pagePanel.ts compilePage), carries its audio thread's script.
+// The page as saved alone, with its audio thread's script if it has sound.
 export function compileSavedPage(code: Code, names: Names, pins: Pins, main: Id): SavedScripts {
   const { ir, names: shown } = lowered(code, names, pins, main);
   return savedScripts(ir, shown[main], hasSound(code));
