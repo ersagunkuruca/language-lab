@@ -9,6 +9,8 @@
 /apps/
 /prebuilt/
 /runtimes/
+/library.*.js
+/example-files/
 /checks.json
 /ters.mjs
 

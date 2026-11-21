@@ -1,0 +1,5 @@
+{"3tnlrs7eitd59j6nghhpqann5m": "A whole turn in radians, 2π.",
+"6ahcl916qp2dmsq3o8cim10d3e": "A tenth of a second of A3 on the left and C♯4 on the right.",
+"bdlnedij3923vcb0gsvcgpsbsk": "Writes the chord as a 16-bit WAV file, chord.wav, reads it back and says how far the samples moved: half a step of 16 bits at most.",
+"es3a1r82mbkj7un49jdo7d0eu4": "The largest difference between two lists of samples, item by item; b as long as a.",
+"g3ce3oup4rj021ln4811u3l45o": "Samples a second."}

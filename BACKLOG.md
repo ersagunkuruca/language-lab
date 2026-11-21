@@ -24,12 +24,12 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Speed up editor startup" | E281, E282, E283 (E280 done) |
+| E Editor | "Speed up editor startup" | E283 (E280 to E282 done) |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
-| L Language and library | "Build a tuner, metronome and looper app" | L271b |
+| L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -73,8 +73,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E281 | Ship the library once: its JSON (7 MB of ters/library/*.json) is bundled into both the editor's script (9.1 MB) and Run's worker (8.4 MB). Make it one file named by its content that both read, so a visit downloads and parses it once and a deploy that doesn't change the library keeps it cached | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?"); measured 2026-11-21 (E280's PR) | P1 | M | |
-| E282 | Read an example program when it's picked: every example's JSON is in index.html (about 11 MB, the largest 0.6 MB), though one is open at a time | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?") | P1 | M | |
 | E283 | Warm-ups after the editor can be clicked: Run's worker start, warmParents, warmRun and warmCalls keep the page busy until about 4 to 5 s after load, so early clicks wait. Start them when the page is idle, after the first drawing, and measure the first click | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?") | P2 | S | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
@@ -207,11 +205,11 @@ all of these.
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
-Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: L271b beside them; the frets page (L278), L279, C271, C273, C260b and C269 are done. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
+Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I really want to develop." Ersagun said go 2026-11-17 19:00; the metronome first. L267, L268, L269, the metronome (L275) and the tuner with its signals and tunings modules (L272 to L274) stereo (L270) and minutes of audio in a cell (C261) are done (DONE.md). The looper (L276) and the strum tuner (L277) are done. Left: L271c beside them (L271b, WAV in the language, is done); the frets page (L278), L279, C271, C273, C260b and C269 are done. The compiled FFT is about 50 times hand-written JS (a 2048-sample autocorrelation takes 14 ms); C262 measures it.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L271b | Keeping a recording, the rest: WAV written and read in the language (a sound-files module: 16-bit and float PCM, mono and stereo) from a tape without making it a list of every byte, so a few minutes save in a second; the files ops are L271a (DONE). Measured 11-17: `bytes of(map(range(n), f))` compiled takes 3.9 s and 2.7 GB for 10 MB (lists as arrays: 2.0 s, 3.3 GB), and a minute of stereo at 16 bits is 11.5 MB, so it needs Bytes made item by item (by position) that compiles to a buffer, or that pipeline fused; in an app, offer file as the share sheet and ask for file as the system's picker (c.ts) | Ersagun 2026-11-17 | P3 | M |  |
+| L271c | Keeping a recording, minutes of it: the sounds module (L271b, DONE) writes and reads WAV in the language, but slowly. Measured 11-21 compiled to JS: a minute of stereo at 16 bits written in 15.6 s with the tone made (11.5 MB), ten seconds written at 16 and 32 bits and read back in 7.0 s, a minute read back out of memory at 8 GB; garbage collection is 40 to 47% of it, then range, lists made into arrays and worker messages. Wanted: a few minutes saved in a second. Needs `array of(map(range(n), f))` and `bytes of(append(header, map(range(n), f)))` fused into filling a buffer by position, and the read's `map(range(frames), …)` into a Float64Array; in an app, offer file as the share sheet and ask for file as the system's picker (c.ts) | Ersagun 2026-11-17 | P3 | M |  |
 
 ### Numbers (NUMBERS.md)
 

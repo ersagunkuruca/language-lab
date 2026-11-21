@@ -15,6 +15,10 @@
 //   prebuilt/      the shipped examples compiled ahead (prebuild.ts, E245)
 //   runtimes/      the page and sound runtimes with the solver, read when
 //                  a page that solves asks for them (E280)
+//   library.*.js   the library's JSON, read by the editor and Run's worker
+//                  (E281)
+//   example-files/ the example programs, a file a folder, read when one is
+//                  opened (E282)
 //   checks.json    the library's checks a fresh page reads (keptChecks.ts,
 //                  I213)
 //   apps/*.html    web apps written in the language (the programs
@@ -33,7 +37,7 @@ import { infer } from "../ters/src/lang/infer.ts";
 import { loadProgram } from "../ters/src/lang/load.ts";
 import { represented } from "../ters/cli/represented.ts";
 import { representationsIn } from "../ters/src/lang/represent.ts";
-import { examplesPlugin, exampleTags, type Manifest } from "./examplesPlugin.ts";
+import { examplesPlugin, exampleFiles, type Manifest } from "./examplesPlugin.ts";
 import { shadersBuilt } from "./shadersBuilt.ts";
 import { prebuild } from "./prebuild.ts";
 
@@ -53,8 +57,21 @@ for (const f of [...sources(site + "ters/src"), ...sources(site + "ters/library"
 const CHECKS_KEY = JSON.stringify(checksKey.digest("hex").slice(0, 16));
 // The worker Run uses (editor/runWorker.ts), as text the editor starts. It
 // reads the checks the page kept, under the same name.
-const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { CHECKS_KEY } });
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CORE_PAGE_PLAIN_RUNTIME: '""', CORE_WORKLET_PLAIN_RUNTIME: '""', CHECKS_KEY } });
+// The library's JSON (ters/library/*.json, 7 MB) once, as a file of its
+// own the editor and Run's worker both read (E281): it was in each of
+// their scripts. In the bundles each import of one reads `self.labLibrary`,
+// which library.<hash>.js sets before the editor's script runs; the worker
+// is given it ahead of its own script (runViews.ts newWorker).
+const shared = new Map<string, string>();
+const sharedLibrary = { name: "shared-library", setup(b: { onLoad: (o: { filter: RegExp }, f: (a: { path: string }) => { contents: string; loader: "js" }) => void }) {
+  b.onLoad({ filter: /[\\/]ters[\\/]library[\\/][^\\/]+\.json$/ }, (a) => {
+    const name = a.path.split(/[\\/]/).pop()!.replace(/\.json$/, "");
+    shared.set(name, a.path);
+    return { contents: `export default self.labLibrary[${JSON.stringify(name)}];`, loader: "js" };
+  });
+} };
+const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [sharedLibrary], define: { CHECKS_KEY } });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page"), sharedLibrary], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CORE_PAGE_PLAIN_RUNTIME: '""', CORE_WORKLET_PLAIN_RUNTIME: '""', CHECKS_KEY } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
 // The core IR's page and audio runtimes (E244): Save page prints from the
@@ -72,14 +89,43 @@ const runtimeFile = (id: string, t: string) => {
   writeFileSync(site + name, `labRuntime(${JSON.stringify(id)}, ${JSON.stringify(t)});\n`);
   return `<script type="text/plain" id="${id}" data-src="${name}"></script>\n`;
 };
-const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
-const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
+// The examples, a file a folder, read when opened (E282, exampleFiles.ts).
+// Before the editor's script, the page reads those its first drawing asks
+// for: the program it reopens (main.ts STORE's `current`, written first),
+// one a link asks for (`?program=`), and the first example, which main.ts
+// makes before either. document.write, so they run before the script.
+rmSync(site + "example-files", { recursive: true, force: true });
+mkdirSync(site + "example-files");
+const files = exampleFiles(manifest, (name, t) => writeFileSync(site + name, t));
+const folders = Object.fromEntries(manifest.programs.filter((p) => p.editor !== false && p.folders?.length).map((p) => [p.program, p.folders]));
+const first = manifest.programs.find((p) => p.editor !== false)!.program;
+const exampleStart = `<script type="application/json" id="lab-example-files">${JSON.stringify(files)}</script>
+<script>(() => {
+  const files = ${JSON.stringify(files)}, folders = ${JSON.stringify(folders)};
+  const want = [${JSON.stringify(first)}, "numbers"];
+  try { const m = /^\\{"current":("(?:[^"\\\\]|\\\\.)*")/.exec((localStorage.getItem("projectional-editor-v5") ?? "").slice(0, 400)); if (m) want.push(JSON.parse(m[1])); } catch {}
+  const asked = new URLSearchParams(location.search).get("program"); if (asked) want.push(asked);
+  self.labExamples = {}; self.labExample = (f, t) => { self.labExamples[f] = t; };
+  for (const f of new Set(want.flatMap((p) => folders[p] ?? []))) if (files[f]) document.write('<script src="' + files[f] + '"><\\/script>');
+})();</script>
+`;
+const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleStart;
+// The text kept beside the parsed library, for the worker (newWorker).
+const libraryText = JSON.stringify(Object.fromEntries([...shared].sort().map(([k, f]) => [k, JSON.parse(readFileSync(f, "utf8"))])));
+const libraryName = `library.${createHash("sha1").update(libraryText).digest("hex").slice(0, 12)}.js`;
+for (const f of readdirSync(site)) if (/^library\.[0-9a-f]+\.js$/.test(f)) rmSync(site + f);
+writeFileSync(site + libraryName, `self.labLibraryText=${JSON.stringify(libraryText)};self.labLibrary=JSON.parse(self.labLibraryText);\n`);
+const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script src="${libraryName}"></script>\n<script>${js}</script>`);
 // page.html is the head's tags and styles, then the body from its first
 // element on. The title and icon go in <head>: Chromium reads an icon link in
 // the body too late and asks for /favicon.ico, which the site doesn't have (I306).
 const bodyAt = page.indexOf("</style>\n") + "</style>\n".length;
 const icon = /<link rel="icon"[^>]*>/.exec(page)?.[0] ?? "";
-writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${page.slice(0, bodyAt)}</head>\n<body>\n${page.slice(bodyAt)}</body>\n</html>\n`);
+// The files the editor's script waits for, asked for from the head: their
+// tags come after the 4 MB of the page, where the browser would find them
+// only once the page had arrived (E282).
+const preloads = [libraryName, ...(folders[first] ?? []).map((f) => files[f]).filter(Boolean)].map((src) => `<link rel="preload" href="${src}" as="script">\n`).join("");
+writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${page.slice(0, bodyAt)}${preloads}</head>\n<body>\n${page.slice(bodyAt)}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 // What a fresh page would check of the library first, made in a process
 // of its own (keptChecks.ts, I213).

@@ -14,7 +14,7 @@
 
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { nodesOfKindIn, conditionResults, directionOf, fieldWayOf, portNames, isUse, useTarget, isCall, type Call, bindsOf, copyNodes, dropNode, nodeValues, withNodes } from "../model.ts";
-import { children, collect, freshId, nodesWhere, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
+import { children, collect, freshId, layerOf, nodesWhere, offLayer, ownerOfTypeParts, parentAt, parentOf, replace, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { cantStep, stepsOf } from "./steps.ts";
@@ -83,8 +83,22 @@ function scopesWith(code: Code, def: Id, binder: Id): Id[] {
 // keeps, so a program read on its layer (scanningOnLayer) reads the
 // library's once (I167).
 const picks = <T extends Node>(code: Code, kind: string, keep: (n: Node) => n is T): T[] => nodesWhere(code, kind, keep).map((id) => code.nodes[id] as T);
-const refsTo = (code: Code, target: Id) => picks(code, "toplevel: ref", (n): n is NodeOf<"ref"> => n.kind === "ref").filter((n) => n.target === target);
-const callsOf = (code: Code, target: Id) => picks(code, "toplevel: call", isCall).filter((n) => {
+// What names the program's own definition or input, on the library's
+// layer: only the program's own nodes (and a library node it changed,
+// which is one of them) can, as the layer's name only the layer's. So
+// those are all that are looked at, not every ref or call of the library
+// (E284: each of the inspector's input rows took about 60 ms for the
+// three, at every drawing).
+const ownOnly = <T extends Node>(code: Code, target: Id, keep: (n: Node) => n is T): T[] | null => {
+  const layer = layerOf(code), own = layer && !layer.nodes[target] ? offLayer(code) : undefined;
+  if (!own) return null;
+  const out: T[] = [];
+  for (const id of own) { const n = code.nodes[id]; if (n && keep(n)) out.push(n); }
+  return out;
+};
+const isRef = (n: Node): n is NodeOf<"ref"> => n.kind === "ref";
+const refsTo = (code: Code, target: Id) => (ownOnly(code, target, isRef) ?? picks(code, "toplevel: ref", isRef)).filter((n) => n.target === target);
+const callsOf = (code: Code, target: Id) => (ownOnly(code, target, isCall) ?? picks(code, "toplevel: call", isCall)).filter((n) => {
   if (n.fn === target) return true;
   const f = code.nodes[n.fn];
   return f?.kind === "ref" && f.target === target;
@@ -197,7 +211,7 @@ const lambdaOf = (code: Code, def: Id): NodeOf<"lambda"> | null => {
 };
 
 // The solves that run `def` backwards.
-const solvesOf = (code: Code, def: Id) => picks(code, "toplevel: use", isUse).filter((n) => useTarget(code.nodes, n) === def);
+const solvesOf = (code: Code, def: Id) => (ownOnly(code, def, isUse) ?? picks(code, "toplevel: use", isUse)).filter((n) => useTarget(code.nodes, n) === def);
 
 export function addParameter(code: Code, names: Names, def: Id, rawName: string): Top {
   const d = code.nodes[def] as NodeOf<"def">;

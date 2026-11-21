@@ -24,7 +24,21 @@ declare const RUN_WORKER: string; // editor/runWorker.ts bundled, put in by edit
 // once, here (E204): three uses of the worker carried its 3 MB three times.
 // (Its blob's address kept on the function, which is there before any
 // line of this file runs.)
-export function newWorker(): Worker { const f = newWorker as { url?: string }; return new Worker(f.url ??= URL.createObjectURL(new Blob([runtimeText("lab-run-worker") || RUN_WORKER], { type: "text/javascript" }))); }
+// The site's build gives the worker the library the page read
+// (build.ts, E281): its script reads `self.labLibrary`. Over http the
+// worker reads the library's file itself, from the browser's cache; from
+// file://, where it can't, it's given the page's text, which costs the
+// editor's thread about 0.1 s to put in (E281b).
+export function newWorker(): Worker {
+  const f = newWorker as { url?: string };
+  return new Worker(f.url ??= URL.createObjectURL(new Blob([...libraryFor(), runtimeText("lab-run-worker") || RUN_WORKER], { type: "text/javascript" })));
+}
+function libraryFor(): string[] {
+  const src = typeof document === "object" ? document.querySelector<HTMLScriptElement>('script[src^="library."]')?.src : undefined;
+  if (src && /^https?:/.test(src)) return [`importScripts(${JSON.stringify(src)});\n`];
+  const lib = (globalThis as { labLibraryText?: string }).labLibraryText;
+  return lib ? ["self.labLibrary=JSON.parse(", JSON.stringify(lib), ");\n"] : [];
+}
 // The site's page keeps them as text elements instead (build.ts, E204), so
 // the script it parses before the first drawing is 8 MB shorter. The two
 // with the solver are files of their own (E280): their element names the

@@ -789,6 +789,14 @@ A Tuning is its first step's pitch, its steps in cents within a period, and thei
 - **step pitch** : `(Tuning, Int, Int) -> Float64` (tunings module). The pitch of a step in an octave (C4's octave is 4).
 - **nearest step** : `(Tuning, Float64) -> Reading` (tunings module). What a tuner says about a pitch heard: the nearest step, its octave, how many cents off, and the pitch it should be.
 
+## Sound files
+
+A Sound is its rate and each channel's samples. wav of writes one as a WAV file's bytes, 16-bit PCM or 32-bit float; sound of wav reads either back, any number of channels.
+
+- **Sound** (type) (sounds module). A sound: how many samples a second it plays, and each channel's samples (one for mono, left and right for stereo), −1 to 1.
+- **wav of** : `(Sound, Int) -[Abort]-> Bytes` (sounds module). A sound as a WAV file's bytes: 16-bit PCM, or 32-bit float when bits is 32. Channels interleaved, the rate as a whole number; 16-bit samples outside −1 to 1 are clipped. WAV is Microsoft and IBM's RIFF format (1991).
+- **sound of wav** : `(Bytes) -[Choice, Diverge]-> Sound` (sounds module). The sound in a WAV file's bytes: 16-bit PCM or 32-bit float, any number of channels, chunks other than fmt and data passed over. No answer for bytes that aren't one.
+
 ## Points, colours and slopes
 
 A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.
