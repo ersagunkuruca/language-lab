@@ -14,6 +14,7 @@ import { buildCases } from "../src/lang/cases-source.ts";
 import { buildNumbers } from "../src/lang/numbers-source.ts";
 import { buildSignals } from "../src/lang/signals-source.ts";
 import { buildTunings } from "../src/lang/tunings-source.ts";
+import { buildSoundFiles } from "../src/lang/sound-files-source.ts";
 import { verify, type Module } from "../src/lang/modules.ts";
 
 export interface Built { name: string; module: Module; line: string }
@@ -35,6 +36,7 @@ export function buildModules(): Built[] {
   add("numbers", nu, [prelude, std, m.code]);
   add("signals", buildSignals(m, nu), [prelude, std, m.code, nu.code]);
   add("tunings", buildTunings(m, nu), [prelude, std, m.code, nu.code]);
+  add("sounds", buildSoundFiles(m), [prelude, std, m.code]);
   const t = buildTreesModule(m);
   add("trees", t, [prelude, std, m.code], `${t.representations!.length} representations`);
   return out;

@@ -231,6 +231,15 @@ real program.
   function from a pair and the rate to a pair. A mono input comes in on
   both; `ters render` reads a WAV file's first two channels and writes
   two. A native app doesn't play one yet: it says so.
+- **Sound files in the language (L271b).** The sounds module's `Sound`
+  is a rate and its channels' samples; `wav of(sound, bits)` gives a WAV
+  file's bytes (16-bit PCM, or 32-bit float when bits is 32) and
+  `sound of wav(bytes)` reads one back (either kind, any number of
+  channels, chunks other than fmt and data passed over), with `write
+  bytes` or `offer file` beside them. A Float32 comes back as it went
+  out, a 16-bit sample within half a step. `examples/wav-file` writes a
+  chord and reads it back. Fast enough for seconds, not yet minutes:
+  L271c.
 - **Played while a cell says so (I336).** A listen starts when its
   element is clicked and stops when it's clicked again. With
   `listening while(on)` beside it, it plays while the cell `on` holds

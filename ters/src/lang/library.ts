@@ -11,6 +11,7 @@ import cases0 from "../../library/cases.json" with { type: "json" };
 import numbers0 from "../../library/numbers.json" with { type: "json" };
 import signals0 from "../../library/signals.json" with { type: "json" };
 import tunings0 from "../../library/tunings.json" with { type: "json" };
+import sounds0 from "../../library/sounds.json" with { type: "json" };
 import { readSaved } from "../saved.ts";
 import { merge, shapeHooks, type Code, type Id, nodeEntries, nodeIds } from "../model.ts";
 import { fillLater, usesGiveTheirPorts } from "./ports.ts";
@@ -59,7 +60,9 @@ export const MAT_V = { 2: numbersNode("variant", "mat2"), 3: numbersNode("varian
 export const SIGNALS = readSaved(signals0) as unknown as Module;
 // Tunings, cents and a tuner's reading (tunings-source.ts, L273).
 export const TUNINGS = readSaved(tunings0) as unknown as Module;
-export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS, SIGNALS, TUNINGS];
+// A sound as a WAV file and back (sound-files-source.ts, L271b).
+export const SOUNDS = readSaved(sounds0) as unknown as Module;
+export const MODULES: Module[] = [PRELUDE, VECTORS, HTML_MODULE, TREES, STEADY, CASES, NUMBERS, SIGNALS, TUNINGS, SOUNDS];
 export const CORE: Code = merge(prelude, std);
 // Every program is checked on top of the library, so the trees (about
 // 1,500 nodes nobody edits) aren't in it: they're merged in only when a
