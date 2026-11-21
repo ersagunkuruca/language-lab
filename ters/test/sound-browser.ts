@@ -12,7 +12,7 @@
 // page reads G and the cents from the samples the audio thread sends back.
 // Then examples/looper (L276): its microphone hears the speakers 50 ms
 // late, as a microphone held to them does; Measure, before Start, starts
-// the sound and finds that round trip,
+// the sound, finds that round trip and stops the sound again,
 // the same again, and says a round trip changing under it is unsteady;
 // stopped, it stays stopped, and started again it moves at its pace;
 // a pass records a tone, the track plays it back, and Undo takes it away
@@ -240,7 +240,7 @@ try {
   const button = (label: string) => `[...document.querySelectorAll("button")].find((b) => b.textContent === ${JSON.stringify(label)})`;
   const until = async (what: string, test: string, ms = 10000) => {
     for (let t = 0; t < ms; t += 100) { if (await run<boolean>(test)) return; await new Promise((r) => setTimeout(r, 100)); }
-    throw new Error(`the looper: ${what} didn't happen`);
+    throw new Error(`the looper: ${what} didn't happen (${await run<string>(`document.querySelector(".figures")?.textContent`)})`);
   };
   // Measure before Start starts the sound it needs, and Start says Stop.
   await run(`${button("Measure")}.click()`);
@@ -249,6 +249,8 @@ try {
   await until("the measurement", `/Round trip [0-9]/.test(document.querySelector(".figures").textContent)`);
   const trip = await run<number>(`parseFloat(/Round trip ([0-9.]+)/.exec(document.querySelector(".figures").textContent)[1])`);
   check("the looper measures the round trip through its speakers and microphone", trip >= 50 && trip < 150, { trip });
+  // The sound Measure started stops when it's done (I338).
+  await until("stopping", `document.querySelector("button.start").textContent === "Start"`);
   // Measured again, the same to a tenth of a millisecond or so; and a
   // way from speaker to microphone that changes between the chirps
   // (a noise taken for one, or a device's buffer slipping) is no round
@@ -266,6 +268,8 @@ try {
   await run(`window.back.delayTime.value = 0.05`);
   check("a round trip that keeps changing is said to be unsteady, with each chirp's", /unsteady \([0-9.]+ ms, [0-9.]+ ms, [0-9.]+ ms\)/.test(unsteady), { unsteady });
   await measure();
+  await run(`document.querySelector("button.start").click()`);
+  await until("playing", `document.querySelector("button.start").dataset.playing === "true"`);
   // The loop a second long (a bar of 4 at 240), with no click to record.
   await run(`(() => { ${button("Measured")}.click(); ${button("Click")}.click(); })()`);
   await run(`(() => { const [tempo, beats, bars] = document.querySelectorAll(".field input"); for (const [f, v] of [[tempo, "240"], [beats, "4"], [bars, "1"]]) { f.value = v; f.dispatchEvent(new Event("input")); } })()`);
@@ -275,6 +279,8 @@ try {
     for (let i = 0; i < 20; i++) { await new Promise((r) => setTimeout(r, 20)); a.getFloatTimeDomainData(buf); for (const x of buf) { s += x * x; n++; } }
     return Math.sqrt(s / n);
   })()`);
+  // What the click already sent out (started just now) dies away first.
+  await new Promise((r) => setTimeout(r, 300));
   const silent = await loudness();
   await run(`(() => { window.tone.gain.value = 0.3; ${button("Record")}.click(); })()`);
   await until("recording", `!!${button("Recording")}`);
