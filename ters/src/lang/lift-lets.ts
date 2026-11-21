@@ -141,7 +141,27 @@ export function typedAsBodies(code: Code, typeOf: Map<Id, Type>, schemes: Map<Id
     if (n?.kind !== "def" || !n.body || !sc || skip.has(d)) continue;
     const got = typeOf.get(n.body), bt = got && zonk(got);
     if (!bt || valueVar(bt) || JSON.stringify(bt) === JSON.stringify(sc.type)) continue;
-    schemes.set(d, { ...sc, vars: [], type: bt });
+    // Its rows are the body's, each its own for every use as the
+    // definition's were: the scheme's rows named the definition's type's,
+    // and every use of the body's shared one (a library `<` resolved at
+    // Float64: every definition comparing numbers one group to the
+    // check's cache, none kept). What was said of its variables goes with
+    // them.
+    const { effectsAt: _, subs, ...rest } = sc;
+    const rows = rowsIn(bt);
+    const kept = subs?.filter(([a, b]) => rows.includes(a) && rows.includes(b));
+    schemes.set(d, { ...rest, vars: [], rows, type: bt, ...(kept?.length ? { subs: kept } : {}) });
     typeOf.set(d, bt);
   }
 }
+
+const rowsIn = (t: Type, out: number[] = []): number[] => {
+  if (t.t === "con") for (const a of t.args) rowsIn(a, out);
+  else if (t.t === "fn") {
+    if (t.eff.tail !== null && !out.includes(t.eff.tail)) out.push(t.eff.tail);
+    for (const p of t.params) rowsIn(p, out);
+    rowsIn(t.ret, out);
+    for (const xs of Object.values(t.eff.args ?? {})) for (const x of xs) rowsIn(x, out);
+  }
+  return out;
+};
