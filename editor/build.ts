@@ -13,6 +13,8 @@
 //   shaders.html   a program compiled to WGSL, drawn by WebGPU
 //                  (editor/shaders.ts)
 //   prebuilt/      the shipped examples compiled ahead (prebuild.ts, E245)
+//   runtimes/      the page and sound runtimes with the solver, read when
+//                  a page that solves asks for them (E280)
 //   checks.json    the library's checks a fresh page reads (keptChecks.ts,
 //                  I213)
 //   apps/*.html    web apps written in the language (the programs
@@ -20,7 +22,7 @@
 //                  each one file built like `ters build-web` (WEB.md)
 
 import { build } from "../ters/node_modules/esbuild/lib/main.js";
-import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { statSync } from "node:fs";
@@ -57,7 +59,20 @@ const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
 // The core IR's page and audio runtimes (E244): Save page prints from the
 // core IR, and a page with sound plays in the preview.
-const data = text("lab-core-page-runtime", await corePageRuntime()) + text("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
+// The two with the solver, 7.5 MB each, are files of their own, read when
+// a page that solves asks for them (E280): in the page they were most of
+// what a visit downloaded and parsed before the first drawing. Each is a
+// script that hands its text over (runViews.ts loadRuntime), so it loads
+// from a file:// page too, and is named by its content, so a browser keeps
+// it across deploys that don't change it.
+mkdirSync(site + "runtimes", { recursive: true });
+for (const f of readdirSync(site + "runtimes")) if (f.endsWith(".js")) rmSync(site + "runtimes/" + f);
+const runtimeFile = (id: string, t: string) => {
+  const name = `runtimes/${id.replace(/^lab-core-/, "")}.${createHash("sha1").update(t).digest("hex").slice(0, 12)}.js`;
+  writeFileSync(site + name, `labRuntime(${JSON.stringify(id)}, ${JSON.stringify(t)});\n`);
+  return `<script type="text/plain" id="${id}" data-src="${name}"></script>\n`;
+};
+const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
 const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
 // page.html is the head's tags and styles, then the body from its first
 // element on. The title and icon go in <head>: Chromium reads an icon link in

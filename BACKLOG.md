@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | no open row (E279a done; E279b and E279c closed, Ersagun 2026-11-21) |
+| E Editor | "Speed up editor startup" | E281, E282, E283 (E280 done) |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -74,6 +74,9 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E281 | Ship the library once: its JSON (7 MB of ters/library/*.json) is bundled into both the editor's script (9.1 MB) and Run's worker (8.4 MB). Make it one file named by its content that both read, so a visit downloads and parses it once and a deploy that doesn't change the library keeps it cached | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?"); measured 2026-11-21 (E280's PR) | P1 | M | |
+| E282 | Read an example program when it's picked: every example's JSON is in index.html (about 11 MB, the largest 0.6 MB), though one is open at a time | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?") | P1 | M | |
+| E283 | Warm-ups after the editor can be clicked: Run's worker start, warmParents, warmRun and warmCalls keep the page busy until about 4 to 5 s after load, so early clicks wait. Start them when the page is idle, after the first drawing, and measure the first click | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?") | P2 | S | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

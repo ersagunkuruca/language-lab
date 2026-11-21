@@ -369,8 +369,17 @@ export function savedPageFile(title: string, s: SavedScripts, runtime: Runtime, 
 // The audio thread's script for it: `runtime` is coreWorkletRuntime.
 export const coreWorkletFile = (runtime: Runtime, ir: CoreIR, name: string): string => {
   const script = coreSoundScript(ir, name, "$core");
-  return `${pageRuntime(runtime, script)}\n${script}`;
+  const rt = pageRuntime(runtime, script);
+  if (!rt) throw new NeedsSolver("worklet");
+  return `${rt}\n${script}`;
 };
+// A script that solves was given a runtime whose build with the solver
+// isn't read yet (the editor reads it when asked, E280): read it, then
+// try again.
+export class NeedsSolver extends Error {
+  readonly which: "page" | "worklet";
+  constructor(which: "page" | "worklet") { super(`the ${which} runtime with the solver isn't read yet`); this.which = which; }
+}
 // The same for the preview's page (showPage), or why main isn't compiled
 // through the core IR.
 // Its lists stored as `ters build-web` stores them (C197): a page splits,
