@@ -121,7 +121,11 @@ const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*
 // the body too late and asks for /favicon.ico, which the site doesn't have (I306).
 const bodyAt = page.indexOf("</style>\n") + "</style>\n".length;
 const icon = /<link rel="icon"[^>]*>/.exec(page)?.[0] ?? "";
-writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${page.slice(0, bodyAt)}</head>\n<body>\n${page.slice(bodyAt)}</body>\n</html>\n`);
+// The files the editor's script waits for, asked for from the head: their
+// tags come after the 4 MB of the page, where the browser would find them
+// only once the page had arrived (E282).
+const preloads = [libraryName, ...(folders[first] ?? []).map((f) => files[f]).filter(Boolean)].map((src) => `<link rel="preload" href="${src}" as="script">\n`).join("");
+writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${page.slice(0, bodyAt)}${preloads}</head>\n<body>\n${page.slice(bodyAt)}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
 // What a fresh page would check of the library first, made in a process
 // of its own (keptChecks.ts, I213).
