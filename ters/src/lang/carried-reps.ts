@@ -9,7 +9,7 @@
 // `TERS_VERIFY_REPS` has the verifier vouch for every node (the tests);
 // `TERS_RECHECK` checks the program again instead.
 
-import { dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
+import { dependencies, dependenciesOfAll, subtree, type Code, type Id } from "../model.ts";
 import { infer, type Info } from "./infer.ts";
 import { base, baseNames, checkOptions } from "./base.ts";
 import { TREES } from "./library.ts";
@@ -33,8 +33,20 @@ export function carriedChoice(code: Code, info: Info, next: Code, reps: Represen
   // types is carried stored as its row's.
   const rewritten = [...defs.filter((d) => next.nodes[d])];
   const own = new Set(defs);
-  for (const d of dependenciesOfAll(next, defs)) if (was.has(d) && !own.has(d) && next.nodes[d]?.kind === "def" && subtree(next, d).some((id) => next.nodes[id] !== code.nodes[id])) rewritten.push(d);
   const as = new Map(reps.map((r) => [r.of, r.type]));
+  // And those whose type names a stored type though no node of theirs
+  // changed: one that only passes its Bytes on to another that reads
+  // them by position (sound of wav's `sample at`, L271b) takes what that
+  // one takes now. Not a row's own code, which the rewrite left on the
+  // type it stands for (represent.ts `own`).
+  const rowOwn = new Set<Id>();
+  for (const r of reps) for (const d of [...Object.values(r.impl), r.meaning, r.store, r.literal]) if (d) { rowOwn.add(d); for (const x of dependencies(next, d)) rowOwn.add(x); }
+  const names = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? as.has(t.id) || t.args.some(names) : t.t === "fn" ? [...t.params, t.ret].some(names) : false; };
+  for (const d of dependenciesOfAll(next, defs)) {
+    if (!was.has(d) || own.has(d) || next.nodes[d]?.kind !== "def") continue;
+    const sc = info.schemes.get(d);
+    if (subtree(next, d).some((id) => next.nodes[id] !== code.nodes[id]) || (!rowOwn.has(d) && sc && names(sc.type))) rewritten.push(d);
+  }
   const stored = (t: Type): Type => {
     t = info.subst.zonk(t);
     if (t.t === "var") return t;

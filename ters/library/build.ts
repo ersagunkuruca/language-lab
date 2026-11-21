@@ -37,10 +37,10 @@ const before = (file: string): Record<string, string> => {
   const old = JSON.parse(readFileSync(join(here, file), "utf8")) as { code: { defs: string[] }; names: Record<string, string> };
   return Object.fromEntries(old.code.defs.map((d) => [old.names[d] ?? d, d]));
 };
-const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json"), ...before("steady.json"), ...before("cases.json"), ...before("numbers.json"), ...before("signals.json"), ...before("tunings.json") };
+const oldIds = { ...before("prelude.json"), ...before("vectors.json"), ...before("html.json"), ...before("steady.json"), ...before("cases.json"), ...before("numbers.json"), ...before("signals.json"), ...before("tunings.json"), ...before("sounds.json") };
 
 const built = buildModules();
-const [m, v, h, st, cs, nu, sg, tu] = ["prelude", "vectors", "html", "steady", "cases", "numbers", "signals", "tunings"].map((k) => built.find((b) => b.name === k)!.module);
+const [m, v, h, st, cs, nu, sg, tu, so] = ["prelude", "vectors", "html", "steady", "cases", "numbers", "signals", "tunings", "sounds"].map((k) => built.find((b) => b.name === k)!.module);
 for (const b of built) {
   save(join(here, `${b.name}.json`), b.module);
   console.log(b.line);
@@ -56,7 +56,7 @@ if (check) {
 
 // Definitions whose content changed: old id to new, by name.
 const newIds: Record<string, string> = {};
-for (const mod of [m, v, h, st, cs, nu, sg, tu]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
+for (const mod of [m, v, h, st, cs, nu, sg, tu, so]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
 const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old ? [[old, newIds[name]] as const] : []));
 // A saved program refers to library definitions by id, so one whose content
 // changed keeps opening: its old id is read as the new one (moved.json, read

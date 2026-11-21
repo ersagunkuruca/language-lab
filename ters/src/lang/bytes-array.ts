@@ -20,7 +20,7 @@
 
 import type { Id } from "../model.ts";
 import type { Lang } from "./dsl.ts";
-import { ARRAY_OPS, BYTES_V, COST, JOBS, REPRESENTATION_V, S, SHOW_ANY, COMPARE } from "./std.ts";
+import { ABORT_OP, ARRAY_OPS, BYTES_V, COST, INT_OPS, JOBS, REPRESENTATION_V, S, SHOW_ANY, COMPARE } from "./std.ts";
 import { ARRAY, INT } from "./types.ts";
 
 export interface ByteArray { representations: Id[]; defs: Id[] }
@@ -52,6 +52,16 @@ export function buildByteArray(k: Lang, prelude: (name: string) => Id): ByteArra
   // them, given the meaning.
   const giving = (name: string, params: string[]) => def(`byte array ${name}`, params, (...xs) => k.call(store, k.call(prelude(name), ...xs)));
   const taking = (name: string) => def(`byte array ${name}`, ["byte array"], (b) => k.call(prelude(name), k.call(meaning, b)));
+  // `bytes of` stored first and checked on the array by position, so no
+  // walk of the list it was given beyond the one that stores it.
+  const everyByte = k.def("byte array every byte from");
+  k.define(everyByte, k.fn(["array", "position"], (a, i) => k.if(k.equal(i, k.call(ARRAY_OPS.length, a)), k.true,
+    k.if(k.call(prelude("is byte"), k.call(S.first, k.thunk(() => k.call(ARRAY_OPS.at, a, i)), k.thunk(() => k.int(-1)))),
+      k.call(everyByte, a, k.call(INT_OPS.add, i, k.int(1))), k.false))));
+  defs.push(everyByte);
+  const bytesOf = def("byte array bytes of", ["items"], (xs) => k.let("array", k.call(ARRAY_OPS.of, xs), (a) =>
+    k.if(k.call(everyByte, a, k.int(0)), k.call(V, a),
+      k.call(ABORT_OP, k.lit("bytes of: every item is a byte, a whole number from 0 to 255")))));
   const equal = def("byte array equal", ["a", "b"], (a, b) => k.call(S.equal, items(a), items(b)));
   const show = def("byte array show", ["byte array"], (b) => k.call(SHOW_ANY, k.call(meaning, b)));
   const compare = def("byte array compare", ["a", "b"], (a, b) => k.call(COMPARE, k.call(meaning, a), k.call(meaning, b)));
@@ -67,7 +77,7 @@ export function buildByteArray(k: Lang, prelude: (name: string) => Id): ByteArra
     job("byte count", count, constant),
     job("byte at", at, constant),
     job("byte items", byteItems, linear),
-    job("bytes of", giving("bytes of", ["items"]), linear),
+    job("bytes of", bytesOf, linear),
     job("utf8 of", giving("utf8 of", ["text"]), linear),
     job("bytes of base64", giving("bytes of base64", ["text"]), linear),
     job("bytes of hex", giving("bytes of hex", ["text"]), linear),

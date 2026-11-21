@@ -11,7 +11,7 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Id } from "../src/model.ts";
 import { infer } from "../src/lang/infer.ts";
-import { CASES, HTML_MODULE, LIBRARY, NUMBERS, PRELUDE, SIGNALS, STEADY, TUNINGS, VECTORS } from "../src/lang/library.ts";
+import { CASES, HTML_MODULE, LIBRARY, NUMBERS, PRELUDE, SIGNALS, SOUNDS, STEADY, TUNINGS, VECTORS } from "../src/lang/library.ts";
 import { checkOptions } from "../src/lang/load.ts";
 import type { Module } from "../src/lang/modules.ts";
 import { DIVIDE, SIGS, std } from "../src/lang/std.ts";
@@ -25,7 +25,7 @@ const of = (...ms: Module[]) => (...names: string[]): Id[] => names.map((name) =
   if (!d) throw new Error(`${name} isn't in the ${ms.map((m) => m.title).join(" or ")} module`);
   return d;
 });
-const prelude = of(PRELUDE, NUMBERS), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY), cases = of(CASES), signals = of(SIGNALS), tunings = of(TUNINGS);
+const prelude = of(PRELUDE, NUMBERS), vectors = of(VECTORS), html = of(HTML_MODULE), steady = of(STEADY), cases = of(CASES), signals = of(SIGNALS), tunings = of(TUNINGS), sounds = of(SOUNDS);
 // Rational's and Fixed's `as float64`, the one name (L156), in that order.
 // (Both in the numbers module, L207e and L207f4.)
 const [ratioAsFloat, fixedAsFloat] = NUMBERS.exports.filter((e) => LIBRARY.names[e] === "as float64");
@@ -107,6 +107,8 @@ export const SECTIONS: Section[] = [
     ids: signals("fft", "inverse fft", "spectrum", "hann window", "hann windowed", "autocorrelation", "cross correlation", "peaks", "parabola peak offset", "power of two at least", "padded to") },
   { title: "Tunings", intro: "A Tuning is its first step's pitch, its steps in cents within a period, and their names: 12, 24 or 53 equal steps (53 named in commas, as Turkish theory counts them), just intonation by Rationals, or a Scala .scl file. nearest step says what a tuner reads off a pitch.",
     ids: tunings("Tuning", "Reading", "cents between", "cents above", "equal temperament", "twelve tone", "quarter tones", "fifty three tone", "just intonation", "scala tuning", "with reference", "step pitch", "nearest step") },
+  { title: "Sound files", intro: "A Sound is its rate and each channel's samples. wav of writes one as a WAV file's bytes, 16-bit PCM or 32-bit float; sound of wav reads either back, any number of channels.",
+    ids: sounds("Sound", "wav of", "sound of wav") },
   { title: "Points, colours and slopes", intro: "A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.",
     ids: [...b("mapParts", "zipParts", "total", "set", "fields.mapped", "fields.listed", "derivative", "gradient"), ...vectors("plus", "minus", "times", "scale", "dot", "magnitude", "distance", "unit", "mix", "clamp", "reflect")] },
 ];
