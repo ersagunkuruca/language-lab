@@ -134,9 +134,9 @@ never picks it by cost, and the shader target asks for it.
    as(binary)`, was built in #681 and taken out in the PR after it.
    Programs say which representations exist and what they cost, never
    which one a value gets. Since 2026-11-20 the choices are kept in a
-   schedule beside the program, which the compiler writes and a person may
+   file beside the program, which the compiler writes and a person may
    tune, one implementation of the same meaning for another; the code
-   still never selects (SCHEDULE-2026-11-20.md).
+   still never selects (CHOICES-2026-11-20.md).
 4. **L108d, built.** Each job's law through `meaning` is checked by `lab
    test` (src/lang/rep-laws.ts): `meaning(f′(x′, …)) = f(meaning(x′), …)`
    when the job gives a T, `f′(x′, …) = f(meaning(x′), …)` otherwise. The

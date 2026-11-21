@@ -192,15 +192,15 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L280a | Write the compiler's picks to `<program>.schedule` beside the program: representations, ways, mode plans, places, one entry per line sorted by stable id, each with the facts it read; a stale entry is picked again (cache rule). `ters check` and the editor's Program tab read it ([SCHEDULE-2026-11-20](docs/design/data/SCHEDULE-2026-11-20.md)) | Ersagun 2026-11-20 | P2 | L | |
+| L280a | Write the compiler's picks to `<program>.choices` beside the program: representations, ways, mode plans, places, schedules, one entry per line sorted by stable id, each with the facts it read; a stale entry is picked again (cache rule). `ters check` and the editor's Program tab read it ([CHOICES-2026-11-20](docs/design/data/CHOICES-2026-11-20.md)) | Ersagun 2026-11-20 | P2 | L | |
 | L280b | Per-definition summaries (jobs used per type, calls in a loop) kept in `.lab/` by content hash; a pick whose facts come out the same is reused without the chooser (early cutoff). Measured 2026-11-20 (machine, warm ~0.42 s a choice, CPU profile over 13 runs, no check cache): deciding (choose, uses, looped, listBoundary, inPlace, keyed, generic, listGroups, listFree) about 30%, rewriting (represent, splitLists, stable ids) about 23%, checking the rewrite (infer, carriedChoice) about 36%, the passes before it (fuse walks, fold items, holders, reach) about 8%. A saved pick alone skips the 30%; the rest needs the rewritten definitions and their checks kept by hash too | Ersagun 2026-11-20 | P2 | M | |
 | L280c | Held entries: a person holds or changes an entry; the compiler refuses one that isn't an implementation of the same meaning and warns when it would now pick another. Editor gesture in the Program tab | Ersagun 2026-11-20 | P2 | M | |
-| L280d | Measured sizes and call counts from runs written into the schedule and read by the chooser in place of the cost ladder's n | Ersagun 2026-11-20 | P3 | M | |
-| L280e | Parameters on a representation (a grid's cell size, a chunk size, a worker count), chosen by the compiler and kept in the schedule | Ersagun 2026-11-20 | P3 | M | |
-| L280f | Pool as a representation of a collection, so a program writes List or Map and the schedule says pooled (moves the Pool type out of the code) | Ersagun 2026-11-20 | P3 | L | |
+| L280d | Measured sizes and call counts from runs written into the choices and read by the chooser in place of the cost ladder's n | Ersagun 2026-11-20 | P3 | M | |
+| L280e | Parameters on a representation (a grid's cell size, a chunk size, a worker count), chosen by the compiler and kept in the choices | Ersagun 2026-11-20 | P3 | M | |
+| L280f | Pool as a representation of a collection, so a program writes List or Map and the choices say pooled (moves the Pool type out of the code) | Ersagun 2026-11-20 | P3 | L | |
 | L280g | Spatial partitioning as representations of the "pairs nearer than r" job: all pairs as its meaning, grid and tree as implementations, cell size as a parameter. Needs a program that uses it (flock or Night watch) | Ersagun 2026-11-20 | P3 | L | |
-| L280h | Where work runs (C61's GPU, workers or main thread) kept and tunable in the schedule, per loop | Ersagun 2026-11-20 | P3 | M | |
-| L280i | A published library carries its own types' and ways' schedule, keyed by content hash (when sharing needs it) | Ersagun 2026-11-20 | P3 | M | |
+| L280h | Where work runs (C61's GPU, workers or main thread) kept and tunable in the choices, per loop | Ersagun 2026-11-20 | P3 | M | |
+| L280i | A published library carries its own types' and ways' choices, keyed by content hash (when sharing needs it) | Ersagun 2026-11-20 | P3 | M | |
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
