@@ -194,6 +194,11 @@ export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
     const pair = (s: string) => node({ id: at(s), kind: "tref", target: PAIR, args: [block(`${s}.left`), block(`${s}.right`)] });
     return node({ id: at("type"), kind: "tfun", params: [pair("blocks"), num("rate")], result: pair("result"), effects: [SOUND_ROW] });
   }]]],
+  // Beside a listen on the same element (I336): its sound plays while the
+  // cell holds true, which any handler may write (a Stop button reads it
+  // to say Stop, a Measure button starts the sound it needs), and a click
+  // on the element no longer starts and stops it. Its type by fixed ids.
+  ["listening while", [["on", () => node({ id: "std.attribute.listening while.on.type", kind: "tref", target: CELL, args: [node({ id: "std.attribute.listening while.on.item", kind: "tref", target: BOOL, args: [] })] })]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
@@ -330,7 +335,7 @@ tn += 4 + 9 + 16;
 // for the checker's message.
 export const SMART: Record<Id, string> = { [ALGEBRAIC_V]: "as algebraic or square root", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
 for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
-export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", listenStereo: "std.attribute.listen in stereo", paint: "std.attribute.paint", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", listenStereo: "std.attribute.listen in stereo", listeningWhile: "std.attribute.listening while", paint: "std.attribute.paint", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";

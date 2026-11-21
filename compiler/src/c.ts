@@ -1299,6 +1299,11 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const pin = SF2 ? pairOf(SF2.params[0]) : null, pout = SF2 ? pairOf(SF2.result) : null;
     const stereo = !!(SF2 && IN && pin && pout && SF2.params[1] === "f64" && fname.has(SF2.key));
     const sound = mono || stereo;
+    // A `listening while(on)` beside a listen (I336): its cell read after
+    // each event, the sound started or stopped to match.
+    const lw = ci(A, "std.attribute.listening while"), CT = lw >= 0 ? A.cases[lw].fields[0].t : null;
+    const RF = CT && isRecord(CT) && CT.mutable && sname.has(CT.key) ? (CT.fields[0].t as FType) : null;
+    const follow = !!(sound && RF && typeof RF === "object" && "params" in RF && RF.params.length === 0 && fname.has(RF.key));
     // A canvas's paint (G2): its function's marks, each as numbers and
     // texts the host reads (ters_host's marks).
     const pa = ci(A, "std.attribute.paint"), MF = pa >= 0 ? (A.cases[pa].fields[0].t as FType) : null;
@@ -1510,7 +1515,7 @@ ${sound ? `// A page's sound (C217, AUDIO.md): each listen main put on an elemen
 #include <string.h>
 #define TERS_BLOCK 128
 #define TERS_SOUND_H (1 << 24)
-typedef struct ters_snd { lab_cell *play; void *view; int mic, on, at, handler, stereo; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK], in2[TERS_BLOCK], out2[TERS_BLOCK]; float *rec, *rec2; size_t rn, rp; double rate, sq_in, sq_out, sq_by, heard_in, heard_out, heard_by; long counted; int heard; char said[200]; } ters_snd;
+typedef struct ters_snd { lab_cell *play, *when; void *view; int mic, on, at, handler, stereo; char *address; size_t an; float in[TERS_BLOCK], out[TERS_BLOCK], in2[TERS_BLOCK], out2[TERS_BLOCK]; float *rec, *rec2; size_t rn, rp; double rate, sq_in, sq_out, sq_by, heard_in, heard_out, heard_by; long counted; int heard; char said[200]; } ters_snd;
 static ters_snd *ters_snds;
 static int ters_nsnd;
 // What went wrong with sound n, once for each reason: on stderr, and on
@@ -1712,7 +1717,7 @@ static void ters_snd_toggle(int k) {
 // A listen on element m (in stereo or not), its input to and block
 // function play: its sound, started by a tap (a click handler of its
 // own runs too).
-static void ters_snd_add(ters_m *m, lab_cell *to, lab_cell *play, int stereo) {
+static void ters_snd_add(ters_m *m, lab_cell *to, lab_cell *play, int stereo, lab_cell *when) {
   ters_snds = realloc(ters_snds, sizeof *ters_snds * (size_t)(ters_nsnd + 1));
   if (!ters_snds) lab_oom();
   ters_snd *s = &ters_snds[ters_nsnd];
@@ -1723,10 +1728,26 @@ static void ters_snd_add(ters_m *m, lab_cell *to, lab_cell *play, int stereo) {
   if (to->tag == ${rec}) { lab_cell *t = ${field(IN!, rec, 0, "to")}; s->an = LAB_TN(t); s->address = malloc(s->an + 1); if (!s->address) lab_oom(); memcpy(s->address, LAB_TB(t), s->an); s->address[s->an] = 0; }
   s->view = m->view;
   s->handler = -1;
+  // Played while a cell holds true: a tap on it doesn't start or stop it.
+  if (when) { s->when = when; lab_dup(when); ters_nsnd++; return; }
   for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${on} && LAB_TN(m->attrs[j].name) == 5 && !memcmp(LAB_TB(m->attrs[j].name), "click", 5)) { s->handler = m->attrs[j].handler; break; }
   if (s->handler < 0) ters_h->listen(ters_h->ctx, m->view, "click", 5, TERS_SOUND_H + ters_nsnd);
   ters_nsnd++;
 }
+${follow ? `// Each sound played while a cell holds true (I336): started or stopped
+// to match it, after the handlers that may have written it.
+static void ters_snd_follow(void) {
+  for (int k = 0; k < ters_nsnd; k++) {
+    ters_snd *s = &ters_snds[k];
+    if (!s->when) continue;
+    lab_cell *g = ((${sname.get((CT as RType).key)} *)s->when)->f0;
+    lab_dup(g);
+    int want = ${call(RF!, "g")} ? 1 : 0;
+    if (lab_st) { lab_st = 0; continue; }
+    if (want != (s->on ? 1 : 0)) ters_snd_toggle(k);
+  }
+}
+` : "static void ters_snd_follow(void) {}\n"}
 ` : ""}static void ters_show(ters_m *m, ters_attr *a) {
   lab_cell *v = ters_view(a->f);
   int live = (LAB_TN(a->name) == 5 && !memcmp(LAB_TB(a->name), "value", 5)) || (LAB_TN(a->name) == 7 && !memcmp(LAB_TB(a->name), "checked", 7));
@@ -1749,7 +1770,12 @@ static ters_m *ters_mount(lab_cell *h);
 static void ters_forget(ters_m *m);
 static void ters_part(ters_m *m);
 // The attributes and children of an element, borrowed.
-static void ters_fill(ters_m *m, lab_cell *h) {
+${sound ? `// The cell of a \`listening while\` among an element's attributes, or 0.
+static lab_cell *ters_snd_when(lab_cell *as) {
+  ${follow ? `for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) { lab_cell *a = ${field(LA, la.c, la.head, "x")}; if (a->tag == ${lw}) return ${field(A, lw, 0, "a")}; }` : "(void)as;"}
+  return 0;
+}
+` : ""}static void ters_fill(ters_m *m, lab_cell *h) {
   lab_cell *as = ${field(H, el, 1, "h")}, *ks = ${field(H, el, 2, "h")};
   for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) m->na++;
   for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}) m->nk++;
@@ -1763,9 +1789,10 @@ static void ters_fill(ters_m *m, lab_cell *h) {
     if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
     else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
     ${paint ? `else if (a->tag == ${pa}) { t->f = ${field(A, pa, 0, "a")}; lab_dup(t->f); ters_paint(m, t->f); }` : ""}
+    ${lw >= 0 ? `else if (a->tag == ${lw}) {}` : ""}
     else ${sound ? `if (ters_parts) fputs("a listen inside a part doesn't play: put it where main returns it\\n", stderr);` : `fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);`}
   }
-  ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) { lab_cell *a = ${field(LA, la.c, la.head, "x")};${mono ? ` if (a->tag == ${li}) ters_snd_add(m, ${field(A, li, 0, "a")}, ${field(A, li, 1, "a")}, 0);` : ""}${stereo ? ` if (a->tag == ${ls}) ters_snd_add(m, ${field(A, ls, 0, "a")}, ${field(A, ls, 1, "a")}, 1);` : ""} }
+  ${sound ? `if (!ters_parts) for (lab_cell *x = as; x->tag == ${la.c}; x = ${field(LA, la.c, la.rest, "x")}) { lab_cell *a = ${field(LA, la.c, la.head, "x")};${mono ? ` if (a->tag == ${li}) ters_snd_add(m, ${field(A, li, 0, "a")}, ${field(A, li, 1, "a")}, 0, ters_snd_when(as));` : ""}${stereo ? ` if (a->tag == ${ls}) ters_snd_add(m, ${field(A, ls, 0, "a")}, ${field(A, ls, 1, "a")}, 1, ters_snd_when(as));` : ""} }
   ` : ""}j = 0;
   for (lab_cell *x = ks; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) { m->kids[j] = ters_mount(${field(LH, lh.c, lh.head, "x")}); ters_h->append(ters_h->ctx, m->view, m->kids[j]->view); }
 }
@@ -1899,6 +1926,7 @@ static int ters_ev_run(lab_cell *f, ${ty(E)} e) {
 }
 // The page shows what changed.
 static int ters_shown(int ok) {
+  ${sound ? "ters_snd_follow();" : ""}
   ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0;
   ters_refresh(ters_root);
   lab_nwr = 0;

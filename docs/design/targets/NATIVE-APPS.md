@@ -221,6 +221,11 @@ What a page's parts become under route A:
   back (`ters_sound_play_stereo`), a mono input on both sides, and a
   recording's first two channels kept apart. AAudio plays the right on
   its stream's second channel; on iOS the sound's node has two.
+- **I336. Played while a cell says so.** Done: a `listening while(on)`
+  beside a listen in a C page: after each event the cell is read and the
+  sound started or stopped to match; a tap on the element alone doesn't.
+  A sound that can't start leaves the cell as it is (it says why on the
+  element).
 - **C260b. Latency and the screen off.** Done: `my sound latency()` in
   a C page is what the screen measured once a sound plays, 0 till then
   and on a command line (`ters_page_sound_latency`, shown at the next

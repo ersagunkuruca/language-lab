@@ -11,7 +11,8 @@
 // microphone that is a sawtooth at G3, then 10 cents sharp of it, and the
 // page reads G and the cents from the samples the audio thread sends back.
 // Then examples/looper (L276): its microphone hears the speakers 50 ms
-// late, as a microphone held to them does; Measure finds that round trip,
+// late, as a microphone held to them does; Measure, before Start, starts
+// the sound and finds that round trip,
 // the same again, and says a round trip changing under it is unsteady;
 // stopped, it stays stopped, and started again it moves at its pace;
 // a pass records a tone, the track plays it back, and Undo takes it away
@@ -241,9 +242,10 @@ try {
     for (let t = 0; t < ms; t += 100) { if (await run<boolean>(test)) return; await new Promise((r) => setTimeout(r, 100)); }
     throw new Error(`the looper: ${what} didn't happen`);
   };
-  await run(`document.querySelector("button.start").click()`);
-  await until("playing", `document.querySelector("button.start").dataset.playing === "true"`);
+  // Measure before Start starts the sound it needs, and Start says Stop.
   await run(`${button("Measure")}.click()`);
+  await until("playing", `document.querySelector("button.start").dataset.playing === "true"`);
+  check("Measure starts the sound, and Start says Stop", await run<string>(`document.querySelector("button.start").textContent`) === "Stop", {});
   await until("the measurement", `/Round trip [0-9]/.test(document.querySelector(".figures").textContent)`);
   const trip = await run<number>(`parseFloat(/Round trip ([0-9.]+)/.exec(document.querySelector(".figures").textContent)[1])`);
   check("the looper measures the round trip through its speakers and microphone", trip >= 50 && trip < 150, { trip });
@@ -295,7 +297,7 @@ try {
   // processor went on running, so a second start had two moving the loop.
   const where = () => run<number>(`parseFloat(document.querySelector(".where progress").value)`);
   await run(`document.querySelector("button.start").click()`);
-  await until("stopping", `document.querySelector("button.start").dataset.playing === "false"`);
+  await until("stopping", `document.querySelector("button.start").dataset.playing === "false" && document.querySelector("button.start").textContent === "Start"`);
   await new Promise((r) => setTimeout(r, 200));
   const stopped = [await where()];
   for (let i = 0; i < 4; i++) { await new Promise((r) => setTimeout(r, 150)); stopped.push(await where()); }
@@ -304,7 +306,8 @@ try {
   const t0 = await where(), s0 = Date.now();
   await new Promise((r) => setTimeout(r, 300));
   const moved = ((await where()) - t0 + 1) % 1, seconds = (Date.now() - s0) / 1000;
-  check("stopped, the looper stays where it is; started again, it moves at its pace", new Set(stopped).size === 1 && Math.abs(moved - seconds) < 0.15, { stopped, moved, seconds });
+  const label = await run<string>(`document.querySelector("button.start").textContent`);
+  check("stopped, the looper stays where it is; started again, it moves at its pace", new Set(stopped).size === 1 && Math.abs(moved - seconds) < 0.15 && label === "Stop", { stopped, moved, seconds, label });
 
   // The strum tuner: six strings sounding at once, each off by its own cents.
   await send("Page.navigate", { url: `http://127.0.0.1:${port}/strum-tuner.html` });
