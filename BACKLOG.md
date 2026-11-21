@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E279b, E279c (live edits while a page runs, Ersagun 2026-11-20) |
+| E Editor | "Editor lane" | no open row (E279a done; E279b and E279c closed, Ersagun 2026-11-21) |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -68,15 +68,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-
-### Live edits while a page runs ([doc](https://claude.ai/artifact/KLcZxJq2zWYssNynnXbUVA))
-
-Ersagun 2026-11-20 19:38 UTC: a change to a number while a page runs keeps the page going with the new value; only the editor's preview does this, never compiled or saved pages. Constants are not cells (measured 2.9x to 20x on flock and greenhouse).
-
-| id | item | source | pri | size | status |
-|---|---|---|---|---|---|
-| E279b | A number scrubbed while its page runs takes effect at the next frame with no recompile: the preview's compiled page holds each of the program's literals as a variable the editor sets (about 1.15-1.2x measured), and a page that doesn't tick redraws its views once per change. Save page and Open in a tab keep plain literals. At release, E279a's hand-over runs once. Influence: Bret Victor's Inventing on Principle, Unity's inspector | Ersagun 2026-11-20 | P1 | M | |
-| E279c | E279b for shaders: a literal in shader code is passed as a uniform while the preview runs, so a scrub changes the picture without recompiling the shader | Ersagun 2026-11-20 | P2 | S | |
 
 ### Speed of editing
 
