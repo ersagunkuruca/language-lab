@@ -1,9 +1,9 @@
 // A program with each type it uses stored as the chooser picks (lab.ts's
 // `ters compile`, `ters run`, and a sound's `ters render`, C137 s1).
 
-import { dependencies, type Code, type Id } from "../src/model.ts";
+import { dependencies, idsSeeded, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
-import { infer, type Info } from "../src/lang/infer.ts";
+import { checksKept, infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { endedAsWritten, storedRows, withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
@@ -23,6 +23,13 @@ function fail(message: string): never { throw new Error(message); }
 // `sound`: main is a sound played in blocks (library-reps.ts).
 // `dataKeys`: the target's tables take keys that are data (C's, C243).
 export function represented<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables = false, sound = false, dataKeys = false): P {
+  // Where checks are kept, the ids the steps make are drawn the same way
+  // each compile (model.ts idsSeeded), so their checks again find their
+  // groups kept.
+  const go = () => representedIn(p00, main, hostMaps, tables, sound, dataKeys);
+  return checksKept(p00.info.options) ? idsSeeded(`representing ${main}`, go) : go();
+}
+function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables: boolean, sound: boolean, dataKeys: boolean): P {
   // A match on an Int's cases written out on Int first (int-cases.ts,
   // L249b): what it gives is a Nat, stored as the chooser picks.
   const cased = usesIntCases(p00.code) ? intCases(p00.code, p00.info, p00.names) : null;
