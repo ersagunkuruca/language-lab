@@ -40,3 +40,23 @@ test("Bounce: a step to the first impact meets a ball a plain frame jumps over; 
   // Stepping to impacts doesn't make step Diverge: sub steps counts its tries.
   assert.match(s.defs("step"), /^\w+  step : .*-\[Choice\]->/m);
 });
+
+// I333: a body all but at rest, its speed near 0 (after a quarter of an
+// hour the page's balls get there), or two balls barely closing in, gave
+// a time to the wall or to touching too big for a Float64, and the page
+// stopped every frame. Each is dt now, and the times within dt are as
+// before.
+test("Bounce: a body all but at rest never times its impact past a Float64", () => {
+  const s = new Session(join(root, "examples", "bounce"));
+  const dt = 1 / 60;
+  const out = s.eval(`[‹wall time›(0, 1e-320, 0.78, ${dt}), ‹wall time›(0, -1e-320, 0.78, ${dt}), ‹wall time›(0.79, 1e-320, 0.78, ${dt}), ‹wall time›(-0.79, -1e-320, 0.78, ${dt}), ‹meeting time›(0.01, -1e-170, 0, ${dt}), ‹meeting time›(0.01, -1e-320, 1e-300, ${dt}), ‹wall time›(0.7, 6, 0.78, ${dt}), ‹wall time›(-0.7, -6, 0.78, ${dt}), ‹meeting time›(0.0075, -2, 1, ${dt}), ‹meeting time›(0.01, -1, 0, ${dt})]`);
+  // The answers as the evaluator prints them, to 9 digits.
+  const xs = (out.match(/\[([^\]]*)\]/)?.[1] ?? "").split(", ").map(Number);
+  const near = (x: number, want: number) => Math.abs(x - want) < 1e-8;
+  assert.equal(xs.length, 10, out);
+  for (const x of xs.slice(0, 6)) assert.ok(near(x, dt), out);
+  assert.ok(near(xs[6], 0.08 / 6) && near(xs[7], 0.08 / 6), out);
+  // rate·t² + closing·t + gap: t² − 2t + 0.0075 first reaches 0 at 1 − √0.9925.
+  assert.ok(near(xs[8], 1 - Math.sqrt(0.9925)), out);
+  assert.ok(near(xs[9], 0.01), out);
+});
