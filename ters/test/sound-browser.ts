@@ -12,6 +12,7 @@
 // page reads G and the cents from the samples the audio thread sends back.
 // Then examples/looper (L276): its microphone hears the speakers 50 ms
 // late, as a microphone held to them does; Measure finds that round trip,
+// the same again, and says a round trip changing under it is unsteady;
 // a pass records a tone, the track plays it back, and Undo takes it away
 // and puts it back. Then examples/strum-tuner (L277): a microphone that
 // is six sawtooth strings, each a few cents off, read string by string.
@@ -245,6 +246,23 @@ try {
   await until("the measurement", `/Round trip [0-9]/.test(document.querySelector(".figures").textContent)`);
   const trip = await run<number>(`parseFloat(/Round trip ([0-9.]+)/.exec(document.querySelector(".figures").textContent)[1])`);
   check("the looper measures the round trip through its speakers and microphone", trip >= 50 && trip < 150, { trip });
+  // Measured again, the same to a tenth of a millisecond or so; and a
+  // way from speaker to microphone that changes between the chirps
+  // (a noise taken for one, or a device's buffer slipping) is no round
+  // trip, but each chirp's figure.
+  const figures = () => run<string>(`document.querySelector(".figures").textContent`);
+  const measure = async (during = "") => {
+    await run(`(() => { ${button("Measure")}.click(); ${during} })()`);
+    await until("listening", `/listening/.test(document.querySelector(".figures").textContent)`);
+    await until("the measurement", `!/listening/.test(document.querySelector(".figures").textContent)`);
+    return figures();
+  };
+  const again = parseFloat(/Round trip ([0-9.]+)/.exec(await measure())?.[1] ?? "NaN");
+  check("measured again, the same", Math.abs(again - trip) <= 0.2, { trip, again });
+  const unsteady = await measure(`setTimeout(() => (window.back.delayTime.value = 0.08), 450); setTimeout(() => (window.back.delayTime.value = 0.12), 950);`);
+  await run(`window.back.delayTime.value = 0.05`);
+  check("a round trip that keeps changing is said to be unsteady, with each chirp's", /unsteady \([0-9.]+ ms, [0-9.]+ ms, [0-9.]+ ms\)/.test(unsteady), { unsteady });
+  await measure();
   // The loop a second long (a bar of 4 at 240), with no click to record.
   await run(`(() => { ${button("Measured")}.click(); ${button("Click")}.click(); })()`);
   await run(`(() => { const [tempo, beats, bars] = document.querySelectorAll(".field input"); for (const [f, v] of [[tempo, "240"], [beats, "4"], [bars, "1"]]) { f.value = v; f.dispatchEvent(new Event("input")); } })()`);
