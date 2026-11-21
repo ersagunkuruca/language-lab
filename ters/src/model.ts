@@ -492,11 +492,31 @@ const DIGITS = "0123456789abcdefghijklmnopqrstuv";
 const pool = new Uint8Array(26 * 2520);
 let at = pool.length;
 export function freshId(): Id {
-  if (at + 26 > pool.length) { crypto.getRandomValues(pool); at = 0; }
   let id = "";
-  for (let i = 0; i < 26; i++) id += DIGITS[pool[at++] & 31];
+  if (drawn) for (let i = 0; i < 5; i++) { const x = drawn(); for (let k = 0; k < (i < 4 ? 6 : 2); k++) id += DIGITS[(x >>> (5 * k)) & 31]; }
+  else {
+    if (at + 26 > pool.length) { crypto.getRandomValues(pool); at = 0; }
+    for (let i = 0; i < 26; i++) id += DIGITS[pool[at++] & 31];
+  }
   if (making) making.add(id);
   return id;
+}
+// Inside `idsSeeded(seed, f)`, freshId draws its ids from a generator
+// seeded by `seed` (mulberry32), so a compile of the same program makes
+// the same ids in the same order each time, and an edit that keeps the
+// program's shape (a number changed) makes the same ones too: the check
+// cache finds the groups a pass's check again holds (L266). Ids made
+// outside stay random. A seed is used once per compile; the same seed in
+// two compiles is what makes their ids the same.
+let drawn: (() => number) | null = null;
+export function idsSeeded<T>(seed: string, f: () => T): T {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  let a = h >>> 0;
+  const next = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (t ^ (t >>> 14)) >>> 0; };
+  const outer = drawn;
+  drawn = next;
+  try { return f(); } finally { drawn = outer; }
 }
 // The ids freshId made while f ran (stable-ids.ts names them by what they
 // hold).

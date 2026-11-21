@@ -130,6 +130,11 @@ function canonical(sc: Scheme, s: Subst, frozen: boolean): string {
 }
 
 // Each layer under a check (the library's, L216) by a number, for keys.
+// A layer that is a check of a program (a pass's check again over the
+// check before, infer.ts inferRewritten) is keyed by the kept layer under
+// it, with the program's own data types and implementations by their
+// text as for a check with no layer of its own: a new check object each
+// compile, its number missed every group a recheck checked (L266).
 const layerIds = new WeakMap<Info, number>();
 let layerCount = 0;
 // A layer kept on disk (library-store.ts) is named by what it was made
@@ -219,10 +224,15 @@ export class CheckCache {
     // more than it saves.
     if (!layer) return undefined;
     const start = s.next, onDisk = !!layer.keptAs && !!this.store;
+    // The kept layer the key names: the layer itself, else the nearest
+    // kept one under it (null: none).
+    let base: Info | null = layer;
+    while (base && !base.keptAs) base = base.layer ?? null;
+    const named = layer.keptAs ? layer : base;
     // What every group sees: the data types, the values (implementations
     // and embeddings are values), the options and the layer under. The
     // layer's own definitions are as it checked them.
-    const under = layerParts(layer);
+    const under = named ? layerParts(named) : { types: new Set<Id>() };
     // An implementation or an embedding is a value written as its record
     // (infer.ts implementations, embedding): what every group may be
     // resolved through. Other values are groups like the rest (L215c).
@@ -243,9 +253,9 @@ export class CheckCache {
     // in every later run (I264).
     const insiders = opts.insiders ? new Set(opts.insiders) : null;
     const globalText = JSON.stringify([
-      layerId(layer), idsText(opts.hidden), !!insiders, idsText(opts.library),
+      named === layer ? layerId(layer) : ["over", layerId(named)], idsText(opts.hidden), !!insiders, idsText(opts.library),
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => defText(code, d)),
-      a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => defText(code, d)),
+      a.valueDefs.filter((d) => !named?.schemes.has(d) && isImplementation(d)).map((d) => defText(code, d)),
     ]);
     const global = intern(globalText);
     // The same with every number a text of this process's spelled out.
@@ -378,8 +388,8 @@ export class CheckCache {
             opAt: mine(opAt).map(([id, t]) => [id, cl.type(t)]),
             solveAt: mine(solveAt).map(([id, t]) => [id, cl.type(t)]),
             embedded: mine([...(info.embedded ?? [])]).map(([id, e]) => [id, { def: e.def, from: cl.type(e.from), to: cl.type(e.to), ...(e.of ? { of: cl.type(e.of) as Type & { t: "fn" } } : {}) }]),
-            answered: ids.filter((id) => (info.answered as Set<Id> | undefined)?.has(id) && !layer?.answered?.has(id)),
-            spread: ids.filter((id) => (info.spread as Set<Id> | undefined)?.has(id) && !layer?.spread?.has(id)),
+            answered: ids.filter((id) => (info.answered as Set<Id> | undefined)?.has(id) && !named?.answered?.has(id)),
+            spread: ids.filter((id) => (info.spread as Set<Id> | undefined)?.has(id) && !named?.spread?.has(id)),
             reshape: mine(own(info.reshape)),
             wanted: s.wanted.slice(m.from, m.to).map((w) => ({ t: cl.type(w.t), iface: w.iface, at: w.at })),
             plain: [], numbers: [], arith: [], fractional: [], whole: [], noWorld: [], needs: [], subs: [],

@@ -38,13 +38,13 @@ import { ARITH, ARRAY_OPS, FALSE, FIRST, PAIR_V, S, SECOND, TRUE } from "../../t
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 import { toList, type Runtime } from "../../ters/src/lang/run.ts";
 import { fusedProgram } from "./handlers.ts";
-import { infer, type Info } from "../../ters/src/lang/infer.ts";
+import { checksKept, infer, type Info } from "../../ters/src/lang/infer.ts";
 import { useDirections } from "../../ters/src/lang/directions.ts";
 import { withInverses } from "./inverses.ts";
 import { withOperationLambdas } from "./operation-values.ts";
 import { withCharacterMaps } from "./character-maps.ts";
 import { hoistInvariants } from "./hoist.ts";
-import { ownerOfTypeParts, type Code, type Id, type NodeOf, type Use, nodeIds } from "../../ters/src/model.ts";
+import { idsSeeded, ownerOfTypeParts, type Code, type Id, type NodeOf, type Use, nodeIds } from "../../ters/src/model.ts";
 import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
@@ -722,7 +722,11 @@ export { reachedImplementing };
 export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
   // Definitions' keys (def-keys.ts) write the ids the passes below make by
   // place, not as made.
-  return keysOver(code.nodes, () => lowerCoreIn(code, info, names, roots));
+  // Where checks are kept, the ids the passes make are drawn the same way
+  // each compile (model.ts idsSeeded), so their checks again find their
+  // groups kept.
+  const lower = () => keysOver(code.nodes, () => lowerCoreIn(code, info, names, roots));
+  return checksKept(info.options) ? idsSeeded(`lowering ${roots.join(" ")}`, lower) : lower();
 }
 function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
   // Work a lambda redoes on every call though nothing in it changes, done
