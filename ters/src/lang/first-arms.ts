@@ -30,6 +30,11 @@ import { classKey, optionsText } from "./class-key.ts";
 // options: after an edit elsewhere, machine's 19 firsts aren't tried again.
 const noneTaken = keptMap<string, true>();
 const takenKept = keptMap<string, Set<Id>>();
+// And those where the firsts taken made a problem the program didn't
+// have, so none was taken: greenhouse-page's lowering takes its pools'
+// firsts, then finds its page's handler performing Choice, each compile
+// (two checks, 0.2 s an edit).
+const refusedKept = keptMap<string, true>();
 const optionsKey = (o: Info["options"]) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : Array.isArray(v) && v.every((x) => typeof x === "string") ? [...v].sort() : v));
 
 const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
@@ -146,6 +151,7 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   // only whether one is whole, its sign and whether it is 0): its trial
   // and whole check aren't made again (greenhouse-page: 0.3 s an edit).
   const classes = classKey(code, optionsText(info.options));
+  if (refusedKept.has(classes)) return { code, info, names, taken: 0 };
   let take = takenKept.get(classes);
   let whole = false;
   if (!take) {
@@ -170,7 +176,11 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   if (checked.errors.length > info.errors.length) {
     let before: Set<string>;
     try { before = new Set(infer(code, names, undefined, info.options).errors.map((e) => e.message)); } catch { return { code, info, names, taken: 0 }; }
-    if (checked.errors.some((e) => !before.has(e.message))) return { code, info, names, taken: 0 };
+    if (checked.errors.some((e) => !before.has(e.message))) {
+      if (refusedKept.size >= 4) refusedKept.clear();
+      refusedKept.set(classes, true);
+      return { code, info, names, taken: 0 };
+    }
   }
   return { code: out, info: checked, names: outNames, taken };
 }
