@@ -69,15 +69,20 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
 // the order they were made (as handOver carries them) and the
 // generator's state, so the interpreted page can be built at a snapshot
 // and stepped from there (page.ts showPage `stepFrom`).
-export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void } {
+export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean; worklet?: string; recordings?: string }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void } {
   let stopped = false;
   const cells = new Cells(equal);
+  // A page with sound (E285): `worklet` its audio thread's script, as
+  // startCorePage is given it, and `recordings` where its recordings are.
+  const latency = o.worklet ? cells.own(0, "sound latency") : undefined;
   // The run's log (C172e), as page.ts showPage keeps it: as a window, or
   // capped (I239d).
-  const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); } });
+  const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, ...(latency ? { latency } : {}) });
   const cap = o.window ? undefined : budget();
   const logging = o.log ? logged(browser, o.log, { seeded: true, budget: cap, quiet: () => stopped, inView: () => cells.inView() }) : null;
-  const world = logging ? logging.world : browser;
+  if (o.worklet && !SOUND) throw new Error("this page has a sound but was made without what plays it");
+  const recorded = o.worklet ? SOUND!.recordingWorld(logging ? logging.world : browser) : null;
+  const world = recorded ?? (logging ? logging.world : browser);
   let made: NonNullable<Cells["kept"]> = [];
   // Where this page's part of the log starts: the interpreted page's comes before.
   const start = o.log?.length ?? 0;
@@ -86,7 +91,9 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const fns = defs(coreRuntime(tables, worlds, rt, code));
   cells.kept = [];
   const heard = o.log && heardInto(o.log, window, cap);
-  const root = mountHtml(fns[main]() as never, { cells, doc: o.doc, call: coreCall, ran: o.ran, stopped: o.stopped, heard: heard && ((...a: Parameters<typeof heard>) => { if (!stopped) heard(...a); }) });
+  const run = () => fns[main]() as Value;
+  const sound = o.worklet ? SOUND!.soundPlayer(cells, o.worklet, run, o.recordings, recorded!, latency) : null;
+  const root = mountHtml((sound ? sound.page : run()) as never, { cells, doc: o.doc, call: coreCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: heard && ((...a: Parameters<typeof heard>) => { if (!stopped) heard(...a); }) });
   const kept = cells.kept;
   made = kept;
   cells.kept = null;
@@ -95,5 +102,5 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   // Its start as a snapshot too, as page.ts keeps it: the cells as handed
   // over, the generator as main left it.
   if (window) window.snapshots[0] = { at: start, state: window.take() };
-  return { root, cells, kept, window, handed, stop: () => { stopped = true; } };
+  return { root, cells, kept, window, handed, stop: () => { stopped = true; sound?.stop(); }, ...(sound ? { hush: () => sound.hush() } : {}) };
 }
