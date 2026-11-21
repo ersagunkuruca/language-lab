@@ -28,6 +28,7 @@ import { listGroups } from "./rep-groups.ts";
 import { consOnto, type ConsOnto } from "./cons-onto.ts";
 import { splitLists } from "./rep-split.ts";
 import { carriedChoice } from "./carried-reps.ts";
+import { keptMap } from "../kept.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
 
@@ -151,8 +152,40 @@ function stably({ result: r, made }: { result: Chosen & { reps: Representation[]
   return { ...r, code, names, insiders: r.insiders.map(f) };
 }
 
+// What choiceOf decided, kept between compiles (the incremental compile)
+// by the program but for its numbers, texts and truth values, which no
+// decision reads (only the rewrite does, and a representation's own
+// hidden fields, read before: `asked` is in the key whole): rows of the
+// library's representations by their place in it, or which split was
+// made. An edit of a number found the same choice of greenhouse-page's
+// map and lists again, 0.2 s of a recompile.
+// Kept only inside `choosingFor`, given the key of the program the whole
+// choice starts from (represented.ts): each choice made from it is known
+// by its place in that compile, what was asked and what was skipped, so
+// no choice's program (a second of greenhouse-page's, a megabyte written
+// out) is keyed itself.
+type Decided = { split: "groups"; made: GroupSplit } | { split: "holders"; tree: number } | { chosen: number[] };
+const decidedKept = keptMap<string, Decided>();
+let context: { key: string; n: number } | undefined;
+export function choosingFor<T>(key: string, f: () => T): T {
+  const was = context;
+  context = { key, n: 0 };
+  try { return f(); } finally { context = was; }
+}
+
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
+  const key = context && `${context.key}#${context.n++}|${JSON.stringify([asked, [...skip].sort()])}`;
+  const was = key ? decidedKept.get(key) : undefined;
+  const keep = (d: Decided) => { if (!key) return; if (decidedKept.size >= 16) decidedKept.clear(); decidedKept.set(key, d); };
+  let replayed = false;
+  if (was && "split" in was) {
+    const s = was.split === "groups" ? splitByGroups(code, info, names, main, defs, was.made) : splitByHolders(code, info, names, main, defs, LIBRARY.reps[was.tree]);
+    if (s) return s;
+  } else if (was) {
+    chosen.push(...was.chosen.map((i) => LIBRARY.reps[i]));
+    replayed = true;
+  }
   let backwards: boolean | undefined;
   // A solve on lists, or a function on lists handed to a definition that
   // solves (conjugate's bands, run backwards by inverse).
@@ -188,7 +221,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" && (t.id === ty || t.args.some(has)); };
     return defs.some((d) => subtree(code, d).some((id) => { const t0 = info.typeOf.get(id); if (!t0) return false; const t = info.subst.zonk(t0); return t.t === "con" && holders.has(t.id) && !!t.args[0] && has(t.args[0]); }));
   };
-  types: for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
+  if (!replayed) types: for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
     if (asked.some((r) => r.of === ty) || skip.has(ty) || inTableKeys(ty)) continue;
     // A hash table only where it is (hostMaps), and only where every map
@@ -224,7 +257,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       // List, has its table as an array in C and WebAssembly too (C192).
       if (tree.of === LIST && tree.name === "tree of List" && options.split !== false && !chosen.length) {
         const s = splitByGroups(code, info, names, main, defs);
-        if (s) return s;
+        if (s) { keep({ split: "groups", made: s.made }); return s; }
       }
       // Lists as arrays (C30d3b): alone, and only where every list the
       // program reaches can be one (listBoundary); otherwise each of the
@@ -233,7 +266,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       // converted where they cross (C196: the pedal's sound beside its page).
       if (tree.of === LIST && !chosen.length && !listBoundary(withTrees(code, [tree]), info, defs, tree, asked)) {
         const s = options.split !== false ? splitByHolders(code, info, names, main, defs, tree) : null;
-        if (s) return s;
+        if (s) { keep({ split: "holders", tree: LIBRARY.reps.indexOf(tree) }); return s; }
         left.splice(left.indexOf(tree), 1);
         if (tree.name === "array of List" && left.length) continue;
         continue types;
@@ -244,6 +277,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       break;
     }
   }
+  if (!replayed && chosen.every((r) => LIBRARY.reps.includes(r))) keep({ chosen: chosen.map((r) => LIBRARY.reps.indexOf(r)) });
   if (!chosen.length) return { code, names, chosen: [], insiders: [], reps: [] };
   // The trees' module, which the library leaves out (library.ts): only
   // the definitions the chosen rows use, since the program is checked
@@ -457,9 +491,20 @@ function carriesThroughJob(code: Code, defs: Id[], job: (j: Id) => boolean): boo
 
 // The program's groups that would take arrays (rep-groups.ts) as seeds of
 // a split: all of them, else each that can be one with those before it.
-function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[]): (Chosen & { reps: Representation[] }) | null {
+// The split splitByGroups made: the seeds and depth of the splitLists
+// that gave it, and the roots it names.
+interface GroupSplit { seeds: Id[]; deep: boolean; roots: Id[] }
+function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[], kept?: GroupSplit): (Chosen & { reps: Representation[]; made: GroupSplit }) | null {
   const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
   if (!array) return null;
+  const out = (s: NonNullable<ReturnType<typeof splitLists>>, made: GroupSplit) =>
+    ({ code: s.code, names: s.names, chosen: [`List as array of List from ${s.seeds.filter((d) => made.roots.includes(d)).map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array], made });
+  // As the last compile of this program but for its numbers split it
+  // (choiceOf's `decidedKept`): its one splitLists again.
+  if (kept && [...kept.seeds, ...kept.roots].every((d) => defs.includes(d))) {
+    const s = splitLists(code, info, names, defs, main, kept.seeds, array, kept.deep);
+    if (s) return out(s, kept);
+  }
   const all = listGroups(code, main, defs).groups;
   // A part that keeps the tree, and whose loop carries a list on through
   // a job the tree does cheaper than the list as written (examples/buffer's
@@ -485,10 +530,10 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
   const byPosition = (g: (typeof groups)[number]) => g.defs.some((d) => loops(d) && itemAt(d));
   roots.splice(0, roots.length, ...roots.filter((r) => byPosition(groups.find((g) => g.root === r)!) || !defs.some((d) => d !== r && calls.get(d)?.has(r) && loops(d))));
   if (!roots.length) return null;
-  let s = splitLists(code, info, names, defs, main, roots, array);
+  let s = splitLists(code, info, names, defs, main, roots, array), by = { seeds: roots, deep: false };
   if (!s) {
     let seeds: Id[] = [];
-    for (const r of roots) { const t = splitLists(code, info, names, defs, main, [...seeds, r], array); if (t) { s = t; seeds = [...seeds, r]; } }
+    for (const r of roots) { const t = splitLists(code, info, names, defs, main, [...seeds, r], array); if (t) { s = t; by = { seeds: [...seeds, r], deep: false }; seeds = [...seeds, r]; } }
   }
   // A group whose lists cross holding lists (the strum tuner's analysis,
   // its templates a list of lists, read by position: C271) splits off
@@ -496,11 +541,12 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
   // `deep`), where what that makes checks; else it stays with its caller.
   for (const r of roots) {
     if (s?.seeds.includes(r)) continue;
-    const t = splitLists(code, info, names, defs, main, [...(s?.seeds ?? []), r], array, true);
-    if (t && infer(t.code, t.names, undefined, { ...info.options, ends: endedAsWritten(info, defs), units: false }).errors.length <= info.errors.length) s = t;
+    const seeds = [...(s?.seeds ?? []), r];
+    const t = splitLists(code, info, names, defs, main, seeds, array, true);
+    if (t && infer(t.code, t.names, undefined, { ...info.options, ends: endedAsWritten(info, defs), units: false }).errors.length <= info.errors.length) { s = t; by = { seeds, deep: true }; }
   }
   if (!s) return null;
-  return { code: s.code, names: s.names, chosen: [`List as array of List from ${s.seeds.filter((d) => roots.includes(d)).map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array] };
+  return out(s, { ...by, roots });
 }
 
 // Lists as `rep` in each of the program's definitions that never sees a
