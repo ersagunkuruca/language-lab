@@ -46,6 +46,7 @@ import { DIVERGE, type Type } from "../../ters/src/lang/types.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { does } from "./fuse-steps.ts";
 import { keptMap } from "../../ters/src/kept.ts";
+import { classKey, optionsText } from "../../ters/src/lang/class-key.ts";
 
 const MAP = preludeDef("map"), FLAT_MAP = preludeDef("flat map");
 // How deep a list may be made inside lets and calls and still be found.
@@ -77,7 +78,7 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
   // texts and truth values, which nothing here reads, taken again with
   // one check after: an edit of a number (the editor's drag) found the
   // same 18 walks of greenhouse-page, a check after each (0.5 s).
-  const key = fuseKey(code, opts);
+  const key = classKey(code, optionsText(opts));
   const was = roundsKept.get(key);
   if (was) {
     const given = { code, names };
@@ -175,20 +176,6 @@ function made(code: Code, info: Info, e: Id, deep = 0): Made | null {
 
 type Round = { at: Id; w: Walker; how: Made };
 const roundsKept = keptMap<string, Round[]>();
-// The program as the rounds read it: every node but the library's as it
-// is there, a number by whether it is whole, its sign and whether it is
-// 0 (what the check may tell from it), no text or truth value; and the
-// check's options.
-function fuseKey(code: Code, opts: Options): string {
-  const own: Node[] = [];
-  for (const id in code.nodes) { const n = code.nodes[id]; if (LIBRARY.code.nodes[id] !== n) own.push(n); }
-  return JSON.stringify([code.defs, own, optionsText(opts)], function (this: { kind?: string }, k, v) {
-    if (k !== "value" || this.kind !== "lit") return v;
-    if (typeof v === "number") return Object.is(v, -0) ? "-0" : `${Number.isInteger(v) ? "i" : "f"}${Math.sign(v)}`;
-    return typeof v;
-  });
-}
-const optionsText = (o: Options) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : v));
 
 function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[]): Round | null {
   const walkers = new Map<Id, Walker | null>();
