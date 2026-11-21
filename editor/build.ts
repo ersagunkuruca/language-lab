@@ -15,6 +15,8 @@
 //   prebuilt/      the shipped examples compiled ahead (prebuild.ts, E245)
 //   runtimes/      the page and sound runtimes with the solver, read when
 //                  a page that solves asks for them (E280)
+//   library.*.js   the library's JSON, read by the editor and Run's worker
+//                  (E281)
 //   checks.json    the library's checks a fresh page reads (keptChecks.ts,
 //                  I213)
 //   apps/*.html    web apps written in the language (the programs
@@ -53,8 +55,21 @@ for (const f of [...sources(site + "ters/src"), ...sources(site + "ters/library"
 const CHECKS_KEY = JSON.stringify(checksKey.digest("hex").slice(0, 16));
 // The worker Run uses (editor/runWorker.ts), as text the editor starts. It
 // reads the checks the page kept, under the same name.
-const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, define: { CHECKS_KEY } });
-const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page")], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CORE_PAGE_PLAIN_RUNTIME: '""', CORE_WORKLET_PLAIN_RUNTIME: '""', CHECKS_KEY } });
+// The library's JSON (ters/library/*.json, 7 MB) once, as a file of its
+// own the editor and Run's worker both read (E281): it was in each of
+// their scripts. In the bundles each import of one reads `self.labLibrary`,
+// which library.<hash>.js sets before the editor's script runs; the worker
+// is given it ahead of its own script (runViews.ts newWorker).
+const shared = new Map<string, string>();
+const sharedLibrary = { name: "shared-library", setup(b: { onLoad: (o: { filter: RegExp }, f: (a: { path: string }) => { contents: string; loader: "js" }) => void }) {
+  b.onLoad({ filter: /[\\/]ters[\\/]library[\\/][^\\/]+\.json$/ }, (a) => {
+    const name = a.path.split(/[\\/]/).pop()!.replace(/\.json$/, "");
+    shared.set(name, a.path);
+    return { contents: `export default self.labLibrary[${JSON.stringify(name)}];`, loader: "js" };
+  });
+} };
+const worker = await build({ entryPoints: [here + "runWorker.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [sharedLibrary], define: { CHECKS_KEY } });
+const out = await build({ entryPoints: [here + "main.ts"], bundle: true, format: "iife", target: "es2022", minify: true, write: false, plugins: [examplesPlugin(manifest, "page"), sharedLibrary], define: { CORE_PAGE_RUNTIME: '""', RUN_WORKER: '""', CORE_WORKLET_RUNTIME: '""', CORE_PAGE_PLAIN_RUNTIME: '""', CORE_WORKLET_PLAIN_RUNTIME: '""', CHECKS_KEY } });
 const js = out.outputFiles[0].text.replace(/<\/script/g, "<\\/script");
 const text = (id: string, t: string) => `<script type="text/plain" id="${id}">${t.replace(/<\/script/gi, "<\\/script")}</script>\n`;
 // The core IR's page and audio runtimes (E244): Save page prints from the
@@ -73,7 +88,12 @@ const runtimeFile = (id: string, t: string) => {
   return `<script type="text/plain" id="${id}" data-src="${name}"></script>\n`;
 };
 const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleTags(manifest);
-const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script>${js}</script>`);
+// The text kept beside the parsed library, for the worker (newWorker).
+const libraryText = JSON.stringify(Object.fromEntries([...shared].sort().map(([k, f]) => [k, JSON.parse(readFileSync(f, "utf8"))])));
+const libraryName = `library.${createHash("sha1").update(libraryText).digest("hex").slice(0, 12)}.js`;
+for (const f of readdirSync(site)) if (/^library\.[0-9a-f]+\.js$/.test(f)) rmSync(site + f);
+writeFileSync(site + libraryName, `self.labLibraryText=${JSON.stringify(libraryText)};self.labLibrary=JSON.parse(self.labLibraryText);\n`);
+const page = readFileSync(here + "page.html", "utf8").replace("<script>/*SCRIPT*/</script>", () => `${data}<script src="${libraryName}"></script>\n<script>${js}</script>`);
 // page.html is the head's tags and styles, then the body from its first
 // element on. The title and icon go in <head>: Chromium reads an icon link in
 // the body too late and asks for /favicon.ico, which the site doesn't have (I306).
