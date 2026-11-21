@@ -41,6 +41,7 @@ import { ARITH, CONS, FALSE, NIL, S, TRUE } from "./std.ts";
 import { STD_IMPL } from "./std-impl.ts";
 import { NUMBER, OverMap, type Row, type Type } from "./types.ts";
 import { infer, type Info } from "./infer.ts";
+import { keepingWhole } from "./check-cache.ts";
 import { recordVariant } from "./derive.ts";
 import { valueMasks, type Algebra } from "./grades.ts";
 
@@ -338,7 +339,7 @@ export function stageProgram(code: Code, info: Info, names: Names, open?: Id[]):
     }
     // (Too deep to check, as a very long chain of lets can be: kept out.)
     let again: Info | null = null;
-    try { again = infer(code, names); } catch (e) { if (!(e instanceof RangeError)) throw e; }
+    try { again = keepingWhole(() => infer(code, names)); } catch (e) { if (!(e instanceof RangeError)) throw e; }
     if (!again || (again.errors.length > initial && again.errors.length > before())) { ({ code, names, info } = good); pending = null; return false; }
     info = again;
     good = { code, names, info, rounded: [...good.rounded, ...(pending ?? [])] };
