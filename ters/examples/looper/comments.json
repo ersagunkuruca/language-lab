@@ -25,7 +25,7 @@
 "l3123i2kvier4rdlggac5b7s2j": "The click `s` samples after Start, with a bar `bar` samples long of `beats` beats: a short sine on each beat, higher and louder on the bar's first.",
 "mamcrntkik6pha00m963u1dp1v": "The latency: what the platform says, the round trip measured (or each chirp's when they don't agree), and which one recording makes up for.",
 "ng2iv0a00di05n0pt44mrpaiib": "The place of item i in a cell's list.",
-"niqe65pgrvgoitdd85g7uhdk5n": "Where the measurement started, in samples after Start, while it plays and listens; -1 when it isn't. Asked for, it starts with the block at `p`; it ends a second and a half later, when the third chirp has had 400 ms to come back.",
+"niqe65pgrvgoitdd85g7uhdk5n": "Where the measurement started, in samples after Start, while it plays and listens; -1 when it isn't. Asked for, it starts with the block at `p`; it ends a second and a half later, when the third chirp has had 400 ms to come back, and stops the sound if Measure started it.",
 "nj9vdsrpgd21lnk940k81sienl": "A chirp as the measurement keeps what comes in: at a quarter of the rate, each four samples' average.",
 "ogm12lfglbbt01oga741m6n3gi": "The round trip, in seconds, when two of the chirps' agree within a millisecond: their average. -1 when no two do, as when a noise or a click was taken for a chirp, or the way from speaker to microphone keeps changing.",
 "pc44c6rcjnipsi4a9ocb3rlloo": "Tape i.",
