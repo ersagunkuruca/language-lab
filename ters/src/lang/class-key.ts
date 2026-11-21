@@ -1,0 +1,22 @@
+// A program as a pass that never reads the numbers, texts or truth values
+// written in it sees it (the incremental compile, plan doc "Incremental
+// compile after edits"): every node but the library's as the library has
+// it, a number only by whether it is whole, its sign and whether it is 0
+// (what the check may tell from it), no text or truth value. A pass keeps
+// what it found by this and what else it reads (the check's options), so
+// an edit of a number (the editor's drag) finds it again.
+import type { Code, Node } from "../model.ts";
+import { LIBRARY } from "./library.ts";
+
+export function classKey(code: Code, also: unknown): string {
+  const own: Node[] = [];
+  for (const id in code.nodes) { const n = code.nodes[id]; if (LIBRARY.code.nodes[id] !== n) own.push(n); }
+  return JSON.stringify([code.defs, own, also], function (this: { kind?: string }, k, v) {
+    if (k !== "value" || this.kind !== "lit") return v;
+    if (typeof v === "number") return Object.is(v, -0) ? "-0" : `${Number.isInteger(v) ? "i" : "f"}${Math.sign(v)}`;
+    return typeof v;
+  });
+}
+
+// The check's options as a key reads them: its cache left out, sets in order.
+export const optionsText = (o: unknown) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : v));
