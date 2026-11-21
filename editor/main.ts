@@ -69,6 +69,7 @@ import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
 import { loadChecks } from "./checkStore.ts";
+import { exampleHere, readExamples } from "./exampleFiles.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
 const viewKey = () => `${doc.program}/${ui.def}`;
@@ -555,11 +556,20 @@ function save() {
 
 function switchProgram(p: Program) {
   if (p === doc.program) return;
+  // An example not opened yet is read first (E282), then opened if it's
+  // still the one asked for.
+  if (!docs[p] && isExample(p) && !exampleHere(p)) {
+    wanted = p;
+    void readExamples([p]).then(() => { if (wanted === p) { wanted = null; switchProgram(p); render(); } }, () => { if (wanted === p) wanted = null; ui.note = `${EXAMPLES.find(([k]) => k === p)?.[1] ?? p} couldn't be read`; ui.refused = true; render(); });
+    return;
+  }
+  wanted = null;
   deleted = null;
   save();
   doc = docs[p] ?? initialFor(p);
   showProgram();
 }
+let wanted: Program | null = null;
 
 function showProgram() {
   changes.opened(doc);
@@ -980,7 +990,7 @@ const changes = changesPanels({
   doc: () => doc, ui, namesOf: diffNames, style: () => BLOCKS_STYLE,
   infoOf: (d) => { if (d === doc) return typesOf(); try { return T.infer(d.code, namesOf(d)); } catch { return null; } },
   ownDefs: (d) => ownDefs(d), keep: (d) => kept(d), restore: (d) => onToday(d),
-  shipped: (d) => (isExample(d.program) ? initialFor(d.program) : null),
+  shipped: (d) => (isExample(d.program) && exampleHere(d.program) ? initialFor(d.program) : null),
   // An example as a git revision has it, read from GitHub (E263).
   atRevision: async (d, rev) => {
     const m = manifestOf(d.program);
@@ -2349,7 +2359,7 @@ function definitionPanel(p: Presentation): HTMLElement | null {
 }
 
 const { navigator } = navigatorPanel({
-  doc: () => doc, docs: () => docs, ui, ownDefs: () => ownDefs(), defBody: (d) => defBody(d), titleOf, initialFor: (k) => initialFor(k), isExample: (k) => isExample(k),
+  doc: () => doc, docs: () => docs, ui, ownDefs: () => ownDefs(), defBody: (d) => defBody(d), titleOf, initialFor: (k) => initialFor(k), isExample: (k) => isExample(k), exampleHere, readExamples,
   examples: () => EXAMPLES, mine: MINE, isLibrary: (id) => !!BASE.nodes[id],
 });
 

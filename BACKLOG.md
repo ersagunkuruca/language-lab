@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Speed up editor startup" | E282, E283 (E280, E281 done) |
+| E Editor | "Speed up editor startup" | E283 (E280 to E282 done) |
 | C Compiler and targets | "Compiler lane" | no open row of its own (scan's round 19 stopped after C243: core 2.9x, native 2.4x, wasi 2.3x the ideal; the next stages buy under 10%, GAPS round 19) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -74,7 +74,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E282 | Read an example program when it's picked: every example's JSON is in index.html (about 11 MB, the largest 0.6 MB), though one is open at a time | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?") | P1 | M | |
 | E283 | Warm-ups after the editor can be clicked: Run's worker start, warmParents, warmRun and warmCalls keep the page busy until about 4 to 5 s after load, so early clicks wait. Start them when the page is idle, after the first drawing, and measure the first click | Ersagun 2026-11-21 ("The editor is very slow to start, why is that?") | P2 | S | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
