@@ -12,7 +12,7 @@ import { listens } from "./audio.ts";
 import { applyWrite, portable, PROCESSOR, type Answers, type FromSound, type Write } from "./sound-thread.ts";
 import type { El } from "./html.ts";
 import type { Data, Value, World } from "./run.ts";
-import { HTML_V } from "./std-ids.ts";
+import { FALSE, HTML_V, TRUE } from "./std-ids.ts";
 
 // The page's world, answering as it did, and while `keep` holds a record,
 // writing each random number and clock reading into it: main runs again on
@@ -62,7 +62,9 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
   // main's cells written since main made them: what a sound starting
   // later is sent (it made the rest the same).
   const changed = new Set<number>();
-  cells.onWrite = (place, value, at) => { const cell = mine.get(place); if (cell === undefined) return; changed.add(cell); if (playing.size) send({ cell, value, at }); };
+  // What follows a cell: a sound playing while one holds true (I336).
+  const follows = new Set<() => void>();
+  cells.onWrite = (place, value, at) => { const cell = mine.get(place); if (cell === undefined) return; changed.add(cell); if (playing.size) send({ cell, value, at }); for (const f of follows) f(); };
   // What a sound's block function wrote to main's cells (L267): written
   // here too, so what reads them is drawn again.
   const take = (node: { port: MessagePort }, writes: Write[]) => {
@@ -139,14 +141,33 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
       contexts.clear();
       for (const ctx of all) void ctx.then((c) => c.close()).catch(() => {});
     },
-    listen(e: El, a: Data) {
+    // `when`: the cell of a `listening while` beside the listen (I336).
+    // Then the sound plays while it holds true, started and stopped when a
+    // handler writes it (a click, so the browser lets it start), and a
+    // sound that ends or can't start writes it false.
+    listen(e: El, a: Data, when?: Value) {
       const index = place.get(a);
       if (index === undefined) { console.error("a listen inside a part doesn't play: put it where main returns it"); return; }
       showSaid(e);
       const say = (why: string | null) => e.setAttribute("data-said", why ?? "");
       let on: { stop: () => void } | null = null;
-      e.addEventListener("click", async () => {
-        if (on) { on.stop(); return; }
+      const wanted = () => (cells.peek(when!) as Data).tag === TRUE;
+      const unwanted = () => { if (when && wanted()) cells.write(when, { tag: FALSE, fields: [] } as Data); };
+      if (when) {
+        // After the handler that wrote it, once, so a run taken back and
+        // run again doesn't start and stop it.
+        let looking = false;
+        follows.add(() => {
+          if (looking) return;
+          looking = true;
+          queueMicrotask(() => {
+            looking = false;
+            if (wanted() && !on) void begin();
+            else if (!wanted() && on) on.stop();
+          });
+        });
+      } else e.addEventListener("click", () => { if (on) on.stop(); else void begin(); });
+      const begin = async () => {
         if (closed) return;
         on = { stop: () => {} };
         say(null);
@@ -178,11 +199,11 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           // one asking to be kept alive goes on running, writing the
           // page's cells beside the next one started), and what it still
           // sends is not taken.
-          const end = () => { quiet(); from.stop(); from.node?.disconnect(); node.port.onmessage = null; node.port.postMessage({ stop: true }); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); };
+          const end = () => { quiet(); from.stop(); from.node?.disconnect(); node.port.onmessage = null; node.port.postMessage({ stop: true }); node.disconnect(); playing.delete(node); going.delete(end); on = null; e.setAttribute("data-playing", "false"); unwanted(); };
           on = { stop: end };
           going.add(end);
           // Stopped while it was starting: nothing plays.
-          if (closed) return end();
+          if (closed || (when && !wanted())) return end();
           e.setAttribute("data-playing", "true");
           // The platform's figures (C260): the input's, and the output's
           // (outputLatency, which a browser may know only once it plays,
@@ -201,8 +222,9 @@ export function soundPlayer(cells: Cells, worklet: string, main: () => Value, ba
           console.error(`sound: ${(err as Error).message}`);
           say((err as Error).message);
           e.setAttribute("data-playing", "false");
+          unwanted();
         }
-      });
+      };
     },
   };
 }

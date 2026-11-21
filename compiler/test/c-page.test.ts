@@ -566,6 +566,28 @@ test("a native page's `my sound latency` is what the screen measured, shown at t
   assert.equal(shown(2), "0.0125");
 });
 
+// A sound played while a cell holds true (I336): a tap on its element
+// doesn't start it; a handler writing the cell does, and stops it.
+test("a native page's `listening while` plays its sound while the cell holds true (I336)", { skip }, async () => {
+  const { CELL_OPS, FALSE, S } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const text = (t: string) => k.call(HTML_V.text, k.thunk(() => k.lit(t)));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("going", k.call(CELL_OPS.cell, k.x(FALSE)), (going) => el("div", [], [
+    el("button", [prop("id", "sound"), k.call(HTML_V.listen, k.x(HTML_V.noInput), k.fn(["b", "rate"], (b) => b)), k.call(HTML_V.listeningWhile, going)], [text("sound")]),
+    el("button", [prop("id", "go"), k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.call(CELL_OPS.write, going, k.call(S.not, k.call(CELL_OPS.read, going)))))], [text("go")]),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const r = spawnSync(compile(emitC(l, { main, page: "ui-headless" }).c), ["click:sound", "click:go", "click:sound", "click:go"]);
+  assert.equal(r.status, 0, r.stderr.toString());
+  assert.deepEqual(r.stdout.toString().split("\n").filter((s) => /^sound /.test(s)), ["sound 0 on no input", "sound 0 off no input"]);
+});
+
 // A sound in stereo in C (C269): its block function given a pair of
 // blocks and giving a pair back, left and right on the screen's two
 // channels; a mono input (the microphone here) comes in on both sides.

@@ -56,7 +56,9 @@ export interface Mount {
   // The step budget of each update (run.ts, withSteps).
   steps?: number;
   // What plays an element's sound (audio-page.ts), when the page can.
-  listen?: (el: El, a: Data) => void;
+  // A sound's listen, and the cell it plays while when the element has a
+  // `listening while` too (I336).
+  listen?: (el: El, a: Data, on?: Value) => void;
   // A handler that stopped (an Abort, an overflow), beside the console's
   // line: the editor's preview says it under the page, and where (C143).
   stopped?: (e: unknown) => void;
@@ -337,8 +339,11 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           // cell the view read changes. Out of steps, it keeps what it
           // painted last.
           watch(e, "paint", () => paintMarks(e, viewOf(m.call, a.fields[0])));
+        } else if (a.tag === HTML_V.listeningWhile) {
+          // Read by the listen beside it.
         } else if (a.tag === HTML_V.listen || a.tag === HTML_V.listenStereo) {
-          if (m.listen) m.listen(e, a);
+          const on = (fromList(d.fields[1]) as Data[]).find((b) => b.tag === HTML_V.listeningWhile);
+          if (m.listen) m.listen(e, a, on?.fields[0]);
           else console.warn("this page can't play sound here: build it with ters build-web");
         } else throw new Error(`not an attribute: ${a.tag}`);
       }

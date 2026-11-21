@@ -1548,6 +1548,7 @@ type Attribute = property(name: Text, value: () -[View]-> Text)
                | on(event: Text, then: (Event) -[Handler]-> Unit)
                | listen(to: Input, play: (List Float64, Float64) -[Sound]-> List Float64)
                | listen in stereo(to: Input, play: (Tuple2 (List Float64) (List Float64), Float64) -[Sound]-> Tuple2 (List Float64) (List Float64))
+               | listening while(on: Cell Bool)
 type Event     = event(value: Text, key: Text)
 type Input     = microphone | recording(address: Text) | no input
 ```
