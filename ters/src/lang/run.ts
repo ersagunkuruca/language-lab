@@ -334,6 +334,18 @@ class LambdaMeta {
   constructor(node: NodeOf<"lambda">, scope: Env, by: object) { this.lambda = node.id; this.node = node; this.scope = scope; this.by = by; }
   get env() { return toMap(this.scope); }
 }
+// A call made last in a body run directly, for `enter` to make next (L281a).
+// One made in a part of a constructor in the last place comes back with
+// the value built around it so far: `top` the outermost, and the part
+// (`hole`'s field `at`) where what the call gives goes (L281b).
+class TailCall {
+  readonly c: LambdaMeta;
+  readonly args: Value[];
+  top: Data | null = null;
+  hole: Data | null = null;
+  at = 0;
+  constructor(c: LambdaMeta, args: Value[]) { this.c = c; this.args = args; }
+}
 const toMap = (env: Env) => {
   const out = new Map<Id, Value>(), cells: { b: Id; v: Value }[] = [];
   for (let e = env; e; e = e.up) cells.push(e);
@@ -832,15 +844,42 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // they act.
   let directDepth = 0;
   const builtinFns = new Set<Fn>(Object.values(builtins));
-  const enter = (c: LambdaMeta, args: Value[]): Value => {
-    const t = tries.get(c.lambda);
-    if (t) t.n++; else tries.set(c.lambda, { n: 1, stops: 0 });
-    rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
+  // A call in a body's last place to a function that runs directly too
+  // comes back here as a TailCall, and is made in the same loop, not on
+  // the JavaScript stack: a function calling itself last (`copies onto`
+  // making a looper's minutes-long tape a sample at a time) runs as a
+  // loop, however many times it calls itself (L281a).
+  // A call made last inside a constructor (`cons(change(item), map(rest,
+  // change))`) is made in the loop too, and what it gives is put in the
+  // constructor's part, so `map` over a list of any length runs as a loop
+  // (L281b; tail recursion modulo cons, prior art: Friedman and Wise 1975,
+  // OCaml's [@tail_mod_cons]).
+  const enter = (c0: LambdaMeta, args0: Value[]): Value => {
+    let c = c0, args = args0;
+    // What the call gives, and the part still to fill in it, if any.
+    let result: Value = 0, hole: Data | null = null, at = 0;
     directDepth++;
-    try { return direct(c.node.body, bind(c.scope, c.node.params, args)); }
+    try {
+      while (true) {
+        const t = tries.get(c.lambda);
+        if (t) t.n++; else tries.set(c.lambda, { n: 1, stops: 0 });
+        rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
+        const r = directLast(c.node.body, bind(c.scope, c.node.params, args));
+        if (!(r instanceof TailCall)) {
+          if (!hole) return r;
+          hole.fields[at] = r;
+          return result;
+        }
+        if (r.top) {
+          if (hole) hole.fields[at] = r.top; else result = r.top;
+          hole = r.hole; at = r.at;
+        }
+        c = r.c; args = r.args;
+      }
+    }
     catch (e) {
-      if (e instanceof Aborted && aborts(c.node)) e = NEED;
-      if (e === NEED || e instanceof RangeError) stopped(c.lambda);
+      if (e instanceof Aborted && aborts(c0.node)) e = NEED;
+      if (e === NEED || e instanceof RangeError) { stopped(c0.lambda); if (c !== c0) stopped(c.lambda); }
       throw e;
     }
     finally { directDepth--; }
@@ -871,7 +910,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // compilation): no looking the node up, no switch on its kind, per run.
   type Direct = (env: Env) => Value;
   const compiled = new Map<Id, Direct>();
-  const direct = (id: Id, env: Env): Value => (compiled.get(id) ?? compile(id))(env);
+  // Nodes in a body's last place, made apart: their calls to functions
+  // that run directly give a TailCall for `enter` to make (L281a).
+  const compiledLast = new Map<Id, Direct>();
+  const directLast = (id: Id, env: Env): Value => (compiledLast.get(id) ?? compileLast(id))(env);
   const needs: Direct = () => { throw NEED; };
   // Whether a scope given from outside (ev) binds something besides binders.
   let looseScopes = false;
@@ -881,7 +923,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     return d;
   };
   const compiledOf = (id: Id): Direct => compiled.get(id) ?? compile(id);
-  function compileNode(id: Id): Direct {
+  const compileLast = (id: Id): Direct => {
+    const d = compileNode(id, true);
+    compiledLast.set(id, d);
+    return d;
+  };
+  const compiledLastOf = (id: Id): Direct => compiledLast.get(id) ?? compileLast(id);
+  // `last`: whether the node is in its body's last place (what it gives is
+  // what the body gives).
+  function compileNode(id: Id, last = false): Direct {
+    // Its parts in the last place too, made as it is.
+    const partOf = last ? compiledLastOf : compiledOf;
     const n = code.nodes[id];
     switch (n.kind) {
       case "lit": { const v = n.of === INT ? intLit(n.value) : n.value; return () => v; }
@@ -914,14 +966,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // `and` and `or` work out their second input only when the first
         // doesn't decide (L259, short-circuit.ts).
         const sc = shortCircuitOf(n);
-        if (sc !== null) return (env) => { const as = argsOf(), x = as[0](env) as Data; return x.tag === sc ? x : as[1](env); };
+        if (sc !== null) {
+          let second: Direct | undefined;
+          return (env) => { const x = argsOf()[0](env) as Data; return x.tag === sc ? x : (second ??= partOf(n.args[1]))(env); };
+        }
         if (head.kind === "lambda") {
           let body: Direct | undefined;
           const params = head.params;
           return (env) => {
             const as = argsOf(), vs = new Array<Value>(k);
             for (let i = 0; i < k; i++) vs[i] = as[i](env);
-            return (body ??= compiledOf(head.body))(bind(env, params, vs));
+            return (body ??= partOf(head.body))(bind(env, params, vs));
           };
         }
         let fn: Direct | undefined;
@@ -940,6 +995,25 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         }
         if (part?.kind === "variant" && !effectOf(target!) && part.fields.length === k && k > 0) {
           const tg = target!;
+          // In the last place, its last part that's a call is worked out
+          // last, in the last place too (L281b).
+          let j = -1;
+          if (last) for (let i = k - 1; i >= 0 && j < 0; i--) if (code.nodes[n.args[i]].kind !== "lit" && code.nodes[n.args[i]].kind !== "ref" && code.nodes[n.args[i]].kind !== "lambda") j = i;
+          if (j >= 0) {
+            let lastPart: Direct | undefined;
+            return (env) => {
+              const as = argsOf(), vs = new Array<Value>(k);
+              for (let i = 0; i < k; i++) if (i !== j) vs[i] = as[i](env);
+              if (looseScopes) { vs[j] = as[j](env); return callDirect((fn ??= compiledOf(n.fn))(env), vs); }
+              const r = (lastPart ??= compiledLastOf(n.args[j]))(env);
+              const d: Data = { tag: tg, fields: vs };
+              if (!(r instanceof TailCall)) { vs[j] = r; return d; }
+              vs[j] = r.top ?? 0;
+              if (!r.top) { r.hole = d; r.at = j; }
+              r.top = d;
+              return r as unknown as Value;
+            };
+          }
           return (env) => {
             const as = argsOf(), vs = new Array<Value>(k);
             for (let i = 0; i < k; i++) vs[i] = as[i](env);
@@ -947,6 +1021,13 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             return { tag: tg, fields: vs };
           };
         }
+        if (last) return (env) => {
+          if (steps) spendStep();
+          const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
+          for (let i = 0; i < k; i++) vs[i] = as[i](env);
+          const c = closureOf(f);
+          return c && directly(c.node) ? (new TailCall(c, vs) as unknown as Value) : callDirect(f, vs);
+        };
         return (env) => {
           if (steps) spendStep();
           const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
@@ -961,8 +1042,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         for (const [tag, arm] of matchArms(n)) arms.set(tag, { binds: arm.binds, body: undefined, id: arm.body });
         return (env) => {
           const d = (scrutinee ??= compiledOf(n.scrutinee))(env) as Data, arm = arms.get(d.tag);
-          if (arm) return (arm.body ??= compiledOf(arm.id))(bind(env, arm.binds, d.fields));
-          return (otherwise ??= compiledOf(n.otherwise!))(env);
+          if (arm) return (arm.body ??= partOf(arm.id))(bind(env, arm.binds, d.fields));
+          return (otherwise ??= partOf(n.otherwise!))(env);
         };
       }
       // The rest (a fold, a solve, ...) on a machine of its own, which
