@@ -19,6 +19,7 @@
 // the evaluator's (C137c2), Random seeded is random.ts's generator, and
 // the world is the evaluator's Runtime (C137c3, runCoreMain).
 
+import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
@@ -724,9 +725,10 @@ export function lowerCore(code: Code, info: Info, names: Record<Id, string>, roo
   // place, not as made.
   // Where checks are kept, the ids the passes make are drawn the same way
   // each compile (model.ts idsSeeded), so their checks again find their
-  // groups kept.
+  // groups kept; whole checks too, on no layer (check-cache.ts
+  // keepingWhole): a bake's check was 85 ms of greenhouse-page's lowering.
   const lower = () => keysOver(code.nodes, () => lowerCoreIn(code, info, names, roots));
-  return checksKept(info.options) ? idsSeeded(`lowering ${roots.join(" ")}`, lower) : lower();
+  return checksKept(info.options) ? idsSeeded(`lowering ${roots.join(" ")}`, () => keepingWhole(lower)) : lower();
 }
 function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: Id[]): CoreIR {
   // Work a lambda redoes on every call though nothing in it changes, done

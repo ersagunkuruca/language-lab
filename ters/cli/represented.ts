@@ -7,6 +7,7 @@ import { checksKept, infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
 import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations } from "../src/lang/library-reps.ts";
 import { classKey, optionsText } from "../src/lang/class-key.ts";
+import { keepingWhole } from "../src/lang/check-cache.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
@@ -27,11 +28,12 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // Where checks are kept, the ids the steps make are drawn the same way
   // each compile (model.ts idsSeeded), so their checks again find their
   // groups kept. The choices made are kept too, by this program but for
-  // its numbers, texts and truth values (library-reps.ts choosingFor).
+  // its numbers, texts and truth values (library-reps.ts choosingFor), and
+  // its whole checks by groups (check-cache.ts keepingWhole).
   const go = () => representedIn(p00, main, hostMaps, tables, sound, dataKeys);
   if (!checksKept(p00.info.options)) return go();
   const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys]);
-  return idsSeeded(`representing ${main}`, () => choosingFor(key, go));
+  return idsSeeded(`representing ${main}`, () => keepingWhole(() => choosingFor(key, go)));
 }
 function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables: boolean, sound: boolean, dataKeys: boolean): P {
   // A match on an Int's cases written out on Int first (int-cases.ts,
