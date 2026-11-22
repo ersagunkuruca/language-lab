@@ -5023,3 +5023,35 @@ The next stage buys under 10%. Round 21 ends at 20000 programs:
 Left for other lanes: I344 (checking mini takes 2 s, modes.ts 1.6 s of
 it, the checker's, L266) and the evaluator at 111x (L281).
 
+
+## Sweep: every benchmark against its hand-written twin (2026-11-22)
+
+After C283 and C284 closed, every `compiler/gaps/bench-*.ts` was run
+once at its own sizes (greenhouse and native left out, routes stopped
+at 400 s), to find where the compiled code is furthest from the ideal
+or grows faster than it. Core IR against the ideal, smallest size to
+largest:
+
+| program | core/ideal | grows? |
+|---|---|---|
+| strings | 21.8x, 23.8x, 29.1x | slowly (round 20 stopped) |
+| board | 22x, 14x, 15x, 35x | yes: adding a card 0.32 → 2.07 ms, the ideal's flat |
+| crew | 3.0x, 12.1x, 27.3x | yes, past 50 tasks |
+| fit | 17.3x, 17.1x, 19.2x | no |
+| rota | 10.8x to 13.2x | no |
+| notebook (as written) | 11x to 143x | yes; with trees or the table chosen 3.5 to 5x |
+| clinic | 7.0x to 8.5x | no |
+| flock, moths | 5.8x to 7.0x (wasi 5.3x to 8.5x) | wasi grows |
+| pack, chapters, trek, depot, sheet (chosen), mini, scan, audio | 3x to 6x | no |
+| machine, ledger, countdown | 1.6x to 3x | no |
+
+And one far outside the rest: machine's `primes 20000` in WebAssembly
+takes 11.2 s (the bench's own lowering) or 13.0 s (`ters wasi`)
+against 35 ms in core IR and 27 ms native. The profile is 86%
+`array.replaceAt.a1.i64` and 13% the collector: every store into the
+machine's memory copies it. owned-arrays.ts (C56) can't take it, since
+the program also keeps other Int arrays it reads after changing
+(`report`'s `program` and `better`), and that holds for every Array of
+Int at once. JS has no such case: its arrays are versions (Baker's
+trick, array-view.ts), so a replace writes in place and leaves a note
+for the old array. C285. `sort 1000` is the same (2.3 s against 0.25 s).
