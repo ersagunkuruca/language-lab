@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { children, isCall, isUse, ownerOfTypeParts, portsOf, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
+import { children, isCall, isUse, ownerOfTypeParts, portsOf, resolveRefs, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX } from "../ters/src/lang/std.ts";
@@ -479,8 +479,16 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     handle.append(s("rect", { x: w - 16, y: h - 16, width: 18, height: 18, class: "grip-hit" }), s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}` }));
     g.append(titled(handle, "Drag to resize this node; double-click for its own size"));
   };
+  // A node's own comment, a grey line above it (E291, as the blocks put it
+  // above its line): its first line, clipped; all of it on hover.
+  const noteAbove = (g: SVGGElement, key: Id) => {
+    const c = key !== defId ? pres.comments[key] : undefined;
+    if (!c) return;
+    const all = resolveRefs(c, (r) => pres.names[r] ?? r), first = all.split("\n")[0];
+    g.append(titled(s("text", { x: 0, y: -6, class: "node-cmt" }, first.length > 56 ? `${first.slice(0, 55)}…` : first), all));
+  };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
-    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); };
+    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteAbove(g, key); };
     const own = natural.get(key);
     items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };

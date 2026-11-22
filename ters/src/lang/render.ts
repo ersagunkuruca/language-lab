@@ -132,7 +132,33 @@ export function foldFrom(code: Code, n: Call, nameOf: (id: Id) => string): { fol
 // line, on lines of their own, hidden as …, or shown when it is deeper
 // than the depth hides. A view: kept in layout.json.
 export type Shape = "line" | "lines" | "hidden" | "shown";
-export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: Record<Id, Id>; shape?: Record<Id, Shape>; depth?: number } = {}): Blk[] {
+type BlocksOpts = { pane?: boolean; loose?: Record<Id, Id>; shape?: Record<Id, Shape>; depth?: number };
+export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: BlocksOpts = {}): Blk[] {
+  const bs = blocksBare(code, pres, info, defId, opts);
+  return pres.style.comments === false ? bs : noted(bs, pres, defId);
+}
+
+// A part's own comment is a line of its own above the line it is on
+// (E291; Ersagun 2026-11-22 chose "line above, both views"), as the
+// definition's is above the definition: each comment once, at the first
+// line that shows its part. A part hidden as … keeps its comment there.
+function noted(bs: Blk[], pres: Presentation, defId: Id): Blk[] {
+  const seen = new Set<Id>([defId]);
+  const ids = (ps: Piece[], out: Id[] = []): Id[] => { for (const p of ps) if (typeof p !== "string") { if (p.id) out.push(p.id); ids(p.kids, out); } return out; };
+  const said = (at: Id[]): Blk[] => at.flatMap((id) => {
+    const c = pres.comments[id];
+    if (c === undefined || seen.has(id)) return [];
+    seen.add(id);
+    return resolveRefs(c, (r) => pres.names[r] ?? r).split("\n").map((l): Blk => ({ line: [`-- ${l}`], cls: "cmt" }));
+  });
+  const walk = (list: Blk[]): Blk[] => list.flatMap((b) => {
+    if ("line" in b) return b.cls === "cmt" ? [b] : [...said([...(b.id ? [b.id] : []), ...ids(b.line)]), b];
+    return [...said(b.id ? [b.id] : []), { ...b, kids: walk(b.kids) }];
+  });
+  return walk(bs);
+}
+
+function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: BlocksOpts): Blk[] {
   const names = pres.names;
   const pane = !!opts.pane;
   // A binder nobody named is called for its type (items, x, event), as the
