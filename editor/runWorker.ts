@@ -15,6 +15,8 @@ import type { Pins } from "../ters/src/lang/signatures.ts";
 import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { shower } from "./shown.ts";
 import { loadPrinted } from "../compiler/src/core-js.ts";
+import { keepOnMainThread, shareAlways } from "../compiler/src/scalar.ts";
+import { isPlace } from "./choicesFor.ts";
 import { checkedForRun, coreMain, type CoreMain } from "./coreMain.ts";
 import { Aborted as CoreAborted, Stopped as CoreStopped } from "../compiler/src/core-rt.ts";
 import { resolvedFor, runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
@@ -129,8 +131,22 @@ if (checksRead) {
   void checksRead.then(() => { self.onmessage = answer; for (const e of asked.splice(0)) answer(e); });
 } else self.onmessage = answer;
 
+// The placements held in Choices (E292, L280h), set for the lowering of
+// the ask (scalar.ts keeps them for the next): main's work kept on the
+// main thread, or a command-line program's shared out always. The types'
+// held rows are the rest.
+function placed(held: [Id, string][] = []): [Id, string][] {
+  keepOnMainThread(held.filter(([, r]) => r === "main thread").map(([id]) => id), []);
+  shareAlways(held.filter(([, r]) => r === "worker threads").map(([id]) => id));
+  return held.filter(([, r]) => !isPlace(r));
+}
+
 function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>) {
   answers = null; paused = false;
+  // The choices list every placement as the compiler makes it, the held
+  // marked (choicesFor.ts); runs and pages are lowered with them held.
+  if ("held" in e.data && !("choices" in e.data)) e.data.held = placed(e.data.held);
+  else placed([]);
   if ("warm" in e.data) {
     const { code, names, pins, def, held } = e.data;
     try { const lib = checked(code, names, pins, def, held); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
