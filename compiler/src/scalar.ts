@@ -428,7 +428,7 @@ export type SExpr =
   | { k: "int"; v: bigint }
   | { k: "text"; v: string }
   // A function of the runtime (wasm-rt.ts) by name.
-  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean; always?: true } }
+  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean; always?: true; runs?: number } }
   | { k: "bool"; v: boolean }
   | { k: "local"; i: number }
   | { k: "op"; op: Op; args: SExpr[] }
@@ -636,8 +636,9 @@ export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = {
 // A page's (awayMaps's `fn`) on its workers or its GPU.
 // And JavaScript's runs held (L280e): how many its items are cut into,
 // given after where (false, or "", where only the runs are held).
-let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU">; runs: ReadonlyMap<Id, number> } = { js: new Set(), c: new Set(), page: new Map(), runs: new Map() };
-export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page), runs: new Map(runs) }; }
+// C's (`cRuns`) runs a thread.
+let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU">; runs: ReadonlyMap<Id, number>; cRuns: ReadonlyMap<Id, number> } = { js: new Set(), c: new Set(), page: new Map(), runs: new Map(), cRuns: new Map() };
+export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = [], cRuns: Iterable<[Id, number]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page), runs: new Map(runs), cRuns: new Map(cRuns) }; }
 const runsOf = (at: Id): SExpr[] => { const n = onWorkers.runs.get(at); return n ? [{ k: "num", v: n }] : []; };
 const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = runsOf(at); return on || n.length ? [{ k: "text", v: on ?? "" }, ...n] : []; };
 // map.worth's say, true where its site is held anywhere off the main thread.
@@ -1014,7 +1015,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // One held on C's threads (L280h, `shareAlways`'s c) shares from its
   // first items: its host says so, which c.ts tells the call.
   const onThreads = (e: SExpr, at: Id, how: string): SExpr => {
-    const held: SExpr = e.k === "rt" && e.host && onWorkers.c.has(at) ? { ...e, host: { ...e.host, always: true } } : e;
+    const runs = onWorkers.cRuns.get(at);
+    const held: SExpr = e.k === "rt" && e.host && (onWorkers.c.has(at) || runs) ? { ...e, host: { ...e.host, ...(onWorkers.c.has(at) ? { always: true as const } : {}), ...(runs ? { runs } : {}) } } : e;
     threadSites.push({ e: held, at, how });
     return held;
   };

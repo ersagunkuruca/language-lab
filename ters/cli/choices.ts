@@ -178,6 +178,8 @@ function sitesKept(funcs: readonly { body: unknown }[]): Set<number> {
 // take (branches-rt.ts RUNS, L280e): a map's, a keep's, a fold's, a
 // check's; a search is cut by its first two choices.
 export const RUNS = 32;
+// C's, how many runs a thread (c.ts, the map's `per`).
+export const C_RUNS = 8;
 const IN_RUNS = new Set(["map", "keep", "add", "max", "min", "with", "every", "any", "first where"]);
 export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target = "JavaScript page"): string[] {
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
@@ -215,7 +217,7 @@ export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; 
   for (const f of ir.funcs ?? []) walk(f.body);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
-  return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${t.at} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads; target C`))];
+  return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${t.at} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads${IN_RUNS.has(t.how) ? `; in ${C_RUNS} runs a thread` : ""}; target C`))];
 }
 
 // The schedule entries (the fourth kind, the order and grouping of
@@ -267,7 +269,8 @@ export function choicesText(main: string, lines: readonly string[]): string {
 export const HELD = "held ";
 // A placement: its node, where it runs, what it is among, how many runs
 // its items are shared out in (L280e), its target.
-const PLACE = /^(\S+) place: .*: ([^:;]+); among ([^;]+)(?:; in (\d+) runs)?; target (.+)$/;
+// C's runs are a thread's.
+const PLACE = /^(\S+) place: .*: ([^:;]+); among ([^;]+)(?:; in (\d+) runs(?: a thread)?)?; target (.+)$/;
 // The placements held on the main thread (L280h), by the node each is
 // about, for JavaScript (a page's or a command-line program's workers)
 // and for C's threads; and a command-line program's held on its worker
@@ -275,9 +278,9 @@ const PLACE = /^(\S+) place: .*: ([^:;]+); among ([^;]+)(?:; in (\d+) runs)?; ta
 // its first items; and a page's on its workers or its GPU (`page`).
 // And the runs held (L280e): JavaScript's, a command-line program's or a
 // page's, by the node.
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][] }
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][] }
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [] };
   for (const l of lines) {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
     if (!p) continue;
@@ -286,7 +289,7 @@ export function heldPlaces(lines: readonly string[]): HeldPlaces {
     if (on === "worker threads" && target === "JavaScript") out.workers.push(id);
     if (on === "threads" && target === "C") out.threads.push(id);
     if ((on === "workers" || on === "GPU") && target === "JavaScript page") out.page.push([id, on]);
-    if (runs && target !== "C") out.runs.push([id, Number(runs)]);
+    if (runs) (target === "C" ? out.cRuns : out.runs).push([id, Number(runs)]);
   }
   return out;
 }
@@ -338,7 +341,7 @@ export function heldWarnings(written: readonly string[], alone: readonly string[
   const places = written.flatMap((l) => {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null, was = p && placed.get(`${p[1]} ${p[5]}`);
     if (!p || !was) return [];
-    return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [`held   ${p[1]} (${p[5]}): in ${p[4]} runs, where the compiler would share it in ${was[4]}`] : [])];
+    return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [`held   ${p[1]} (${p[5]}): in ${p[4]} runs${p[5] === "C" ? " a thread" : ""}, where the compiler would share it in ${was[4]}`] : [])];
   });
   return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places];
 }

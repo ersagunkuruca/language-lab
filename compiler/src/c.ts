@@ -61,7 +61,7 @@ import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, ty
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (reservedNames).
-export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_runs", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
@@ -393,7 +393,7 @@ static int lab_par_ahead(const struct timespec *t0, int64_t done, int64_t n) {
 // A call held on the threads (L280h) is made with this set: the job
 // reads it, clears it (so the calls inside its items don't see it), and
 // shares from its first items, its clock started an hour back.
-static _Thread_local int lab_par_always = 0;
+static _Thread_local int lab_par_always = 0, lab_par_runs = 0;
 static int lab_par_worth(const struct timespec *t0) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
@@ -508,7 +508,12 @@ type SearchHow = "count" | "all" | "first";
 const folds = (job: string) => job === "add" || job === "max" || job === "min" || job === "with";
 // A call held on the threads (L280h, scalar.ts onThreads): made with
 // lab_par_always set, which the job reads and clears.
-const atOnce = (e: SExpr, call: string): string => (e.k === "rt" && e.host?.always ? `(lab_par_always = 1, ${call})` : call);
+// And one whose runs are held (L280e), with lab_par_runs set: how many
+// runs a thread its items are cut into.
+const atOnce = (e: SExpr, call: string): string => {
+  const h = e.k === "rt" ? e.host : undefined, set = [...(h?.always ? ["lab_par_always = 1"] : []), ...(h?.runs ? [`lab_par_runs = ${h.runs}`] : [])];
+  return set.length ? `(${set.join(", ")}, ${call})` : call;
+};
 const isPar = (fn: string) => fn.startsWith("par:range:") || fn.startsWith("par:chunks:") || fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
@@ -4125,8 +4130,8 @@ static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"
   return r;
 }
 static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_in_${n}(lab_cell *xs, lab_cell *f${fold ? `, ${ty(tf.result)} z` : ""}${tj ? ", lab_cell *jf" : ""}) {
-  int always = lab_par_always;
-  lab_par_always = 0;
+  int always = lab_par_always, per = lab_par_runs ? lab_par_runs : 8;
+  lab_par_always = 0; lab_par_runs = 0;
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;
@@ -4175,7 +4180,7 @@ ${job === "map" ? `  // Already on the threads (a map inside a map's item, moths
     for (k = 0; k < left; k++) ${share(ta.item, "j.in[k]")}
     lab_shared();
     if (!lab_share_no) {
-      j.next = left; j.run = left / (8 * ((int64_t)lab_pool_n + 1)); if (j.run < 1) j.run = 1;
+      j.next = left; j.run = left / (per * ((int64_t)lab_pool_n + 1)); if (j.run < 1) j.run = 1;
       lab_freeze(); lab_pool_run(lab_par_work_${n}, &j); lab_thaw();${counted(out) ? `
       for (k = 0; k < left; k++) if (!j.bad[k]) ${hold(out, "j.out[k]")}
       lab__held();` : ""}
