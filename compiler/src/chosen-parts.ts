@@ -39,6 +39,10 @@ const flat = (e: SExpr): boolean => {
     // A pure function's call (the stand-in `nobody`, `nothing`): worked
     // out where a part of it is read, so only past the end (C268).
     case "call": return !e.cps && pure.has(e.fn) && e.args.every(flat);
+    // A choice of them, and a case made of them (an `Optional` of an
+    // item's columns, G1b3: `if present then some(vec(x, y)) else none`).
+    case "if": return !e.check && flat(e.cond) && flat(e.then) && flat(e.else);
+    case "new": return e.args.every(flat);
     default: return false;
   }
 };
@@ -75,6 +79,9 @@ export function chosenParts(ir: CoreIR): number {
       return mapKids(e, go);
     };
     f.body = go(f.body);
+    // A match on a case chosen between, in each choice (G1b3); then the
+    // records it gives read by their parts.
+    if (cases(f)) { n++; f.body = go(f.body); }
     if (n > before) f.body = tidied(f, fi).body;
   });
   pure = new Set();
@@ -144,10 +151,10 @@ function at(f: SFunc, v: SExpr, t: LType, p: number[], ren: Map<number, number>,
   switch (v.k) {
     case "let": {
       const i = f.locals.push(f.locals[v.i]) - 1, value = re(v.value), inner = new Map(ren).set(v.i, i);
-      const m = value.k === "make" ? new Map(made).set(i, value) : made;
+      const m = value.k === "make" ? new Map(made).set(i, value) : value.k === "local" && made.has(value.i) ? new Map(made).set(i, made.get(value.i)!) : made;
       const body = at(f, v.body, t, p, inner, m);
       // A record made, read here only at its parts: not made at all.
-      return value.k === "make" && !reads(body, i) ? body : { k: "let", i, value, body };
+      return (value.k === "make" || (value.k === "local" && made.has(value.i))) && !reads(body, i) ? body : { k: "let", i, value, body };
     }
     case "if": return { k: "if", cond: re(v.cond), then: at(f, v.then, t, p, ren, made), else: at(f, v.else, t, p, ren, made), t: typeAt(t, p) };
     case "attempt": {
@@ -185,4 +192,87 @@ function answers(body: SExpr, otherwise: SExpr): SExpr | null {
     return b && { ...body, then: a!, else: b };
   }
   return sure(body) ? body : null;
+}
+
+// `let x = V in … case x …`, V a choice whose ends include cases made
+// (`new`): the match made in each end of V, the arm for a case made given
+// its fields, so no case is made to be matched (G1b3: a neighbour's
+// `velocity` from its columns, `if present then some(vec(x, y)) else
+// none`, matched by `velocity of`). GHC's case-of-case and case of a
+// known constructor. The arms are copied for each end, so only small ones.
+const MAX_ARMS = 60;
+type Case = Extract<SExpr, { k: "case" }>;
+function cases(f: SFunc): number {
+  let n = 0;
+  const ends = (e: SExpr): SExpr[] => (e.k === "let" ? ends(e.body) : e.k === "if" ? [...ends(e.then), ...ends(e.else)] : [e]);
+  const binds = (e: SExpr): number[] => {
+    const own = e.k === "let" ? [e.i] : e.k === "case" ? [e.s] : e.k === "attempt" || e.k === "search" ? [e.res] : [];
+    return [...own, ...kids(e).flatMap(binds)];
+  };
+  const plainArm = (e: SExpr): boolean => !["list", "handle", "budget", "apply", "released", "closure"].includes(e.k) && kids(e).every(plainArm);
+  // An arm copied, its own locals new.
+  const fresh = (e: SExpr, m: Map<number, number>): SExpr => {
+    const own = new Map(m);
+    for (const b of binds(e)) own.set(b, f.locals.push(f.locals[b]) - 1);
+    return mapLocals(e, (i) => own.get(i) ?? i);
+  };
+  const pushed = (v: SExpr, c: Case, ren: Map<number, number>): SExpr | null => {
+    const re = (x: SExpr) => mapLocals(x, (i) => ren.get(i) ?? i);
+    switch (v.k) {
+      case "let": {
+        const i = f.locals.push(f.locals[v.i]) - 1, body = pushed(v.body, c, new Map(ren).set(v.i, i));
+        return body && { k: "let", i, value: re(v.value), body };
+      }
+      case "if": {
+        const a = pushed(v.then, c, ren), b = a && pushed(v.else, c, ren);
+        return b && { k: "if", cond: re(v.cond), then: a!, else: b, t: c.result };
+      }
+      case "new": {
+        const arm = c.arms[v.c];
+        if (!arm) return null;
+        // Its fields as lets, read where the arm reads them.
+        const at = v.args.map((x, k) => ({ i: f.locals.push(c.t.cases[v.c].fields[k].t) - 1, value: re(x) }));
+        let whole = false;
+        const sub = (x: SExpr): SExpr => {
+          if (x.k === "field" && x.rec.k === "local" && x.rec.i === c.s && x.c === v.c) return { k: "local", i: at[x.i].i };
+          if (x.k === "local" && x.i === c.s) whole = true;
+          return mapKids(x, sub);
+        };
+        const body = sub(fresh(arm, new Map()));
+        if (whole) return null;
+        return at.reduceRight<SExpr>((b, l) => ({ k: "let", i: l.i, value: l.value, body: b }), body);
+      }
+      default: {
+        const si = f.locals.push(c.t) - 1;
+        return { k: "case", scrut: re(v), s: si, t: c.t, result: c.result, arms: c.arms.map((a) => a && fresh(a, new Map([[c.s, si]]))) };
+      }
+    }
+  };
+  const chosen = new Set<number>();
+  const go = (e: SExpr, vals: Map<number, SExpr>): SExpr => {
+    if (e.k === "let" && !e.check && !e.seeded && typeof f.locals[e.i] === "object" && "cases" in (f.locals[e.i] as object) && choice(e.value) && ends(e.value).some((x) => x.k === "new")) {
+      chosen.add(e.i);
+      return { ...e, value: go(e.value, vals), body: go(e.body, new Map(vals).set(e.i, e.value)) };
+    }
+    // `let y = x`: y the same choice.
+    if (e.k === "let" && e.value.k === "local" && vals.has(e.value.i)) return { ...e, body: go(e.body, new Map(vals).set(e.i, vals.get(e.value.i)!)) };
+    if (e.k === "case" && e.scrut.k === "local" && vals.has(e.scrut.i)) {
+      const v = vals.get(e.scrut.i)!;
+      const armSize = e.arms.reduce((k, a) => k + (a ? size(a) : 0), 0);
+      if (e.arms.every((a) => !a || plainArm(a)) && armSize * ends(v).length <= MAX_ARMS * 2 && armSize <= MAX_ARMS) {
+        const p = pushed(v, { ...e, arms: e.arms.map((a) => a && go(a, vals)) }, new Map());
+        if (p) { n++; return p; }
+      }
+    }
+    return mapKids(e, (x) => go(x, vals));
+  };
+  f.body = go(f.body, new Map());
+  // A choice every case of which went in, and the names given it: not
+  // made (a choice is flat).
+  const drop = (e: SExpr): SExpr => {
+    const x = mapKids(e, drop);
+    return x.k === "let" && (chosen.has(x.i) || x.value.k === "local") && !x.check && !reads(x.body, x.i) ? x.body : x;
+  };
+  if (n) f.body = drop(f.body);
+  return n;
 }

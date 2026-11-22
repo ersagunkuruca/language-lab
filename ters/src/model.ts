@@ -809,6 +809,14 @@ export function collect(code: Code): Code {
   const keep = new Set<Id>();
   for (const n of nodesOfKindIn(code.nodes, "builtin")) if (n.kind === "builtin") keep.add(n.id);
   for (const d of code.defs) for (const id of subtree(code, d)) keep.add(id);
+  // Nodes over others stay over them, the unreached taken out: a plain
+  // copy of every node (the MCP's each new definition, 50,000 nodes on the
+  // library) was kept by each version after, 3 MB an edit (I317).
+  if (nodesUnder(code.nodes)) {
+    const nodes = copyNodes(code.nodes);
+    for (const id of nodeIds(code.nodes)) if (!keep.has(id)) dropNode(nodes, id);
+    return { nodes, defs: code.defs };
+  }
   return { nodes: Object.fromEntries(nodeEntries(code.nodes).filter(([id]) => keep.has(id))), defs: code.defs };
 }
 
