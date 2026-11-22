@@ -34,7 +34,7 @@ import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, type Pos } from "./canvas.ts";
-import { edit, fileTag, gesturesTip, h, head, tip, type Kid } from "./dom.ts";
+import { edit, fileTag, gesturesTip, growing, h, head, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
 import { navigatorPanel } from "./navigator.ts";
 import { runPanel } from "./runPanel.ts";
@@ -1225,6 +1225,27 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const outer = enclosing(id);
   const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ Outer") : null;
   out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))), ...(upBtn ? [h("div", { class: "acts up" }, upBtn)] : []));
+  // Its comment first, in one box as tall as its text (E288), saved in
+  // comments.json.
+  {
+    const ta = growing(h("textarea", { id: "f-comment", placeholder: "Comment", "aria-label": "Comment" }) as HTMLTextAreaElement);
+    // References show as {name}; on the way back a {name} that is one of them,
+    // or that only one node carries, becomes that node's id again.
+    const raw = doc.comments[id] ?? "";
+    const refs = [...raw.matchAll(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"))].map((m) => m[1]);
+    ta.value = resolveRefs(raw, (ref) => `{${names[ref] ?? ref}}`);
+    ta.addEventListener("change", () => {
+      const back = ta.value.replace(/\{([^{}]+)\}/g, (whole, nm: string) => {
+        const mine = refs.find((r) => names[r] === nm);
+        const all = Object.keys(names).filter((r) => names[r] === nm && doc.code.nodes[r]);
+        const ref = mine ?? (all.length === 1 ? all[0] : undefined);
+        return ref ? `{${ref}}` : whole;
+      });
+      if (back !== raw) setComment(id, back);
+    });
+    ta.title = "Saved in comments.json";
+    out.append(h("label", { class: "field comment", for: "f-comment" }, ta));
+  }
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   // With the unit it needs, a pin's included (QA 11-15 Q1).
@@ -1435,22 +1456,6 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const structure = structurePanel(info, names);
   if (structure) out.append(structure);
 
-  const ta = h("textarea", { id: "f-comment", rows: "2", placeholder: "Add a note to this node" }) as HTMLTextAreaElement;
-  // References show as {name}; on the way back a {name} that is one of them,
-  // or that only one node carries, becomes that node's id again.
-  const raw = doc.comments[id] ?? "";
-  const refs = [...raw.matchAll(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"))].map((m) => m[1]);
-  ta.value = resolveRefs(raw, (ref) => `{${names[ref] ?? ref}}`);
-  ta.addEventListener("change", () => {
-    const back = ta.value.replace(/\{([^{}]+)\}/g, (whole, nm: string) => {
-      const mine = refs.find((r) => names[r] === nm);
-      const all = Object.keys(names).filter((r) => names[r] === nm && doc.code.nodes[r]);
-      const ref = mine ?? (all.length === 1 ? all[0] : undefined);
-      return ref ? `{${ref}}` : whole;
-    });
-    if (back !== raw) setComment(id, back);
-  });
-  out.append(h("label", { class: "field", for: "f-comment" }, h("span", { class: "field-head" }, "Comment", fileTag("comments")), ta));
   return out;
 }
 
@@ -2129,14 +2134,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   return box;
 }
 
-// Run's head, and for main its comment behind an ⓘ (E276): what the
-// program does and what to give it, without reading its code.
-function runHead(): HTMLElement {
-  const about = ui.def === defNamed("main") ? doc.comments[ui.def] : undefined;
-  if (!about) return h("h2", {}, "Run");
-  const [b, note] = tip(about, "What main does");
-  return h("div", { class: "run-head" }, h("h2", {}, "Run"), b, note);
-}
+// Run's head. Main's comment is in the Definition panel's box, once
+// (E288: an ⓘ here repeated it).
+const runHead = (): HTMLElement => h("h2", {}, "Run");
 
 const { page, pageSection, pictureSection, savePage, saveLog } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,

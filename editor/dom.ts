@@ -38,6 +38,18 @@ export function head(label: Kid | Kid[], o: { tip?: string; file?: string } = {}
   } else if (o.file) el.append(fileTag(o.file));
   return el;
 }
+// A textarea as tall as its text (E288): CSS field-sizing where the
+// browser has it, its scroll height where it hasn't.
+export function growing(ta: HTMLTextAreaElement): HTMLTextAreaElement {
+  ta.rows = 1;
+  ta.classList.add("grow");
+  if (CSS.supports("field-sizing", "content")) return ta;
+  const fit = () => { ta.style.height = "auto"; ta.style.height = `${ta.scrollHeight}px`; };
+  ta.addEventListener("input", fit);
+  // Its height is known once it is on the page.
+  requestAnimationFrame(fit);
+  return ta;
+}
 // An ⓘ: its text on hover, and a note under it that a click opens.
 export function tip(text: string, label = "What this is"): [HTMLElement, HTMLElement] {
   const note = h("p", { class: "tip-note", hidden: true }, text);
