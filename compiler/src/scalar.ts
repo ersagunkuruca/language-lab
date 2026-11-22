@@ -90,6 +90,9 @@ import { bakeCalls } from "./bake.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { countsInto } from "./fold-chunks.ts";
+import { originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "../../ters/src/lang/prelude-ids.ts";
+
+const ZIPPED = PRELUDE_DEFS["zipped"];
 import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
@@ -4249,6 +4252,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const atLeast0: SExpr = { k: "if", t: "int", cond: { k: "rt", fn: "int.less", args: [n, { k: "int", v: 0n }] }, then: { k: "int", v: 0n }, else: n };
         return { k: "let", i: nl, value: range, body: { k: "call", fn: ci.fn, args: [{ k: "int", v: 0n }, atLeast0, ci.start, ...outside], tail } };
       }
+      // Over `zipped` of two arrays (C275, YIN's difference): no array of
+      // pairs, item k read from both arrays at k, from the shorter's last
+      // back. A copy on a split's side counts too: what it is given are
+      // arrays here, and the pairs are of their items whatever it gives.
+      const z = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? s.args[0] : null;
+      const zf = z?.k === "call" ? funcs[z.fn] : null;
+      const zi = z?.k === "call" && zf && (SPLIT_COPIED_FROM.get(zf.def) ?? originalOf(zf.def)) === ZIPPED && zf.params.length === 2 && zf.params.every(isArray) ? zippedItems(st, result, arms, free, env, f, zf.params as AType[]) : null;
+      if (zi && z?.k === "call") {
+        const l1 = f.locals.push(zi.arrays[0]) - 1, l2 = f.locals.push(zi.arrays[1]) - 1, nl = f.locals.push("int") - 1;
+        const a1: SExpr = { k: "local", i: l1 }, a2: SExpr = { k: "local", i: l2 }, n: SExpr = { k: "local", i: nl };
+        const n1: SExpr = { k: "rt", fn: `array.length.a${zi.arrays[0].index}`, args: [a1] }, n2: SExpr = { k: "rt", fn: `array.length.a${zi.arrays[1].index}`, args: [a2] };
+        return { k: "let", i: l1, value: z.args[0], body: { k: "let", i: l2, value: z.args[1], body: {
+          k: "let", i: nl, value: { k: "if", t: "int", cond: { k: "rt", fn: "int.less", args: [n1, n2] }, then: n1, else: n2 },
+          body: { k: "call", fn: zi.fn, args: [a1, a2, n, zi.start, ...outside], tail } } } };
+      }
       const ai = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? arrayItems(st, result, arms, free, env, f, [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])]) : null;
       if (ai && s.k === "rt") {
         const al = f.locals.push(ai.array) - 1, a: SExpr = { k: "local", i: al };
@@ -4750,6 +4768,40 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const start = expr(nil.body, env, f, false);
     if (opts.host && !counted) restAsView((g.body as Extract<SExpr, { k: "if" }>).else, start, array, k, x);
     return { fn: gi, start, array };
+  }
+  // A fold over zipped(a, b) of two arrays read in place (C275): as
+  // arrayItems, the item at k the pair of a's and b's items at k. Only
+  // where the arm reads the item as it is, the pair its head field holds.
+  function zippedItems(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, arrays: AType[]): { fn: number; start: SExpr; arrays: AType[] } | null {
+    const nil = arms.find((a) => !a.results.some((x) => x)), cons = arms.find((a) => a.results.some((x) => x));
+    if (!nil || !cons || arms.length !== 2 || st.cases.length !== 2) return null;
+    const c = st.cases.find((x) => x.variant === cons.variant)!;
+    const head = c.fields.findIndex((x) => x.t !== st), tail = c.fields.findIndex((x) => x.t === st);
+    if (head < 0 || tail < 0) return null;
+    const pair = c.fields[head].t;
+    if (!isRecord(pair) || pair.fields.length !== 2 || pair.fields[0].t !== arrays[0].item || pair.fields[1].t !== arrays[1].item) return null;
+    if (cons.binds[tail] && refsIn(cons.body).includes(cons.binds[tail]!)) return null;
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const params: LType[] = [arrays[0], arrays[1], "int", result, ...caps];
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.zipped`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    let inner = new Map(free.map((b, j) => [b, 4 + j]));
+    const k = g.locals.push("int") - 1, x = g.locals.push(pair) - 1;
+    if (cons.binds[head]) inner = new Map(inner).set(cons.binds[head]!, x);
+    inner = new Map(inner).set(cons.results[tail]!, 3);
+    const a1: SExpr = { k: "local", i: 0 }, a2: SExpr = { k: "local", i: 1 }, left: SExpr = { k: "local", i: 2 }, at: SExpr = { k: "local", i: k };
+    g.body = {
+      k: "if", t: result, cond: { k: "rt", fn: "int.equal", args: [left, { k: "int", v: 0n }] }, then: { k: "local", i: 3 },
+      else: {
+        k: "let", i: k, value: { k: "rt", fn: "int.sub", args: [left, { k: "int", v: 1n }] },
+        body: {
+          k: "let", i: x, value: { k: "make", t: pair, args: [{ k: "rt", fn: `array.get.a${arrays[0].index}`, args: [a1, at] }, { k: "rt", fn: `array.get.a${arrays[1].index}`, args: [a2, at] }] },
+          body: { k: "call", fn: gi, args: [a1, a2, at, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 4 + j }))], tail: true },
+        },
+      },
+    };
+    if (fails(g.body, funcs)) g.partial = true;
+    return { fn: gi, start: expr(nil.body, env, f, false), arrays };
   }
   // `array of List`'s own fold hands each arm the rest of the array as it
   // goes, pushing each item onto what it had: a new array per fold,

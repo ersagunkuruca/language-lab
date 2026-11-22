@@ -42,6 +42,8 @@ export const PRELUDE_DEFS: Readonly<Record<string, string>> = {
  "append": "@c9sa21p6t34r9bf9cjcm8h2101",
  // One item at the end, what cons-onto.ts adds each item with (C250).
  "added at end": "@clvlk6m2ke027pdc01b5rs0rqv",
+ // Two lists side by side, a fold over which reads both arrays in place (compiler/src/scalar.ts zippedItems, C275).
+ "zipped": "@u6ulqtprp7t04gefhq2qrf9fqi",
 };
 
 // A definition copied by a pass (library-reps.ts copies the library's list
