@@ -188,7 +188,6 @@ all of these.
 | L280e | Parameters on a representation (a grid's cell size, a chunk size, a worker count), chosen by the compiler and kept in the choices | Ersagun 2026-11-20 | P3 | M | |
 | L280f | Pool as a representation of a collection, so a program writes List or Map and the choices say pooled (moves the Pool type out of the code) | Ersagun 2026-11-20 | P3 | L | |
 | L280g | Spatial partitioning as representations of the "pairs nearer than r" job: all pairs as its meaning, grid and tree as implementations, cell size as a parameter. Needs a program that uses it (flock or Night watch) | Ersagun 2026-11-20 | P3 | L | |
-| L280h | Where work runs (C61's GPU, workers or main thread) kept and tunable in the choices, per loop. Parts 1-3 done: a placement held on the main thread (JavaScript's workers, C's threads apart), and a command-line program's on worker threads or C's on its threads from its first items, `ters check` saying where the compiler would run it; left: a page's workers or GPU always | Ersagun 2026-11-20 | P3 | M | |
 | L280i | A published library carries its own types' and ways' choices, keyed by content hash (when sharing needs it) | Ersagun 2026-11-20 | P3 | M | |
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))

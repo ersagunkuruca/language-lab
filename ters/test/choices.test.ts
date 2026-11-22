@@ -16,6 +16,7 @@ import { represented, type Program } from "../cli/represented.ts";
 import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, scheduleLines, staleChoices } from "../cli/choices.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
+import { shareAlways } from "../../compiler/src/scalar.ts";
 
 const root = fileURLToPath(new URL("../examples/", import.meta.url));
 
@@ -129,7 +130,27 @@ test("moths-page's maps go to the workers when slow, and one of Ints to the GPU 
     "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; target JavaScript page",
     "place: tick's map: workers when slow; among main thread, workers; target JavaScript page",
   ]);
-  assert.throws(() => heldOf([`held ${lines[0]}`]), /a placement can be held on the main thread, worker threads or C's threads, not yet a page's workers or GPU/);
+  assert.throws(() => heldOf([`held ${lines[0]}`]), /a placement is held on one of what it is among/);
+  // Held on the GPU and on the workers (L280h): each page's map given
+  // where, after its join.
+  const gpu = lines.find((l) => l.includes(" place: range from's map: "))!, tick = lines.find((l) => l.includes(" place: tick's map: "))!;
+  const held = [`held ${gpu.replace(": workers when slow, the GPU where the browser has WebGPU;", ": GPU;")}`, `held ${tick.replace(": workers when slow;", ": workers;")}`];
+  assert.equal(heldOf(held).size, 0);
+  const page = heldPlaces(held).page;
+  assert.deepEqual(page.map(([, on]) => on), ["GPU", "workers"]);
+  shareAlways([], [], page);
+  try {
+    const on: string[] = [], seen = new Set<object>();
+    const walk = (e: unknown): void => {
+      if (!e || typeof e !== "object" || seen.has(e)) return;
+      seen.add(e);
+      const x = e as { k?: string; op?: string; args?: { k?: string; v?: unknown }[] };
+      if (x.k === "world" && x.op === "mapAway" && x.args?.[7]?.k === "text") on.push(String(x.args[7].v));
+      for (const v of Array.isArray(e) ? e : Object.values(e)) walk(v);
+    };
+    for (const f of lowerCore(r.code, r.info, r.names, [main]).funcs) walk(f.body);
+    assert.deepEqual(on.sort(), ["GPU", "workers"]);
+  } finally { shareAlways([]); }
 });
 
 // A whole program's lists held (L280c): as arrays or trees, alone, where
@@ -227,11 +248,11 @@ test("collatz's keep held on the main thread runs there, said by a check, the sa
     run("choices", at);
     const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
     writeFileSync(`${at}.choices`, text);
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; target JavaScript/)![1]], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]], workers: [], threads: [] });
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; target JavaScript/)![1]], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]], workers: [], threads: [], page: [] });
     assert.equal(run("run", at), plain);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
     assert.deepEqual(said.map((l) => l.replace(/^held   \S+ /, "")).sort(), ["(C): main thread, where the compiler would run it on threads when slow", "(JavaScript): main thread, where the compiler would run it on worker threads when slow"]);
-    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace(": main thread;", ": GPU;")]), /a placement can be held on the main thread, worker threads or C's threads, not yet a page's workers or GPU/);
+    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace(": main thread;", ": GPU;")]), /a placement is held on one of what it is among/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -249,7 +270,7 @@ test("collatz's keep held on worker threads and C's threads is shared from the s
     writeFileSync(`${at}.choices`, text);
     const id = text.match(/held (\S+) place: main's keep: worker threads; among main thread, worker threads; target JavaScript/)![1];
     assert.match(text, new RegExp(`held ${id} place: main's keep: threads; among main thread, threads; target C`));
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id] });
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id], page: [] });
     assert.equal(run("run", at), plain);
     run("compile", at);
     assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, Infinity, 0, true\);/);

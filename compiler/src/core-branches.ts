@@ -71,7 +71,11 @@ function rt(name: string): Fn | undefined {
 // A map on a page's workers (C61 c′, branches-rt.ts), given the rest; a
 // count or an all of a search there likewise (C61 c′4).
 function world(op: string): Fn | undefined {
-  if (op === "mapAway") return (xs, f, fuel, site, how, z, join, k) => mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, typeof join === "number" ? undefined : join as (x: unknown) => unknown, (v) => RUNTIME.ap(k as never, v));
+  // One held (L280h) is given where, after the join, before the rest.
+  if (op === "mapAway") return (...a: unknown[]) => {
+    const [xs, f, fuel, site, how, z, join] = a, k = a[a.length - 1], on = a.length > 8 ? a[7] as "workers" | "GPU" : undefined;
+    return mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, typeof join === "number" ? undefined : join as (x: unknown) => unknown, (v) => RUNTIME.ap(k as never, v), on);
+  };
   if (op === "searchAway") return (search, array, fuel, site, how, k) => searchAway(search, fuel, site as number, how as "count", (v) => RUNTIME.ap(k as never, how === "count" ? v : how === "first" ? ((v as Value[]).length ? (v as Value[])[0] : FAIL) : array ? arrayOf(v as Value[]) : toList(v as Value[])));
   return undefined;
 }
