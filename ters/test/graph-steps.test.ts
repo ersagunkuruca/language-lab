@@ -49,10 +49,28 @@ test("a step with no name that nothing reads is numbered as a step, not a let ca
   assert.ok(!svg.all().some((e) => /\bdotl\b/.test(e.getAttribute("class") ?? "") && e.textContent === "?"), "no dot called ?");
 });
 
-test("a case whose value comes after steps is framed: its steps don't read as the definition's own", () => {
-  // chapters' main: otherwise → print error(usage), then 2.
+test("statements are one in order node, an input each, the value last", () => {
+  // chapters' main: otherwise → print error(usage); 2. No frame round it:
+  // the node holds the steps, and its output is the 2 (Ersagun 2026-11-22).
   const { p, svg } = draw("chapters", "main");
   const match = subtree(p.code, p.named("main")).map((x) => p.code.nodes[x]).find((n) => n.kind === "match" && n.otherwise && isCall(p.code.nodes[n.otherwise]))!;
   const otherwise = (match as { otherwise: Id }).otherwise;
-  assert.ok(svg.all().some((e) => e.getAttribute("data-frame") === otherwise), "the otherwise case has a frame");
+  assert.ok(!svg.all().some((e) => e.getAttribute("data-frame") === otherwise), "no frame round the otherwise");
+  const node = svg.all().find((e) => e.tagName === "rect" && e.getAttribute("data-id") === otherwise && /\border\b/.test(e.getAttribute("class") ?? ""));
+  assert.ok(node, "the otherwise is an in order node");
+  const g = node!.parentElement!;
+  assert.deepEqual(g.children.filter((c) => c.getAttribute("class") === "portl").map((c) => c.textContent), ["1", "2"]);
 });
+
+test("order arrows run between actions only: none from a print to the value given after it", () => {
+  // ledger's usage: print error(…), then 2. One action, so no arrow.
+  assert.equal(draw("ledger", "usage").svg.all().filter((e) => e.getAttribute("class") === "then").length, 0);
+});
+
+test("a case that says what the otherwise says is drawn once", () => {
+  // chapters' main: a list of one gives the usage message, as otherwise does.
+  const { svg } = draw("chapters", "main");
+  const usage = svg.all().filter((e) => e.tagName === "text" && /usage: chapters/.test(e.textContent));
+  assert.equal(usage.length, 1, "the usage message once");
+});
+
