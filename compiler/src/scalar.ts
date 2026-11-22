@@ -97,7 +97,7 @@ import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelT
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
+import { FRAME_OPS, WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
 import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW } from "../../ters/src/lang/std.ts";
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
@@ -581,7 +581,11 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; sharedSites?: { site: number; at: Id; how: string }[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
+// A draw (FRAMES.md, G9c): its call, its vertex and fragment functions as
+// written, and the binders they read, given to the compiled draw after
+// its site so the GPU's uniform gets their values (gpu-draws.ts).
+export interface DrawSite { site: number; at: Id; vertex: Id; fragment: Id; caps: Id[] }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; drawSites?: DrawSite[]; sharedSites?: { site: number; at: Id; how: string }[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -1009,6 +1013,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
   const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
+  const drawSites: DrawSite[] = [];
   // A command-line program's work shared out on worker threads where it
   // is worth it (C42, C43): its site, the node it is about (a map's
   // function, a fold's item arm, a search) and how; the program's choices
@@ -2231,6 +2236,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (deep && (!HOST_CELLS.has(target) || handsOn)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;
+    // A draw is given its site and what its two functions read (G9c).
+    if (target === FRAME_OPS.draw && n.args.length === 4) {
+      const caps = [...new Set([...refsIn(n.args[2]), ...refsIn(n.args[3])])].filter((b) => env.has(b));
+      const site = drawSites.push({ site: drawSites.length, at: n.id, vertex: n.args[2], fragment: n.args[3], caps }) - 1;
+      return { k: "rt", fn: `host:${target}`, args: [...n.args.map((a) => expr(a, env, f, false)), { k: "num", v: site }, ...caps.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], host: { t, partial: false } };
+    }
     return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? ":deep" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
   // A relation run some way with one answer, for JavaScript from the core
@@ -5968,7 +5979,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const derived = new Map([...fns.values()].flatMap((t): [string, FType][] => (derivedKeys.has(plainKey(t)) ? [[t.key, derivativeType(t)]] : [])));
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(sharedSites.length ? { sharedSites } : {}), ...(threadSites.length ? { threadSites } : {}), ...(derived.size ? { derived } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(drawSites.length ? { drawSites } : {}), ...(sharedSites.length ? { sharedSites } : {}), ...(threadSites.length ? { threadSites } : {}), ...(derived.size ? { derived } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a
