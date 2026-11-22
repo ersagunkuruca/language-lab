@@ -473,6 +473,25 @@ test("a list pattern's rest, `..more`, is the list after its items (I340)", asyn
   assert.match(bad.text, /comes last/);
 });
 
+// Round 20 waited minutes for an unknown name at the end of a chain of
+// `++`s to be refused: each split re-read the parts that don't read (I341).
+test("an unknown name at the end of a long ++ chain is refused at once (I341)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "said", kind: "function", params: ["n"] });
+  const started = performance.now();
+  const r = call("replace", { at: "said", find: "□", text: '"a" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ nosuch' });
+  assert.ok(r.error);
+  assert.match(r.text, /nothing is named nosuch/);
+  // Four shows took over 100 s; now well under a second.
+  assert.ok(performance.now() - started < 10000, `${Math.round(performance.now() - started)} ms`);
+  assert.match(text("replace", { at: "said", find: "□", text: '"a" ++ show(2.5) ++ "b" ++ show(n) ++ "c"' }), /show/);
+});
+
 // rota's main used `attempt` and a match on its Outcome (I217 M7).
 test("a handler is written as the view prints it: handle …, an operation's case, otherwise (I217 M7)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");

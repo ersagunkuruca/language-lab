@@ -963,7 +963,27 @@ const wordyNames = (names: Names): string[] => {
   return w;
 };
 
+// What a text failed to read as, kept for the same program, names and
+// scope: an operator chain is split at each of its operators in turn, and
+// a part that doesn't read was read again for every split around it, so
+// an unknown name at the end of `"a" ++ show(2.5) ++ "b" ++ … ++ nosuch`
+// took 7 s with two shows and minutes with four (I341). Only refusals are
+// kept: a reading holds fresh ids, which two places mustn't share.
+const refused = new WeakMap<Code, WeakMap<Names, WeakMap<Map<string, Id>, Map<string, { error: string }>>>>();
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
+  let byNames = refused.get(code);
+  if (!byNames) refused.set(code, (byNames = new WeakMap()));
+  let byScope = byNames.get(names);
+  if (!byScope) byNames.set(names, (byScope = new WeakMap()));
+  let kept = byScope.get(scope);
+  if (!kept) byScope.set(scope, (kept = new Map()));
+  const known = kept.get(text);
+  if (known) return known;
+  const r = reading(text, code, names, scope);
+  if ("error" in r) kept.set(text, r);
+  return r;
+}
+function reading(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
   // A name of several words alone, quoted as the view prints it: map(xs,
   // ‹rack row›) (I187), as ‹rack row›(r) already reads.
@@ -995,7 +1015,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   const word = (n: string) => new RegExp(`(?<![\\p{L}\\p{N}_'])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_'])`, "gu");
   const longer = (n: string) => [...new Set([...scope.keys(), ...wordyNames(names)])].filter((m) => m !== n && m.includes(" ") && word(n).test(m)).sort((a, b) => b.length - a.length);
   const shadows = [...scope].some(([n, id]) => {
-    if (code.defs.includes(id) || !word(n).test(bare)) return false;
+    // (A name not in the text at all is looked for no further: I341, this
+    // was most of each reading, its scope's every name a pattern.)
+    if (!bare.includes(n) || code.defs.includes(id) || !word(n).test(bare)) return false;
     const rest = longer(n).reduce((x, m) => x.replace(word(m), " "), bare);
     return word(n).test(rest);
   });
