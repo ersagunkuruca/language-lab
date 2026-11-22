@@ -371,16 +371,17 @@ test("collatz's workers held at 1 and its threads at 2: started so, said by a ch
 
 // Measured (L280d): a run's calls of each picked type's jobs and the
 // largest value they were given or gave, kept until measured again.
-test("tally measured with 3000 words: its Map's update at counted, 505 entries at most, kept by choices and check", () => {
+test("tally measured with 3000 words: its Map's update at counted, 505 entries at most, its main's List too, kept by choices and check", () => {
   const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "tally"), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
   const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
   try {
     cpSync(root + "tally", at, { recursive: true });
     run("choices", at, "--measure", "3000");
-    const line = "std.map measured: Map: update at 4500 times; up to 505 items; from a run with 3000";
-    assert.ok(readFileSync(`${at}.choices`, "utf8").split("\n").includes(line));
+    // Its main's calls too, made in an action (the evaluator's machine).
+    const lines = ["std.list measured: List: map 2 times, take 1 time; up to 3000 items; from a run with 3000", "std.map measured: Map: entries of 1 time, map size 1 time, update at 4500 times, values of 1 time; up to 505 items; from a run with 3000"];
+    assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
     run("choices", at);
-    assert.ok(readFileSync(`${at}.choices`, "utf8").split("\n").includes(line));
+    assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
     assert.deepEqual(run("check", at).split("\n").filter((l) => /^(stale|new|held) /.test(l)), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

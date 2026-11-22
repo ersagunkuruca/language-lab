@@ -1738,6 +1738,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if (!this.fuel) spendStep();
           else if (--this.fuel.left < 0) return this.outOfFuel();
         }
+        // A call measured (L280d), made in an action: counted, and now and
+        // then what it was given (what it gives comes later, to its frame).
+        const m = rt.measure, job = m?.calls.get(n.id);
+        if (m && job !== undefined) {
+          const c = (m.counts.get(job) ?? 0) + 1;
+          m.counts.set(job, c);
+          if ((c & (c - 1)) === 0 || (c & 4095) === 0) for (let i = 1; i < vals.length; i++) m.gave(job, vals[i]);
+        }
         return this.apply(vals[0], vals.slice(1));
       }
       this.solve(n, vals, env);
