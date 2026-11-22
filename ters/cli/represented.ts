@@ -5,7 +5,7 @@ import { dependencies, idsSeeded, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { checksKept, infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
-import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations } from "../src/lang/library-reps.ts";
+import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations, type Pick } from "../src/lang/library-reps.ts";
 import { classKey, optionsText } from "../src/lang/class-key.ts";
 import { keepingWhole } from "../src/lang/check-cache.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
@@ -13,7 +13,7 @@ import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
-export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[] }
+export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[] }
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -65,7 +65,7 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   const pinfo = shared.shared ? infer(shared.code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false }) : p.info;
   const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys });
   let code = lib.code;
-  const names = lib.names, chosen = [...lib.chosen];
+  const names = lib.names, chosen = [...lib.chosen], picks = [...(lib.picks ?? [])];
   const rows = storedRows(p.code, p.own, p.reps);
   for (const of of new Set(rows.map((r) => r.of))) {
     const rep = choose(code, main, rows.filter((r) => r.of === of)).rep;
@@ -74,6 +74,7 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
     if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
     code = represent(code, defs, rep);
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
+    picks.push({ of, rep: rep.name });
   }
   if (!chosen.length) return shared.shared ? { ...p, code: shared.code, info: pinfo } : held || walks?.made.length ? p : p0;
   // So does a library row's (std's Nat as an Int): written on the type's
@@ -94,7 +95,7 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // through `match Nat′`. library-reps.ts checks its rewrite so too.
   const info = same ? lib.info! : infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders], ends: endedAsWritten(p.info, p.own), units: false });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
-  return { ...p, code, names, info, chosen };
+  return { ...p, code, names, info, chosen, picks };
 }
 
 
