@@ -4886,3 +4886,14 @@ made again (scalar.ts `turned`): strings at 32 blocks, three runs each,
 core 9.6 → 8.3 s. No pair per item in YIN's zipped fold was tried too and
 was within noise.
 
+### Round stopped
+
+The next stage would make fewer lists in the FFT: `map` over `numbered`
+and over `zipped` as one walk each. Written so by hand in the library,
+as an upper bound on what fusing them could buy, strings at 32 blocks
+took 9.2 to 9.5 s in the core IR against 7.6 to 8.0 s as it is, three
+runs each: slower, so no fusion row. With C278 measured the same way,
+what is left is the collector on the FFT's lists as the library writes
+them. The round stops there, at 32 blocks: core IR about 22x the JS
+ideal, `ters native` 12x the ideal C, `ters wasi` 12x the JS ideal.
+
