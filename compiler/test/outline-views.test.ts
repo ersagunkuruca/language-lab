@@ -22,12 +22,9 @@ test("compiled outline: ticking a step three deep makes no row and runs about te
   const info = infer(code, names, undefined, checkOptions);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   const cells = new Cells(equal);
-  // The core IR doesn't lower each or each of over data holding a Bool yet
-  // (I331, C137's gaps): until it does, the test checks that's why, then
-  // the rest runs.
-  let main: () => unknown;
-  try { main = compiledDefs(code, info, names, [names[p.main]], { cells })[names[p.main]] as () => unknown; }
-  catch (e) { assert.match((e as Error).message, /each(?: of)? on data holding a Bool, which isn't lowered yet/); return; }
+  // each and each of over data holding a Bool (a step's done) hand their
+  // rows views whose Bools read as booleans (I331).
+  const main = compiledDefs(code, info, names, [names[p.main]], { cells })[names[p.main]] as () => unknown;
   const root = mountHtml(main() as never, { cells, doc: fakeDoc(), call: coreCall }) as FakeEl;
   const line = (title: string) => all(root).find((e) => (e.attrs.get("class") ?? "").split(" ").includes("todo-line") && leaves(e).join("") === title)!;
   const tick = (title: string) => all(line(title)).find((e) => e.tag === "button" && e.attrs.get("title") === "Tick")!.fire("click");

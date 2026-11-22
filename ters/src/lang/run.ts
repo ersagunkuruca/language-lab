@@ -72,6 +72,9 @@ const LISTS = { from: fromList, to: toList as (xs: Value[]) => Value };
 const LIST_VIEWS = { cons: CONS, nil: NIL, isList: (v: Value) => typeof v === "object" && (v.tag === CONS || v.tag === NIL) };
 // The evaluator's lists with them, as Cells compares values by (C162).
 export const LIST_SHAPE = { ...LISTS, views: LIST_VIEWS };
+// The same for compiled code's rows (I331): a Bool inside an item read as
+// a boolean.
+export const LIST_SHAPE_BOOLS = { ...LISTS, views: { ...LIST_VIEWS, bools: { t: TRUE, f: FALSE } } };
 
 // Cells' operations on a handler (cells.ts), by builtin id, for every
 // runner of a program's values: the evaluator's here, and JavaScript
@@ -80,8 +83,9 @@ export const LIST_SHAPE = { ...LISTS, views: LIST_VIEWS };
 // read with no answer (a formula that gave none, or no item at a place)
 // is undefined. `path` is the evaluator's alone: it looks inside the
 // function it is given.
-export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value): Record<Id, (...xs: Value[]) => Value | undefined> {
-  const listsHere = LIST_SHAPE;
+// `listsHere`: how each and each of hand their rows views (LIST_SHAPE_BOOLS
+// for compiled rows of data holding a Bool, I331).
+export function cellOps(cells: Cells, call: (f: Value, ...xs: Value[]) => Value, listsHere: typeof LIST_SHAPE = LIST_SHAPE): Record<Id, (...xs: Value[]) => Value | undefined> {
   const noValue = (f: () => Value) => { try { return f(); } catch (e) { if (e instanceof NoValue) return undefined; throw e; } };
   return {
     [CELL_OPS.cell]: (v) => cells.cell(v, "cell", listsHere),
