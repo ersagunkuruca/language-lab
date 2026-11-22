@@ -277,10 +277,110 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     return { ...base, params: [["a", "array"], ["k", "int"], ...ks.map((f, x) => [`x${x}`, ts[f] as VT] as [string, VT])], result: "array", locals: [["j", "i32"]], uses: ["int.clamped"],
       body: [index, ...ks.map((f, x) => `${at(f)}\nlocal.get $x${x}\narray.set $col${f}`), "local.get $a"].join("\n") };
   };
+  // Arrays as versions (C285), as compiled JS keeps them (array-view.ts,
+  // Baker's trick): a replace in an array whose buffer no other view
+  // shares writes the slot and leaves the array it was given a note (the
+  // newer array, the slot, what was there), so a replace costs one write
+  // however many hold the array. Reading an array with a note first puts
+  // its buffer back as that array had it (array.reroot): the notes on the
+  // way turned round, as Baker's are; or, when other views share the
+  // buffer by then (a rest, a push into its room), in a copy of its own.
+  // Only for an item type some replace isn't in place for (owned-arrays.ts
+  // makes the rest replaceOwned): its view gets the note field, mutable.
+  const versioned = new Set<number>();
+  if (!(typeof process !== "undefined" && process.env.NO_ARRAY_VERSIONS)) {
+    const scan = (e: SExpr): void => { const m = e.k === "rt" ? /^array\.replaceAt\.a(\d+)(\.i64)?$/.exec(e.fn) : null; if (m) versioned.add(Number(m[1])); kids(e).forEach(scan); };
+    funcs.forEach((f) => scan(f.body));
+    for (const a of versioned) if (colArrays.has(a)) versioned.delete(a);
+  }
+  const VERSION_FN = /^array\.(cur|reroot)\.a(\d+)$/;
+  const versionRt = (name: string, m: RegExpExecArray): RtFn => {
+    const base = { name, array: Number(m[2]), native: true as const };
+    // The array itself, its buffer as it has it.
+    if (m[1] === "cur") return { ...base, params: [["a", "array"]], result: "array", locals: [], uses: [`array.reroot.a${m[2]}`], body: [
+      "local.get $a", "struct.get $arr 3", "ref.is_null", "i32.eqz", "if void", "local.get $a", `call $array.reroot.a${m[2]}`, "end", "local.get $a"].join("\n") };
+    return { ...base, params: [["a", "array"]], result: "void", uses: [],
+      locals: [["sh", "i32"], ["p", "array"], ["c", "array"], ["nx", "array"], ["nt", "note"], ["s", "i32"], ["w", "item"], ["x", "array"], ["y", "array"], ["it", "items"], ["cp", "items"]],
+      body: [
+        // The way to the newest turned round: each note on it names the older.
+        "ref.null $arr", "local.set $p", "local.get $a", "local.set $c",
+        "block void", "loop void",
+        "local.get $c", "struct.get $arr 3", "local.tee $nt", "ref.is_null", "br_if 1",
+        "local.get $nt", "struct.get $note 0", "local.set $nx", "local.get $nt", "local.get $p", "struct.set $note 0",
+        "local.get $c", "local.set $p", "local.get $nx", "local.set $c", "br 0",
+        "end", "end",
+        // The newest's buffer (an older one given a copy of its own holds
+        // another), and whether another view shares it.
+        "local.get $c", "struct.get $arr 0", "struct.get $buf 3", "local.set $sh",
+        "local.get $c", "struct.get $arr 0", "struct.get $buf 0", "local.set $it",
+        // Shared: undone in a copy.
+        "local.get $sh", "if void",
+        "local.get $it", "array.len", "array.new_default $items", "local.set $cp",
+        "local.get $cp", "i32.const 0", "local.get $it", "i32.const 0", "local.get $it", "array.len", "array.copy $items $items",
+        "local.get $cp", "local.set $it", "end",
+        // Back from the newest, each slot as the older had it.
+        "local.get $c", "local.set $x", "local.get $p", "local.set $y",
+        "block void", "loop void",
+        "local.get $y", "ref.is_null", "br_if 1",
+        "local.get $y", "struct.get $arr 3", "local.set $nt",
+        "local.get $nt", "struct.get $note 1", "local.set $s",
+        "local.get $nt", "struct.get $note 0", "local.set $p",
+        "local.get $sh", "if void",
+        // The notes left as they were.
+        "local.get $it", "local.get $s", "local.get $nt", "struct.get $note 2", "array.set $items",
+        "local.get $nt", "local.get $x", "struct.set $note 0",
+        "else",
+        // The note moved to the newer, with what it held there.
+        "local.get $it", "local.get $s", "array.get $items", "local.set $w",
+        "local.get $it", "local.get $s", "local.get $nt", "struct.get $note 2", "array.set $items",
+        "local.get $nt", "local.get $y", "struct.set $note 0",
+        "local.get $nt", "local.get $w", "struct.set $note 2",
+        "local.get $x", "local.get $nt", "struct.set $arr 3",
+        "local.get $y", "ref.null $note", "struct.set $arr 3",
+        "local.get $y", "local.get $c", "struct.get $arr 0", "struct.set $arr 0",
+        "end",
+        "local.get $y", "local.set $x", "local.get $p", "local.set $y", "br 0",
+        "end", "end",
+        "local.get $sh", "if void",
+        "local.get $a", "local.get $it",
+        "local.get $c", "struct.get $arr 0", "struct.get $buf 1", "local.get $c", "struct.get $arr 0", "struct.get $buf 2", "i32.const 0", "struct.new $buf",
+        "struct.set $arr 0",
+        "local.get $a", "ref.null $note", "struct.set $arr 3",
+        "end",
+      ].join("\n"),
+    };
+  };
+  // The replace itself: in place with a note where no other view shares
+  // the buffer, the copy otherwise (REPLACE_COPY, after this).
+  const NOTED = [
+    "local.get $a", "struct.get $arr 0", "struct.get $buf 3", "i32.eqz",
+    "local.get $k", "i64.const 0", "i64.ge_s", "i32.and",
+    "local.get $k", "local.get $a", "struct.get $arr 2", "i64.extend_i32_s", "i64.lt_s", "i32.and",
+    "if void",
+    "local.get $a", "struct.get $arr 1", "local.get $k", "i32.wrap_i64", "i32.add", "local.set $n",
+    "local.get $a", "struct.get $arr 0", "struct.get $buf 0", "local.set $it",
+    "local.get $a", "struct.get $arr 0", "local.get $a", "struct.get $arr 1", "local.get $a", "struct.get $arr 2", "struct.new $arr", "local.set $b",
+    "local.get $a", "local.get $b", "local.get $n", "local.get $it", "local.get $n", "array.get $items", "struct.new $note", "struct.set $arr 3",
+    "local.get $it", "local.get $n", "local.get $x", "array.set $items",
+    "local.get $b", "return",
+    "end",
+  ].join("\n");
+  const versions = (g: RtFn): RtFn => {
+    const a = g.array!;
+    const noted = /^array\.replaceAt\.a\d+\.i64$/.test(g.name);
+    // After a byte array's widening (wasm-rt.ts byteSlots), if any.
+    const widen = `local.get $a\ncall $array.widen.a${a}\n`, w = g.body.startsWith(widen) ? widen : "";
+    const body = (noted ? `${w}${NOTED}\n${g.body.slice(w.length)}` : g.body)
+      .replace(/struct\.get \$arr 0/g, `call $array.cur.a${a}\nstruct.get $arr 0`).replace(/struct\.new \$arr/g, "ref.null $note\nstruct.new $arr");
+    return { ...g, body, locals: noted ? [...g.locals, ["b", "array"]] : g.locals, uses: body.includes(`call $array.cur.a${a}`) ? [...g.uses, `array.cur.a${a}`] : g.uses };
+  };
   const rt = (name: string): RtFn => {
+    const vm = VERSION_FN.exec(name);
+    if (vm) { const v = versionRt(name, vm); return byteArray(lowered.arrays[v.array!]) ? byteSlots(v) : v; }
     const cm = COL_FN.exec(name);
     if (cm) return colRt(name, cm);
     const g = rt0(name);
+    if (g.array !== undefined && versioned.has(g.array)) return versions(g);
     // The buffer's columns, none, wherever it's made as rows.
     if (g.array === undefined || !colArrays.has(g.array)) return g;
     return { ...g, types: { ...g.types, ...colTypes(g.array) }, body: g.body.replace(/struct\.new \$buf/g, `${colArrays.get(g.array)!.map((_, f) => `ref.null $col${f}`).join("\n")}\nstruct.new $buf`) };
@@ -453,7 +553,10 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     structs.push({ name: `items${a.index}`, fields: [], final: true, items: a.item });
     // An Int array's buffer has its bytes too (L189f2b, wasm-rt.ts byteSlots).
     structs.push({ name: `buf${a.index}`, fields: [{ name: "items", t: "i32", ref: k }, { name: "lo", t: "i32" }, { name: "hi", t: "i32" }, { name: "shared", t: "i32" }, ...(byteArray(a) ? [{ name: "bytes", t: "i32" as const, ref: bytesIndex }] : []), ...cols], final: true, mutable: true });
-    structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }], final: true });
+    const noted = versioned.has(a.index);
+    structs.push({ name: `array${a.index}`, fields: [{ name: "buf", t: "i32", ref: k + 1 }, { name: "start", t: "i32" }, { name: "n", t: "i32" }, ...(noted ? [{ name: "note", t: "i32" as const, ref: k + 3 }] : [])], final: true, ...(noted ? { mutable: true as const } : {}) });
+    // Its note (C285): the newer array, the slot and what was there.
+    if (noted) structs.push({ name: `note${a.index}`, fields: [{ name: "next", t: "i32", ref: k + 2 }, { name: "slot", t: "i32" }, { name: "old", t: a.item }], final: true, mutable: true });
     arrIndex.set(a.key, k + 2);
   }
   // A table (C63j, wasm-table.ts): each slot's state, its keys and its
@@ -489,7 +592,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     return d;
   };
   const resolver = (f?: RtFn) => ({
-    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : /\.c\d+$/.test(n) && f?.types?.[n.replace(/\.c\d+$/, "")] ? caseIndex(f.types[n.replace(/\.c\d+$/, "")] as DType, Number(n.slice(n.lastIndexOf(".c") + 2))) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
+    type: (n: string) => (f?.table !== undefined && TBL[n] !== undefined ? tblIndex.get(f.table)! + TBL[n] : f?.types?.[n] ? refIndex(f.types[n] as RType) : /\.c\d+$/.test(n) && f?.types?.[n.replace(/\.c\d+$/, "")] ? caseIndex(f.types[n.replace(/\.c\d+$/, "")] as DType, Number(n.slice(n.lastIndexOf(".c") + 2))) : n === "arr" ? arrIndex.get(arrayOf(f).key)! : n === "buf" ? arrIndex.get(arrayOf(f).key)! - 1 : n === "items" ? arrIndex.get(arrayOf(f).key)! - 2 : n === "note" ? arrIndex.get(arrayOf(f).key)! + 1 : n === "bytes" ? bytesIndex : n === "text" ? textIndex : n === "i64s" ? i64sIndex : n === "big" ? bigIndex : n === "u32s" ? u32sIndex : n === "huge" ? hugeIndex : n === "hstack" ? hstackIndex : n === "option" ? baseIndex.get(OPTION_TEXT)! : n === "list" ? baseIndex.get(listOf(f).key)! : caseIndex(listOf(f), n === "list.nil" ? 0 : 1)),
     func: (n: string) => {
       if (n.startsWith("wasi_")) return worldBase + wasiImports.indexOf(n);
       if (n === "main") return fnIndex(funcs.indexOf(main!));
@@ -514,7 +617,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         const m = t === "array" ? arrayOf(f) : arrayOf(f).item;
         return { bytes: typeOf(m), text: m === "text" ? "(ref null $text)" : isRec(m) ? `(ref null $${structs[refIndex(m)].name})` : m === "int" ? "eqref" : m as string };
       }
-      if (t === "buf" || t === "items") { const k = arrIndex.get(arrayOf(f).key)! - (t === "buf" ? 1 : 2); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
+      if (t === "buf" || t === "items" || t === "note") { const k = arrIndex.get(arrayOf(f).key)! + (t === "buf" ? -1 : t === "items" ? -2 : 1); return { bytes: [0x63, ...s(k)], text: `(ref null $${structs[k].name})` }; }
       return { bytes: typeOf(t as MType), text: t === "text" ? "(ref null $text)" : t === "raw" ? "(ref null $bytes)" : t === "int" ? "eqref" : t === "mag" ? "(ref null $u32s)" : t as string };
     },
   });

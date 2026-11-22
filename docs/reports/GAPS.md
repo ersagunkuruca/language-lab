@@ -5055,3 +5055,15 @@ the program also keeps other Int arrays it reads after changing
 Int at once. JS has no such case: its arrays are versions (Baker's
 trick, array-view.ts), so a replace writes in place and leaves a note
 for the old array. C285. `sort 1000` is the same (2.3 s against 0.25 s).
+
+### After C285
+
+WebAssembly's arrays are versions (wasm.ts `versioned`, `array.reroot`),
+so machine's stores write one slot. bench-machine (median of three):
+
+| program | wasm before | wasm after | core IR | native | ideal |
+|---|---|---|---|---|---|
+| primes 5000 | 810 ms | 6.3 ms | 8.7 ms | 9.7 ms | 3.6 ms |
+| primes 20000 | 11,203 ms | 22 ms | 35 ms | 26 ms | 14 ms |
+| sort 400 | 243 ms | 23 ms | 41 ms | 28 ms | 15 ms |
+| sort 1000 | 2,345 ms | 139 ms | 248 ms | 146 ms | 90 ms |
