@@ -1,5 +1,5 @@
 {
-  "about": "The example programs (BACKLOG E205), with every bigger-program round's program (GAPS.md): the editor's picker in this order, each from its folders under ters/examples/, or from the repository root when the name has a slash (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: a page only. run: what Run gives main as ters run would, its arguments (none: main takes no command line), what each argument is (names, shown beside them) and the files beside it.",
+  "about": "The example programs (BACKLOG E205), with every bigger-program round's program (GAPS.md): the editor's picker in this order, each from its folders under ters/examples/, or from the repository root when the name has a slash (merged in order) or built in code, with the definition it opens on (else main, else its picture). page: built as apps/<folder>.html too (editor/build.ts). editor false: not in the editor (a page only, or a bigger program whose page took its place in the picker, kept for tests and benchmarks). run: what Run gives main as ters run would, its arguments (none: main takes no command line), what each argument is (names, shown beside them) and the files beside it.",
   "programs": [
     { "program": "numbers", "label": "Numbers & physics", "folders": ["quadratic", "physics"], "start": "fall" },
     { "program": "queens", "label": "Eight queens", "folders": ["queens"], "start": "queens" },
@@ -44,13 +44,13 @@
     { "program": "ledger", "label": "Bigger program: ledger, money entries totalled", "folders": ["ledger"], "run": { "args": ["book.csv"], "names": ["book"], "files": ["book.csv"] } },
     { "program": "chapters", "label": "Bigger program: chapters, a book split into chapters", "folders": ["chapters"], "run": { "args": ["book.md", "out"], "names": ["book", "folder"], "files": ["book.md"] } },
     { "program": "calc", "label": "Bigger program: calc, a calculator for big numbers", "folders": ["calc"] },
-    { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"], "run": { "files": ["clinic.txt"] } },
-    { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "run": { "args": ["plan.txt"], "names": ["plan"], "files": ["plan.txt"] } },
-    { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"] },
-    { "program": "pond", "label": "Bigger program: pond, fish kept in a pool", "folders": ["compiler/gaps/pond"], "run": { "args": ["30", "100"], "names": ["ticks", "fish"] } },
-    { "program": "moths", "label": "Bigger program: moths, boids on a grid", "folders": ["compiler/gaps/moths"], "run": { "args": ["25", "2000"], "names": ["ticks", "moths"] } },
-    { "program": "greenhouse", "label": "Bigger program: greenhouse, a scripted night", "folders": ["compiler/gaps/greenhouse"], "run": { "args": ["300", "500"], "names": ["ticks", "moths"] } },
-    { "program": "flock", "label": "Bigger program: flock, 3D boids", "folders": ["compiler/gaps/flock"], "run": { "args": ["50", "1000"], "names": ["ticks", "birds"] } },
+    { "program": "clinic", "label": "Bigger program: clinic, a waiting-room simulation", "folders": ["compiler/gaps/clinic"], "editor": false, "run": { "files": ["clinic.txt"] } },
+    { "program": "crew", "label": "Bigger program: crew, workers as fibers", "folders": ["compiler/gaps/crew"], "editor": false, "run": { "args": ["plan.txt"], "names": ["plan"], "files": ["plan.txt"] } },
+    { "program": "break", "label": "Bigger program: break, a pool break event by event", "folders": ["compiler/gaps/break"], "editor": false },
+    { "program": "pond", "label": "Bigger program: pond, fish kept in a pool", "folders": ["compiler/gaps/pond"], "editor": false, "run": { "args": ["30", "100"], "names": ["ticks", "fish"] } },
+    { "program": "moths", "label": "Bigger program: moths, boids on a grid", "folders": ["compiler/gaps/moths"], "editor": false, "run": { "args": ["25", "2000"], "names": ["ticks", "moths"] } },
+    { "program": "greenhouse", "label": "Bigger program: greenhouse, a scripted night", "folders": ["compiler/gaps/greenhouse"], "editor": false, "run": { "args": ["300", "500"], "names": ["ticks", "moths"] } },
+    { "program": "flock", "label": "Bigger program: flock, 3D boids", "folders": ["compiler/gaps/flock"], "editor": false, "run": { "args": ["50", "1000"], "names": ["ticks", "birds"] } },
     { "program": "compass", "label": "Compass", "folders": ["compass"], "page": true, "editor": false }
   ]
 }
