@@ -4897,3 +4897,78 @@ what is left is the collector on the FFT's lists as the library writes
 them. The round stops there, at 32 blocks: core IR about 22x the JS
 ideal, `ters native` 12x the ideal C, `ters wasi` 12x the JS ideal.
 
+## Round 21: mini, a little functional language typed and run (2026-11-22)
+
+`compiler/gaps/mini` is a program of another kind than round 20's signal
+code, and bigger (92 definitions to strings' 34): a little functional
+language written in Ters, symbols, trees and environments where strings
+had numbers in lists.
+- its text becomes tokens, and a recursive-descent parser reads `let`,
+  `fun`, `if`, comparisons, sums, products and calls, every step a
+  `Parsed` value handed on through a closure (`then parse`);
+- algorithm W types it: unknowns in a `Map Int Ty` threaded through as a
+  `State`, unification with the occurs check, let-polymorphism by
+  schemes over an association list;
+- an interpreter runs it: closures over association lists, a let's
+  function knowing its own name;
+- the report types and runs a corpus of fifteen (factorial, Fibonacci of
+  20, compose, Church numerals, Ackermann, S K K, a pair by closures, and
+  some that are wrong), and then a batch of generated programs (200, or
+  as many as asked), each 4 to 12 lets of arithmetic, functions and
+  choices, one in seven ill typed.
+
+Written through the MCP (driver in project files gaps-round21/): 92
+definitions, no refusals; a definition naming one not defined yet is
+refused, so the parser's and the type printer's are declared first, as
+round 19's were. The ideal is `mini.ideal.js`: recursive descent with an
+index into an array of tokens, a `Map` of what each unknown was found to
+be, exceptions for errors, linked frames for environments. Every way
+prints the same; test/mini.test.ts holds them to it.
+
+| mini | 200 | 2000 | 20000 |
+|---|---|---|---|
+| evaluator | 585 ms (111x) | | |
+| core IR | 25.5 ms (4.8x) | 114 ms (4.5x) | 1086 ms (4.5x) |
+| ideal JS | 5.3 ms | 25.6 ms | 241 ms |
+| `ters native` (a process) | 15.8 ms (3.0x) | 85.8 ms (3.3x) | 792 ms (3.3x) |
+| `ters wasi` (a process) | 52.5 ms (9.9x) | 151 ms (5.9x) | 870 ms (3.6x) |
+
+Compiling it takes 2.9 s, against 0.5 s for strings.
+
+**MN1. Two pure calls are planned for workers at every top-level call
+(C280).** `resolved`'s `arrow(resolved(s, a), resolved(s, b))`,
+`occurs in`'s `or`, and `append(unknowns in(a), unknowns in(b))` are two
+calls that only compute, which branches-rt.ts `bothPure` may share out
+(C61e). Each call met outside one probes up to eight levels for leaves,
+throwing to stop each, and reads the machine's thread count again
+(`SIZE`, `os.availableParallelism` through `getBuiltinModule`), before
+`shared` runs them in place anyway: mini's types are a few nodes each,
+met at every unification. About a fifth of the core IR's time
+(1.08 s to 0.89 s at 20000, measured with the fix).
+
+**MN2. A token's characters are made to read one of them (C281).**
+`is name` reads `item at(characters(t), 0, "")`, `is number` walks
+`all pass(characters(t), …)`: each makes a list of one-character texts,
+two cells a character natively (`lab_text_characters` 6% of `ters
+native`'s instructions, `chars` and `text$characters` 8% of the core
+IR's time) to read the first, or each in turn.
+
+**MN3. A text compared with a literal is counted and called (C282).**
+The parser compares each token with keywords and marks (`t = "let"`,
+`head of(ts) = "*"`): natively each is `lab_text_equal(lab_dup(t),
+literal)`, a call that drops both after a length check and `memcmp`.
+`lab_text_equal` is 10.7% of `ters native`'s instructions, `lab_dec` and
+`lab__dead` (the counts) 13% more, some of it this.
+
+**MN4. Checking mini takes 2 s, the modes 1.6 s of it (I344, the
+checker's).** modes.ts `terminates`, under `lambdaMode` and `joined`, is
+1.4 s of the 2.9 s compile: it decides which way each definition can run,
+and the parser's closures handed to `then parse` and `expected`, each a
+lambda inside a lambda, are asked again and again. For the lane that has
+the checker (L266, a faster checker).
+
+The evaluator is 111x the ideal, the interpreter's (L281).
+
+Fix order: C280 (a fifth of the core IR, a runtime change), then C281 and
+C282, which are most of what `ters native` does beyond the ideal's work.
+
