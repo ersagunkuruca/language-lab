@@ -5,7 +5,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
@@ -31,6 +31,10 @@ function unrecorded(env: NodeJS.ProcessEnv, timed: boolean): NodeJS.ProcessEnv {
   const { NODE_V8_COVERAGE: _, ...rest } = env;
   return rest;
 }
+// `ters compile` without esbuild (no `npm ci` in ters/) writes a module
+// that imports the runtime's sources, about 0.4 s to start, so each
+// worker is still starting when the main thread has done the job (C263).
+const slowStart = existsSync(join(here, "../../ters/node_modules/esbuild")) ? undefined : "no workers: ters/node_modules has no esbuild (run npm ci in ters/), so a compiled program's workers start slower than its job";
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name)!;
 
 // A module of a main written here, unbundled: it imports the runtime from
@@ -54,7 +58,7 @@ test("area counts its eight bands on workers, and says what it says in order and
   assert.equal(made[2], 0, made[1]);
   const [side, alone, small] = await Promise.all([run(["area.mjs", "900"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["area.mjs", "900"], { TERS_WORKERS: "0" }, dir), run(["area.mjs", "100"], { TERS_BRANCHES: "say" }, dir, true)]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[1], /branches on workers: [1-7]\n/);
+  assert.match(side[1], /branches on workers: [1-7]\n/, slowStart);
   // Bands this small stay on the main thread: starting workers would cost more.
   assert.equal(small[0], inEvaluator[0]);
   assert.equal(small[1], "branches on workers: 0\n");
@@ -79,7 +83,7 @@ test("values cross back as they were, lists and what the branches captured (C41)
   assert.match(many[0], /^\[\[1124999250000, 0\.5, 1\], \[2249998500000, 1, 2\], /);
   // Units on workers: branches, or runs of the maps inside one run before
   // the workers were there (C42).
-  assert.match(many[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(many[1], /branches on workers: [1-9]\d*\n/, slowStart);
 });
 
 test("the first abort in the actions' order is the together's, wherever each ran (C41)", async () => {
@@ -102,7 +106,7 @@ test("mandelbrot-rows draws its rows by one map on workers, the same picture in 
   assert.equal(made[2], 0, made[1]);
   const [side, alone, small] = await Promise.all([run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_WORKERS: "0" }, dir), run(["mandelbrot-rows.mjs", "40", "60"], { TERS_BRANCHES: "say" }, dir, true)]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
   assert.equal(small[1], "branches on workers: 0\n");
 });
@@ -119,7 +123,7 @@ test("a map's items cross with what its function captured, and its first abort i
   assert.equal(many[2], 0, many[1]);
   assert.equal(many[0], one[0]);
   assert.match(many[0], /^\[\[179999700000, 0\], \[179999700000, 0\.5\], /);
-  assert.match(many[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(many[1], /branches on workers: [1-9]\d*\n/, slowStart);
   const aborts = module(mkdtempSync(join(tmpdir(), "branches-")), (k) => {
     const main = k.def("main");
     k.define(main, k.thunk(() => k.call(S.print, k.call(SHOW_ANY, k.call(lib("map"), k.call(INT_OPS.range, k.int(8)),
@@ -182,7 +186,7 @@ test("fingerprint works out its numbers' walks on workers and hashes them in tur
   const [side, alone, small] = await Promise.all([run(["fingerprint.mjs", "400"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["fingerprint.mjs", "400"], { TERS_WORKERS: "0" }, dir), run(["fingerprint.mjs", "12"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /below 400: \d+\n$/);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
 });
 
@@ -196,7 +200,7 @@ test("pond's plans are made on workers from its fish sent by shape, the same pon
   assert.equal(made[2], 0, made[1]);
   const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
 });
 
 test("collatz keeps its long walks on workers, the same numbers in the same order as in turn and in the evaluator (C43)", async () => {
@@ -212,7 +216,7 @@ test("collatz keeps its long walks on workers, the same numbers in the same orde
   const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /^665 numbers below 300000 take more than 300 steps/);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
 });
 
@@ -223,7 +227,7 @@ test("nicomachus checks its ks by all pass and any pass on workers, the same ans
   const [side, alone, small] = await Promise.all([run(["nicomachus.mjs", "10000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["nicomachus.mjs", "10000"], { TERS_WORKERS: "0" }, dir), run(["nicomachus.mjs", "200"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /for every k below 10000: true; some sum of cubes past 10¹²: true/);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
 });
 
@@ -235,7 +239,7 @@ test("divisors finds its n by first where on workers, the same answer as in turn
   const [side, alone, none, small] = await Promise.all([run(["divisors.mjs", "10000", "400"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "10000", "400"], { TERS_WORKERS: "0" }, dir), run(["divisors.mjs", "1500", "2000"], { TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "1000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /more than 400 divisors: some\(5984\)/);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.match(none[0], /more than 2000 divisors: none/);
   assert.equal(small[0], inEvaluator[0]);
 });
@@ -254,7 +258,7 @@ test("queens-count counts its boards by the first row's columns on workers, the 
   const [side, alone, small] = await Promise.all([run(["queens-count.mjs", "11"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["queens-count.mjs", "11"], { TERS_WORKERS: "0" }, dir), run(["queens-count.mjs", "6"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /boards of 11 queens: 2680\n/);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
 });
 
@@ -273,7 +277,7 @@ test("a count split by its first choice counts a search inside it whole (C43)", 
   assert.match(readFileSync(file, "utf8"), /R\.rt\("count\.search"[\s\S]*R\.rt\("all\.search"/);
   const [side, alone] = await Promise.all([run([file], { TERS_WORKERS: "3", TERS_BRANCHES: "say" }), run([file], { TERS_WORKERS: "0" })]);
   assert.deepEqual([side[0], side[2]], ["28\n", 0]);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.deepEqual(alone, ["28\n", "", 0]);
 });
 
@@ -295,7 +299,7 @@ test("a search whose first choice has one item with answers shares out its secon
   const want = "[10, 20, 21, 30, 31, 32, 40, 41, 42, 43, 50, 51, 52, 53, 54]\n";
   const [side, alone] = await Promise.all([run([file], { TERS_WORKERS: "3", TERS_BRANCHES: "say" }), run([file], { TERS_WORKERS: "0" })]);
   assert.deepEqual([side[0], side[2]], [want, 0]);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.deepEqual(alone, [want, "", 0]);
 });
 
@@ -372,7 +376,7 @@ test("fibonacci's two calls of itself are shared out on workers, the same number
   const [side, alone, small] = await Promise.all([run(["fibonacci.mjs", "36"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["fibonacci.mjs", "36"], { TERS_WORKERS: "0" }, dir), run(["fibonacci.mjs", "15"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.equal(side[0], "14930352\n");
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
 });
 
@@ -397,5 +401,5 @@ test("a fold over a tree works out its two halves on workers, the same total as 
   const [side, alone] = await Promise.all([run([file], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }), run([file], { TERS_WORKERS: "0" })]);
   assert.equal(side[2], 0, side[1]);
   assert.equal(side[0], alone[0]);
-  assert.match(side[1], /branches on workers: [1-9]\d*\n/);
+  assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
 });
