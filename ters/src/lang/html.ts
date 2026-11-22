@@ -16,6 +16,7 @@ import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
 import { HTML_V, MARK_V } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
+import { rasterize } from "./raster.ts";
 
 export interface Node_ { textContent: string | null }
 export interface El extends Node_ {
@@ -43,6 +44,9 @@ export interface Context2D {
   beginPath(): void; arc(x: number, y: number, r: number, a: number, b: number): void; fill(): void;
   moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; stroke(): void;
   fillText(text: string, x: number, y: number): void;
+  // For a rendered frame (G9b), drawn on the CPU.
+  createImageData?(w: number, h: number): { data: Uint8ClampedArray };
+  putImageData?(image: { data: Uint8ClampedArray }, x: number, y: number): void;
 }
 export interface Doc {
   createElement(tag: string): El;
@@ -374,6 +378,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           // cell the view read changes. Out of steps, it keeps what it
           // painted last.
           watch(e, "paint", () => paintMarks(e, viewOf(m.call, a.fields[0])));
+        } else if (a.tag === HTML_V.render) {
+          // A frame (G9b, FRAMES.md): drawn on the CPU here, again whenever
+          // a cell its view read changes.
+          watch(e, "render", () => renderFrame(e, viewOf(m.call, a.fields[0]), m.call));
         } else if (a.tag === HTML_V.listeningWhile) {
           // Read by the listen beside it.
         } else if (a.tag === HTML_V.listen || a.tag === HTML_V.listenStereo) {
@@ -402,6 +410,15 @@ const TYPED = new Set(["input", "textarea", "select"]);
 // The marks a canvas paints (std.ts Mark), on its 2D context, in its own
 // units. A compiled record's fields are f0, f1, … and the evaluator's are
 // in fields, so each is read either way.
+function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
+  const c = e.getContext?.("2d");
+  if (!c?.createImageData || !c.putImageData || v === null) return;
+  const w = e.width || 300, h = e.height || 150;
+  const img = rasterize(v, w, h, call), out = c.createImageData(w, h);
+  out.data.set(img.rgba);
+  c.putImageData(out, 0, 0);
+}
+
 function paintMarks(e: El, v: Value | null): void {
   const c = e.getContext?.("2d");
   if (!c || v === null) return;

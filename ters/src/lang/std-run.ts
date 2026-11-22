@@ -146,3 +146,6 @@ export const arith$mul = /* @__PURE__ */ unresolved("multiply");
 export const arith$neg = /* @__PURE__ */ unresolved("negate");
 export const arith$less = /* @__PURE__ */ unresolved("less than");
 export const arith$abs = /* @__PURE__ */ unresolved("abs");
+// A draw (FRAMES.md, G9b): its mesh, instances and two functions, kept for
+// the runtime that renders a frame; nothing in a program takes one apart.
+export const frame$draw = (mesh: unknown, instances: unknown, vertex: unknown, fragment: unknown) => ({ tag: "builtin.frame.draw", fields: [mesh, instances, vertex, fragment] });

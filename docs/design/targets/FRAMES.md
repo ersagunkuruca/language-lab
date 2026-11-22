@@ -41,23 +41,30 @@ A canvas gets a `render` attribute beside today's `paint`. Its view gives a
 
 ```
 type Frame = frame(passes: List Pass)
-type Pass = pass(into: Target, clear: Colour, depth: Bool, draws: List Draw)
+type Pass = pass(into: Target, clear: Text, depth: Bool, draws: List Draw)
 type Target = screen | texture(name: Text, width: Int, height: Int)
-type Draw = draw(shape: Mesh, instances: List i,
-                 vertex: (i, Corner) -> Placed v,
-                 fragment: (v) -> Colour)
-type Placed v = placed(position: Vec4, carried: v)
-type Corner = corner(position: Vec3, normal: Vec3, across: Vec2)
-type Mesh = mesh(corners: List Corner, triangles: List Int)
+type Placed p v = placed(position: p, carried: v)
+type Mesh c = mesh(corners: List c, triangles: List Int)
+type Draw                         -- no cases of its own
+
+draw : (Mesh c, List i, (i, c) -> Placed p v, (v) -> k) -> Draw
 ```
 
-`i` (an instance) and `v` (what the vertex gives the fragment) are the
-case's own type variables. A frame holds draws of different instance types
-in one list, which is L256's packing. Nothing outside the draw can use an
-`i` or a `v`: they only go from the list to the vertex function, and from
-the vertex function to the fragment function. So the case needs no `has`,
-and the checker lets a case's own type variable stand alone when only the
-case's own functions consume it (G9a).
+`draw` is a std function, and its type hides `i` (an instance) and `v`
+(what the vertex gives the fragment): a frame holds draws of different
+instance types in one list, and nothing in a program takes a draw apart,
+only the runtime does. So Draw needs no packing and no new checker rule.
+(The first draft of this note made Draw a case with its own type
+variables, which needed a rule for a variable with no `has`, G9a. A
+function with that type does the same job and no rule is needed.)
+
+A mesh's corner `c`, the placed position `p` and the colour `k` are
+records of Float64s: the program's own Vec3, Vec4 and Colour, as the
+vectors module works on any record of Float64s. A position is clip space
+(x and y from −1 to 1 with y up, z from 0 to 1 near to far, w for
+perspective; three Float64s mean w = 1), and a colour is red, green and
+blue from 0 to 1, with alpha as a fourth. The clear colour is CSS text, as
+a mark's fill is. Both functions are pure, as a shader is.
 
 The flock drawn with data:
 
@@ -187,13 +194,12 @@ flock page drawn with data, and the stage's round compares it with a
 hand-written WebGPU flock (flock.ideal-gpu.js): CPU time a frame, bytes
 uploaded, draw calls.
 
-- **G9a** (language): a case's own type variable with no `has`, when only
-  the case's own fields consume it (Draw's `i` and `v`). Checker and
-  packing.ts.
-- **G9b**: std `Frame`, `Pass`, `Target`, `Draw`, `Placed`, `Corner`,
-  `Mesh`, and the `render` attribute, typed as `paint` is. Evaluated: the
-  CPU rasterizer draws a frame into a fake canvas's ImageData. Tests
-  compare small frames pixel by pixel with hand-worked answers.
+- **G9b** (done): std `Frame`, `Pass`, `Target`, `Placed`, `Mesh`,
+  `Draw` and `draw`, and the `render` attribute, typed as `paint` is.
+  raster.ts draws a frame on the CPU into the canvas's ImageData, with
+  depth and with what the vertex carried put between the corners in
+  perspective. frames.test checks small frames pixel by pixel against
+  answers worked out by hand.
 - **G9c**: the vertex and fragment stages printed to WGSL from a draw's
   functions (wgsl.ts, beside today's fragment-only picture), with captures
   as a uniform and instances as storage buffers of whole records (one
@@ -212,7 +218,7 @@ uploaded, draw calls.
   measured against flock.ideal-gpu.js, with the gaps going into GAPS.md.
 
 The compiler-internal parts (G9c's WGSL vertex stage, G8's columns into
-buffers) can go to the Compiler lane once G9b lands.
+buffers) can go to the Compiler lane now that G9b has landed.
 
 ## Credits
 
