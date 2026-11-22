@@ -36,17 +36,17 @@ import { choicesFor } from "./choicesFor.ts";
 // lowering again.
 // `replay`: answer from an earlier run's log instead of the world (E232b);
 // `until`: give only that many of its answers, then pause (E232c).
-export type RunAsk = { code: SentCode; names: Names; pins: Pins; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
+export type RunAsk = { code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
 // Run's worker is kept between runs and started before the first (I177):
 // `warm` checks the program, so the library's check is kept by the time
 // Run main is pressed.
-export type WarmAsk = { warm: true; code: SentCode; names: Names; pins: Pins; def: Id };
+export type WarmAsk = { warm: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id };
 // args: main takes the command line's words, as `ters run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts corePageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
 // `saved`: only the page as Open in a tab gives it (pageCompile.ts
 // compileSavedPage), a page with sound's too.
-export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; main: Id; saved?: true };
+export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; held?: [Id, string][]; main: Id; saved?: true };
 // Printed from the core IR (core-js.ts corePageScript), the script
 // calling $core.startCorePage (E244).
 export type CompileSays = CompiledPage | { saved: SavedScripts } | { error: string };
@@ -57,8 +57,9 @@ export type WhereAsk = { whereRuns: true; code: SentCode; names: Names; pins: Pi
 export type WhereSays = { answers: [Id, ...Answer][] } | { error: string };
 // The program's choices for main (choicesFor.ts, E292), as `ters choices`
 // writes them.
-export type ChoicesAsk = { choices: true; code: SentCode; names: Names; pins: Pins; main: Id };
-export type ChoicesSays = { choices: string[] } | { error: string };
+export type ChoicesAsk = { choices: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; main: Id };
+// `would`: for each held type, the row the compiler would pick instead.
+export type ChoicesSays = { choices: string[]; would: [Id, string][]; refused?: string } | { error: string };
 // Where the last read of a text run backwards stopped, when one found no
 // answer (L70c): the text, the place, what was looked for there, and how
 // many reads stopped.
@@ -105,13 +106,13 @@ function withInput(world: World, stdin: string | undefined): World {
 // the code) are kept too: calc's run was 0.14 s of checking and 0.6 s of
 // resolving each time, then printing `→ 0` at once.
 let lastAsk: { key: string; code: Code; def?: Id; lib?: ReturnType<typeof checkedForRun> } | null = null;
-function checked(given: SentCode, names: Names, pins: Pins, def: Id): ReturnType<typeof checkedForRun> {
-  const key = JSON.stringify([given, names, pins]);
+function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, string][] = []): ReturnType<typeof checkedForRun> {
+  const key = JSON.stringify([given, names, pins, held]);
   if (lastAsk?.key !== key) lastAsk = { key, code: receivedCode(given) };
   setDisplayNames(names);
   setProgramPins(pins);
   if (lastAsk.def === def && lastAsk.lib) return lastAsk.lib;
-  const lib = checkedForRun(lastAsk.code, names, def);
+  const lib = checkedForRun(lastAsk.code, names, def, held);
   lastAsk.def = def;
   lastAsk.lib = lib;
   return lib;
@@ -131,16 +132,16 @@ if (checksRead) {
 function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>) {
   answers = null; paused = false;
   if ("warm" in e.data) {
-    const { code, names, pins, def } = e.data;
-    try { const lib = checked(code, names, pins, def); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
+    const { code, names, pins, def, held } = e.data;
+    try { const lib = checked(code, names, pins, def, held); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
     return;
   }
   if ("choices" in e.data) {
-    const { names, pins, main } = e.data;
+    const { names, pins, main, held } = e.data;
     try {
       setDisplayNames(names);
       setProgramPins(pins);
-      return post({ choices: choicesFor(receivedCode(e.data.code), names, main) });
+      return post(choicesFor(receivedCode(e.data.code), names, main, held));
     } catch (err) {
       return post({ error: (err as Error).message });
     }
@@ -160,10 +161,10 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     }
   }
   if ("compilePage" in e.data) {
-    const { code, names, pins, main, saved } = e.data;
+    const { code, names, pins, main, saved, held } = e.data;
     try {
       // From the core IR, as Save page does.
-      return post(saved ? { saved: compileSavedPage(code, names, pins, main) } : compilePageProgram(code, names, pins, main));
+      return post(saved ? { saved: compileSavedPage(code, names, pins, main, held) } : compilePageProgram(code, names, pins, main, held));
     } catch (err) {
       return post({ error: (err as Error).message });
     }
@@ -174,7 +175,7 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     const { code, def, values, names } = e.data, until = Date.now() + 60000;
     return post(searchBackwards(code, def, received(values), names, () => Date.now() > until));
   }
-  const { code: given, names, pins, def, title, files, args, core, deny, stdin, replay, until } = e.data;
+  const { code: given, names, pins, held, def, title, files, args, core, deny, stdin, replay, until } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();
   const store: Store = {
     getItem: (k) => kept.get(k) ?? null,
@@ -193,7 +194,7 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     const world = logging.world;
     answers = logging.log;
     if (core && core.args === !!args && runPrinted(core, undefined, args, world, print, flush, () => [...wrote])) return;
-    const lib = checked(given, names, pins, def), info = lib.info;
+    const lib = checked(given, names, pins, def, held), info = lib.info;
     const own = lastAsk!.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     // Each lambda of the program's own definitions, by the definition it's in.
     const ownerOf = new Map<Id, Id>();

@@ -165,6 +165,10 @@ export interface Doc {
   // their newest versions.
   modules?: Module[];
   store?: Module;
+  // Types whose representation you held in Choices (E292, L280c): the
+  // row each is stored as, by the type's id, whatever the compiler would
+  // pick. Kept with the program, as `held` lines in `<program>.choices`.
+  heldReps?: Record<Id, string>;
 }
 
 export interface UI {
@@ -1145,7 +1149,7 @@ function kindLabel(id: Id): string {
 
 // The program's choices for main (E292), for the Choices tab and the
 // badges on the nodes they are about.
-const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
+const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
 const openChoice = (id: Id) => {
   ui.panel = "choices"; ui.choiceAt = id;
   if (onePane()) ui.pane = "side";
@@ -2212,7 +2216,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
 // (E288: an ⓘ here repeated it).
 const runHead = (): HTMLElement => h("h2", {}, "Run");
 
-const { page, pageSection, pictureSection, savePage, saveLog } = pagePanels({
+const { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
   errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });
@@ -2739,6 +2743,15 @@ document.addEventListener("click", (e) => {
     if (a === "named") return toggleNamed(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
     if (a === "open-choice") return openChoice(act.dataset.target!);
+    // A type held as a row, or let go (E292, L280c): runs, pages and the
+    // choices store it so from now on.
+    if (a === "choice-hold" || a === "choice-release") {
+      const of = act.dataset.of!, { [of]: _, ...rest } = doc.heldReps ?? {};
+      const heldReps = a === "choice-hold" ? { ...rest, [of]: act.dataset.rep! } : rest;
+      const what = typedPres().names[of] ?? LIBRARY.names[of] ?? of;
+      forgetCompiled();
+      return commit({ heldReps }, ["choices"], a === "choice-hold" ? `Held ${what} as ${act.dataset.rep}` : `${what} is the compiler's to pick again`);
+    }
     if (a === "goto-stop") { const d = act.dataset.def!, n = act.dataset.target!; if (d !== ui.def) openDef(d); return select(doc.code.nodes[n] ? n : null); }
     // The form is in the side panel's first tab: show it, whichever tab
     // (the Guide, on a first visit) was open.

@@ -371,7 +371,7 @@ export function pagePanels(host: PageHost) {
   // I109). Once per version of the program: Restart swaps it in at once. A
   // page with sound stays interpreted, since here its sound plays from the
   // evaluator's page (audio-page.ts), and the status line says so. Runs and inspection don't use the page, so they don't change.
-  const compiledPages = new WeakMap<Code, CompiledPage | null>(); // null: it didn't compile
+  let compiledPages = new WeakMap<Code, CompiledPage | null>(); // null: it didn't compile
   // The pages showing that are compiled ones.
   const compiledNow = new WeakSet<Preview>();
   let compiling: Worker | null = null;
@@ -400,7 +400,7 @@ export function pagePanels(host: PageHost) {
     // A shipped example as shipped was compiled when the site was built
     // (prebuilt.ts, E245): that program, then, and no compiling here.
     const asked = ++asks;
-    void prebuilt<CompiledPage>(prebuiltKey("page", code, { main }, pins())).then((got) => {
+    void shipped<CompiledPage>(prebuiltKey("page", code, { main }, pins())).then((got) => {
       if (asked !== asks) return;
       if (!got) return compileHere(code, main);
       compiledPages.set(code, got);
@@ -518,7 +518,7 @@ export function pagePanels(host: PageHost) {
     };
     w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data as CompiledPage | { error: string });
     w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
-    const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: pins(), main };
+    const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
     w.postMessage(ask);
   }
   // The program printed from the core IR (E244) runs on a fresh copy of its
@@ -589,17 +589,22 @@ export function pagePanels(host: PageHost) {
   // reaches. Made off the editor's thread: by the preview's compile, which
   // makes it too, by the site's build for a shipped example, or else by a
   // worker now. Filling it in takes no time.
-  const savedPages = new WeakMap<Code, SavedScripts>();
+  let savedPages = new WeakMap<Code, SavedScripts>();
+  // A type held or let go in Choices (E292): the same code compiles
+  // otherwise, so what was compiled is forgotten.
+  const forgetCompiled = () => { compiledPages = new WeakMap(); savedPages = new WeakMap(); };
+  // The site's build compiled the shipped examples with nothing held.
+  const shipped = <T>(key: string): Promise<T | null> => (Object.keys(doc().heldReps ?? {}).length ? Promise.resolve(null) : prebuilt<T>(key));
   function savedFor(code: Code, main: Id): Promise<SavedScripts> {
     const kept = savedPages.get(code) ?? compiledPages.get(code)?.saved;
     if (kept) return Promise.resolve(kept);
     // The preview's compile of this same code, under way: its page.
     if (inFlight?.code === code) return inFlight.done.then(() => savedFor(code, main));
-    return prebuilt<SavedScripts>(prebuiltKey("saved", code, { main }, pins())).then((got) => got ?? new Promise<SavedScripts>((ok, fail) => {
+    return shipped<SavedScripts>(prebuiltKey("saved", code, { main }, pins())).then((got) => got ?? new Promise<SavedScripts>((ok, fail) => {
       const w = newWorker();
       w.onmessage = (e: MessageEvent<CompileSays>) => { w.terminate(); if ("saved" in e.data) ok(e.data.saved); else fail(new Error("error" in e.data ? e.data.error : "the compiler gave no page")); };
       w.onerror = (e) => { e.preventDefault(); w.terminate(); fail(new Error(e.message || "the compiler failed")); };
-      const ask: CompileAsk = { compilePage: true, saved: true, code, names: pres().names, pins: pins(), main };
+      const ask: CompileAsk = { compilePage: true, saved: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
       w.postMessage(ask);
     })).then((made) => { savedPages.set(code, made); return made; });
   }
@@ -646,5 +651,5 @@ export function pagePanels(host: PageHost) {
     ui.note = `Saved this run's log: ${events} event${events === 1 ? "" : "s"} the page's handlers were given and ${answers} answer${answers === 1 ? "" : "s"} of the world, in order.${left}`;
     render();
   }
-  return { page, pageSection, pictureSection, savePage, saveLog };
+  return { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled };
 }
