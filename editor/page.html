@@ -528,7 +528,10 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .cn.handler { fill: var(--tone-2); }
 .tgraph .cn.err, .tgraph .pill.err { stroke: var(--hot); stroke-width: 2.5; }
 .tgraph .cl { fill: var(--fg); font: 600 13px var(--font-ui); pointer-events: none; }
-.tgraph .node-cmt { fill: var(--muted); font: italic 11px var(--font-ui); }
+.tgraph .cmt-mark path { fill: var(--canvas); stroke: var(--muted); stroke-width: 1.2; }
+.tgraph .cmt-mark .cmt-lines { fill: none; stroke-linecap: round; }
+.tgraph .cmt-mark text { font: 700 8.5px var(--font-ui); fill: var(--muted); pointer-events: none; }
+.tgraph .cmt-mark:hover path { stroke: var(--accent); }
 .tgraph .badge { fill: var(--muted); font: 600 9.5px var(--font-ui); letter-spacing: .02em; pointer-events: none; }
 .tgraph .pill { stroke: none; cursor: pointer; }
 .tgraph .pill.var { fill: var(--lit); cursor: grab; }

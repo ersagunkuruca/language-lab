@@ -75,7 +75,7 @@ test("a case that says what the otherwise says is drawn once", () => {
 });
 
 
-test("a folded frame says the comments of the nodes it hides (QA 11-22b L3)", () => {
+test("a node's comment is a mark on it, and a folded frame's mark says the comments of the nodes it hides (QA 11-22b L3)", () => {
   const p = loadProgram(join(root, "examples", "queens"));
   const safe = p.named("safe");
   const abs = subtree(p.code, safe).find((x) => { const n = p.code.nodes[x]; return isCall(n) && p.pres.names[(p.code.nodes[n.fn] as { target?: string }).target ?? ""] === "abs"; })!;
@@ -84,7 +84,7 @@ test("a folded frame says the comments of the nodes it hides (QA 11-22b L3)", ()
     selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
     canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded, fold() {}, order: false,
   } as never).root as unknown as El;
-  const notes = (e: El) => e.all().filter((x) => /\bnode-cmt\b/.test(x.getAttribute("class") ?? "")).map((x) => x.textContent);
+  const notes = (e: El) => e.all().filter((x) => /\bcmt-mark\b/.test(x.getAttribute("class") ?? "")).map((x) => x.children.find((c) => c.tagName === "title")!.textContent);
   const open = svg(new Set());
   assert.deepEqual(notes(open), ["how far apart"]);
   // Every frame folded: the box that holds abs says its comment.
