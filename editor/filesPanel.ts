@@ -9,10 +9,28 @@ import { hashDef } from "../ters/src/hash.ts";
 import { savedForm } from "../ters/src/saved.ts";
 import { h } from "./dom.ts";
 import type { Doc, UI } from "./main.ts";
-import { nodeEntries } from "../ters/src/model.ts";
+import { nodeEntries, nodeIds, sameValue } from "../ters/src/model.ts";
 
 // The program without the library's builtins, as code.json keeps it.
 export const userCode = (c: Code): Code => ({ nodes: Object.fromEntries(nodeEntries(c.nodes).filter(([, n]) => n.kind !== "builtin")), defs: c.defs });
+
+// Whether two versions of the program would be saved the same: node by
+// node, the same object or the same value (QA 11-22d M1: Undo wrote both
+// out as code.json to tell, 0.25 s of sheet's).
+export function sameCode(a: Code, b: Code): boolean {
+  if (a === b) return true;
+  if (a.defs.length !== b.defs.length || a.defs.some((d, i) => b.defs[i] !== d)) return false;
+  const ids = nodeIds(a.nodes);
+  let n = 0;
+  for (const id of ids) {
+    const x = a.nodes[id], y = b.nodes[id];
+    if (x === undefined) continue;
+    n++;
+    if (x !== y && !sameValue(x, y)) return false;
+  }
+  for (const id of nodeIds(b.nodes)) if (b.nodes[id] !== undefined) n--;
+  return n === 0;
+}
 
 // A short hash of a file's text (FNV-1a), to see that it changed.
 export function fnv(s: string) {
@@ -32,9 +50,10 @@ export interface FilesHost {
 
 export function filesPanels(host: FilesHost) {
   const { doc, ui, undo, prog, draftsOf } = host;
-  const files = () => [
-    { name: "code.json", get: (d: Doc) => JSON.stringify(savedForm(userCode(prog(d)))) },
-    { name: "drafts.json", get: (d: Doc) => JSON.stringify(draftsOf(d)) },
+  // `same`, where telling two versions apart is quicker than writing them.
+  const files = (): { name: string; get: (d: Doc) => string; same?: (a: Doc, b: Doc) => boolean }[] => [
+    { name: "code.json", get: (d: Doc) => JSON.stringify(savedForm(userCode(prog(d)))), same: (a, b) => sameCode(prog(a), prog(b)) },
+    { name: "drafts.json", get: (d: Doc) => JSON.stringify(draftsOf(d)), same: (a, b) => (a.code === b.code && a.loose === b.loose && a.home === b.home) || JSON.stringify(draftsOf(a)) === JSON.stringify(draftsOf(b)) },
     { name: "names.short.json", get: (d: Doc) => JSON.stringify(d.names.short) },
     { name: "names.descriptive.json", get: (d: Doc) => JSON.stringify(d.names.descriptive) },
     { name: "comments.json", get: (d: Doc) => JSON.stringify(d.comments) },

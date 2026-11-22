@@ -864,7 +864,7 @@ function travel(from: Doc[], to: Doc[], label: string) {
   if (!d) return;
   openWith.set(doc, ui.def);
   to.push(doc);
-  const changed = files().filter((f) => f.get(d) !== f.get(doc)).map((f) => f.name);
+  const changed = files().filter((f) => !(f.same ? f.same(d, doc) : f.get(d) === f.get(doc))).map((f) => f.name);
   doc = d;
   if (ui.selected && !doc.code.nodes[ui.selected]) ui.selected = null;
   const was = openWith.get(d);
