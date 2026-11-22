@@ -207,13 +207,15 @@ export function pushedInOrder(ir: CoreIR): number {
     if (!ok || !fronts) return;
     // Round i reads the item at length − 1 − i, and pushes it at the end.
     const at = (): SExpr => ({ k: "op", op: "sub", args: [{ k: "op", op: "sub", args: [{ k: "rt", fn: `array.length.${n}`, args: [{ k: "local", i: a.i }] }, { k: "num", v: 1 }] }, { k: "local", i }] });
+    const k = f.locals.push("f64") - 1;
     const go = (e: SExpr): SExpr => {
       const x = mapKids(e, go);
-      if (x.k === "rt" && /^array\.get\.a\d+$/.test(x.fn) && isLocal(x.args[1], i)) return { ...x, args: [x.args[0], at()] };
+      if (x.k === "rt" && /^array\.get\.a\d+$/.test(x.fn) && isLocal(x.args[1], i)) return { ...x, args: [x.args[0], { k: "local", i: k }] };
       if (x.k === "rt" && PUT.test(x.fn)) return { ...x, fn: x.fn.replace("pushFront", "push") };
       return x;
     };
-    f.body = { ...b, then: go(b.then) };
+    // (The position a local, as columns.ts reads an item at.)
+    f.body = { ...b, then: { k: "let", i: k, value: at(), body: go(b.then) } };
     made++;
   });
   return made;

@@ -27,7 +27,7 @@
 // the columns apart again where it only reads its fields (escape
 // analysis). An array captured by a closure given to a call stays columns.
 
-import { kids, mapKids, type AType, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { kids, mapKids, type AType, type CoreIR, type DType, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 type Local = Extract<SExpr, { k: "local" }>;
 const loc = (i: number): Local => ({ k: "local", i });
@@ -119,10 +119,45 @@ const found = (e: SExpr, p: (e: SExpr) => boolean): boolean => p(e) || kids(e).s
 
 // A record's leaf fields, each by its path of field positions: a field
 // holding a record (not one changed in place) is its own leaves.
-export type Leaf = { path: number[]; t: LType };
-export function leavesOf(r: RType, deep: boolean, at: number[] = []): Leaf[] {
-  return r.fields.flatMap((x, k) => (deep && isRecord(x.t) && !x.t.mutable && x.t.fields.length ? leavesOf(x.t, deep, [...at, k]) : [{ path: [...at, k], t: x.t }]));
+// Deep (whole), an `Optional` field (G1b3, a data type of a case with no
+// fields and a case of one, whose value is a plain number or a record of
+// them: a moth's `velocity: Optional Vec`) is a column of whether it is
+// that case (`opt`, its index `some`), then that value's leaves, by a
+// path through it of −1.
+export type Leaf = { path: number[]; t: LType; opt?: DType; some?: number };
+const PLAIN_LEAF = new Set<LType>(["f64", "int", "i32"]);
+export function optionalOf(t: LType): { d: DType; some: number; v: LType } | null {
+  if (!isData(t) || t.cases.length !== 2) return null;
+  const some = t.cases.findIndex((c) => c.fields.length === 1);
+  if (some < 0 || t.cases[1 - some].fields.length) return null;
+  const v = t.cases[some].fields[0].t;
+  const plain = PLAIN_LEAF.has(v) || (isRecord(v) && !v.mutable && v.fields.length > 0 && v.fields.every((x) => PLAIN_LEAF.has(x.t)));
+  return plain ? { d: t, some, v } : null;
 }
+export function leavesOf(r: RType, deep: boolean, at: number[] = []): Leaf[] {
+  return r.fields.flatMap((x, k): Leaf[] => {
+    if (deep && isRecord(x.t) && !x.t.mutable && x.t.fields.length) return leavesOf(x.t, deep, [...at, k]);
+    const o = deep ? optionalOf(x.t) : null;
+    if (o) return [{ path: [...at, k], t: "i32", opt: o.d, some: o.some }, ...(isRecord(o.v) ? o.v.fields.map((y, m) => ({ path: [...at, k, -1, m], t: y.t })) : [{ path: [...at, k, -1], t: o.v }])];
+    return [{ path: [...at, k], t: x.t }];
+  });
+}
+// A case of one record and a case of none (`Optional Thing`), and the
+// leaves of an array of it: its column of which, then the record's.
+function slotOf(t: LType): { d: DType; some: number; v: RType } | null {
+  if (!isData(t) || t.cases.length !== 2) return null;
+  const some = t.cases.findIndex((c) => c.fields.length === 1);
+  if (some < 0 || t.cases[1 - some].fields.length) return null;
+  const v = t.cases[some].fields[0].t;
+  return isRecord(v) && !v.mutable && v.fields.length ? { d: t, some, v } : null;
+}
+function slotLeaves(d: DType): Leaf[] {
+  const o = slotOf(d)!;
+  return [{ path: [], t: "i32", opt: d, some: o.some }, ...leavesOf(o.v, true, [-1])];
+}
+const isData = (t: LType | undefined): t is DType => typeof t === "object" && t !== null && "cases" in t;
+// What a column holds where the field is not that case.
+const zeroOf = (t: LType): SExpr => (t === "f64" ? { k: "num", v: 0 } : t === "int" ? { k: "int", v: 0n } : { k: "bool", v: false });
 
 // `plain`: only records of plain fields (Float64, Int, Text, Bool), the
 // columns WebAssembly keeps (wasm.ts colScan): there a record holding an
@@ -134,15 +169,19 @@ export function columns(ir: CoreIR, roots: number[], opts: { plain?: boolean; wh
   let n = 0;
   for (const a of ir.arrays) {
     const r = a.item;
-    if (!isRecord(r) || !r.fields.length) continue;
-    if (opts.plain && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
-    if (stored(ir, a, r, roots, !!opts.whole, !!opts.grow)) n++;
+    // An array of a case of one record, whole and growing (G1b4: a pool's
+    // slots, `Optional Thing`): whether each item is that case, and its
+    // record's leaves.
+    const slots = opts.whole && opts.grow ? slotOf(r) : null;
+    if (!slots && (!isRecord(r) || !r.fields.length)) continue;
+    if (opts.plain && isRecord(r) && r.fields.some((x) => !["f64", "int", "text", "i32"].includes(x.t as string))) continue;
+    if (stored(ir, a, r as RType | DType, roots, !!opts.whole, !!opts.grow)) n++;
   }
   return n;
 }
 
-function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean, grow: boolean): boolean {
-  const leaves = leavesOf(r, whole);
+function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: boolean, grow: boolean): boolean {
+  const leaves = isRecord(r) ? leavesOf(r, whole) : slotLeaves(r);
   const leafAt = (path: number[]) => leaves.findIndex((l) => l.path.length === path.length && l.path.every((x, k) => x === path[k]));
   const suffix = `.a${a.index}`;
   const ofA = (fn: string) => fn.endsWith(suffix) && /^array\./.test(fn);
@@ -172,7 +211,7 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
     const w = (e: SExpr) => { if (e.k === "let" && e.value.k === "rt" && e.value.fn === `array.get${suffix}`) items.add(e.i); kids(e).forEach(w); };
     w(f.body);
     const puts = found(f.body, (e) => e.k === "rt" && ofA(e.fn) && (PUSH.test(e.fn) || REPLACE.test(e.fn)));
-    const makes = (c: Extract<SExpr, { k: "call" }>) => { const t = funcs[c.fn].result; return isRecord(t) && t.key === r.key; };
+    const makes = (c: Extract<SExpr, { k: "call" }>) => { const t = funcs[c.fn].result; return isRecord(t) && isRecord(r) && t.key === r.key; };
     if (items.size || puts) inlined(work, f, i, (c) => (puts && makes(c)) || c.args.some((x) => isLocal(x) && items.has(x.i)));
   }
 
@@ -240,7 +279,11 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
             if (!m) return bad();
             if (m[1] === "get" && under?.k !== "let") return bad();
             if (m[1] === "at" && (!whole || !isLocal(e.args[0]))) return bad();
-            if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e) && !pushes.has(e)) return bad();
+            // Growing, a replace or a put in front of an array held
+            // elsewhere too: on a copy of its columns (G1b4: a pool's slot
+            // given an item, at a lamp hung or taken).
+            const copied = grow && /^(replaceAt|replaceOwned|pushFront|pushFrontOwned)$/.test(m[1]);
+            if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e) && !pushes.has(e) && !copied) return bad();
             if (m[1] === "empty" && !grow && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
             for (const x of e.args) walk(x, e);
             return;
@@ -275,11 +318,22 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
     // The record (or the record in a field, by its path) at j of x, made
     // from its columns.
     const madeAt = (x: Local, j: Local, t: RType, path: number[]): SExpr =>
-      ({ k: "make", t, args: t.fields.map((fd, k) => { const l = leafAt([...path, k]); return l >= 0 ? rt(`array.cget${l}${suffix}`, x, j) : madeAt(x, j, fd.t as RType, [...path, k]); }) });
+      ({ k: "make", t, args: t.fields.map((fd, k) => { const l = leafAt([...path, k]); return l >= 0 ? leafRead(x, j, l) : madeAt(x, j, fd.t as RType, [...path, k]); }) });
+    // A leaf's column read; an `Optional` made from its own (G1b3): that
+    // case, of its value's leaves, where its column says so.
+    const leafRead = (x: Local, j: Local, l: number): SExpr => {
+      const lf = leaves[l];
+      if (!lf.opt) return rt(`array.cget${l}${suffix}`, x, j);
+      const v = lf.opt.cases[lf.some!].fields[0].t;
+      const value = isRecord(v) ? madeAt(x, j, v, [...lf.path, -1]) : rt(`array.cget${leafAt([...lf.path, -1])}${suffix}`, x, j);
+      return { k: "if", cond: rt(`array.cget${l}${suffix}`, x, j), then: { k: "new", t: lf.opt, c: lf.some!, args: [value] }, else: { k: "new", t: lf.opt, c: 1 - lf.some!, args: [] }, t: lf.opt };
+    };
+    // The item at j of x: a record made, or a slot (G1b4).
+    const itemAt = (x: Local, j: Local): SExpr => (isRecord(r) ? madeAt(x, j, r, []) : leafRead(x, j, 0));
     // A read of a field of a record at a path in an item.
     const fieldAt = (p: { x: Local; j: Local }, path: number[], t: RType): SExpr => {
       const l = leafAt(path);
-      return l >= 0 ? rt(`array.cget${l}${suffix}`, p.x, p.j) : madeAt(p.x, p.j, t, path);
+      return l >= 0 ? leafRead(p.x, p.j, l) : madeAt(p.x, p.j, t, path);
     };
     // A get of a get … of an item: its path, or null.
     const pathOf = (e: SExpr): { p: { x: Local; j: Local }; path: number[] } | null => {
@@ -292,19 +346,19 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
         at.set(e.i, { x: e.value.args[0] as Local, j: e.value.args[1] as Local });
         // Whole, the item made too, for where it leaves (dropped when
         // nothing reads it).
-        return whole ? { ...e, value: madeAt(e.value.args[0] as Local, e.value.args[1] as Local, r, []), body: go(e.body) } : go(e.body);
+        return whole ? { ...e, value: itemAt(e.value.args[0] as Local, e.value.args[1] as Local), body: go(e.body) } : go(e.body);
       }
       // `item at`, checked: made from its columns, or no answer.
       if (e.k === "rt" && e.fn === `array.at${suffix}`) {
         const x = go(e.args[0]) as Local, jv = go(e.args[1]), j = f.locals.push("int") - 1;
-        return { k: "let", i: j, value: jv, body: { k: "if", cond: rt(`array.cin${suffix}`, x, loc(j)), then: madeAt(x, loc(j), r, []), else: { k: "fail" }, t: r } };
+        return { k: "let", i: j, value: jv, body: { k: "if", cond: rt(`array.cin${suffix}`, x, loc(j)), then: itemAt(x, loc(j)), else: { k: "fail" }, t: r } };
       }
       if (e.k === "let" && e.value.k === "local" && at.has(e.value.i)) { at.set(e.i, at.get(e.value.i)!); return whole ? { ...e, body: go(e.body) } : go(e.body); }
       if (e.k === "get") {
         const q = pathOf(e);
         if (q) {
           // The record it reads into: the item's, or the record in a field.
-          let t: RType = r;
+          let t = r as RType;
           for (const k of q.path.slice(0, -1)) t = t.fields[k].t as RType;
           return fieldAt(q.p, q.path, t.fields[q.path[q.path.length - 1]].t as RType);
         }
@@ -317,6 +371,12 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
       if (grow && e.k === "call" && !e.cps && e.args.length === 0 && pushes.size && (b0 => b0.k === "rt" && b0.fn === `array.empty${suffix}`)(funcs[e.fn].body)) return rt(`array.cbuild${suffix}`);
       if (grow && e.k === "rt" && e.fn === `array.empty${suffix}` && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return rt(`array.cbuild${suffix}`);
       if (e.k === "rt" && fold && e === fold.put) return written(e.args[0], loc(fold.j), e.args[e.args.length - 1], REPLACE.test(e.fn));
+      // A copy written into (above): the item replaced, or one more in front.
+      if (grow && e.k === "rt" && /^array\.(replaceAt|replaceOwned|pushFront|pushFrontOwned)\./.test(e.fn) && ofA(e.fn)) {
+        const front = e.fn.startsWith("array.pushFront"), j = f.locals.push("f64") - 1, c = f.locals.push(a as unknown as LType) - 1;
+        const copy = rt(front ? `array.cfront${suffix}` : `array.ccopy${suffix}`, go(e.args[0]));
+        return { k: "let", i: j, value: front ? { k: "num", v: 0 } : go(e.args[1]), body: { k: "let", i: c, value: copy, body: written(loc(c), loc(j), e.args[e.args.length - 1], false) } };
+      }
       if (entry && e === entry.call) {
         const made = e.args[2];
         const args = made.k === "rt" && made.fn === `array.empty${suffix}` ? [e.args[0], e.args[1], rt(`array.cnew${suffix}`, e.args[1]), e.args[3]] : e.args;
@@ -344,15 +404,36 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
       // The value at a leaf's path in v: a part of a record made here, or
       // read from a let of it.
       const named = new Map<SExpr, Local>();
-      const partOf = (v: SExpr, path: number[], t: RType): SExpr => {
-        if (!path.length) return v;
-        if (v.k === "make") return partOf(v.args[path[0]], path.slice(1), t.fields[path[0]].t as RType);
-        let l = v.k === "local" ? v : named.get(v);
-        if (!l) { const ti = f.locals.push(t) - 1; lets.push({ i: ti, value: v }); l = loc(ti); named.set(v, l); }
-        return partOf({ k: "get", rec: l, t, i: path[0] }, path.slice(1), t.fields[path[0]].t as RType);
+      // Through an `Optional` (G1b3): whether it is that case, or that
+      // case's value, read by a match where it isn't made here (inside one,
+      // `arm`, nothing is named: what it reads is bound there).
+      // v once, in a let, where more than one leaf reads it.
+      const once = (v: SExpr, t: LType, arm: boolean): SExpr => {
+        let l: SExpr | undefined = v.k === "local" || arm ? v : named.get(v);
+        if (!l) { const ti = f.locals.push(t) - 1; lets.push({ i: ti, value: v }); l = loc(ti); named.set(v, l as Local); }
+        return l;
+      };
+      const partOf = (v: SExpr, path: number[], t: LType, lf: Leaf, arm = false): SExpr => {
+        if (!path.length) {
+          if (!lf.opt) return v;
+          if (v.k === "new") return { k: "bool", v: v.c === lf.some };
+          v = once(v, lf.opt, arm);
+          return { k: "case", scrut: v, s: f.locals.push(lf.opt) - 1, t: lf.opt, result: "i32", arms: lf.opt.cases.map((_, c) => ({ k: "bool", v: c === lf.some })) };
+        }
+        const [step, ...rest] = path;
+        if (step === -1) {
+          const d = t as DType, some = d.cases.findIndex((c) => c.fields.length === 1), vt = d.cases[some].fields[0].t;
+          if (v.k === "new") return v.c === some ? partOf(v.args[0], rest, vt, lf, arm) : zeroOf(lf.t);
+          v = once(v, d, arm);
+          const si = f.locals.push(d) - 1;
+          return { k: "case", scrut: v, s: si, t: d, result: lf.t, arms: d.cases.map((_, c) => (c === some ? partOf({ k: "field", rec: loc(si), t: d, c, i: 0 }, rest, vt, lf, true) : zeroOf(lf.t))) };
+        }
+        const rt0 = t as RType;
+        if (v.k === "make") return partOf(v.args[step], rest, rt0.fields[step].t, lf, arm);
+        return partOf({ k: "get", rec: once(v, t, arm), t: rt0, i: step }, rest, rt0.fields[step].t, lf, arm);
       };
       const ks = leaves.map((_, k) => k).filter((k) => !same.has(leaves[k].path[0]));
-      const vals = ks.map((k) => partOf(x, leaves[k].path, r));
+      const vals = ks.map((k) => partOf(x, leaves[k].path, r, leaves[k]));
       // The lets first (an item read in them still says what it said).
       const body: SExpr = j ? rt(`array.cset${ks.join("_")}${suffix}`, c, j, ...vals) : rt(`array.cpush${suffix}`, c, ...vals);
       return go(lets.reduceRight<SExpr>((b, l) => ({ k: "let", i: l.i, value: l.value, body: b }), body));
@@ -369,7 +450,14 @@ function stored(ir: CoreIR, a: AType, r: RType, roots: number[], whole: boolean,
 function unread(e: SExpr): SExpr {
   const x = mapKids(e, unread);
   if (x.k !== "let") return x;
-  const read = (v: SExpr): boolean => v.k === "local" || (v.k === "rt" && v.fn.startsWith("array.cget")) || (v.k === "make" && v.args.every(read));
+  // Reads only, so dropping one changes nothing: of columns (an item's
+  // Optional field remade from them too, G1b4), and records made of them.
+  const read = (v: SExpr): boolean =>
+    v.k === "local" || v.k === "num" || v.k === "int" || v.k === "bool" ||
+    (v.k === "rt" && /^array\.c(get\d*|in|length)\./.test(v.fn)) ||
+    ((v.k === "make" || v.k === "new") && v.args.every(read)) ||
+    (v.k === "if" && read(v.cond) && read(v.then) && read(v.else)) ||
+    (v.k === "let" && read(v.value) && read(v.body));
   const cheap = read(x.value);
   return cheap && !found(x.body, (y) => y.k === "local" && y.i === x.i) ? x.body : x;
 }
