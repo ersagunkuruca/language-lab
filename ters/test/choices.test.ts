@@ -65,3 +65,13 @@ test("a held entry that isn't a way to store the type, or a list's split, is ref
   assert.throws(() => choices("greenhouse-page", new Map([["std.set", "linked list"]])), /Set can't be held as linked list here: it is stored as weight-balanced tree, sorted list, hash table/);
   assert.throws(() => heldOf(["held std.list representation: List as array of List from main; among array of List, List as written; jobs none; target JavaScript"]), /a list's split can't be held yet/);
 });
+
+// The algorithm kind (L280a part 2): the way each operation main uses is
+// given by, among the field as written and its ways (WAYS.md), as the
+// arithmetic's resolving picks it.
+test("herd's trig: each operation it uses, as written among its ways; none it doesn't use", () => {
+  const ways = choices("herd").filter((l) => l.includes(" way: "));
+  assert.deepEqual(ways.map((l) => l.split(";")[0].replace(/^\S+ /, "")), ["way: trig at float64's cos: as written", "way: trig at float64's polar: as written", "way: trig at float64's sin: as written"]);
+  assert.match(ways[0], /; among as written, cos by sin, cos by polar; target JavaScript$/);
+  assert.deepEqual(choices("numbers").filter((l) => l.includes(" way: ")), []);
+});
