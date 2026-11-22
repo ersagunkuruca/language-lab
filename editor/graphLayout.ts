@@ -461,6 +461,8 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     const blockers: string[][] = cols.map(() => []);
     for (const u of units) for (let k = 1; k < spanOf(u); k++) blockers[rank.get(u)! + k]?.push(u);
     const y = new Map<string, number>();
+    // Where each unit plugs in, kept for the columns a frame spans.
+    const plugs = new Map<string, [number, number]>();
     cols.forEach((col, r) => {
       const want = (u: string) => {
         const es = outs.get(u)!.filter((e) => y.has(e.to));
@@ -481,10 +483,34 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
       const ps = new Map(col.map((u) => [u, plug(u)]));
       const byPlug = (a: string, b: string) => ps.get(a)![0] - ps.get(b)![0] || ps.get(a)![1] - ps.get(b)![1] || ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!;
       const sorted = keepOrder(r ? [...col].sort(byPlug) : [...col]);
+      for (const u of col) plugs.set(u, ps.get(u)!);
       let bottom = -Infinity;
-      const walls = blockers[r].filter((b) => y.has(b)).map((b) => [y.get(b)!, y.get(b)! + size.get(b)!.h]).sort((a, b) => a[0] - b[0]);
+      const inWay = blockers[r].filter((b) => y.has(b)).sort((a, b) => y.get(a)! - y.get(b)!);
+      const walls = inWay.map((b) => [y.get(b)!, y.get(b)! + size.get(b)!.h]);
       const clear = (t: number, h: number) => { for (const [a, b] of walls) if (t < b + gap && t + h + gap > a) t = b + gap; return t; };
-      for (const u of sorted) { const t = clear(r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap), size.get(u)!.h); y.set(u, t); bottom = t + size.get(u)!.h; }
+      const stack = (us: string[]) => { for (const u of us) { const t = clear(r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap), size.get(u)!.h); y.set(u, t); bottom = t + size.get(u)!.h; } };
+      // A frame spanning this column keeps its place in the column's order
+      // (Ersagun 2026-11-22: "keep the order of nodes taking multi column
+      // frames into account"): what plugs in above where the frame plugs
+      // in goes above it, the rest below.
+      const before = (b: string) => (u: string) => { const p = ps.get(u)!, q = plugs.get(b)!; return p[0] < q[0] || (p[0] === q[0] && (p[1] < q[1] || (p[1] === q[1] && ws.get(u)! < y.get(b)!))); };
+      let rest = sorted;
+      for (const b of inWay) {
+        const k = rest.findIndex((u) => !before(b)(u));
+        const above = k < 0 ? rest : rest.slice(0, k);
+        if (above.length) {
+          // Stacked as they want, then lifted to clear the frame's top,
+          // where there's room for them between it and what's above.
+          let t = bottom, tops: number[] = [];
+          for (const u of above) { const top = Math.max(ws.get(u)!, t + gap); tops.push(top); t = top + size.get(u)!.h; }
+          const lift = Math.max(0, t + gap - y.get(b)!);
+          if (tops[0] - lift < bottom + gap) break;
+          above.forEach((u, i) => y.set(u, tops[i] - lift));
+          rest = rest.slice(above.length);
+        }
+        bottom = Math.max(bottom, y.get(b)! + size.get(b)!.h);
+      }
+      stack(rest);
       // Pushed down to make room: move the column back up, half way.
       if (r && !walls.length) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
     });
