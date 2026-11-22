@@ -182,7 +182,10 @@ export interface Lists {
   to: (xs: Value[]) => Value;
   // Given, each hands its rows tracked views of their items (L99): the
   // tags of a list's two cases, and how to tell a list from a record.
-  views?: { cons: string; nil: string; isList: (v: Value) => boolean };
+  // `bools` (I331): a Bool read through a view is a boolean, as compiled
+  // code holds one inside data, not the evaluator's case: its true and
+  // false tags.
+  views?: { cons: string; nil: string; isList: (v: Value) => boolean; bools?: { t: string; f: string } };
 }
 type Data = { tag: string; fields: Value[] };
 const keyOf = (steps: Step[]) => steps.map((s) => ("item" in s ? `i${s.item}/` : "field" in s ? `f${s.field}/` : "k/")).join("");
@@ -732,6 +735,8 @@ export class Cells {
       return last!;
     };
     const part = (inner: Step[], v: Value): Value => {
+      const b = shape.bools, d = v as unknown as Data;
+      if (b && typeof v === "object" && v !== null && (d.tag === b.t || d.tag === b.f) && d.fields.length === 0) { this.seen(n, { row, rel: inner }); return (d.tag === b.t) as unknown as Value; }
       if (typeof v === "object" && v !== null) return this.view(n, row, inner, lists);
       this.seen(n, { row, rel: inner });
       return v;
