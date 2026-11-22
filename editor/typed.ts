@@ -763,6 +763,13 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // not the one std happens to declare first. Where a generic one is
   // among them (+ for every number type), the order is left as it was.
   const generic = t.alts.some((op) => op.startsWith("builtin.arith."));
+  // The generic one first, as + is by its glyph: abs is found by name,
+  // where Float64's is declared first, and `(x) => abs(x)` read as
+  // Float64's (I342). At a Float64 or an Int it is that type's anyway.
+  if (generic && !t.alts[0].startsWith("builtin.arith.")) {
+    const g = t.alts.find((op) => op.startsWith("builtin.arith."))!;
+    return leaveOpen(info, { ...t, alts: [g, ...t.alts.filter((op) => op !== g)] });
+  }
   // (The Int one takes its twin's place, so Float64's stays before
   // another type's: show(1.5) is Float64's show, not Algebraic's, I248.)
   const twinned = (op: Id) => !generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."));
