@@ -22,7 +22,7 @@ import { Lang } from "./dsl.ts";
 import { digest, hashes } from "../hash.ts";
 import { LIBRARY, TREES } from "./library.ts";
 import { intCases, usesIntCases } from "./int-cases.ts";
-import { CARRIED, choose, represent, uses, type Representation } from "./represent.ts";
+import { CARRIED, choose, represent, uses, type Measured, type Representation } from "./represent.ts";
 import { LADDER } from "./cost.ts";
 import { listGroups } from "./rep-groups.ts";
 import { consOnto, type ConsOnto } from "./cons-onto.ts";
@@ -73,7 +73,7 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // `held`: the rows a person held in the program's choices (L280c,
 // CHOICES-2026-11-20.md), by the type's id: the row's name, which must be
 // one the chooser could pick here, so the meaning is kept.
-export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean; dataKeys?: boolean; held?: ReadonlyMap<Id, string> }
+export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean; dataKeys?: boolean; held?: ReadonlyMap<Id, string>; measured?: ReadonlyMap<Id, Measured> }
 
 // The rows the chooser picks from for each type a program stores: its own
 // representations, and the library's rows for a type stored whole (std's
@@ -300,7 +300,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // append onto what a loop carries is the array's own, C234).
     const left = [...rows];
     for (;;) {
-      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...edges]).rep;
+      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...edges], options.measured?.get(ty)).rep;
       if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue types;
       // Lists as trees for the whole, where parts of it would have arrays
       // (machine's step loop): those parts as arrays, the rest as written,

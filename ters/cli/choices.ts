@@ -12,7 +12,7 @@ import type { Measure } from "../src/lang/run.ts";
 import type { Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { S } from "../src/lang/std.ts";
-import { CARRIED, HEAD, looped, uses, type Representation } from "../src/lang/represent.ts";
+import { CARRIED, HEAD, looped, uses, type Measured, type Representation } from "../src/lang/represent.ts";
 import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
@@ -403,15 +403,10 @@ export function staleChoices(written: readonly string[], now: readonly string[])
 export interface Measuring { measure: Measure; lines: (args: readonly string[]) => string[] }
 export function measuring(given: Program, main: Id, picks: readonly Pick[]): Measuring {
   const names = { ...LIBRARY.names, ...given.names }, code = given.code;
-  const stored = storedRows(code, given.own, given.reps);
-  const rowsOf = (of: Id): Representation[] => { const own = stored.filter((r) => r.of === of); return own.length ? own : LIBRARY.reps.filter((r) => r.of === of); };
   const casesOf = (t: Id): Id[] => { const d = code.nodes[t]; return d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : []; };
   // Each job's call nodes, by the type and the job (`T job`).
   const jobOf = new Map<Id, Id>(), typeOf = new Map<string, Id>();
-  for (const t of new Set(picks.map((p) => p.of))) {
-    const jobs = new Set([...casesOf(t), ...rowsOf(t).flatMap((r) => Object.keys(r.cost)).filter((k) => code.nodes[k]?.kind === "def")]);
-    for (const j of jobs) if (!jobOf.has(j)) { jobOf.set(j, t); typeOf.set(`${t} ${j}`, t); }
-  }
+  for (const t of new Set(picks.map((p) => p.of))) for (const j of jobsOf(given, t)) if (!jobOf.has(j)) { jobOf.set(j, t); typeOf.set(`${t} ${j}`, t); }
   const own = new Set(given.own), calls = new Map<Id, string>();
   for (const d of [main, ...dependencies(code, main)]) {
     if (!own.has(d)) continue;
@@ -460,6 +455,33 @@ export function measuring(given: Program, main: Id, picks: readonly Pick[]): Mea
   });
   return { measure, lines };
 }
+// A type's jobs a run counts: its constructors and the definitions its
+// rows say what they cost.
+function jobsOf(given: Program, t: Id): Set<Id> {
+  const code = given.code, d = code.nodes[t];
+  const cases = d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : [];
+  const own = storedRows(code, given.own, given.reps).filter((r) => r.of === t), rows = own.length ? own : LIBRARY.reps.filter((r) => r.of === t);
+  return new Set([...cases, ...rows.flatMap((r) => Object.keys(r.cost)).filter((k) => code.nodes[k]?.kind === "def")]);
+}
 const MEASURED = /^\S+ measured: /;
+const MEASURE = /^(\S+) measured: [^:]*: ([^;]+?)(?:; up to (\d+) items?)?; from a run with .*$/;
+// The measured entries read back for the chooser (represent.ts Measured),
+// by the type: each job by its name among the type's jobs.
+export function measuredOf(given: Program, lines: readonly string[]): Map<Id, Measured> {
+  const names = { ...LIBRARY.names, ...given.names }, out = new Map<Id, Measured>();
+  for (const l of lines) {
+    const m = MEASURE.exec(l);
+    if (!m) continue;
+    const [, t, calls, size] = m, byName = new Map([...jobsOf(given, t)].map((j) => [names[j] ?? j, j]));
+    const counted = new Map<string, number>();
+    for (const c of calls.split(", ")) {
+      const x = /^(.+) (\d+) times?$/.exec(c), j = x && byName.get(x[1]);
+      if (!x || !j) throw new Error(`a measured entry names a job ${names[t] ?? t} doesn't have: ${l}`);
+      counted.set(j, Number(x[2]));
+    }
+    out.set(t, { calls: counted, size: size ? Number(size) : 1 });
+  }
+  return out;
+}
 // The measured entries of a choices file, kept as written.
 export const measuredIn = (lines: readonly string[]): string[] => lines.filter((l) => MEASURED.test(l));
