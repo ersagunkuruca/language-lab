@@ -595,6 +595,9 @@ function showProgram() {
   // A program's open definition may be below the navigator's fold (pedal's
   // main): bring it into view.
   document.querySelector(".p-nav .nav-row[data-def].on")?.scrollIntoView({ block: "nearest" });
+  // Run's worker checks this program while it is read (I320), as it
+  // does the first one (started).
+  if (!EMBED) { const at = doc.program; setTimeout(() => { const m = defNamed("main"); if (m && doc.program === at && typesOf()) warmRun(m); }, 300); }
 }
 
 // ---------------------------------------------------------------- programs and files
