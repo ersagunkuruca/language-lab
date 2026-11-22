@@ -13,6 +13,7 @@ import * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { inlinable, type InlineView } from "./inline.ts";
 import { newLoose } from "./drafts.ts";
+import type { Shape } from "../ters/src/lang/render.ts";
 import type { GraphView } from "./typedGraph.ts";
 import type { Doc, UI } from "./main.ts";
 
@@ -50,6 +51,7 @@ export interface GraphMenuHost {
   paletteFor(hole: Id, m: NonNullable<UI["menu"]>): void;
   runTop(info: T.Info, r: Top.Top): void;
   fillPalette(hole: Id, info: T.Info, names: Names, field?: string): HTMLElement;
+  setShape(id: Id, to: Shape | null): void;
   // What main.ts keeps for the next render: the parts to scroll to, the
   // hole a swap made, the part being wrapped.
   setReveal(f: (id: Id) => boolean): void;
@@ -59,7 +61,7 @@ export interface GraphMenuHost {
 
 export function graphMenu(host: GraphMenuHost) {
   const { doc, ui, graph, view, undo, applyT, commit, render, select, openDef, calleeDef, typesOf, typedPres, defBody, stepAt, lkey, isNamed, bindersOf, fnSet,
-    groupable, groupPicked, groupToFunction, ungroup, partCalls, wrappable, graphFolded, toggleFolded, toggleInline, toggleNamed, allNamed, paletteFor, runTop, fillPalette,
+    groupable, groupPicked, groupToFunction, ungroup, partCalls, wrappable, graphFolded, toggleFolded, toggleInline, toggleNamed, allNamed, paletteFor, runTop, fillPalette, setShape,
     setReveal, setSwapped, setWrapping } = host;
   let menuGen = 0;
   function menuFor(info: T.Info): HTMLElement | null {
@@ -191,6 +193,16 @@ export function graphMenu(host: GraphMenuHost) {
     // definition takes it with everything written inside it, and a function
     // written in place can be made a definition, as from its frame in the
     // graph (E208).
+    // How the part is laid out in the blocks (E290): a view.
+    const laid = id ? doc().layout.shape?.[id] : undefined, n = id ? doc().code.nodes[id] : undefined;
+    const call = !!n && isCall(n) && doc().code.nodes[n.fn]?.kind !== "lambda";
+    if (kind === "node" && !inGraph && id && (call || n?.kind === "lambda")) {
+      rows.push(h("div", { class: "ctx-sep" }), head("Layout"),
+        item(`${laid === "line" ? "✓ " : ""}One line`, "shape-line"),
+        item(`${laid === "lines" ? "✓ " : ""}Indented`, "shape-lines"),
+        ...(call ? [item("Hide", "shape-hidden", "Shown as …; click it to show")] : []),
+        ...(laid ? [item("Auto", "shape-auto", "One line while it fits")] : []));
+    }
     if (kind === "node" && !inGraph && id) {
       const members = partCalls(id);
       if (members.length) rows.push(h("div", { class: "ctx-sep" }),
@@ -234,6 +246,7 @@ export function graphMenu(host: GraphMenuHost) {
   }
 
   function menuAction(act: string, target: Id | undefined) {
+    if (act.startsWith("shape-") && target) { ui.menu = null; return setShape(target, act === "shape-auto" ? null : act.slice(6) as Shape); }
     const info = typesOf();
     const m = ui.menu;
     ui.menu = null;

@@ -128,7 +128,11 @@ export function foldFrom(code: Code, n: Call, nameOf: (id: Id) => string): { fol
 }
 
 // `loose`: the definition is a loose part, with its inputs' `home`.
-export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: Record<Id, Id> } = {}): Blk[] {
+// How a part is laid out in the blocks, picked in its menu (E290): on one
+// line, on lines of their own, hidden as …, or shown when it is deeper
+// than the depth hides. A view: kept in layout.json.
+export type Shape = "line" | "lines" | "hidden" | "shown";
+export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: { pane?: boolean; loose?: Record<Id, Id>; shape?: Record<Id, Shape>; depth?: number } = {}): Blk[] {
   const names = pres.names;
   const pane = !!opts.pane;
   // A binder nobody named is called for its type (items, x, event), as the
@@ -204,11 +208,25 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
   // past WIDTH, with what goes before it, is laid out as a tall one is,
   // its parts one under another, indented (Ersagun 2026-11-22: "Some
   // programs are very hard to read this way").
+  // Calls deeper than opts.depth, and those picked Hide, read as … (E290).
+  const shapes = opts.shape ?? {};
+  let depth = 0;
+  // An operator, a list or a field read is not a level: a + b's operands
+  // are as deep as the sum.
+  const counts = (id: Id) => {
+    const n = node(id);
+    if (!isCall(n) || isLet(n) || listItems(id)) return false;
+    const f = node(n.fn), fix = f.kind === "ref" ? pres.style.notation[f.target]?.fixity : undefined;
+    return fix !== "infix" && fix !== "prefix" && !(f.kind === "ref" && node(f.target)?.kind === "field");
+  };
+  const hidden = (id: Id) => counts(id) && (shapes[id] === "hidden" || (opts.depth !== undefined && depth > opts.depth && shapes[id] !== "shown"));
   const widths = new Map<Id, number>();
   let measuring = false;
   const wide = (id: Id, lead: Piece[] = []): boolean => {
     const n = node(id);
     if (!(isCall(n) || n.kind === "lambda" || (n.kind === "match" && isBool(n)))) return false;
+    if (shapes[id] === "line" || hidden(id)) return false;
+    if (shapes[id] === "lines") return true;
     let w = widths.get(id);
     if (w === undefined) {
       measuring = true;
@@ -244,6 +262,15 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
 
   // One line.
   const inline = (id: Id): I => {
+    if (hidden(id)) return atom(part("call hid", ["…"], id, "Hidden: click to show"));
+    if (!counts(id)) return inlineAll(id);
+    // One shown by a click counts from itself: what it holds shows as far
+    // down as a line's top does.
+    const was = depth;
+    depth = shapes[id] === "shown" ? 1 : depth + 1;
+    try { return inlineAll(id); } finally { depth = was; }
+  };
+  const inlineAll = (id: Id): I => {
     const n = node(id);
     switch (n.kind) {
       case "lit": {
@@ -407,7 +434,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       const rows = items.flatMap((x, i) => (i < items.length - 1 ? appendLast(block(x, []), pn(",")) : block(x, [])));
       return hold([ln(...lead, pn("[")), grp(rows), ln(pn("]"))]);
     }
-    if (!tallOrWide(id, lead)) return [ln(...lead, ...inline(id).p)];
+    if (hidden(id) || !tallOrWide(id, lead)) return [ln(...lead, ...inline(id).p)];
     if (isCall(n) && isLet(n)) {
       // A run of steps is one column, each step its own line: x = …, then
       // the next, not each one nested inside the one before (the right-
