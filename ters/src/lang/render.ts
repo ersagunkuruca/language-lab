@@ -199,6 +199,18 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
   const isLet = (n: Node): boolean => isCall(n) && node(n.fn).kind === "lambda";
+  // A step done for what it does, that nothing reads, is just the step.
+  const unreadStep = (p: Id, body: Id) => base(p) === "_" || (!names[p] && !subtree(code, body).some((x) => (node(x) as { target?: Id }).target === p));
+  // A run of steps short enough to read on one line, each step and what it
+  // gives one line high: `print error(…); 2` after a case's arrow, or after
+  // handle (Ersagun 2026-11-22, chapters' main).
+  const stepsFit = (id: Id, lead: Piece[]): boolean => {
+    const parts: Id[] = [];
+    let at = id;
+    for (let c = node(at); isLet(c); c = node(at)) { const l = node((c as Call).fn) as NodeOf<"lambda">; parts.push(...(c as Call).args); at = l.body; }
+    if (at === id || [...parts, at].some(tall)) return false;
+    return pieceText([...lead, ...inline(id).p]).length <= WIDTH;
+  };
   // A match whose arms are an effect's operations handles it.
   const isHandler = (n: NodeOf<"match">) => {
     const owner = n.arms.length ? info?.owner.get((node(n.arms[0]) as NodeOf<"arm">).variant) : undefined;
@@ -369,6 +381,18 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
         const items = listItems(id);
         if (items) return atom(part("call", [pn("["), ...commas(items.map((i) => inline(i).p)), pn("]")], id));
         const f = node(n.fn);
+        // A run of steps on one line: each step, then `;`, then what it
+        // gives, `‹split book›(path, folder); 0`, as the text writes it.
+        if (f.kind === "lambda" && f.params.length === n.args.length) {
+          enter(f.params);
+          const labels = f.params.map(bind);
+          leave(f.params);
+          const steps = f.params.flatMap((p, i) => [...(unreadStep(p, f.body) ? [] : [labels[i], pn(" = ")]), ...inline(n.args[i]).p, pn("; ")]);
+          enter(f.params);
+          const rest = inline(f.body).p;
+          leave(f.params);
+          return { p: [part("call steps", [...steps, ...rest], id)], prec: 0 };
+        }
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
         const ops = chainOperands(code, id);
         const args = (ops ?? n.args).map(inline);
@@ -571,7 +595,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
       //       0
       //     abort(why) → …
       const word = kw(`${handles ? "handle" : n.kind}`);
-      if (tall(n.scrutinee)) return hold([ln(...lead, word), grp(block(n.scrutinee, []), 4), grp(arms)]);
+      if (tall(n.scrutinee) && !stepsFit(n.scrutinee, [...lead, word, " "])) return hold([ln(...lead, word), grp(block(n.scrutinee, []), 4), grp(arms)]);
       return hold([ln(...lead, word, " ", ...inline(n.scrutinee).p), grp(arms)]);
     }
     if (isBound(n)) {
@@ -694,7 +718,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     }
     return [ln(...lead, ...inline(id).p)];
   };
-  const hang = (id: Id, head: Piece[]): Blk[] => (tallOrWide(id, head) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
+  const hang = (id: Id, head: Piece[]): Blk[] => (stepsFit(id, head) ? [ln(...head, ...inline(id).p)] : tallOrWide(id, head) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
 
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;

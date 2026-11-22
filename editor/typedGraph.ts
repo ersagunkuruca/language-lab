@@ -61,7 +61,7 @@ import { solveMode } from "../ters/src/lang/modes.ts";
 import { portLabel } from "../ters/src/lang/equations.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
 import { foldFrom, looseParts, takenApart } from "../ters/src/lang/render.ts";
-import { flattened, matchRows, patternText } from "../ters/src/lang/patterns.ts";
+import { flattened, matchRows, patternText, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
@@ -1036,12 +1036,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     }
     if (numbered) {
       const dot = (b: Id): [End, End] => [{ item: b, dx: 8, dy: 16 }, { item: b, dx: 8, dy: 0 }];
-      // The last leads to the top of what the steps lead to, as each leads
-      // to the top of the next, not to its output on the far side (it
-      // crossed what it pointed at).
+      // Order arrows run between actions only: the last step leads on to
+      // what follows when that acts too (to its top, as each step leads to
+      // the next), not to a value such as the `2` a case gives after its
+      // print (Ersagun 2026-11-22: "Arrows to 2s? What do they even mean?").
+      const acts = subtree(code, rest).some((x) => { const c = node(x); return isCall(c) && effectsOf(c).does.length > 0; });
       const out = body.out, last = "item" in out ? items.get(out.item) : undefined;
       const next: End = last && "item" in out ? { item: out.item, dx: last.w / 2, dy: 0 } : out;
-      silentSteps.forEach((b, i) => then.push([dot(b)[0], i + 1 < silentSteps.length ? dot(silentSteps[i + 1])[1] : next]));
+      silentSteps.forEach((b, i) => { if (i + 1 < silentSteps.length) then.push([dot(b)[0], dot(silentSteps[i + 1])[1]]); else if (acts) then.push([dot(b)[0], next]); });
     }
     const bx = sequence ? 0 : right + 26;
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
@@ -1107,7 +1109,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const title = from ? `fold${type ? ` ${name(type)}` : ""} from ${starts.map(name).join(", ")}` : isIf ? "if" : apart ? (fields.length > APART ? `${name(armNodes[0].variant)}(…) =` : fields) : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
-    const kids: (Sub | null)[] = [arg(n.scrutinee)];
+    // Steps handled or matched on, `handle split book(…); 0`, are framed:
+    // drawn loose, the steps read as run before the handle, outside it.
+    const sc = node(n.scrutinee);
+    const kids: (Sub | null)[] = [isCall(sc) && node(sc.fn).kind === "lambda" ? region(n.scrutinee, "", [], n.scrutinee, "arm") : arg(n.scrutinee)];
     from?.args.forEach((a, i) => { labels.push(name(starts[i])); inputs.push(a); kids.push(arg(a)); });
     const values = inputs.length;
     // A case with nothing to name is a value, not a function: what it gives
@@ -1131,7 +1136,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const valueOf = (arm: NodeOf<"arm">) => { const v = arm.value ? node(arm.value) : null; return v?.kind === "lit" ? litLabel(v.value, 18).short : null; };
     const byValue = armNodes.some((a) => a.value);
     const all = n.kind === "match" && !handles && !isIf && !apart && !byValue && !hooks.tree?.has(id) ? matchRows(code, info, n) : null;
-    const rows = all && flattened(all) ? all : null;
+    // A case that says what the otherwise says is drawn once, as the
+    // otherwise, as the text reads it (sharedOtherwise): chapters' main drew
+    // the usage message twice, once for a list of one (Ersagun 2026-11-22).
+    const rows = all && flattened(all) ? (n.kind === "match" && n.otherwise ? sharedOtherwise(code, all, n.otherwise).rows : all) : null;
     for (const r of rows ?? []) {
       const pat = patternText(r.pat, name, name);
       labels.push(pat.length > APART ? `${pat.slice(0, APART - 1)}…` : pat);

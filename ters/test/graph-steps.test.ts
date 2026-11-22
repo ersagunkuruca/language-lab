@@ -56,3 +56,16 @@ test("a case whose value comes after steps is framed: its steps don't read as th
   const otherwise = (match as { otherwise: Id }).otherwise;
   assert.ok(svg.all().some((e) => e.getAttribute("data-frame") === otherwise), "the otherwise case has a frame");
 });
+
+test("order arrows run between actions only: none from a print to the value given after it", () => {
+  // ledger's usage: print error(…), then 2. One action, so no arrow.
+  assert.equal(draw("ledger", "usage").svg.all().filter((e) => e.getAttribute("class") === "then").length, 0);
+});
+
+test("a case that says what the otherwise says is drawn once", () => {
+  // chapters' main: a list of one gives the usage message, as otherwise does.
+  const { svg } = draw("chapters", "main");
+  const usage = svg.all().filter((e) => e.tagName === "text" && /usage: chapters/.test(e.textContent));
+  assert.equal(usage.length, 1, "the usage message once");
+});
+
