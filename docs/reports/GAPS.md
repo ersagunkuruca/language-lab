@@ -4833,3 +4833,20 @@ C275 first: it is most of every target's time and fuse-walks.ts is where
 it goes. Then C276, which also makes `ters wasi` run the program, then
 C277. The MCP rows go to the lanes that own the reader (I340 first: a
 program read wrong without a word).
+
+### After C275
+
+`compiler/src/scalar.ts` (zippedItems): a fold over `zipped(a, b)` of two
+arrays is a loop over both, item k their items at k, from the shorter's
+last back, as the fold over the array of pairs went; no array of pairs is
+made. Every way prints the same digits.
+
+| strings, 32 blocks | before | after |
+|---|---|---|
+| core IR | 15.2 s (47x) | 8.1 s (23x) |
+| `ters native` | 2.42 s | 2.26 s (12x the C) |
+
+Natively, callgrind at 2 blocks counts 36% fewer instructions; what is
+left is the library's FFT on cons lists (`lab_new`, counts and frees
+together 43%, `fft` 10%), the next stage after C276.
+
