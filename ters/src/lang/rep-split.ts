@@ -22,7 +22,7 @@
 // variables represented differently (Schonberg, Schwartz and Sharir, 1981).
 
 import { SPLIT_COPIED_FROM, originalOf } from "./prelude-ids.ts";
-import { dependencies, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf, copyNodes, nodeValues, withNodes } from "../model.ts";
+import { dependencies, dependenciesOfAll, freshId, mapIds, merge, subtree, isCall, type Code, type Id, type Node, type NodeOf, copyNodes, nodeValues, withNodes } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
 import { BY_VALUE, listBoundary, loopsOnto, withTrees } from "./library-reps.ts";
@@ -48,7 +48,9 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
   const isType = (d: Id) => isDef(d) && code.nodes[(code.nodes[d] as NodeOf<"def">).body ?? ""]?.kind === "typedef";
   // The representation's own code stays as it is.
   const repOwn = new Set<Id>();
-  for (const d of [...Object.values(rep.impl), rep.meaning, rep.store]) { repOwn.add(d); if (code.nodes[d]) for (const x of dependencies(code, d)) repOwn.add(x); }
+  const rowDefs = [...Object.values(rep.impl), rep.meaning, rep.store];
+  for (const d of rowDefs) repOwn.add(d);
+  for (const x of dependenciesOfAll(code, rowDefs.filter((d) => code.nodes[d]))) repOwn.add(x);
   const refsOf = (d: Id) => subtree(code, d).flatMap((x) => { const n = code.nodes[x]; return n.kind === "ref" && isDef(n.target) && !isType(n.target) && !repOwn.has(n.target) && !rep.impl[n.target] ? [n.target] : []; });
   const reach = (roots: Id[], stop: Set<Id>) => {
     const seen = new Set<Id>(), todo = [...roots];
