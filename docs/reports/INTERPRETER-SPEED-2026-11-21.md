@@ -79,3 +79,18 @@ Numbers vary by about 10% from run to run.
 Before these fixes, the looper's main was slow mostly because of the
 first cause. Countdown and pond are slow because of the third and
 fourth.
+
+## After the fixes, 2026-11-22
+
+L281a to L281d and L281g are done (#2970, #2990, #2994, #3003). Pages
+now open in node in: looper 2.8 to 3.2 s, countdown 3.8 s (after L281h),
+pond 2.8 s, break and crew 0.7 s, every other page under 1 s.
+
+The machine no longer matters on any page: none makes more than 14,000
+machine calls opening (pond 12,000), under 2% of its time. So L281e
+(stops keep a function on the machine) and L281f (the machine's cost per
+call) were closed measured. What is left is the direct runs themselves:
+the looper builds 5.8 million list cells, countdown makes 1.7 million
+calls each of `join` and `valid` in a search, and about a fifth of each
+page's time is garbage collection. L281h took the lookups out of each
+direct search call (countdown 5.3 to 3.8 s).
