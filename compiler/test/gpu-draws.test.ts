@@ -195,6 +195,23 @@ test("only the fields of an instance its vertex function reads cross, through th
   assert.deepEqual([...new Float32Array(Uint32Array.from(w.instances).buffer)], [-0.5, 0.5, 0, 0]);
 });
 
+test("a vertex function reading top-level constants, a Float64 and a record, through a function it calls, gets a site", () => {
+  const p = program((k, t) => {
+    const eye = k.def("eye distance");
+    k.define(eye, k.lit(4));
+    const still = k.def("still");
+    k.define(still, t.corner(0.25, 0.5));
+    const seen = k.def("seen by");
+    k.define(seen, k.fn(["x"], (x) => k.call(B.div, x, k.x(eye))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(FRAME_V.frame, k.list(t.pass("#000", false,
+      k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(1.5)), k.fn(["_", "c"], (_, c) => k.call(FRAME_V.placed, t.point(k.call(seen, t.cx(c)), k.call(B.add, t.cy(c), t.cx(k.x(still))), k.lit(0.5)), k.lit(0))), k.fn(["_"], () => t.colour(k.lit(1), k.lit(0), k.lit(0)))))))));
+    return main;
+  });
+  assert.deepEqual([...p.draws.refused], []);
+  assert.deepEqual(Object.keys(p.draws.sites), ["0"]);
+});
+
 // Chromium: CHROMIUM, or Playwright's own in /opt/pw-browsers.
 const chromiumPath = (): string | undefined => {
   if (process.env.CHROMIUM) return process.env.CHROMIUM;
