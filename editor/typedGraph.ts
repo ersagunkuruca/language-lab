@@ -488,17 +488,15 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     handle.append(s("rect", { x: w - 16, y: h - 16, width: 18, height: 18, class: "grip-hit" }), s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}` }));
     g.append(titled(handle, "Drag to resize this node; double-click for its own size"));
   };
-  // A node's own comment, a grey line above it (E291, as the blocks put it
-  // above its line): its first line, clipped; all of it on hover.
-  const noteAbove = (g: SVGGElement, key: Id) => {
+  // A node's own comment, a speech mark on its top right corner, the
+  // comment on hover (Ersagun 2026-11-22, picked over E291's grey line
+  // above it, which ran into wires and neighbours).
+  const noteMark = (g: SVGGElement, key: Id, w: number) => {
     const c = key !== defId ? pres.comments[key] : undefined;
-    if (!c) return;
-    const all = resolveRefs(c, (r) => pres.names[r] ?? r), first = all.split("\n")[0];
-    // Haloed: a wire running under it doesn't cut through it (QA 11-22b L2).
-    g.append(titled(s("text", { x: 0, y: -6, class: "node-cmt halo" }, first.length > 56 ? `${first.slice(0, 55)}…` : first), all));
+    if (c) g.append(commentMark(w, resolveRefs(c, (r) => pres.names[r] ?? r)));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
-    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteAbove(g, key); };
+    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteMark(g, key, w); };
     const own = natural.get(key);
     const c = key !== defId ? pres.comments[key] : undefined;
     items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r) } : {}), ...extra });
@@ -1363,6 +1361,17 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // box, not on its corner: there it sat on a title above it, a frame's or
 // the signature line (QA 11-15 Q4), and the box's own words start inside.
 // Its inputs come in lower down the same edge.
+// A speech mark on a box's top right corner, saying it has a comment (how
+// many, past one); the comment on hover.
+function commentMark(w: number, text: string, n = 1): SVGElement {
+  const o = s("g", { class: "cmt-mark", transform: `translate(${w - 9} -7)` });
+  const bw = n > 1 ? 24 : 16;
+  o.append(s("path", { d: `M2 0 H${bw - 2} Q${bw} 0 ${bw} 2 V9 Q${bw} 11 ${bw - 2} 11 H7 L3 15 L4 11 H2 Q0 11 0 9 V2 Q0 0 2 0 Z` }));
+  if (n > 1) o.append(s("text", { x: bw / 2, y: 8.5, "text-anchor": "middle" }, String(n)));
+  else o.append(s("path", { class: "cmt-lines", d: "M4 4 H12 M4 7 H10" }));
+  o.append(s("title", {}, text));
+  return o;
+}
 function effectBadge(text: string, why: string): SVGElement {
   const o = s("g", { class: "effn" }), w = Math.max(18, tw(text, 6.2) + 10), x = -4 - w / 2;
   o.append(w > 18 ? s("rect", { x: x - w / 2, y: 0, width: w, height: 18, rx: 9 }) : s("circle", { cx: x, cy: 9, r: 9 }), s("text", { x, y: 12.5, "text-anchor": "middle" }, text));
@@ -1409,13 +1418,10 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     for (let i = 0; i < us.length;) { let j = i; while (j + 1 < us.length && us[j + 1] === us[j] + 1) j++; runs.push(j > i ? `${us[i]}–${us[j]}` : `${us[i]}`); i = j + 1; }
     return runs.join(", ");
   };
-  const notes = (f: Id): SVGElement[] => {
+  // The comments of the nodes a folded frame hides: its mark, with how many.
+  const notes = (f: Id, w: number): SVGElement[] => {
     const all = [...scene.items.values()].filter((it) => it.note && hider(it.frame) === f).map((it) => it.note!);
-    if (!all.length) return [];
-    const first = all[0].split("\n")[0], line = all.length > 1 ? `${first.length > 40 ? `${first.slice(0, 39)}…` : first} (+${all.length - 1})` : first.length > 56 ? `${first.slice(0, 55)}…` : first;
-    const t = s("text", { x: 0, y: -6, class: "node-cmt halo" }, line);
-    t.append(s("title", {}, all.join("\n\n")));
-    return [t];
+    return all.length ? [commentMark(w, all.join("\n\n"), all.length)] : [];
   };
   const size = (f: Frame) => ({ w: Math.max(tw(clip(f.title, FOLDT), 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
@@ -1433,9 +1439,9 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
         s("text", { x: 10, y: 16, class: "rt" }, clip(f.title, FOLDT)),
         s("text", { x: 10, y: 34, class: "fold-n" }, holds(f.id)),
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
-        // The comments of the nodes it hides, said above it as an open
-        // node's is (QA 11-22b L3: folded, they showed nowhere).
-        ...notes(f.id),
+        // The comments of the nodes it hides (QA 11-22b L3: folded,
+        // they showed nowhere).
+        ...notes(f.id, w),
         ...(ran(f.id) ? [effectBadge(ran(f.id), `The calls with effects inside run as number ${ran(f.id)} here: unfold it to see which`)] : []),
       ),
     });
