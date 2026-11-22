@@ -61,9 +61,30 @@ test("a held entry is stored as it says, kept, and said where the compiler would
   assert.deepEqual(heldWarnings([held], stored), []);
 });
 
-test("a held entry that isn't a way to store the type, or a list's split, is refused", () => {
+test("a held entry that isn't a way to store the type is refused", () => {
   assert.throws(() => choices("greenhouse-page", new Map([["std.set", "linked list"]])), /Set can't be held as linked list here: it is stored as weight-balanced tree, sorted list, hash table/);
-  assert.throws(() => heldOf(["held std.list representation: List as array of List from main; among array of List, List as written; jobs none; target JavaScript"]), /a list's split can't be held yet/);
+  assert.deepEqual([...heldOf(["held std.list representation: List as array of List from run of; among array of List, List as written; jobs none; target JavaScript"])], [["std.list", "array of List from run of"]]);
+});
+
+// A list's split held (L280c): arrays of List from the definitions it
+// names, where the lists can be split off there.
+test("machine's split held from fewer definitions is made so, and said where the compiler would split otherwise", () => {
+  const machine = fileURLToPath(new URL("../../compiler/gaps/machine", import.meta.url));
+  const p = loadProgram(machine), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+  const info = infer(p.code, names, undefined, p.options);
+  const reps = representationsIn(p.code, info, names, p.own.defs);
+  const lines = (held?: Map<string, string>) => {
+    const given: Program = { title: "machine", code: p.code, own: p.own.defs, names, info, reps, options: p.options, held };
+    return choiceLines(given, main, represented(given, main, true).picks ?? []).filter((l) => l.startsWith("std.list "));
+  };
+  const now = lines();
+  assert.match(now[0], /^std\.list representation: List as array of List from (\S+, )+run of, \S+/);
+  const held = `held ${now[0].replace(/ from [^;]*;/, " from run of;")}`;
+  const stored = lines(heldOf([held]));
+  assert.equal(`held ${stored[0]}`, held);
+  assert.equal(heldWarnings([held], now)[0].replace(/ from .*/, ""), "held   std.list: array of List");
+  assert.throws(() => lines(heldOf([held.replace("from run of", "from nowhere")])), /List can't be held as array of List from nowhere here: the program has no definition nowhere/);
+  assert.throws(() => lines(heldOf([held.replace("from run of", "from main")])), /main keeps its lists as written in a split/);
 });
 
 // The algorithm kind (L280a part 2): the way each operation main uses is

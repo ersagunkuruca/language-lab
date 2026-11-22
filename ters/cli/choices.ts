@@ -153,8 +153,9 @@ export function choicesText(main: string, lines: readonly string[]): string {
 // compiler stores the type as it says, where that keeps the meaning (the
 // chooser could pick that row), and says when it would pick another.
 export const HELD = "held ";
-const ENTRY = /^(\S+) representation: .*? as ([^;]+?)(?: from [^;]*)?; among /;
-// The held entries' rows, by the type's id.
+const ENTRY = /^(\S+) representation: .*? as ([^;]+?); among /;
+// The held entries' rows, by the type's id: a split's with the
+// definitions it is from (`array of List from a, b`).
 export function heldOf(lines: readonly string[]): Map<Id, string> {
   const out = new Map<Id, string>();
   for (const l of lines) {
@@ -162,7 +163,6 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
     const m = ENTRY.exec(l.slice(HELD.length));
     if (!m && /^\S+ (way|mode plan): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
-    if (/ from [^;]*; among /.test(l)) throw new Error(`a list's split can't be held yet: ${l}`);
     out.set(m[1], m[2]);
   }
   return out;
