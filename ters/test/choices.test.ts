@@ -25,6 +25,8 @@ const choices = (name: string, held?: Map<string, string>) => {
   const given: Program = { title: name, code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options, held };
   return choiceLines(given, main, represented(given, main, true).picks ?? []);
 };
+// Only the representations' entries.
+const reps = (lines: string[]) => lines.filter((l) => l.includes(" representation: "));
 
 test("numbers' Nat is an int, with the jobs main uses on it, those in a loop marked", () => {
   const lines = choices("numbers");
@@ -33,13 +35,13 @@ test("numbers' Nat is an int, with the jobs main uses on it, those in a loop mar
 });
 
 test("greenhouse-page's Set is a hash table; the same each time", () => {
-  const lines = choices("greenhouse-page");
+  const lines = reps(choices("greenhouse-page"));
   assert.deepEqual(lines.map((l) => l.split(";")[0]), ["std.set representation: Set as hash table"]);
-  assert.deepEqual(choices("greenhouse-page"), lines);
+  assert.deepEqual(reps(choices("greenhouse-page")), lines);
 });
 
 test("a check says which entries are stale and which are new", () => {
-  const now = choices("greenhouse-page");
+  const now = reps(choices("greenhouse-page"));
   const text = choicesText("main", now);
   assert.deepEqual(readChoices(text), now);
   assert.deepEqual(staleChoices(readChoices(text), now), []);
@@ -56,10 +58,10 @@ test("a program's choices are beside it", () => {
 // compiler stores the type so, where the chooser could pick that row, and
 // says when it would pick another; writing the choices again keeps it.
 test("a held entry is stored as it says, kept, and said where the compiler would pick another", () => {
-  const now = choices("greenhouse-page");
+  const now = reps(choices("greenhouse-page"));
   const held = `held ${now[0].replace("as hash table", "as weight-balanced tree")}`;
   assert.deepEqual([...heldOf([held])], [["std.set", "weight-balanced tree"]]);
-  const stored = choices("greenhouse-page", heldOf([held]));
+  const stored = reps(choices("greenhouse-page", heldOf([held])));
   assert.match(stored[0], /^std\.set representation: Set as weight-balanced tree;/);
   assert.deepEqual(heldAndPicked([held], stored), [held]);
   assert.deepEqual(staleChoices([held], stored), []);
@@ -187,4 +189,12 @@ test("moths-page's walks over the lists its maps make are one loop each", () => 
   const lines = scheduleLines(represented(given, main, true), main).map((l) => l.replace(/^\S+ /, "")).sort();
   assert.ok(lines.includes("schedule: moved's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript"), lines.join("\n"));
   assert.ok(lines.every((l) => / walk, its list made by (map|flat map|a call|lets): one loop; among made then walked, one loop; target JavaScript$/.test(l)));
+});
+
+// Search order (L280a's schedules): each search main reaches, its answers
+// in the fair order, the one there is for now.
+test("queens' searches give their answers in the fair order", () => {
+  const lines = choices("queens").filter((l) => l.includes(" schedule: ")).map((l) => l.replace(/^\S+ /, "")).sort();
+  assert.deepEqual(lines.map((l) => l.split(":")[1]), [" main's all of a search", " main's count of a search", " main's first of a search"]);
+  assert.match(lines[0], /: answers in the fair order, its choices interleaved; among fair order; target JavaScript$/);
 });
