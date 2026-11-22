@@ -428,7 +428,7 @@ export type SExpr =
   | { k: "int"; v: bigint }
   | { k: "text"; v: string }
   // A function of the runtime (wasm-rt.ts) by name.
-  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean } }
+  | { k: "rt"; fn: string; args: SExpr[]; host?: { t: LType; partial: boolean; always?: true } }
   | { k: "bool"; v: boolean }
   | { k: "local"; i: number }
   | { k: "op"; op: Op; args: SExpr[] }
@@ -631,10 +631,11 @@ export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = {
 // And the ones held on worker threads (L280h): a command-line program's
 // map, keep, fold or search shared out from its first items, its
 // runtime call given true (branches-rt.ts `always`), by the node its
-// entry is about (sharedSites's `at`).
-let onWorkers: ReadonlySet<Id> = new Set();
-export function shareAlways(js: Iterable<Id>) { onWorkers = new Set(js); }
-const always = (at: Id): SExpr[] => (onWorkers.has(at) ? [{ k: "bool", v: true }] : []);
+// entry is about (sharedSites's `at`); and C's on its threads
+// (threadSites's `at`).
+let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id> } = { js: new Set(), c: new Set() };
+export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = []) { onWorkers = { js: new Set(js), c: new Set(c) }; }
+const always = (at: Id): SExpr[] => (onWorkers.js.has(at) ? [{ k: "bool", v: true }] : []);
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
@@ -1003,7 +1004,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // And C's: each call the threads run (c.ts `par:`), by the expression
   // itself, which the choices find in the code kept (cli/choices.ts).
   const threadSites: { e: SExpr; at: Id; how: string }[] = [];
-  const onThreads = (e: SExpr, at: Id, how: string): SExpr => { threadSites.push({ e, at, how }); return e; };
+  // One held on C's threads (L280h, `shareAlways`'s c) shares from its
+  // first items: its host says so, which c.ts tells the call.
+  const onThreads = (e: SExpr, at: Id, how: string): SExpr => {
+    const held: SExpr = e.k === "rt" && e.host && onWorkers.c.has(at) ? { ...e, host: { ...e.host, always: true } } : e;
+    threadSites.push({ e: held, at, how });
+    return held;
+  };
   for (const n of opts.host || fibers ? allDefs : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
