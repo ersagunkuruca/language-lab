@@ -340,10 +340,19 @@ const toBoolean = (x: unknown) => ((x as { tag?: Id } | null)?.tag === TRUE ? tr
 // Each Bool inside data turned by `f` (to the evaluator's case, or back to
 // a boolean): the data copied as its tag and fields, which the printed
 // code reads as it reads its own (core-js.ts). Along a list's tail in a
-// loop, as a list may be long; what isn't data (a number, a cell, an
-// array) as it is.
-function turned(v: unknown, f: (x: unknown) => unknown): unknown {
+// loop, as a list may be long; what isn't data (a number, a cell) as it
+// is. An array stays a view, its items turned: copied as its tag and
+// fields it was a plain value every read of it copied again
+// (flock-frame-page's birds, read from the sky's cell each tick: met's
+// loop O(n²)).
+export function turned(v: unknown, f: (x: unknown) => unknown): unknown {
   type D = { tag: Id; fields: unknown[] };
+  if (v instanceof ArrayView) {
+    const items = v.buf.items, out: unknown[] = [];
+    let changed = false;
+    for (let i = 0; i < v.n; i++) { const x = items[v.start + i], y = turned(x, f); out.push(y); changed ||= y !== x; }
+    return changed ? arrayOf(out) : v;
+  }
   const data = (x: unknown): x is D => typeof x === "object" && x !== null && "tag" in x && Array.isArray((x as D).fields);
   const b = f(v);
   if (b !== v || !data(v)) return b;

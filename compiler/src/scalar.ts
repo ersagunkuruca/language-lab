@@ -5946,7 +5946,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const defaults = (r: Id): At => {
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!);
     const s = info.subst;
-    return new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+    const out = new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+    // A shader's root as the program given typed it, where checking the
+    // passes' program again left a variable (a draw's fragment lifted with
+    // what its vertex read, gpu-draws.ts: an input it ignores).
+    const was = opts.shader && asGiven.typeOf.get(r) && asGiven.subst.zonk(asGiven.typeOf.get(r)!);
+    const match = (now: Type, then: Type): void => {
+      if (now.t === "var") { if (then.t !== "var" && !out.has(now.v)) out.set(now.v, then); }
+      else if (now.t === "con" && then.t === "con" && now.id === then.id) now.args.forEach((a, j) => then.args[j] && match(a, then.args[j]));
+      else if (now.t === "fn" && then.t === "fn" && now.params.length === then.params.length) { now.params.forEach((p, j) => match(p, then.params[j])); match(now.ret, then.ret); }
+    };
+    if (raw && was) match(raw, was);
+    return out;
   };
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
