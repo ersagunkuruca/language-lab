@@ -19,7 +19,7 @@ import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
 import { COPIED_FROM, PRELUDE_DEFS } from "./prelude-ids.ts";
-import { add, compare, LADDER, NEVER, steps, type Cost } from "./cost.ts";
+import { add, compare, LADDER, NEVER, possible, steps, type Cost } from "./cost.ts";
 
 export interface Representation {
   name: string;
@@ -510,7 +510,20 @@ export interface Choice {
 // before the definition as written (a sound's lists as arrays, C196).
 // `opaque`: definitions another type's chosen representation does (Bytes'
 // byte at, as a byte array): their bodies, the lists as written, don't run.
-export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean, opaque: Iterable<Id> = []): Choice {
+// A run's measurements of a type (L280d, the choices' measured entry):
+// how often each job was called, by the job (its definition's or
+// constructor's id), and the largest value seen, in items.
+export interface Measured { calls: ReadonlyMap<string, number>; size: number }
+// A ladder order's steps at n items.
+const stepsAt = (order: string, n: number): number => {
+  const lg = Math.log2(Math.max(n, 2));
+  return order === "1" ? 1 : order === "log n" ? lg : order === "log² n" ? lg * lg : order === "n" ? n : order === "n log n" ? n * lg : order === "n²" ? n * n : Infinity;
+};
+// `measured`: where a run was measured, the rows are ordered by the steps
+// its calls would have taken at its largest size first (each job's
+// count times its order at that n), in place of guessing which jobs are in
+// a loop; the ladder after, for the jobs not measured (matches, folds).
+export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (r: Representation) => boolean, opaque: Iterable<Id> = [], measured?: Measured): Choice {
   const jobs = uses(code, entry, reps, true, opaque);
   const spec = reps.find((r) => r.type === r.of && !Object.keys(r.impl).length)!;
   // Building a v onto a field taken out of another value costs v's
@@ -533,8 +546,20 @@ export function choose(code: Code, entry: Id, reps: Representation[], prefer?: (
   const inLoop = looped(code, entry, reps, opaque);
   const times = (c: string) => (c === "1" ? "n" : c === "log n" ? "n log n" : LADDER.includes(c) ? "n²" : c);
   const score = (r: Representation) => { const c = costs(r); return { jobs: add(...jobs.map((j) => step(inLoop.has(j) ? times(c[j]) : c[j]))), space: step(c.space) }; };
+  const took = new Map<Representation, number>();
+  const ran = (r: Representation): number => {
+    let t = took.get(r);
+    if (t !== undefined) return t;
+    t = 0;
+    for (const [j, k] of measured!.calls) { const c = own(r, j) ?? onto(r, j) ?? own(spec, j); if (c !== undefined) t += k * stepsAt(c, measured!.size); }
+    took.set(r, t);
+    return t;
+  };
   const best = reps.filter((r) => !r.approximate).sort((a, b) => {
     const [x, y] = [score(a), score(b)];
+    const can = Number(possible(y.jobs)) - Number(possible(x.jobs));
+    const d = measured ? ran(a) - ran(b) : 0;
+    if (measured && (can || (d && !Number.isNaN(d)))) return can || d;
     return compare(x.jobs, y.jobs) || compare(x.space, y.space) || Number(!!prefer?.(b)) - Number(!!prefer?.(a)) || Number(b === spec) - Number(a === spec);
   })[0];
   return { rep: best, jobs, table: reps.map((r) => ({ rep: r.name, costs: costs(r) })) };

@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuring, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -667,7 +667,8 @@ const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fai
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
 const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); };
 if (holdsPlaces) await onMainThread(placesHeld);
-const loaded = { ...answeredHere(load(path)), ...(heldHere.size ? { held: heldHere } : {}) };
+const answered = answeredHere(load(path)), measuredHere = (() => { try { return measuredOf(answered, writtenChoices); } catch (e) { fail((e as Error).message); } })();
+const loaded = { ...answered, ...(heldHere.size ? { held: heldHere } : {}), ...(measuredHere.size ? { measured: measuredHere } : {}) };
 const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
 // lowering is most of a run, and the same program lowers the same way.

@@ -384,3 +384,27 @@ test("tally measured with 3000 words: its Map's update at counted, 505 entries a
     assert.deepEqual(run("check", at).split("\n").filter((l) => /^(stale|new|held) /.test(l)), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// The chooser reads them (L280d part 2): routes' Set, a tree by the ladder
+// (items of in a loop), a hash table where a run says items of was called
+// once and adds and removes 244000 times at 5000 items; the same answers.
+test("routes's Set measured as adds and removes, its items read once: stored as a hash table, the same answers", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "routes"), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  try {
+    cpSync(root + "routes", at, { recursive: true });
+    const roads = join(at, "roads.txt"), plain = run("run", at, roads);
+    run("choices", at);
+    const set = () => readFileSync(`${at}.choices`, "utf8").split("\n").find((l) => l.startsWith("std.set representation: "))?.split(";")[0];
+    assert.equal(set(), "std.set representation: Set as weight-balanced tree");
+    writeFileSync(`${at}.choices`, readFileSync(`${at}.choices`, "utf8") + "std.set measured: Set: add item 145000 times, items of 1 time, remove item 99000 times; up to 5000 items; from a run with big.txt\n");
+    run("choices", at);
+    assert.equal(set(), "std.set representation: Set as hash table");
+    assert.equal(run("run", at, roads), plain);
+    // A job the type hasn't: refused, saying which entry.
+    writeFileSync(`${at}.choices`, readFileSync(`${at}.choices`, "utf8").replace("items of 1 time", "items off 1 time"));
+    const bad = spawnSync(process.execPath, [ters, "check", at], { encoding: "utf8", cwd: dir });
+    assert.notEqual(bad.status, 0);
+    assert.match(bad.stderr, /a measured entry names a job Set doesn't have/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

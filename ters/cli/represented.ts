@@ -5,7 +5,7 @@ import { dependencies, idsSeeded, subtree, type Code, type Id } from "../src/mod
 import type { Pins } from "../src/lang/signatures.ts";
 import type { Names } from "../src/presentation.ts";
 import { checksKept, infer, type Info } from "../src/lang/infer.ts";
-import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
+import { choose, jobProblem, represent, type Measured, type Representation } from "../src/lang/represent.ts";
 import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations, type Pick } from "../src/lang/library-reps.ts";
 import { classKey, optionsText } from "../src/lang/class-key.ts";
 import { keepingWhole } from "../src/lang/check-cache.ts";
@@ -16,7 +16,7 @@ import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
 // `held`: the rows a person held in the program's choices (L280c), by the
 // type's id.
-export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string>; fused?: { at: Id; walker: Id; over: string; made?: Id }[] }
+export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string>; measured?: ReadonlyMap<Id, Measured>; fused?: { at: Id; walker: Id; over: string; made?: Id }[] }
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -35,7 +35,7 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // its whole checks by groups (check-cache.ts keepingWhole).
   const go = () => representedIn(p00, main, hostMaps, tables, sound, dataKeys);
   if (!checksKept(p00.info.options)) return go();
-  const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys, [...(p00.held ?? [])].sort()]);
+  const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys, [...(p00.held ?? [])].sort(), [...(p00.measured ?? [])].map(([t, m]) => [t, m.size, [...m.calls].sort()])]);
   return idsSeeded(`representing ${main}`, () => keepingWhole(() => choosingFor(key, go)));
 }
 function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables: boolean, sound: boolean, dataKeys: boolean): P {
@@ -66,14 +66,14 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // map C shares out on its threads.
   const shared = (typeof process !== "undefined" && process.env.NO_FOLD_ITEMS) ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
   const pinfo = shared.shared ? infer(shared.code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false }) : p.info;
-  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys, held: p.held });
+  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys, held: p.held, measured: p.measured });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen], picks = [...(lib.picks ?? [])];
   const rows = storedRows(p.code, p.own, p.reps);
   let pins = (p.options as Parameters<typeof infer>[3])?.pins;
   for (const of of new Set(rows.map((r) => r.of))) {
     const hold = p.held?.get(of), candidates = rows.filter((r) => r.of === of);
-    const rep = hold === undefined ? choose(code, main, candidates).rep : candidates.find((r) => r.name === hold) ?? fail(`${p.names[of] ?? of} can't be held as ${hold}: it is stored as ${candidates.map((r) => r.name).join(", ")}`);
+    const rep = hold === undefined ? choose(code, main, candidates, undefined, [], p.measured?.get(of)).rep : candidates.find((r) => r.name === hold) ?? fail(`${p.names[of] ?? of} can't be held as ${hold}: it is stored as ${candidates.map((r) => r.name).join(", ")}`);
     if (rep.type === rep.of) continue;
     const problem = jobProblem(p.info, rep, p.names);
     if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
