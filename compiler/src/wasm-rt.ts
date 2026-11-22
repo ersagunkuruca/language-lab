@@ -27,7 +27,7 @@ import { SITES, STOPS } from "./stops.ts";
 // `i64` a plain machine word, which the functions below compute with.
 // `mag` a big Int's magnitude, an array of 32-bit limbs.
 // An array function's (C66) own types: the view, its item, its buffer and the buffer's items.
-export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "raw" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "raw" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "note" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
 
 export interface RtFn {
   name: string;
