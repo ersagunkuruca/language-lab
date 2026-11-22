@@ -362,9 +362,14 @@ export class Session {
   private fillIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
     // A record taken apart by a step written before `;`, `reading(called,
     // place) = nearest step(…); □`, is the step on a line of its own
-    // (I343: it was read as a value, "nothing is named place here").
+    // (I343: it was read as a value, "nothing is named place here"); so is
+    // any step before `;` with lines after it, `k = 2; match xs` and the
+    // match's cases on the lines below (I318).
     const semi = firstSemicolon(text);
-    if (semi > 0 && !text.slice(0, semi).includes("\n") && /^\s*[\p{L}_][\p{L}\p{N}_' ]*?\s*\([^()]*\)\s*=(?![=>])/u.test(text)) return this.fillIn(code, names, hole, `${text.slice(0, semi).trim()}\n${text.slice(semi + 1).trim()}`, def, as);
+    const head = semi > 0 ? text.slice(0, semi) : "";
+    const apart = /^\s*[\p{L}_][\p{L}\p{N}_' ]*?\s*\([^()]*\)\s*=(?![=>])/u.test(head);
+    const step = /^\s*[\p{L}_][\p{L}\p{N}_' ]*?\s*=(?![=>])/u.test(head);
+    if (semi > 0 && !head.includes("\n") && (apart || (step && text.slice(semi + 1).includes("\n")))) return this.fillIn(code, names, hole, `${head.trim()}\n${text.slice(semi + 1).replace(/^[ \t]+/, "")}`, def, as);
     const steps = this.stepsIn(code, names, hole, text, def, as);
     if (steps) return steps;
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def, as);
