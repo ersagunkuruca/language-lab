@@ -2744,14 +2744,14 @@ document.addEventListener("click", (e) => {
     if (a === "named") return toggleNamed(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
     if (a === "open-choice") return openChoice(act.dataset.target!);
-    // A type held as a row, or let go (E292, L280c): runs, pages and the
-    // choices store it so from now on.
+    // A type held as a row, or a placement on a thread, or let go (E292,
+    // L280c, L280h): runs, pages and the choices keep it so from now on.
     if (a === "choice-hold" || a === "choice-release") {
       const of = act.dataset.of!, { [of]: _, ...rest } = doc.heldReps ?? {};
       const heldReps = a === "choice-hold" ? { ...rest, [of]: act.dataset.rep! } : rest;
-      const what = typedPres().names[of] ?? LIBRARY.names[of] ?? of;
+      const what = act.dataset.about ?? typedPres().names[of] ?? LIBRARY.names[of] ?? of;
       forgetCompiled();
-      return commit({ heldReps }, ["choices"], a === "choice-hold" ? `Held ${what} as ${act.dataset.rep}` : `${what} is the compiler's to pick again`);
+      return commit({ heldReps }, ["choices"], a === "choice-hold" ? `Held ${what} ${act.dataset.prep ?? "as"} ${act.dataset.rep}` : `${what} is the compiler's to pick again`);
     }
     if (a === "goto-stop") { const d = act.dataset.def!, n = act.dataset.target!; if (d !== ui.def) openDef(d); return select(doc.code.nodes[n] ? n : null); }
     // The form is in the side panel's first tab: show it, whichever tab

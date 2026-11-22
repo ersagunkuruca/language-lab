@@ -170,14 +170,17 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
       const at = e.among.findIndex((a) => e.pick === a || e.pick.startsWith(`${a} `) || e.pick.startsWith(`${a},`));
       const chips = at < 0 ? [e.pick || "—", ...e.among] : e.among, on = Math.max(at, 0);
       // A whole type's row can be held (L280c); a split (`array of List
-      // from a, b`) is the compiler's to make.
-      const holdable = e.kind === "representation" && at >= 0, would = c.would.get(e.id);
+      // from a, b`) is the compiler's to make. A placement can be held on
+      // the main thread, and a command-line program's on worker threads
+      // (L280h); a page's workers or GPU are the compiler's.
+      const holds = (a: string) => at >= 0 && (e.kind === "representation" || (e.kind === "place" && (a === "main thread" || (a === "worker threads" && e.target === "JavaScript"))));
+      const would = c.would.get(e.id), verb = e.kind === "place" ? "Run" : "Store", prep = e.kind === "place" ? "on" : "as";
       return h("div", { class: `choice${open && ids.includes(open) ? " on" : ""}`, "data-choice-row": ids.join(" "), title: [...e.facts, `target ${e.target}`].join("\n") },
-        h("div", { class: "choice-head" }, h("span", { class: "choice-name" }, about, same.length > 1 ? h("span", { class: "choice-n" }, `×${same.length}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
-        h("div", { class: "file-chips" }, ...chips.map((a, i) => i !== on && holdable
-          ? h("button", { class: "chip-btn", type: "button", "data-act": "choice-hold", "data-of": e.id, "data-rep": a, title: `Store ${e.about} as ${a}` }, a)
+        h("div", { class: "choice-head" }, h("span", { class: "choice-name" }, about, same.length > 1 ? h("span", { class: "choice-n" }, `×${same.length}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, "data-about": e.about, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
+        h("div", { class: "file-chips" }, ...chips.map((a, i) => i !== on && holds(a)
+          ? h("button", { class: "chip-btn", type: "button", "data-act": "choice-hold", "data-of": e.id, "data-rep": a, "data-about": e.about, "data-prep": prep, title: `${verb} ${e.about} ${prep} ${a}` }, a)
           : h("span", { class: `chip-btn${i === on ? " on" : ""}`, ...(i === on && a !== e.pick ? { title: e.pick } : {}) }, a))),
-        would ? h("p", { class: "status-line warn", title: `Held as ${e.pick}; with nothing held, the compiler picks ${would}` }, `Compiler would pick ${would}`) : null);
+        would ? h("p", { class: "status-line warn", title: `Held ${prep} ${e.pick}; with nothing held, the compiler picks ${would}` }, `Compiler would pick ${would}`) : null);
     })));
   }
   return box;
