@@ -356,6 +356,13 @@ export function turned(v: unknown, f: (x: unknown) => unknown): unknown {
   const data = (x: unknown): x is D => typeof x === "object" && x !== null && "tag" in x && Array.isArray((x as D).fields);
   const b = f(v);
   if (b !== v || !data(v)) return b;
+  // Data that isn't a list's cell, where nothing inside turns, as it is
+  // (a bird of the flock holds no Bool: copied, the GPU's packing read
+  // it the slow way).
+  if (!(v.tag === CONS && v.fields.length === 2)) {
+    const fs = v.fields, out = fs.map((x) => turned(x, f));
+    return out.every((x, i) => x === fs[i]) ? v : { tag: v.tag, fields: out };
+  }
   let first: D | undefined, last: D | undefined, at: D = v;
   for (;;) {
     const cons = at.tag === CONS && at.fields.length === 2;
