@@ -314,7 +314,7 @@ export function signAnalysis(code: Code) {
     if (f === B.exp || f === TRIG_OPS.exp) return POS;
     if (f === B.log && numLit(n.args[0], env) !== null && numLit(n.args[0], env)! > 0) { const v = Math.log(numLit(n.args[0], env)!); return v > 0 ? POS : v < 0 ? NEG : ZERO; }
     if (f === B.pow) return a(0) === POS ? POS : ANY;
-    if (f === S.abs || f === INT_OPS.abs) { const s = a(0); return (s & NONZERO ? POS : 0) | (s & ZERO); }
+    if (f === S.abs || f === INT_OPS.abs || f === ARITH.abs) { const s = a(0); return (s & NONZERO ? POS : 0) | (s & ZERO); }
     if (f === INT_OPS.toNumber) return a(0);
     // A sum of squares, total(zip parts(·, x, x)), is never negative.
     if (f === S.total) {
