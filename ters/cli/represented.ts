@@ -16,7 +16,7 @@ import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
 // `held`: the rows a person held in the program's choices (L280c), by the
 // type's id.
-export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string>; fused?: { at: Id; walker: Id; over: string }[] }
+export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string>; fused?: { at: Id; walker: Id; over: string; made?: Id }[] }
 
 function fail(message: string): never { throw new Error(message); }
 

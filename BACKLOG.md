@@ -57,9 +57,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E309 | Schedule rows name the compiler's own made definitions (`flock over over flat map's flock over walk`): scheduleLines (cli/choices.ts) should name the walk in the program's own definition by its written name (QA-2026-11-22c L1). The editor's half done in #3067: one row a walk however its list is made, the maker said on hover | QA 11-22c | P3 | S | |
 | E310 | The side panel's seven tabs fit one line at 1400 px (QA-2026-11-22c L2): they need 406 px and the panel has 318, so two lines, or fewer tabs; Ersagun's call. The phone half (L4, a row's count beside its name) done in #3066 | QA 11-22c | P3 | S | |
-| E311 | A mode plan's pick names its goals by the definitions they call, not their drawn text (`relational, goals a function(…)`; QA-2026-11-22c L3) | QA 11-22c | P3 | S | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 

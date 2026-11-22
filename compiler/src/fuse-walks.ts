@@ -56,8 +56,10 @@ interface Walker { def: Id; params: Id[]; k: number; m: number; head: Id; step: 
 
 // `fused`: each call walked where its list is made, with its walker and
 // what makes the list, in the order the rounds took them (the program's
-// choices, L280a).
-export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): { code: Code; info: Info; names: Names; made: Id[]; fused: { at: Id; walker: Id; over: string }[] } {
+// choices, L280a), and the definition the round made, where it made one
+// (a later round's call may be in it, or walk by it).
+export interface Fused { at: Id; walker: Id; over: string; made?: Id }
+export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): { code: Code; info: Info; names: Names; made: Id[]; fused: Fused[] } {
   const before = new Set(code.defs);
   // Each definition's calls a candidate may be, kept between rounds for
   // the definitions a round left alone (greenhouse-page: 18 rounds over
@@ -87,6 +89,7 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     const given = { code, names };
     const changed = new Set<Id>();
     let whole = info.options !== opts, lost = false;
+    const fused: Fused[] = [];
     for (const r of was) {
       // A round's call is in a definition an earlier round made, whose
       // ids are the same only where they are drawn so (model.ts
@@ -96,15 +99,16 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
       const next = rewrite(code, names, r.at, r.w, r.how);
       const c = whole ? undefined : changedOver(code.nodes, next.code.nodes);
       if (c) for (const id of c) changed.add(id); else whole = true;
+      fused.push(fusedOf(r, code, next.code));
       ({ code, names } = next);
     }
     if (lost) ({ code, names } = given);
     const made = code.defs.filter((d) => !before.has(d));
     const checked = lost ? undefined : whole ? infer(code, names, undefined, opts) : inferRewritten(given.code, code, names, info, [...changed].filter((id) => given.code.nodes[id] !== undefined), made);
-    if (checked && checked.errors.length <= info.errors.length) return { code, info: checked, names, made, fused: was.map(fusedOf) };
+    if (checked && checked.errors.length <= info.errors.length) return { code, info: checked, names, made, fused };
     ({ code, names } = given);
   }
-  const rounds: Round[] = [];
+  const rounds: Round[] = [], fused: Fused[] = [];
   for (let round = 0; round < 40; round++) {
     const c = candidate(code, info, names, callsOf);
     if (!c) break;
@@ -117,15 +121,19 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     const checked = changed ? inferRewritten(code, next.code, next.names, info, changed.filter((id) => code.nodes[id] !== undefined), next.code.defs.filter((d) => !code.defs.includes(d))) : infer(next.code, next.names, undefined, opts);
     if (checked.errors.length > info.errors.length) break;
     rounds.push(c);
+    fused.push(fusedOf(c, code, next.code));
     if (changed) for (const id of changed) for (const d of defsOf.get(id) ?? []) calls.delete(d);
     else calls.clear();
     ({ code, names } = next);
     info = checked;
   }
   if (rounds.length) { if (roundsKept.size >= 4) roundsKept.clear(); roundsKept.set(key, rounds); }
-  return { code, info, names, made: code.defs.filter((d) => !before.has(d)), fused: rounds.map(fusedOf) };
+  return { code, info, names, made: code.defs.filter((d) => !before.has(d)), fused };
 }
-const fusedOf = (r: Round) => ({ at: r.at, walker: r.w.def, over: r.how.how === "list" ? (r.how.fn === FLAT_MAP ? "flat map" : "map") : r.how.how === "def" ? "a call" : "lets" });
+function fusedOf(r: Round, was: Code, now: Code): Fused {
+  const had = new Set(was.defs), made = now.defs.find((d) => !had.has(d));
+  return { at: r.at, walker: r.w.def, over: r.how.how === "list" ? (r.how.fn === FLAT_MAP ? "flat map" : "map") : r.how.how === "def" ? "a call" : "lets", ...(made ? { made } : {}) };
+}
 
 const refTo = (code: Code, x: Id | undefined): Id | null => { const n = x ? code.nodes[x] : undefined; return n?.kind === "ref" ? n.target : null; };
 const onlyComputes = (effs: Set<Id> | null | undefined) => !!effs && [...effs].every((e) => e === DIVERGE);

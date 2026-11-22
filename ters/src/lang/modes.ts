@@ -851,7 +851,10 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
     const o = n.args.length;
     const all = n.args.map((_, i) => i);
     const fn = fnAt(n.fn, ctx);
-    const text = `${fn ? (fn.k === "lambda" ? "a function written here" : nm(fn.id)) : "a function"}(${n.args.length ? "…" : ""})`;
+    // A function only known when it runs by the name it is drawn with
+    // (a parameter's, E311), not "a function".
+    const called = nodes[n.fn];
+    const text = `${fn ? (fn.k === "lambda" ? "a function written here" : nm(fn.id)) : called?.kind === "ref" ? nm(called.target) : "a function"}(${n.args.length ? "…" : ""})`;
     const call: Exec = { k: "call", node: n.id };
     // An interface's operation isn't a field taken out of its first input:
     // which implementation runs is only known when it runs (a packed value,
