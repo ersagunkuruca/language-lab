@@ -351,7 +351,8 @@ test("the audio thread's answers: the page's, in order, then seeded random numbe
 test("the preview's audio thread plays the pedal's sound on arrays", () => {
   const pr = loadProgram(join(import.meta.dirname, "../examples/pedal"));
   const info = infer(pr.code, pr.pres.names, undefined, pr.options);
-  const file = soundFile("", pr.code, info, pr.pres.names, pr.named("main"));
+  // A runtime stands in: "" is one not read yet (E280).
+  const file = soundFile("/* runtime */", pr.code, info, pr.pres.names, pr.named("main"));
   assert.match(file, /array\.pushFront/);
 });
 
@@ -504,21 +505,30 @@ test("the looper records a bar as it comes back, and making up for the round tri
   }
 });
 
-// The looper measures the round trip by playing a chirp and finding it
-// again in what comes in: the lag where they line up best, read between
-// samples; none when nothing stands out.
-test("the looper finds its chirp in what came in, to a fraction of a sample", async () => {
+// The looper measures the round trip by playing three chirps half a
+// second apart and finding each again in what came in, kept at a quarter
+// of the rate (I334): the lag where they line up best, read between
+// samples; the round trip when two chirps agree within a millisecond;
+// none when nothing stands out, or when the chirps disagree.
+test("the looper finds its chirps in what came in, and a round trip only where two agree", async () => {
   const m = loadProgram(join(import.meta.dirname, "../examples/looper"));
   const info = infer(m.code, m.pres.names, undefined, m.options);
-  const ir = lowerCore(m.code, info, m.pres.names, [m.named("round trip in"), m.named("chirp samples")]);
+  const ir = lowerCore(m.code, info, m.pres.names, [m.named("round trips in"), m.named("round trip of"), m.named("chirp samples")]);
   const fns = loadCoreJs(ir, { print: () => {}, world: { random: Math.random } as never });
   const fn = (name: string) => fns[ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted)] as (...xs: unknown[]) => unknown;
   const chirp = fromList(fn("chirp samples")(48000) as never) as number[];
-  assert.equal(chirp.length, 1920);
+  assert.equal(chirp.length, 1200);
   let seed = 7;
   const noise = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 0.02;
-  const heard = Array.from({ length: 24000 }, (_, i) => 0.4 * (chirp[i - 3217] ?? 0) + noise());
-  const found = fn("round trip in")(toList(heard), 48000) as number;
-  assert.ok(Math.abs(found * 48000 - 3217) < 0.05, `${found * 48000}`);
-  assert.equal(fn("round trip in")(toList(Array.from({ length: 24000 }, noise)), 48000), -1);
+  // Each chirp in its own half second (6000 samples at a quarter of 48 kHz).
+  const heard = (lags: number[]) => toList(Array.from({ length: 36000 }, (_, i) => { const k = Math.floor(i / 6000); return 0.4 * (chirp[i - k * 6000 - lags[k]] ?? 0) + noise(); }));
+  const trips = fromList(fn("round trips in")(heard([804, 804, 804]), 48000) as never) as number[];
+  for (const t of trips) assert.ok(Math.abs(t * 12000 - 804) < 0.05, `${t * 12000}`);
+  assert.ok(Math.abs((fn("round trip of")(toList(trips)) as number) * 12000 - 804) < 0.05);
+  // Two that agree are enough; three that don't are no round trip.
+  const two = fromList(fn("round trips in")(heard([804, 1500, 804]), 48000) as never) as number[];
+  assert.ok(Math.abs((fn("round trip of")(toList(two)) as number) * 12000 - 804) < 0.05, `${two}`);
+  const apart = fromList(fn("round trips in")(heard([804, 1100, 1500]), 48000) as never) as number[];
+  assert.equal(fn("round trip of")(toList(apart)), -1);
+  assert.deepEqual(fromList(fn("round trips in")(toList(Array.from({ length: 36000 }, noise)), 48000) as never), [-1, -1, -1]);
 });
