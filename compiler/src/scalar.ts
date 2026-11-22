@@ -1329,8 +1329,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const d = code.nodes[def] as NodeOf<"def">;
     const lam = d?.body ? code.nodes[d.body] : null;
     const fail = (why: string): never => { refused.set(key, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
-    // A constant (`data`): a function of no inputs, computed where it's used.
-    const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con" && t.id === ARRAY)) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
+    // A constant (`data`, or in a shader any value that isn't a function:
+    // an array, a Float64, a record, G9c): a function of no inputs,
+    // computed where it's used.
+    const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con")) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
     if (!constant && (!t || t.t !== "fn" || lam?.kind !== "lambda")) fail("is not a function written in the program");
     const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
     // A relation whose type is one of its readings (L130: polar read from
@@ -1436,10 +1438,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (later) return { ...later, tail };
         // A case with no fields (empty, nothing) written alone.
         if (opts.data && code.nodes[n.target]?.kind === "variant") return build(n.target, zonk(id), []);
-        // A constant array in a shader (C66c): a function of no inputs.
+        // A constant array in a shader (C66c), or a Float64, an Int or a
+        // record a vertex function reads (G9c, flock's `eye distance`,
+        // `still`): a function of no inputs.
         if (opts.shader && !opts.data && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
-          if (t && isArray(t)) return { k: "call", fn: func(n.target, new Map()), args: [], tail };
+          if (t && !isFn(t)) return { k: "call", fn: func(n.target, new Map()), args: [], tail };
         }
         if (defunc && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
@@ -5942,7 +5946,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const defaults = (r: Id): At => {
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!);
     const s = info.subst;
-    return new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+    const out = new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+    // A shader's root as the program given typed it, where checking the
+    // passes' program again left a variable (a draw's fragment lifted with
+    // what its vertex read, gpu-draws.ts: an input it ignores).
+    const was = opts.shader && asGiven.typeOf.get(r) && asGiven.subst.zonk(asGiven.typeOf.get(r)!);
+    const match = (now: Type, then: Type): void => {
+      if (now.t === "var") { if (then.t !== "var" && !out.has(now.v)) out.set(now.v, then); }
+      else if (now.t === "con" && then.t === "con" && now.id === then.id) now.args.forEach((a, j) => then.args[j] && match(a, then.args[j]));
+      else if (now.t === "fn" && then.t === "fn" && now.params.length === then.params.length) { now.params.forEach((p, j) => match(p, then.params[j])); match(now.ret, then.ret); }
+    };
+    if (raw && was) match(raw, was);
+    return out;
   };
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;

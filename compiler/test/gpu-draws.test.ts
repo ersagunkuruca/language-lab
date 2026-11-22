@@ -195,6 +195,41 @@ test("only the fields of an instance its vertex function reads cross, through th
   assert.deepEqual([...new Float32Array(Uint32Array.from(w.instances).buffer)], [-0.5, 0.5, 0, 0]);
 });
 
+test("a vertex function reading top-level constants, a Float64 and a record, through a function it calls, gets a site", () => {
+  const p = program((k, t) => {
+    const eye = k.def("eye distance");
+    k.define(eye, k.lit(4));
+    const still = k.def("still");
+    k.define(still, t.corner(0.25, 0.5));
+    const seen = k.def("seen by");
+    k.define(seen, k.fn(["x"], (x) => k.call(B.div, x, k.x(eye))));
+    const main = k.def("main");
+    k.define(main, k.thunk(() => k.call(FRAME_V.frame, k.list(t.pass("#000", false,
+      k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(1.5)), k.fn(["_", "c"], (_, c) => k.call(FRAME_V.placed, t.point(k.call(seen, t.cx(c)), k.call(B.add, t.cy(c), t.cx(k.x(still))), k.lit(0.5)), k.lit(0))), k.fn(["_"], () => t.colour(k.lit(1), k.lit(0), k.lit(0)))))))));
+    return main;
+  });
+  assert.deepEqual([...p.draws.refused], []);
+  assert.deepEqual(Object.keys(p.draws.sites), ["0"]);
+});
+
+// flock-frame-page's floor: the vertex function carries a bare `0` and
+// reads main's `shift`; the fragment is a definition that ignores what it
+// is given, `(a) -> Colour`, so nothing pins its input's type.
+const ignored = () => program((k, t) => {
+  const flat = k.def("flat");
+  k.define(flat, k.fn(["_"], () => t.colour(k.lit(0.25), k.lit(0.5), k.lit(0.75))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("shift", k.lit(0.5), (s) => k.call(FRAME_V.frame, k.list(t.pass("#000", false,
+    k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(0)), k.fn(["_", "c"], (_, c) => k.call(FRAME_V.placed, t.point(k.call(B.mul, t.cx(c), s), t.cy(c), k.lit(0.5)), k.lit(0))), k.x(flat))))))));
+  return main;
+});
+test("a fragment that is a definition ignoring its input, its vertex reading a capture, gets a site", () => {
+  const p = ignored();
+  assert.deepEqual([...p.draws.refused], []);
+  assert.deepEqual(Object.keys(p.draws.sites), ["0"]);
+  assert.deepEqual(p.draws.sites[0].caps.map((c) => c.map((l) => l.kind)), [["f32"]]);
+});
+
 // Chromium: CHROMIUM, or Playwright's own in /opt/pw-browsers.
 const chromiumPath = (): string | undefined => {
   if (process.env.CHROMIUM) return process.env.CHROMIUM;
@@ -272,7 +307,7 @@ test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ram
     await page.goto(`file://${blank}`);
     assert.ok(await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu), "Chromium has WebGPU");
     const width = 16, height = 8;
-    for (const [name, p] of [["ramp", ramp()], ["near and far, depth", nearFar(true)], ["near and far, no depth", nearFar(false)], ["only the read field", spread()]] as const) {
+    for (const [name, p] of [["ramp", ramp()], ["near and far, depth", nearFar(true)], ["near and far, no depth", nearFar(false)], ["only the read field", spread()], ["a fragment ignoring its input", ignored()]] as const) {
       const want = rasterize(p.evaluated(), width, height, evaluatorCall).rgba;
       const got = await page.evaluate(`(${RENDER})(${JSON.stringify({ width, height, passes: onGpu(p.compiled(), p.draws.sites) })})`) as { errors: string[]; rgba: number[] };
       assert.deepEqual(got.errors, [], name);
