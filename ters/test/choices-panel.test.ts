@@ -39,9 +39,13 @@ test("a type held in Choices: its entry says held, and what the compiler would p
   const held = got.choices.map(parseChoice).find((c) => c?.id === nat.id)!;
   assert.deepEqual([held.held, held.pick], [true, "unary"]);
   assert.deepEqual(got.would, [[nat.id, "int"]]);
-  // One the program doesn't check on: refused with why, the compiler's
-  // own picks given instead.
+  // The program's own row, std's natural built by its jobs (L280c part 4).
   const binary = choicesFor(p.code, names, main, [[nat.id, "binary"]]);
-  assert.match(binary.refused ?? "", /doesn't check on Nat as binary/);
-  assert.equal(binary.choices.map(parseChoice).find((c) => c?.id === nat.id)?.pick, "int");
+  assert.equal(binary.refused, undefined);
+  assert.equal(binary.choices.map(parseChoice).find((c) => c?.id === nat.id)?.pick, "binary");
+  // One that isn't a way to store it: refused with why, the compiler's
+  // own picks given instead.
+  const none = choicesFor(p.code, names, main, [[nat.id, "linked list"]]);
+  assert.match(none.refused ?? "", /Nat can't be held as linked list/);
+  assert.equal(none.choices.map(parseChoice).find((c) => c?.id === nat.id)?.pick, "int");
 });
