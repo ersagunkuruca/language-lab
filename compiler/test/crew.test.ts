@@ -8,7 +8,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { folder, plan, ways } from "../gaps/crew.ts";
+import { folder, plan, program, ways } from "../gaps/crew.ts";
+import { lowerCore } from "../src/core-js.ts";
+import { kids, type SExpr } from "../src/scalar.ts";
 
 const w = await ways();
 const all = (args: string[], files: Record<string, string>, slow = false) => {
@@ -56,4 +58,16 @@ test("crew: what goes wrong, and the exit codes", () => {
 test("crew: a made-up plan of 300 tasks, compiled", () => {
   const r = all(["p"], { p: plan(300, 3) }, true);
   assert.match(r.out[0], /^300 tasks, /);
+});
+
+// C286: the tasks' array is built from the back by a function calling
+// itself, a task put in front each step. As columns each step copied the
+// whole array (2,000 tasks 1.19 s); as rows it goes into the room in front.
+test("crew: no function calling itself copies an array's columns", () => {
+  const p = program(), ir = lowerCore(p.code, p.info, p.names, [p.main]);
+  const has = (e: SExpr, test: (x: SExpr) => boolean): boolean => test(e) || kids(e).some((x) => has(x, test));
+  for (const [i, f] of ir.funcs.entries()) {
+    if (!has(f.body, (x) => x.k === "call" && x.fn === i)) continue;
+    assert.ok(!has(f.body, (x) => x.k === "rt" && /^array\.c(front|copy)\./.test(x.fn)), f.name);
+  }
 });

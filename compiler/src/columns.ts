@@ -61,6 +61,8 @@ function foldOf(ir: CoreIR, g: number): Fold | null {
   return null;
 }
 
+const callsItself = (e: SExpr, g: number): boolean => (e.k === "call" && e.fn === g) || kids(e).some((x) => callsItself(x, g));
+
 // The functions run from the roots: calls and closures' code.
 function reached(ir: CoreIR, roots: number[]): Set<number> {
   const seen = new Set<number>();
@@ -283,6 +285,12 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
             // elsewhere too: on a copy of its columns (G1b4: a pool's slot
             // given an item, at a lamp hung or taken).
             const copied = grow && /^(replaceAt|replaceOwned|pushFront|pushFrontOwned)$/.test(m[1]);
+            // Not in a function that calls itself (C286): a copy a step is
+            // the whole array again each step, where rows put an item in
+            // front in its room or replace it with a version note (crew's
+            // list of tasks as an array, built from the back: 2,000 tasks
+            // 1.19 s, 0.24 s as rows).
+            if (copied && !(fold && fold.put === e) && !pushes.has(e) && callsItself(f.body, i)) return bad();
             if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e) && !pushes.has(e) && !copied) return bad();
             if (m[1] === "empty" && !grow && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
             for (const x of e.args) walk(x, e);
