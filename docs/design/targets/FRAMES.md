@@ -250,7 +250,9 @@ uploaded, draw calls.
   Checked on SwiftShader against the rasterizer.
 - **G8**: instances by column, Float32 storage buffers of only the fields
   the vertex reads, uploaded only when they changed. A test counts the
-  bytes sent per frame.
+  bytes sent per frame. Done as G8a (only the leaves read) and G8b (a
+  packing loop printed per site); columns closed, measured: the drawing
+  was under 1% of the flock page's main thread.
 - **G9d**: the flock page drawn with `render`, 2,000 birds and then
   20,000, and its CPU time a frame against today's `paint`.
 - **G10**: depth (already in G9b's rasterizer, in WebGPU here), texture
