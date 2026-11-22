@@ -148,4 +148,7 @@ export const arith$less = /* @__PURE__ */ unresolved("less than");
 export const arith$abs = /* @__PURE__ */ unresolved("abs");
 // A draw (FRAMES.md, G9b): its mesh, instances and two functions, kept for
 // the runtime that renders a frame; nothing in a program takes one apart.
-export const frame$draw = (mesh: unknown, instances: unknown, vertex: unknown, fragment: unknown) => ({ tag: "builtin.frame.draw", fields: [mesh, instances, vertex, fragment] });
+// Compiled, a draw is also given its site and the values its functions
+// read (G9c, compiler/src/gpu-draws.ts), as fields 4 and 5: what the
+// GPU's pipeline for the site and its uniform are made from (gpu-frame.ts).
+export const frame$draw = (mesh: unknown, instances: unknown, vertex: unknown, fragment: unknown, site?: number, ...caps: unknown[]) => ({ tag: "builtin.frame.draw", fields: site === undefined ? [mesh, instances, vertex, fragment] : [mesh, instances, vertex, fragment, site, caps] });

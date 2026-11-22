@@ -51,6 +51,7 @@ import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
+import { gpuDraws } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -1395,8 +1396,12 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const kernels = worlds.includes("mapAway") ? gpuMaps(ir) : {};
   const js = Object.keys(kernels).length ? `R.pageGpu(${JSON.stringify(kernels)});\n${js1}` : js1;
   const code = codeFor(ir, js);
+  // Its draws the GPU takes, each as a site (G9c, gpu-draws.ts).
+  const draws = ir.drawSites ? gpuDraws(ir).sites : {};
+  const drawn = Object.keys(draws).length ? [using("pageDraws", page), `pageDraws(${JSON.stringify(draws)});`] : [];
   return wrapped(page, [
     using("startCorePage", page),
+    ...drawn,
     ...solverFor(code, page, js),
     ...floatsFor(js, page),
     ...builtinsFor(js, page),

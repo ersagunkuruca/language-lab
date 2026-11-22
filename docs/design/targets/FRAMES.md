@@ -136,6 +136,45 @@ functions under the Float32 profile (float32.ts) when it draws a frame on
 the CPU (below). Then the two give close answers for ÷, sqrt and sin, and
 the same answers for + − × and comparisons, as pictures already do.
 
+## What a compiled page hands the runtime
+
+The compiler prints each `draw` it lowers (compiler/src/gpu-draws.ts)
+as a site, and gpu-frame.ts draws the sites it is given:
+
+- The page script calls `pageDraws({ [site]: Site })` before the page
+  starts. A Site is `{ wgsl, caps, instance, corner, colour }`.
+- A compiled draw is `frame$draw(mesh, instances, vertex, fragment,
+  site, …caps)`. Its fields 4 and 5 are the site and the list of values
+  its two functions read where they were written (`view`, a colour), in
+  the uniform's order. A draw with no site goes to raster.ts.
+- Each value crosses as 4-byte words, one per leaf. A leaf is `{ path,
+  kind }`: the field indices to follow, and `f32` (a Float64), `i32` (an
+  Int) or `bool` (1 or 0). `caps` gives the leaves of each value read,
+  and `instance` and `corner` give those of one instance and one corner.
+  An instance the vertex function never reads (a floor drawn once for the
+  whole state) has no leaves.
+- The module's entries are `lab_vs` and `lab_fs`. In group 0, binding 0
+  is `var<uniform> lab_caps: array<vec4u, N>`, the leaves of the values
+  read, four to a vec4u. Binding 1 is `var<storage, read> lab_inst:
+  array<u32>`, an instance's leaves after another's. Binding 2 is the
+  same for the corners. The vertex stage reads every binding, so a
+  layout made from the module has all three.
+- The draw is `drawIndexed(triangles, instances)`, with the triangles as
+  the index buffer. The vertex stage takes its corner at `vertex_index`
+  and its instance at `instance_index`.
+- What the vertex function carries reaches the fragment stage one
+  varying per leaf. A Float64 is put between the corners in perspective;
+  anything else is the first corner's (`flat`), as in raster.ts.
+- A fragment with no answer is `discard`. A corner with no answer is
+  placed at NaN, which GPUs drop (raster.ts drops its triangles).
+- The blend that matches raster.ts is colour src-alpha / one-minus-src-
+  alpha and alpha one / one-minus-src-alpha; depth is depth24plus,
+  compared with `less`, cleared to 1.
+
+A vertex or fragment function the shader lowering doesn't take (it reads
+a list, it recurses) leaves its draw without a site, and the reason is
+kept beside the sites (`gpuDraws(ir).refused`).
+
 ## Where it runs
 
 - **WebGPU** in the browser, which is the target.
