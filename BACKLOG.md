@@ -30,7 +30,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
-| L Language and library | "Speed up the interpreter on real programs" | L281c, L281d (L281a, L281b, L281g done) |
+| L Language and library | "Speed up the interpreter on real programs" | L281d (L281a, L281b, L281g, L281c done) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -207,7 +207,6 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L281c | Under `with fuel` nothing runs directly: every call counts fuel on the machine. Countdown's page is 14 s, all of it there (`join` and `valid` 1.7 million calls each). Count fuel in direct runs too | interpreter profile 2026-11-21 | P2 | M | |
 | L281d | A function whose type may choose (`lookup entry` and `value at`, row `choice`) always runs on the machine when called outside a search run directly, though it gives one answer or none. Pond's page: 2.3 million machine calls, about 4.5 s. Run such a call as a direct search and take its answer when it has exactly one | interpreter profile 2026-11-21 | P2 | M | |
 | L281e | One stop keeps a function on the machine for good: after 4 stops `map` runs step by step for every later call, also those given a function that only computes (the looper's 281 maps, stopped by a change that reads a cell). Decide per call, or try again later | interpreter profile 2026-11-21 | P3 | S | |
 | L281f | The machine itself is about 3 µs a call: each step looks its node up, makes a frame per part and copies the parts so far (`[...f.vals, v]`). Effects and handlers always run there (crew's scheduler). Make each node into a function of the machine once, as direct runs do | interpreter profile 2026-11-21 | P3 | L | |
