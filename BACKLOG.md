@@ -257,7 +257,7 @@ agent with inertia: built as L119 to L124 (DONE.md).
 
 ## G: Game ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md))
 
-Ersagun 2026-11-17: a medium-sized original game to test Ters against current engines and languages. Ersagun said go for stage 1 on 2026-11-17 19:00 UTC; stages 2 to 6 stay held until stage 1's round is reported. The lane column is a suggestion; each stage ends in a bigger-program round.
+Ersagun 2026-11-17: a medium-sized original game to test Ters against current engines and languages. Ersagun said go for stage 1 on 2026-11-17 19:00 UTC; stage 2 (drawing with data) on 2026-11-22; stages 3 to 6 stay held. The lane column is a suggestion; each stage ends in a bigger-program round.
 
 | id | item | lane | source | pri | size | status |
 |---|---|---|---|---|---|---|
@@ -265,11 +265,14 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 | G1b1 | `keep` over a List kept as an array lowers as every `all` of a `choose`: the array's items as a list taken apart, answers consed in a box, reversed, an array made of them. The greenhouse's three keeps a tick (moths, plants, lamps) are the first thing keeping its Things as rows in JS (columns.ts: `array.of`). A loop over the positions pushing each kept item (kept-items.ts), on JS, C and WebAssembly. Done | C | G1b, 2026-11-20 | P2 | S | |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G7 | Drawing with data, a design note: a frame as a value (meshes, instances, materials, cameras, passes), the GPU as a world, what changes between frames uploaded rather than rebuilt (WEB.md's model for pages, for frames) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
-| G8 | Columns into GPU buffers: a program's Float64 columns uploaded as Float32 storage buffers, only the columns a shader reads, only when they change | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G9 | Vertex functions and instanced draws: a Ters function of (instance, vertex) to a position and its varyings, printed as a WGSL vertex stage beside today's fragment | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G10 | Depth, render targets and several passes in a frame; post effects as passes reading the last one's texture | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
-| G11 | Textures and meshes loaded as data (images, a simple mesh format), from files a page or native build carries | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
+| G9a | A case's own type variable with no `has`, when only the case's own fields consume it (FRAMES.md's `Draw`: its instances `i` and what the vertex gives the fragment `v`): checker and packing.ts | L | [FRAMES](docs/design/targets/FRAMES.md) | P2 | M | |
+| G9b | std `Frame`, `Pass`, `Target`, `Draw`, `Placed`, `Corner`, `Mesh` and a `render` attribute typed as `paint` is; evaluated, a CPU rasterizer with a depth buffer draws a frame into the canvas's ImageData (the draw's functions under the Float32 profile); small frames checked pixel by pixel | E | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |
+| G9c | A draw's vertex and fragment functions printed as WGSL stages (wgsl.ts, beside the fragment-only picture), captures as a uniform, instances as storage buffers of whole records; a pipeline kept per draw; checked on headless WebGPU (SwiftShader) against G9b's rasterizer | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |
+| G9d | The flock page drawn with `render` (2,000 birds, then 20,000), its CPU time a frame against today's `paint` | E | [FRAMES](docs/design/targets/FRAMES.md) | P2 | M | |
+| G8 | Columns into GPU buffers: a program's Float64 columns uploaded as Float32 storage buffers, only the columns a shader reads, only when they change | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |
+| G9 | Vertex functions and instanced draws (G9a to G9d): a Ters function of (instance, vertex) to a position and its varyings, printed as a WGSL vertex stage beside today's fragment | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |
+| G10 | Depth, render targets and several passes in a frame; post effects as passes reading the last one's texture | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | L | |
+| G11 | Textures and meshes loaded as data (images, a simple mesh format), from files a page or native build carries | C | [FRAMES](docs/design/targets/FRAMES.md) | P2 | M | |
 | G12 | Float32 compute kernels over columns (today's GPU maps are Int to Int or Bool only), records of Float64s as vec2f to vec4f as in pictures | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G13 | Data that stays on the GPU: a column only kernels and draws touch lives in a GPU buffer across frames, never read back (C61's choice by cost, carried to data); GPU particles as its example | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G14 | Culling: frustum on the CPU, then a compute pass writing indirect draw arguments, then occlusion against a hierarchical depth buffer | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
