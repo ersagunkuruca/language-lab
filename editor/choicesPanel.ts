@@ -53,6 +53,9 @@ export interface ChoicesHost {
   pins(): Pins;
   // The types held (E292, L280c), by id: the row each is stored as.
   held(): Record<Id, string>;
+  // What the program needs before the compiler can choose (its type
+  // errors, its holes), or null (QA 11-22c M1).
+  blocked(): string | null;
   main(): Id | undefined;
   render(): void;
 }
@@ -60,7 +63,7 @@ export interface ChoicesHost {
 // What the panel and the badges read: the entries for the code shown, or
 // the last version's while this one is worked out (`working`). `would`:
 // for a held type, the row the compiler would pick instead.
-export interface Choices { entries: Choice[]; would: Map<Id, string>; refused?: string; working: boolean; failed: boolean }
+export interface Choices { entries: Choice[]; would: Map<Id, string>; refused?: string; blocked?: string; working: boolean; failed: boolean }
 type Got = { main: Id; entries: Choice[]; would: Map<Id, string>; refused?: string };
 
 export function choicesOf(host: ChoicesHost) {
@@ -90,6 +93,8 @@ export function choicesOf(host: ChoicesHost) {
   return (): Choices | null => {
     const code = host.code(), main = host.main();
     if (!main) return null;
+    const blocked = host.blocked();
+    if (blocked) return { entries: [], would: new Map(), blocked, working: false, failed: false };
     const held = heldKey(), got = answers.get(code)?.get(held);
     const kept = last?.main === main ? last : null;
     if (got === "failed") return { entries: kept?.entries ?? [], would: new Map(), working: false, failed: true };
@@ -117,6 +122,7 @@ export function choiceMarks(c: Choices | null): Map<Id, string> {
 export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HTMLElement {
   const box = h("div", { class: "choices" });
   if (!c) { box.append(h("p", { class: "empty", title: "The compiler's choices are made for main" }, "No main")); return box; }
+  if (c.blocked) { box.append(h("p", { class: "status-line warn", title: "The compiler chooses once the program checks; Checks lists what's wrong" }, `Waits on ${c.blocked}`)); return box; }
   if (c.failed && !c.entries.length) { box.append(h("p", { class: "status-line warn", title: "The worker working them out failed" }, "No choices")); return box; }
   if (!c.entries.length) { box.append(h("p", { class: "empty" }, c.working ? "Working out…" : "None")); return box; }
   if (c.working) box.append(h("p", { class: "hint" }, "Updating…"));
