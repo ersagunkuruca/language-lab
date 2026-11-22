@@ -4867,3 +4867,14 @@ the workers from the second on). strings on three workers: 8 blocks 3.2 →
 2.0 s, 32 blocks 12.7 → 8.2 s, as alone or a little better. What is left
 of the core IR's 23x is the library's FFT on lists and the collector.
 
+### C278, measured
+
+Arrays for the library's FFT, autocorrelation and spectrum (the chooser
+choosing between arrays and lists as written for each part) print the
+same and are slower: at 32 blocks core 9.95 → 11.2 s, native 2.30 →
+2.73 s. The FFT as the library writes it makes new lists at every level
+on any representation, so arrays only add conversions. Not landed. What
+the core IR spends its time on at 8 blocks: the collector 28%, YIN's
+`difference` 22% (a pair made for every item of its zipped fold, then
+taken apart), the FFT's maps and splits most of the rest.
+
