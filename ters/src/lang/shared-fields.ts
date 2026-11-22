@@ -19,7 +19,7 @@
 // keep each case's fields apart, as the language did before.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { nodesWhere, freshId, isCall, type Call, copyNodes, nodeValues } from "../model.ts";
+import { nodesWhere, freshId, isCall, type Call, copyNodes, nodesOfKind, nodesOfKindIn, ownerOfTypeParts } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { inferRewritten, type Info } from "./infer.ts";
 import { S, SET } from "./std.ts";
@@ -46,13 +46,14 @@ export function sharing(code: Code, td: NodeOf<"typedef">, field: Id): { members
   return { members, total: members.length === td.variants.length };
 }
 
-// The type a field belongs to, as its typedef.
+// The type a field belongs to, as its typedef: the def holding it, found
+// once per version (model.ts ownerOfTypeParts), where each look walked
+// every def (a third of machine's pass).
 function typeOf(code: Code, field: Id): NodeOf<"typedef"> | null {
-  for (const d of code.defs) {
-    const def = code.nodes[d], td = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
-    if (td?.kind === "typedef" && td.variants.some((v) => (code.nodes[v] as NodeOf<"variant">).fields.includes(field))) return td;
-  }
-  return null;
+  if (code.nodes[field]?.kind !== "field") return null;
+  const d = ownerOfTypeParts(code).get(field), def = d === undefined ? undefined : code.nodes[d];
+  const td = def?.kind === "def" && def.body ? code.nodes[def.body] : undefined;
+  return td?.kind === "typedef" ? td : null;
 }
 
 export const usesSharedFields = (code: Code) => nodesWhere(code, "shared field", (n) => n.kind === "field" && !!n.same, ["field"]).length > 0;
@@ -67,9 +68,14 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
   const made = new Map<Id, Id>();
   let changed = false;
   const touched: Id[] = [];
+  const sharings = new Map<Id, ReturnType<typeof sharing>>();
   const shared = (field: Id) => {
-    const td = typeOf(code, field);
-    const sh = td && td.variants.length > 1 ? sharing(code, td, field) : null;
+    let sh = sharings.get(field);
+    if (sh === undefined) {
+      const td = typeOf(code, field);
+      sh = td && td.variants.length > 1 ? sharing(code, td, field) : null;
+      sharings.set(field, sh);
+    }
     return sh && !sh.problem ? sh : null;
   };
   const ownerVariant = (f: Id): Id => typeOf(code, f)!.variants.find((v) => (code.nodes[v] as NodeOf<"variant">).fields.includes(f))!;
@@ -99,7 +105,8 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
   // set(p ↦ p.to.value, i, x) = with to(i, set(t ↦ t.value, i.to, x)),
   // a step on a field of a one-case type its own `with`. Each value is bound
   // once, by a lambda applied to it.
-  for (const n of nodeValues(code.nodes)) {
+  // The calls and refs in the nodes' order, from their kind index.
+  for (const n of nodesOfKind(code, "call")) {
     if (!isCall(n) || n.args.length !== 3 || (code.nodes[n.fn] as { target?: Id })?.target !== SET) continue;
     const path = fieldPath(code, n.args[0]);
     if (!path || !path.some((f) => shared(f))) continue;
@@ -119,7 +126,7 @@ export function sharedFields(code: Code, info: Info, names: Names): { code: Code
     touched.push(n.id);
     changed = true;
   }
-  for (const n of nodeValues(nodes)) {
+  for (const n of nodesOfKindIn(nodes, "ref")) {
     if (n.kind !== "ref" || code.nodes[n.target]?.kind !== "field") continue;
     const sh = shared(n.target);
     if (!sh) continue;
