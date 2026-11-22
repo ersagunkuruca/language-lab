@@ -444,8 +444,10 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 .typed .ln { white-space: pre-wrap; }
 .tgraph text.pl { white-space: pre; }
 .typed .blk { display: block; }
-/* A hidden part (E290): click to show. */
-.typed .hid { cursor: pointer; padding: 0 4px; border-radius: 4px; background: var(--canvas); color: var(--muted); }
+/* A hidden part (E290): click to show. A chip in the accent, so it isn't
+   read as a text cut short, whose … is plain (QA 11-22b L1). */
+.typed .hid { cursor: pointer; padding: 0 5px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.typed .hid:hover { outline: 1px solid var(--accent); }
 .typed .step { display: block; }
 .typed .chain { display: flex; align-items: baseline; }
 .palette .opt-l { white-space: nowrap; flex-shrink: 0; }
