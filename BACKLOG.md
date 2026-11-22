@@ -57,6 +57,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E316 | A node's comment in the graph readable at a glance, without overlapping anything (Ersagun 2026-11-22 on E306's speech mark: "Not ideal but an improvement. We can go back to this later"). The other two ways he was offered: the comment as the node's top line, which layout and Tidy count, cut with the rest on hover; or a note beside the node, joined by a line, with room Tidy keeps. His pick when it's taken up | Ersagun 11-22 | P3 | M | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 
@@ -69,7 +70,7 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E314 | Opening a big program holds the editor's thread for 0.4 to 0.8 s (sheet 0.78 s; QA-2026-11-22d L1). Measured 11-22: only a first visit; it is the program's check (sheet 0.44 s, 0.24 s of it the modes asked of its relations, modes.ts seenVerdict), and a later visit reads the groups' checks kept in the browser (checkStore.ts): sheet 0.18 s. Shipping the examples' kept checks beside checks.json would cover the first visit; its size isn't measured | QA 11-22d | P3 | M | |
+| E314 | A first visit checks each example as it opens, on the editor's thread (sheet 0.44 s of a 0.78 s open; QA-2026-11-22d L1) and again in Run's worker (I320's rest: calc's Run in the first half second waits 0.5 to 0.8 s on calc's check); a later visit reads the definition groups' checks kept in the browser (checkStore.ts), sheet 0.18 s. Ship each example's kept group checks beside it, read when it opens (not in checks.json, already 8.9 MB): measured 11-22 as JSON, calc 113 KB, sheet 321 KB, greenhouse-page 659 KB | QA 11-22d, I320 | P2 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
