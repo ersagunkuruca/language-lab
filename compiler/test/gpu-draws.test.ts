@@ -21,7 +21,7 @@ import { evaluatorCall } from "../../ters/src/lang/html.ts";
 import { cssColour, rasterize } from "../../ters/src/lang/raster.ts";
 import { merge, type Id } from "../../ters/src/model.ts";
 import { compiledDefs, corePageScript, lowerCore } from "../src/core-js.ts";
-import { gpuDraws, type DrawSite, type Leaf } from "../src/gpu-draws.ts";
+import { gpuDraws, packsOf, type DrawSite, type Leaf } from "../src/gpu-draws.ts";
 
 // A program with a corner (x, y), a clip-space point and a colour of its
 // own, and the frame `main` builds (as frames.test.ts).
@@ -228,6 +228,20 @@ test("a fragment that is a definition ignoring its input, its vertex reading a c
   assert.deepEqual([...p.draws.refused], []);
   assert.deepEqual(Object.keys(p.draws.sites), ["0"]);
   assert.deepEqual(p.draws.sites[0].caps.map((c) => c.map((l) => l.kind)), [["f32"]]);
+});
+
+test("each site's printed packing writes the words put would, for its instances and its corners (G8)", () => {
+  for (const p of [ramp(), nearFar(true), spread(), ignored()]) {
+    const packs = new Function(`return ${packsOf(p.draws.sites)};`)() as Record<string, { instance: (xs: Value[], f: Float32Array, n: Int32Array) => void; corner: (xs: Value[], f: Float32Array, n: Int32Array) => void }>;
+    for (const pass of fromList(part(p.compiled(), 0))) for (const d of fromList(part(pass, 3))) {
+      const draw = d as unknown as { fields: Value[] }, key = String(draw.fields[4]), site = p.draws.sites[Number(key)];
+      for (const [which, xs, leaves] of [["instance", fromList(draw.fields[1]), site.instance], ["corner", fromList(part(draw.fields[0], 0)), site.corner]] as const) {
+        const f = new Float32Array(Math.max(4, xs.length * leaves.length)), n = new Int32Array(f.buffer);
+        packs[key][which](xs, f, n);
+        assert.deepEqual([...new Uint32Array(f.buffer)].slice(0, xs.length * leaves.length), words(xs, leaves).slice(0, xs.length * leaves.length), `${p.name} ${which}`);
+      }
+    }
+  }
 });
 
 // Chromium: CHROMIUM, or Playwright's own in /opt/pw-browsers.

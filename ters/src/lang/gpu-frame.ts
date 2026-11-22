@@ -36,7 +36,17 @@ export interface Sited { site: Site; caps: Value[] }
 
 // The page's sites, by key (R.pageDraws).
 const SITES: Record<string, Site> = {};
-export const pageDraws = (sites: Record<string, Site>) => { Object.assign(SITES, sites); };
+// A site's packing, printed by the compiler for its leaves (G8,
+// gpu-draws.ts packsOf): item i's leaves written at i × leaves.length,
+// as put writes them, without walking each leaf's path. A site without
+// one (written by hand) is put's.
+export type Pack = (items: Value[], f: Float32Array, n: Int32Array) => void;
+export interface Packs { instance?: Pack; corner?: Pack }
+const PACKS = new WeakMap<Site, Packs>();
+export const pageDraws = (sites: Record<string, Site>, packs: Record<string, Packs> = {}) => {
+  Object.assign(SITES, sites);
+  for (const [k, p] of Object.entries(packs)) if (sites[k]) PACKS.set(sites[k], p);
+};
 export const sitedOf = (d: Data): Sited | null => {
   const key = d.fields[4], site = key === undefined ? undefined : SITES[String(key)];
   return site ? { site, caps: (d.fields[5] as unknown as Value[]) ?? [] } : null;
@@ -118,7 +128,8 @@ export class GpuFrames {
     if (got) return got;
     const cs = items(part(m, 0)), ts = items(part(m, 1)).map(Number);
     const w = words(cs.length * site.corner.length);
-    cs.forEach((c, i) => put(c, site.corner, w.f, w.n, i * site.corner.length));
+    const pack = PACKS.get(site)?.corner;
+    if (pack) pack(cs, w.f, w.n); else cs.forEach((c, i) => put(c, site.corner, w.f, w.n, i * site.corner.length));
     got = { corners: this.buffer(w.b, GPUBufferUsage.STORAGE), triangles: this.buffer(new Uint32Array(ts), GPUBufferUsage.INDEX), count: ts.length };
     this.meshes.set(m as object, got);
     return got;
@@ -151,7 +162,8 @@ export class GpuFrames {
         const n = items(list).length;
         if (slot.list !== list || !slot.items) {
           const per = site.instance.length, w = words(n * per);
-          items(list).forEach((it, i) => put(it, site.instance, w.f, w.n, i * per));
+          const pack = PACKS.get(site)?.instance;
+          if (pack) pack(items(list), w.f, w.n); else items(list).forEach((it, i) => put(it, site.instance, w.f, w.n, i * per));
           if (slot.items && slot.items.size >= w.b.byteLength) this.device.queue.writeBuffer(slot.items, 0, w.b);
           else { slot.items?.destroy(); slot.items = this.buffer(w.b, GPUBufferUsage.STORAGE); }
           slot.list = list;

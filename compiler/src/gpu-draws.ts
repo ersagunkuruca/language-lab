@@ -28,6 +28,7 @@ import type { Code, Id } from "../../ters/src/model.ts";
 import { withNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { NUMBER, type Type } from "../../ters/src/lang/types.ts";
+import { TRUE } from "../../ters/src/lang/std-ids.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 import { emitWgsl, vectorWidth } from "./wgsl.ts";
@@ -123,6 +124,34 @@ const reads = (nodes: Code["nodes"], e: Id, b: Id): boolean => {
   return Object.values(n).some((v) => (typeof v === "string" && v !== e && v !== n.kind && nodes[v] && nodes[v].kind !== "def" && reads(nodes, v, b)) || (Array.isArray(v) && v.some((x) => typeof x === "string" && nodes[x] && reads(nodes, x, b))) || (v && typeof v === "object" && !Array.isArray(v) && Object.values(v).some((x) => typeof x === "string" && nodes[x] && reads(nodes, x, b))));
 };
 const NUMBER_T: Type = { t: "con", id: NUMBER, args: [] };
+
+// Each site's packing as JavaScript (G8, gpu-frame.ts Pack): a loop over
+// the items writing each leaf where put would, reading its path directly
+// (a compiled record's `fK`, else the evaluator's `fields[K]`), each part
+// of a path read once. The object literal the page script hands
+// pageDraws.
+export function packsOf(sites: Record<number, DrawSite>): string {
+  const one = (leaves: Leaf[]): string => {
+    const names = new Map<string, string>([["", "v"]]);
+    const lines: string[] = [];
+    const at = (path: number[]): string => {
+      const key = path.join(".");
+      let name = names.get(key);
+      if (name) return name;
+      const outer = at(path.slice(0, -1)), k = path[path.length - 1];
+      name = `p${names.size}`;
+      names.set(key, name);
+      lines.push(`const ${name} = ${outer}.f${k} ?? ${outer}.fields[${k}];`);
+      return name;
+    };
+    leaves.forEach((l, k) => {
+      const x = at(l.path);
+      lines.push(l.kind === "f32" ? `f[a + ${k}] = ${x};` : l.kind === "i32" ? `n[a + ${k}] = Number(${x});` : `n[a + ${k}] = ${x} === true || ${x}?.tag === ${JSON.stringify(TRUE)} ? 1 : 0;`);
+    });
+    return `(xs, f, n) => { for (let i = 0, a = 0; i < xs.length; i++, a += ${leaves.length}) { const v = xs[i]; ${lines.join(" ")} } }`;
+  };
+  return `{ ${Object.entries(sites).map(([k, s]) => `${JSON.stringify(k)}: { instance: ${one(s.instance)}, corner: ${one(s.corner)} }`).join(", ")} }`;
+}
 
 export function gpuDraws(ir: CoreIR): { sites: Record<number, DrawSite>; refused: Map<number, string> } {
   const sites: Record<number, DrawSite> = {}, refused = new Map<number, string>();
