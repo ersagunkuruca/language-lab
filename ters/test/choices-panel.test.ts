@@ -52,3 +52,21 @@ test("a type held in Choices: its entry says held, and what the compiler would p
   assert.match(none.refused ?? "", /Nat can't be held as linked list/);
   assert.equal(none.choices.map(parseChoice).find((c) => c?.id === nat.id)?.pick, "int");
 });
+
+test("a placement held in Choices: on the main thread, said held, and the lowering keeps it there", async () => {
+  const p = loadProgram(fileURLToPath(new URL("../examples/calc", import.meta.url))), names = p.pres.names;
+  const main = p.own.defs.find((d) => names[d] === "main")!;
+  const keep = choicesFor(p.code, names, main).choices.map(parseChoice).find((c) => c?.kind === "place" && c.about === "tokens's keep")!;
+  const got = choicesFor(p.code, names, main, [[keep.id, "main thread"]]);
+  const held = got.choices.map(parseChoice).find((c) => c?.id === keep.id)!;
+  assert.deepEqual([held.held, held.pick, held.among], [true, "main thread", keep.among]);
+  assert.deepEqual(got.would, [[keep.id, keep.pick]]);
+  // As the editor's worker lowers a run with it held (runWorker.ts placed).
+  const { keepOnMainThread, shareAlways } = await import("../../compiler/src/scalar.ts");
+  const { lowerCore } = await import("../../compiler/src/core-js.ts");
+  const { checkedForRun } = await import("../../editor/coreMain.ts");
+  const sites = () => { const r = checkedForRun(p.code, names, main); const ir = lowerCore(r.code, r.info, r.names, [main]); return (ir.sharedSites ?? []).map((s) => s.at); };
+  assert.ok(sites().includes(keep.id));
+  keepOnMainThread([keep.id], []);
+  try { assert.ok(!sites().includes(keep.id)); } finally { keepOnMainThread([], []); shareAlways([]); }
+});

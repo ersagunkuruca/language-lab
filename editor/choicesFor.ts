@@ -19,7 +19,12 @@ import { infer, programOptions } from "./typed.ts";
 // that's another row.
 // `refused`: why what is held can't be, the choices then made with
 // nothing held (a run says the same).
-export function choicesFor(code: Code, names: Names, main: Id, held: readonly [Id, string][] = []): { choices: string[]; would: [Id, string][]; refused?: string } {
+// A placement held (L280h): on the main thread, or a command-line
+// program's on worker threads from its first items.
+export const isPlace = (row: string) => row === "main thread" || row === "worker threads";
+
+export function choicesFor(code: Code, names: Names, main: Id, holds: readonly [Id, string][] = []): { choices: string[]; would: [Id, string][]; refused?: string } {
+  const held = holds.filter(([, r]) => !isPlace(r)), placesHeld = new Map(holds.filter(([, r]) => isPlace(r)));
   const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
   const info = infer(code, names);
   if (info.errors.length) return { choices: [], would: [] };
@@ -27,7 +32,7 @@ export function choicesFor(code: Code, names: Names, main: Id, held: readonly [I
   let p: Program;
   try { p = represented<Program>(given, main, true); } catch (e) {
     if (!held.length) throw e;
-    return { ...choicesFor(code, names, main), refused: (e as Error).message };
+    return { ...choicesFor(code, names, main, [...placesHeld]), refused: (e as Error).message };
   }
   let places: string[] = [];
   try {
@@ -35,8 +40,19 @@ export function choicesFor(code: Code, names: Names, main: Id, held: readonly [I
     places = placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), p.names);
   } catch { /* main doesn't lower: it runs in the evaluator, on the main thread */ }
   const of = new Map(held), idOf = (l: string) => l.slice(0, l.indexOf(" "));
+  // A held placement's entry is the compiler's with the held row in it;
+  // what the compiler picks alone is said beside it.
+  const pickOf = (l: string) => / place: .*: ([^:;]+); among /.exec(l)?.[1] ?? "";
+  const wouldPlace: [Id, string][] = [];
+  places = places.map((l) => {
+    const row = placesHeld.get(idOf(l));
+    if (!row) return l;
+    if (pickOf(l) !== row) wouldPlace.push([idOf(l), pickOf(l)]);
+    return HELD + l.replace(/: [^:;]+; among /, `: ${row}; among `);
+  });
   const now = [...new Set([...choiceLines(given, main, p.picks ?? []), ...scheduleLines(p, main), ...places])];
-  if (!held.length) return { choices: now.sort(), would: [] };
+  const byText = (x: string, y: string) => x.replace(HELD, "").localeCompare(y.replace(HELD, ""));
+  if (!held.length) return { choices: now.sort(byText), would: wouldPlace };
   // A type held as the row it is written as has no pick of its own: its
   // entry is the compiler's, with the held row in it.
   const alonePicks = represented<Program>({ ...given, held: undefined }, main, true).picks ?? [];
@@ -46,6 +62,6 @@ export function choicesFor(code: Code, names: Names, main: Id, held: readonly [I
     const l = now.find((x) => isRep(x) && idOf(x) === id) ?? alone.find((x) => isRep(x) && idOf(x) === id)?.replace(/ as [^;]+?; among /, ` as ${rep}; among `);
     return l ? [HELD + l] : [];
   });
-  const choices = [...now.filter((l) => !isRep(l)), ...heldLines].sort((x, y) => x.replace(HELD, "").localeCompare(y.replace(HELD, "")));
-  return { choices, would: alonePicks.filter((a) => of.has(a.of) && of.get(a.of) !== a.rep).map((a) => [a.of, a.rep]) };
+  const choices = [...now.filter((l) => !isRep(l)), ...heldLines].sort(byText);
+  return { choices, would: [...alonePicks.filter((a) => of.has(a.of) && of.get(a.of) !== a.rep).map((a): [Id, string] => [a.of, a.rep]), ...wouldPlace] };
 }
