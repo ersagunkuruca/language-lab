@@ -32,7 +32,7 @@ import { parseValue } from "../ters/src/lang/values.ts";
 import { choose, representationsIn } from "../ters/src/lang/represent.ts";
 import { storedRows } from "../ters/src/lang/library-reps.ts";
 import { leftToWays, pickWays, waysIn } from "../ters/src/lang/ways.ts";
-import { blocksOf, blocksText, litLabel, type Blk, type Piece } from "../ters/src/lang/render.ts";
+import { blocksOf, blocksText, litLabel, type Blk, type Piece, type Shape } from "../ters/src/lang/render.ts";
 import { matchRows, patternText, shape, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 import { h, type Kid } from "./dom.ts";
 import { nfc } from "../ters/src/lang/border.ts";
@@ -108,7 +108,7 @@ export function tookType(code: Code, info: Info | null, names: Names, id: Id): s
 // The pane draws what the blocks text prints (render.ts blocksOf), so the
 // two can't drift apart: a piece that stands for a node is a span you can
 // click, with its type on hover; a group of lines is a box.
-export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = []): HTMLElement {
+export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = [], shapes: { shape?: Record<Id, Shape>; depth?: number } = {}): HTMLElement {
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
@@ -145,7 +145,7 @@ export function renderTyped(code: Code, pres: Presentation, info: Info | null, d
     return h("div", { class: c || undefined, "data-id": b.id, style: b.pad && b.pad !== 2 ? `padding-left: ${b.pad * 11}px` : undefined }, ...b.kids.map(draw));
   };
   const grouped = new WeakMap<Blk, Id>();
-  return h("div", { class: "typed" }, ...groupBlocks(blocksOf(code, pres, info, defId, { pane: true, loose }), groups, grouped).map(draw));
+  return h("div", { class: "typed" }, ...groupBlocks(blocksOf(code, pres, info, defId, { pane: true, loose, ...shapes }), groups, grouped).map(draw));
 }
 
 // A group the graph draws (BACKLOG E111) is bracketed in the blocks too

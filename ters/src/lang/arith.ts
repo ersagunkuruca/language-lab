@@ -25,7 +25,7 @@
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { conditionResults, isUse, isBound, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf, copyNodes, dropNode, nodeIds, nodeValues } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
-import { changedFromLayer, freshId, layerOf, nodesWhere, offLayer, onLayer, scanningOnLayer, subtree } from "../model.ts";
+import { changedFromLayer, derived, freshId, layerOf, nodesWhere, offLayer, onLayer, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, sccs, terminates, type Info } from "./infer.ts";
@@ -118,8 +118,21 @@ function textParts(text: string): [bigint, bigint] | null {
 // from a Float64 its default, Int, can't hold), given as `wanted` (the
 // definition itself when that is its default).
 export function resolveArithmetic(code: Code, info: Info, names: Names = {}, costOf: BuiltinCost = NEUTRAL, want?: { def: Id; float: number[] }): { code: Code; info: Info; names: Names; wanted?: Id } {
-  const r = scanningOnLayer(code, () => resolving(code, info, names, costOf, want ? null : seedFor(code, info, names, costOf), false, want));
-  return r as { code: Code; info: Info; names: Names; wanted?: Id };
+  const on = want ? code : onLibrary(code);
+  const r = scanningOnLayer(on, () => resolving(on, info, names, costOf, want ? null : seedFor(on, info, names, costOf), false, want)) as { code: Code; info: Info; names: Names; wanted?: Id };
+  return r.code === on && on !== code ? { ...r, code } : r;
+}
+
+// An edited program (each edit derived from the one before: the editor,
+// infer.ts inferEdited) read as on the library's layer, where the first of
+// them is, so the library's kept resolving serves it (I330): a copy put on
+// the layer, its own nodes found against the layer's.
+function onLibrary(code: Code): Code {
+  if (layerOf(code) || !derived.has(code)) return code;
+  let at: Code | undefined = code;
+  for (let i = 0; at && !layerOf(at) && i < 64; i++) at = derived.get(at)?.base;
+  const lib = at && layerOf(at);
+  return lib ? onLayer({ ...code }, lib) : code;
 }
 
 // The library's own resolving (L217b): its definitions at their own types,
@@ -132,14 +145,22 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
 type Seed = {
   layer: Code; nodes: Record<Id, Node>; defs: Id[]; typeOf: Map<Id, Type>; schemes: Map<Id, Scheme>; divergent: Set<Id>; names: Names;
   copies: Map<string, Id>; opAt: Map<Id, Type>; copyOf: Map<Id, Id>; lifted: Map<string, Id>; chosen: Map<Id, Map<Id, Id | null>>;
+  // The library's check it was made on: a program's check is over it, or
+  // over the check of the program it was edited from, down to it.
+  check: Info;
 };
 const seeds = new WeakMap<Info, Map<BuiltinCost, Seed | null>>();
 function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): Seed | null {
-  const lib = layerOf(code), under = info.layer;
+  const lib = layerOf(code);
+  let under = info.layer;
   // The check under must be of that library: a program whose uses were
   // filled after it was checked (compiler/src/uses.ts carried) is on the
-  // library filled, and still on the check of the library as written.
+  // library filled, and still on the check of the library as written. An
+  // edited program's is the check of the one before, and so on down (I330).
+  for (let i = 0; lib && under && codeChecked(under) !== lib && i < 64; i++) under = under.layer;
   if (!lib || !under || codeChecked(under) !== lib || !(info.typeOf instanceof OverMap)) return null;
+  const types = ownOf(info.typeOf, under.typeOf);
+  if (!types) return null;
   for (const k of info.implementations?.keys() ?? []) {
     if (under.implementations?.has(k)) continue;
     // Kept by its type constructor (`@con`) or at a closed type (its type
@@ -149,7 +170,9 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   }
   // A program's check sets the library's definitions' types again; they
   // must be the library's.
-  for (const [id, t] of info.typeOf.own()) if (lib.nodes[id] !== undefined) { const u = under.typeOf.get(id); if (t !== u && JSON.stringify(t) !== JSON.stringify(u)) return null; }
+  // An edited program's check (infer.ts inferEdited) types a library body
+  // it first needs with variables of its own (I330): the same type.
+  for (const [id, t] of types) if (lib.nodes[id] !== undefined) { const u = under.typeOf.get(id); if (t !== u && JSON.stringify(t) !== JSON.stringify(u) && !(u && sameUpToVariables(info.subst.zonk(t), under.subst.zonk(u)))) return null; }
   let byCost = seeds.get(under);
   if (!byCost) seeds.set(under, (byCost = new Map()));
   if (!byCost.has(costOf)) {
@@ -190,7 +213,7 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
         r = { ...rest, nodes };
       } else r = null;
     } else r = make();
-    byCost.set(costOf, r ? { ...r, layer: lib } : null);
+    byCost.set(costOf, r ? { ...r, layer: lib, check: under } : null);
   }
   return byCost.get(costOf) ?? null;
 }
@@ -210,9 +233,27 @@ function ownOver<V>(m: ReadonlyMap<Id, V> | undefined, base: ReadonlyMap<Id, V> 
   for (let i = chain.length - 1; i >= 0; i--) for (const [k, v] of chain[i].own()) out.set(k, v);
   return out;
 }
-// As the seed read it before (a check right over the library's).
-const ownOf = <V,>(m: ReadonlyMap<Id, V> | undefined, base: ReadonlyMap<Id, V> | undefined): Map<Id, V> | null => (m instanceof OverMap ? new Map(m.own()) : ownOver(m, base));
-type Snapshot = Omit<Seed, "layer">;
+// As the seed read it before (a check right over the library's), or over
+// the checks of the programs it was edited from (I330).
+const ownOf = <V,>(m: ReadonlyMap<Id, V> | undefined, base: ReadonlyMap<Id, V> | undefined): Map<Id, V> | null => ownOver(m, base) ?? (m instanceof OverMap ? new Map(m.own()) : null);
+// Two types the same but for how their variables are numbered.
+function sameUpToVariables(a: Type, b: Type): boolean {
+  const pairs = () => { const to = new Map<number, number>(), from = new Map<number, number>(); return (x: number, y: number) => (to.has(x) || from.has(y) ? to.get(x) === y && from.get(y) === x : (to.set(x, y), from.set(y, x), true)); };
+  const vars = pairs(), rows = pairs();
+  const row = (r: Row, q: Row): boolean => {
+    if (r.effs.length !== q.effs.length || r.effs.some((e, i) => e !== q.effs[i])) return false;
+    if ((r.tail === null) !== (q.tail === null) || (r.tail !== null && !rows(r.tail, q.tail!))) return false;
+    const ra = Object.keys(r.args ?? {}), qa = Object.keys(q.args ?? {});
+    return ra.length === qa.length && ra.every((k) => q.args?.[k] && r.args![k].length === q.args[k].length && r.args![k].every((x, i) => same(x, q.args![k][i])));
+  };
+  const same = (x: Type, y: Type): boolean => {
+    if (x.t === "var") return y.t === "var" && vars(x.v, y.v);
+    if (x.t === "con") return y.t === "con" && x.id === y.id && x.args.length === y.args.length && x.args.every((p, i) => same(p, y.args[i]));
+    return y.t === "fn" && x.params.length === y.params.length && x.params.every((p, i) => same(p, y.params[i])) && same(x.ret, y.ret) && row(x.eff, y.eff);
+  };
+  return same(a, b);
+}
+type Snapshot = Omit<Seed, "layer" | "check">;
 function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, seed: Seed | null, snapshot = false, want?: { def: Id; float: number[] }): { code: Code; info: Info; names: Names; wanted?: Id } | (Snapshot & { layer: true }) {
   const given = { code, info };
   // A relation's own directions first (directions.ts), so the evaluator and
@@ -243,7 +284,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // put over it (L281g: resolving all the library again was 3 s of their
   // pages' start).
   // (The check the seed was made on: the steps' checks sit over the given one.)
-  const under = given.info.layer;
+  const under = seed?.check;
   const typesOver = seed && under ? (code === given.code && info === given.info ? ownOf(info.typeOf, under.typeOf) : ownOver(info.typeOf, under.typeOf)) : null;
   const opsOver = seed && under ? (code === given.code && info === given.info ? ownOf(info.opAt, under.opAt) : ownOver(info.opAt, under.opAt)) : null;
   const changed = !seed || !typesOver || !opsOver ? undefined : code === given.code ? offLayer(code) : changedFromLayer(onLayer(code, seed.layer));
