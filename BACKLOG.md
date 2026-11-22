@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row (startup: E280 to E284 done, E283 closed measured, 2026-11-21) |
-| C Compiler and targets | "Compiler lane" | C266, C267 (the game loops) |
+| C Compiler and targets | "Compiler lane" | C267 (the game loops) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads) (G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
@@ -96,7 +96,6 @@ New targets and speed rank below every language item (Ersagun,
 | id | item | source | added |
 |---|---|---|---|
 | C265 | Optional components cost a count on every read: the greenhouse's Thing holds three Optionals, so on C each `item at` of a moth dups the Thing and drops it again (Thing_dup 83 million and lab_drop 247 million calls in 600 ticks, against none for moths' all-Float64 Moth). An item read only to be read, borrowed, with no count taken. First half done: a record a loop passes on as it is each round is lent (c.ts), the greenhouse's `gathered from` no longer dups and drops its moth per neighbour (native one thread, 600 ticks of 2,000 moths, 2.6 to 1.85 s; C 0.46 s). Second half done with C268: `item at` put in place (item-reads.ts), the item read lent where only read (c.ts `peeked`), 1.85 to about 1.4 s, instructions 5.0 to 2.8 billion for 150 ticks | game round 2 (G6), 2026-11-17 | 2026-11-17 |
-| C266 | The greenhouse is slower on 4 threads than on one natively (13.4 s against 10.8 s a night): its maps' answers hold cells (the Optionals), so what they share is counted atomically from every thread (G3c froze it only where answers hold none). Done 11-20: the pool's update, a map calling the function its caller gives, runs on C's threads when every caller gives a pure one (pure-branches.ts givenEffects), and a map whose answers hold cells is frozen too, the counts its answers keep of what it shares taken after (c.ts lab__hold). A night of 2,000 moths natively: 4 threads 9 s before freezing, 5.2 s now, one thread 5.8 s (C 2.0 s, OpenMP 0.7 s). Left: marking what it shares (lab_share) each map, about 9% of the work, and the serial work around it | game round 2 (G6), 2026-11-17 | 2026-11-17 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
