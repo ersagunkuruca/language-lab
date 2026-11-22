@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -307,8 +307,8 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // arrays from its counts. In C a map whose function only computes shares
 // its items out on threads (L101, c.ts `par:map`).
 // `page`: main gives Html, mounted rather than printed (C199c).
-function nativeLowered(main: Id, wasm = false, page = false) {
-  const q00 = withInverses(p.code, p.info, p.names);
+function nativeLowered(main: Id, wasm = false, page = false, from: Program = p) {
+  const q00 = withInverses(from.code, from.info, from.names);
   // An operation with an effect given as a value, the lambda calling it (C235).
   const q01 = withOperationLambdas(q00.code, q00.info, q00.names);
   // A map over a text's characters, a fold over them (C239).
@@ -669,6 +669,24 @@ async function pageFile(): Promise<string> {
   try { return await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
 }
 
+// Where a page's handler's maps may run (L280a's placement entries):
+// from the program lowered as it is compiled.
+async function places(q: { code: Code; info: Info; names: Names }, root: Id): Promise<string[]> {
+  const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts");
+  let ir: ReturnType<typeof lower>;
+  try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
+  return placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names);
+}
+// And where a command-line program's work runs in C (`ters native`): on
+// its threads, the program stored as C stores it.
+function cPlaces(root: Id): string[] {
+  if (staticPage) return [];
+  try {
+    const c = representedOr(loaded, root, false, true, false, true);
+    return threadLines(nativeLowered(root, false, false, c).lowered, c.names);
+  } catch { return []; }
+}
+
 switch (command) {
   case "run": {
     if (staticPage) {
@@ -918,7 +936,7 @@ switch (command) {
     break;
   }
   case "choices": {
-    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, choiceLines(loaded, main, p.picks ?? []))));
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main)].sort())));
     console.log(`wrote ${choicesFile}`);
     break;
   }
@@ -948,7 +966,7 @@ switch (command) {
     // said (L280c, rule 3), and kept.
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
-      for (const l of staleChoices(writtenChoices, choiceLines(loaded, start, now.picks ?? []))) console.log(l);
+      for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...scheduleLines(now, start), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
       if (heldHere.size) {
         const alone = represented({ ...loaded, held: undefined }, start, true);
         for (const l of heldWarnings(writtenChoices, choiceLines(loaded, start, alone.picks ?? []))) console.log(l);

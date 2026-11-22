@@ -232,8 +232,15 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
     const hold = options.held?.get(ty);
     const refuse = (why: string): never => { throw new Error(`${names[ty] ?? LIBRARY.names[ty] ?? ty} can't be held as ${hold} here: ${why}`); };
+    // A list's split held (`array of List from a, b`): split off from
+    // those definitions, where the lists can be (rep-split.ts), alone as
+    // the chooser's splits are.
+    if (ty === LIST && hold?.includes(" from ") && !asked.some((r) => r.of === LIST)) {
+      if (skip.has(LIST)) refuse("the program stored so doesn't check");
+      if (chosen.length) continue;
+      return heldSplit(code, info, names, main, defs, hold, refuse);
+    }
     if (hold !== undefined && hold !== spec.name && !asked.some((r) => r.of === ty)) {
-      if (ty === LIST) refuse("a list's choice can't be held yet");
       if (!LIBRARY.reps.some((r) => r.of === ty && r.name === hold)) refuse(`it is stored as ${LIBRARY.reps.filter((r) => r.of === ty).map((r) => r.name).join(", ")}`);
       if (skip.has(ty) || skip.has(hold + " " + ty)) refuse("the program stored so doesn't check");
       if (inTableKeys(ty)) refuse("it is in a hash table's keys, which hash it as written");
@@ -253,8 +260,25 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))));
     if (hold !== undefined) {
       // Held: that row, where the chooser could have picked it (L280c).
-      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen" : "the chooser can't pick it here");
+      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen"
+        : ty === LIST && hold === "tree of List" ? "it runs something on lists backwards, which the chooser leaves as written" : "the chooser can't pick it here");
       if (!uses(code, main, [spec, row]).length) refuse(`main doesn't use it`);
+      // A whole program's lists held (array or tree): alone, as the
+      // chooser's are (in a round of their own, after the types chosen
+      // with them here), and only where every list the program reaches can
+      // be one (listBoundary); a sound played in blocks keeps arrays.
+      if (ty === LIST) {
+        if (chosen.length) continue;
+        if (options.sound && row.name !== "array of List") refuse("a sound played in blocks keeps its lists as arrays");
+        // Not where something runs on lists backwards: the chooser leaves
+        // those as written, and conjugate's inverse held on arrays never
+        // ends.
+        if (runsBackwards()) refuse("it runs something on lists backwards, which the chooser leaves as written");
+        if (keyed(info, defs, code, ty) || generic(info, defs, code, row)) refuse("its values cross where it can't be converted");
+        if (!listBoundary(withTrees(code, [row]), info, defs, row, asked)) refuse("some list the program reaches can't be one; a split can be held instead");
+        chosen.push(row);
+        continue;
+      }
       if (keyed(info, defs, code, ty) || generic(info, defs, code, row) || !plainBoundary(code, defs, row)) refuse("its values cross where it can't be converted");
       chosen.push(row);
       continue;
@@ -573,6 +597,25 @@ function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[
   }
   if (!s) return null;
   return out(s, { ...by, roots });
+}
+
+// A split held in the program's choices (L280c): arrays of List from the
+// definitions it names, by their names among the program's, as a split
+// by groups makes them (not converting a list of lists whole, else so).
+function heldSplit(code: Code, info: Info, names: Names, main: Id, defs: Id[], hold: string, refuse: (why: string) => never): Chosen & { reps: Representation[] } {
+  const [, as, from] = /^(.+?) from (.+)$/.exec(hold)!;
+  const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List")!;
+  if (as !== array.name) refuse(`only ${array.name} is split off from definitions`);
+  const seeds = from.split(", ").map((n) => {
+    const ds = defs.filter((d) => code.nodes[d]?.kind === "def" && (names[d] ?? d) === n);
+    return ds.length === 1 ? ds[0] : refuse(ds.length ? `${n} names ${ds.length} definitions` : `the program has no definition ${n}`);
+  });
+  if (seeds.includes(main)) refuse(`${names[main] ?? "main"} keeps its lists as written in a split`);
+  for (const deep of [false, true]) {
+    const s = splitLists(code, info, names, defs, main, seeds, array, deep);
+    if (s) return { code: s.code, names: s.names, chosen: [`List as ${array.name} from ${from}`], insiders: [], reps: [array], picks: [{ of: LIST, rep: array.name, from: s.seeds.filter((d) => seeds.includes(d)) }] };
+  }
+  return refuse("its lists can't be split off there");
 }
 
 // Lists as `rep` in each of the program's definitions that never sees a

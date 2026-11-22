@@ -3,8 +3,8 @@
 // stable id it is about (a type, an implementation, a solve), each with
 // the facts the pick read. `ters choices` writes `<program>.choices`;
 // `ters check` says which entries are stale (the facts or the pick came
-// out otherwise) and which are new. Representations, ways and mode plans
-// for now, on JavaScript's target; the code never selects
+// out otherwise) and which are new. Representations, ways, mode plans
+// placements and schedules for now, on JavaScript's target; the code never selects
 // (REPRESENTATIONS.md), and the compiler picks every entry again.
 
 import type { Id } from "../src/model.ts";
@@ -15,7 +15,7 @@ import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
 import { reachedImplementing } from "../src/lang/reached.ts";
-import { dependencies, isUse, subtree, useTarget, type NodeOf } from "../src/model.ts";
+import { dependencies, isUse, parentLookup, subtree, useTarget, type Code, type NodeOf } from "../src/model.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { determinism, solveMode } from "../src/lang/modes.ts";
 import { answerKeys } from "../src/lang/ports.ts";
@@ -145,6 +145,88 @@ export function modeLines(given: Program, main: Id, target = "JavaScript"): stri
   return lines;
 }
 
+// The placement entries (the third kind): where each map, keep or fold a
+// page's handler sends away may run (WHERE-IT-RUNS.md, scalar.ts
+// awayMaps): on the page's workers once it is slow, and on the GPU where
+// it has a kernel (gpu-maps.ts, `gpu`, by site) and the browser WebGPU.
+// By the function's id, with the definition it is in.
+// A command-line program's (no handler sends any away): each map, keep,
+// fold or search it shares out on worker threads once it is slow
+// (branches-rt.ts, scalar.ts sharedSites), where its code kept the site.
+export interface Lowered { code: Code; funcs?: readonly { body: unknown }[]; awayMaps?: { site: number; fn: Id; how: string }[]; sharedSites?: { site: number; at: Id; how: string }[] }
+const HOW: Record<string, string> = { map: "map", keep: "keep", add: "fold adding", max: "fold keeping the largest", min: "fold keeping the smallest", with: "fold of fields", first: "search for the first answer", count: "count of a search's answers", all: "search for all answers", any: "check of any item", every: "check of every item", "first where": "first item that passes" };
+// The sites the lowered code shares out: a runtime call's (`map.pure`,
+// `fold.pure`, `count.search`, …) number after the fuel it is given.
+function sitesKept(funcs: readonly { body: unknown }[]): Set<number> {
+  const kept = new Set<number>(), seen = new Set<object>();
+  const walk = (e: unknown): void => {
+    if (!e || typeof e !== "object" || seen.has(e)) return;
+    seen.add(e);
+    const x = e as { k?: string; fn?: unknown; args?: unknown[] };
+    if (x.k === "rt" && typeof x.fn === "string" && /\.(pure|search)$/.test(x.fn) && Array.isArray(x.args)) {
+      const at = x.args.findIndex((a) => (a as { k?: string; fn?: string })?.k === "rt" && (a as { fn?: string }).fn === "fuel.get");
+      const site = x.args[at + 1] as { k?: string; v?: unknown } | undefined;
+      if (at >= 0 && site?.k === "num" && typeof site.v === "number") kept.add(site.v);
+    }
+    for (const v of Array.isArray(e) ? e : Object.values(e)) walk(v);
+  };
+  for (const f of funcs) walk(f.body);
+  return kept;
+}
+export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target = "JavaScript page"): string[] {
+  const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  // A definition by its name as written: main's copy stored otherwise
+  // (library-reps.ts) is still main.
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  if (!ir.awayMaps?.length) {
+    if (!ir.sharedSites?.length) return [];
+    const kept = sitesKept(ir.funcs ?? []);
+    return [...new Set(ir.sharedSites.filter((m) => kept.has(m.site)).map((m) => {
+      return `${m.at} place: ${nameOf(defOf(m.at))}'s ${HOW[m.how] ?? m.how}: worker threads when slow; among main thread, worker threads; target JavaScript`;
+    }))];
+  }
+  return ir.awayMaps.map((m) => {
+    const d = defOf(m.fn), on = gpu.has(m.site);
+    return `${m.fn} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; target ${target}`;
+  });
+}
+
+// C's (`ters native`): each call its threads run (c.ts `par:`, scalar.ts
+// threadSites), by the node it is about, where the lowered code still
+// has a call of that runtime function (the passes after rebuild them).
+const THREADS: Record<string, string> = { ...HOW, together: "together", both: "two calls of one function", counted: "fold counting into a map" };
+export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; how: string }[] }, names: Names): string[] {
+  if (!ir.threadSites?.length) return [];
+  const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code), seen = new Set<unknown>(), kept = new Set<string>();
+  const walk = (e: unknown): void => {
+    if (!e || typeof e !== "object" || seen.has(e)) return;
+    seen.add(e);
+    const x = e as { k?: string; fn?: unknown };
+    if (x.k === "rt" && typeof x.fn === "string" && x.fn.startsWith("par:")) kept.add(x.fn);
+    for (const v of Array.isArray(e) ? e : Object.values(e)) walk(v);
+  };
+  for (const f of ir.funcs ?? []) walk(f.body);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${t.at} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads; target C`))];
+}
+
+// The schedule entries (the fourth kind, the order and grouping of
+// work): each walk main reaches taken where its list is made, as the
+// rounds took them (fuse-walks.ts), by the call's id. The items are met
+// in the same order, one loop for both.
+export function scheduleLines(p: { code: Code; names: Names; fused?: readonly { at: Id; walker: Id; over: string }[] }, main: Id, target = "JavaScript"): string[] {
+  if (!p.fused?.length) return [];
+  const all = { ...LIBRARY.names, ...p.names }, up = parentLookup(p.code), reached = new Set([main, ...dependencies(p.code, main)]);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && p.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return [...new Set(p.fused.flatMap((f) => {
+    const d = defOf(f.at);
+    return d && reached.has(d) ? [`${f.at} schedule: ${nameOf(d)}'s ${nameOf(f.walker)} walk, its list made by ${f.over}: one loop; among made then walked, one loop; target ${target}`] : [];
+  }))];
+}
+
 export function choicesText(main: string, lines: readonly string[]): string {
   return [`# The compiler's choices for ${main} (L280a): picked again whenever their facts change.`, ...lines].join("\n") + "\n";
 }
@@ -153,16 +235,16 @@ export function choicesText(main: string, lines: readonly string[]): string {
 // compiler stores the type as it says, where that keeps the meaning (the
 // chooser could pick that row), and says when it would pick another.
 export const HELD = "held ";
-const ENTRY = /^(\S+) representation: .*? as ([^;]+?)(?: from [^;]*)?; among /;
-// The held entries' rows, by the type's id.
+const ENTRY = /^(\S+) representation: .*? as ([^;]+?); among /;
+// The held entries' rows, by the type's id: a split's with the
+// definitions it is from (`array of List from a, b`).
 export function heldOf(lines: readonly string[]): Map<Id, string> {
   const out = new Map<Id, string>();
   for (const l of lines) {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
-    if (!m && /^\S+ (way|mode plan): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
+    if (!m && /^\S+ (way|mode plan|place): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
-    if (/ from [^;]*; among /.test(l)) throw new Error(`a list's split can't be held yet: ${l}`);
     out.set(m[1], m[2]);
   }
   return out;

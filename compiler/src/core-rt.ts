@@ -114,6 +114,7 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // The array's items from place k on, a view of the same buffer (C30 s2b:
   // the rest an array's fold hands its arm, scalar.ts restAsView).
   "array.from": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i <= v.n)) throw FAIL; (v.ver as { shared?: true }).shared = true; return new ArrayView(v.ver, v.start + i, v.n - i); },
+  "text.after": (t: string, i: number) => { if (ascii(t)) return i + 1; const b = utf8Of(t); do i++; while (i < b.length && (b[i] & 0xc0) === 0x80); return i; },
   "text.before": (t: string, i: number) => { if (ascii(t)) return i - 1; const b = utf8Of(t); do i--; while (i > 0 && (b[i] & 0xc0) === 0x80); return i; },
 };
 // A Table or Hash set (C63h, C63i) is the evaluator's (std.ts Table: a

@@ -581,7 +581,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; derived?: Map<string, FType> }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; sharedSites?: { site: number; at: Id; how: string }[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -980,6 +980,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
   const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
+  // A command-line program's work shared out on worker threads where it
+  // is worth it (C42, C43): its site, the node it is about (a map's
+  // function, a fold's item arm, a search) and how; the program's choices
+  // list those its code kept (cli/choices.ts placeLines).
+  const sharedSites: { site: number; at: Id; how: string }[] = [];
+  // And C's: each call the threads run (c.ts `par:`), by the expression
+  // itself, which the choices find in the code kept (cli/choices.ts).
+  const threadSites: { e: SExpr; at: Id; how: string }[] = [];
+  const onThreads = (e: SExpr, at: Id, how: string): SExpr => { threadSites.push({ e, at, how }); return e; };
   for (const n of opts.host || fibers ? allDefs : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1460,7 +1469,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             halving.add(n.id);
             let body: SExpr;
             try { body = expr(id, env, f, tail); } finally { pinned = was; halving.delete(n.id); }
-            return bothOnThreads(f, first.fn, first.args, then.args, rt, x0, x1, body);
+            return bothOnThreads(f, first.fn, first.args, then.args, rt, x0, x1, body, n.id);
           }
         }
         const head = code.nodes[n.fn];
@@ -1673,7 +1682,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // (C42), where its items are worth sharing by what each took the
         // last time (map.worth); otherwise the map as compiled, which is
         // the faster for the small maps a loop makes many of.
-        if (opts.host && !fibers && !given.has(n.id) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
+        // Not a text's characters, which no worker is worth (C281).
+        if (opts.host && !fibers && !given.has(n.id) && !charactersCall(n.args[0]) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
           const tx = stype(zonk(n.args[0])), t = stype(zonk(id));
           if (tx && t) {
             // The list once, as a local; the function as written, made
@@ -1696,6 +1706,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             const shared: SExpr = away
               ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }, { k: "num", v: 0 }], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
+            if (!away) sharedSites.push({ site: (site as { v: number }).v, at: n.args[1], how: kind === "all" ? "every" : kind === "first" ? "first where" : kind });
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.
             let then: SExpr = shared;
@@ -1715,20 +1726,20 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // c.ts `par:together`): on the threads, not on fibers.
         if (opts.threads && target === TOGETHER && (parallel ??= parallelTogethers(code, info)).has(n.id)) {
           const t = stype(zonk(id));
-          if (t && isData(t)) return { k: "rt", fn: "par:together", args: args(), host: { t, partial: true } };
+          if (t && isData(t)) return onThreads({ k: "rt", fn: "par:together", args: args(), host: { t, partial: true } }, n.id, "together");
         }
         // And a keep (C202), its items that pass in order; all pass and
         // any pass, the first test that decides.
         const job = opts.threads ? (parallelList ??= parallelLists(code, info, !!opts.threads)).get(n.id) : undefined;
         if (job === "map" || job === "keep" || job === "all" || job === "any" || job === "first") {
           const t = stype(zonk(id)), tx = stype(zonk(n.args[0]));
-          if (t && (job === "all" || job === "any" ? tx && isArray(tx) : isArray(t))) return { k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } };
+          if (t && (job === "all" || job === "any" ? tx && isArray(tx) : isArray(t))) return onThreads({ k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } }, n.args[1], job === "all" ? "every" : job);
           // first where (C202c): the item that first passes, as an array
           // of it or of none, which first where as compiled then answers
           // from, as in JavaScript.
           if (job === "first" && tx && isArray(tx) && !given.has(n.id)) {
             const one = f.locals.push(tx) - 1;
-            const found: SExpr = { k: "rt", fn: "par:first", args: args(), host: { t: tx, partial: true } };
+            const found = onThreads({ k: "rt", fn: "par:first", args: args(), host: { t: tx, partial: true } }, n.args[1], "first where");
             given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
             try { return { k: "let", i: one, value: found, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
           }
@@ -4091,9 +4102,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // (`par:both.on`, at the top levels only), then the first made here and
   // the second on another thread (`par:both:<function>`), its answer
   // taken after (`par:both.second:<function>`); else the two as written.
-  function bothOnThreads(f: SFunc, gi: number, a: SExpr[], b: SExpr[], rt: LType, x0: number, x1: number, body: SExpr): SExpr {
+  function bothOnThreads(f: SFunc, gi: number, a: SExpr[], b: SExpr[], rt: LType, x0: number, x1: number, body: SExpr, at: Id): SExpr {
     const on = f.locals.push("i32") - 1;
-    const both: SExpr = { k: "rt", fn: `par:both:${gi}`, args: [...a, ...b], host: { t: rt, partial: true } };
+    const both = onThreads({ k: "rt", fn: `par:both:${gi}`, args: [...a, ...b], host: { t: rt, partial: true } }, at, "both");
     const second: SExpr = { k: "rt", fn: `par:both.second:${gi}`, args: [], host: { t: rt, partial: false } };
     return { k: "let", i: on, value: { k: "rt", fn: "par:both.on", args: [], host: { t: "i32", partial: false } }, body: { k: "let", i: x0, value: { k: "if", cond: local(on), then: both, else: { k: "call", fn: gi, args: a, tail: false }, t: rt }, body: { k: "let", i: x1, value: { k: "if", cond: local(on), then: second, else: { k: "call", fn: gi, args: b, tail: false }, t: rt }, body } } };
   }
@@ -4211,7 +4222,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // A tree's (map-tree.ts) put together here: the hash table's by
           // the C runtime (c.ts mergeC).
           const join = isData(res) ? treeJoin(res, funcs[ai.fn].body) : null;
-          if (!isData(res) || join !== null) return { k: "rt", fn: `par:chunks:${gi}${join !== null ? `:${join}` : ""}`, args: [s.args[0]], host: { t: res, partial: false } };
+          if (!isData(res) || join !== null) return onThreads({ k: "rt", fn: `par:chunks:${gi}${join !== null ? `:${join}` : ""}`, args: [s.args[0]], host: { t: res, partial: false } }, n.id, "counted");
         }
         funcs.pop();
       }
@@ -4219,7 +4230,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       if (each) {
         const arr = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn);
         // In C (C202d), an array's, on the threads, which time it themselves.
-        if (opts.threads) { if (arr) return { k: "rt", fn: `par:fold:${each.how}`, args: [s.args[0], each.fn, each.nil, ...(each.join ? [each.join] : [])], host: { t: res, partial: true } }; }
+        if (opts.threads) { if (arr) return onThreads({ k: "rt", fn: `par:fold:${each.how}`, args: [s.args[0], each.fn, each.nil, ...(each.join ? [each.join] : [])], host: { t: res, partial: true } }, each.arm.id, each.how); }
         else {
         const whole = arr ? s.args[0] : s, lt = arr ? [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])] : st;
         const l = f.locals.push(lt) - 1, xs: SExpr = { k: "local", i: l }, site: SExpr = { k: "num", v: mapSites++ };
@@ -4228,6 +4239,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // item's arm, given the rest's Int as the join's identity; a
         // record of Ints's (C42g) given each field's.
         if (waitsIn(f)) awayMaps.push({ site: (site as { v: number }).v, fn: each.arm.id, how: each.how, caps: each.free, params: [each.arm.binds[0], each.arm.results[1]!], ...(each.hows ? { hows: each.hows } : {}) });
+        else sharedSites.push({ site: (site as { v: number }).v, at: each.arm.id, how: each.how });
         const shared: SExpr = waitsIn(f)
           ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil, each.join ?? { k: "num", v: 0 }], t: res, suspends: true }
           : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : [])] };
@@ -4336,7 +4348,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const half = (j: number): SExpr[] => [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured];
         const [j0, j1] = halves, x0 = g.locals.push(result) - 1, x1 = g.locals.push(result) - 1;
         inner = new Map(inner).set(a.results[j0]!, x0).set(a.results[j1]!, x1);
-        const body = bothOnThreads(g, gi, half(j0), half(j1), result, x0, x1, expr(a.body, inner, g, true));
+        const body = bothOnThreads(g, gi, half(j0), half(j1), result, x0, x1, expr(a.body, inner, g, true), a.id);
         return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), body);
       }
       a.results.forEach((r, j) => {
@@ -4973,6 +4985,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const away: SExpr = { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: false }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: "first" }], t, suspends: true };
           return { k: "let", i: got, value: away, body: { k: "attempt", body: { k: "rt", fn: "first.one", args: [local(got)] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t } };
         }
+        sharedSites.push({ site: mapSites, at: n.id, how: "first" });
         return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
       }
     }
@@ -4983,7 +4996,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // In a function that may wait (a page's handler), on the page's
       // workers, the rest of it given (C61 c′4, branches-rt.ts searchAway).
       if (c && waitsIn(f)) return { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: kind === "all" && isArray(t) }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: kind }], t, suspends: true };
-      if (c) return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
+      if (c) { sharedSites.push({ site: mapSites, at: n.id, how: kind }); return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }; }
     }
     // The same count in C (C203): the search a closure of nothing giving
     // its count, which c.ts `par:count:search` runs with each item of its first
@@ -5015,7 +5028,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (counted.k === "search") counted = { ...counted, splits: true };
         g.body = lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), counted);
         const c: SExpr = { k: "closure", t: ft, fn: gi, shape, caps: free.map((b): SExpr => ({ k: "local", i: env.get(b)! })) };
-        const found: SExpr = { k: "rt", fn: `par:${kind}:search`, args: [c], host: { t, partial: true } };
+        const found = onThreads({ k: "rt", fn: `par:${kind}:search`, args: [c], host: { t, partial: true } }, n.id, kind);
         if (kind !== "first") return found;
         const res = f.locals.push(t) - 1;
         return { k: "attempt", body: found, res, ok: { k: "local", i: res }, otherwise: expr(dflt!, env, f, false), t };
@@ -5564,6 +5577,82 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     })) };
     return gi;
   }
+  // A walk down a text's characters, read in place (C281, GAPS round 21
+  // MN2): mini's `item at(characters(t), 0, "")` and `all pass(characters(t),
+  // p)` made a list of one-character texts to read the first, or each in
+  // turn till one fails. A walker is a function that matches one input,
+  // a list of texts, at its top and hands the rest of it on only to
+  // itself in the same place; called on `characters(t)` it is called
+  // instead on t and a byte position, the copy reading the character at
+  // that position where the list's head was, the list's end where the
+  // text ends. The walker stays, for its other callers. (Deforestation
+  // again, Wadler 1990: the list was only ever taken apart.)
+  // A call of `characters`, as written.
+  function charactersCall(id: Id | undefined): boolean {
+    const x = id ? code.nodes[id] : undefined, fn = x && isCall(x) ? code.nodes[x.fn] : undefined;
+    return fn?.kind === "ref" && fn.target === TEXT_OPS.characters;
+  }
+  function textWalks() {
+    const made = new Map<string, number>();
+    const walkOf = (wi: number, k: number): number => {
+      const key = `${wi}:${k}`;
+      if (made.has(key)) return made.get(key)!;
+      made.set(key, -1);
+      const w = funcs[wi], d = w.params[k], b = w.body;
+      if (!w || w.multi || closureCode.has(wi) || !isData(d) || d.cases.length !== 2) return -1;
+      const c = d.cases.findIndex((x) => x.variant === CONS), nil = 1 - c;
+      if (c < 0 || d.cases[nil].variant !== NIL || d.cases[c].fields.length !== 2) return -1;
+      const head = d.cases[c].fields.findIndex((x) => x.t === "text"), tl = d.cases[c].fields.findIndex((x) => x.t === d);
+      if (head < 0 || tl < 0) return -1;
+      if (b.k !== "case" || b.scrut.k !== "local" || b.scrut.i !== k || !b.arms[c] || !b.arms[nil]) return -1;
+      // The rest of the list: read off the cell, or a local let to it.
+      const tails = new Set<number>(), s = b.s;
+      let ok = true, reads = false;
+      const of = (e: SExpr, sv: number, ts: Set<number>) => (e.k === "field" && e.rec.k === "local" && e.rec.i === sv && e.i === tl) || (e.k === "local" && ts.has(e.i));
+      const scan = (e: SExpr) => {
+        if (!ok) return;
+        if (e.k === "local") { if (e.i === k || e.i === s || tails.has(e.i)) ok = false; return; }
+        if ((e.k === "new" || e.k === "make") && e.into !== undefined && (e.into === k || e.into === s || tails.has(e.into))) { ok = false; return; }
+        if (e.k === "field" && e.rec.k === "local" && e.rec.i === s) { if (e.i === tl) ok = false; else reads = true; return; }
+        if (e.k === "let" && of(e.value, s, tails)) { tails.add(e.i); scan(e.body); return; }
+        if (e.k === "call" && e.fn === wi && !e.cps && of(e.args[k], s, tails)) { e.args.forEach((a, j) => { if (j !== k) scan(a); }); return; }
+        kids(e).forEach(scan);
+      };
+      b.arms.forEach((a) => a && scan(a));
+      if (!ok) return -1;
+      // t where the list was, the position last; the locals after the
+      // inputs one further on.
+      const p = w.params.length, at = (j: number) => (j < p ? j : j + 1);
+      const params: LType[] = [...w.params.map((x, j) => (j === k ? "text" : x)), "i32"];
+      const g: SFunc = { ...w, name: `${w.name}.characters`, params, locals: [...params, ...w.locals.slice(p)], inner: true, body: { k: "num", v: 0 } };
+      const gi = funcs.push(g) - 1;
+      made.set(key, gi);
+      const t: SExpr = { k: "local", i: k }, pos: SExpr = { k: "local", i: p };
+      const next = g.locals.push("i32") - 1, ch = g.locals.push("text") - 1;
+      const s2 = at(s), tails2 = new Set([...tails].map(at));
+      const rw = (e: SExpr): SExpr => {
+        if (e.k === "field" && e.rec.k === "local" && e.rec.i === s2) return { k: "local", i: ch };
+        if (e.k === "let" && tails2.has(e.i)) return rw(e.body);
+        if (e.k === "call" && e.fn === wi && !e.cps && of(e.args[k], s2, tails2)) return { ...e, fn: gi, args: [...e.args.map((a, j) => (j === k ? t : rw(a))), { k: "local", i: next }] };
+        return mapKids(e, rw);
+      };
+      const body = mapLocals(b, at) as Extract<SExpr, { k: "case" }>;
+      const arm = rw(body.arms[c]!);
+      g.body = {
+        k: "if", t: b.result, cond: { k: "op", op: "beq", args: [pos, { k: "rt", fn: "text.size", args: [t] }] }, then: rw(body.arms[nil]!),
+        else: { k: "let", i: next, value: { k: "rt", fn: "text.after", args: [t, pos] }, body: reads ? { k: "let", i: ch, value: { k: "rt", fn: "text.bytes", args: [t, pos, { k: "local", i: next }] }, body: arm } : arm },
+      };
+      return gi;
+    };
+    const sites = (e: SExpr): SExpr => {
+      const r = mapKids(e, sites);
+      if (r.k !== "call" || r.cps) return r;
+      const k = r.args.findIndex((a) => a.k === "rt" && a.fn === "text.characters");
+      const gi = k < 0 ? -1 : walkOf(r.fn, k);
+      return gi < 0 ? r : { ...r, fn: gi, args: [...r.args.map((a, j) => (j === k ? (a as Extract<SExpr, { k: "rt" }>).args[0] : a)), { k: "zero", t: "i32" }] };
+    };
+    for (let i = 0; i < funcs.length; i++) funcs[i].body = sites(funcs[i].body);
+  }
   // A list turned round onto another, a loop.
   function reverse(d: DType): number {
     const key = `reverse:${d.key}`;
@@ -5824,6 +5913,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   finishStreams();
+  if (opts.data) textWalks();
   funcs.forEach((g, j) => { g.body = tidied(g, j).body; });
   // Every closure `derivative` may be asked of carries its derivative, or
   // the evaluator's derive is lowered instead (I245).
@@ -5837,7 +5927,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const derived = new Map([...fns.values()].flatMap((t): [string, FType][] => (derivedKeys.has(plainKey(t)) ? [[t.key, derivativeType(t)]] : [])));
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(derived.size ? { derived } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(sharedSites.length ? { sharedSites } : {}), ...(threadSites.length ? { threadSites } : {}), ...(derived.size ? { derived } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a

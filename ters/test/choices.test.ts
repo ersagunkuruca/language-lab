@@ -5,11 +5,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, readChoices, staleChoices } from "../cli/choices.ts";
+import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, placeLines, readChoices, scheduleLines, staleChoices } from "../cli/choices.ts";
+import { lowerCore } from "../../compiler/src/core-js.ts";
+import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 
 const root = fileURLToPath(new URL("../examples/", import.meta.url));
 
@@ -61,9 +67,30 @@ test("a held entry is stored as it says, kept, and said where the compiler would
   assert.deepEqual(heldWarnings([held], stored), []);
 });
 
-test("a held entry that isn't a way to store the type, or a list's split, is refused", () => {
+test("a held entry that isn't a way to store the type is refused", () => {
   assert.throws(() => choices("greenhouse-page", new Map([["std.set", "linked list"]])), /Set can't be held as linked list here: it is stored as weight-balanced tree, sorted list, hash table/);
-  assert.throws(() => heldOf(["held std.list representation: List as array of List from main; among array of List, List as written; jobs none; target JavaScript"]), /a list's split can't be held yet/);
+  assert.deepEqual([...heldOf(["held std.list representation: List as array of List from run of; among array of List, List as written; jobs none; target JavaScript"])], [["std.list", "array of List from run of"]]);
+});
+
+// A list's split held (L280c): arrays of List from the definitions it
+// names, where the lists can be split off there.
+test("machine's split held from fewer definitions is made so, and said where the compiler would split otherwise", () => {
+  const machine = fileURLToPath(new URL("../../compiler/gaps/machine", import.meta.url));
+  const p = loadProgram(machine), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+  const info = infer(p.code, names, undefined, p.options);
+  const reps = representationsIn(p.code, info, names, p.own.defs);
+  const lines = (held?: Map<string, string>) => {
+    const given: Program = { title: "machine", code: p.code, own: p.own.defs, names, info, reps, options: p.options, held };
+    return choiceLines(given, main, represented(given, main, true).picks ?? []).filter((l) => l.startsWith("std.list "));
+  };
+  const now = lines();
+  assert.match(now[0], /^std\.list representation: List as array of List from (\S+, )+run of, \S+/);
+  const held = `held ${now[0].replace(/ from [^;]*;/, " from run of;")}`;
+  const stored = lines(heldOf([held]));
+  assert.equal(`held ${stored[0]}`, held);
+  assert.equal(heldWarnings([held], now)[0].replace(/ from .*/, ""), "held   std.list: array of List");
+  assert.throws(() => lines(heldOf([held.replace("from run of", "from nowhere")])), /List can't be held as array of List from nowhere here: the program has no definition nowhere/);
+  assert.throws(() => lines(heldOf([held.replace("from run of", "from main")])), /main keeps its lists as written in a split/);
 });
 
 // The algorithm kind (L280a part 2): the way each operation main uses is
@@ -85,4 +112,79 @@ test("backwards' solves have their mode plans: equations or relational, with the
   assert.match(of("who was greeted"), /solve of greet for name from answer: relational, goals "hello, ", join text\(…\); at most one answer, ends; target JavaScript$/);
   assert.deepEqual(choices("backwards").filter((l) => / mode plan: /.test(l)), lines);
   assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation can be held yet/);
+});
+
+// Placements (L280a): where each map a page's handler sends away may run,
+// the GPU among them where it has a kernel.
+test("moths-page's maps go to the workers when slow, and one of Ints to the GPU too", () => {
+  const p = loadProgram(root + "moths-page"), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+  const info = infer(p.code, names, undefined, p.options);
+  const given: Program = { title: "moths-page", code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options };
+  const r = represented(given, main, true);
+  const ir = lowerCore(r.code, r.info, r.names, [main]);
+  const lines = placeLines(ir, new Set(Object.keys(gpuMaps(ir)).map(Number)), r.names);
+  assert.deepEqual(lines.map((l) => l.replace(/^\S+ /, "")).sort(), [
+    "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; target JavaScript page",
+    "place: tick's map: workers when slow; among main thread, workers; target JavaScript page",
+  ]);
+  assert.throws(() => heldOf([`held ${lines[0]}`]), /only a type's representation can be held yet/);
+});
+
+// A whole program's lists held (L280c): as arrays or trees, alone, where
+// every list the program reaches can be one and nothing runs on them
+// backwards.
+test("divisors' lists held as trees are made so and said; where a list can't be one, refused", () => {
+  const now = choices("divisors").filter((l) => l.startsWith("std.list "));
+  assert.match(now[0], /^std\.list representation: List as array of List;/);
+  const held = `held ${now[0].replace("as array of List", "as tree of List")}`;
+  const stored = choices("divisors", heldOf([held])).filter((l) => l.startsWith("std.list "));
+  assert.equal(`held ${stored[0]}`, held);
+  assert.deepEqual(heldWarnings([held], now), ["held   std.list: tree of List, where the compiler would pick array of List"]);
+  assert.throws(() => choices("break-page", new Map([["std.list", "array of List"]])), /List can't be held as array of List here: some list the program reaches can't be one/);
+  assert.throws(() => choices("backwards", new Map([["std.list", "tree of List"]])), /runs something on lists backwards/);
+  assert.throws(() => choices("conjugate", new Map([["std.list", "array of List"]])), /runs something on lists backwards/);
+});
+
+// A command-line program's placements (L280a): each map, fold or search
+// it shares out on worker threads once slow, where its code kept it.
+test("collatz's keep and fold go to worker threads when slow; queens' searches too", () => {
+  const places = (name: string) => {
+    const p = loadProgram(root + name), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+    const info = infer(p.code, names, undefined, p.options);
+    const given: Program = { title: name, code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options };
+    const r = represented(given, main, true);
+    return placeLines(lowerCore(r.code, r.info, r.names, [main]), new Set(), r.names).map((l) => l.replace(/^\S+ /, "")).sort();
+  };
+  assert.deepEqual(places("collatz"), [
+    "place: main's keep: worker threads when slow; among main thread, worker threads; target JavaScript",
+    "place: walks of's fold of fields: worker threads when slow; among main thread, worker threads; target JavaScript",
+  ]);
+  assert.deepEqual(places("queens").map((l) => l.split(":")[1]), [" main's count of a search's answers", " main's search for all answers", " main's search for the first answer"]);
+});
+
+// C's threads (L280a): `ters choices` writes, beside JavaScript's worker
+// threads, each call `ters native` runs on its threads.
+test("collatz's keep and fold run on C's threads when slow, as written by ters choices", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "collatz");
+  try {
+    cpSync(root + "collatz", at, { recursive: true });
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL("../cli/ters.ts", import.meta.url)), "choices", at], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const c = readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.endsWith("target C")).map((l) => l.replace(/^\S+ /, "")).sort();
+    assert.deepEqual(c, [
+      "place: main's keep: threads when slow; among main thread, threads; target C",
+      "place: walks of's fold of fields: threads when slow; among main thread, threads; target C",
+    ]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Schedules (L280a): each walk main reaches taken where its list is made
+// (fuse-walks.ts), one loop for both.
+test("moths-page's walks over the lists its maps make are one loop each", () => {
+  const p = loadProgram(root + "moths-page"), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+  const info = infer(p.code, names, undefined, p.options);
+  const given: Program = { title: "moths-page", code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options };
+  const lines = scheduleLines(represented(given, main, true), main).map((l) => l.replace(/^\S+ /, "")).sort();
+  assert.ok(lines.includes("schedule: moved's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript"), lines.join("\n"));
+  assert.ok(lines.every((l) => / walk, its list made by (map|flat map|a call|lets): one loop; among made then walked, one loop; target JavaScript$/.test(l)));
 });

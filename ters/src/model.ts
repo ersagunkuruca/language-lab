@@ -974,9 +974,25 @@ function underKinds(under: Record<Id, Node>, u: ReturnType<typeof underOf>): Kin
 // with the version's own nodes put in, a kind none of them is or was
 // shared as it is. Positions only order: those under are shifted past the
 // ones listed first, the ones added come after.
+// Kept by the version with what it held of its own, and found again while
+// it holds the same (a version changed in place holds others): the passes
+// before arithmetic each ask the same version for its refs or calls.
+type OwnSeen = { first: Id[] | undefined; firstNodes: Node[]; changed: [number, Node | undefined][]; added: Id[]; addedNodes: Node[] };
+const overKindsKept = new WeakMap<object, OwnSeen & { k: KindIndex }>();
+const sameOwn = (w: OwnSeen, raw: Record<Id, Node>, first: Id[] | undefined, changed: [number, Node | undefined][], added: Id[]) =>
+  (w.first?.length ?? 0) === (first?.length ?? 0) && (!first || first.every((id, i) => w.first![i] === id && w.firstNodes[i] === raw[id]))
+  && w.changed.length === changed.length && changed.every((c, i) => w.changed[i][0] === c[0] && w.changed[i][1] === c[1])
+  && w.added.length === added.length && added.every((id, i) => w.added[i] === id && w.addedNodes[i] === raw[id]);
 function kindsOver(nodes: Record<Id, Node>, under: Record<Id, Node>): KindIndex {
   const { raw, first, u, changed, added } = overParts(nodes, under), uk = underKinds(under, u);
   if (!changed.length && !added.length && !first?.length) return uk;
+  const was = overKindsKept.get(raw);
+  if (was && sameOwn(was, raw, first, changed, added)) return was.k;
+  const k = kindsOverIn(raw, first, u, changed, added, uk);
+  overKindsKept.set(raw, { first: first?.slice(), firstNodes: (first ?? []).map((id) => raw[id]), changed: changed.slice(), added: added.slice(), addedNodes: added.map((id) => raw[id]), k });
+  return k;
+}
+function kindsOverIn(raw: Record<Id, Node>, first: Id[] | undefined, u: ReturnType<typeof underOf>, changed: [number, Node | undefined][], added: Id[], uk: KindIndex): KindIndex {
   const touched = new Set<string>();
   for (const [i, n] of changed) { touched.add(u.values[i].kind); if (n) touched.add(n.kind); }
   for (const id of first ?? []) touched.add(raw[id].kind);
