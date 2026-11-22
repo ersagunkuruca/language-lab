@@ -355,7 +355,9 @@ let ran = 0;
 const AGAIN = Symbol("again");
 let inJob = false;
 type Payload = Omit<Job, "job" | "units" | "base" | "claims">;
-function shared(n: number, here: (i: number) => unknown, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
+// `always`: a site its program's choices hold on worker threads (L280h),
+// which starts them at once and is never marked quick.
+function shared(n: number, here: (i: number) => unknown, send: () => Payload | typeof NO, site: Fn | undefined, always = false): unknown[] {
   const values: unknown[] = new Array(n);
   // The main thread starts with the last unit; the ones before it may go
   // to workers, if there are any or it is worth starting them. Never from
@@ -365,7 +367,8 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
   let left = n;
   const main = !!wt()?.isMainThread && !inJob;
   const idle = !!pool; // workers started before this job (busy or not): no alone time from it
-  const stays = !!site && quick.has(site);
+  const stays = !!site && quick.has(site) && !always;
+  if (always && main && mod) pool ??= startPool();
   if (!pool || !main || stays) {
     const t0 = performance.now();
     while (left > 0) {
@@ -401,13 +404,13 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     theirs = left - mine.size;
     // A job the main thread did alone in under a millisecond: its units
     // are worth less than sending them, so they stay here.
-    if (!theirs && site && performance.now() - t0 < 1) quick.add(site);
+    if (!theirs && site && !always && performance.now() - t0 < 1) quick.add(site);
     for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
     const unit = site && theirs ? alone.get(site) : undefined;
     if (unit !== undefined) {
       const misses = performance.now() - sent >= unit * left ? (unpaid.get(site!) ?? 0) + 1 : 0;
       unpaid.set(site!, misses);
-      if (misses >= UNPAID) quick.add(site!);
+      if (misses >= UNPAID && !always) quick.add(site!);
     }
   }
   if (theirs) {
@@ -444,13 +447,14 @@ function decided(claims: Int32Array, i: number): void {
 // A unit that decides: a run's index of its deciding item, or a search's
 // answer found (an array of it).
 const decides = (v: unknown): boolean => (v instanceof ArrayView ? v.n > 0 : (v as number) >= 0);
-function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => unknown, send: () => Payload | typeof NO, site: Fn | undefined): unknown[] {
+function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => unknown, send: () => Payload | typeof NO, site: Fn | undefined, always = false): unknown[] {
   const values: unknown[] = new Array(n), ends = (v: unknown) => v instanceof Thrown || decides(v);
   const main = !!wt()?.isMainThread && !inJob;
+  if (always && main && mod) pool ??= startPool();
   let next = 0;
   // In turn from the front, till one decides or it is worth sharing.
   const inTurn = (): unknown[] | null => { for (; next < n; next++) if (ends(values[next] = attempt(() => here(next)))) return values.slice(0, next + 1); return values; };
-  if (!pool || !main || (site && quick.has(site))) {
+  if (!pool || !main || (site && quick.has(site) && !always)) {
     const t0 = performance.now();
     for (; next < n; ) {
       if (ends(values[next] = attempt(() => here(next)))) return values.slice(0, next + 1);
@@ -475,7 +479,7 @@ function sharedUntil(n: number, here: (i: number, stop?: () => boolean) => unkno
     }
   } finally { inJob = false; }
   const theirs = left - mine.size;
-  if (!theirs && site && performance.now() - t0 < 1) quick.add(site);
+  if (!theirs && site && !always && performance.now() - t0 < 1) quick.add(site);
   for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
   if (theirs) {
     const w = wt()!;
@@ -609,11 +613,11 @@ export const bothOn = (): boolean => plan !== null || (!inBoth && !inJob && canS
 const RUNS = 32, perItem: number[] = [];
 // Whether a map is worth sharing: never met, or as many items as would
 // take a millisecond by the last measure, counted no further than that.
-export function mapWorth(xs: unknown, site: number): boolean {
+export function mapWorth(xs: unknown, site: number, always?: boolean): boolean {
   // A list the runtime reads (an array, or cons cells): anything else stays compiled.
   if (!(canShare() || web) || !(xs instanceof ArrayView || (xs as { tag?: unknown })?.tag === CONS || (xs as { tag?: unknown })?.tag === NIL)) return false;
   const est = perItem[site];
-  if (est === undefined) return true;
+  if (est === undefined || always) return true;
   const enough = 1 / est;
   if (xs instanceof ArrayView) return xs.n >= enough;
   let n = 0;
@@ -622,13 +626,13 @@ export function mapWorth(xs: unknown, site: number): boolean {
 }
 // With `keep`, the items whose test passed (C43), each run's in order.
 const run = (items: unknown[], f: Fn, keep?: boolean): unknown[] => (keep ? items.filter((x) => f(x)) : items.map((x) => f(x)));
-export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean): unknown {
+export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean, always?: boolean): unknown {
   if (!canShare()) return mapInOrder(xs, f, keep);
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = shared(n, (i) => run(items.slice(i * size, (i + 1) * size), f, keep), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, keep };
-  }, (f as Closure).code);
+  }, (f as Closure).code, always);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
   return sameKind(xs, (runs as unknown[][]).flat());
 }
@@ -646,7 +650,7 @@ export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameK
 type FoldHow = "add" | "max" | "min" | "with";
 const both = (how: FoldHow, join?: Fn) => (a: Int, b: Int): Int => (how === "with" ? (join as unknown as (x: Int, y: Int) => Int)(a, b) : how === "add" ? add(a, b) : how === "max" ? (b > a ? b : a) : (b < a ? b : a));
 const together = (items: unknown[], f: Fn, how: FoldHow, join?: Fn): Int => { const by = both(how, join); let s = f(items[0]) as Int; for (let i = 1; i < items.length; i++) s = by(s, f(items[i]) as Int); return s; };
-export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number, join?: Fn): Int {
+export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number, join?: Fn, always?: boolean): Int {
   if (!canShare()) return foldInOrder(xs, f, z, how, join);
   const items = itemsOf(xs).reverse();
   if (!items.length) return z;
@@ -654,7 +658,7 @@ export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number,
   const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how, join), () => {
     const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, fold: how, ...(j ? { join: j } : {}) };
-  }, (f as Closure).code);
+  }, (f as Closure).code, always);
   perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
   return (runs as Int[]).reduce(both(how, join), z);
 }
@@ -666,21 +670,21 @@ export const foldInOrder = (xs: unknown, f: Fn, z: Int, how: FoldHow, join?: Fn)
 // never read.
 const deciding = (items: unknown[], f: Fn, any: boolean, stop?: () => boolean): number => { for (let i = 0; i < items.length; i++) { if (!f(items[i]) === !any) return i; if (stop?.()) return -1; } return -1; };
 // The index of the first item that decides, or -1.
-function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean): number {
+function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean): number {
   const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = sharedUntil(n, (i, stop) => deciding(items.slice(i * size, (i + 1) * size), f, any, stop), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, until: any ? "any" : "all" };
-  }, (f as Closure).code);
+  }, (f as Closure).code, always);
   const last = runs[runs.length - 1];
   if (last instanceof Thrown) throw last.e;
   // A measure only of a test that ran through: one that stopped early says little of the next.
   if (!((last as number) >= 0)) { perItem[site] = (performance.now() - t0) / Math.max(1, items.length); return -1; }
   return (runs.length - 1) * size + (last as number);
 }
-export function testPure(xs: unknown, f: Fn, site: number, any: boolean): boolean {
+export function testPure(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean): boolean {
   if (!canShare()) return testInOrder(xs, f, any);
-  const found = firstDeciding(xs, f, site, any) >= 0;
+  const found = firstDeciding(xs, f, site, any, always) >= 0;
   return any ? found : !found;
 }
 export const testInOrder = (xs: unknown, f: Fn, any: boolean): boolean => (any ? itemsOf(xs).some((x) => f(x)) : itemsOf(xs).every((x) => f(x)));
@@ -688,9 +692,9 @@ export const testInOrder = (xs: unknown, f: Fn, any: boolean): boolean => (any ?
 // first where of a test that only computes and ends (C43): the first item
 // that passes, as a list of it or of none in the input's kind, which the
 // compiled first where then takes its answer from.
-export function firstPure(xs: unknown, f: Fn, site: number): unknown {
+export function firstPure(xs: unknown, f: Fn, site: number, always?: boolean): unknown {
   if (!canShare()) return firstInOrder(xs, f);
-  const i = firstDeciding(xs, f, site, true);
+  const i = firstDeciding(xs, f, site, true, always);
   return sameKind(xs, i < 0 ? [] : [itemsOf(xs)[i]]);
 }
 export const firstInOrder = (xs: unknown, f: Fn): unknown => { const items = itemsOf(xs), i = items.findIndex((x) => f(x)); return sameKind(xs, i < 0 ? [] : [items[i]]); };
@@ -742,7 +746,7 @@ function answers(search: unknown, p: Piece, how: How): unknown {
 // every item from there on.
 const piece = (p: number, m: number): Piece => { const i = Math.floor(p / m), j = p % m; return [i, i + 1, j, j === m - 1 ? Infinity : j + 1]; };
 // count's number, all's answers or first's (one or none), as an array.
-export function searchPure(search: unknown, site: number, how: How): unknown {
+export function searchPure(search: unknown, site: number, how: How, always?: boolean): unknown {
   const out = (v: unknown) => (how === "count" ? v : itemsOf(v));
   if (!canShare()) return out(answers(search, null, how));
   const outer = [seen, seen2];
@@ -754,7 +758,7 @@ export function searchPure(search: unknown, site: number, how: How): unknown {
   m = Math.max(1, m);
   if (k <= 1 && m <= 1 || (how === "first" && decides(first))) return out(first);
   const n = Math.max(1, k) * m - 1, t0 = performance.now(), send = () => { const g = encode(search, names!); return g === NO ? NO : { search: g, how, ways: m, ...(how === "first" ? { until: "first" as const } : {}) }; };
-  const rest = how === "first" ? sharedUntil(n, (i) => answers(search, piece(i + 1, m), how), send, (search as Closure).code) : shared(n, (i) => answers(search, piece(i + 1, m), how), send, (search as Closure).code);
+  const rest = how === "first" ? sharedUntil(n, (i) => answers(search, piece(i + 1, m), how), send, (search as Closure).code, always) : shared(n, (i) => answers(search, piece(i + 1, m), how), send, (search as Closure).code, always);
   perItem[site] = (performance.now() - t0) / n;
   if (how === "first") { const found = rest[rest.length - 1]; return found instanceof ArrayView && decides(found) ? itemsOf(found) : []; }
   return how === "all" ? [first, ...rest].flatMap((a) => itemsOf(a)) : rest.reduce((a: number, b) => a + (b as number), first as number);
