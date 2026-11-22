@@ -4858,3 +4858,12 @@ reads, so its frames go on the heap: `ters wasi` prints what the ideal
 prints at 2, 8 and 32 blocks (32: 3.8 s, 10.5x the JS ideal). The core
 IR's generator for the same is 8% of its time, under the 10% rule.
 
+### After C277
+
+branches-rt.ts `shared`: a site's units run alone once, for their time,
+and a site whose shared jobs twice in a row take as long as that runs in
+place from then on; and a site marked so really does (its units went to
+the workers from the second on). strings on three workers: 8 blocks 3.2 →
+2.0 s, 32 blocks 12.7 → 8.2 s, as alone or a little better. What is left
+of the core IR's 23x is the library's FFT on lists and the collector.
+

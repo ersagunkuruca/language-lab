@@ -234,6 +234,15 @@ let pool: Helper[] | null = null, job = 0, onWorkers = 0;
 // exit (the tests' check that they did).
 if ((globalThis as { process?: NodeJS.Process }).process?.env?.TERS_BRANCHES === "say") process.on("exit", () => { if (mod && wt()?.isMainThread) process.stderr.write(`branches on workers: ${onWorkers}\n`); });
 const quick = new WeakSet<Fn>();
+// What a site's unit takes on this thread with the workers idle, from
+// its first units, run here (C277); and how many of its shared jobs in a
+// row since took as long as it would have alone. Its units' own time
+// while shared says nothing: code that allocates as it goes (strings'
+// blocks, 2.1 s alone, 3.2 s on three workers) runs slower on every
+// thread at once, the collector's work shared out too. Twice and it is
+// quick: the first job pays for the workers' cold code.
+const alone = new WeakMap<Fn, number>(), unpaid = new WeakMap<Fn, number>();
+const UNPAID = 2;
 const SIZE = () => { try { const os = (globalThis as { process?: { getBuiltinModule?: (m: string) => unknown } }).process?.getBuiltinModule?.("node:os") as typeof import("node:os"); return Math.max(0, Math.min(3, (os.availableParallelism?.() ?? os.cpus().length) - 1)); } catch { return 0; } };
 function startPool(): Helper[] {
   const w = wt();
@@ -353,16 +362,30 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
   // the outer one.
   let left = n;
   const main = !!wt()?.isMainThread && !inJob;
-  if (!pool || !main || (site && quick.has(site))) {
+  const idle = !!pool; // workers started before this job (busy or not): no alone time from it
+  const stays = !!site && quick.has(site);
+  if (!pool || !main || stays) {
     const t0 = performance.now();
     while (left > 0) {
       values[--left] = attempt(() => here(left));
-      // Started here, or by a job inside this unit (a map in a branch).
-      if (left > 0 && main && mod && (pool || ran + performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
+      // Started here, or by a job inside this unit (a map in a branch);
+      // a quick site's units all stay here (C277: they went to the
+      // workers from the second on once any had started).
+      if (left > 0 && main && mod && !stays && (pool || ran + performance.now() - t0 > WORTH)) { pool ??= startPool(); break; }
     }
     if (main) ran += performance.now() - t0;
+    // With no workers yet, what its units take alone.
+    if (main && site && !idle && left < n && !alone.has(site)) alone.set(site, (performance.now() - t0) / (n - left));
   }
-  const helpers = pool ?? [], payload = left > 0 && helpers.length ? send() : NO;
+  // Met first with the workers started: its last unit here first, alone,
+  // for the time (C277), the rest shared.
+  if (left > 1 && main && pool?.length && site && !alone.has(site)) {
+    const t0 = performance.now();
+    values[left - 1] = attempt(() => here(left - 1));
+    left--;
+    alone.set(site, performance.now() - t0);
+  }
+  const sent = performance.now(), helpers = pool ?? [], payload = left > 0 && helpers.length ? send() : NO;
   if (payload === NO) for (; left > 0; left--) values[left - 1] = attempt(() => here(left - 1));
   const mine = new Set<number>(), id = ++job;
   let theirs = 0;
@@ -378,6 +401,12 @@ function shared(n: number, here: (i: number) => unknown, send: () => Payload | t
     // are worth less than sending them, so they stay here.
     if (!theirs && site && performance.now() - t0 < 1) quick.add(site);
     for (let d = Atomics.load(claims, 1); d < theirs; d = Atomics.load(claims, 1)) Atomics.wait(claims, 1, d);
+    const unit = site && theirs ? alone.get(site) : undefined;
+    if (unit !== undefined) {
+      const misses = performance.now() - sent >= unit * left ? (unpaid.get(site!) ?? 0) + 1 : 0;
+      unpaid.set(site!, misses);
+      if (misses >= UNPAID) quick.add(site!);
+    }
   }
   if (theirs) {
     const w = wt()!;
