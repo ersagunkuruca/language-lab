@@ -5,6 +5,7 @@
 // whole search and the page shows the rest when it ends (BACKLOG E127).
 
 import type { Code, Id } from "../ters/src/model.ts";
+import type { SentCode } from "./runCode.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import { relate, showTerm } from "../ters/src/lang/relate.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
@@ -12,7 +13,7 @@ import { makeRunner, type Data } from "../ters/src/lang/run.ts";
 import { CONS } from "../ters/src/lang/std-ids.ts";
 
 export interface Found { answers: { values: Record<string, string>; free: string[]; residual: string[] }[]; more: boolean; error?: string; cut?: boolean }
-export type BackAsk = { backwards: true; code: Code; names: Names; def: Id; values: Record<string, unknown> };
+export type BackAsk = { backwards: true; code: SentCode; names: Names; def: Id; values: Record<string, unknown> };
 
 // The known ports' values as the worker gets them (I319). A cons list
 // goes as its items, walked, not recursed into: postMessage's copy

@@ -1162,12 +1162,25 @@ export function carried(fromFirst: unknown, toFirst: Value, now: unknown): { val
 }
 // The same plain data: numbers (NaN the same as NaN), strings, whole
 // numbers, and data with the same tag and the same fields. Never true
-// with a function in it.
+// with a function in it. Walked with a stack of its own, not by
+// recursion (I348): the looper's recordings, lists of a few hundred
+// thousand samples, overflowed the call stack, so each edit's compiled
+// page failed to take over.
 function plainSame(a: unknown, b: unknown): boolean {
-  if (typeof a !== typeof b) return false;
-  if (typeof a === "number" || typeof a === "string" || typeof a === "bigint" || typeof a === "boolean") return Object.is(a, b) || a === b;
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => plainSame(x, b[i]));
-  if (!a || typeof a !== "object" || !b || Array.isArray(b)) return false;
-  const x = a as { tag?: unknown; fields?: unknown[] }, y = b as { tag?: unknown; fields?: unknown[] };
-  return typeof x.tag === "string" && x.tag === y.tag && Array.isArray(x.fields) && Array.isArray(y.fields) && x.fields.length === y.fields.length && x.fields.every((f, i) => plainSame(f, y.fields![i]));
+  const todo: unknown[] = [a, b];
+  while (todo.length) {
+    const y = todo.pop(), x = todo.pop();
+    if (typeof x !== typeof y) return false;
+    if (typeof x === "number" || typeof x === "string" || typeof x === "bigint" || typeof x === "boolean") { if (!(Object.is(x, y) || x === y)) return false; continue; }
+    if (Array.isArray(x)) {
+      if (!Array.isArray(y) || x.length !== y.length) return false;
+      for (let i = x.length - 1; i >= 0; i--) todo.push(x[i], y[i]);
+      continue;
+    }
+    if (!x || typeof x !== "object" || !y || Array.isArray(y)) return false;
+    const d = x as { tag?: unknown; fields?: unknown[] }, e = y as { tag?: unknown; fields?: unknown[] };
+    if (typeof d.tag !== "string" || d.tag !== e.tag || !Array.isArray(d.fields) || !Array.isArray(e.fields) || d.fields.length !== e.fields.length) return false;
+    for (let i = d.fields.length - 1; i >= 0; i--) todo.push(d.fields[i], e.fields[i]);
+  }
+  return true;
 }

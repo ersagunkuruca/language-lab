@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Code, Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
-import { Cells, handOver } from "../src/lang/cells.ts";
+import { Cells, carried, handOver } from "../src/lang/cells.ts";
 import { counterProgram, fractionsProgram } from "../src/lang/cells-programs.ts";
 import { infer } from "../src/lang/infer.ts";
 import { base, baseNames, checkOptions } from "../src/lang/load.ts";
@@ -246,4 +246,15 @@ test("a program with no formula, each or page keeps its cells plainly; one with 
   assert.equal(runMain(code, info, main, { print: () => {}, names }), 2);
   const p = counterProgram();
   assert.equal(tracks(base(p.code), p.main), true);
+});
+
+// I348: a cell holding a long list (the looper's recording, a few hundred
+// thousand samples) is carried across an edit without overflowing the
+// call stack: each edit's compiled page failed to take over, and the page
+// ran interpreted on the editor's thread instead.
+test("a cell holding a long list is carried to the edited page", () => {
+  const list = (n: number, last = 0) => { let l: unknown = { tag: "nil", fields: [] }; for (let i = n - 1; i >= 0; i--) l = { tag: "cons", fields: [i === n - 1 ? last : i, l] }; return l; };
+  const first = list(300000), now = list(300000, 7);
+  assert.deepEqual(carried(first, list(300000) as Value, now), { value: now });
+  assert.equal(carried(first, list(300000, 1) as Value, now), null);
 });
