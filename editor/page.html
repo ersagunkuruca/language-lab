@@ -402,6 +402,9 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 .port-row input[type=text], .port-row output { font: 13px var(--font-code); min-width: 0; }
 .port-row output { padding: 4px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
 .port-row output.none { background: none; color: var(--muted); font-weight: 400; }
+.port-row output.long { max-height: 7.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.port-row output.all { max-height: 50vh; overflow: auto; white-space: pre-wrap; }
+.port-more { display: flex; gap: 6px; justify-content: flex-end; margin: -2px 0 4px; }
 .port-row .unit { font: 500 11px var(--font-code); color: var(--faint); min-width: 2.5em; }
 .alts ul { margin: 4px 0 0; padding-left: 18px; font: 12px var(--font-code); }
 .btn.back { font-weight: 600; }
