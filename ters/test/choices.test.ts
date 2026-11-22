@@ -13,7 +13,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, RUNS, C_RUNS, scheduleLines, staleChoices } from "../cli/choices.ts";
+import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, RUNS, C_RUNS, C_CHUNK, scheduleLines, staleChoices } from "../cli/choices.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 import { shareAlways } from "../../compiler/src/scalar.ts";
@@ -310,5 +310,28 @@ test("collatz's keep held in 8 runs is cut so, said by a check, the same answers
     // The runs the compiler writes are the runtime's.
     assert.match(readFileSync(fileURLToPath(new URL("../../compiler/src/branches-rt.ts", import.meta.url)), "utf8"), new RegExp(`const RUNS = ${RUNS}\\b`));
     assert.match(readFileSync(fileURLToPath(new URL("../../compiler/src/c.ts", import.meta.url)), "utf8"), new RegExp(`lab_par_runs : ${C_RUNS};`));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// C's chunks (L280e): a fold counting into a map cut in chunks of so many
+// items, each counted from empty by a thread, held to tune.
+test("tally's counting folds held in chunks of 1000 items: made so in C, said by a check", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "tally"), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  try {
+    cpSync(root + "tally", at, { recursive: true });
+    run("choices", at);
+    const chunked = / place: main's fold counting into a map: threads when slow; among main thread, threads; in chunks of 16384 items; target C$/;
+    const lines = readFileSync(`${at}.choices`, "utf8").split("\n"), ids = lines.filter((l) => chunked.test(l)).map((l) => l.split(" ")[0]);
+    assert.ok(ids.length, lines.join("\n"));
+    const text = lines.map((l) => chunked.test(l) ? `held ${l.replace("chunks of 16384", "chunks of 1000")}` : l).join("\n");
+    writeFileSync(`${at}.choices`, text);
+    assert.deepEqual(heldPlaces(readChoices(text)).cRuns, ids.map((id) => [id, 1000]));
+    spawnSync(process.execPath, [ters, "native", at], { encoding: "utf8", cwd: dir });
+    assert.match(readFileSync(join(dir, "tally.c"), "utf8"), /\(lab_par_runs = 1000, lab_par_chunks_\d+\(/);
+    const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
+    assert.deepEqual(said.sort(), ids.map((id) => `held   ${id} (C): in chunks of 1000 items, where the compiler would cut it in chunks of 16384`).sort());
+    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace("chunks of 1000", "chunks of 0")]), /a placement's chunks are from 1 to 16777216 items/);
+    assert.match(readFileSync(fileURLToPath(new URL("../../compiler/src/c.ts", import.meta.url)), "utf8"), new RegExp(`lab_par_runs : ${C_CHUNK};`));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
