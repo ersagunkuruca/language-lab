@@ -62,3 +62,26 @@ test("an entry has the lines a test ran and the files it read", async () => {
     rmSync(top, { recursive: true, force: true });
   }
 });
+
+test("a file that never ends is stopped, with what it started, and fails", async () => {
+  const top = mkdtempSync(join(tmpdir(), "ters-map-late-"));
+  try {
+    mkdirSync(join(top, "pkg"), { recursive: true });
+    writeFileSync(join(top, "pkg", "package.json"), `{"type": "module"}\n`);
+    writeFileSync(join(top, "pkg", "late.test.ts"), [
+      `import { test } from "node:test";`,
+      `import { spawn } from "node:child_process";`,
+      `test("late", async () => {`,
+      `  spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "inherit" });`,
+      `  await new Promise(() => {});`,
+      `});`,
+    ].join("\n") + "\n");
+    const start = Date.now();
+    const { entry, output } = await recordOne(top, "pkg/late.test.ts", "abc", process.env, false, 2);
+    assert.equal(entry.passed, false);
+    assert.match(output, /still running after 2 s/);
+    assert.ok(Date.now() - start < 20_000);
+  } finally {
+    rmSync(top, { recursive: true, force: true });
+  }
+});
