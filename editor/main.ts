@@ -208,7 +208,7 @@ export interface UI {
   menu: { target: MenuTarget; x: number; y: number; world: Pos; blocks?: boolean } | null;
   // Definitions open as tabs over the graph, and which inspector tab shows.
   tabs: Id[];
-  panel: "node" | "program" | "checks" | "choices" | "files" | "changes" | "guide";
+  panel: "node" | "program" | "checks" | "files" | "changes" | "guide";
   // The Choices tab's row a node's badge opened (E292).
   choiceAt?: Id | null;
 }
@@ -1149,9 +1149,9 @@ function kindLabel(id: Id): string {
 
 // The program's choices for main (E292), for the Choices tab and the
 // badges on the nodes they are about.
-const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, wanted: (last) => ui.panel === "choices" || (!!last.length && ((ids) => last.some((e) => ids.has(e.id)))(new Set(subtree(doc.code, ui.def)))), blocked: () => { const info = typesOf(); if (!info) return "the check"; const e = errorsIn(info), o = holesIn(info); return e ? `${e} type error${e === 1 ? "" : "s"}` : o ? `${o} hole${o === 1 ? "" : "s"}` : null; }, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
+const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, wanted: (last) => ui.panel === "checks" || (!!last.length && ((ids) => last.some((e) => ids.has(e.id)))(new Set(subtree(doc.code, ui.def)))), blocked: () => { const info = typesOf(); if (!info) return "the check"; const e = errorsIn(info), o = holesIn(info); return e ? `${e} type error${e === 1 ? "" : "s"}` : o ? `${o} hole${o === 1 ? "" : "s"}` : null; }, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
 const openChoice = (id: Id) => {
-  ui.panel = "choices"; ui.choiceAt = id;
+  ui.panel = "checks"; ui.choiceAt = id;
   if (onePane()) ui.pane = "side";
   render();
   document.querySelector(`[data-choice-row~="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
@@ -2578,8 +2578,9 @@ function draw() {
   const panels: [UI["panel"], string, () => Kid[]][] = [
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
     ["program", "Program", () => [programPanel()]],
-    ["checks", "Checks", () => [typedChecks(namer, info)]],
-    ["choices", "Choices", () => [choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null)]],
+    // The program's choices under the definition's checks (E310: a tab
+    // of their own made seven, two lines at 1400 px; Ersagun chose this).
+    ["checks", "Checks", () => [typedChecks(namer, info), h("section", { class: "checks-choices" }, head("Choices", { tip: "What the compiler picked for main: how each type is stored, the ways, where the work runs and its order, each among implementations with the same meaning" }), choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null))]],
     ["files", "Files", () => [filesPanel()]],
     ["changes", "Changes", () => [changes.changesPanel()]],
     ["guide", "Guide", () => [guide()]],

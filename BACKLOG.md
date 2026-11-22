@@ -57,7 +57,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E310 | The side panel's seven tabs fit one line at 1400 px (QA-2026-11-22c L2): they need 406 px and the panel has 318, so two lines, or fewer tabs; Ersagun's call. The phone half (L4, a row's count beside its name) done in #3066 | QA 11-22c | P3 | S | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 

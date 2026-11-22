@@ -160,7 +160,7 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
     const rows = new Map<string, Choice[]>();
     for (const e of c.entries) if (kinds.includes(e.kind)) { const k = JSON.stringify([e.about, e.pick, e.among, e.held]); rows.set(k, [...(rows.get(k) ?? []), e]); }
     if (!rows.size) continue;
-    box.append(h("section", { class: "choice-kind" }, h("h3", {}, title), ...[...rows.values()].map((same) => {
+    box.append(h("section", { class: "choice-kind" }, h("h4", {}, title), ...[...rows.values()].map((same) => {
       const e = same.find((x) => code.nodes[x.id]) ?? same[0], ids = same.map((x) => x.id);
       const d = code.nodes[e.id] ? defOf(e.id) : undefined;
       const about = d === undefined ? h("span", { class: "choice-about" }, e.about)
