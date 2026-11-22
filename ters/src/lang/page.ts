@@ -95,10 +95,19 @@ export interface PageOptions {
   // editor's preview): past it they stop, and showPage throws TooSlow, so
   // the editor shows the compiled page instead of holding its own thread
   // while the evaluator draws (Countdown's solve, 6.6 s). Later updates
-  // have no limit.
+  // have no limit, except a frame's:
   drawWithin?: number;
+  // How long a frame may take, in ms: past it the page stops and
+  // `tooSlow` is called, so the editor waits for the compiled page
+  // instead (flock drew its first frame in time, then took 8 to 10 s a
+  // frame on the editor's thread).
+  frameWithin?: number;
+  tooSlow?: () => void;
 }
 
+// A run stopped as the page stops for taking too long (frameWithin): not
+// said as a handler out of steps (html.ts).
+const quietly = () => Object.assign(new OutOfSteps(), { quiet: true });
 // A page that didn't draw within its `drawWithin`.
 export class TooSlow extends Error {
   readonly ms: number;
@@ -157,8 +166,25 @@ export function showPage(o: PageOptions): Preview {
   // Within drawWithin: the clock read every 256 calls of a lambda while
   // main runs and the page first draws, and past the time each call stops
   // the part it's in, as a part out of steps stops (html.ts).
-  let end = o.drawWithin === undefined ? Infinity : performance.now() + o.drawWithin, calls = 0, late = false;
-  const entered = o.drawWithin === undefined ? undefined : () => {
+  // After it, within frameWithin each time the evaluator runs (a frame, an
+  // event): a run starts where the clock, read every 256 calls, jumped
+  // past GAP since the last read, as between two of the browser's tasks.
+  // Past it the run stops, quietly, the page stops and tooSlow is called.
+  let end = o.drawWithin === undefined ? Infinity : performance.now() + o.drawWithin, calls = 0, late = false, drawn = false, read = 0, slow = false;
+  const GAP = 30;
+  const entered = o.drawWithin === undefined && o.frameWithin === undefined ? undefined : () => {
+    if (slow) throw quietly();
+    if (drawn) {
+      if ((++calls & 255) !== 0) return;
+      const now = performance.now();
+      if (now - read > GAP) end = now + o.frameWithin!;
+      read = now;
+      if (now <= end) return;
+      slow = stopped = true;
+      sound?.stop();
+      setTimeout(() => o.tooSlow?.(), 0);
+      throw quietly();
+    }
     if (end === Infinity) return;
     if (!late && (++calls & 255) !== 0) return;
     if (late || performance.now() > end) { late = true; throw new OutOfSteps(); }
@@ -178,6 +204,7 @@ export function showPage(o: PageOptions): Preview {
     sound?.stop();
     throw new TooSlow(o.drawWithin!);
   }
+  if (o.frameWithin !== undefined) { drawn = true; calls = 0; read = performance.now(); }
   const kept = cells.kept;
   made = kept ?? [];
   cells.kept = null;
