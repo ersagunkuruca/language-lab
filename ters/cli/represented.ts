@@ -13,7 +13,9 @@ import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
-export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[] }
+// `held`: the rows a person held in the program's choices (L280c), by the
+// type's id.
+export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string> }
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -32,7 +34,7 @@ export function represented<P extends Program>(p00: P, main: Id, hostMaps: boole
   // its whole checks by groups (check-cache.ts keepingWhole).
   const go = () => representedIn(p00, main, hostMaps, tables, sound, dataKeys);
   if (!checksKept(p00.info.options)) return go();
-  const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys]);
+  const key = classKey(p00.code, [optionsText(p00.info.options), main, p00.own, p00.reps, hostMaps, tables, sound, dataKeys, [...(p00.held ?? [])].sort()]);
   return idsSeeded(`representing ${main}`, () => keepingWhole(() => choosingFor(key, go)));
 }
 function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, tables: boolean, sound: boolean, dataKeys: boolean): P {
@@ -63,12 +65,13 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // map C shares out on its threads.
   const shared = (typeof process !== "undefined" && process.env.NO_FOLD_ITEMS) ? { shared: 0, code: p.code } : shareFoldItems(p.code, p.info);
   const pinfo = shared.shared ? infer(shared.code, p.names, undefined, { ...(p.options as Parameters<typeof infer>[3]), units: false }) : p.info;
-  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys });
+  const lib = withLibraryRepresentations(shared.code, pinfo, p.names, main, p.own, p.reps, { hostMaps, tables, sound, dataKeys, held: p.held });
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen], picks = [...(lib.picks ?? [])];
   const rows = storedRows(p.code, p.own, p.reps);
   for (const of of new Set(rows.map((r) => r.of))) {
-    const rep = choose(code, main, rows.filter((r) => r.of === of)).rep;
+    const hold = p.held?.get(of), candidates = rows.filter((r) => r.of === of);
+    const rep = hold === undefined ? choose(code, main, candidates).rep : candidates.find((r) => r.name === hold) ?? fail(`${p.names[of] ?? of} can't be held as ${hold}: it is stored as ${candidates.map((r) => r.name).join(", ")}`);
     if (rep.type === rep.of) continue;
     const problem = jobProblem(p.info, rep, p.names);
     if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
