@@ -125,3 +125,18 @@ test("moths-page's maps go to the workers when slow, and one of Ints to the GPU 
   ]);
   assert.throws(() => heldOf([`held ${lines[0]}`]), /only a type's representation can be held yet/);
 });
+
+// A whole program's lists held (L280c): as arrays or trees, alone, where
+// every list the program reaches can be one and nothing runs on them
+// backwards.
+test("divisors' lists held as trees are made so and said; where a list can't be one, refused", () => {
+  const now = choices("divisors").filter((l) => l.startsWith("std.list "));
+  assert.match(now[0], /^std\.list representation: List as array of List;/);
+  const held = `held ${now[0].replace("as array of List", "as tree of List")}`;
+  const stored = choices("divisors", heldOf([held])).filter((l) => l.startsWith("std.list "));
+  assert.equal(`held ${stored[0]}`, held);
+  assert.deepEqual(heldWarnings([held], now), ["held   std.list: tree of List, where the compiler would pick array of List"]);
+  assert.throws(() => choices("break-page", new Map([["std.list", "array of List"]])), /List can't be held as array of List here: some list the program reaches can't be one/);
+  assert.throws(() => choices("backwards", new Map([["std.list", "tree of List"]])), /runs something on lists backwards/);
+  assert.throws(() => choices("conjugate", new Map([["std.list", "array of List"]])), /runs something on lists backwards/);
+});

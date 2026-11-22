@@ -241,7 +241,6 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       return heldSplit(code, info, names, main, defs, hold, refuse);
     }
     if (hold !== undefined && hold !== spec.name && !asked.some((r) => r.of === ty)) {
-      if (ty === LIST) refuse("a whole program's lists can't be held yet, only a split's");
       if (!LIBRARY.reps.some((r) => r.of === ty && r.name === hold)) refuse(`it is stored as ${LIBRARY.reps.filter((r) => r.of === ty).map((r) => r.name).join(", ")}`);
       if (skip.has(ty) || skip.has(hold + " " + ty)) refuse("the program stored so doesn't check");
       if (inTableKeys(ty)) refuse("it is in a hash table's keys, which hash it as written");
@@ -261,8 +260,25 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))));
     if (hold !== undefined) {
       // Held: that row, where the chooser could have picked it (L280c).
-      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen" : "the chooser can't pick it here");
+      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen"
+        : ty === LIST && hold === "tree of List" ? "it runs something on lists backwards, which the chooser leaves as written" : "the chooser can't pick it here");
       if (!uses(code, main, [spec, row]).length) refuse(`main doesn't use it`);
+      // A whole program's lists held (array or tree): alone, as the
+      // chooser's are (in a round of their own, after the types chosen
+      // with them here), and only where every list the program reaches can
+      // be one (listBoundary); a sound played in blocks keeps arrays.
+      if (ty === LIST) {
+        if (chosen.length) continue;
+        if (options.sound && row.name !== "array of List") refuse("a sound played in blocks keeps its lists as arrays");
+        // Not where something runs on lists backwards: the chooser leaves
+        // those as written, and conjugate's inverse held on arrays never
+        // ends.
+        if (runsBackwards()) refuse("it runs something on lists backwards, which the chooser leaves as written");
+        if (keyed(info, defs, code, ty) || generic(info, defs, code, row)) refuse("its values cross where it can't be converted");
+        if (!listBoundary(withTrees(code, [row]), info, defs, row, asked)) refuse("some list the program reaches can't be one; a split can be held instead");
+        chosen.push(row);
+        continue;
+      }
       if (keyed(info, defs, code, ty) || generic(info, defs, code, row) || !plainBoundary(code, defs, row)) refuse("its values cross where it can't be converted");
       chosen.push(row);
       continue;
