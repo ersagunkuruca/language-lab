@@ -3,7 +3,7 @@
 // `characters(t)` is called on t and a byte position instead (scalar.ts
 // textWalks): no list of one-character texts. Here with characters of
 // one, two, three and four bytes, a walk that stops early and one that
-// reads every character, on every target.
+// reads every character, and one over an empty text, on every target.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -33,7 +33,7 @@ function written(): string {
   ask("replace", { at: "every", find: "□", text: "match xs\n  nil → true\n  cons(x, rest) → p(x) and every(rest, p)" });
   ask("define", { name: "main", kind: "function", params: ["arguments"] });
   ask("replace", { at: "main", find: "□", text: 't = join all(append(["aé€😀"], arguments), ""); □' });
-  ask("replace", { at: "main", find: "□", text: 'print(join all([nth(characters(t), 0), nth(characters(t), 1), nth(characters(t), 2), nth(characters(t), 3), nth(characters(t), 4), nth(characters(t), 9), show(every(characters(t), (c) => c ≠ "€")), show(every(characters(t), (c) => c ≠ "q"))], " "))' });
+  ask("replace", { at: "main", find: "□", text: 'print(join all([show(every(characters(join all(drop(arguments, 1), "")), (c) => c ≠ "q")), nth(characters(t), 0), nth(characters(t), 1), nth(characters(t), 2), nth(characters(t), 3), nth(characters(t), 4), nth(characters(t), 9), show(every(characters(t), (c) => c ≠ "€")), show(every(characters(t), (c) => c ≠ "q"))], " "))' });
   return dir;
 }
 
@@ -49,7 +49,7 @@ test("a walk down a text's characters reads the text in place, every way", () =>
   assert.ok(!found(m.body, (e) => e.k === "rt" && e.fn === "text.characters"), "main makes no list of characters");
   const want = spawnSync(process.execPath, [lab, "run", dir, "z"], { encoding: "utf8" });
   assert.equal(want.status, 0, want.stderr);
-  assert.equal(want.stdout, "a é € 😀 z - false true\n");
+  assert.equal(want.stdout, "true a é € 😀 z - false true\n");
   const out = mkdtempSync(join(tmpdir(), "text-walks-out-"));
   const js = spawnSync(process.execPath, [lab, "compile", dir, "-o", join(out, "p.js")], { encoding: "utf8" });
   assert.equal(js.status, 0, js.stderr);

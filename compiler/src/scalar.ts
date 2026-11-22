@@ -5665,7 +5665,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       if (r.k !== "call" || r.cps) return r;
       const k = r.args.findIndex((a) => a.k === "rt" && a.fn === "text.characters");
       const gi = k < 0 ? -1 : walkOf(r.fn, k);
-      return gi < 0 ? r : { ...r, fn: gi, args: [...r.args.map((a, j) => (j === k ? (a as Extract<SExpr, { k: "rt" }>).args[0] : a)), { k: "zero", t: "i32" }] };
+      // The first position a number 0 on every target: an i32's zero is
+      // `false` in JavaScript, which is never the size of an empty text,
+      // so the walk went on past its end (prelude-laws-compiled's csv
+      // rows of "", Check main 11-22).
+      return gi < 0 ? r : { ...r, fn: gi, args: [...r.args.map((a, j) => (j === k ? (a as Extract<SExpr, { k: "rt" }>).args[0] : a)), { k: "zero", t: "int32" }] };
     };
     for (let i = 0; i < funcs.length; i++) funcs[i].body = sites(funcs[i].body);
   }
