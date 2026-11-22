@@ -5110,3 +5110,26 @@ versioned per branch where the ideal changes arrays and undoes them, each
 place's candidates a `keep`, a `sort by` on tuples (`merge by key` 4%)
 and a `map`, and the `set tree has` of the plan's off days (3.4%). No
 single piece of that is 10%.
+
+### strings again, after the sweep (C290, measured)
+
+A fresh profile of `ters compile`'s strings at 8 blocks, one thread (1.85
+s from the command line, core IR in process 1.68 s, 20.6x): the
+collector 31%, YIN's `difference` fold 26% (50 million items, one loop
+over both arrays since C275), and the library FFT's maps, `zipped` and
+`numbered from` most of the rest, as round 20 left them. Allocation
+sampled over the run: 4.7 GB, a sixth of it the fold's pair per item,
+the rest the FFT's lists.
+
+- The pair per item, the record made of two array reads that may fail
+  (out of range), split into its parts by chosen-parts.ts: the loop
+  makes no pair and the output is the same, but 8 blocks went from 1.68
+  to 1.75 s and 32 blocks from 7.57 to 7.50 s, five runs each. V8 already
+  keeps the pair out of the loop's time. Not landed.
+- The fold on its own, timed on the program's own arrays: 3.8 ns an item
+  as compiled, 2.4 without the Int subtraction's runtime call and the
+  pair, 1.0 on a Float64Array. At 50 million items the first step is 70
+  ms of 1.7 s, 4%.
+
+Nothing reaches 10%. What is left is the FFT as the library writes it
+(C278: arrays slower; round 20: fused maps slower). Closed as measured.
