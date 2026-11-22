@@ -61,7 +61,7 @@ import { BASE, C_TAKEN, cName, POSIX, reservedNames, RT_C, runtimeC, WORLD_H, ty
 // The `lab_` names c.ts's own runtime text defines (the thread pool, the
 // shared counts, stops, fdlibm's maths), kept from a program's definitions
 // (I214). c-rt.ts's are found in its text (reservedNames).
-export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
+export const C_RUNTIME = ["_hd", "_hd_cap", "_hd_n", "_held", "_hold", "_holds", "_hs", "_hs_cap", "_hs_n", "_hseen", "_int_hold", "mk", "mk_n", "mk_cap", "unshare", "fz", "fz_cap", "freeze", "thaw", "_dup_shared", "_last_shared", "argc", "argv", "bail", "bits", "block", "block_end", "closure", "code", "dclosure", "crd", "cwr", "dc_c", "dc_depth", "dc_done", "dc_failed", "dc_finish", "dc_go", "dc_join", "dc_m", "dc_on", "dc_push", "dc_serve", "dc_stack", "dc_take", "dc_task", "dead", "dead_cap", "dead_n", "fdlibm_atan2", "fdlibm_cos", "fdlibm_exp", "fdlibm_log", "fdlibm_pow", "fdlibm_sin", "fdlibm_tan", "fields", "forever", "free", "hex", "hexd", "host_fail", "host_why", "i32", "iabs", "iadd", "imul", "in", "in_par", "ineg", "int_share", "isub", "live", "memo_clear", "mod", "none", "nrd", "nwr", "on_pool", "out", "par_ahead", "par_always", "par_items", "par_say", "par_worth", "pool_arg", "pool_busy", "pool_done", "pool_fn", "pool_gen", "pool_go", "pool_live", "pool_loop", "pool_m", "pool_n", "pool_ready", "pool_run", "range_job", "rd", "rding", "run", "share", "share_cap", "share_forever", "share_n", "share_no", "share_st", "shared", "shares", "sites", "split_give", "split_hold", "stop_at", "stopped", "stops", "together_quick", "token", "touch", "unused", "w", "word", "wr", "wrote"];
 // The prefixes this file puts a number after (lab_m3), or with true any
 // name (lab_print_ and a type's), which a program's own names must not
 // start with either (c-names.test.ts checks both lists against this file).
@@ -390,6 +390,10 @@ static int lab_par_ahead(const struct timespec *t0, int64_t done, int64_t n) {
   clock_gettime(CLOCK_MONOTONIC, &t);
   return ((double)(t.tv_sec - t0->tv_sec) * 1e3 + (double)(t.tv_nsec - t0->tv_nsec) / 1e6) * (double)n >= (double)done;
 }
+// A call held on the threads (L280h) is made with this set: the job
+// reads it, clears it (so the calls inside its items don't see it), and
+// shares from its first items, its clock started an hour back.
+static _Thread_local int lab_par_always = 0;
 static int lab_par_worth(const struct timespec *t0) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
@@ -502,6 +506,9 @@ const isFiber = (fn: string) => FIBER.test(fn);
 const isSplit = (fn: string) => fn === "choose.split" || fn === "split.hold" || fn === "split.give";
 type SearchHow = "count" | "all" | "first";
 const folds = (job: string) => job === "add" || job === "max" || job === "min" || job === "with";
+// A call held on the threads (L280h, scalar.ts onThreads): made with
+// lab_par_always set, which the job reads and clears.
+const atOnce = (e: SExpr, call: string): string => (e.k === "rt" && e.host?.always ? `(lab_par_always = 1, ${call})` : call);
 const isPar = (fn: string) => fn.startsWith("par:range:") || fn.startsWith("par:chunks:") || fn.startsWith("par:fold:") || fn.startsWith("par:both") || fn === "par:count:search" || fn === "par:all:search" || fn === "par:first:search" || fn === "par:map" || fn === "par:keep" || fn === "par:all" || fn === "par:any" || fn === "par:first" || fn === "par:together";
 // What crosses to a C host (L69b1): each shape's type in the program and
 // at the host.
@@ -2443,11 +2450,11 @@ int main(int argc, char **argv) {
             const gi = Number(bo[2]);
             boths.add(gi);
             if (bo[1]) return stated(`lab_both_r_${gi}`, funcs[gi].result, pre, d);
-            return checked(`lab_both_${gi}(${args(e.args, pre, d, after).join(", ")})`, funcs[gi].result, pre, d, after);
+            return checked(atOnce(e, `lab_both_${gi}(${args(e.args, pre, d, after).join(", ")})`), funcs[gi].result, pre, d, after);
           }
           if (e.fn === "par:together") {
             const n = togetherSite(typeOf(e.args[0], f.locals) as DType, e.host!.t as DType);
-            return checked(`lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+            return checked(atOnce(e, `lab_par_together_${n}(${args(e.args, pre, d, after).join(", ")})`), e.host!.t, pre, d, after);
           }
           if (isSplit(e.fn)) {
             splits = true;
@@ -2458,19 +2465,19 @@ int main(int argc, char **argv) {
             return stated(`lab_split_${splitLists.get(t.key)!.n}(${xs[0]})`, t, pre, d);
           }
           const sh = /^par:(count|all|first):search$/.exec(e.fn);
-          if (sh) return checked(`lab_par_search_${countSite(typeOf(e.args[0], f.locals) as FType, sh[1] as SearchHow)}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+          if (sh) return checked(atOnce(e, `lab_par_search_${countSite(typeOf(e.args[0], f.locals) as FType, sh[1] as SearchHow)}(${args(e.args, pre, d, after).join(", ")})`), e.host!.t, pre, d, after);
           const ch = /^par:chunks:(\d+)(?::(\d+))?$/.exec(e.fn);
           if (ch) {
             const gi = Number(ch[1]), g = funcs[gi];
             chunked.set(gi, ch[2] === undefined ? null : Number(ch[2]));
             if (ch[2] === undefined) { const ti = (g.result as TType).index; arrayFns.add(`table.atb.t${ti}`).add(`table.put.t${ti}`); }
             arrayFns.add(`array.length.a${(g.params[0] as AType).index}`);
-            return stated(`lab_par_chunks_${gi}(${args(e.args, pre, d, after).join(", ")})`, g.result, pre, d);
+            return stated(atOnce(e, `lab_par_chunks_${gi}(${args(e.args, pre, d, after).join(", ")})`), g.result, pre, d);
           }
           if (isPar(e.fn)) {
             const job = (e.fn.startsWith("par:fold:") ? e.fn.slice(9) : e.fn.slice(4)) as ParJob, ta = typeOf(e.args[0], f.locals) as AType;
             const n = parSite(ta, typeOf(e.args[1], f.locals) as FType, job === "all" || job === "any" || folds(job) ? ta : e.host!.t as AType, job, job === "with" ? typeOf(e.args[3], f.locals) as FType : undefined);
-            return checked(`lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`, e.host!.t, pre, d, after);
+            return checked(atOnce(e, `lab_par_map_${n}(${args(e.args, pre, d, after).join(", ")})`), e.host!.t, pre, d, after);
           }
           if (isPerform(e.fn)) {
             const h = hostOf(e.fn)!;
@@ -3503,7 +3510,9 @@ static void lab_together_work_${n}(void *p) {
 static int lab_together_quick_${n} = 0;
 static lab_cell *lab_par_together_${n}(lab_cell *l) {
   int64_t n = 0, left = 0, k = 0;
-  int quick = __atomic_load_n(&lab_together_quick_${n}, __ATOMIC_RELAXED);
+  int always = lab_par_always;
+  lab_par_always = 0;
+  int quick = !always && __atomic_load_n(&lab_together_quick_${n}, __ATOMIC_RELAXED);
   lab_cell *p;
   for (p = l; p->tag == ${i.tag}; p = ((${i.cons} *)p)->f${i.rest}) n++;
   ${J} j = { malloc((size_t)(n ? n : 1) * sizeof(lab_cell *)), malloc((size_t)(n ? n : 1) * sizeof(${To})), malloc((size_t)(n ? n : 1)), 0, n };
@@ -3534,7 +3543,7 @@ static lab_cell *lab_par_together_${n}(lab_cell *l) {
     if (lab_st) goto failed;
     j.bad[k] = 0;
   }
-  __atomic_store_n(&lab_together_quick_${n}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
+  if (!always) __atomic_store_n(&lab_together_quick_${n}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
   lab_cell *r = (lab_cell *)&${o.nil};
   for (k = n; k-- > 0;) { ${o.cons} *c = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); c->f${o.head} = j.out[k]; c->f${o.rest} = r; r = (lab_cell *)c; }
   for (k = 0; k < n; k++) lab_drop(j.in[k]);
@@ -3597,12 +3606,13 @@ static void lab_both_top_${gi}(void *p) {
   lab_dc_finish();
 }
 static ${R} lab_both_${gi}(${params}) {
-  int top = !lab_dc_depth;
+  int top = !lab_dc_depth, always = lab_par_always;
+  lab_par_always = 0;
   struct timespec t0;
   ${J} ja = { { lab_both_one_${gi}, 0, 0, lab_dc_depth + 1 }, ${[...ins("a"), zero(g.result), "1"].join(", ")} }, jb = { { lab_both_one_${gi}, 0, 0, lab_dc_depth + 1 }, ${[...ins("b"), zero(g.result), "1"].join(", ")} };
   if (top) {
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    if (__atomic_load_n(&lab_both_quick_${gi}, __ATOMIC_RELAXED)) {
+    if (!always && __atomic_load_n(&lab_both_quick_${gi}, __ATOMIC_RELAXED)) {
       ${R} r = lab_both_alone_${gi}(${[...ins("a"), ...ins("b")].join(", ")});
       __atomic_store_n(&lab_both_quick_${gi}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
       return r;
@@ -3628,7 +3638,7 @@ static ${R} lab_both_${gi}(${params}) {
       return lab_both_alone_${gi}(${[...ins("ka"), ...ins("kb")].join(", ")});
     }
     ${dropAll("ka")} ${dropAll("kb")}
-    __atomic_store_n(&lab_both_quick_${gi}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
+    if (!always) __atomic_store_n(&lab_both_quick_${gi}, !lab_par_worth(&t0), __ATOMIC_RELAXED);
   } else {
     int d = lab_dc_depth;
     lab_dc_push(&jb.t);
@@ -3786,12 +3796,14 @@ static ${T} lab_par_search_${n}(lab_cell *f) {
 }
 static ${T} lab_par_search_in_${n}(lab_cell *f) {
   int64_t was = lab__split, was2 = lab__split2, outer = lab__seen, outer2 = lab__seen2, n1, m0, k, i, m, b;
-  int par = 0;
+  int par = 0, always = lab_par_always;
+  lab_par_always = 0;
   struct timespec t0;
   lab_cell *g = lab_dup(f);
   ${T} r;
   ${T} *seq;
   clock_gettime(CLOCK_MONOTONIC, &t0);
+  if (always) t0.tv_sec -= 3600;
   lab__split = 0; lab__split2 = 0; lab__seen = -1; lab__seen2 = -1;
   r = ${call("g")};
   n1 = lab__seen; m0 = lab__seen2;
@@ -3928,11 +3940,13 @@ static ${T} lab_par_search_${n}(lab_cell *f) {
 }
 static ${T} lab_par_search_in_${n}(lab_cell *f) {
   int64_t was = lab__split, was2 = lab__split2, outer = lab__seen, outer2 = lab__seen2, n1, m0, k, i, m, b, ka, kc;
-  int par = 0;
+  int par = 0, always = lab_par_always;
+  lab_par_always = 0;
   struct timespec t0;
   lab_cell *g = lab_dup(f);
   ${T} r;
   clock_gettime(CLOCK_MONOTONIC, &t0);
+  if (always) t0.tv_sec -= 3600;
   lab__split = 0; lab__split2 = 0; lab__seen = -1; lab__seen2 = -1;
   r = ${call("g")};
   n1 = lab__seen; m0 = lab__seen2;
@@ -4015,7 +4029,9 @@ static void lab_chunks_work_${gi}(void *p) {
 }
 static lab_cell *lab_par_chunks_${gi}(lab_cell *xs) {
   int64_t n = ((${V} *)xs)->n;
-  if (n < 16 * LAB_CHUNK || !lab_pool_ready()) return ${nm}(xs);
+  int always = lab_par_always;
+  lab_par_always = 0;
+  if ((n < 16 * LAB_CHUNK && !always) || !lab_pool_ready()) return ${nm}(xs);
   size_t mk = lab_mk_n;
   lab_share_no = 0;
   lab_share(xs);
@@ -4109,6 +4125,8 @@ static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"
   return r;
 }
 static ${(tests && job !== "first") || fold ? `${ty(tf.result)} ` : "lab_cell *"}lab_par_map_in_${n}(lab_cell *xs, lab_cell *f${fold ? `, ${ty(tf.result)} z` : ""}${tj ? ", lab_cell *jf" : ""}) {
+  int always = lab_par_always;
+  lab_par_always = 0;
   ${vi.view} *v = (${vi.view} *)xs;
   ${vi.buf} *b = (${vi.buf} *)v->b;
   int64_t n = v->n, left = n, k;
@@ -4143,6 +4161,7 @@ ${job === "map" ? `  // Already on the threads (a map inside a map's item, moths
   lab_drop(xs);
   memset(j.bad, 1, (size_t)n);
   clock_gettime(CLOCK_MONOTONIC, &t0);
+  if (always) t0.tv_sec -= 3600;
   while (left > 0) {
     lab_par_one_${n}(&j, left - 1);
     if (lab_st) { k = left - 1; goto failed; }

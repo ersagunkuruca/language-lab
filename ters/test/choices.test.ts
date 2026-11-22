@@ -129,7 +129,7 @@ test("moths-page's maps go to the workers when slow, and one of Ints to the GPU 
     "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; target JavaScript page",
     "place: tick's map: workers when slow; among main thread, workers; target JavaScript page",
   ]);
-  assert.throws(() => heldOf([`held ${lines[0]}`]), /a placement can be held only on the main thread, or a command-line program's on worker threads, yet/);
+  assert.throws(() => heldOf([`held ${lines[0]}`]), /a placement can be held on the main thread, worker threads or C's threads, not yet a page's workers or GPU/);
 });
 
 // A whole program's lists held (L280c): as arrays or trees, alone, where
@@ -227,34 +227,36 @@ test("collatz's keep held on the main thread runs there, said by a check, the sa
     run("choices", at);
     const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
     writeFileSync(`${at}.choices`, text);
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; target JavaScript/)![1]], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]], workers: [] });
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; target JavaScript/)![1]], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]], workers: [], threads: [] });
     assert.equal(run("run", at), plain);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
     assert.deepEqual(said.map((l) => l.replace(/^held   \S+ /, "")).sort(), ["(C): main thread, where the compiler would run it on threads when slow", "(JavaScript): main thread, where the compiler would run it on worker threads when slow"]);
-    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace(": main thread;", ": GPU;")]), /a placement can be held only on the main thread, or a command-line program's on worker threads, yet/);
+    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace(": main thread;", ": GPU;")]), /a placement can be held on the main thread, worker threads or C's threads, not yet a page's workers or GPU/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-// And a command-line program's held on its worker threads (L280h): shared
-// out from its first items, never kept on the main thread for being
-// quick, the same answers.
-test("collatz's keep held on worker threads is shared from the start, said by a check, the same answers", () => {
+// And a command-line program's held on its worker threads, and C's on
+// its threads (L280h): shared out from its first items, never kept on
+// the main thread for being quick, the same answers.
+test("collatz's keep held on worker threads and C's threads is shared from the start, said by a check, the same answers", () => {
   const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "collatz"), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
   const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
   try {
     cpSync(root + "collatz", at, { recursive: true });
     const plain = run("run", at);
     run("choices", at);
-    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: .*target JavaScript$/.test(l) ? `held ${l.replace(": worker threads when slow;", ": worker threads;")}` : l).join("\n");
+    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": $1threads;")}` : l).join("\n");
     writeFileSync(`${at}.choices`, text);
     const id = text.match(/held (\S+) place: main's keep: worker threads; among main thread, worker threads; target JavaScript/)![1];
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id] });
+    assert.match(text, new RegExp(`held ${id} place: main's keep: threads; among main thread, threads; target C`));
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id] });
     assert.equal(run("run", at), plain);
     run("compile", at);
     assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, Infinity, 0, true\);/);
+    // C's: the call made with lab_par_always set (its build is not this test's).
+    spawnSync(process.execPath, [ters, "native", at], { encoding: "utf8", cwd: dir });
+    assert.match(readFileSync(join(dir, "collatz.c"), "utf8"), /\(lab_par_always = 1, lab_par_map_\d+\(/);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
-    assert.deepEqual(said, [`held   ${id} (JavaScript): worker threads, where the compiler would run it on worker threads when slow`]);
-    // C's threads are held only on the main thread yet.
-    assert.throws(() => heldOf([text.split("\n").find((l) => / place: main's keep: .*target C$/.test(l))!.replace(/^(\S+ place: main's keep: )threads when slow/, "held $1threads")]), /a placement can be held only on the main thread, or a command-line program's on worker threads, yet/);
+    assert.deepEqual(said.sort(), [`held   ${id} (C): threads, where the compiler would run it on threads when slow`, `held   ${id} (JavaScript): worker threads, where the compiler would run it on worker threads when slow`]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
