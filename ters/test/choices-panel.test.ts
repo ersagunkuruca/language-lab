@@ -70,3 +70,23 @@ test("a placement held in Choices: on the main thread, said held, and the loweri
   keepOnMainThread([keep.id], []);
   try { assert.ok(!sites().includes(keep.id)); } finally { keepOnMainThread([], []); shareAlways([]); }
 });
+
+// The workers a page's main starts (L280e): its entry in Choices, held to
+// a count as the editor holds it (choicesFor.ts isPool), and the page
+// compiled with that many (runWorker.ts placed).
+test("moths' workers held at 2 in Choices: said held, and its page starts two", async () => {
+  const p = loadProgram(fileURLToPath(new URL("../examples/moths-page", import.meta.url))), names = p.pres.names;
+  const main = p.own.defs.find((d) => names[d] === "main")!;
+  const pool = choicesFor(p.code, names, main).choices.map(parseChoice).find((c) => c?.kind === "place" && c.id === main)!;
+  assert.deepEqual([pool.about, pool.among, pool.held, pool.target], ["main's workers", ["0 to 64"], false, "JavaScript page"]);
+  const got = choicesFor(p.code, names, main, [[main, "2"]]);
+  const held = got.choices.map(parseChoice).find((c) => c?.kind === "place" && c.id === main)!;
+  assert.deepEqual([held.held, held.pick], [true, "2"]);
+  assert.deepEqual(got.would, [[main, pool.pick]]);
+  const { shareAlways } = await import("../../compiler/src/scalar.ts");
+  const { compilePageProgram } = await import("../../editor/pageCompile.ts");
+  const page = () => compilePageProgram(p.code, names, {}, main).program;
+  assert.doesNotMatch(page(), /\.Aborted, 2\);/);
+  shareAlways([], [], [], [], [], [["JavaScript", 2], ["JavaScript page", 2]]);
+  try { assert.match(page(), /\.Aborted, 2\);/); } finally { shareAlways([]); }
+});
