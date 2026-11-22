@@ -245,6 +245,9 @@ export function pagePanels(host: PageHost) {
   function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>, run?: RunCode, drawWithin?: number): Preview {
     return showPage({
       drawWithin,
+      // A frame as long as a first drawing may take stops it too, and the
+      // compiled page, under way, is waited for (frameSlow).
+      ...(drawWithin !== undefined ? { frameWithin: drawWithin, tooSlow: frameSlow } : {}),
       log: page.log, window: LOG_WINDOW, stepFrom,
       code: run?.code ?? prog(), info: run?.info ?? info, names: run?.names ?? pres().names, main, program: titleOf(doc()),
       doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimes(), recordings: "apps/",
@@ -313,6 +316,18 @@ export function pagePanels(host: PageHost) {
     compilePage(main, true);
     if (page.deferred) page.status.title = "", page.status.textContent = "Compiling…";
     render();
+  }
+  // The interpreted page's frames took too long: it stops where it is, and
+  // the compiled page (compilePage, under way) takes over from it.
+  function frameSlow() {
+    if (!page.now || compiledNow.has(page.now)) return;
+    const was = page.now;
+    page.handFrom = was.kept ?? page.handFrom;
+    page.now = null;
+    page.status.textContent = "Compiling…";
+    page.status.title = "Its frames took too long interpreted, so it shows when it's compiled";
+    // A compile here under way swaps in when it ends (compileHere).
+    if (page.started && page.for === prog() && inFlight?.code !== prog()) compilePage(page.started.main, true);
   }
   // It didn't compile: the page starts interpreted, handed what it can.
   function notDeferred(): boolean {

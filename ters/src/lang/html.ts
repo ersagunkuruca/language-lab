@@ -317,7 +317,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                   });
                 } else if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
-                else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
+                else if (err instanceof OutOfSteps) { if (!(err as { quiet?: boolean }).quiet) console.error(`${name} handler ${STUCK}`); }
                 else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }
             };

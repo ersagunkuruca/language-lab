@@ -41,6 +41,40 @@ test("the dice page previews: Roll draws, the clock runs on frames, stop stops i
   assert.equal(tick(), 0);
 });
 
+// A frame gets as long as the first drawing (frameWithin): flock drew its
+// first frame in time interpreted, then took 8 to 10 s a frame on the
+// editor's thread. Past it the page stops, saying nothing on the console,
+// and calls tooSlow, so the editor waits for the compiled page.
+test("a page whose frame takes longer than frameWithin stops and says it's too slow", async () => {
+  const p = loadProgram(join(import.meta.dirname, "../examples/flock-page"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  const main = pageMain(p.own.defs, info, p.pres.names)!;
+  let frames: ((ms: number) => void)[] = [], slow = 0, t = 0;
+  const said: unknown[] = [], error = console.error;
+  const g = globalThis as { requestAnimationFrame?: unknown };
+  const raf = g.requestAnimationFrame, connected = Object.getOwnPropertyDescriptor(FakeEl.prototype, "isConnected");
+  g.requestAnimationFrame = (f: (ms: number) => void) => { frames.push(f); return 0; };
+  Object.defineProperty(FakeEl.prototype, "isConnected", { get: () => true, configurable: true });
+  console.error = (...a: unknown[]) => { said.push(a); };
+  try {
+    showPage({ code: p.code, info, names: p.pres.names, main, program: "flock", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {}, frameWithin: 1, tooSlow: () => { slow++; } });
+    assert.ok(frames.length, "flock asks for a frame");
+    const began = performance.now();
+    for (let i = 0; i < 6 && !slow; i++) {
+      await new Promise((r) => setTimeout(r, 40));
+      const fs = frames; frames = []; t += 1000 / 30; fs.forEach((f) => f(t));
+    }
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(slow, 1);
+    assert.ok(performance.now() - began < 3000, `stopped after ${Math.round(performance.now() - began)} ms`);
+    assert.deepEqual(said, []);
+  } finally {
+    g.requestAnimationFrame = raf;
+    if (connected) Object.defineProperty(FakeEl.prototype, "isConnected", connected); else delete (FakeEl.prototype as { isConnected?: unknown }).isConnected;
+    console.error = error;
+  }
+});
+
 // I307: the editor's preview gives the first drawing drawWithin ms. Countdown
 // solves as it draws (6.6 s interpreted in the editor): it stops at once,
 // saying so, and the editor waits for the compiled page. One that draws in
