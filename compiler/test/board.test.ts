@@ -64,3 +64,26 @@ test("board on the core IR: a running frame runs no column again, the card's cha
   assert.ok(runs.length > 0, "the frames ran something");
   assert.equal(runs.filter((l) => l === "formula").length, 0, `formulas run in the frames: ${runs.join(" ")}`);
 });
+
+test("board on the core IR: a card added makes one row and puts only it on the page (C287)", async () => {
+  const { all } = await import("../gaps/board.ts");
+  const { Cells } = await import("../../ters/src/lang/cells.ts");
+  const { FakeEl } = await import("../../ters/test/fakedom.ts");
+  const root = w.core();
+  const [add] = session(30);
+  add[1](root);
+  const list = all(root, "stage-todo")[0], first = all(list, "card")[0];
+  // The rows each made, and the children the page put again all at once.
+  const P = Cells.prototype as unknown as { recompute: (n: unknown) => void };
+  const E = FakeEl.prototype as unknown as { replaceChildren: (...k: unknown[]) => void };
+  const [was, put] = [P.recompute, E.replaceChildren];
+  let rows = 0, most = 0;
+  P.recompute = function (this: { rowsMade: number }, n: unknown) { const r = this.rowsMade; was.call(this, n); rows += this.rowsMade - r; };
+  E.replaceChildren = function (this: unknown, ...k: unknown[]) { most = Math.max(most, k.length); put.apply(this, k); };
+  try { session(5)[0][1](root); } finally { [P.recompute, E.replaceChildren] = [was, put]; }
+  assert.equal(all(root, "stage-todo")[0], list, "the column is the same element");
+  assert.equal(all(list, "card")[0], first, "and its first card the same row");
+  assert.equal(all(list, "card").length, all(root, "card").filter((c) => all(list, "card").includes(c)).length);
+  assert.ok(rows <= 5 * 2, `${rows} rows made for 5 cards`);
+  assert.ok(most < 30, `children put again at once: ${most}`);
+});

@@ -24,6 +24,11 @@ export class FakeEl implements El {
   set textContent(t: string | null) { this.kids = [new FakeText(t ?? "")]; }
   append(...nodes: Node_[]) { this.kids.push(...(nodes as (FakeEl | FakeText)[])); }
   replaceChildren(...nodes: Node_[]) { this.kids = [...(nodes as (FakeEl | FakeText)[])]; }
+  insertBefore(node: Node_, before: Node_ | null) {
+    const at = before ? this.kids.indexOf(before as FakeEl | FakeText) : -1;
+    this.kids.splice(at < 0 ? this.kids.length : at, 0, node as FakeEl | FakeText);
+  }
+  removeChild(node: Node_) { const at = this.kids.indexOf(node as FakeEl | FakeText); if (at >= 0) this.kids.splice(at, 1); }
   addEventListener(type: string, f: Listener) { this.listeners.set(type, [...(this.listeners.get(type) ?? []), f]); }
   setAttribute(name: string, value: string) {
     this.attrs.set(name, value);
