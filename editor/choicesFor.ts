@@ -20,8 +20,10 @@ import { infer, programOptions } from "./typed.ts";
 // `refused`: why what is held can't be, the choices then made with
 // nothing held (a run says the same).
 // A placement held (L280h): on the main thread, or a command-line
-// program's on worker threads from its first items.
-export const isPlace = (row: string) => row === "main thread" || row === "worker threads";
+// program's on worker threads from its first items. And how many workers
+// main starts (L280e), held as the count, 0 to 64.
+export const isPool = (row: string) => /^\d+$/.test(row);
+export const isPlace = (row: string) => row === "main thread" || row === "worker threads" || isPool(row);
 
 export function choicesFor(code: Code, names: Names, main: Id, holds: readonly [Id, string][] = []): { choices: string[]; would: [Id, string][]; refused?: string } {
   const held = holds.filter(([, r]) => !isPlace(r)), placesHeld = new Map(holds.filter(([, r]) => isPlace(r)));
@@ -37,7 +39,7 @@ export function choicesFor(code: Code, names: Names, main: Id, holds: readonly [
   let places: string[] = [];
   try {
     const ir = lowerCore(p.code, p.info, p.names, [main]);
-    places = placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), p.names);
+    places = placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), p.names, undefined, main);
   } catch { /* main doesn't lower: it runs in the evaluator, on the main thread */ }
   const of = new Map(held), idOf = (l: string) => l.slice(0, l.indexOf(" "));
   // A held placement's entry is the compiler's with the held row in it;
