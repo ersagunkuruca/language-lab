@@ -786,6 +786,9 @@ export const ARITH = {
   mul: generic("mul", "multiply", 2),
   neg: generic("neg", "negate", 1),
   less: generic("less", "less than", 2, "less"),
+  // abs for every number type with < (I342): Float64's and Int's own, and
+  // on a type of its own `x < −x`'s (arith.ts), so it needs both.
+  abs: builtin("arith.abs", "abs", (s) => { const a = s.fresh(false, false, "ordered"); return fn([a], a, s.freshRow()); }),
 };
 // Which interface's field each generic operation is (INTERFACES.md step 4).
 export const ARITH_FIELD: Record<Id, { iface: Id; field: Id }> = {

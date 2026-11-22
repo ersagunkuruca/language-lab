@@ -31,7 +31,7 @@ import { B } from "../prelude.ts";
 import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, sccs, terminates, type Info } from "./infer.ts";
 import { keptAcrossRuns } from "./kept.ts";
 import { interfaceOps, leftToWays, NEUTRAL, pickWays, waysIn, type BuiltinCost } from "./ways.ts";
-import { ARITH, ARITH_FIELD, CONS, EMBEDDING, EMBEDDING_MAP, INT_OPS, LIST, LITERAL, LITERAL_V, NIL, S } from "./std.ts";
+import { ARITH, ARITH_FIELD, BOOL, CONS, EMBEDDING, EMBEDDING_MAP, FALSE, INT_OPS, LIST, LITERAL, LITERAL_V, NIL, S, TRUE } from "./std.ts";
 import { INT, NUMBER, OverMap, type Row, type Scheme, type Type } from "./types.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { ratioParts } from "./int.ts";
@@ -59,6 +59,7 @@ const AT: Record<Id, { number: Id; int: Id; arity: 1 | 2 }> = {
   [ARITH.mul]: { number: B.mul, int: INT_OPS.mul, arity: 2 },
   [ARITH.neg]: { number: B.neg, int: INT_OPS.neg, arity: 1 },
   [ARITH.less]: { number: S.less, int: INT_OPS.less, arity: 2 },
+  [ARITH.abs]: { number: S.abs, int: INT_OPS.abs, arity: 1 },
 };
 
 // A literal written at a type of its own (`of`, other than Float64 and
@@ -588,6 +589,25 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
     const walk = (id: Id, parent: Id | null) => {
       // The one + − · −x < at a type with an implementation of its own
       // (Arithmetic, Ordered): that implementation's operation.
+      // abs at a type with + − · and < of its own (I342): v ↦ if v < −v
+      // then −v else v, by its implementations' operations.
+      if (nodes[id].kind === "ref" && (nodes[id] as NodeOf<"ref">).target === ARITH.abs) {
+        const t = typeOf.get(id), c = t && close(t, env), x = c?.t === "fn" ? c.params[0] : null;
+        if (x?.t === "con" && x.id !== NUMBER && x.id !== INT) {
+          const neg = ARITH_FIELD[ARITH.neg], less = ARITH_FIELD[ARITH.less];
+          if (!implementationOf(info, neg.iface, x) || !implementationOf(info, less.iface, x)) return;
+          const bool: Type = { t: "con", id: BOOL, args: [] }, negT: Type = { t: "fn", params: [x], ret: x, eff: pure }, lessT: Type = { t: "fn", params: [x, x], ret: bool, eff: pure };
+          const field = (f: Id, ft: Type) => { const r = add({ kind: "ref", target: f }, ft); opAt.set(r, x); return r; };
+          const v = add({ kind: "binder" }, x), ref = () => add({ kind: "ref", target: v }, x);
+          const negated = () => add({ kind: "call", fn: field(neg.field, negT), args: [ref()] }, x);
+          const cond = add({ kind: "call", fn: field(less.field, lessT), args: [ref(), negated()] }, bool);
+          const arm = (variant: Id, body: Id) => add({ kind: "arm", variant, binds: [], results: [], body }, x);
+          const body = add({ kind: "match", scrutinee: cond, arms: [arm(TRUE, negated()), arm(FALSE, ref())], otherwise: null }, x);
+          nodes[id] = { id, kind: "lambda", params: [v], body };
+          typeOf.set(id, c!);
+          // Walked as any lambda: its operations are the implementations'.
+        }
+      }
       if (nodes[id].kind === "ref" && (nodes[id] as NodeOf<"ref">).target in ARITH_FIELD) {
         const t = typeOf.get(id), c = t && close(t, env), x = c?.t === "fn" ? c.params[0] : null;
         const f = ARITH_FIELD[(nodes[id] as NodeOf<"ref">).target];
