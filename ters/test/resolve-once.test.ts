@@ -42,7 +42,10 @@ test("the library's copies have the library's names whoever resolves first", () 
   assert.deepEqual(named.filter((n) => n.startsWith("@") || n.includes("type.number")), []);
 });
 
-const EXAMPLES = (process.env.ALL ? readdirSync(join(root, "examples")) : ["queens", "numbers", "algebra", "lockstep", "generic", "calc"]) as string[];
+// Break's page and crew's go on from the library's though the steps before
+// change them (a relation's directions, an embedding put in) and break has
+// implementations of its own types (L281g).
+const EXAMPLES = (process.env.ALL ? readdirSync(join(root, "examples")) : ["queens", "numbers", "algebra", "lockstep", "generic", "calc", "break-page", "crew-page"]) as string[];
 for (const example of EXAMPLES) test(`${example}: resolving on the library's own resolving is resolving from scratch`, () => {
   let p: ReturnType<typeof loadProgram>;
   try { p = loadProgram(join(root, "examples", example)); } catch { return; }
