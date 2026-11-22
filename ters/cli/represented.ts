@@ -15,7 +15,7 @@ import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
 
 // `held`: the rows a person held in the program's choices (L280c), by the
 // type's id.
-export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string> }
+export interface Program { title: string; code: Code; own: Id[]; names: Names; info: Info; reps: Representation[]; options?: unknown; chosen?: string[]; picks?: Pick[]; held?: ReadonlyMap<Id, string>; fused?: { at: Id; walker: Id; over: string }[] }
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -51,7 +51,7 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // given, so no list is made (fuse-walks.ts, G3b); its walks are the
   // program's own, stored as the rest.
   const walks = (typeof process !== "undefined" && process.env.NO_FUSE_WALKS) ? null : fuseWalks(p1.code, p1.info, p1.names, { ...(p1.options as Parameters<typeof infer>[3]), units: false });
-  const p = walks?.made.length ? { ...p1, code: walks.code, info: walks.info, names: walks.names, own: [...p1.own, ...walks.made] } : p1;
+  const p = walks?.made.length ? { ...p1, code: walks.code, info: walks.info, names: walks.names, own: [...p1.own, ...walks.made], fused: walks.fused } : p1;
   // Every definition the program has, so the ones main shares with others
   // change together; types stay as they are for its own representations.
   // The library's are chosen over the types too, so a field typed Map
