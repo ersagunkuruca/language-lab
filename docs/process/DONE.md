@@ -1428,6 +1428,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| L280a (part 3) | The program's choices carry mode plans: for each solve main reaches, by its stable id, what is known and what is asked (the facts), and how it runs: by the equation solver (with how many answers), or relationally with its goals in the order the plan runs them (modes.ts, the first branch's), how many answers that gives and whether it ends. `ters check` says which are stale; a held mode plan is refused (only a type's representation can be held yet) | #3038 |
 | L281h | Direct searches look nothing up per call: a call's lambda keeps what is known of it (its stops, what its type says, its body made, as a run and as a search), each search node keeps the searches of its parts, and a constructor's value is kept where it is named, not looked up each time. Countdown's page (1.7 million calls each of `join` and `valid`, in an `all` under fuel) in node 5.3 to 3.8 s | #3012 |
 | L281f (closed) | The machine is about 3 µs a call: measured 2026-11-22 after L281a to L281d, every page makes under 14,000 machine calls opening (pond 12,000, crew 700, looper 1,400), under 2% of each page's time. What is left is in direct runs (L281h) | measured 2026-11-22 |
 | L281e (closed) | A function stopped four times stays on the machine: measured 2026-11-22, the calls kept there are the looper's 281 `map`s, pond's 1,022 `food at` and crew's scheduler, under 2% of each page's time, under the 10% rule | measured 2026-11-22 |

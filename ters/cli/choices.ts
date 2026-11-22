@@ -1,10 +1,11 @@
 // The program's choices, kept beside it (L280a, CHOICES-2026-11-20.md):
 // what the compiler picked for main, one entry per line sorted by the
-// type's stable id, each with the facts the pick read. `ters choices`
-// writes `<program>.choices`; `ters check` says which entries are stale
-// (the facts or the pick came out otherwise) and which are new. Only the
-// representation kind for now, on JavaScript's target; the code never
-// selects (REPRESENTATIONS.md), and the compiler picks every entry again.
+// stable id it is about (a type, an implementation, a solve), each with
+// the facts the pick read. `ters choices` writes `<program>.choices`;
+// `ters check` says which entries are stale (the facts or the pick came
+// out otherwise) and which are new. Representations, ways and mode plans
+// for now, on JavaScript's target; the code never selects
+// (REPRESENTATIONS.md), and the compiler picks every entry again.
 
 import type { Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
@@ -15,6 +16,9 @@ import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
 import { reachedImplementing } from "../src/lang/reached.ts";
 import { dependencies, isUse, subtree, useTarget, type NodeOf } from "../src/model.ts";
+import { planSolve } from "../src/lang/solve.ts";
+import { determinism, solveMode } from "../src/lang/modes.ts";
+import { answerKeys } from "../src/lang/ports.ts";
 
 export const choicesPath = (program: string) => `${program.replace(/[/\\]+$/, "")}.choices`;
 
@@ -52,7 +56,7 @@ export function choiceLines(given: Program, main: Id, picks: readonly Pick[], ta
     const from = p.from?.length ? ` from ${p.from.map((d) => names[d] ?? d).join(", ")}` : "";
     return `${p.of} representation: ${names[p.of] ?? p.of} as ${p.rep}${from}; among ${rows.map((r) => r.name).join(", ")}; jobs ${jobList.join(", ") || "none"}; target ${target}`;
   });
-  return [...new Set([...lines, ...wayLines(given, main, target)])].sort();
+  return [...new Set([...lines, ...wayLines(given, main, target), ...modeLines(given, main, target)])].sort();
 }
 
 // The algorithm entries (CHOICES-2026-11-20.md's second kind): for each
@@ -109,6 +113,38 @@ export function wayLines(given: Program, main: Id, target = "JavaScript"): strin
   return lines;
 }
 
+// The mode plans (the algorithm kind's other entry, MODES.md): for each
+// solve main reaches, by the solve's stable id, what is known and what is
+// asked (the facts), and how it is run: by the equation solver, or
+// relationally with its goals in the order the plan runs them (the first
+// branch's, modes.ts), how many answers that gives and whether it ends.
+export function modeLines(given: Program, main: Id, target = "JavaScript"): string[] {
+  const names = { ...LIBRARY.names, ...given.names }, code = given.code;
+  const port = (k: string) => (k === "out" ? "answer" : names[k] ?? (/^\d+$/.test(k) ? `input ${+k + 1}` : k));
+  const lines: string[] = [];
+  for (const d of [main, ...dependencies(code, main)]) {
+    if (code.nodes[d]?.kind !== "def") continue;
+    for (const id of subtree(code, d)) {
+      const n = code.nodes[id];
+      if (!isUse(n)) continue;
+      let plan: ReturnType<typeof planSolve>;
+      try { plan = planSolve(code, n); } catch { continue; }
+      const of = useTarget(code.nodes, n), known = Object.keys(n.given).map(port).join(", "), asked = answerKeys(code, n).map(port).join(", ");
+      const facts = `${names[d] ?? d}'s solve of ${names[of] ?? of} for ${asked || "nothing"} from ${known || "nothing"}`;
+      if (plan.mode === "solver") {
+        lines.push(`${id} mode plan: ${facts}: equations; ${plan.status === "solved" ? (plan.unique ? "exactly one answer" : plan.many ? "any number of answers" : "at most one answer") : `${plan.needMore} more needed`}; target ${target}`);
+        continue;
+      }
+      const v = solveMode(code, n, given.names);
+      if (!v) continue;
+      const many = { det: "exactly one answer", semidet: "at most one answer", multi: "at least one answer", nondet: "any number of answers" }[determinism(v.answers)];
+      const how = v.stuck.length ? `stuck at ${v.stuck[0]}` : `${many}, ${v.ends ? "ends" : "may not end"}`;
+      lines.push(`${id} mode plan: ${facts}: relational, goals ${v.order.filter((g) => g).join(", ") || "none"}; ${how}; target ${target}`);
+    }
+  }
+  return lines;
+}
+
 export function choicesText(main: string, lines: readonly string[]): string {
   return [`# The compiler's choices for ${main} (L280a): picked again whenever their facts change.`, ...lines].join("\n") + "\n";
 }
@@ -124,6 +160,7 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
   for (const l of lines) {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
+    if (!m && /^\S+ (way|mode plan): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     if (/ from [^;]*; among /.test(l)) throw new Error(`a list's split can't be held yet: ${l}`);
     out.set(m[1], m[2]);
