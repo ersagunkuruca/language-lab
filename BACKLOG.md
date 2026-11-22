@@ -58,7 +58,7 @@ New items land here until the next triage gives them a lane and a priority.
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E309 | Schedule rows by the walks in the program's own definitions, with their written names, one row a walk, not one per compiler-made definition and list maker (QA-2026-11-22c L1; the text comes from cli/choices.ts scheduleLines) | QA 11-22c | P3 | S | |
-| E310 | The side panel's seven tabs fit one line at 1400 px (QA-2026-11-22c L2): they need 406 px and the panel has 318, so two lines, or fewer tabs; Ersagun's call. The phone half (L4, a row's count beside its name) done in #3065 | QA 11-22c | P3 | S | |
+| E310 | The side panel's seven tabs fit one line at 1400 px (QA-2026-11-22c L2): they need 406 px and the panel has 318, so two lines, or fewer tabs; Ersagun's call. The phone half (L4, a row's count beside its name) done in #3066 | QA 11-22c | P3 | S | |
 | E311 | A mode plan's pick names its goals by the definitions they call, not their drawn text (`relational, goals a function(…)`; QA-2026-11-22c L3) | QA 11-22c | P3 | S | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
