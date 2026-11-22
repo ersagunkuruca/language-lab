@@ -62,6 +62,7 @@ const { arrayOffsets } = compiles ? await import("../../compiler/src/array-offse
 const { keptItems } = compiles ? await import("../../compiler/src/kept-items.ts") : ({} as typeof import("../../compiler/src/kept-items.ts"));
 const { deepLoops } = compiles ? await import("../../compiler/src/deep-loops.ts") : ({} as typeof import("../../compiler/src/deep-loops.ts"));
 const { ownedTables } = compiles ? await import("../../compiler/src/owned-tables.ts") : ({} as typeof import("../../compiler/src/owned-tables.ts"));
+const { itemReads } = compiles ? await import("../../compiler/src/item-reads.ts") : ({} as typeof import("../../compiler/src/item-reads.ts"));
 const { columns } = compiles ? await import("../../compiler/src/columns.ts") : ({} as typeof import("../../compiler/src/columns.ts"));
 const { untaggedLoops, untaggedFunctions } = compiles ? await import("../../compiler/src/untagged-ints.ts") : ({} as typeof import("../../compiler/src/untagged-ints.ts"));
 const { earlyAnd } = compiles ? await import("../../compiler/src/early-and.ts") : ({} as typeof import("../../compiler/src/early-and.ts"));
@@ -368,6 +369,9 @@ function nativeLowered(main: Id, wasm = false, page = false, from: Program = p) 
     // A table nobody else holds changed in place, no version made, as on
     // JavaScript (owned-tables.ts, C58p).
     if (!process.env.NO_OWN_TABLES) ownedTables(lowered, q.code, q.info, q.names, root);
+    // `item at` put in place, its stand-in made only past the end, as
+    // natively (C268, item-reads.ts).
+    if (!process.env.NO_ITEM_READS) itemReads(lowered);
   }
   return { lowered, root };
 }
