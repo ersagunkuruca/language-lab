@@ -18,7 +18,7 @@ for (const ev of ["uncaughtException", "unhandledRejection"] as const) process.o
 });
 import { cacheChecks, infer, type Info, type Options } from "../src/lang/infer.ts";
 import { CheckCache } from "../src/lang/check-cache.ts";
-import { groupStore } from "../src/lang/library-store.ts";
+import { decidedStore, groupStore } from "../src/lang/library-store.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { addToStore, lineageOf, pointsAt, previousVersion, publishVersion, sameLines, upgrade, upgradeNames, upgradeOwn, verify, type Module } from "../src/lang/modules.ts";
 import { base, baseNames, loadProgram, optionsWith, programModules, programStore } from "../src/lang/load.ts";
@@ -38,7 +38,7 @@ import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
 import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
-import { storedRows } from "../src/lang/library-reps.ts";
+import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
 import { bundle } from "../src/io.ts";
 import { answersAgain, checkedTests, checksAgain, compiledValue, mainCall, mainDiffers, runMainIn, runTests, savedFrom, testsIn, type Again, type Called, type Failure, type Saved } from "../src/lang/tests.ts";
@@ -180,6 +180,9 @@ function fail(message: string): never {
 // Each definition group's check kept on disk (I193i): a program's
 // unchanged definitions aren't checked again by the next command.
 if (!process.env.LAB_NO_LIBRARY_STORE) cacheChecks(new CheckCache(4000, groupStore));
+// And the chooser's decisions (L280b): the program's representations
+// picked again only where it changed but for its literals.
+if (!process.env.LAB_NO_LIBRARY_STORE && !process.env.TERS_KEEP_NOTHING) keepDecisionsIn(decidedStore as DecidedStore);
 
 // A program's representations, each job's cost worked out from its
 // definition where that is more than it declares (L247).

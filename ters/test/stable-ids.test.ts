@@ -15,6 +15,8 @@ import { represented } from "../cli/represented.ts";
 import { lowerCore, coreModule } from "../../compiler/src/core-js.ts";
 import { freshId, idsMadeBy, subtree, type Code, nodeIds } from "../src/model.ts";
 import { stableIds } from "../src/stable-ids.ts";
+import { forgetKept } from "../src/kept.ts";
+import { keepDecisionsIn, type Decided } from "../src/lang/library-reps.ts";
 
 const root = fileURLToPath(new URL("../examples/", import.meta.url));
 
@@ -64,4 +66,30 @@ test("stableIds names a rewrite's new nodes by what they hold, whatever ids it d
   assert.equal(nodeIds(a.nodes).length, 6);
   const use = a.nodes[(a.nodes.main as { body: string }).body];
   assert.equal(use.kind === "ref" && a.nodes[use.target]?.kind, "def");
+});
+
+// The chooser's decisions kept in a store (L280b, the command line's on
+// disk): a compile in a fresh process (here, with what the process keeps
+// forgotten) takes them from the store, without the chooser, and makes
+// the same program.
+test("tally and machine: decisions kept in the store make the same program after the rest is forgotten", () => {
+  const saved = new Map<string, Decided>();
+  let read = 0;
+  const store = { load: (k: string) => { const d = saved.get(k); if (d) read++; return d && structuredClone(d); }, save: (k: string, d: Decided) => { saved.set(k, structuredClone(d)); } };
+  for (const name of ["tally", "../../compiler/gaps/machine"]) {
+    forgetKept();
+    const plain = compiled(name);
+    cacheChecks(new CheckCache(4000));
+    keepDecisionsIn(store);
+    try {
+      forgetKept();
+      const first = compiled(name), wrote = saved.size, was = read;
+      assert.ok(wrote > 0);
+      forgetKept();
+      const second = compiled(name);
+      assert.ok(read > was, "the second compile read the store");
+      assert.equal(first.js, plain.js);
+      assert.equal(second.js, plain.js);
+    } finally { keepDecisionsIn(null); cacheChecks(undefined); }
+  }
 });
