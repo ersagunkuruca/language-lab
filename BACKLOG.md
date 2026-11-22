@@ -70,7 +70,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E313 | Undo takes longer than the edit it undoes (sheet 0.33 s): 0.25 s of it writes both versions out as code.json to say which files changed back (QA-2026-11-22d M1) | QA 11-22d | P2 | S | |
 | E314 | Opening a big program holds the editor's thread for 0.4 to 0.8 s (sheet 0.78 s; QA-2026-11-22d L1) | QA 11-22d | P3 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
