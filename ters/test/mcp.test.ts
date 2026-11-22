@@ -511,6 +511,23 @@ test("a record taken apart by a step before `;` reads as on lines (I343)", async
   assert.match(text("eval", { text: "area of(2.0)" }), /^= 6 :/);
 });
 
+// Game round 2 wrote `k = …; match xs` with the cases on the lines below,
+// and a match after `else` on one line (I318).
+test("a step before `;` with a match on the lines after, and a match after else on one line (I318)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "plus first", kind: "function", params: ["xs"] });
+  text("replace", { at: "plus first", find: "□", text: "k = 2; match xs\n  nil → k\n  cons(h, t) → h + k" });
+  assert.match(text("eval", { text: "plus first([5]) + plus first([])" }), /^= 9 :/);
+  text("define", { name: "or first", kind: "function", params: ["xs", "n"] });
+  text("replace", { at: "or first", find: "□", text: "if n > 0 then n else match xs; nil → 0; cons(h, t) → h" });
+  assert.match(text("eval", { text: "or first([5], 0) + or first([], 2)" }), /^= 7 :/);
+});
+
 // rota's main used `attempt` and a match on its Outcome (I217 M7).
 test("a handler is written as the view prints it: handle …, an operation's case, otherwise (I217 M7)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
