@@ -25,10 +25,10 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row (startup: E280 to E284 done, E283 closed measured, 2026-11-21) |
-| C Compiler and targets | "Compiler lane" | C267 (the game loops) |
+| C Compiler and targets | "Compiler lane" | C283 (the greenhouse in compiled JS) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads) (G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: C283 (the greenhouse in compiled JS, 4.9x the JS by hand) (C265, C267 done; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -95,7 +95,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
-| C265 | Optional components cost a count on every read: the greenhouse's Thing holds three Optionals, so on C each `item at` of a moth dups the Thing and drops it again (Thing_dup 83 million and lab_drop 247 million calls in 600 ticks, against none for moths' all-Float64 Moth). An item read only to be read, borrowed, with no count taken. First half done: a record a loop passes on as it is each round is lent (c.ts), the greenhouse's `gathered from` no longer dups and drops its moth per neighbour (native one thread, 600 ticks of 2,000 moths, 2.6 to 1.85 s; C 0.46 s). Second half done with C268: `item at` put in place (item-reads.ts), the item read lent where only read (c.ts `peeked`), 1.85 to about 1.4 s, instructions 5.0 to 2.8 billion for 150 ticks | game round 2 (G6), 2026-11-17 | 2026-11-17 |
+| C283 | The greenhouse in compiled JS is 4.9x the JS by hand (600 ticks of 2,000 moths: 2.93 s against 0.60 s; native 0.85 s, wasi 1.87 s, 11-22). A profile puts 37% in the walk over a cell's moths with `met` put in place, 11% in the collector and 5% in `arrayOf`. In that walk, each field read goes through `r.f0 ?? r.fields[0]`, each column read through `Number.isInteger(i) && i >= 0 && i < n` with a stand-in made otherwise, a literal (`reach squared`, 64) is checked to be finite on every read, and `0 < length − i` is worked out as a difference. Tried and dropped 11-22: met's Flock and its Vecs as separate values through the walk (loop-records.ts after inlineCalls, with `if c then Flock(…) else acc` as two next rounds). Only push and centre split, and the run was 10% slower, because few neighbours are within reach, so few Flocks are made | GAPS game round 2 (GH6), 11-22 | 2026-11-22 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
