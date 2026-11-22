@@ -26,7 +26,7 @@ function rt(name: string): Fn | undefined {
   // all pass and any pass, stopping at the first item that decides (C43).
   if (name === "all.pure" || name === "any.pure") {
     const any = name === "any.pure";
-    return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? testPure(xs, f as (x: unknown) => unknown, site as number, any, !!always) : testInOrder(xs, f as (x: unknown) => unknown, any));
+    return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown, runs?: unknown) => (unbounded(fuel) ? testPure(xs, f as (x: unknown) => unknown, site as number, any, !!always, runs as number | undefined) : testInOrder(xs, f as (x: unknown) => unknown, any));
   }
   // Two calls of a function in its own body (C61 e): the first's answer,
   // and then the second's.
@@ -34,7 +34,7 @@ function rt(name: string): Fn | undefined {
   if (name === "both.second") return bothSecond as Fn;
   if (name === "both.on") return bothOn as Fn;
   // first where, its answer's item as a list of one or none (C43).
-  if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? firstPure(xs, f as (x: unknown) => unknown, site as number, !!always) : firstInOrder(xs, f as (x: unknown) => unknown));
+  if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown, runs?: unknown) => (unbounded(fuel) ? firstPure(xs, f as (x: unknown) => unknown, site as number, !!always, runs as number | undefined) : firstInOrder(xs, f as (x: unknown) => unknown));
   // A count whose search's first choice is shared out (C43), and that
   // choice, which keeps one item in each run of it.
   if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? searchPure(search, site as number, "count", !!always) : countEvery(search));
@@ -53,9 +53,9 @@ function rt(name: string): Fn | undefined {
   // or the smallest, after the empty list's z (C42).
   // A site held on worker threads (L280h) is given true after the join
   // (0 where it has none).
-  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, by?: unknown, always?: unknown) => {
+  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, by?: unknown, always?: unknown, runs?: unknown) => {
     const join = by === undefined || typeof by === "number" ? undefined : by as (x: unknown) => unknown;
-    return unbounded(fuel) ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join, !!always) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join);
+    return unbounded(fuel) ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join, !!always, runs as number | undefined) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join);
   };
   if (name === "choose.split") return chooseSplit as Fn;
   if (name === "range.split") return ((x: number) => rangeSplit(rangeCount(x))) as Fn;
@@ -63,7 +63,7 @@ function rt(name: string): Fn | undefined {
   if (name === "split.give") return splitGive as Fn;
   if (name === "map.pure" || name === "keep.pure") {
     const keep = name === "keep.pure";
-    return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep, !!always) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
+    return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown, runs?: unknown) => (unbounded(fuel) ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep, !!always, runs as number | undefined) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
   }
   return undefined;
 }
@@ -73,8 +73,8 @@ function rt(name: string): Fn | undefined {
 function world(op: string): Fn | undefined {
   // One held (L280h) is given where, after the join, before the rest.
   if (op === "mapAway") return (...a: unknown[]) => {
-    const [xs, f, fuel, site, how, z, join] = a, k = a[a.length - 1], on = a.length > 8 ? a[7] as "workers" | "GPU" : undefined;
-    return mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, typeof join === "number" ? undefined : join as (x: unknown) => unknown, (v) => RUNTIME.ap(k as never, v), on);
+    const [xs, f, fuel, site, how, z, join] = a, k = a[a.length - 1], on = a.length > 8 ? a[7] as "workers" | "GPU" | "" : undefined, runs = a.length > 9 ? a[8] as number : undefined;
+    return mapAway(xs, f as (x: unknown) => unknown, fuel, site as number, how as "map", z, typeof join === "number" ? undefined : join as (x: unknown) => unknown, (v) => RUNTIME.ap(k as never, v), on || undefined, runs);
   };
   if (op === "searchAway") return (search, array, fuel, site, how, k) => searchAway(search, fuel, site as number, how as "count", (v) => RUNTIME.ap(k as never, how === "count" ? v : how === "first" ? ((v as Value[]).length ? (v as Value[])[0] : FAIL) : array ? arrayOf(v as Value[]) : toList(v as Value[])));
   return undefined;

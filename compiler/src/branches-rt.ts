@@ -626,9 +626,11 @@ export function mapWorth(xs: unknown, site: number, always?: boolean): boolean {
 }
 // With `keep`, the items whose test passed (C43), each run's in order.
 const run = (items: unknown[], f: Fn, keep?: boolean): unknown[] => (keep ? items.filter((x) => f(x)) : items.map((x) => f(x)));
-export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean, always?: boolean): unknown {
+// `cut`: how many runs its items are cut into, where the program's
+// choices hold it (L280e).
+export function mapPure(xs: unknown, f: Fn, site: number, keep?: boolean, always?: boolean, cut = RUNS): unknown {
   if (!canShare()) return mapInOrder(xs, f, keep);
-  const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
+  const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = shared(n, (i) => run(items.slice(i * size, (i + 1) * size), f, keep), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, keep };
@@ -650,11 +652,11 @@ export const mapInOrder = (xs: unknown, f: Fn, keep?: boolean): unknown => sameK
 type FoldHow = "add" | "max" | "min" | "with";
 const both = (how: FoldHow, join?: Fn) => (a: Int, b: Int): Int => (how === "with" ? (join as unknown as (x: Int, y: Int) => Int)(a, b) : how === "add" ? add(a, b) : how === "max" ? (b > a ? b : a) : (b < a ? b : a));
 const together = (items: unknown[], f: Fn, how: FoldHow, join?: Fn): Int => { const by = both(how, join); let s = f(items[0]) as Int; for (let i = 1; i < items.length; i++) s = by(s, f(items[i]) as Int); return s; };
-export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number, join?: Fn, always?: boolean): Int {
+export function foldPure(xs: unknown, f: Fn, z: Int, how: FoldHow, site: number, join?: Fn, always?: boolean, cut = RUNS): Int {
   if (!canShare()) return foldInOrder(xs, f, z, how, join);
   const items = itemsOf(xs).reverse();
   if (!items.length) return z;
-  const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
+  const size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = shared(n, (i) => together(items.slice(i * size, (i + 1) * size), f, how, join), () => {
     const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, fold: how, ...(j ? { join: j } : {}) };
@@ -670,8 +672,8 @@ export const foldInOrder = (xs: unknown, f: Fn, z: Int, how: FoldHow, join?: Fn)
 // never read.
 const deciding = (items: unknown[], f: Fn, any: boolean, stop?: () => boolean): number => { for (let i = 0; i < items.length; i++) { if (!f(items[i]) === !any) return i; if (stop?.()) return -1; } return -1; };
 // The index of the first item that decides, or -1.
-function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean): number {
-  const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size), t0 = performance.now();
+function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean, cut = RUNS): number {
+  const items = itemsOf(xs), size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size), t0 = performance.now();
   const runs = sharedUntil(n, (i, stop) => deciding(items.slice(i * size, (i + 1) * size), f, any, stop), () => {
     const g = encode(f, names!), es = g === NO ? [NO] : items.map((x) => encode(x, names!));
     return es.includes(NO) ? NO : { f: g, items: es, size, until: any ? "any" : "all" };
@@ -682,9 +684,9 @@ function firstDeciding(xs: unknown, f: Fn, site: number, any: boolean, always?: 
   if (!((last as number) >= 0)) { perItem[site] = (performance.now() - t0) / Math.max(1, items.length); return -1; }
   return (runs.length - 1) * size + (last as number);
 }
-export function testPure(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean): boolean {
+export function testPure(xs: unknown, f: Fn, site: number, any: boolean, always?: boolean, runs?: number): boolean {
   if (!canShare()) return testInOrder(xs, f, any);
-  const found = firstDeciding(xs, f, site, any, always) >= 0;
+  const found = firstDeciding(xs, f, site, any, always, runs) >= 0;
   return any ? found : !found;
 }
 export const testInOrder = (xs: unknown, f: Fn, any: boolean): boolean => (any ? itemsOf(xs).some((x) => f(x)) : itemsOf(xs).every((x) => f(x)));
@@ -692,9 +694,9 @@ export const testInOrder = (xs: unknown, f: Fn, any: boolean): boolean => (any ?
 // first where of a test that only computes and ends (C43): the first item
 // that passes, as a list of it or of none in the input's kind, which the
 // compiled first where then takes its answer from.
-export function firstPure(xs: unknown, f: Fn, site: number, always?: boolean): unknown {
+export function firstPure(xs: unknown, f: Fn, site: number, always?: boolean, runs?: number): unknown {
   if (!canShare()) return firstInOrder(xs, f);
-  const i = firstDeciding(xs, f, site, true, always);
+  const i = firstDeciding(xs, f, site, true, always, runs);
   return sameKind(xs, i < 0 ? [] : [itemsOf(xs)[i]]);
 }
 export const firstInOrder = (xs: unknown, f: Fn): unknown => { const items = itemsOf(xs), i = items.findIndex((x) => f(x)); return sameKind(xs, i < 0 ? [] : [items[i]]); };
@@ -834,10 +836,10 @@ const webUnit = (m: WebJob, f: unknown, x: unknown): unknown => (m.how === "coun
 // `on`: where the page's choices hold it (L280h): its workers from the
 // first items, or the GPU where this site has a kernel and the browser
 // WebGPU, whatever either took the last time.
-export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, join: Fn | undefined, k: (v: unknown) => unknown, on?: "workers" | "GPU"): unknown {
+export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, join: Fn | undefined, k: (v: unknown) => unknown, on?: "workers" | "GPU", cut = RUNS): unknown {
   const unbudgeted = fuel === Infinity || fuel === undefined;
   const inTurn = () => (isFold(how) ? foldInOrder(xs, f, z as Int, how, join) : mapInOrder(xs, f, how === "keep"));
-  if (canShare()) return k(!unbudgeted ? inTurn() : isFold(how) ? foldPure(xs, f, z as Int, how, site, join) : mapPure(xs, f, site, how === "keep"));
+  if (canShare()) return k(!unbudgeted ? inTurn() : isFold(how) ? foldPure(xs, f, z as Int, how, site, join, false, cut) : mapPure(xs, f, site, how === "keep", false, cut));
   const w = web;
   if (!w || !unbudgeted) return k(inTurn());
   // A fold's items from the last, as the fold in turn meets them.
@@ -862,7 +864,7 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
   if (!w.workers.length || !items.length) return k(inTurn());
   const g = encode(f, names!), j = join ? encode(join, names!) : undefined, es = g === NO || j === NO ? [NO] : items.map((x) => encode(x, names!));
   if (es.includes(NO)) return k(inTurn());
-  const size = Math.max(1, Math.ceil(items.length / RUNS)), n = Math.ceil(items.length / size);
+  const size = Math.max(1, Math.ceil(items.length / cut)), n = Math.ceil(items.length / size);
   return awayRuns(w.workers, n, { f: g, how, ...(j ? { join: j } : {}) }, (i) => es.slice(i * size, (i + 1) * size), (i) => unitOf(items.slice(i * size, (i + 1) * size), f, how, join), (values) => {
     perItem[site] = (performance.now() - t0) / Math.max(1, items.length);
     return k(isFold(how) ? (values as Int[]).reduce(both(how, join), z as Int) : sameKind(xs, (values as unknown[][]).flat()));

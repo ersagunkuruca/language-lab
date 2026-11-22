@@ -174,6 +174,11 @@ function sitesKept(funcs: readonly { body: unknown }[]): Set<number> {
   for (const f of funcs) walk(f.body);
   return kept;
 }
+// A shared job's items are cut into this many runs, which the threads
+// take (branches-rt.ts RUNS, L280e): a map's, a keep's, a fold's, a
+// check's; a search is cut by its first two choices.
+export const RUNS = 32;
+const IN_RUNS = new Set(["map", "keep", "add", "max", "min", "with", "every", "any", "first where"]);
 export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target = "JavaScript page"): string[] {
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
@@ -184,12 +189,12 @@ export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, 
     if (!ir.sharedSites?.length) return [];
     const kept = sitesKept(ir.funcs ?? []);
     return [...new Set(ir.sharedSites.filter((m) => kept.has(m.site)).map((m) => {
-      return `${m.at} place: ${nameOf(defOf(m.at))}'s ${HOW[m.how] ?? m.how}: worker threads when slow; among main thread, worker threads; target JavaScript`;
+      return `${m.at} place: ${nameOf(defOf(m.at))}'s ${HOW[m.how] ?? m.how}: worker threads when slow; among main thread, worker threads${IN_RUNS.has(m.how) ? `; in ${RUNS} runs` : ""}; target JavaScript`;
     }))];
   }
   return ir.awayMaps.map((m) => {
     const d = defOf(m.fn), on = gpu.has(m.site);
-    return `${m.fn} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; target ${target}`;
+    return `${m.fn} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; in ${RUNS} runs; target ${target}`;
   });
 }
 
@@ -260,27 +265,36 @@ export function choicesText(main: string, lines: readonly string[]): string {
 // compiler stores the type as it says, where that keeps the meaning (the
 // chooser could pick that row), and says when it would pick another.
 export const HELD = "held ";
-const PLACE = /^(\S+) place: .*: ([^:;]+); among [^;]+; target (.+)$/;
+// A placement: its node, where it runs, what it is among, how many runs
+// its items are shared out in (L280e), its target.
+const PLACE = /^(\S+) place: .*: ([^:;]+); among ([^;]+)(?:; in (\d+) runs)?; target (.+)$/;
 // The placements held on the main thread (L280h), by the node each is
 // about, for JavaScript (a page's or a command-line program's workers)
 // and for C's threads; and a command-line program's held on its worker
 // threads (`workers`), or C's on its threads (`threads`), shared out from
 // its first items; and a page's on its workers or its GPU (`page`).
-export function heldPlaces(lines: readonly string[]): { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][] } {
-  const out = { js: [] as Id[], c: [] as Id[], workers: [] as Id[], threads: [] as Id[], page: [] as [Id, "workers" | "GPU"][] };
+// And the runs held (L280e): JavaScript's, a command-line program's or a
+// page's, by the node.
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][] }
+export function heldPlaces(lines: readonly string[]): HeldPlaces {
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [] };
   for (const l of lines) {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
-    if (p && p[2] === "main thread") (p[3] === "C" ? out.c : out.js).push(p[1]);
-    if (p && p[2] === "worker threads" && p[3] === "JavaScript") out.workers.push(p[1]);
-    if (p && p[2] === "threads" && p[3] === "C") out.threads.push(p[1]);
-    if (p && (p[2] === "workers" || p[2] === "GPU") && p[3] === "JavaScript page") out.page.push([p[1], p[2]]);
+    if (!p) continue;
+    const [, id, on, , runs, target] = p;
+    if (on === "main thread") (target === "C" ? out.c : out.js).push(id);
+    if (on === "worker threads" && target === "JavaScript") out.workers.push(id);
+    if (on === "threads" && target === "C") out.threads.push(id);
+    if ((on === "workers" || on === "GPU") && target === "JavaScript page") out.page.push([id, on]);
+    if (runs && target !== "C") out.runs.push([id, Number(runs)]);
   }
   return out;
 }
 // What a placement can be held on: what its entry is among (the main
 // thread, a command-line program's worker threads, C's threads, a page's
-// workers, and its GPU where the site has a kernel).
-const HOLDABLE = (l: string, on: string) => / among ([^;]+);/.exec(l)?.[1].split(", ").includes(on) ?? false;
+// workers, and its GPU where the site has a kernel), or where the
+// compiler runs it (`worker threads when slow`), its runs held alone.
+const HOLDABLE = (among: string, on: string) => among.split(", ").some((a) => on === a || on === `${a} when slow` || on.startsWith(`${a} when slow, `));
 const ENTRY = /^(\S+) representation: .*? as ([^;]+?); among /;
 // The held entries' rows, by the type's id: a split's with the
 // definitions it is from (`array of List from a, b`).
@@ -291,7 +305,11 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
     const m = ENTRY.exec(l.slice(HELD.length));
     // A placement held (L280h): heldPlaces's.
     const place = PLACE.exec(l.slice(HELD.length));
-    if (!m && place) { if (!HOLDABLE(l, place[2])) throw new Error(`a placement is held on one of what it is among: ${l}`); continue; }
+    if (!m && place) {
+      if (!HOLDABLE(place[3], place[2])) throw new Error(`a placement is held on one of what it is among: ${l}`);
+      if (place[4] !== undefined && !(Number(place[4]) >= 1 && Number(place[4]) <= 4096)) throw new Error(`a placement's runs are from 1 to 4096: ${l}`);
+      continue;
+    }
     if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation or a placement can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
@@ -308,16 +326,20 @@ export function heldAndPicked(written: readonly string[], now: readonly string[]
 // by the type, or a placement's, by its node and target.
 function heldIn(written: readonly string[]): (l: string) => boolean {
   const of = new Set(heldOf(written).keys());
-  const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[3]}`] : []; }));
-  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[3]}`)); };
+  const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[5]}`] : []; }));
+  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)); };
 }
 const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // What a check says of the held entries: where the compiler, choosing
 // alone, picks another row (`alone`, the entries made with nothing held).
 export function heldWarnings(written: readonly string[], alone: readonly string[]): string[] {
   const picks = new Map(alone.flatMap((l) => { const m = ENTRY.exec(l); return m ? [[m[1], m[2]] as const] : []; }));
-  const placed = new Map(alone.flatMap((l) => { const p = PLACE.exec(l); return p ? [[`${p[1]} ${p[3]}`, p[2]] as const] : []; }));
-  const places = written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; const was = p && placed.get(`${p[1]} ${p[3]}`); return p && was && was !== p[2] ? [`held   ${p[1]} (${p[3]}): ${p[2]}, where the compiler would run it on ${was}`] : []; });
+  const placed = new Map(alone.flatMap((l) => { const p = PLACE.exec(l); return p ? [[`${p[1]} ${p[5]}`, p] as const] : []; }));
+  const places = written.flatMap((l) => {
+    const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null, was = p && placed.get(`${p[1]} ${p[5]}`);
+    if (!p || !was) return [];
+    return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [`held   ${p[1]} (${p[5]}): in ${p[4]} runs, where the compiler would share it in ${was[4]}`] : [])];
+  });
   return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places];
 }
 

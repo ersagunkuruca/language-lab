@@ -13,7 +13,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, scheduleLines, staleChoices } from "../cli/choices.ts";
+import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, RUNS, scheduleLines, staleChoices } from "../cli/choices.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 import { shareAlways } from "../../compiler/src/scalar.ts";
@@ -127,10 +127,11 @@ test("moths-page's maps go to the workers when slow, and one of Ints to the GPU 
   const ir = lowerCore(r.code, r.info, r.names, [main]);
   const lines = placeLines(ir, new Set(Object.keys(gpuMaps(ir)).map(Number)), r.names);
   assert.deepEqual(lines.map((l) => l.replace(/^\S+ /, "")).sort(), [
-    "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; target JavaScript page",
-    "place: tick's map: workers when slow; among main thread, workers; target JavaScript page",
+    "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; in 32 runs; target JavaScript page",
+    "place: tick's map: workers when slow; among main thread, workers; in 32 runs; target JavaScript page",
   ]);
-  assert.throws(() => heldOf([`held ${lines[0]}`]), /a placement is held on one of what it is among/);
+  // Held where it isn't among (a map with no kernel on the GPU): refused.
+  assert.throws(() => heldOf([`held ${lines.find((l) => l.includes(" place: tick's map: "))!.replace(": workers when slow;", ": GPU;")}`]), /a placement is held on one of what it is among/);
   // Held on the GPU and on the workers (L280h): each page's map given
   // where, after its join.
   const gpu = lines.find((l) => l.includes(" place: range from's map: "))!, tick = lines.find((l) => l.includes(" place: tick's map: "))!;
@@ -179,8 +180,8 @@ test("collatz's keep and fold go to worker threads when slow; queens' searches t
     return placeLines(lowerCore(r.code, r.info, r.names, [main]), new Set(), r.names).map((l) => l.replace(/^\S+ /, "")).sort();
   };
   assert.deepEqual(places("collatz"), [
-    "place: main's keep: worker threads when slow; among main thread, worker threads; target JavaScript",
-    "place: walks of's fold of fields: worker threads when slow; among main thread, worker threads; target JavaScript",
+    "place: main's keep: worker threads when slow; among main thread, worker threads; in 32 runs; target JavaScript",
+    "place: walks of's fold of fields: worker threads when slow; among main thread, worker threads; in 32 runs; target JavaScript",
   ]);
   assert.deepEqual(places("queens").map((l) => l.split(":")[1]), [" main's count of a search's answers", " main's search for all answers", " main's search for the first answer"]);
 });
@@ -248,7 +249,8 @@ test("collatz's keep held on the main thread runs there, said by a check, the sa
     run("choices", at);
     const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
     writeFileSync(`${at}.choices`, text);
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; target JavaScript/)![1]], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]], workers: [], threads: [], page: [] });
+    const js = text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; in 32 runs; target JavaScript/)![1];
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [js], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]], workers: [], threads: [], page: [], runs: [[js, 32]] });
     assert.equal(run("run", at), plain);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
     assert.deepEqual(said.map((l) => l.replace(/^held   \S+ /, "")).sort(), ["(C): main thread, where the compiler would run it on threads when slow", "(JavaScript): main thread, where the compiler would run it on worker threads when slow"]);
@@ -268,16 +270,40 @@ test("collatz's keep held on worker threads and C's threads is shared from the s
     run("choices", at);
     const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": $1threads;")}` : l).join("\n");
     writeFileSync(`${at}.choices`, text);
-    const id = text.match(/held (\S+) place: main's keep: worker threads; among main thread, worker threads; target JavaScript/)![1];
+    const id = text.match(/held (\S+) place: main's keep: worker threads; among main thread, worker threads; in 32 runs; target JavaScript/)![1];
     assert.match(text, new RegExp(`held ${id} place: main's keep: threads; among main thread, threads; target C`));
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id], page: [] });
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id], page: [], runs: [[id, 32]] });
     assert.equal(run("run", at), plain);
     run("compile", at);
-    assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, Infinity, 0, true\);/);
+    assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, Infinity, 0, true, 32\);/);
     // C's: the call made with lab_par_always set (its build is not this test's).
     spawnSync(process.execPath, [ters, "native", at], { encoding: "utf8", cwd: dir });
     assert.match(readFileSync(join(dir, "collatz.c"), "utf8"), /\(lab_par_always = 1, lab_par_map_\d+\(/);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
     assert.deepEqual(said.sort(), [`held   ${id} (C): threads, where the compiler would run it on threads when slow`, `held   ${id} (JavaScript): worker threads, where the compiler would run it on worker threads when slow`]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// A shared job's runs (L280e): how many its items are cut into, written
+// by the compiler, held to tune; its place as the compiler picks it.
+test("collatz's keep held in 8 runs is cut so, said by a check, the same answers", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "collatz"), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  try {
+    cpSync(root + "collatz", at, { recursive: true });
+    const plain = run("run", at);
+    run("choices", at);
+    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: .*target JavaScript$/.test(l) ? `held ${l.replace("; in 32 runs;", "; in 8 runs;")}` : l).join("\n");
+    writeFileSync(`${at}.choices`, text);
+    const id = text.match(/held (\S+) place: main's keep: worker threads when slow; among main thread, worker threads; in 8 runs; target JavaScript/)![1];
+    assert.deepEqual(heldPlaces(readChoices(text)).runs, [[id, 8]]);
+    assert.equal(run("run", at), plain);
+    run("compile", at);
+    assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, Infinity, 0, false, 8\);/);
+    const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
+    assert.deepEqual(said, [`held   ${id} (JavaScript): in 8 runs, where the compiler would share it in 32`]);
+    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace("in 8 runs", "in 0 runs")]), /a placement's runs are from 1 to 4096/);
+    // The runs the compiler writes are the runtime's.
+    assert.match(readFileSync(fileURLToPath(new URL("../../compiler/src/branches-rt.ts", import.meta.url)), "utf8"), new RegExp(`const RUNS = ${RUNS}\\b`));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
