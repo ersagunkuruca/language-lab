@@ -2333,7 +2333,7 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 }
 
 // Run main (editor/runPanel.ts, E228i).
-const { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
+const { startRun, stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
   doc: () => doc, ui, prog: () => prog(), pres: () => pres(), typesOf: () => typesOf(), titleOf, render: () => render(),
   defNamed, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });
@@ -2925,6 +2925,7 @@ if (!EMBED && ASKED.has("code")) void unpackSnippet(ASKED.get("code")!).then((p)
 
 function started() {
   render();
+  if (!EMBED) startRun();
   // What every first click asks, found before it (selection.ts).
   setTimeout(() => warmParents(LIBRARY.code), 1500);
   // Run's worker, started with this program's check while nothing else

@@ -59,6 +59,10 @@ export function runPanel(host: RunHost) {
     const warm: WarmAsk = { warm: true, code: sendCode(code), names: pres().names, pins: pins(), def };
     idle.postMessage(warm);
   }
+  // Started with the page, before any program is open: the worker takes
+  // about 0.8 s to start and read the kept checks (I320), and Run in the
+  // first second after opening waited on that.
+  function startRun() { if (!idle && !running) idle = newWorker(); }
   function stopRun(why?: string) {
     running?.terminate();
     running = null;
@@ -209,6 +213,6 @@ export function runPanel(host: RunHost) {
 
   // Ends a run without a word: opening another program.
   const endRun = () => { running?.terminate(); running = null; };
-  return { stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile };
+  return { startRun, stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile };
 }
 
