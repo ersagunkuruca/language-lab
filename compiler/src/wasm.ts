@@ -55,6 +55,28 @@ import { emptyArray, fails, listSteps, isArray, isTable, isData, isFn, isRecord,
 // columns.ts's ops on an array kept as columns (C60 w2).
 const COL_FN = /^array\.c(new|length|get(\d+)|set([\d_]+))\.a(\d+)$/;
 const VAL: Record<SType | "i64", number> = { f64: 0x7c, i32: 0x7f, int32: 0x7f, i64: 0x7e };
+// A comparison of Ints that are i64s boxed (untagged-ints.ts's counts,
+// an array's length read as an i64): compared as i64s, with no Int made
+// or taken apart, and `0 < a − b` as `b < a`, the same for every Int
+// (C267: the greenhouse's walks ask `0 < length − i` each step, three
+// tagged calls).
+export const boxedCompares = (e: SExpr): SExpr => {
+  const x = mapKids(e, boxedCompares);
+  if (x.k !== "rt" || x.fn !== "int.less" || x.args.length !== 2) return x;
+  const i64 = (a: SExpr): SExpr | null => (a.k === "rt" && (a.fn === "i64.box" || a.fn === "int.of") && a.args.length === 1 ? a.args[0]
+    : a.k === "rt" && /^array\.length\.a\d+$/.test(a.fn) && runtime(a.fn).uses.includes(`${a.fn}.i64`) ? { ...a, fn: `${a.fn}.i64` }
+    : a.k === "int" && a.v >= -(1n << 62n) && a.v < 1n << 62n ? { k: "rt", fn: "i64.lit", args: [a] } : null);
+  // Read in either order alike: a local, a literal, an array's length.
+  const plain = (a: SExpr): boolean => a.k === "local" || a.k === "int" || (a.k === "rt" && (a.fn === "i64.lit" || /^array\.length\.a\d+\.i64$/.test(a.fn)) && a.args.every(plain));
+  let [a, b] = x.args;
+  if (a.k === "int" && a.v === 0n && b.k === "rt" && b.fn === "int.sub" && b.args.length === 2) {
+    const [p, q] = b.args.map(i64);
+    if (p && q && plain(p) && plain(q)) [a, b] = [b.args[1], b.args[0]];
+  }
+  const [p, q] = [i64(a), i64(b)];
+  return p && q ? { k: "rt", fn: "i64.less", args: [p, q] } : { ...x, args: [a, b] };
+};
+
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag" | "raw";
 const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
@@ -161,7 +183,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (bad) throw new Error(`${h.name} takes or gives ${bad.k === "list" ? "a list" : bad.k === "record" ? "a record" : "a value"}, which doesn't cross to the host in WebAssembly yet`);
     return { k: "world", op: `host:${eff}:${i}`, aborts: true, args: x.args, t: x.host!.t, ins: h.ins.map((y) => HOST_TYPES[y.k]!) };
   };
-  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f)).map((f) => (lowered.tables.length ? { ...f, body: keysArrays(lowered, f.body) } : f)).map((f) => ({ ...f, body: viaI64(f.body) }));
+  const funcs0 = shader ? lowered.funcs.map((f) => ({ ...f, partial: undefined, body: shaderArrays(f.body) })) : lowered.funcs.map((f) => (performsIn(f.body) ? { ...f, body: performs(f.body) } : f)).map((f) => (lowered.tables.length ? { ...f, body: keysArrays(lowered, f.body) } : f)).map((f) => ({ ...f, body: boxedCompares(viaI64(f.body)) }));
   // A text constant longer than array.new_fixed takes (10,000 bytes; the
   // cases module's collation tables, L214e5b4) is made of pieces joined.
   const longIn = (e: SExpr): boolean => (e.k === "text" && e.v.length > TEXT_PIECE / 4) || kids(e).some(longIn);
