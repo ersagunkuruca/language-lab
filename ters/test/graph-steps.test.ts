@@ -74,3 +74,21 @@ test("a case that says what the otherwise says is drawn once", () => {
   assert.equal(usage.length, 1, "the usage message once");
 });
 
+
+test("a folded frame says the comments of the nodes it hides (QA 11-22b L3)", () => {
+  const p = loadProgram(join(root, "examples", "queens"));
+  const safe = p.named("safe");
+  const abs = subtree(p.code, safe).find((x) => { const n = p.code.nodes[x]; return isCall(n) && p.pres.names[(p.code.nodes[n.fn] as { target?: string }).target ?? ""] === "abs"; })!;
+  const pres = { ...p.pres, comments: { ...p.pres.comments, [abs]: "how far apart" } };
+  const svg = (folded: Set<string>) => typedGraph(p.code, pres, infer(p.code, p.pres.names), safe, {
+    selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
+    canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), folded, fold() {}, order: false,
+  } as never).root as unknown as El;
+  const notes = (e: El) => e.all().filter((x) => /\bnode-cmt\b/.test(x.getAttribute("class") ?? "")).map((x) => x.textContent);
+  const open = svg(new Set());
+  assert.deepEqual(notes(open), ["how far apart"]);
+  // Every frame folded: the box that holds abs says its comment.
+  const frames = new Set(open.all().map((x) => x.getAttribute("data-frame")).filter((x): x is string => !!x && x !== safe));
+  assert.ok(frames.size > 0);
+  assert.deepEqual(notes(svg(frames)), ["how far apart"]);
+});

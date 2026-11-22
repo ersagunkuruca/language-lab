@@ -342,6 +342,7 @@ interface Item {
   solid: boolean;       // wires running under it are drawn as tunnels
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
+  note?: string;       // its own comment (E291), said by a folded box that holds it
   ran?: number;         // its place in the order effects run (E265), shown
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
@@ -493,12 +494,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const c = key !== defId ? pres.comments[key] : undefined;
     if (!c) return;
     const all = resolveRefs(c, (r) => pres.names[r] ?? r), first = all.split("\n")[0];
-    g.append(titled(s("text", { x: 0, y: -6, class: "node-cmt" }, first.length > 56 ? `${first.slice(0, 55)}…` : first), all));
+    // Haloed: a wire running under it doesn't cut through it (QA 11-22b L2).
+    g.append(titled(s("text", { x: 0, y: -6, class: "node-cmt halo" }, first.length > 56 ? `${first.slice(0, 55)}…` : first), all));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
     const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteAbove(g, key); };
     const own = natural.get(key);
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...extra });
+    const c = key !== defId ? pres.comments[key] : undefined;
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r) } : {}), ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
@@ -1406,6 +1409,14 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     for (let i = 0; i < us.length;) { let j = i; while (j + 1 < us.length && us[j + 1] === us[j] + 1) j++; runs.push(j > i ? `${us[i]}–${us[j]}` : `${us[i]}`); i = j + 1; }
     return runs.join(", ");
   };
+  const notes = (f: Id): SVGElement[] => {
+    const all = [...scene.items.values()].filter((it) => it.note && hider(it.frame) === f).map((it) => it.note!);
+    if (!all.length) return [];
+    const first = all[0].split("\n")[0], line = all.length > 1 ? `${first.length > 40 ? `${first.slice(0, 39)}…` : first} (+${all.length - 1})` : first.length > 56 ? `${first.slice(0, 55)}…` : first;
+    const t = s("text", { x: 0, y: -6, class: "node-cmt halo" }, line);
+    t.append(s("title", {}, all.join("\n\n")));
+    return [t];
+  };
   const size = (f: Frame) => ({ w: Math.max(tw(clip(f.title, FOLDT), 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
   for (const it of scene.items.values()) if (!hider(it.frame)) items.set(it.key, it);
@@ -1422,6 +1433,9 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
         s("text", { x: 10, y: 16, class: "rt" }, clip(f.title, FOLDT)),
         s("text", { x: 10, y: 34, class: "fold-n" }, holds(f.id)),
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
+        // The comments of the nodes it hides, said above it as an open
+        // node's is (QA 11-22b L3: folded, they showed nowhere).
+        ...notes(f.id),
         ...(ran(f.id) ? [effectBadge(ran(f.id), `The calls with effects inside run as number ${ran(f.id)} here: unfold it to see which`)] : []),
       ),
     });
