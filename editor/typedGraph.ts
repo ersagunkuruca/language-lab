@@ -952,10 +952,8 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // Statements, `print error(…); 2`: a run of lets with a step done for
   // its effect. They're drawn as one "in order" node, an input each, top
   // to bottom, the value it gives last (Ersagun 2026-11-22: "Would
-  // variadic input to a 'ordered actions' node work better?"). Its inputs
-  // say the order, so a statement's own call isn't numbered as well.
-  const ownOrder = new Set<Id>();
-  const ranOf = (id: Id) => (ownOrder.has(id) ? undefined : runOrder.get(id));
+  // variadic input to a 'ordered actions' node work better?").
+  const ranOf = (id: Id) => runOrder.get(id);
   const statements = (id: Id): boolean => {
     for (let c = node(id); isCall(c) && node(c.fn).kind === "lambda"; ) {
       const lam = node(c.fn) as NodeOf<"lambda">;
@@ -983,7 +981,6 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // acts, is an input of the in order node.
     const ordered = steps.some(([b]) => quiet(b));
     const inOrder = ordered ? steps.filter(([b, v]) => quiet(b) || acting(v)).map(([b]) => b) : [];
-    for (const [b, v] of steps) if (inOrder.includes(b)) ownOrder.add(v);
     const portY = new Map<Id, number>(), portFrom = new Map<Id, End>();
     const vals = steps.map(([, v]) => lay(v));
     const colW = Math.max(0, ...vals.map((v) => v.w));
@@ -1371,8 +1368,11 @@ function effectBadge(text: string, why: string): SVGElement {
 }
 
 const FOLDH = 44;
-// The longest name, and the longest line, a folded box lists.
-const HOLDN = 14, HOLDS = 24;
+// The longest name, and the longest line, a folded box lists, and the
+// longest title it shows: narrow, all of it on hover (Ersagun 2026-11-22:
+// "can we make collapsed frames narrower by default?").
+const HOLDN = 12, HOLDS = 16, FOLDT = 24;
+const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   const parent = (f: Id) => scene.frames.get(f)?.parent ?? null;
   // The outermost folded frame among f and the frames around it.
@@ -1406,7 +1406,7 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     for (let i = 0; i < us.length;) { let j = i; while (j + 1 < us.length && us[j + 1] === us[j] + 1) j++; runs.push(j > i ? `${us[i]}–${us[j]}` : `${us[i]}`); i = j + 1; }
     return runs.join(", ");
   };
-  const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
+  const size = (f: Frame) => ({ w: Math.max(tw(clip(f.title, FOLDT), 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
   for (const it of scene.items.values()) if (!hider(it.frame)) items.set(it.key, it);
   const frames = new Map<Id, Frame>();
@@ -1418,8 +1418,8 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     items.set(f.id, {
       key: f.id, frame: f.parent, w, h, auto: { x: b.x, y: b.y }, solid: true,
       draw: (g) => g.append(
-        s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id }),
-        s("text", { x: 10, y: 16, class: "rt" }, f.title),
+        ((r) => (r.append(s("title", {}, `${f.title}\n${holds(f.id)}`)), r))(s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id })),
+        s("text", { x: 10, y: 16, class: "rt" }, clip(f.title, FOLDT)),
         s("text", { x: 10, y: 34, class: "fold-n" }, holds(f.id)),
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
         ...(ran(f.id) ? [effectBadge(ran(f.id), `The calls with effects inside run as number ${ran(f.id)} here: unfold it to see which`)] : []),

@@ -14,6 +14,6 @@ test("a short run of steps handled, or after a case's arrow, reads on one line",
   const p = loadProgram(join(root, "examples", "chapters"));
   const text = blocksText(blocksOf(p.code, p.pres, null, p.named("main"), { pane: true })).join("\n");
   assert.doesNotMatch(text, /=>/);
-  assert.match(text, /\n( +)match ‹split book›\(path, folder\); 0\n\1  abort\(why\) → ‹print error›\("chapters: " \+\+ why\); 1\n/);
-  assert.match(text, /otherwise → ‹print error›\("usage: chapters book\.md folder"\); 2$/);
+  assert.match(text, /\n( +)match \{ ‹split book›\(path, folder\); 0 \}\n\1  abort\(why\) → \{ ‹print error›\("chapters: " \+\+ why\); 1 \}\n/);
+  assert.match(text, /otherwise → \{ ‹print error›\("usage: chapters book\.md folder"\); 2 \}$/);
 });

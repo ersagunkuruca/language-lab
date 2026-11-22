@@ -123,7 +123,8 @@ async function swapAndUndo() {
   // Right-click on the blocks' empty space adds a value, as the graph's
   // canvas does (BACKLOG E100); Undo takes it back.
   where = "add a value from the blocks";
-  const steps = async () => (await p.locator(".p-text").innerText()).split("\n").filter((l) => /^\s*\S+ = /.test(l)).length;
+  // A step a line, or short steps on one line in braces (E297, E299).
+  const steps = async () => ((await p.locator(".p-text").innerText()).match(/(?:^|[{;])[ \t]*\S+ = /gm) ?? []).length;
   const had = await steps();
   await p.locator(".blocks-wrap").dispatchEvent("contextmenu", { clientX: 600, clientY: 700 });
   // A hole of any type is offered everything, so its palette takes seconds (E103).
@@ -408,7 +409,7 @@ async function helperAtValue() {
   await p.locator('.ctx-menu [data-menu="add-before"]').click({ timeout: 15000 });
   await p.locator(".palette .opt", { hasText: /^\(□\) => □/ }).first().click({ timeout: 5000 }).catch(() => errors.push(`${where}: the palette offers no (□) => □`));
   const text = (await p.locator(".p-text .body").innerText()).replace(/\s+/g, " ");
-  if (!/= \(\w+\) => □/.test(text)) errors.push(`${where}: no new function at the value: ${text.slice(-160)}`);
+  if (!/(?:= |\{ |; )\(\w+\) => □/.test(text)) errors.push(`${where}: no new function at the value: ${text.slice(-160)}`);
   await p.close();
 }
 
