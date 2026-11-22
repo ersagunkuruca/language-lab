@@ -28,13 +28,16 @@ export type CoreMain = { printed: Printed; at: number; args: boolean; result: "i
 // be (hostMaps: the evaluator and JavaScript have std's Table), in the
 // program's own types' fields too (GAPS.md M2). A choice the rewrite
 // can't make, which `ters run` refuses, runs as written.
-export function checkedForRun(code: Code, names: Names, def: Id): { code: Code; names: Names; info: Info; chosen: string[] } {
+// `held`: the types held in Choices (E292), stored as held or refused
+// with the reason.
+export function checkedForRun(code: Code, names: Names, def: Id, held: readonly [Id, string][] = []): { code: Code; names: Names; info: Info; chosen: string[] } {
   const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);
   const first = infer(code, names);
   try {
-    const p: Program = represented<Program>({ title: "this program", code, own, names, info: first, reps: representationsIn(code, first, names, own), options: programOptions() }, def, true);
+    const p: Program = represented<Program>({ title: "this program", code, own, names, info: first, reps: representationsIn(code, first, names, own), options: programOptions(), ...(held.length ? { held: new Map(held) } : {}) }, def, true);
     return { code: p.code, names: p.names, info: p.info, chosen: p.chosen ?? [] };
-  } catch {
+  } catch (e) {
+    if (held.length) throw e;
     const lib = withLibraryRepresentations(code, first, names, def, own);
     return { code: lib.code, names: lib.names, info: lib.chosen.length ? infer(lib.code, lib.names) : first, chosen: lib.chosen };
   }

@@ -51,44 +51,51 @@ export interface ChoicesHost {
   code(): Code;
   names(): Names;
   pins(): Pins;
+  // The types held (E292, L280c), by id: the row each is stored as.
+  held(): Record<Id, string>;
   main(): Id | undefined;
   render(): void;
 }
 
 // What the panel and the badges read: the entries for the code shown, or
-// the last version's while this one is worked out (`working`).
-export interface Choices { entries: Choice[]; working: boolean; failed: boolean }
+// the last version's while this one is worked out (`working`). `would`:
+// for a held type, the row the compiler would pick instead.
+export interface Choices { entries: Choice[]; would: Map<Id, string>; refused?: string; working: boolean; failed: boolean }
+type Got = { main: Id; entries: Choice[]; would: Map<Id, string>; refused?: string };
 
 export function choicesOf(host: ChoicesHost) {
-  const answers = new WeakMap<Code, { main: Id; entries: Choice[] } | "failed">();
-  let last: { main: Id; entries: Choice[] } | null = null;
-  let worker: Worker | null = null, working: Code | null = null, next: Code | null = null;
+  // By version of the code, then by what is held.
+  const answers = new WeakMap<Code, Map<string, Got | "failed">>();
+  let last: Got | null = null;
+  let worker: Worker | null = null, working: { code: Code; held: string } | null = null, next = false;
+  const heldKey = () => JSON.stringify(Object.entries(host.held()).sort());
   const ask = (code: Code, main: Id) => {
-    if (working) { next = code; return; }
-    working = code;
-    const a: ChoicesAsk = { choices: true, code: sendCode(code), names: host.names(), pins: host.pins(), main };
-    const settle = (got: { main: Id; entries: Choice[] } | "failed") => {
-      answers.set(code, got);
+    if (working) { next = true; return; }
+    const held = heldKey();
+    working = { code, held };
+    const a: ChoicesAsk = { choices: true, code: sendCode(code), names: host.names(), pins: host.pins(), held: Object.entries(host.held()), main };
+    const settle = (got: Got | "failed") => {
+      if (!answers.has(code)) answers.set(code, new Map());
+      answers.get(code)!.set(held, got);
       if (got !== "failed") last = got;
       working = null;
-      const n = next;
-      next = null;
-      if (n && !answers.has(n)) { const m = host.main(); if (m && host.code() === n) ask(n, m); }
+      if (next) { next = false; const m = host.main(), c = host.code(); if (m && !answers.get(c)?.has(heldKey())) ask(c, m); }
       host.render();
     };
     const w = (worker ??= newWorker());
-    w.onmessage = (e: MessageEvent<ChoicesSays>) => settle("error" in e.data ? "failed" : { main, entries: e.data.choices.map(parseChoice).filter((c): c is Choice => !!c) });
+    w.onmessage = (e: MessageEvent<ChoicesSays>) => settle("error" in e.data ? "failed" : { main, entries: e.data.choices.map(parseChoice).filter((c): c is Choice => !!c), would: new Map(e.data.would), ...(e.data.refused ? { refused: e.data.refused } : {}) });
     w.onerror = (e) => { e.preventDefault(); w.terminate(); worker = null; settle("failed"); };
     w.postMessage(a);
   };
   return (): Choices | null => {
     const code = host.code(), main = host.main();
     if (!main) return null;
-    const got = answers.get(code);
-    if (got === "failed") return { entries: last?.main === main ? last.entries : [], working: false, failed: true };
-    if (got) return { entries: got.entries, working: false, failed: false };
-    if (working !== code && next !== code) ask(code, main);
-    return { entries: last?.main === main ? last.entries : [], working: true, failed: false };
+    const held = heldKey(), got = answers.get(code)?.get(held);
+    const kept = last?.main === main ? last : null;
+    if (got === "failed") return { entries: kept?.entries ?? [], would: new Map(), working: false, failed: true };
+    if (got) return { entries: got.entries, would: got.would, refused: got.refused, working: false, failed: false };
+    if (working?.code !== code || working.held !== held) ask(code, main);
+    return { entries: kept?.entries ?? [], would: kept?.would ?? new Map(), working: true, failed: false };
   };
 }
 
@@ -113,6 +120,9 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
   if (c.failed && !c.entries.length) { box.append(h("p", { class: "status-line warn", title: "The worker working them out failed" }, "No choices")); return box; }
   if (!c.entries.length) { box.append(h("p", { class: "empty" }, c.working ? "Working out…" : "None")); return box; }
   if (c.working) box.append(h("p", { class: "hint" }, "Updating…"));
+  // What is held can't be (a run is refused the same): said first, the
+  // compiler's own picks below, each with its row to hold another.
+  if (c.refused) box.append(h("p", { class: "status-line bad", role: "alert", title: c.refused }, "Held choice refused · ", h("span", { class: "hint" }, c.refused)));
   const up = parentLookup(code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   for (const [title, kinds] of SECTIONS) {
@@ -130,9 +140,15 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
       // `worker threads` among them, when slow said on hover.
       const at = e.among.findIndex((a) => e.pick === a || e.pick.startsWith(`${a} `) || e.pick.startsWith(`${a},`));
       const chips = at < 0 ? [e.pick || "—", ...e.among] : e.among, on = Math.max(at, 0);
+      // A whole type's row can be held (L280c); a split (`array of List
+      // from a, b`) is the compiler's to make.
+      const holdable = e.kind === "representation" && at >= 0, would = c.would.get(e.id);
       return h("div", { class: `choice${open && ids.includes(open) ? " on" : ""}`, "data-choice-row": ids.join(" "), title: [...e.facts, `target ${e.target}`].join("\n") },
-        h("div", { class: "choice-head" }, h("span", {}, about, same.length > 1 ? h("span", { class: "choice-n" }, ` ×${same.length}`) : null), h("span", { class: `choice-state${e.held ? " held" : ""}` }, e.held ? "Held" : "Auto")),
-        h("div", { class: "file-chips" }, ...chips.map((a, i) => h("span", { class: `chip-btn${i === on ? " on" : ""}`, ...(i === on && a !== e.pick ? { title: e.pick } : {}) }, a))));
+        h("div", { class: "choice-head" }, h("span", {}, about, same.length > 1 ? h("span", { class: "choice-n" }, ` ×${same.length}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
+        h("div", { class: "file-chips" }, ...chips.map((a, i) => i !== on && holdable
+          ? h("button", { class: "chip-btn", type: "button", "data-act": "choice-hold", "data-of": e.id, "data-rep": a, title: `Store ${e.about} as ${a}` }, a)
+          : h("span", { class: `chip-btn${i === on ? " on" : ""}`, ...(i === on && a !== e.pick ? { title: e.pick } : {}) }, a))),
+        would ? h("p", { class: "status-line warn", title: `Held as ${e.pick}; with nothing held, the compiler picks ${would}` }, `Compiler would pick ${would}`) : null);
     })));
   }
   return box;

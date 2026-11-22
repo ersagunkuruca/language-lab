@@ -23,9 +23,25 @@ test("an entry of each kind reads as what it is about, its pick and what it was 
 test("calc's choices: tokens's keep may run on worker threads, a badge on its function", () => {
   const p = loadProgram(fileURLToPath(new URL("../examples/calc", import.meta.url))), names = p.pres.names;
   const main = p.own.defs.find((d) => names[d] === "main")!;
-  const entries = choicesFor(p.code, names, main).map(parseChoice).filter((c) => !!c);
+  const entries = choicesFor(p.code, names, main).choices.map(parseChoice).filter((c) => !!c);
   const keep = entries.find((c) => c.kind === "place" && c.about === "tokens's keep");
   assert.ok(keep, entries.map((c) => c.about).join(", "));
   assert.equal(p.code.nodes[keep.id]?.kind, "lambda");
-  assert.equal(choiceMarks({ entries, working: false, failed: false }).get(keep.id), "tokens's keep: worker threads when slow");
+  assert.equal(choiceMarks({ entries, would: new Map(), working: false, failed: false }).get(keep.id), "tokens's keep: worker threads when slow");
+});
+
+test("a type held in Choices: its entry says held, and what the compiler would pick", () => {
+  const p = loadProgram(fileURLToPath(new URL("../examples/numbers", import.meta.url))), names = p.pres.names;
+  const main = p.own.defs.find((d) => names[d] === "main")!;
+  const nat = choicesFor(p.code, names, main).choices.map(parseChoice).find((c) => c?.about === "Nat")!;
+  assert.equal(nat.pick, "int");
+  const got = choicesFor(p.code, names, main, [[nat.id, "unary"]]);
+  const held = got.choices.map(parseChoice).find((c) => c?.id === nat.id)!;
+  assert.deepEqual([held.held, held.pick], [true, "unary"]);
+  assert.deepEqual(got.would, [[nat.id, "int"]]);
+  // One the program doesn't check on: refused with why, the compiler's
+  // own picks given instead.
+  const binary = choicesFor(p.code, names, main, [[nat.id, "binary"]]);
+  assert.match(binary.refused ?? "", /doesn't check on Nat as binary/);
+  assert.equal(binary.choices.map(parseChoice).find((c) => c?.id === nat.id)?.pick, "int");
 });
