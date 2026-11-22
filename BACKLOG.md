@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row (startup: E280 to E284 done, E283 closed measured, 2026-11-21) |
-| C Compiler and targets | "Compiler lane" | C286, C287 |
+| C Compiler and targets | "Compiler lane" | C287 |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
@@ -94,7 +94,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
-| C286 | crew in core IR grows faster than its ideal: 3.0x at 50 tasks, 12.1x at 200, 27.3x at 1,000. Profile at 1,000 and fix what grows | GAPS sweep 2026-11-22 | 2026-11-22 |
 | C287 | board in core IR grows faster than its ideal: adding a card 0.32 ms at 50 cards, 2.07 ms at 2,000 (the ideal's 0.01 ms throughout), the session 35x at 2,000. Profile at 2,000 and fix what grows | GAPS sweep 2026-11-22 | 2026-11-22 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)

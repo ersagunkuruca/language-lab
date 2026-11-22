@@ -5067,3 +5067,10 @@ so machine's stores write one slot. bench-machine (median of three):
 | primes 20000 | 11,203 ms | 22 ms | 35 ms | 26 ms | 14 ms |
 | sort 400 | 243 ms | 23 ms | 41 ms | 28 ms | 15 ms |
 | sort 1000 | 2,345 ms | 139 ms | 248 ms | 146 ms | 90 ms |
+
+### After C286
+
+crew's tasks' array, built from the back by a function calling itself,
+stays rows (columns.ts), so a task put in front goes into the room
+instead of copying every column. bench-crew: 1,000 tasks 304 → 101 ms
+(27.3x → 9.2x the ideal); 2,000 tasks 1.19 → 0.22 s.
