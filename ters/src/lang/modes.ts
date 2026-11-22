@@ -1267,25 +1267,37 @@ export function analyzer(program: Code, names: Record<Id, string> = {}, { plansO
       for (const [i, j, s] of g.arcs) { const k = `${i},${j}`; best.set(k, [i, j, s || (best.get(k)?.[2] ?? false)]); }
       return { from: g.from, to: g.to, arcs: [...best.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]) };
     };
-    const key = (g: Graph) => `${g.from}\u0000${g.to}\u0000${g.arcs.map((a) => a.join(",")).join(";")}`;
+    // A graph by its ends' numbers, not their keys: a mode's key is long,
+    // and the closure looks up every graph it composes (I344).
+    const ends = new Map<string, number>(), endOf = (m: string) => { let i = ends.get(m); if (i === undefined) ends.set(m, (i = ends.size)); return i; };
+    const key = (g: Graph) => `${endOf(g.from)} ${endOf(g.to)} ${g.arcs.map((a) => a.join(",")).join(";")}`;
     const compose = (g: Graph, h: Graph) => norm({ from: g.from, to: h.to, arcs: g.arcs.flatMap(([i, j, s1]) => h.arcs.filter(([k]) => k === j).map(([, l, s2]): Arc => [i, l, s1 || s2])) });
     const all = new Map<string, Graph>();
     let todo = graphs.map(norm);
     if (from) {
-      const reach = new Set([from]);
-      for (let grew = true; grew;) { grew = false; for (const g of todo) if (reach.has(g.from) && !reach.has(g.to)) { reach.add(g.to); grew = true; } }
+      // The modes reachable from it, by the graphs out of each (one walk).
+      const out = new Map<string, string[]>();
+      for (const g of todo) { let xs = out.get(g.from); if (!xs) out.set(g.from, (xs = [])); xs.push(g.to); }
+      const reach = new Set([from]), stack = [from];
+      while (stack.length) for (const t of out.get(stack.pop()!) ?? []) if (!reach.has(t)) { reach.add(t); stack.push(t); }
       todo = todo.filter((g) => reach.has(g.from));
     }
+    // The graphs found so far by where they start and end, so each new one
+    // is composed with those it meets only (I344: mini's parser, every
+    // graph met every other, 1.4 s of a 2 s check). The closure is the
+    // same whatever the order.
+    const byFrom = new Map<string, Graph[]>(), byTo = new Map<string, Graph[]>();
+    const at = (m: Map<string, Graph[]>, k: string) => { let xs = m.get(k); if (!xs) m.set(k, (xs = [])); return xs; };
     while (todo.length) {
       const g = todo.pop()!;
       const k = key(g);
       if (all.has(k)) continue;
       all.set(k, g);
       if (all.size > 4000) return { ok: false, at: ["too many call patterns to check"] };
-      for (const h of [...all.values()]) {
-        if (g.to === h.from) todo.push(compose(g, h));
-        if (h.to === g.from) todo.push(compose(h, g));
-      }
+      at(byFrom, g.from).push(g);
+      at(byTo, g.to).push(g);
+      for (const h of byFrom.get(g.to) ?? []) todo.push(compose(g, h));
+      for (const h of byTo.get(g.from) ?? []) todo.push(compose(h, g));
     }
     const bad = [...all.values()].filter((g) => g.from === g.to && key(compose(g, g)) === key(g) && !g.arcs.some(([i, j, s]) => i === j && s) && !byLength(g.from));
     return { ok: !bad.length, at: [...new Set(bad.map((g) => g.from))] };
