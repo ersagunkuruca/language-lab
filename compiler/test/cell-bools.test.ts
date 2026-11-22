@@ -43,3 +43,12 @@ test("a cell's value turned keeps an array a view: the same one where no item ch
   assert.ok(back instanceof ArrayView);
   assert.deepEqual((back as InstanceType<typeof ArrayView>).fields, [2, true, 2]);
 });
+
+test("data holding no Bool comes back from a cell's turn as the same value", async () => {
+  const { turned } = await import("../src/core-rt.ts");
+  const { TRUE } = await import("../../ters/src/lang/std.ts");
+  const plain = { tag: "bird", fields: [1, { tag: "v", fields: [2, 3] }] };
+  assert.equal(turned(plain, (x) => x), plain);
+  const flagged = { tag: "bird", fields: [1, { tag: TRUE, fields: [] }] };
+  assert.deepEqual(turned(flagged, (x) => ((x as { tag?: string } | null)?.tag === TRUE ? true : x)), { tag: "bird", fields: [1, true] });
+});

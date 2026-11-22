@@ -141,8 +141,12 @@ the same answers for + − × and comparisons, as pictures already do.
 The compiler prints each `draw` it lowers (compiler/src/gpu-draws.ts)
 as a site, and gpu-frame.ts draws the sites it is given:
 
-- The page script calls `pageDraws({ [site]: Site })` before the page
-  starts. A Site is `{ wgsl, caps, instance, corner, colour }`.
+- The page script calls `pageDraws({ [site]: Site }, { [site]: Packs })`
+  before the page starts. A Site is `{ wgsl, caps, instance, corner,
+  colour }`. Packs are `{ instance, corner }`, each `(items, f32s, i32s)`
+  writing item i's leaves at i × leaves, as the generic `put` would but
+  read straight from the compiled records (G8b). A site with no packs
+  (written by hand) is put's.
 - A compiled draw is `frame$draw(mesh, instances, vertex, fragment,
   site, …caps)`. Its fields 4 and 5 are the site and the list of values
   its two functions read where they were written (`view`, a colour), in
