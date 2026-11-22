@@ -448,6 +448,14 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
             return `(${a}.push(${x}), ${a})`;
           }
           noted(e.t.cases[e.c].variant, e.c);
+          // Written into a local's cell (C279, scalar.ts turned): every
+          // input first, then the changed fields; anything else made anew.
+          if (e.into !== undefined) {
+            const xs = e.args.map((a) => named(ex(a, pre, d), pre, d)), y = local(e.into);
+            const fresh = made(e.t.cases[e.c].variant, xs), k = fresh.slice(4, fresh.indexOf("("));
+            const writes = xs.flatMap((x, i) => (e.same?.includes(i) ? [] : [`${y}.f${i} = ${x}`]));
+            return `(${y} instanceof ${k} ? (${[...writes, y].join(", ")}) : ${fresh})`;
+          }
           const v = made(e.t.cases[e.c].variant, exs(e.args, pre, d));
           return constant(e) ? constName(v) : v;
         }
