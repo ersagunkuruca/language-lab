@@ -25,10 +25,10 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row (startup: E280 to E284 done, E283 closed measured, 2026-11-21) |
-| C Compiler and targets | "Compiler lane" | C283 (the greenhouse in compiled JS) |
+| C Compiler and targets | "Compiler lane" | C284 (the greenhouse in wasi) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: C283 (the greenhouse in compiled JS, 4.9x the JS by hand) (C265, C267 done; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: C284 (the greenhouse in wasi, 2.2x native) (C265, C267 done, C283 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -94,7 +94,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
-| C283 | The greenhouse in compiled JS is 4.9x the JS by hand (600 ticks of 2,000 moths: 2.93 s against 0.60 s; native 0.85 s, wasi 1.87 s, 11-22). A profile puts 37% in the walk over a cell's moths with `met` put in place, 11% in the collector and 5% in `arrayOf`. In that walk, each field read goes through `r.f0 ?? r.fields[0]`, each column read through `Number.isInteger(i) && i >= 0 && i < n` with a stand-in made otherwise, a literal (`reach squared`, 64) is checked to be finite on every read, and `0 < length − i` is worked out as a difference. Tried and dropped 11-22: met's Flock and its Vecs as separate values through the walk (loop-records.ts after inlineCalls, with `if c then Flock(…) else acc` as two next rounds). Only push and centre split, and the run was 10% slower, because few neighbours are within reach, so few Flocks are made | GAPS game round 2 (GH6), 11-22 | 2026-11-22 |
+| C284 | The greenhouse in wasi is 2.1x native through C (600 ticks of 2,000 moths: 1.7 to 1.8 s against 0.85 s, 11-22). A profile under Node puts 30% in `met`, 18% in the walk over a cell's moths (`gathered$from counted`) and 10% in the collector. C passes Thing, Flock and Vec by value, as structs; WebAssembly makes a GC struct for every one: `offset to` and `plus` make a Vec each, and every near moth a new Flock and three Vecs (10 million of 31.8 million looked at). The Flock's count is an eqref Int added through `int.add`. Not the cause: exports (none but main changed nothing) and inlining (V8 already inlines the small calls). The fix to build: a record of a few numbers passed and returned as its fields (multi-value params and results), as C passes it | GAPS game round 2 (GH6), 11-22 | 2026-11-22 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
