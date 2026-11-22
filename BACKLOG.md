@@ -47,7 +47,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E308 | Choices are asked of the worker only once edits settle, and not at all when neither the tab nor a badge would change: today every edit costs 3 to 5 s of worker CPU on a page program (QA-2026-11-22c M2) | QA 11-22c | P2 | S | |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 

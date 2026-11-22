@@ -47,6 +47,8 @@ export function parseChoice(line: string): Choice | null {
 
 export const SECTIONS: [string, ChoiceKind[]][] = [["Representation", ["representation"]], ["Algorithm", ["way", "mode plan"]], ["Placement", ["place"]], ["Schedule", ["schedule"]]];
 
+const SETTLE = 700;
+
 export interface ChoicesHost {
   code(): Code;
   names(): Names;
@@ -56,6 +58,10 @@ export interface ChoicesHost {
   // What the program needs before the compiler can choose (its type
   // errors, its holes), or null (QA 11-22c M1).
   blocked(): string | null;
+  // Whether choices for an edited version are wanted now: the tab is
+  // open, or the open definition had a badge (QA 11-22c M2). A program's
+  // first are always wanted, for its badges.
+  wanted(last: readonly Choice[]): boolean;
   main(): Id | undefined;
   render(): void;
 }
@@ -90,6 +96,19 @@ export function choicesOf(host: ChoicesHost) {
     w.onerror = (e) => { e.preventDefault(); w.terminate(); worker = null; settle("failed"); };
     w.postMessage(a);
   };
+  // Asked once edits settle (QA 11-22c M2: each one cost a page program 3
+  // to 5 s of the worker), and only when wanted; a render after that, the
+  // tab opened, asks again.
+  let waiting: { code: Code; held: string; timer: ReturnType<typeof setTimeout> } | null = null;
+  const later = (code: Code, held: string, main: Id, last: readonly Choice[] | null) => {
+    if (waiting?.code === code && waiting.held === held) return;
+    if (waiting) clearTimeout(waiting.timer);
+    const timer = setTimeout(() => {
+      waiting = null;
+      if (host.code() === code && heldKey() === held && (!last || host.wanted(last))) ask(code, main);
+    }, SETTLE);
+    waiting = { code, held, timer };
+  };
   return (): Choices | null => {
     const code = host.code(), main = host.main();
     if (!main) return null;
@@ -99,7 +118,7 @@ export function choicesOf(host: ChoicesHost) {
     const kept = last?.main === main ? last : null;
     if (got === "failed") return { entries: kept?.entries ?? [], would: new Map(), working: false, failed: true };
     if (got) return { entries: got.entries, would: got.would, refused: got.refused, working: false, failed: false };
-    if (working?.code !== code || working.held !== held) ask(code, main);
+    if (working?.code !== code || working.held !== held) later(code, held, main, kept?.entries ?? null);
     return { entries: kept?.entries ?? [], would: kept?.would ?? new Map(), working: true, failed: false };
   };
 }
