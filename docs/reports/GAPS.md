@@ -4878,3 +4878,11 @@ the core IR spends its time on at 8 blocks: the collector 28%, YIN's
 `difference` 22% (a pair made for every item of its zipped fold, then
 taken apart), the FFT's maps and splits most of the rest.
 
+### After C279
+
+A list a loop builds onto a call of itself, the items so far kept newest
+first, is turned round at the end in its own cells in JavaScript, not
+made again (scalar.ts `turned`): strings at 32 blocks, three runs each,
+core 9.6 → 8.3 s. No pair per item in YIN's zipped fold was tried too and
+was within noise.
+

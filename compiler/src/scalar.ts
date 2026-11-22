@@ -350,7 +350,7 @@ export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
     case "handle": return { ...r, reason: m(r.reason), save: m(r.save), ...(r.frame !== undefined ? { frame: m(r.frame) } : {}) };
     case "budget": return { ...r, save: m(r.save), res: m(r.res) };
     case "released": return r.st !== undefined ? { ...r, st: m(r.st) } : r;
-    case "make": return r.into !== undefined ? { ...r, into: m(r.into) } : r;
+    case "make": case "new": return r.into !== undefined ? { ...r, into: m(r.into) } : r;
     default: return r;
   }
 }
@@ -447,7 +447,10 @@ export type SExpr =
   | { k: "get"; rec: SExpr; t: RType; i: number }
   // A value of case c of t, and field i of one (it is that case: the
   // checker says so, or the match just looked).
-  | { k: "new"; t: DType; c: number; args: SExpr[] }
+  // `into` (C279): written into that local's value where it is a cell of
+  // the same case, its fields at `same` already these: the JavaScript
+  // printer's, other printers make it anew.
+  | { k: "new"; t: DType; c: number; args: SExpr[]; into?: number; same?: number[] }
   | { k: "field"; rec: SExpr; t: DType; c: number; i: number }
   // A written list (`list of`, L181b): items in order, each a value of
   // case c's head, made into case c from the end onto t's empty case. Flat,
@@ -5500,8 +5503,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // input, so each such end is a tail call, and every other end gives
   // them turned round onto its answer: the same list, built in the same
   // order. (Tail recursion modulo cons, done by reversing rather than
-  // filling holes, since WasmGC cells are immutable; the JS backend
-  // fills holes, G22.)
+  // filling holes, since WasmGC cells are immutable; in JavaScript the
+  // reverse turns the cells where they are, `turned`, C279.)
   function modCons(from: number) {
     const end = funcs.length;
     for (let i = from; i < end; i++) {
@@ -5536,11 +5539,30 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           }
         }
         // Not a tail call any more: its answer is turned round onto.
-        return { k: "call", fn: reverse(t), tail: true, args: [acc, "tail" in e && e.tail ? { ...e, tail: false } as SExpr : e] };
+        return { k: "call", fn: turned(t), tail: true, args: [acc, "tail" in e && e.tail ? { ...e, tail: false } as SExpr : e] };
       };
       h.body = onto(mapLocals(g.body, (j) => (j < p ? j : j + 1)));
       g.body = { k: "call", fn: hi, tail: true, args: [...g.params.map((_, j): SExpr => ({ k: "local", i: j })), { k: "new", t, c: nil, args: [] }] };
     }
+  }
+  // The items so far turned round onto an answer: as reverse, but given
+  // only lists made here and seen by nothing else (the `onto` copy's
+  // input, made cell by cell by it), so each cell is turned where it is
+  // (`into`, the JavaScript printer's), no list made a second time (C279).
+  // Tail recursion modulo cons by filling holes is what this gives, as
+  // OCaml's (Bour, Clément and Scherer 2021); WasmGC's cells are
+  // immutable, and C's reuse a cell given once already (Perceus).
+  function turned(d: DType): number {
+    const key = `turned:${d.key}`;
+    if (index.has(key)) return index.get(key)!;
+    const g: SFunc = { def: d.def, name: `${d.name}.turned`, params: [d, d], result: d, locals: [d, d], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    index.set(key, gi);
+    const cons = d.cases.findIndex((c) => c.variant === CONS), l: SExpr = { k: "local", i: 0 };
+    g.body = { k: "case", scrut: l, s: 0, t: d, result: d, arms: d.cases.map((_, k): SExpr => (k !== cons ? { k: "local", i: 1 } : {
+      k: "call", fn: gi, tail: true, args: [{ k: "field", rec: l, t: d, c: k, i: 1 }, { k: "new", t: d, c: k, args: [{ k: "field", rec: l, t: d, c: k, i: 0 }, { k: "local", i: 1 }], into: 0, same: [0] }],
+    })) };
+    return gi;
   }
   // A list turned round onto another, a loop.
   function reverse(d: DType): number {
