@@ -72,7 +72,7 @@ import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts"
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
-import { fails, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, poolHeld, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -322,6 +322,11 @@ static void lab__held(void) {
 // thread that gave it. A map met on one of them, or inside a job, stays
 // on its thread. With TERS_BRANCHES=say, how many items they ran is said
 // at the exit, as compiled JavaScript says it (branches-rt.ts).
+// With how many threads it starts (L280e): cores less one, at most 15,
+// or as many as its choices hold (at most 64); TERS_WORKERS says otherwise.
+const poolC = (held: number | undefined) => `#define LAB_POOL_HELD ${held ?? "sysconf(_SC_NPROCESSORS_ONLN) - 1"}
+#define LAB_POOL_MAX ${held === undefined ? 15 : 64}
+${POOL_C}`;
 const POOL_C = `static _Thread_local int lab_in_par = 0, lab_on_pool = 0;
 static int64_t lab_par_items = 0;
 static void lab_par_say(void) { fprintf(stderr, "items on threads: %lld\\n", (long long)__atomic_load_n(&lab_par_items, __ATOMIC_RELAXED)); }
@@ -356,13 +361,13 @@ static int lab_pool_ready(void) {
   if (lab_in_par) return 0;
   if (lab_pool_n < 0) {
     const char *w = getenv("TERS_WORKERS");
-    long n = w ? atol(w) : sysconf(_SC_NPROCESSORS_ONLN) - 1;
+    long n = w ? atol(w) : LAB_POOL_HELD;
     pthread_attr_t a;
     lab_pool_n = 0;
     if (getenv("TERS_BRANCHES") && !strcmp(getenv("TERS_BRANCHES"), "say")) atexit(lab_par_say);
     pthread_attr_init(&a);
     pthread_attr_setstacksize(&a, sizeof(void *) == 8 ? (size_t)1 << 28 : (size_t)1 << 24);
-    for (long k = 0; k < (n > 15 ? 15 : n); k++) { pthread_t t; if (pthread_create(&t, &a, lab_pool_loop, 0)) break; pthread_detach(t); lab_pool_n++; }
+    for (long k = 0; k < (n > LAB_POOL_MAX ? LAB_POOL_MAX : n); k++) { pthread_t t; if (pthread_create(&t, &a, lab_pool_loop, 0)) break; pthread_detach(t); lab_pool_n++; }
   }
   return lab_pool_n > 0;
 }
@@ -1209,7 +1214,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     ...[...tables.values()].flatMap((t) => tableC(t)),
     ...(splits ? [splitC(TL)] : []),
     ...(i64RangeUsed ? [i64RangeC(splits)] : []),
-    ...(threads ? [POOL_C, ...[...countPars.values()].map((x) => countC(x, stops, fuelled)), ...[...pars.values()].map((x) => parC(x, stops, fuelled)), ...[...togethers.values()].map((x) => togetherC(x, stops, fuelled))] : []),
+    ...(threads ? [poolC(poolHeld("C")), ...[...countPars.values()].map((x) => countC(x, stops, fuelled)), ...[...pars.values()].map((x) => parC(x, stops, fuelled)), ...[...togethers.values()].map((x) => togetherC(x, stops, fuelled))] : []),
     "",
     ...[...fiberGlobals].map(([n, t]) => `static ${t} ${n};`),
     ...fiberC,

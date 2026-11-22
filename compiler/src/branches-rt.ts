@@ -261,8 +261,11 @@ function startPool(): Helper[] {
 }
 
 // Called by the module before its main (core-js.ts coreModule).
-export function branchesFrom(url: string, fns: Record<string, Fn>, closure: Module["closure"], Aborted: Module["Aborted"]): void {
+// And how many worker threads it starts where its choices hold that
+// (L280e): TERS_WORKERS still says otherwise.
+export function branchesFrom(url: string, fns: Record<string, Fn>, closure: Module["closure"], Aborted: Module["Aborted"], workers?: number): void {
   mod = { url, fns, closure, Aborted };
+  if (workers !== undefined) size = workers;
   names = new Map(Object.entries(fns).map(([k, f]) => [f, k]));
 }
 
@@ -780,8 +783,9 @@ interface Web { script: string; workers: Worker[] | null }
 let web: Web | undefined;
 // Given by a page's script before its main (core-page.ts): its own text,
 // which each worker runs, and its functions by name.
-export function pageBranches(script: string | undefined, fns: Record<string, Fn>, closure: Module["closure"], Aborted: Module["Aborted"]): void {
+export function pageBranches(script: string | undefined, fns: Record<string, Fn>, closure: Module["closure"], Aborted: Module["Aborted"], workers?: number): void {
   mod = { url: "", fns, closure, Aborted };
+  if (workers !== undefined) webHeld = workers;
   names = new Map(Object.entries(fns).map(([k, f]) => [f, k]));
   if (script !== undefined && typeof Worker === "function" && typeof Blob === "function") web = { script, workers: null };
 }
@@ -812,7 +816,8 @@ export function pageWorker(): boolean {
 interface WebJob { job: number; f: unknown; join?: unknown; runs: [number, unknown][]; how: AwayHow | How; ways?: number; steps: number | null }
 // A run's answer, with the steps it spent under a page's budget; `out`: it ran out.
 type WebAnswer = Answer & { used?: number; out?: true };
-const webSize = () => Math.max(0, Math.min(7, ((globalThis as { navigator?: { hardwareConcurrency?: number } }).navigator?.hardwareConcurrency ?? 1) - 1));
+let webHeld: number | undefined;
+const webSize = () => webHeld ?? Math.max(0, Math.min(7, ((globalThis as { navigator?: { hardwareConcurrency?: number } }).navigator?.hardwareConcurrency ?? 1) - 1));
 function startWeb(w: Web): Worker[] {
   const url = URL.createObjectURL(new Blob([w.script], { type: "text/javascript" }));
   const out: Worker[] = [];

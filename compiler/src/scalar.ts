@@ -638,7 +638,12 @@ export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = {
 // given after where (false, or "", where only the runs are held).
 // C's (`cRuns`) runs a thread.
 let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU">; runs: ReadonlyMap<Id, number>; cRuns: ReadonlyMap<Id, number> } = { js: new Set(), c: new Set(), page: new Map(), runs: new Map(), cRuns: new Map() };
-export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = [], cRuns: Iterable<[Id, number]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page), runs: new Map(runs), cRuns: new Map(cRuns) }; }
+export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = [], cRuns: Iterable<[Id, number]> = [], held: Iterable<[string, number]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page), runs: new Map(runs), cRuns: new Map(cRuns) }; pool = new Map(held); }
+// And how many workers or threads a program starts, held (L280e): by
+// target ("JavaScript", "JavaScript page", "C"), read by the printers
+// (core-js.ts's branchesFrom and pageBranches, c.ts's lab_pool_ready).
+let pool: ReadonlyMap<string, number> = new Map();
+export const poolHeld = (target: "JavaScript" | "JavaScript page" | "C"): number | undefined => pool.get(target);
 const runsOf = (at: Id): SExpr[] => { const n = onWorkers.runs.get(at); return n ? [{ k: "num", v: n }] : []; };
 const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = runsOf(at); return on || n.length ? [{ k: "text", v: on ?? "" }, ...n] : []; };
 // map.worth's say, true where its site is held anywhere off the main thread.

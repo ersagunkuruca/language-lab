@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -665,7 +665,7 @@ const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choice
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
-const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns); };
+const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); };
 if (holdsPlaces) await onMainThread(placesHeld);
 const loaded = { ...answeredHere(load(path)), ...(heldHere.size ? { held: heldHere } : {}) };
 const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
@@ -689,7 +689,7 @@ async function places(q: { code: Code; info: Info; names: Names }, root: Id): Pr
   const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts");
   let ir: ReturnType<typeof lower>;
   try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
-  return placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names);
+  return placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names, undefined, root);
 }
 // And where a command-line program's work runs in C (`ters native`): on
 // its threads, the program stored as C stores it.
@@ -697,7 +697,7 @@ function cPlaces(root: Id): string[] {
   if (staticPage) return [];
   try {
     const c = representedOr(loaded, root, false, true, false, true);
-    return threadLines(nativeLowered(root, false, false, c).lowered, c.names);
+    return threadLines(nativeLowered(root, false, false, c).lowered, c.names, root);
   } catch { return []; }
 }
 
@@ -984,7 +984,7 @@ switch (command) {
       if (heldHere.size || holdsPlaces) {
         const alone = represented({ ...loaded, held: undefined }, start, true);
         // Where the compiler alone would run the work held on the main thread.
-        if (holdsPlaces) await onMainThread({ js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [] });
+        if (holdsPlaces) await onMainThread(NONE_HELD);
         const placedAlone = holdsPlaces ? [...await places(alone, start), ...cPlaces(start)] : [];
         if (holdsPlaces) await onMainThread(placesHeld);
         for (const l of heldWarnings(writtenChoices, [...choiceLines(loaded, start, alone.picks ?? []), ...placedAlone])) console.log(l);

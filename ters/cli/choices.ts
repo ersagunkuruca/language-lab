@@ -183,8 +183,21 @@ export const C_RUNS = 8;
 // And a C fold counting into a map, the items in each chunk a thread
 // counts from empty (c.ts chunksC's chunk).
 export const C_CHUNK = 16384;
+// And how many workers or threads a program starts beside its main one:
+// the cores less one, at most so many (branches-rt.ts sizeOf and webSize,
+// c.ts lab_pool_ready), one entry for the program where any of its work
+// may be shared; held to a count from 0 to 64.
+export const POOL = { JavaScript: 3, "JavaScript page": 7, C: 15 } as const;
+const POOL_OF = { JavaScript: "worker threads", "JavaScript page": "workers", C: "threads" } as const;
+const poolLine = (main: Id, name: string, target: keyof typeof POOL) => `${main} place: ${name}'s ${POOL_OF[target]}: cores less one, at most ${POOL[target]}; among 0 to 64; target ${target}`;
+const POOLED = /^(\S+) place: .*'s (?:worker threads|workers|threads): (cores less one, at most \d+|\d+); among 0 to 64; target (JavaScript|JavaScript page|C)$/;
 const IN_RUNS = new Set(["map", "keep", "add", "max", "min", "with", "every", "any", "first where"]);
-export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target = "JavaScript page"): string[] {
+// With `main`, the program's workers' entry too.
+export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: "JavaScript page" | "JavaScript" = "JavaScript page", main?: Id): string[] {
+  const lines = sitesPlaced(ir, gpu, names, target);
+  return main !== undefined && lines.length ? [...lines, poolLine(main, ({ ...LIBRARY.names, ...names })[main] ?? main, ir.awayMaps?.length ? target : "JavaScript")] : lines;
+}
+function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target: string): string[] {
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   // A definition by its name as written: main's copy stored otherwise
@@ -207,7 +220,11 @@ export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, 
 // threadSites), by the node it is about, where the lowered code still
 // has a call of that runtime function (the passes after rebuild them).
 const THREADS: Record<string, string> = { ...HOW, together: "together", both: "two calls of one function", counted: "fold counting into a map" };
-export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; how: string }[] }, names: Names): string[] {
+export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; how: string }[] }, names: Names, main?: Id): string[] {
+  const lines = threadsPlaced(ir, names);
+  return main !== undefined && lines.length ? [...lines, poolLine(main, ({ ...LIBRARY.names, ...names })[main] ?? main, "C")] : lines;
+}
+function threadsPlaced(ir: Lowered & { threadSites?: { e: unknown; at: Id; how: string }[] }, names: Names): string[] {
   if (!ir.threadSites?.length) return [];
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code), seen = new Set<unknown>(), kept = new Set<string>();
   const walk = (e: unknown): void => {
@@ -283,10 +300,14 @@ const CHUNKED = "; in chunks of ";
 // its first items; and a page's on its workers or its GPU (`page`).
 // And the runs held (L280e): JavaScript's, a command-line program's or a
 // page's, by the node; C's runs a thread, or its chunks' items.
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][] }
+// And the workers or threads a program starts, by the target (`pool`).
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][] }
+export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [] };
   for (const l of lines) {
+    const pooled = l.startsWith(HELD) ? POOLED.exec(l.slice(HELD.length)) : null;
+    if (pooled) { if (/^\d+$/.test(pooled[2])) out.pool.push([pooled[3], Number(pooled[2])]); continue; }
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
     if (!p) continue;
     const [, id, on, , runs, target] = p;
@@ -312,6 +333,12 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
     // A placement held (L280h): heldPlaces's.
+    const pooled = POOLED.exec(l.slice(HELD.length));
+    if (pooled) {
+      if (/^\d+$/.test(pooled[2]) && Number(pooled[2]) > 64) throw new Error(`a program starts from 0 to 64 workers: ${l}`);
+      continue;
+    }
+    if (!m && / place: .*'s (?:worker threads|workers|threads): [^;]*; among 0 to 64; /.test(l)) throw new Error(`a program starts from 0 to 64 workers: ${l}`);
     const place = PLACE.exec(l.slice(HELD.length));
     if (!m && place) {
       if (!HOLDABLE(place[3], place[2])) throw new Error(`a placement is held on one of what it is among: ${l}`);
@@ -347,6 +374,7 @@ export function heldWarnings(written: readonly string[], alone: readonly string[
   const places = written.flatMap((l) => {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null, was = p && placed.get(`${p[1]} ${p[5]}`);
     if (!p || !was) return [];
+    if (POOLED.test(l.slice(HELD.length))) return was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]} ${POOL_OF[p[5] as keyof typeof POOL_OF].replace(p[2] === "1" ? /s$/ : /$^/, "")}, where the compiler would start ${was[2]}`] : [];
     return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [l.includes(CHUNKED) ? `held   ${p[1]} (${p[5]}): in chunks of ${p[4]} items, where the compiler would cut it in chunks of ${was[4]}` : `held   ${p[1]} (${p[5]}): in ${p[4]} runs${p[5] === "C" ? " a thread" : ""}, where the compiler would share it in ${was[4]}`] : [])];
   });
   return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places];
