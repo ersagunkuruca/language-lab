@@ -1910,6 +1910,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // Their inputs' types, for WebAssembly's imports (L213c9).
           return { k: "world", op: KEPT_OPS[target], aborts: false, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
         }
+        // A file's bytes, read and written, in C (C291): the world's, as
+        // JavaScript's HOST_WORLD; failing as reading a file does.
+        if (opts.handlers && opts.threads && (target === IO.readBytes || target === IO.writeBytes)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: target === IO.readBytes ? "readBytes" : "writeBytes", aborts: true, args: args(), t };
+        }
         // A log line nothing handles (L213a3, for a release that logs): the
         // world's log, as the evaluator writes it.
         if ((opts.host || opts.releases) && target === LOG_OP && !tailOps.has(LOG_OP)) {
