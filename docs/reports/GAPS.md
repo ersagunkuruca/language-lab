@@ -4985,3 +4985,20 @@ that grows is planned again).
 
 strings at 32 blocks stays 24x its ideal.
 
+### After C281
+
+A walk down `characters(t)` reads t in place by byte position: `is
+name` and `is number` make no list of characters, and `all pass` on
+them is no longer weighed for workers. 4 to 7% at 20000 (two runs each,
+before → after):
+
+| mini, 20000 | before | after |
+|---|---|---|
+| core IR | 835 ms | 799 ms (3.4x) |
+| `ters native` | 803 ms | 744 ms (3.1x) |
+| `ters wasi` | 837 ms | 824 ms (3.5x) |
+
+The lexer's own walk (`tokens from`) still makes the list: it reads
+`item at(rest, 0, "")` and `drop(rest, 1)` as well as handing `rest`
+on, so it is not a walker.
+

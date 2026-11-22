@@ -4350,6 +4350,34 @@ ${drop}
   // bytes to fill, filling one, and reading one back.
   "text.new": { params: [["n", "i32"]], result: "text", locals: [], uses: [], body: "local.get $n\narray.new_default $bytes" },
   "text.put": { params: [["t", "text"], ["i", "i32"], ["b", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nlocal.get $i\nlocal.get $b\narray.set $bytes\ni32.const 0" },
+  // Where the character that starts at byte i (< the size) ends: on over
+  // UTF-8's continuation bytes (10xxxxxx).
+  "text.after": {
+    params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [],
+    body: `
+      block void
+        loop void
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          local.get $i
+          local.get $t
+          array.len
+          i32.ge_u
+          br_if 1
+          local.get $t
+          local.get $i
+          array.get_u $bytes
+          i32.const 192
+          i32.and
+          i32.const 128
+          i32.eq
+          br_if 0
+        end
+      end
+      local.get $i`,
+  },
   // Where the character that ends at byte i (> 0) starts: back over
   // UTF-8's continuation bytes (10xxxxxx).
   "text.before": {
@@ -7947,6 +7975,31 @@ const V: Record<string, Omit<RtFn, "name">> = {
   },
   "text.size": { params: [["t", "text"]], result: "i32", locals: [], uses: [], body: "local.get $t\nstruct.get $text 2" },
   "text.byte": { params: [["t", "text"], ["i", "i32"]], result: "i32", locals: [], uses: [], body: "local.get $t\nstruct.get $text 0\nlocal.get $i\nlocal.get $t\nstruct.get $text 1\ni32.add\narray.get_u $bytes" },
+  // Where the character that starts at byte i (< the size) ends: on over
+  // UTF-8's continuation bytes (10xxxxxx).
+  "text.after": {
+    params: [["t", "text"], ["i", "i32"]], result: "i32", locals: opened("t"), uses: [],
+    body: `${openText("t")}
+      block void
+        loop void
+          local.get $i
+          i32.const 1
+          i32.add
+          local.set $i
+          local.get $i
+          local.get $tn
+          i32.ge_u
+          br_if 1
+          ${byteOf("t", "local.get $i")}
+          i32.const 192
+          i32.and
+          i32.const 128
+          i32.eq
+          br_if 0
+        end
+      end
+      local.get $i`,
+  },
   // Where the character that ends at byte i (> 0) starts: back over
   // UTF-8's continuation bytes (10xxxxxx).
   "text.before": {

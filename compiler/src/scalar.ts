@@ -1673,7 +1673,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // (C42), where its items are worth sharing by what each took the
         // last time (map.worth); otherwise the map as compiled, which is
         // the faster for the small maps a loop makes many of.
-        if (opts.host && !fibers && !given.has(n.id) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
+        // Not a text's characters, which no worker is worth (C281).
+        if (opts.host && !fibers && !given.has(n.id) && !charactersCall(n.args[0]) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
           const tx = stype(zonk(n.args[0])), t = stype(zonk(id));
           if (tx && t) {
             // The list once, as a local; the function as written, made
@@ -5564,6 +5565,82 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     })) };
     return gi;
   }
+  // A walk down a text's characters, read in place (C281, GAPS round 21
+  // MN2): mini's `item at(characters(t), 0, "")` and `all pass(characters(t),
+  // p)` made a list of one-character texts to read the first, or each in
+  // turn till one fails. A walker is a function that matches one input,
+  // a list of texts, at its top and hands the rest of it on only to
+  // itself in the same place; called on `characters(t)` it is called
+  // instead on t and a byte position, the copy reading the character at
+  // that position where the list's head was, the list's end where the
+  // text ends. The walker stays, for its other callers. (Deforestation
+  // again, Wadler 1990: the list was only ever taken apart.)
+  // A call of `characters`, as written.
+  function charactersCall(id: Id | undefined): boolean {
+    const x = id ? code.nodes[id] : undefined, fn = x && isCall(x) ? code.nodes[x.fn] : undefined;
+    return fn?.kind === "ref" && fn.target === TEXT_OPS.characters;
+  }
+  function textWalks() {
+    const made = new Map<string, number>();
+    const walkOf = (wi: number, k: number): number => {
+      const key = `${wi}:${k}`;
+      if (made.has(key)) return made.get(key)!;
+      made.set(key, -1);
+      const w = funcs[wi], d = w.params[k], b = w.body;
+      if (!w || w.multi || closureCode.has(wi) || !isData(d) || d.cases.length !== 2) return -1;
+      const c = d.cases.findIndex((x) => x.variant === CONS), nil = 1 - c;
+      if (c < 0 || d.cases[nil].variant !== NIL || d.cases[c].fields.length !== 2) return -1;
+      const head = d.cases[c].fields.findIndex((x) => x.t === "text"), tl = d.cases[c].fields.findIndex((x) => x.t === d);
+      if (head < 0 || tl < 0) return -1;
+      if (b.k !== "case" || b.scrut.k !== "local" || b.scrut.i !== k || !b.arms[c] || !b.arms[nil]) return -1;
+      // The rest of the list: read off the cell, or a local let to it.
+      const tails = new Set<number>(), s = b.s;
+      let ok = true, reads = false;
+      const of = (e: SExpr, sv: number, ts: Set<number>) => (e.k === "field" && e.rec.k === "local" && e.rec.i === sv && e.i === tl) || (e.k === "local" && ts.has(e.i));
+      const scan = (e: SExpr) => {
+        if (!ok) return;
+        if (e.k === "local") { if (e.i === k || e.i === s || tails.has(e.i)) ok = false; return; }
+        if ((e.k === "new" || e.k === "make") && e.into !== undefined && (e.into === k || e.into === s || tails.has(e.into))) { ok = false; return; }
+        if (e.k === "field" && e.rec.k === "local" && e.rec.i === s) { if (e.i === tl) ok = false; else reads = true; return; }
+        if (e.k === "let" && of(e.value, s, tails)) { tails.add(e.i); scan(e.body); return; }
+        if (e.k === "call" && e.fn === wi && !e.cps && of(e.args[k], s, tails)) { e.args.forEach((a, j) => { if (j !== k) scan(a); }); return; }
+        kids(e).forEach(scan);
+      };
+      b.arms.forEach((a) => a && scan(a));
+      if (!ok) return -1;
+      // t where the list was, the position last; the locals after the
+      // inputs one further on.
+      const p = w.params.length, at = (j: number) => (j < p ? j : j + 1);
+      const params: LType[] = [...w.params.map((x, j) => (j === k ? "text" : x)), "i32"];
+      const g: SFunc = { ...w, name: `${w.name}.characters`, params, locals: [...params, ...w.locals.slice(p)], inner: true, body: { k: "num", v: 0 } };
+      const gi = funcs.push(g) - 1;
+      made.set(key, gi);
+      const t: SExpr = { k: "local", i: k }, pos: SExpr = { k: "local", i: p };
+      const next = g.locals.push("i32") - 1, ch = g.locals.push("text") - 1;
+      const s2 = at(s), tails2 = new Set([...tails].map(at));
+      const rw = (e: SExpr): SExpr => {
+        if (e.k === "field" && e.rec.k === "local" && e.rec.i === s2) return { k: "local", i: ch };
+        if (e.k === "let" && tails2.has(e.i)) return rw(e.body);
+        if (e.k === "call" && e.fn === wi && !e.cps && of(e.args[k], s2, tails2)) return { ...e, fn: gi, args: [...e.args.map((a, j) => (j === k ? t : rw(a))), { k: "local", i: next }] };
+        return mapKids(e, rw);
+      };
+      const body = mapLocals(b, at) as Extract<SExpr, { k: "case" }>;
+      const arm = rw(body.arms[c]!);
+      g.body = {
+        k: "if", t: b.result, cond: { k: "op", op: "beq", args: [pos, { k: "rt", fn: "text.size", args: [t] }] }, then: rw(body.arms[nil]!),
+        else: { k: "let", i: next, value: { k: "rt", fn: "text.after", args: [t, pos] }, body: reads ? { k: "let", i: ch, value: { k: "rt", fn: "text.bytes", args: [t, pos, { k: "local", i: next }] }, body: arm } : arm },
+      };
+      return gi;
+    };
+    const sites = (e: SExpr): SExpr => {
+      const r = mapKids(e, sites);
+      if (r.k !== "call" || r.cps) return r;
+      const k = r.args.findIndex((a) => a.k === "rt" && a.fn === "text.characters");
+      const gi = k < 0 ? -1 : walkOf(r.fn, k);
+      return gi < 0 ? r : { ...r, fn: gi, args: [...r.args.map((a, j) => (j === k ? (a as Extract<SExpr, { k: "rt" }>).args[0] : a)), { k: "zero", t: "i32" }] };
+    };
+    for (let i = 0; i < funcs.length; i++) funcs[i].body = sites(funcs[i].body);
+  }
   // A list turned round onto another, a loop.
   function reverse(d: DType): number {
     const key = `reverse:${d.key}`;
@@ -5824,6 +5901,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   }
   for (const [r, why] of unstarted) if (!refused.has(r)) refused.set(r, why);
   finishStreams();
+  if (opts.data) textWalks();
   funcs.forEach((g, j) => { g.body = tidied(g, j).body; });
   // Every closure `derivative` may be asked of carries its derivative, or
   // the evaluator's derive is lowered instead (I245).
