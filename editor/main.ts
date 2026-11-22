@@ -52,6 +52,7 @@ import { shower } from "./shown.ts";
 import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { pagePanels } from "./pagePanel.ts";
 import { whereRuns } from "./whereRuns.ts";
+import { choiceMarks, choicesOf, choicesPanel } from "./choicesPanel.ts";
 import { answersView, lawPanel, profileView, stuckView, valueView } from "./runViews.ts";
 import type { LogEntry } from "../ters/src/lang/worldlog.ts";
 import { fileModules, fromFile, toFile, upgradeFile, versionOf } from "../ters/src/files.ts";
@@ -203,7 +204,9 @@ export interface UI {
   menu: { target: MenuTarget; x: number; y: number; world: Pos; blocks?: boolean } | null;
   // Definitions open as tabs over the graph, and which inspector tab shows.
   tabs: Id[];
-  panel: "node" | "program" | "checks" | "files" | "changes" | "guide";
+  panel: "node" | "program" | "checks" | "choices" | "files" | "changes" | "guide";
+  // The Choices tab's row a node's badge opened (E292).
+  choiceAt?: Id | null;
 }
 
 const styles: Record<StyleName, Style> = { math: mathStyle as unknown as Style, plain: plainStyle as unknown as Style, lisp: lispStyle as unknown as Style };
@@ -1140,6 +1143,15 @@ function kindLabel(id: Id): string {
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
+// The program's choices for main (E292), for the Choices tab and the
+// badges on the nodes they are about.
+const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
+const openChoice = (id: Id) => {
+  ui.panel = "choices"; ui.choiceAt = id;
+  if (onePane()) ui.pane = "side";
+  render();
+  document.querySelector(`[data-choice-row~="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
+};
 const whereRunsOf = whereRuns({ code: () => doc.code, names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, render: () => render() });
 const { implementButton, makeNamed, newDefinitionForm, pick, row, runTop, structurePanel, words } = structure({
   doc: () => doc, ui, applyT: (e, then, place, pins) => applyT(e, then, place, pins), render: () => render(), topT: (i, r) => topT(i, r), defBody: (d) => defBody(d), defNamed: (n) => defNamed(n),
@@ -1235,9 +1247,15 @@ function setShape(id: Id, to: Shape | null) {
 }
 function blocksOf(info: T.Info): HTMLElement {
   const p = typedPres();
-  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded, doc.layout.shape, ui.fit, blocksChars];
+  const marks = choiceMarks(choicesNow()), marked = [...marks].join("\n");
+  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded, doc.layout.shape, ui.fit, blocksChars, marked];
   watchBlocks();
-  if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes()) }).el;
+  if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) {
+    const el = T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes());
+    // A badge after each part a choice is about (E292), as in the graph.
+    for (const [id, text] of marks) el.querySelector(`[data-id="${CSS.escape(id)}"]`)?.append(h("button", { class: "choice-badge", type: "button", "data-act": "open-choice", "data-target": id, title: text, "aria-label": "Choices" }));
+    return (blocksKept = { from, el }).el;
+  }
   for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
   if (ui.selected) for (const e of blocksKept.el.querySelectorAll(`[data-id="${CSS.escape(ui.selected)}"]`)) e.classList.add("sel");
   return blocksKept.el;
@@ -2017,6 +2035,8 @@ function graphHooks(info: T.Info) {
       const was = root ? graph?.posOf(root) : undefined;
       void applyT(T.looseOver(doc.code, doc.names.short, info, ui.def, doc.loose ?? {}, doc.home ?? {}, part, slot), undefined, was ? { [slot]: was } : undefined);
     },
+    choices: choiceMarks(choicesNow()),
+    choice: openChoice,
     values: (() => {
       const tr = stepped(info);
       const show = shower(doc.code, info, pres().names);
@@ -2555,6 +2575,7 @@ function draw() {
     ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
     ["program", "Program", () => [programPanel()]],
     ["checks", "Checks", () => [typedChecks(namer, info)]],
+    ["choices", "Choices", () => [choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null)]],
     ["files", "Files", () => [filesPanel()]],
     ["changes", "Changes", () => [changes.changesPanel()]],
     ["guide", "Guide", () => [guide()]],
@@ -2717,6 +2738,7 @@ document.addEventListener("click", (e) => {
     if (a === "inline") return toggleInline(act.dataset.target!);
     if (a === "named") return toggleNamed(act.dataset.target!);
     if (a === "goto-node") return select(act.dataset.target!);
+    if (a === "open-choice") return openChoice(act.dataset.target!);
     if (a === "goto-stop") { const d = act.dataset.def!, n = act.dataset.target!; if (d !== ui.def) openDef(d); return select(doc.code.nodes[n] ? n : null); }
     // The form is in the side panel's first tab: show it, whichever tab
     // (the Guide, on a first visit) was open.

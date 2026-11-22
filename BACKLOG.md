@@ -58,7 +58,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E292 | A Choices tab beside Checks and Files: the open definition's `<program>.choices` entries under Representation, Algorithm, Placement and Schedule, each its pick, the alternatives of the same meaning to choose from, auto or held (Release); a badge on each node a choice is about, in the graph and the blocks, opens its row. Waits on L280a (the file) and L280c (held entries) | Ersagun 2026-11-22 (chose "Choices tab + node badges") | P2 | L | ⏸ L280a |
+| E292 | A Choices tab beside Checks and Files: the open definition's `<program>.choices` entries under Representation, Algorithm, Placement and Schedule, each its pick, the alternatives of the same meaning to choose from, auto or held (Release); a badge on each node a choice is about, in the graph and the blocks, opens its row. Part 1 (#3053): the tab and the badges, main's entries worked out in a worker as `ters choices` writes them (JavaScript's; C's threads left to the command line). Left: holding or changing an entry from the tab (L280c's editor gesture), kept with the program | Ersagun 2026-11-22 (chose "Choices tab + node badges") | P2 | L | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 

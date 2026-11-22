@@ -29,6 +29,7 @@ import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
 import { loadChecks } from "./checkStore.ts";
+import { choicesFor } from "./choicesFor.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
 // code or built with the site (E245c), so the run needs no checking or
@@ -54,6 +55,10 @@ export type CompileSays = CompiledPage | { saved: SavedScripts } | { error: stri
 // WebAssembly and C can't, or null (whereAnswers.ts).
 export type WhereAsk = { whereRuns: true; code: SentCode; names: Names; pins: Pins; only: Id[] };
 export type WhereSays = { answers: [Id, ...Answer][] } | { error: string };
+// The program's choices for main (choicesFor.ts, E292), as `ters choices`
+// writes them.
+export type ChoicesAsk = { choices: true; code: SentCode; names: Names; pins: Pins; main: Id };
+export type ChoicesSays = { choices: string[] } | { error: string };
 // Where the last read of a text run backwards stopped, when one found no
 // answer (L70c): the text, the place, what was looked for there, and how
 // many reads stopped.
@@ -74,7 +79,7 @@ let lastWhere: Code | null = null;
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays | WhereSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
+const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `ters run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -117,18 +122,28 @@ function checked(given: SentCode, names: Names, pins: Pins, def: Id): ReturnType
 // started (I203), its whole check and its bodies, though the page had
 // kept them.
 const checksRead = loadChecks();
-const asked: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>[] = [];
+const asked: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>[] = [];
 if (checksRead) {
   self.onmessage = (e) => { asked.push(e); };
   void checksRead.then(() => { self.onmessage = answer; for (const e of asked.splice(0)) answer(e); });
 } else self.onmessage = answer;
 
-function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk>) {
+function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>) {
   answers = null; paused = false;
   if ("warm" in e.data) {
     const { code, names, pins, def } = e.data;
     try { const lib = checked(code, names, pins, def); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
     return;
+  }
+  if ("choices" in e.data) {
+    const { names, pins, main } = e.data;
+    try {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      return post({ choices: choicesFor(receivedCode(e.data.code), names, main) });
+    } catch (err) {
+      return post({ error: (err as Error).message });
+    }
   }
   if ("whereRuns" in e.data) {
     const { names, pins, only } = e.data;

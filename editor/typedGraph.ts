@@ -133,6 +133,10 @@ export interface GraphHooks {
   canReorder?: (item: Id) => ((onto: Id) => string | null) | null;
   // Right-click: what was under the pointer, where (screen and world).
   menu?: (target: MenuTarget, screen: Pos, world: Pos) => void;
+  // The program's choices by the node they are about (E292), what each
+  // says on hover; a click on a node's badge opens its row.
+  choices?: Map<Id, string>;
+  choice?: (id: Id) => void;
   // Values from a run on example inputs (src/lang/trace.ts), already shown
   // as text, by node and by variable.
   values?: Map<Id, string>;
@@ -494,6 +498,9 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   const noteMark = (g: SVGGElement, key: Id, w: number) => {
     const c = key !== defId ? pres.comments[key] : undefined;
     if (c) g.append(commentMark(w, resolveRefs(c, (r) => pres.names[r] ?? r)));
+    // Its choices (E292), left of the comment's mark.
+    const ch = hooks.choices?.get(key);
+    if (ch) g.append(choiceMark(key, (c ? w - 22 : w) - 9, -7, ch));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
     const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteMark(g, key, w); };
@@ -1372,6 +1379,14 @@ function commentMark(w: number, text: string, n = 1): SVGElement {
   o.append(s("title", {}, text));
   return o;
 }
+// A fork on a box's top right corner, saying the compiler made a choice
+// about it (E292); what it chose on hover, its row in Choices on a click.
+function choiceMark(id: Id, x: number, y: number, text: string): SVGElement {
+  const o = s("g", { class: "choice-mark", "data-choice": id, transform: `translate(${x} ${y})` });
+  o.append(s("rect", { x: 0, y: 0, width: 15, height: 13, rx: 3 }), s("path", { class: "choice-fork", d: "M2.5 6.5 H6 L11.5 3 M6 6.5 L11.5 10" }));
+  o.append(s("title", {}, text));
+  return o;
+}
 function effectBadge(text: string, why: string): SVGElement {
   const o = s("g", { class: "effn" }), w = Math.max(18, tw(text, 6.2) + 10), x = -4 - w / 2;
   o.append(w > 18 ? s("rect", { x: x - w / 2, y: 0, width: w, height: 18, rx: 9 }) : s("circle", { cx: x, cy: 9, r: 9 }), s("text", { x, y: 12.5, "text-anchor": "middle" }, text));
@@ -1554,6 +1569,9 @@ function render(scene: Scene, hooks: GraphHooks, at: Record<Id, Pos>, picked: Se
     if (f.id !== scene.defId) r.setAttribute("data-move", f.id);
     frameG.append(r, s("text", { x: b.x + 10, y: b.y + 14, class: "rt" }, f.title));
     if (f.id !== scene.defId && hooks.fold) frameG.append(foldToggle(b.x + b.w - 16, b.y + 14, f.id, "▾", "Fold into one box"));
+    // A function's frame is what a placement is about (E292).
+    const ch = hooks.choices?.get(f.id);
+    if (ch) frameG.append(choiceMark(f.id, b.x + b.w - (f.id !== scene.defId && hooks.fold ? 46 : 24), b.y + 5, ch));
     const port = (right: boolean) => (bd: Id, i: number) => {
       const p = point({ frame: f.id, port: i, right });
       portG.append(s("circle", { cx: p.x, cy: p.y, r: 6, class: `src${right ? " res" : ""}${sel(bd)}${scene.lit.has(bd) ? " lit" : ""}`, "data-src": bd, "data-id": bd }));
@@ -1955,6 +1973,8 @@ function interact(canvas: Canvas, scene: Scene, hooks: GraphHooks, picked: Set<I
     if (folding) return hooks.fold?.(folding);
     const fanning = (e.target as Element).closest("[data-fan]")?.getAttribute("data-fan");
     if (fanning) return hooks.fan?.(fanning);
+    const choosing = (e.target as Element).closest("[data-choice]")?.getAttribute("data-choice");
+    if (choosing) return hooks.choice?.(choosing);
     const edge = (e.target as Element).closest("[data-edge]");
     if (edge && !e.shiftKey) {
       // A dot can change how the rest would be laid out (its let wraps the
