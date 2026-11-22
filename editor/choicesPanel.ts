@@ -42,6 +42,10 @@ export function parseChoice(line: string): Choice | null {
   const among = rest.find((p) => p.startsWith("among "))?.slice(6).split(", ") ?? [];
   const target = rest.find((p) => p.startsWith("target "))?.slice(7) ?? "";
   const facts = rest.filter((p) => !p.startsWith("among ") && !p.startsWith("target "));
+  // A walk is one row however its list is made (QA 11-22c L1): what
+  // makes it is a fact, said on hover.
+  const made = kind === "schedule" ? / *, its list made by (.*)$/.exec(about) : null;
+  if (made) return { id: m[1], kind, held, about: about.slice(0, made.index), pick, among, facts: [`its list made by ${made[1]}`, ...facts], target };
   return { id: m[1], kind, held, about, pick, among, facts, target };
 }
 
