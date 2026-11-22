@@ -360,6 +360,11 @@ export class Session {
   private reading: string | null = null;
 
   private fillIn(code: Code, names: Names, hole: Id, text: string, def: Id, as?: string): { ok: true; code: Code; names: Names } | { ok: false; reason: string } {
+    // A record taken apart by a step written before `;`, `reading(called,
+    // place) = nearest step(…); □`, is the step on a line of its own
+    // (I343: it was read as a value, "nothing is named place here").
+    const semi = firstSemicolon(text);
+    if (semi > 0 && !text.slice(0, semi).includes("\n") && /^\s*[\p{L}_][\p{L}\p{N}_' ]*?\s*\([^()]*\)\s*=(?![=>])/u.test(text)) return this.fillIn(code, names, hole, `${text.slice(0, semi).trim()}\n${text.slice(semi + 1).trim()}`, def, as);
     const steps = this.stepsIn(code, names, hole, text, def, as);
     if (steps) return steps;
     if (/^\s*match\s/.test(text)) return this.matchIn(code, names, hole, text, def, as);
@@ -1264,6 +1269,20 @@ function topLevel(text: string, sep: string): string[] {
 // and a length no pattern has is the fallback. An item named alike by
 // every pattern still going is the cons's field; else the field is
 // `item k` and each pattern names it with a step.
+// Where a text's first `;` outside brackets and quotes is, or -1.
+function firstSemicolon(t: string): number {
+  let depth = 0, quoted = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (quoted) { if (c === "\\") i++; else if (c === '"') quoted = false; continue; }
+    if (c === '"') quoted = true;
+    else if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c)) depth--;
+    else if (c === ";" && !depth) return i;
+  }
+  return -1;
+}
+
 // A list pattern's items, and its rest (`..more`) when it has one.
 type ListCase = { names: string[]; rest?: string; body: string };
 // The matches on nil and cons that list patterns stand for, from the k-th

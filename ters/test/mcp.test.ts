@@ -492,6 +492,25 @@ test("an unknown name at the end of a long ++ chain is refused at once (I341)", 
   assert.match(text("replace", { at: "said", find: "□", text: '"a" ++ show(2.5) ++ "b" ++ show(n) ++ "c"' }), /show/);
 });
 
+// Round 20 wrote `reading(called, place, …) = nearest step(…); □`, a
+// record taken apart by a step before `;`, and was told "nothing is named
+// called here" (I343): it reads as on lines of its own.
+test("a record taken apart by a step before `;` reads as on lines (I343)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "Spot", kind: "type", first: "spot(x: Float64, y: Float64)" });
+  text("define", { name: "made", kind: "function", params: ["a"] });
+  text("replace", { at: "made", find: "□", text: "spot(a, a + 1.0)" });
+  text("define", { name: "area of", kind: "function", params: ["a"] });
+  assert.match(text("replace", { at: "area of", find: "□", text: "spot(px, py) = made(a); □" }), /spot\(px#\w+, py#\w+\) = it/);
+  text("replace", { at: "area of", find: "□", text: "px · py" });
+  assert.match(text("eval", { text: "area of(2.0)" }), /^= 6 :/);
+});
+
 // rota's main used `attempt` and a match on its Outcome (I217 M7).
 test("a handler is written as the view prints it: handle …, an operation's case, otherwise (I217 M7)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
