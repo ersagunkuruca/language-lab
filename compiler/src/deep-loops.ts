@@ -34,6 +34,8 @@ export function deepLoops(ir: CoreIR): number {
 // The kinds a body may hold: no handler, budget or search, which keep
 // state in locals mapLocals doesn't move or go on after a call.
 const OPAQUE = new Set(["handle", "budget", "search", "released"]);
+// What only reads: given beside a call of f, it may be read after the call.
+const READS = new Set(["local", "num", "int", "bool", "text", "zero", "field", "get"]);
 
 function deepLoop(ir: CoreIR, fi: number): boolean {
   const f = ir.funcs[fi];
@@ -79,7 +81,29 @@ function deepLoop(ir: CoreIR, fi: number): boolean {
         return !calls(e);
     }
   };
-  if (!ok(f.body) || !sites.length) return false;
+  // A call of f given straight to the one that ends a path, `larger(x,
+  // highest(rest))`, is `let r = highest(rest) in larger(x, r)` where
+  // what is given beside it only reads (C276, strings' `highest`): the
+  // same order, since nothing beside it does anything.
+  const locals = f.locals.length, body = f.body;
+  const reads = (e: SExpr): boolean => READS.has(e.k) && kids(e).every(reads);
+  const hoist = (e: SExpr): SExpr => {
+    switch (e.k) {
+      case "let": return { ...e, body: hoist(e.body) };
+      case "if": return { ...e, then: hoist(e.then), else: hoist(e.else) };
+      case "case": return { ...e, arms: e.arms.map((x) => x && hoist(x)) };
+      default: {
+        if (!(e.k === "call" || e.k === "rt" || e.k === "op") || (e.k === "call" && e.fn === fi) || calls(e) !== 1) return e;
+        const j = e.args.findIndex((x) => x.k === "call" && x.fn === fi);
+        if (j < 0 || !e.args.every((x, i) => i === j || reads(x))) return e;
+        const r = f.locals.push(f.result) - 1;
+        return { k: "let", i: r, value: { ...(e.args[j] as Call), tail: false }, body: { ...e, args: e.args.map((x, i) => (i === j ? { k: "local", i: r } : x)) } as SExpr } as SExpr;
+      }
+    }
+  };
+  f.body = hoist(f.body);
+  binds(f.body);
+  if (!ok(f.body) || !sites.length) { f.body = body; f.locals.length = locals; return false; }
   const at = f.params.length, gi = ir.funcs.length, ui = gi + 1;
   // The frames: done, or one case per call, the locals what comes after
   // it reads, and the frames under it.
