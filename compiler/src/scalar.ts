@@ -621,6 +621,14 @@ export { reachedFrom, reachedWithShows };
 // handles them (FOREIGN.md; for C, hosts/c.c, L69b1): their operations
 // are performed, as compiled JavaScript's are.
 // `dataKeys`: a table's key may be data (C243, C's tables only).
+// Work a person held on the main thread in the program's choices (L280h):
+// by the node its placement entry is about (a map's function, a fold's
+// item arm, a search, a together, a call halved), for JavaScript's
+// workers and for C's threads apart. Set by the command line before it
+// lowers (cli/main.ts), from `<program>.choices`.
+let onMain: { js: ReadonlySet<Id>; c: ReadonlySet<Id> } = { js: new Set(), c: new Set() };
+export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = { js: new Set(js), c: new Set(c) }; }
+
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
   // lowering meets one, and lowered again with them (C137c22). Only those
@@ -1439,7 +1447,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // g(f(a), f(b)) in f's own body (C61 e): the two calls of f given to
         // the runtime, which may run them on other cores (branches-rt.ts
         // `both`), the first's answer back and the second's after it.
-        if (opts.host && !fibers && !halving.has(n.id) && (halves ??= parallelHalves(code, info)).has(n.id)) {
+        if (opts.host && !fibers && !halving.has(n.id) && !onMain.js.has(n.id) && (halves ??= parallelHalves(code, info)).has(n.id)) {
           const [j0, j1] = halves.get(n.id)!, c0 = code.nodes[n.args[j0]] as Call, c1 = code.nodes[n.args[j1]] as Call;
           const rt = stype(zonk(n.args[j0])), ps = c0.args.map((a) => stype(zonk(a)));
           if (rt && ps.every((p) => p)) {
@@ -1459,7 +1467,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         // The same on C's threads (C61e3, c.ts `par:both`): the second
         // call given to another thread while this one makes the first.
-        if (opts.threads && !halving.has(n.id) && (halves ??= parallelHalves(code, info)).has(n.id)) {
+        if (opts.threads && !halving.has(n.id) && !onMain.c.has(n.id) && (halves ??= parallelHalves(code, info)).has(n.id)) {
           const [j0, j1] = halves.get(n.id)!, rt = stype(zonk(n.args[j0]));
           const first = expr(n.args[j0], env, f, false), then = expr(n.args[j1], env, f, false);
           if (rt && first.k === "call" && then.k === "call" && first.fn === then.fn) {
@@ -1677,13 +1685,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // A together whose actions only compute, in JavaScript: run side
         // by side on worker threads where there are any (branches-rt.ts,
         // C41), given the fuel, since under a budget they stay in order.
-        if (opts.host && !fibers && target === TOGETHER && (parallel ??= parallelTogethers(code, info)).has(n.id)) return { k: "rt", fn: "together.pure", args: [...args(), { k: "rt", fn: "fuel.get", args: [] }] };
+        if (opts.host && !fibers && target === TOGETHER && !onMain.js.has(n.id) && (parallel ??= parallelTogethers(code, info)).has(n.id)) return { k: "rt", fn: "together.pure", args: [...args(), { k: "rt", fn: "fuel.get", args: [] }] };
         // A map of a function that only computes, likewise by its items
         // (C42), where its items are worth sharing by what each took the
         // last time (map.worth); otherwise the map as compiled, which is
         // the faster for the small maps a loop makes many of.
         // Not a text's characters, which no worker is worth (C281).
-        if (opts.host && !fibers && !given.has(n.id) && !charactersCall(n.args[0]) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
+        if (opts.host && !fibers && !given.has(n.id) && !charactersCall(n.args[0]) && !onMain.js.has(n.args[1]) && (parallelList ??= parallelLists(code, info, !!opts.threads)).has(n.id)) {
           const tx = stype(zonk(n.args[0])), t = stype(zonk(id));
           if (tx && t) {
             // The list once, as a local; the function as written, made
@@ -1724,13 +1732,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // list's map stays as compiled.
         // A together whose actions only compute, likewise in C (C201,
         // c.ts `par:together`): on the threads, not on fibers.
-        if (opts.threads && target === TOGETHER && (parallel ??= parallelTogethers(code, info)).has(n.id)) {
+        if (opts.threads && target === TOGETHER && !onMain.c.has(n.id) && (parallel ??= parallelTogethers(code, info)).has(n.id)) {
           const t = stype(zonk(id));
           if (t && isData(t)) return onThreads({ k: "rt", fn: "par:together", args: args(), host: { t, partial: true } }, n.id, "together");
         }
         // And a keep (C202), its items that pass in order; all pass and
         // any pass, the first test that decides.
-        const job = opts.threads ? (parallelList ??= parallelLists(code, info, !!opts.threads)).get(n.id) : undefined;
+        const job = opts.threads && !onMain.c.has(n.args[1]) ? (parallelList ??= parallelLists(code, info, !!opts.threads)).get(n.id) : undefined;
         if (job === "map" || job === "keep" || job === "all" || job === "any" || job === "first") {
           const t = stype(zonk(id)), tx = stype(zonk(n.args[0]));
           if (t && (job === "all" || job === "any" ? tx && isArray(tx) : isArray(t))) return onThreads({ k: "rt", fn: `par:${job}`, args: args(), host: { t, partial: true } }, n.args[1], job === "all" ? "every" : job);
@@ -4211,7 +4219,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // A fold counting into a Map (C42h, fold-chunks.ts): on C's threads
       // in runs of an array's items, each run counted from empty by the
       // same loop as in turn, the runs' Maps then added together.
-      if (opts.threads && !underBudget && !free.length && ((isTable(result) && result.value === "int") || treeOfInts(result)) && s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) && (foldsShared ??= parallelFolds(code, info)).has(n.id) && countsInto(code, info, n)) {
+      if (opts.threads && !underBudget && !free.length && !onMain.c.has(n.id) && ((isTable(result) && result.value === "int") || treeOfInts(result)) && s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) && (foldsShared ??= parallelFolds(code, info)).has(n.id) && countsInto(code, info, n)) {
         const at = [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])];
         const g: SFunc = { def: id, name: `${f.name}.fold.run`, params: [at], result: res, locals: [at], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
         const gi = funcs.push(g) - 1;
@@ -4226,7 +4234,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         }
         funcs.pop();
       }
-      const each = (result === "int" || isRecord(result)) && !underBudget && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f, result) : null;
+      const held = arms.find((a) => a.variant === CONS)?.id, kept = held !== undefined && (opts.threads ? onMain.c : onMain.js).has(held);
+      const each = (result === "int" || isRecord(result)) && !underBudget && !kept && (opts.host && !fibers || opts.threads) && !(s.k === "rt" && s.fn === "text.characters") && (foldsShared ??= parallelFolds(code, info)).has(n.id) ? itemFold(st, arms, free, env, f, result) : null;
       if (each) {
         const arr = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn);
         // In C (C202d), an array's, on the threads, which time it themselves.
@@ -4333,7 +4342,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // other cores (branches-rt.ts bothPure), as a function's two calls
       // of itself are.
       const halves = a.results.flatMap((r, j) => (r && c.fields[j].t === st ? [j] : []));
-      if (opts.host && !fibers && !underBudget && halves.length === 2 && a.results.filter((r) => r).length === 2 && (treeFolds ??= parallelTreeFolds(code, info)).get(n.id)?.has(a.id)) {
+      if (opts.host && !fibers && !underBudget && !onMain.js.has(a.id) && halves.length === 2 && a.results.filter((r) => r).length === 2 && (treeFolds ??= parallelTreeFolds(code, info)).get(n.id)?.has(a.id)) {
         const fn = foldValue(gi, fnOf(params, result));
         const half = (j: number): SExpr[] => [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured];
         const on = g.locals.push("i32") - 1;
@@ -4344,7 +4353,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return lets.reduceRight<SExpr>((body, l) => ({ k: "let", i: l.i, value: l.value, body }), expr(a.body, inner, g, true));
       }
       // The same on C's threads (C61e3).
-      if (opts.threads && !underBudget && halves.length === 2 && a.results.filter((r) => r).length === 2 && (treeFolds ??= parallelTreeFolds(code, info)).get(n.id)?.has(a.id)) {
+      if (opts.threads && !underBudget && !onMain.c.has(a.id) && halves.length === 2 && a.results.filter((r) => r).length === 2 && (treeFolds ??= parallelTreeFolds(code, info)).get(n.id)?.has(a.id)) {
         const half = (j: number): SExpr[] => [{ k: "field", rec: scrut, t: st, c: ci, i: j }, ...captured];
         const [j0, j1] = halves, x0 = g.locals.push(result) - 1, x1 = g.locals.push(result) - 1;
         inner = new Map(inner).set(a.results[j0]!, x0).set(a.results[j1]!, x1);
@@ -4974,7 +4983,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // Only a search with several answers, its closure taking the rest
     // (a search of one answer or none has no choice to split).
     const searchClosure = (): SExpr | null => { const c = expr(n.args[0], env, f, false); return c.k === "closure" && c.t.several ? c : null; };
-    if (opts.host && !fibers && kind === "first" && dflt && countsShared().get(n.id) === "first" && !soleSolve(search) && !soleCall(search)) {
+    if (opts.host && !fibers && kind === "first" && dflt && !onMain.js.has(n.id) && countsShared().get(n.id) === "first" && !soleSolve(search) && !soleCall(search)) {
       const c = searchClosure();
       if (c) {
         const res = f.locals.push(t) - 1;
@@ -4989,7 +4998,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
       }
     }
-    if (opts.host && !fibers && (kind === "count" || kind === "all") && countsShared().has(n.id)) {
+    if (opts.host && !fibers && (kind === "count" || kind === "all") && !onMain.js.has(n.id) && countsShared().has(n.id)) {
       // all's answers as the list kind its type is: an array, or a list
       // the compiled code reads as it reads any of the runtime's.
       const how: SExpr[] = kind === "all" ? [{ k: "bool", v: isArray(t) }] : [], c = searchClosure();
@@ -5008,7 +5017,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // Only a search with several answers, as in JavaScript.
     // (Its closure made, as there, to learn that; then left unused.)
     const severalC = () => { const c = expr(n.args[0], env, f, false); return c.k === "closure" && !!c.t.several; };
-    if (opts.threads && (kind === "count" ? t === "int" : kind === "all" ? isData(t) : firstC) && countsShared().get(n.id) === kind && !splitting.has(n.id) && splitsC() && severalC()) {
+    if (opts.threads && (kind === "count" ? t === "int" : kind === "all" ? isData(t) : firstC) && !onMain.c.has(n.id) && countsShared().get(n.id) === kind && !splitting.has(n.id) && splitsC() && severalC()) {
       const free = [...new Set(refsIn(n.args[0]))].filter((b) => env.has(b) || inlined.has(b));
       if (!free.some((b) => inlined.has(b))) {
         // Its own type: one of nothing giving t may be the search's, with several answers.
