@@ -152,6 +152,8 @@ export class OverMap<K, V> extends Map<K, V> {
   override get(k: K) { return super.has(k) ? super.get(k) : this.under.get(k); }
   // What this one added, without what it reads through to.
   own(): MapIterator<[K, V]> { return super.entries(); }
+  // What it reads through to.
+  get below(): ReadonlyMap<K, V> { return this.under; }
   override has(k: K) { return super.has(k) || this.under.has(k); }
   override get size() { let n = this.under.size; for (const k of super.keys()) if (!this.under.has(k)) n++; return n; }
   override *entries(): MapIterator<[K, V]> { yield* super.entries(); for (const e of this.under) if (!super.has(e[0])) yield e; }
@@ -165,6 +167,8 @@ export class OverSet<K> extends Set<K> {
   constructor(under: ReadonlySet<K>) { super(); this.under = under; }
   // What this one added, without what it reads through to.
   own(): SetIterator<K> { return super.values(); }
+  // What it reads through to.
+  get below(): ReadonlySet<K> { return this.under; }
   override has(k: K) { return super.has(k) || this.under.has(k); }
   override get size() { let n = this.under.size; for (const k of super.values()) if (!this.under.has(k)) n++; return n; }
   override *values(): SetIterator<K> { yield* super.values(); for (const k of this.under) if (!super.has(k)) yield k; }

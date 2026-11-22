@@ -26,9 +26,13 @@ type Bare = Node extends infer N ? (N extends Node ? Omit<N, "id"> : never) : ne
 // program's own, not those of the check it is on (the library's, which
 // has none when its resolving is kept: arith.ts).
 export function spreadTuples(code: Code, info: Info, names: Names, own = false): { code: Code; info: Info; names: Names } {
-  const ids = own && info.spread instanceof OverSet ? [...info.spread.own()] : nodeIds(code.nodes).filter((id) => info.spread?.has(id));
+  // The program's own: those of every set put over the check it is on, as
+  // the steps before put one over another (L281g).
+  const ownSet = (m: ReadonlySet<Id> | undefined): Id[] => { const out = new Set<Id>(); for (let x = m; x instanceof OverSet; x = x.below) for (const k of x.own()) out.add(k); return [...out]; };
+  const ownMap = <V,>(m: ReadonlyMap<Id, V> | undefined): [Id, V][] => { const out = new Map<Id, V>(); for (let x = m; x instanceof OverMap; x = x.below) for (const [k, v] of x.own()) if (!out.has(k)) out.set(k, v); return [...out]; };
+  const ids = own && info.spread instanceof OverSet ? ownSet(info.spread) : nodeIds(code.nodes).filter((id) => info.spread?.has(id));
   const calls = ids.filter((id) => isCall(code.nodes[id]));
-  const reshaped = own && info.reshape instanceof OverMap ? [...info.reshape.own()].filter(([id]) => code.nodes[id]) : nodeIds(code.nodes).flatMap((id) => { const r = info.reshape?.get(id); return r ? [[id, r] as const] : []; });
+  const reshaped = own && info.reshape instanceof OverMap ? ownMap(info.reshape).filter(([id]) => code.nodes[id]) : nodeIds(code.nodes).flatMap((id) => { const r = info.reshape?.get(id); return r ? [[id, r] as const] : []; });
   if (!calls.length && !reshaped.length) return { code, info, names };
   const nodes: Record<Id, Node> = copyNodes(code.nodes);
   const add = (n: Bare): Id => { const id = freshId(); nodes[id] = { ...n, id } as Node; return id; };

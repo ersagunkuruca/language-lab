@@ -25,7 +25,7 @@
 import type { Code, Id, Node, NodeData, NodeOf, Use } from "../model.ts";
 import { conditionResults, isUse, isBound, useTarget, isCall, fieldPorts, type Call, bindsOf, useKids, portsOf, copyNodes, dropNode, nodeIds, nodeValues } from "../model.ts";
 import { resultsAsFunctions, usesResultsAsFunction } from "./results-fn.ts";
-import { freshId, layerOf, nodesWhere, offLayer, scanningOnLayer, subtree } from "../model.ts";
+import { changedFromLayer, freshId, layerOf, nodesWhere, offLayer, onLayer, scanningOnLayer, subtree } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { B } from "../prelude.ts";
 import { bodyFacts, codeChecked, implementationOf, joinBodyFacts, sccs, terminates, type Info } from "./infer.ts";
@@ -142,7 +142,9 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
   if (!lib || !under || codeChecked(under) !== lib || !(info.typeOf instanceof OverMap)) return null;
   for (const k of info.implementations?.keys() ?? []) {
     if (under.implementations?.has(k)) continue;
-    const rest = k.slice(k.indexOf("|") + 1), con = rest.startsWith("@") ? rest.slice(1) : null;
+    // Kept by its type constructor (`@con`) or at a closed type (its type
+    // as JSON, L281g: break's `Shown` for its own types).
+    const rest = k.slice(k.indexOf("|") + 1), con = rest.startsWith("@") ? rest.slice(1) : headCon(rest);
     if (!con || lib.nodes[con] !== undefined || con.startsWith("builtin.")) return null;
   }
   // A program's check sets the library's definitions' types again; they
@@ -195,6 +197,21 @@ function seedFor(code: Code, info: Info, names: Names, costOf: BuiltinCost): See
 // The library's resolving made now, ahead of a program's (the editor's
 // warm-up does it in a task of its own: I189e).
 export function seedArithmetic(code: Code, info: Info, names: Names = {}): void { seedFor(code, info, names, NEUTRAL); }
+// The type constructor at the head of an implementation key's closed type.
+const headCon = (json: string): Id | null => { try { const t = JSON.parse(json) as Type; return t.t === "con" ? t.id : null; } catch { return null; } };
+// What a map of a check added over `base` (the library's check's), through
+// the maps steps put over it, outermost last; null when it isn't over base
+// that way. It may hold library ids: the seed has those.
+function ownOver<V>(m: ReadonlyMap<Id, V> | undefined, base: ReadonlyMap<Id, V> | undefined): Map<Id, V> | null {
+  if (m === base) return new Map();
+  const chain: OverMap<Id, V>[] = [];
+  for (let x = m; x !== base; x = (x as OverMap<Id, V>).below) { if (!(x instanceof OverMap)) return null; chain.push(x); }
+  const out = new Map<Id, V>();
+  for (let i = chain.length - 1; i >= 0; i--) for (const [k, v] of chain[i].own()) out.set(k, v);
+  return out;
+}
+// As the seed read it before (a check right over the library's).
+const ownOf = <V,>(m: ReadonlyMap<Id, V> | undefined, base: ReadonlyMap<Id, V> | undefined): Map<Id, V> | null => (m instanceof OverMap ? new Map(m.own()) : ownOver(m, base));
 type Snapshot = Omit<Seed, "layer">;
 function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, seed: Seed | null, snapshot = false, want?: { def: Id; float: number[] }): { code: Code; info: Info; names: Names; wanted?: Id } | (Snapshot & { layer: true }) {
   const given = { code, info };
@@ -208,10 +225,10 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   ({ code, info, names } = packsWritten(code, info, names));
   // With the library's resolving kept, the library has none (its own
   // resolving would have changed it, and kept none), so only the program's
-  // are looked for, and the library's bodies aren't all typed for them.
-  // When the program has some, the library's isn't used: all are.
-  const spread = seed ? spreadTuples(code, info, names, true) : null;
-  ({ code, info, names } = spread && spread.code === code ? spread : spreadTuples(code, info, names));
+  // are looked for, and the library's bodies aren't all typed for them,
+  // also when the program has some (L281g: break's page typed all the
+  // library's for its own, 3 s).
+  ({ code, info, names } = seed ? spreadTuples(code, info, names, true) : spreadTuples(code, info, names));
   ({ code, info, names } = resultsAsFunctions(code, info, names));
   ({ code, info, names } = fieldsByType(code, info, names));
   ({ code, info, names } = jsonByType(code, info, names));
@@ -219,9 +236,17 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   ({ code, info, names } = setSeveral(code, info, names));
   ({ code, info, names } = sharedFields(code, info, names));
   if (!snapshot && !usesGenericArithmetic(code) && !someLiteralNotFloat64(code, info)) return { code, info, names };
-  // The library's resolving goes on here only when the steps above left the
-  // program and its check as they were, and every library node is there.
-  const changed = seed && code === given.code && info === given.info ? offLayer(code) : undefined;
+  // The library's resolving goes on here only when every library node is
+  // there as it was. The steps above may have changed the program's own
+  // (a relation's directions, break's; an embedding put in, crew's): then
+  // what they added over the library's check is read through the maps they
+  // put over it (L281g: resolving all the library again was 3 s of their
+  // pages' start).
+  // (The check the seed was made on: the steps' checks sit over the given one.)
+  const under = given.info.layer;
+  const typesOver = seed && under ? (code === given.code && info === given.info ? ownOf(info.typeOf, under.typeOf) : ownOver(info.typeOf, under.typeOf)) : null;
+  const opsOver = seed && under ? (code === given.code && info === given.info ? ownOf(info.opAt, under.opAt) : ownOver(info.opAt, under.opAt)) : null;
+  const changed = !seed || !typesOver || !opsOver ? undefined : code === given.code ? offLayer(code) : changedFromLayer(onLayer(code, seed.layer));
   if (seed && (!changed || [...changed].some((id) => id in seed!.layer.nodes))) seed = null;
   if (snapshot && (code !== given.code || info !== given.info)) return { code, info, names };
   const s = info.subst;
@@ -234,7 +259,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // library, and a copy would type all its bodies (I313).
   const readThrough = <V,>(m: Map<Id, V> | undefined): Map<Id, V> => (snapshot ? new Map(m ?? []) : new OverMap(m ?? new Map()));
   const typeOf = seed ? new Map(seed.typeOf) : readThrough(info.typeOf);
-  if (seed) for (const [id, t] of (info.typeOf as OverMap<Id, Type>).own()) if (!(id in seed.layer.nodes)) typeOf.set(id, t);
+  if (seed) for (const [id, t] of typesOver!) if (!(id in seed.layer.nodes)) typeOf.set(id, t);
   const schemes = new Map(info.schemes);
   if (seed) for (const [id, sc] of seed.schemes) if (code.nodes[id] === undefined) schemes.set(id, sc);
   const divergent = new Set(info.divergent);
@@ -377,7 +402,7 @@ function resolving(code: Code, info: Info, names: Names, costOf: BuiltinCost, se
   // or, when that is more than a ref, to a definition made of it.
   const ops = interfaceOps(code);
   const opAt = seed ? new Map(seed.opAt) : readThrough(info.opAt);
-  if (seed && info.opAt instanceof OverMap) for (const [id, t] of info.opAt.own()) opAt.set(id, t);
+  if (seed && opsOver) for (const [id, t] of opsOver) if (!(id in seed.layer.nodes)) opAt.set(id, t);
   const copyOf = seed ? new Map(seed.copyOf) : readThrough(info.copyOf);
   const lifted = new Map<string, Id>(seed?.lifted ?? []);
   // Ways (WAYS.md, BACKLOG L96, ways.ts): each implementation's pick,
