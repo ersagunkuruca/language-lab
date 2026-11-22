@@ -73,7 +73,9 @@ export interface Drawn { draws: number; bytes: number }
 
 export class GpuFrames {
   private pipelines = new Map<string, GPURenderPipeline>();
-  private meshes = new WeakMap<object, { corners: GPUBuffer; triangles: GPUBuffer; count: number }>();
+  // By mesh, then by site: two sites may read different leaves of the
+  // same corners (G8a), so each writes its own corner words.
+  private meshes = new WeakMap<object, Map<Site, { corners: GPUBuffer; triangles: GPUBuffer; count: number }>>();
   private slots = new Map<string, Slot>();
   private depthTex: GPUTexture | null = null;
   private device: GPUDevice;
@@ -124,14 +126,16 @@ export class GpuFrames {
   }
 
   private mesh(m: Value, site: Site) {
-    let got = this.meshes.get(m as object);
+    let bySite = this.meshes.get(m as object);
+    if (!bySite) this.meshes.set(m as object, (bySite = new Map()));
+    let got = bySite.get(site);
     if (got) return got;
     const cs = items(part(m, 0)), ts = items(part(m, 1)).map(Number);
     const w = words(cs.length * site.corner.length);
     const pack = PACKS.get(site)?.corner;
     if (pack) pack(cs, w.f, w.n); else cs.forEach((c, i) => put(c, site.corner, w.f, w.n, i * site.corner.length));
     got = { corners: this.buffer(w.b, GPUBufferUsage.STORAGE), triangles: this.buffer(new Uint32Array(ts), GPUBufferUsage.INDEX), count: ts.length };
-    this.meshes.set(m as object, got);
+    bySite.set(site, got);
     return got;
   }
 
