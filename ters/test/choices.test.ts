@@ -377,8 +377,9 @@ test("tally measured with 3000 words: its Map's update at counted, 505 entries a
   try {
     cpSync(root + "tally", at, { recursive: true });
     run("choices", at, "--measure", "3000");
-    // Its main's calls too, made in an action (the evaluator's machine).
-    const lines = ["std.list measured: List: map 2 times, take 1 time; up to 3000 items; from a run with 3000", "std.map measured: Map: entries of 1 time, map size 1 time, update at 4500 times, values of 1 time; up to 505 items; from a run with 3000"];
+    // Its main's calls too, made in an action (the evaluator's machine),
+    // and its folds over a List.
+    const lines = ["std.list measured: List: fold of items 2 times, map 2 times, take 1 time; up to 3000 items; from a run with 3000", "std.map measured: Map: entries of 1 time, map size 1 time, update at 4500 times, values of 1 time; up to 505 items; from a run with 3000"];
     assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
     run("choices", at);
     assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
