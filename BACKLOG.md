@@ -48,6 +48,8 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E307 | Choices says the choices wait on the program's type errors, as Run does, instead of "None" ([QA-2026-11-22c](docs/reports/qa/QA-2026-11-22c.md) M1) | QA 11-22c | P2 | S | |
+| E308 | Choices are asked of the worker only once edits settle, and not at all when neither the tab nor a badge would change: today every edit costs 3 to 5 s of worker CPU on a page program (QA-2026-11-22c M2) | QA 11-22c | P2 | S | |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 
@@ -58,6 +60,9 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E309 | Schedule rows by the walks in the program's own definitions, with their written names, one row a walk, not one per compiler-made definition and list maker (QA-2026-11-22c L1; the text comes from cli/choices.ts scheduleLines) | QA 11-22c | P3 | S | |
+| E310 | The side panel's seven tabs fit one line at 1400 px; on a phone a Choices row's count stays beside its name (QA-2026-11-22c L2, L4) | QA 11-22c | P3 | S | |
+| E311 | A mode plan's pick names its goals by the definitions they call, not their drawn text (`relational, goals a function(…)`; QA-2026-11-22c L3) | QA 11-22c | P3 | S | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 
@@ -267,9 +272,6 @@ Ersagun 2026-11-17: a medium-sized original game to test Ters against current en
 |---|---|---|---|---|---|---|
 | G1b | Columns with presence: an `Optional` field of a record kept as columns stored as a bit per slot and a column of values, read in place by a match on it (columns.ts, C and JS first) | C | [ENTITIES](docs/design/data/ENTITIES.md) | P2 | L | |
 | G1b1 | `keep` over a List kept as an array lowers as every `all` of a `choose`: the array's items as a list taken apart, answers consed in a box, reversed, an array made of them. The greenhouse's three keeps a tick (moths, plants, lamps) are the first thing keeping its Things as rows in JS (columns.ts: `array.of`). A loop over the positions pushing each kept item (kept-items.ts), on JS, C and WebAssembly. Done | C | G1b, 2026-11-20 | P2 | S | |
-| G3e | moths M5: profile `ters wasi` on moths (14.6x) and split what isn't M1, M2 or M4 into rows. Done 11-20: profiled with function names (TERS_WASM_NAMES, wasm.ts's name section): split into G3f and G3g, the rest is `met` and its loops (M4, G3d) | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | |
-| G3f | moths on WebAssembly: filing the moths by cell copies the cells array once for every moth (`replace at`, 24% of a profile, and most of the 16% in the GC). WebAssembly has no counts, so only one-holder.ts can make it in place, and the one value `empty grid`, named every tick, isn't one holder's. Fix: a constant used as a fresh value is made fresh where it is cheap, or one-holder reads a definition's value as a new one each time it is named. Done 11-20: the second. A definition giving an array of a type written in place is worked out each time it is named, in JavaScript and WebAssembly, unless it gives an empty one (one-holder.ts `fresh`). Arrays of arrays count as items (owned-arrays.ts). A pure call giving an array is no longer shared (share-calls.ts), so two namings stay two arrays. The moths' cells are filed in place on WebAssembly: moths 10.6 to 7.7 s, greenhouse 6.6 to 3.9 s, flock 6.6 to 4.7 s. JavaScript is unchanged and every program prints the same | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | M | 2026-11-20 |
-| G3g | moths on WebAssembly: small runtime functions (an array's item and length, `int.less`, `int.small`) are calls Node's V8 doesn't inline (about 10% together). Put them in place as compiled JavaScript does (core-js inline array reads, #2913). Done 11-20: a runtime function that is a straight run of instructions (no branch, no local of its own), called with locals, is put in place with the caller's locals for its parameters (wasm-rt.ts `inlined`, its bytes and its text; NO_INLINE_RT turns it off). flock 4.65 to 4.5 s, greenhouse 3.86 to 3.75 s, moths within noise. The moths' items are Ints kept as bytes, so their read is `array.slot`, which branches on the bytes and stays a call: putting it in place needs the caller to get a scratch local, which buys at most the few percent left. Every program prints the same | C | [GAPS game round 1](docs/reports/GAPS.md) | P2 | S | 2026-11-20 |
 | G4 | The archetype representation from G1, built: a Pool whose records leave components out stored as tables per set of components | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G5 | Systems with disjoint effect rows run on the thread pool and page workers at once (G1's scheduling) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | L | ⏸ |
 | G7 | Drawing with data, a design note: a frame as a value (meshes, instances, materials, cameras, passes), the GPU as a world, what changes between frames uploaded rather than rebuilt (WEB.md's model for pages, for frames) | C | [GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md) | P2 | M | ⏸ |
