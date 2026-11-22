@@ -45,14 +45,34 @@ const READ = `host:${CELL_OPS.read}`, FORMULA = `host:${CELL_OPS.formula}`;
 // worked out per round.
 const DEEP = 8, PLACES = 16, CALLS = 20000;
 // Calls worked out inside one another, each with inputs of its own: past
-// this many it gives up too, before the stack does (pond-page needs 649,
-// which overflowed it).
+// this many it gives up too, before the stack does (pond-page went 649
+// deep, which overflowed it, until each place was kept once: 19 now).
 const NESTED = 300;
 
-const union = (a: Src[], b: Src[]) => [...a, ...b.filter((s) => !a.some((t) => t.o === s.o && t.at === s.at))];
+// Each place once: with a place twice, a list built item by item (a
+// reverse's accumulator) held one more copy of it each call, so each
+// call looked new and pond-page's went 649 deep (C259).
+const union = (a: Src[], b: Src[]) => { const out: Src[] = []; for (const s of [...a, ...b]) if (!out.some((t) => t.o === s.o && t.at === s.at)) out.push(s); return out; };
 const join = (a: Abs, b: Abs): Abs => (a === NONE ? b : b === NONE ? a : { srcs: union(a.srcs, b.srcs), clos: [...a.clos, ...b.clos.filter((c) => !a.clos.includes(c))], held: union(a.held, b.held), ...(a.bx || b.bx ? { bx: [...new Set([...(a.bx ?? []), ...(b.bx ?? [])])] } : {}) });
 const sig = (a: Abs, depth = 0): string => `${a.srcs.map((s) => `${s.o}:${s.at}`).sort().join(" ")}|${a.held.map((s) => `${s.o}:${s.at}`).sort().join(" ")}|${(a.bx ?? []).join(" ")}|${depth > 3 ? "…" : a.clos.map((c) => `${c.fn}(${c.caps.map((x) => sig(x, depth + 1)).join(",")})`).sort().join(" ")}`;
 const isList = (t: DType) => t.def === LIST;
+// Whether a place is inside one already needed whole (one without `=`).
+const covers = (n: Set<string>, key: string) => { for (const k of n) if (!k.endsWith("=") && k !== key && key.startsWith(k)) return true; return false; };
+// Places past PLACES given up a step at a time, deepest first: each taken
+// at its first d steps, whole there, until few enough are left; none left
+// (every place the read's top) is the value whole (C259: pond-page's
+// fish are read at more places of each item than PLACES, so the read was
+// whole; now it waits on the items).
+function widened(n: Set<string>): Set<string> | null {
+  const steps = (k: string) => k.replace(/=$/, "").split("/").filter(Boolean);
+  for (let d = Math.max(...[...n].map((k) => steps(k).length)) - 1; d > 0; d--) {
+    const out = new Set<string>();
+    for (const k of n) { const p = steps(k); out.add(p.length > d ? `${p.slice(0, d).join("/")}/` : k); }
+    for (const k of [...out]) if (covers(out, k)) out.delete(k);
+    if (out.size <= PLACES / 2) return out;
+  }
+  return null;
+}
 const keyOf = (t: LType) => (typeof t === "string" ? t : t.key);
 
 // Kept between compiles (plan doc "Incremental compile after edits"):
@@ -107,10 +127,11 @@ function trackReadsIn(ir: CoreIR): number {
       const n = needs[s.o];
       if (n === null) continue;
       const key = s.at + (only && !("whole" in s) ? "=" : "");
-      if (n.has(key)) continue;
+      if (n.has(key) || covers(n, key)) continue;
       changed = true;
-      if (n.size >= PLACES || key === "") needs[s.o] = null;
-      else n.add(key);
+      if (key === "") { needs[s.o] = null; continue; }
+      n.add(key);
+      if (n.size > PLACES) { const w = widened(n); needs[s.o] = w; }
     }
     for (const c of a.clos) for (const x of c.caps) need(x, false);
   };
@@ -144,7 +165,7 @@ function trackReadsIn(ir: CoreIR): number {
       if (at.split("/").length > DEEP) need({ srcs: [s], clos: [], held: [] }, false);
       else srcs.push({ o: s.o, at, t: keyOf(t) });
     }
-    return srcs.length || held.length ? { srcs, clos: [], held } : NONE;
+    return srcs.length || held.length ? { srcs: union(srcs, []), clos: [], held } : NONE;
   };
   // What each box (a record the lowering sets, W4d) was given, by where
   // and in which call it was made.
