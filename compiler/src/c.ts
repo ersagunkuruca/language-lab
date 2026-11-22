@@ -509,7 +509,8 @@ const folds = (job: string) => job === "add" || job === "max" || job === "min" |
 // A call held on the threads (L280h, scalar.ts onThreads): made with
 // lab_par_always set, which the job reads and clears.
 // And one whose runs are held (L280e), with lab_par_runs set: how many
-// runs a thread its items are cut into.
+// runs a thread its items are cut into, or for a fold counting into a
+// map (chunksC) how many items a chunk.
 const atOnce = (e: SExpr, call: string): string => {
   const h = e.k === "rt" ? e.host : undefined, set = [...(h?.always ? ["lab_par_always = 1"] : []), ...(h?.runs ? [`lab_par_runs = ${h.runs}`] : [])];
   return set.length ? `(${set.join(", ")}, ${call})` : call;
@@ -4016,16 +4017,15 @@ static ${T} lab_par_search_in_${n}(lab_cell *f) {
   }
   function chunksC(gi: number, ji: number | null): string {
     const g = funcs[gi], at = g.params[0] as AType, merge = ji === null ? `lab_merge_t${(g.result as TType).index}` : names.get(ji)!, nm = names.get(gi)!, V = aname.get(at.key)!.view, J = `lab_chunks_job_${gi}`;
-    return `#define LAB_CHUNK 16384
-typedef struct { lab_cell *xs; int64_t n, next; int slots; lab_cell *out[17]; } ${J};
+    return `typedef struct { lab_cell *xs; int64_t n, next, chunk; int slots; lab_cell *out[17]; } ${J};
 static void lab_chunks_work_${gi}(void *p) {
   ${J} *j = p;
   ${V} *v = (${V} *)j->xs;
   int s = __atomic_fetch_add(&j->slots, 1, __ATOMIC_RELAXED);
   lab_cell *acc = 0;
   int64_t k;
-  while ((k = __atomic_fetch_add(&j->next, LAB_CHUNK, __ATOMIC_RELAXED)) < j->n) {
-    int64_t hi = j->n - k, lo = hi > LAB_CHUNK ? hi - LAB_CHUNK : 0;
+  while ((k = __atomic_fetch_add(&j->next, j->chunk, __ATOMIC_RELAXED)) < j->n) {
+    int64_t hi = j->n - k, lo = hi > j->chunk ? hi - j->chunk : 0;
     lab_cell *r = ${nm}(lab__view_a${at.index}(lab_dup(v->b), v->s + (uint32_t)lo, (uint32_t)(hi - lo)));
     acc = acc ? ${merge}(acc, r) : r;
     if (lab_on_pool) __atomic_fetch_add(&lab_par_items, hi - lo, __ATOMIC_RELAXED);
@@ -4035,22 +4035,22 @@ static void lab_chunks_work_${gi}(void *p) {
 static lab_cell *lab_par_chunks_${gi}(lab_cell *xs) {
   int64_t n = ((${V} *)xs)->n;
   int always = lab_par_always;
-  lab_par_always = 0;
-  if ((n < 16 * LAB_CHUNK && !always) || !lab_pool_ready()) return ${nm}(xs);
+  int64_t chunk = lab_par_runs ? lab_par_runs : 16384;
+  lab_par_always = 0; lab_par_runs = 0;
+  if ((n < 16 * chunk && !always) || !lab_pool_ready()) return ${nm}(xs);
   size_t mk = lab_mk_n;
   lab_share_no = 0;
   lab_share(xs);
   lab_shared();
   if (lab_share_no) { lab_unshare(mk); return ${nm}(xs); }
-  ${J} j = { xs, n, 0, 0, { 0 } };
+  ${J} j = { xs, n, 0, chunk, 0, { 0 } };
   lab_pool_run(lab_chunks_work_${gi}, &j);
   lab_unshare(mk);
   lab_cell *acc = 0;
   for (int s = 0; s < j.slots; s++) if (j.out[s]) acc = acc ? ${merge}(acc, j.out[s]) : j.out[s];
   lab_drop(xs);
   return acc;
-}
-#undef LAB_CHUNK`;
+}`;
   }
   function rangeC(gi: number, view: string, fuelled: boolean): string {
     return `static void lab_range_work_${gi}(void *p) {
