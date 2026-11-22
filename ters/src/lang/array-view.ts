@@ -185,11 +185,18 @@ export const replaceIn = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
 // every array of its item type has one holder, so the view given is read
 // no more and its slot is written in place; unless another view shares the
 // buffer (a rest, a push into its room), when it is replaceIn.
+//
+// A view whose version is no longer the newest, since a view of an older
+// one was read since (a map written into the array it reads: strings'
+// inverse fft on a spectrum another view shares, C278), is copied out
+// into a buffer of its own first, n once: as replaceIn, each read of the
+// older view would undo every change since, n a read.
 export const replaceOwned = (a: ArrayValue, i: I.Int, x: unknown): ArrayView => {
-  const v = a instanceof ArrayView ? a : arrayView(a), t = v.ver;
-  if (t.shared || !t.cur || v.rest) return replaceIn(a, i, x);
+  let v = a instanceof ArrayView ? a : arrayView(a), t = v.ver;
   const k = typeof i === "number" ? i : Number(i);
   if (!(k >= 0 && k < v.n && Math.floor(k) === k)) return v;
+  if (!t.cur && !v.rest) { v = arrayOf(v.buf.items, v.start, v.start + v.n); t = v.ver; }
+  if (t.shared || !t.cur || v.rest) return replaceIn(v, i, x);
   const b = t.cur;
   if (b.items instanceof Uint8Array && !isByte(x)) b.items = Array.from(b.items);
   b.items[v.start + k] = x;
