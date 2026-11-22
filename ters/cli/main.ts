@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings, placeLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -669,6 +669,15 @@ async function pageFile(): Promise<string> {
   try { return await webCorePage(p.title, p.code, p.info, p.names, main, pageHost); } catch (e) { fail((e as Error).message.replace(/^(ters|lab): /, "")); }
 }
 
+// Where a page's handler's maps may run (L280a's placement entries):
+// from the program lowered as it is compiled.
+async function places(q: { code: Code; info: Info; names: Names }, root: Id): Promise<string[]> {
+  const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts");
+  let ir: ReturnType<typeof lower>;
+  try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
+  return placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names);
+}
+
 switch (command) {
   case "run": {
     if (staticPage) {
@@ -918,7 +927,7 @@ switch (command) {
     break;
   }
   case "choices": {
-    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, choiceLines(loaded, main, p.picks ?? []))));
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...await places(p, main)].sort())));
     console.log(`wrote ${choicesFile}`);
     break;
   }
@@ -948,7 +957,7 @@ switch (command) {
     // said (L280c, rule 3), and kept.
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
-      for (const l of staleChoices(writtenChoices, choiceLines(loaded, start, now.picks ?? []))) console.log(l);
+      for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...await places(now, start)].sort())) console.log(l);
       if (heldHere.size) {
         const alone = represented({ ...loaded, held: undefined }, start, true);
         for (const l of heldWarnings(writtenChoices, choiceLines(loaded, start, alone.picks ?? []))) console.log(l);
