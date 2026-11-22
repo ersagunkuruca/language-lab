@@ -10,6 +10,7 @@
 import type { Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
+import { S } from "../src/lang/std.ts";
 import { CARRIED, HEAD, looped, uses, type Representation } from "../src/lang/represent.ts";
 import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
@@ -56,7 +57,7 @@ export function choiceLines(given: Program, main: Id, picks: readonly Pick[], ta
     const from = p.from?.length ? ` from ${p.from.map((d) => names[d] ?? d).join(", ")}` : "";
     return `${p.of} representation: ${names[p.of] ?? p.of} as ${p.rep}${from}; among ${rows.map((r) => r.name).join(", ")}; jobs ${jobList.join(", ") || "none"}; target ${target}`;
   });
-  return [...new Set([...lines, ...wayLines(given, main, target), ...modeLines(given, main, target)])].sort();
+  return [...new Set([...lines, ...wayLines(given, main, target), ...modeLines(given, main, target), ...searchLines(given, main, target)])].sort();
 }
 
 // The algorithm entries (CHOICES-2026-11-20.md's second kind): for each
@@ -227,6 +228,25 @@ export function scheduleLines(p: { code: Code; names: Names; fused?: readonly { 
   }))];
 }
 
+// And each search main reaches (all, first, count, optional of one): its
+// answers come in the fair order that interleaves its choices, the one
+// order there is for now (decided 2026-11-12; compiled code keeps it).
+const SEARCHES: [Id, string][] = [[S.all, "all"], [S.first, "first"], [S.count, "count"], [S.optional, "optional"]];
+export function searchLines(given: Program, main: Id, target = "JavaScript"): string[] {
+  const names = { ...LIBRARY.names, ...given.names }, own = new Set(given.own), kinds = new Map(SEARCHES);
+  const lines: string[] = [];
+  for (const d of [main, ...dependencies(given.code, main)]) {
+    if (!own.has(d) || given.code.nodes[d]?.kind !== "def") continue;
+    for (const id of subtree(given.code, d)) {
+      const n = given.code.nodes[id];
+      if (n?.kind !== "call") continue;
+      const f = given.code.nodes[n.fn], kind = f?.kind === "ref" ? kinds.get(f.target) : undefined;
+      if (kind) lines.push(`${id} schedule: ${names[d] ?? d}'s ${kind} of a search: answers in the fair order, its choices interleaved; among fair order; target ${target}`);
+    }
+  }
+  return lines;
+}
+
 export function choicesText(main: string, lines: readonly string[]): string {
   return [`# The compiler's choices for ${main} (L280a): picked again whenever their facts change.`, ...lines].join("\n") + "\n";
 }
@@ -243,7 +263,7 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
   for (const l of lines) {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
-    if (!m && /^\S+ (way|mode plan|place): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
+    if (!m && /^\S+ (way|mode plan|place|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
