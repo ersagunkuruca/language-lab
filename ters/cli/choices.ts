@@ -12,6 +12,9 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { CARRIED, HEAD, looped, uses, type Representation } from "../src/lang/represent.ts";
 import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
+import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
+import { reachedImplementing } from "../src/lang/reached.ts";
+import { dependencies, isUse, subtree, useTarget, type NodeOf } from "../src/model.ts";
 
 export const choicesPath = (program: string) => `${program.replace(/[/\\]+$/, "")}.choices`;
 
@@ -49,7 +52,61 @@ export function choiceLines(given: Program, main: Id, picks: readonly Pick[], ta
     const from = p.from?.length ? ` from ${p.from.map((d) => names[d] ?? d).join(", ")}` : "";
     return `${p.of} representation: ${names[p.of] ?? p.of} as ${p.rep}${from}; among ${rows.map((r) => r.name).join(", ")}; jobs ${jobList.join(", ") || "none"}; target ${target}`;
   });
-  return [...new Set(lines)].sort();
+  return [...new Set([...lines, ...wayLines(given, main, target)])].sort();
+}
+
+// The algorithm entries (CHOICES-2026-11-20.md's second kind): for each
+// implementation main reaches whose fields have ways (WAYS.md), the way
+// each field is given by, as the arithmetic's resolving picks it
+// (ways.ts pickWays, target-neutral as JavaScript's is), among the field
+// as written and its ways.
+export function wayLines(given: Program, main: Id, target = "JavaScript"): string[] {
+  const names = { ...LIBRARY.names, ...given.names };
+  const code = reachedImplementing(given.code, [main], given.info);
+  const ways = waysIn(code, interfaceOps(code));
+  if (!ways.size) return [];
+  const impls = new Set(given.info.implementations?.values() ?? []);
+  // Only the operations main uses: its own definitions and what they
+  // call, and what an operation it uses is given by (an implementation's
+  // field as written, its ways), on until nothing new is asked. An
+  // implementation is reached by its type, all its fields with it.
+  const asked = new Set<Id>(), seen = new Set<Id>();
+  const reach = (d: Id) => {
+    for (const x of [d, ...dependencies(code, d)]) {
+      if (seen.has(x) || code.nodes[x]?.kind !== "def") continue;
+      seen.add(x);
+      if (impls.has(x)) continue;
+      for (const y of subtree(code, x)) {
+        const n = code.nodes[y], op = n?.kind === "ref" ? n.target : n && isUse(n) ? useTarget(code.nodes, n) : undefined;
+        if (op === undefined || !ways.has(op) || asked.has(op)) continue;
+        asked.add(op);
+        for (const w of ways.get(op)!) reach(w.def);
+        for (const impl of impls) {
+          const b = code.nodes[(code.nodes[impl] as NodeOf<"def"> | undefined)?.body ?? ""], f = b?.kind === "call" ? code.nodes[b.fn] : undefined, v = f?.kind === "ref" ? code.nodes[f.target] : undefined;
+          const at = v?.kind === "variant" ? v.fields.indexOf(op) : -1;
+          if (at >= 0 && b?.kind === "call" && b.args) for (const z of subtree(code, b.args[at])) { const m = code.nodes[z]; if (m?.kind === "ref" && code.nodes[m.target]?.kind === "def") reach(m.target); }
+        }
+      }
+    }
+  };
+  reach(main);
+  const lines: string[] = [];
+  for (const impl of code.defs) {
+    if (!impls.has(impl)) continue;
+    const body = code.nodes[(code.nodes[impl] as NodeOf<"def">).body ?? ""];
+    if (body?.kind !== "call" || !body.args) continue;
+    const fn = code.nodes[body.fn], variant = fn?.kind === "ref" ? code.nodes[fn.target] : undefined;
+    if (variant?.kind !== "variant") continue;
+    const fields = variant.fields.filter((f) => ways.has(f) && asked.has(f));
+    if (!fields.length) continue;
+    const pick = pickWays(code, ways, variant, body.args, NEUTRAL);
+    for (const f of fields) {
+      const way = pick.get(f), written = !leftToWays(code, body.args[variant.fields.indexOf(f)]);
+      const among = [...(written ? ["as written"] : []), ...ways.get(f)!.map((w) => names[w.def] ?? w.def)];
+      lines.push(`${impl} way: ${names[impl] ?? impl}'s ${names[f] ?? f}: ${way ? names[way] ?? way : way === null ? "as written" : "none"}; among ${among.join(", ")}; target ${target}`);
+    }
+  }
+  return lines;
 }
 
 export function choicesText(main: string, lines: readonly string[]): string {
