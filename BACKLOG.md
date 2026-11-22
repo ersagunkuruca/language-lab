@@ -64,6 +64,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E292 | A Choices tab beside Checks and Files: the open definition's `<program>.choices` entries under Representation, Algorithm, Placement and Schedule, each its pick, the alternatives of the same meaning to choose from, auto or held (Release); a badge on each node a choice is about, in the graph and the blocks, opens its row. Waits on L280a (the file) and L280c (held entries) | Ersagun 2026-11-22 (chose "Choices tab + node badges") | P2 | L | ⏸ L280a |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 
@@ -195,7 +196,7 @@ all of these.
 |---|---|---|---|---|---|
 | L280a | Write the compiler's picks to `<program>.choices` beside the program: representations, ways, mode plans, places, schedules, one entry per line sorted by stable id, each with the facts it read; a stale entry is picked again (cache rule). `ters check` and the editor's Program tab read it ([CHOICES-2026-11-20](docs/design/data/CHOICES-2026-11-20.md)). Representations written and checked (part 1); ways, mode plans, places, schedules and the Program tab left | Ersagun 2026-11-20 | P2 | L | |
 | L280b | Per-definition summaries (jobs used per type, calls in a loop) kept in `.lab/` by content hash; a pick whose facts come out the same is reused without the chooser (early cutoff). Measured 2026-11-20 (machine, warm ~0.42 s a choice, CPU profile over 13 runs, no check cache): deciding (choose, uses, looped, listBoundary, inPlace, keyed, generic, listGroups, listFree) about 30%, rewriting (represent, splitLists, stable ids) about 23%, checking the rewrite (infer, carriedChoice) about 36%, the passes before it (fuse walks, fold items, holders, reach) about 8%. A saved pick alone skips the 30%; the rest needs the rewritten definitions and their checks kept by hash too | Ersagun 2026-11-20 | P2 | M | |
-| L280c | Held entries: a person holds or changes an entry; the compiler refuses one that isn't an implementation of the same meaning and warns when it would now pick another. Editor gesture in the Program tab | Ersagun 2026-11-20 | P2 | M | |
+| L280c | Held entries: a person holds or changes an entry; the compiler refuses one that isn't an implementation of the same meaning and warns when it would now pick another. Editor gesture in E292's Choices tab | Ersagun 2026-11-20 | P2 | M | |
 | L280d | Measured sizes and call counts from runs written into the choices and read by the chooser in place of the cost ladder's n | Ersagun 2026-11-20 | P3 | M | |
 | L280e | Parameters on a representation (a grid's cell size, a chunk size, a worker count), chosen by the compiler and kept in the choices | Ersagun 2026-11-20 | P3 | M | |
 | L280f | Pool as a representation of a collection, so a program writes List or Map and the choices say pooled (moves the Pool type out of the code) | Ersagun 2026-11-20 | P3 | L | |
