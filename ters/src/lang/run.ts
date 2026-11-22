@@ -808,6 +808,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // says it does more than compute never tries, and one that keeps
   // stopping stops trying.
   const NEED = new Error("needs the machine");
+  // A direct run that gives no value (a `fail`, a builtin with none): the
+  // run has no choice points, so the call it is in has none either, and
+  // where it began fails (the machine's choice point) or a search's branch
+  // does (L281d).
+  const FAILED = new Error("no value");
   // The builtins that only compute (their type's row has at most a choice
   // and diverging: one that gives no value or several stops the run), and
   // the library's host ways, which are pure.
@@ -837,11 +842,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
   const directly = (n: NodeOf<"lambda">) => !machineOnly.has(n.id) && !acts(n);
   const single = (r: Iterable<Value>): Value => {
-    if (Array.isArray(r)) { if (r.length === 1) return r[0]; throw NEED; }
+    if (Array.isArray(r)) { if (r.length === 1) return r[0]; throw r.length ? NEED : FAILED; }
     const it = r[Symbol.iterator](), a = it.next();
-    if (a.done || !it.next().done) throw NEED;
+    if (a.done) throw FAILED;
+    if (!it.next().done) throw NEED;
     return a.value;
   };
+  // A function whose type says it may fail but never gives two values
+  // runs directly when nothing counts fuel: one that may choose stops at
+  // its first choice (NEED), one that fails gives FAILED. `lookup entry`
+  // and `value at` ran on the machine (pond's page, 2.3 million calls).
+  const failsAtMost = (n: NodeOf<"lambda">) => !machineOnly.has(n.id) && chooses(n);
   // How deep in direct runs this is: a machine started inside one (a
   // builtin or host way calling a function back) may act on nothing
   // either, so its world builtins and operations stop the run too, before
@@ -856,7 +867,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const underFuel = <T,>(fuel: Fuel, f: () => T): T => {
     const left = fuel.left, was = directFuel, around = ambient;
     directFuel = fuel; ambient = fuel;
-    try { return f(); } catch (e) { fuel.left = left; throw e; } finally { directFuel = was; ambient = around; }
+    // (A failure, which spends as the machine would only from the same
+    // place, runs again on the machine too.)
+    try { return f(); } catch (e) { fuel.left = left; throw e === FAILED ? NEED : e; } finally { directFuel = was; ambient = around; }
   };
   // Of the searches, those whose spending doesn't hang on the order they
   // look in (every answer is looked for), run directly under fuel too.
@@ -911,7 +924,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
   const callDirect = (f: Value, args: Value[]): Value => {
     const c = closureOf(f);
-    if (c && directly(c.node)) return enter(c, args);
+    if (c && (directly(c.node) || (!directFuel && failsAtMost(c.node)))) return enter(c, args);
     const h = HANDLED.get(f as Fn);
     if (h && searchesUnder(h, directFuel)) {
       // Under fuel the whole run goes to the machine, which runs out where
@@ -1048,7 +1061,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
           for (let i = 0; i < k; i++) vs[i] = as[i](env);
           const c = closureOf(f);
-          return c && directly(c.node) ? (new TailCall(c, vs) as unknown as Value) : callDirect(f, vs);
+          return c && (directly(c.node) || (!directFuel && failsAtMost(c.node))) ? (new TailCall(c, vs) as unknown as Value) : callDirect(f, vs);
         };
         return (env) => {
           if (steps) spendDirect();
@@ -1126,7 +1139,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const callSearch = (f: Value, args: Value[], k: K): boolean => {
     const c = closureOf(f);
     if (c && !machineOnly.has(c.lambda)) {
-      if (!acts(c.node)) return k(enter(c, args));
+      if (!acts(c.node)) { let v: Value; try { v = enter(c, args); } catch (e) { if (e === FAILED) return false; throw e; } return k(v); }
       if (chooses(c.node)) {
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
         return search(c.node.body, bind(c.scope, c.node.params, args), k);
@@ -1140,7 +1153,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       return false;
     }
     const h = HANDLED.get(f as Fn);
-    if (h) return k(handledDirect(h, args));
+    if (h) { let v: Value; try { v = handledDirect(h, args); } catch (e) { if (e === FAILED) return false; throw e; } return k(v); }
     throw NEED;
   };
   // A node whose one value is worked out directly, as searchNode's first case.
@@ -1309,9 +1322,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       const c = closureOf(f);
       if (c) {
         // Directly first (L118c), spending from its fuel (L281c).
-        if (directly(c.node)) {
-          const fuel = this.fuel;
-          try { return this.ret(fuel ? underFuel(fuel, () => enter(c, args)) : enter(c, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; }
+        const fuel = this.fuel;
+        if (directly(c.node) || (!fuel && failsAtMost(c.node))) {
+          try { return this.ret(fuel ? underFuel(fuel, () => enter(c, args)) : enter(c, args)); } catch (e) { if (e === FAILED) return this.fail(); if (e !== NEED && !(e instanceof RangeError)) throw e; }
         }
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
         return this.eval(c.node.body, bind(c.scope, c.node.params, args));
@@ -1320,7 +1333,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (h) {
         // A search run directly first (L118d).
         const fuel = this.fuel;
-        if (searchesUnder(h, fuel)) { try { return this.ret(fuel ? underFuel(fuel, () => handledDirect(h, args)) : handledDirect(h, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; } }
+        if (searchesUnder(h, fuel)) { try { return this.ret(fuel ? underFuel(fuel, () => handledDirect(h, args)) : handledDirect(h, args)); } catch (e) { if (e === FAILED) return this.fail(); if (e !== NEED && !(e instanceof RangeError)) throw e; } }
         return this.handle(h, args);
       }
       if (directDepth && builtinFns.has(f as Fn) && !pureFns.has(f as Fn)) throw NEED;
