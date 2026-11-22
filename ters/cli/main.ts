@@ -36,6 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -89,7 +90,9 @@ usage:
                                         as WebAssembly and C are
   ters native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   ters wasi <program> [-o out.wasm]      compile to a WASI command: WebAssembly with GC (wasmtime, Node's WASI)
-  ters check <program>                   type-check, and list the definitions and their types
+  ters check <program>                   type-check, and list the definitions and their types; with <program>.choices
+                                        beside it, its entries the compiler would now pick otherwise (stale) or adds (new)
+  ters choices <program> [--main name]   write the compiler's choices for main to <program>.choices (L280a)
   ters qasm <program> --main f [--bits n] [--unroll n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
                                         its Ints n bits wide (default 8), scratch qubits uncomputed and reused;
@@ -644,7 +647,7 @@ function answeredHere(q: Program): Program {
   return { ...q, code, info, reps: representationsIn(code, info, q.names, q.own) };
 }
 const loaded = answeredHere(load(path));
-const main = command === "run" || command === "compile" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
+const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
 // lowering is most of a run, and the same program lowers the same way.
 const runKeyed = command === "run" && main && defined < 0 && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
@@ -907,6 +910,12 @@ switch (command) {
     if (o >= 0) writeFileSync(rest[o + 1] ?? fail("-o needs a file"), q); else process.stdout.write(q);
     break;
   }
+  case "choices": {
+    const file = choicesPath(path);
+    writeFileSync(file, choicesText(mainName, choiceLines(loaded, main, p.picks ?? [])));
+    console.log(`wrote ${file}`);
+    break;
+  }
   case "check": {
     for (const e of p.info.errors) console.log(`error  ${p.names[e.id] ?? e.id}: ${e.message}`);
     // A part read that is always 0, a wrong grade (GRADES.md, L43e).
@@ -927,6 +936,12 @@ switch (command) {
     if (start && !p.info.errors.length) for (const of of new Set(rows.map((r) => r.of))) {
       const c = choose(p.code, start, rows.filter((r) => r.of === of));
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
+    }
+    // The choices kept beside the program (L280a), against the picks made now.
+    const kept = choicesPath(path);
+    if (start && !p.info.errors.length && existsSync(kept)) {
+      const now = represented(loaded, start, true);
+      for (const l of staleChoices(readChoices(readFileSync(kept, "utf8")), choiceLines(loaded, start, now.picks ?? []))) console.log(l);
     }
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;
     break;

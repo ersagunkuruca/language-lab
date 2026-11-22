@@ -39,7 +39,11 @@ export const BY_VALUE: Record<Id, "equal" | "show" | "compare"> = { [S.equal]: "
 // `insiders`: the representations' definitions, which may call the
 // private constructors they represent (infer.ts Options). The library's
 // own are insiders already (load.ts checkOptions).
-export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: Id[]; info?: Info }
+// What was chosen for a type, for the program's choices (choices.ts,
+// L280a): the row it is stored as and, for a split, the definitions whose
+// lists start it.
+export interface Pick { of: Id; rep: string; from?: Id[] }
+export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: Id[]; info?: Info; picks?: Pick[] }
 
 // `defs`: the program's own definitions, which the rewrite changes;
 // `asked`: the program's own representations, whose types are left alone.
@@ -120,12 +124,12 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       // Lists go alone (choiceOf); with Map or Set chosen first, they're
       // chosen again on what that made, the Map and Set rows asked for as
       // the program's own (C93).
-      if (r.reps.some((x) => x.of === LIST) || asked.some((x) => x.of === LIST)) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
+      if (r.reps.some((x) => x.of === LIST) || asked.some((x) => x.of === LIST)) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked, picks: r.picks };
       const insiders = [...(info.options?.insiders ?? []), ...r.insiders];
       const lists = withLibraryRepresentations(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, [...asked, ...r.reps], options);
       return lists.chosen.length
-        ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders] }
-        : { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked };
+        ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders], picks: [...(r.picks ?? []), ...(lists.picks ?? [])] }
+        : { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked, picks: r.picks };
     }
     const list = r.reps.find((x) => x.of === LIST);
     // A hash table that doesn't check gives way to the tree, not to the
@@ -411,7 +415,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   // on List, and stays so.
   const kept = [...made.filter((d) => !own.includes(d)), ...(boundary ? [...boundary.made, ...boundary.edges] : [])];
   const out = chosen.reduce((c, rep) => represent(c, own, rep, kept), all);
-  return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen };
+  return { code: out, names: { ...names, ...k.names }, chosen: chosen.map((r) => `${names[r.of] ?? LIBRARY.names[r.of]} as ${r.name}`), insiders: made, reps: chosen, picks: chosen.map((r) => ({ of: r.of, rep: r.name })) };
 }
 
 // A definition consing onto a call of itself appends at the back instead,
@@ -497,8 +501,10 @@ interface GroupSplit { seeds: Id[]; deep: boolean; roots: Id[] }
 function splitByGroups(code: Code, info: Info, names: Names, main: Id, defs: Id[], kept?: GroupSplit): (Chosen & { reps: Representation[]; made: GroupSplit }) | null {
   const array = LIBRARY.reps.find((r) => r.of === LIST && r.name === "array of List");
   if (!array) return null;
-  const out = (s: NonNullable<ReturnType<typeof splitLists>>, made: GroupSplit) =>
-    ({ code: s.code, names: s.names, chosen: [`List as array of List from ${s.seeds.filter((d) => made.roots.includes(d)).map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array], made });
+  const out = (s: NonNullable<ReturnType<typeof splitLists>>, made: GroupSplit) => {
+    const from = s.seeds.filter((d) => made.roots.includes(d));
+    return { code: s.code, names: s.names, chosen: [`List as array of List from ${from.map((d) => names[d] ?? d).join(", ")}`], insiders: [], reps: [array], made, picks: [{ of: LIST, rep: array.name, from }] };
+  };
   // As the last compile of this program but for its numbers split it
   // (choiceOf's `decidedKept`): its one splitLists again.
   if (kept && [...kept.seeds, ...kept.roots].every((d) => defs.includes(d))) {
@@ -568,7 +574,7 @@ function splitByHolders(code: Code, info: Info, names: Names, main: Id, defs: Id
   if (!seeds.length) return null;
   const s = splitLists(code, info, names, defs, main, seeds, rep, true);
   if (!s) return null;
-  return { code: s.code, names: s.names, chosen: [`List as ${rep.name} beside ${names[main] ?? "main"}'s lists as written`], insiders: [], reps: [rep] };
+  return { code: s.code, names: s.names, chosen: [`List as ${rep.name} beside ${names[main] ?? "main"}'s lists as written`], insiders: [], reps: [rep], picks: [{ of: LIST, rep: rep.name, from: seeds }] };
 }
 
 // A list as written, stored: the row's own way (`store by`), else one
