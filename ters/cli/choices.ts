@@ -154,7 +154,7 @@ export function modeLines(given: Program, main: Id, target = "JavaScript"): stri
 // fold or search it shares out on worker threads once it is slow
 // (branches-rt.ts, scalar.ts sharedSites), where its code kept the site.
 export interface Lowered { code: Code; funcs?: readonly { body: unknown }[]; awayMaps?: { site: number; fn: Id; how: string }[]; sharedSites?: { site: number; at: Id; how: string }[] }
-const HOW: Record<string, string> = { map: "map", keep: "keep", add: "fold adding", max: "fold keeping the largest", min: "fold keeping the smallest", with: "fold of fields", first: "search for the first answer", count: "count of a search's answers", all: "search for all answers", any: "check of any item", every: "check of every item" };
+const HOW: Record<string, string> = { map: "map", keep: "keep", add: "fold adding", max: "fold keeping the largest", min: "fold keeping the smallest", with: "fold of fields", first: "search for the first answer", count: "count of a search's answers", all: "search for all answers", any: "check of any item", every: "check of every item", "first where": "first item that passes" };
 // The sites the lowered code shares out: a runtime call's (`map.pure`,
 // `fold.pure`, `count.search`, …) number after the fuel it is given.
 function sitesKept(funcs: readonly { body: unknown }[]): Set<number> {
@@ -190,6 +190,26 @@ export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, 
     const d = defOf(m.fn), on = gpu.has(m.site);
     return `${m.fn} place: ${nameOf(d)}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; target ${target}`;
   });
+}
+
+// C's (`ters native`): each call its threads run (c.ts `par:`, scalar.ts
+// threadSites), by the node it is about, where the lowered code still
+// has a call of that runtime function (the passes after rebuild them).
+const THREADS: Record<string, string> = { ...HOW, together: "together", both: "two calls of one function", counted: "fold counting into a map" };
+export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; how: string }[] }, names: Names): string[] {
+  if (!ir.threadSites?.length) return [];
+  const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code), seen = new Set<unknown>(), kept = new Set<string>();
+  const walk = (e: unknown): void => {
+    if (!e || typeof e !== "object" || seen.has(e)) return;
+    seen.add(e);
+    const x = e as { k?: string; fn?: unknown };
+    if (x.k === "rt" && typeof x.fn === "string" && x.fn.startsWith("par:")) kept.add(x.fn);
+    for (const v of Array.isArray(e) ? e : Object.values(e)) walk(v);
+  };
+  for (const f of ir.funcs ?? []) walk(f.body);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${t.at} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads; target C`))];
 }
 
 export function choicesText(main: string, lines: readonly string[]): string {
