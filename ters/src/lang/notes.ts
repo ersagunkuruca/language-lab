@@ -128,6 +128,7 @@ export const NOTES: Comments = {
   "builtin.arith.mul": "a · b, at any Number. At Complex it's the complex product.",
   "builtin.arith.neg": "−a, at any Number.",
   "builtin.arith.less": "a < b, at any type with <: every Number but Complex, Text (alphabetical, as comes before), and a type with an Ordered of its own. at most, more than, at least, smaller and larger are written with it, so they take the same types.",
+  "builtin.arith.abs": "The size of a number without its sign, at any type with < and −x: Float64, Int, Rational and the other ordered numbers. Written with them, so it takes the same types.",
   "builtin.add": `a + b for ${n}s: what the generic + is at ${n}.`,
   "builtin.sub": `a − b for ${n}s: what the generic − is at ${n}.`,
   "builtin.mul": `a · b for ${n}s: what the generic · is at ${n}.`,
