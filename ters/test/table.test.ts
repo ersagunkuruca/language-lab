@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CONS, TABLE_OPS } from "../src/lang/std.ts";
-import { DirectMap, Table } from "../src/lang/table.ts";
+import { DirectMap, held, Table, tableRead } from "../src/lang/table.ts";
 import { STD_IMPL } from "../src/lang/std-impl.ts";
 
 const put = STD_IMPL[TABLE_OPS.put] as (t: Table, k: unknown, v: unknown) => Table;
@@ -135,6 +135,20 @@ test("tuple keys whose Texts hold quotes, commas, brackets and backslashes stay 
   keys.forEach((k, i) => { assert.equal(has(t, pair(...(k.fields as [unknown, unknown]))).tag, has(t, k).tag); assert.deepEqual(listed(put(empty(), k, i)), [[k, i]]); });
   const read = (k: unknown) => listed(t).find(([key]) => JSON.stringify(key) === JSON.stringify(k))?.[1];
   keys.forEach((k, i) => assert.equal(read(k), i));
+});
+
+// C289: a tuple of Ints and Texts is spelled once and that spelling given
+// again for a fresh tuple of the same parts; an Int and its digits as a
+// Text, and a tuple inside a tuple, still spell apart.
+test("a tuple key met before is read without spelling it again, and keeps apart what it kept apart", () => {
+  const pair = (a: unknown, b: unknown) => ({ tag: "tuple", fields: [a, b] });
+  const keys = [pair(3, "Mon"), pair("3", "Mon"), pair("Mon", 3), pair("Mon", "3"), pair(pair(1, 2), 3), pair(1, pair(2, 3)), pair("a\"b", 1)];
+  const spelt = keys.map((k) => held(k));
+  assert.equal(new Set(spelt).size, keys.length);
+  keys.forEach((k, i) => assert.equal(held(pair(...(k.fields as [unknown, unknown]))), spelt[i]));
+  let t = empty();
+  keys.forEach((k, i) => (t = put(t, k, i)));
+  keys.forEach((k, i) => assert.equal(tableRead(t, pair(...(k.fields as [unknown, unknown])), -1), i));
 });
 
 // A page's cell holding a set kept as a hash table (the greenhouse's held
