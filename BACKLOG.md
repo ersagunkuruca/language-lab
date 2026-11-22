@@ -94,6 +94,7 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
+| C284 | The greenhouse in wasi is 2.1x native through C (600 ticks of 2,000 moths: 1.7 to 1.8 s against 0.85 s, 11-22). A profile under Node puts 30% in `met`, 18% in the walk over a cell's moths (`gathered$from counted`) and 10% in the collector. C passes Thing, Flock and Vec by value, as structs; WebAssembly makes a GC struct for every one: `offset to` and `plus` make a Vec each, and every near moth a new Flock and three Vecs (10 million of 31.8 million looked at). The Flock's count is an eqref Int added through `int.add`. Not the cause: exports (none but main changed nothing) and inlining (V8 already inlines the small calls). The fix to build: a record of a few numbers passed and returned as its fields (multi-value params and results), as C passes it | GAPS game round 2 (GH6), 11-22 | 2026-11-22 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
