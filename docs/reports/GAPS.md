@@ -5002,3 +5002,24 @@ The lexer's own walk (`tokens from`) still makes the list: it reads
 `item at(rest, 0, "")` and `drop(rest, 1)` as well as handing `rest`
 on, so it is not a walker.
 
+### C282, measured
+
+A text compared with a literal natively is `lab_text_equal(lab_dup(t),
+literal)`. Patched by hand in mini's C into a borrowing compare (21
+sites, no count up or down, inlined), it gives 737 → 697 ms at 20000
+(five runs each), 5% of `ters native` alone. Not built: under the
+round's 10%, and the change is c.ts's printing.
+
+### Round stopped
+
+The next stage buys under 10%. Round 21 ends at 20000 programs:
+
+| mini, 20000 | at the start | at the end |
+|---|---|---|
+| core IR | 4.5x the ideal | 3.4x |
+| `ters native` | 3.3x | 3.1x |
+| `ters wasi` | 3.6x | 3.5x |
+
+Left for other lanes: I344 (checking mini takes 2 s, modes.ts 1.6 s of
+it, the checker's, L266) and the evaluator at 111x (L281).
+
