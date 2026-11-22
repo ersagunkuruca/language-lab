@@ -25,6 +25,7 @@ import { CONS, LIST } from "../../ters/src/lang/std.ts";
 import { CELL_OPS } from "../../ters/src/lang/std.ts";
 import type { CoreIR, DType, LType, SExpr } from "./scalar.ts";
 import { kids as allKids } from "./scalar.ts";
+import { keptMap } from "../../ters/src/kept.ts";
 
 // `t`: the type of the value at that place, by key, where it's known.
 type Src = { o: number; at: string; t?: string };
@@ -54,9 +55,48 @@ const sig = (a: Abs, depth = 0): string => `${a.srcs.map((s) => `${s.o}:${s.at}`
 const isList = (t: DType) => t.def === LIST;
 const keyOf = (t: LType) => (typeof t === "string" ? t : t.key);
 
+// Kept between compiles (plan doc "Incremental compile after edits"):
+// what is worked out here never reads a number, a text or a truth value
+// written in the program, nor a function's definition, binders or
+// lambda. So the lowered program with those left out, each type by its
+// key, is the key, and an edit of a number (greenhouse-page: 0.8 s of a
+// 3.7 s compile here) finds what each read became again, by its place
+// among the reads the key met.
+const LIT = new Set(["num", "int", "text", "bool"]);
+const isType = (v: object) => "key" in v && !("k" in v);
+const keptReads = keptMap<string, { fns: (string | null)[]; n: number }>();
+function readsKey(ir: CoreIR): { key: string; reads: (SExpr & { k: "rt" })[] } {
+  const reads: (SExpr & { k: "rt" })[] = [];
+  const own = (ts: object[]) => ts.map((t) => { const { key, ...rest } = t as { key: string }; return { type: key, ...rest }; });
+  const key = JSON.stringify([ir.funcs, ir.shapes, ...[ir.records, ir.arrays, ir.tables, ir.fns, ir.data, ir.escapes].map(own)], function (this: Record<string, unknown>, k, v) {
+    if (typeof v === "bigint") return null;
+    if (k === "binders" || k === "lambda" || ("body" in this && "locals" in this && k === "def")) return null;
+    if (v && typeof v === "object") {
+      if (isType(v)) return (v as { key: string }).key;
+      const e = v as SExpr;
+      if (LIT.has(e.k) && "v" in e) return { k: e.k };
+      if (e.k === "rt" && e.fn === READ) reads.push(e);
+    }
+    return v;
+  });
+  return { key, reads };
+}
+
 // The places each read's value is used at: keys, or null for the whole
 // value. Then every read whose places are all known is rewritten in place.
 export function trackReads(ir: CoreIR): number {
+  const { key, reads } = readsKey(ir);
+  const was = keptReads.get(key);
+  if (was && was.fns.length === reads.length) {
+    was.fns.forEach((f, i) => { if (f !== null) reads[i].fn = f; });
+    return was.n;
+  }
+  const n = trackReadsIn(ir);
+  if (keptReads.size >= 4) keptReads.clear();
+  keptReads.set(key, { fns: reads.map((e) => (e.fn === READ ? null : e.fn)), n });
+  return n;
+}
+function trackReadsIn(ir: CoreIR): number {
   const sites = new Map<SExpr, number>();
   const needs: (Set<string> | null)[] = [];
   // The places a formula's answer holds as they are, by read.

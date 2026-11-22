@@ -707,6 +707,7 @@ function prepared(code: Code, info: Info, names: Names, roots: Id[], host: boole
   return out;
 }
 
+const fronts = new WeakMap<Set<string>, { code: Code; info: Info; names: Names; rounded: Id[] }>();
 function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean }, severalTypes: Set<string>, carry: { derive: boolean }): CoreIR {
   // Where each stop is lowered from (C143): the node being lowered, and
   // the sites met so far, one a node.
@@ -738,50 +739,60 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // program still checks. Not in a shader, whose Float32 would round
   // differently, nor for Build targets' answer (`bake: false`, I315): it
   // only makes more lower.
-  if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) {
-    const b = bakeCalls(code, info, names);
-    if (b.baked.length) {
-      const checked = infer(b.code, names, undefined, recheck);
-      if (checked.errors.length <= info.errors.length) ({ code, info } = { code: reachedWithShows(b.code, roots, checked), info: checked });
+  // The same each time lowerScalar lowers again (several answers met, a
+  // derivative not carried): kept for those (greenhouse-page staged twice
+  // a compile, 0.3 s each).
+  const front = fronts.get(severalTypes);
+  let st: { rounded: Id[] };
+  if (front) ({ code, info, names, st } = { ...front, st: { rounded: [...front.rounded] } });
+  else {
+    if (!opts.shader && opts.bake !== false && !envSet("NO_BAKE")) {
+      const b = bakeCalls(code, info, names);
+      if (b.baked.length) {
+        const checked = infer(b.code, names, undefined, recheck);
+        if (checked.errors.length <= info.errors.length) ({ code, info } = { code: reachedWithShows(b.code, roots, checked), info: checked });
+      }
     }
-  }
-  // Calls given data written down (an algebra's signature and basis) are
-  // worked out as far as that data goes (stage.ts, C65): what's left is
-  // arithmetic, with no lists. Kept only if the program still checks.
-  // Definitions given such data get a copy for it (I86).
-  // The roots are called from outside: every other definition's
-  // multivector inputs are what its callers give it (grades.ts valueMasks,
-  // L43c), so staging multiplies only their masked parts.
-  const st = stageProgram(code, info, names, roots);
-  ({ code, names, info } = st);
-  // The passes so far carry the types of the nodes they made rather than
-  // check the program again (I203). The verifier vouches for them in one
-  // walk (wc 11 ms, spacetime 260); where it finds a problem the program is
-  // checked again, as before I203 (REVIEW-2026-11-11 §2, I207).
-  // (A page has no `process`: the editor's shaders couldn't draw, I219.)
-  if (typeof process === "undefined" || !process.env?.NO_VERIFY) info = vouched(code, info, names);
-  // Then derivative(f) of a function written right there becomes the code
-  // of its derivative (derive.ts), checked again, so the GPU gets exact
-  // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
-  // definitions like any other. gradient(f) too, over the record f's type
-  // says it takes. After staging, so a function that calls the clifford
-  // functions with an algebra written down is arithmetic by then (C74: a
-  // ray marcher's scene moved by a PGA motor; read before, its derivative
-  // would be the clifford functions' generic folds again), and what the
-  // derivatives made is staged in turn.
-  const later = expandDerivatives(code, names, (call) => {
-    const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0]) ?? { t: "var", v: -1 });
-    return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
-  });
-  if (later.expanded.length) {
-    const checked = infer(later.code, later.names, undefined, recheck);
-    if (checked.errors.length <= info.errors.length) {
-      ({ code, names } = later);
-      info = checked;
-      const again = stageProgram(code, info, names, roots);
-      ({ code, names, info } = again);
-      st.rounded.push(...again.rounded);
+    // Calls given data written down (an algebra's signature and basis) are
+    // worked out as far as that data goes (stage.ts, C65): what's left is
+    // arithmetic, with no lists. Kept only if the program still checks.
+    // Definitions given such data get a copy for it (I86).
+    // The roots are called from outside: every other definition's
+    // multivector inputs are what its callers give it (grades.ts valueMasks,
+    // L43c), so staging multiplies only their masked parts.
+    const staged = stageProgram(code, info, names, roots);
+    ({ code, names, info } = staged);
+    st = staged;
+    // The passes so far carry the types of the nodes they made rather than
+    // check the program again (I203). The verifier vouches for them in one
+    // walk (wc 11 ms, spacetime 260); where it finds a problem the program is
+    // checked again, as before I203 (REVIEW-2026-11-11 §2, I207).
+    // (A page has no `process`: the editor's shaders couldn't draw, I219.)
+    if (typeof process === "undefined" || !process.env?.NO_VERIFY) info = vouched(code, info, names);
+    // Then derivative(f) of a function written right there becomes the code
+    // of its derivative (derive.ts), checked again, so the GPU gets exact
+    // slopes as plain arithmetic. The partials it calls (∂scene/∂x …) are
+    // definitions like any other. gradient(f) too, over the record f's type
+    // says it takes. After staging, so a function that calls the clifford
+    // functions with an algebra written down is arithmetic by then (C74: a
+    // ray marcher's scene moved by a PGA motor; read before, its derivative
+    // would be the clifford functions' generic folds again), and what the
+    // derivatives made is staged in turn.
+    const later = expandDerivatives(code, names, (call) => {
+      const f = info.subst.zonk(info.typeOf.get((code.nodes[call] as Call).args[0]) ?? { t: "var", v: -1 });
+      return f.t === "fn" && f.params[0]?.t === "con" ? recordVariant(code, f.params[0].id) : null;
+    });
+    if (later.expanded.length) {
+      const checked = infer(later.code, later.names, undefined, recheck);
+      if (checked.errors.length <= info.errors.length) {
+        ({ code, names } = later);
+        info = checked;
+        const again = stageProgram(code, info, names, roots);
+        ({ code, names, info } = again);
+        st.rounded.push(...again.rounded);
+      }
     }
+    fronts.set(severalTypes, { code, info, names, rounded: [...st.rounded] });
   }
   const rounded = new Set<Id>();
   const calls = new Set(st.rounded);
@@ -900,7 +911,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // and what it was given in the reason: Abort's reason, or the operation
   // as a value of the effect's own type (`escapes`, from 1).
   const opOf = new Map<Id, Id>();
-  for (const n of nodeValues(code.nodes)) {
+  // The definitions, in their order, from the nodes' kept index (model.ts
+  // nodesOfKindIn): each scan of all 50,000 nodes here was 5 ms a compile.
+  const allDefs = nodesOfKindIn(code.nodes, "def") as NodeOf<"def">[];
+  for (const n of allDefs) {
     if (n.kind !== "def" || !n.body) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return !x.returns && !x.later; })) td.variants.forEach((v: Id) => opOf.set(v, n.id));
@@ -925,7 +939,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // Without `host`, only the effects `hosted` names (C's hosts/c.c).
   // And the file `with open file` keeps open (L213c3), the library's.
   // With `handlers` (C, L213c4), the program's own too, on C's stack.
-  for (const n of opts.host || opts.handlers ? nodeValues(code.nodes) : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
+  for (const n of opts.host || opts.handlers ? allDefs : [...opts.hosted ?? []].flatMap((e) => code.nodes[e] ?? [])) {
     if (n.kind !== "def" || !n.body || (n.id.startsWith("std.") ? !((opts.host || opts.handlers) && n.id === OPEN_FILE) : code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">))) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && !answeredLater.has(v); })) td.variants.forEach((v: Id) => tailOps.set(v, n.id));
@@ -960,7 +974,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
   const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
-  for (const n of opts.host || fibers ? nodeValues(code.nodes) : []) {
+  for (const n of opts.host || fibers ? allDefs : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
     if (td?.kind === "typedef" && td.effect && td.variants.length && td.variants.every((v: Id) => { const x = code.nodes[v] as NodeOf<"variant">; return x.returns && answeredLater.has(v); })) td.variants.forEach((v: Id) => laterOps.set(v, n.id));
@@ -981,7 +995,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const tailOwn = new Set(opts.handlers ? [...tailOps.values()].filter((e) => !opts.hosted?.has(e)) : []);
   let drawn = false;
   // Every effect's operations, for refusing what isn't lowered yet.
-  const effectOps = new Set(nodeValues(code.nodes).flatMap((n) => {
+  const effectOps = new Set(allDefs.flatMap((n) => {
     const td = n.kind === "def" && n.body ? code.nodes[n.body] : null;
     return td?.kind === "typedef" && td.effect ? td.variants : [];
   }));

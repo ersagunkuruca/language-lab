@@ -22,12 +22,19 @@ import { S } from "./std.ts";
 import { CHOICE, type Type } from "./types.ts";
 import { defsKey } from "./def-keys.ts";
 import { keptMap } from "../kept.ts";
+import { classKey, optionsText } from "./class-key.ts";
 
 // The searches whose firsts stay, kept between compiles (the incremental
 // compile, part 2) by the keys of the definitions holding them and what
 // those reach, which is all the trial below reads, and the check's
 // options: after an edit elsewhere, machine's 19 firsts aren't tried again.
 const noneTaken = keptMap<string, true>();
+const takenKept = keptMap<string, Set<Id>>();
+// And those where the firsts taken made a problem the program didn't
+// have, so none was taken: greenhouse-page's lowering takes its pools'
+// firsts, then finds its page's handler performing Choice, each compile
+// (two checks, 0.2 s an edit).
+const refusedKept = keptMap<string, true>();
 const optionsKey = (o: Info["options"]) => JSON.stringify(o ?? {}, (k, v) => (k === "cache" ? undefined : v instanceof Set ? [...v].sort() : Array.isArray(v) && v.every((x) => typeof x === "string") ? [...v].sort() : v));
 
 const SEARCHES = new Set<Id>([S.all, S.count, S.first, S.optional]);
@@ -129,7 +136,7 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   const thunks = new Map(sites.map((s) => [s, copy((code.nodes[s] as { args: Id[] }).args[0])]));
   for (const [s, th] of thunks) nodes[s] = { id: s, kind: "call", fn: th, args: [] } as Node;
   let out: Code = { ...code, nodes, defs: [...code.defs, ...copies.values()] };
-  let checked: Info;
+  let checked: Info | undefined;
   const made = [...copies.values()];
   // Where the thunk chooses no more, the first is its body; elsewhere the
   // first stays as it was. Which ones may is asked first of a check of
@@ -139,12 +146,23 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   // number's sign is the whole program's, pond's tick).
   const stillChooses = (c: Info, th: Id) => { const t = c.typeOf.get(th), z = t && c.subst.zonk(t); return z?.t !== "fn" || c.subst.resolveRow(z.eff).effs.includes(CHOICE); };
   const mayTake = (c: Info) => [...thunks].filter(([s, th]) => !open.has(s) && !stillChooses(c, th));
-  try { checked = inferRewritten(code, out, outNames, info, sites, made, dependenciesOfAll(code, sites.map((s) => (code.nodes[s] as { args: Id[] }).args[0]))); } catch { return { code, info, names, taken: 0 }; }
-  // A first the trial may take is asked of the whole program, whose
-  // answer the key doesn't cover: not kept.
-  const whole = mayTake(checked).length > 0;
-  if (whole) try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
-  const take = new Set(mayTake(checked).map(([s]) => s));
+  // Which firsts the last compile of this program took, but for its
+  // numbers (first-arms reads them only through the check, which tells
+  // only whether one is whole, its sign and whether it is 0): its trial
+  // and whole check aren't made again (greenhouse-page: 0.3 s an edit).
+  const classes = classKey(code, optionsText(info.options));
+  if (refusedKept.has(classes)) return { code, info, names, taken: 0 };
+  let take = takenKept.get(classes);
+  let whole = false;
+  if (!take) {
+    try { checked = inferRewritten(code, out, outNames, info, sites, made, dependenciesOfAll(code, sites.map((s) => (code.nodes[s] as { args: Id[] }).args[0]))); } catch { return { code, info, names, taken: 0 }; }
+    // A first the trial may take is asked of the whole program, whose
+    // answer the key doesn't cover: not kept.
+    whole = mayTake(checked).length > 0;
+    if (whole) try { checked = infer(out, outNames, undefined, info.options); } catch { return { code, info, names, taken: 0 }; }
+    take = new Set(mayTake(checked).map(([s]) => s));
+    if (take.size) { if (takenKept.size >= 4) takenKept.clear(); takenKept.set(classes, take); }
+  }
   let taken = 0;
   for (const [s, th] of thunks) {
     if (take.has(s)) { nodes[s] = { ...nodes[(nodes[th] as { body: Id }).body], id: s } as Node; taken++; }
@@ -158,7 +176,11 @@ export function firstArms(code: Code, info: Info, names: Names): { code: Code; i
   if (checked.errors.length > info.errors.length) {
     let before: Set<string>;
     try { before = new Set(infer(code, names, undefined, info.options).errors.map((e) => e.message)); } catch { return { code, info, names, taken: 0 }; }
-    if (checked.errors.some((e) => !before.has(e.message))) return { code, info, names, taken: 0 };
+    if (checked.errors.some((e) => !before.has(e.message))) {
+      if (refusedKept.size >= 4) refusedKept.clear();
+      refusedKept.set(classes, true);
+      return { code, info, names, taken: 0 };
+    }
   }
   return { code: out, info: checked, names: outNames, taken };
 }

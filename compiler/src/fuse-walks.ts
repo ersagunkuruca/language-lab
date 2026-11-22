@@ -45,6 +45,8 @@ import { CONS, NIL } from "../../ters/src/lang/std.ts";
 import { DIVERGE, type Type } from "../../ters/src/lang/types.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { does } from "./fuse-steps.ts";
+import { keptMap } from "../../ters/src/kept.ts";
+import { classKey, optionsText } from "../../ters/src/lang/class-key.ts";
 
 const MAP = preludeDef("map"), FLAT_MAP = preludeDef("flat map");
 // How deep a list may be made inside lets and calls and still be found.
@@ -54,10 +56,50 @@ interface Walker { def: Id; params: Id[]; k: number; m: number; head: Id; step: 
 
 export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): { code: Code; info: Info; names: Names; made: Id[] } {
   const before = new Set(code.defs);
+  // Each definition's calls a candidate may be, kept between rounds for
+  // the definitions a round left alone (greenhouse-page: 18 rounds over
+  // the library's nodes too, 0.25 s a compile).
+  const calls = new Map<Id, Id[]>(), defsOf = new Map<Id, Id[]>();
+  const callsOf = (d: Id): Id[] => {
+    let xs = calls.get(d);
+    if (xs) return xs;
+    xs = [];
+    for (const id of subtree(code, d)) {
+      let ds = defsOf.get(id);
+      if (!ds) defsOf.set(id, (ds = []));
+      ds.push(d);
+      const n = code.nodes[id];
+      if (isCall(n) && n.args && !LIBRARY.code.nodes[id]) xs.push(id);
+    }
+    calls.set(d, xs);
+    return xs;
+  };
+  // The rounds of the last compile of this program but for its numbers,
+  // texts and truth values, which nothing here reads, taken again with
+  // one check after: an edit of a number (the editor's drag) found the
+  // same 18 walks of greenhouse-page, a check after each (0.5 s).
+  const key = classKey(code, optionsText(opts));
+  const was = roundsKept.get(key);
+  if (was) {
+    const given = { code, names };
+    const changed = new Set<Id>();
+    let whole = info.options !== opts;
+    for (const r of was) {
+      const next = rewrite(code, names, r.at, r.w, r.how);
+      const c = whole ? undefined : changedOver(code.nodes, next.code.nodes);
+      if (c) for (const id of c) changed.add(id); else whole = true;
+      ({ code, names } = next);
+    }
+    const made = code.defs.filter((d) => !before.has(d));
+    const checked = whole ? infer(code, names, undefined, opts) : inferRewritten(given.code, code, names, info, [...changed].filter((id) => given.code.nodes[id] !== undefined), made);
+    if (checked.errors.length <= info.errors.length) return { code, info: checked, names, made };
+    ({ code, names } = given);
+  }
+  const rounds: Round[] = [];
   for (let round = 0; round < 40; round++) {
-    const c = candidate(code, info, names);
+    const c = candidate(code, info, names, callsOf);
     if (!c) break;
-    const next = c();
+    const next = rewrite(code, names, c.at, c.w, c.how);
     // Checked again only where the round changed it, over the check
     // before (infer.ts inferRewritten): a round adds a definition and
     // changes a call or two, and the whole program was checked each round
@@ -65,9 +107,13 @@ export function fuseWalks(code: Code, info: Info, names: Names, opts: Options): 
     const changed = info.options === opts ? changedOver(code.nodes, next.code.nodes) : undefined;
     const checked = changed ? inferRewritten(code, next.code, next.names, info, changed.filter((id) => code.nodes[id] !== undefined), next.code.defs.filter((d) => !code.defs.includes(d))) : infer(next.code, next.names, undefined, opts);
     if (checked.errors.length > info.errors.length) break;
+    rounds.push(c);
+    if (changed) for (const id of changed) for (const d of defsOf.get(id) ?? []) calls.delete(d);
+    else calls.clear();
     ({ code, names } = next);
     info = checked;
   }
+  if (rounds.length) { if (roundsKept.size >= 4) roundsKept.clear(); roundsKept.set(key, rounds); }
   return { code, info, names, made: code.defs.filter((d) => !before.has(d)) };
 }
 
@@ -128,12 +174,16 @@ function made(code: Code, info: Info, e: Id, deep = 0): Made | null {
   return m && { how: "def", def: target, f: m.f };
 }
 
-function candidate(code: Code, info: Info, names: Names): (() => { code: Code; names: Names }) | null {
+type Round = { at: Id; w: Walker; how: Made };
+const roundsKept = keptMap<string, Round[]>();
+
+function candidate(code: Code, info: Info, names: Names, callsOf: (d: Id) => Id[]): Round | null {
   const walkers = new Map<Id, Walker | null>();
-  const reached = new Set(code.defs.flatMap((d) => subtree(code, d)));
-  for (const id of reached) {
-    const n = code.nodes[id];
-    if (!isCall(n) || !n.args || LIBRARY.code.nodes[id]) continue;
+  const seen = new Set<Id>();
+  for (const d of code.defs) for (const id of callsOf(d)) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const n = code.nodes[id] as NodeOf<"call"> & { args: Id[] };
     const t = refTo(code, n.fn);
     if (!t || code.nodes[t]?.kind !== "def") continue;
     if (!walkers.has(t)) walkers.set(t, walker(code, info, t));
@@ -148,7 +198,7 @@ function candidate(code: Code, info: Info, names: Names): (() => { code: Code; n
     // pond 100 40 from 1.8 to 5.8 s).
     if (loopsPerItem(how.f)) continue;
     if (!n.args.every((a) => onlyComputes(does(code, info, a)))) continue;
-    return () => rewrite(code, names, id, w, how);
+    return { at: id, w, how };
   }
   return null;
 

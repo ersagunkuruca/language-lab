@@ -191,6 +191,18 @@ const intern = (t: string) => { let n = interned.get(t); if (n === undefined) { 
 export interface GroupStore { load(key: string): Closed | undefined; save(key: string, c: Closed): void }
 export type { Closed };
 
+// A check of a whole program kept by groups too, while `keepingWhole`
+// runs (a lowering, a choice of representations, where checks are kept):
+// the lowering's checks of what the roots reach (stage.ts), on no
+// layer, are most of a compile after an edit (greenhouse-page's 0.25 s),
+// and their groups are those of the last compile but one or two.
+let wholeKept = false;
+export function keepingWhole<T>(f: () => T): T {
+  const was = wholeKept;
+  wholeKept = true;
+  try { return f(); } finally { wholeKept = was; }
+}
+
 export class CheckCache {
   private kept = new Map<string, Closed>();
   hits = 0;
@@ -222,13 +234,13 @@ export class CheckCache {
     // check of everything is the library's own, made once, or the
     // palette's trial of one filling, thrown away, and keying either costs
     // more than it saves.
-    if (!layer) return undefined;
-    const start = s.next, onDisk = !!layer.keptAs && !!this.store;
+    if (!layer && !wholeKept) return undefined;
+    const start = s.next, onDisk = !!layer?.keptAs && !!this.store;
     // The kept layer the key names: the layer itself, else the nearest
     // kept one under it (null: none).
     let base: Info | null = layer;
     while (base && !base.keptAs) base = base.layer ?? null;
-    const named = layer.keptAs ? layer : base;
+    const named = layer?.keptAs ? layer : base;
     // What every group sees: the data types, the values (implementations
     // and embeddings are values), the options and the layer under. The
     // layer's own definitions are as it checked them.
@@ -261,9 +273,9 @@ export class CheckCache {
     // The same with every number a text of this process's spelled out.
     const spelled = (n: number) => numberTexts.get(n) ?? "";
     let globalSpelled: string | undefined;
-    const globalOnDisk = () => (globalSpelled ??= JSON.stringify([layer.keptAs, idsText(opts.hidden), !!insiders, idsText(opts.library),
+    const globalOnDisk = () => (globalSpelled ??= JSON.stringify([layer?.keptAs, idsText(opts.hidden), !!insiders, idsText(opts.library),
       a.typeDefs.filter((d) => !under.types.has(d)).map((d) => spelled(defText(code, d))),
-      a.valueDefs.filter((d) => !layer.schemes.has(d) && isImplementation(d)).map((d) => spelled(defText(code, d))),
+      a.valueDefs.filter((d) => !layer?.schemes.has(d) && isImplementation(d)).map((d) => spelled(defText(code, d))),
     ]));
     const ends = new Set(opts.ends ?? []);
     const missed: { group: Id[]; key: string; stored: (() => string) | null; from: number; to: number }[] = [];
