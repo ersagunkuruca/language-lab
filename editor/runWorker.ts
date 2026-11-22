@@ -48,7 +48,7 @@ export type WarmAsk = { shipped?: Record<string, unknown>; warm: true; code: Sen
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
 // `saved`: only the page as Open in a tab gives it (pageCompile.ts
 // compileSavedPage), a page with sound's too.
-export type CompileAsk = { shipped?: Record<string, unknown>; compilePage: true; code: Code; names: Names; pins: Pins; held?: [Id, string][]; main: Id; saved?: true };
+export type CompileAsk = { shipped?: Record<string, unknown>; compilePage: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; main: Id; saved?: true };
 // Printed from the core IR (core-js.ts corePageScript), the script
 // calling $core.startCorePage (E244).
 export type CompileSays = CompiledPage | { saved: SavedScripts } | { error: string };
@@ -179,7 +179,7 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     }
   }
   if ("compilePage" in e.data) {
-    const { code, names, pins, main, saved, held } = e.data;
+    const { names, pins, main, saved, held } = e.data, code = receivedCode(e.data.code);
     try {
       // From the core IR, as Save page does.
       return post(saved ? { saved: compileSavedPage(code, names, pins, main, held) } : compilePageProgram(code, names, pins, main, held));
@@ -190,8 +190,8 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
   // A function run backwards, searched to the end, or for a minute at
   // most (backSearch.ts).
   if ("backwards" in e.data) {
-    const { code, def, values, names } = e.data, until = Date.now() + 60000;
-    return post(searchBackwards(code, def, received(values), names, () => Date.now() > until));
+    const { def, values, names } = e.data, until = Date.now() + 60000;
+    return post(searchBackwards(receivedCode(e.data.code), def, received(values), names, () => Date.now() > until));
   }
   const { code: given, names, pins, held, def, title, files, args, core, deny, stdin, replay, until } = e.data;
   const kept = new Map(files), wrote = new Map<string, string>();

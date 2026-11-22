@@ -11,6 +11,7 @@ import type { Doc, Program, UI } from "./main.ts";
 import { h } from "./dom.ts";
 import { corePageRuntimes, coreWorkletRuntimes, hasCoreRuntime, loadSolving, newWorker } from "./runViews.ts";
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
+import { sendCode } from "./runCode.ts";
 import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
 import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
 import type { Cells } from "../ters/src/lang/cells.ts";
@@ -521,7 +522,7 @@ export function pagePanels(host: PageHost) {
     };
     w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data as CompiledPage | { error: string });
     w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
-    const ask: CompileAsk = { ...shippedOf(), compilePage: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
+    const ask: CompileAsk = { ...shippedOf(), compilePage: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
     w.postMessage(ask);
   }
   // The program printed from the core IR (E244) runs on a fresh copy of its
@@ -607,7 +608,7 @@ export function pagePanels(host: PageHost) {
       const w = newWorker();
       w.onmessage = (e: MessageEvent<CompileSays>) => { w.terminate(); if ("saved" in e.data) ok(e.data.saved); else fail(new Error("error" in e.data ? e.data.error : "the compiler gave no page")); };
       w.onerror = (e) => { e.preventDefault(); w.terminate(); fail(new Error(e.message || "the compiler failed")); };
-      const ask: CompileAsk = { ...shippedOf(), compilePage: true, saved: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
+      const ask: CompileAsk = { ...shippedOf(), compilePage: true, saved: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
       w.postMessage(ask);
     })).then((made) => { savedPages.set(code, made); return made; });
   }

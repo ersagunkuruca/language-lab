@@ -23,6 +23,7 @@ import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { declaresUnits } from "./selectedParts.ts";
 import { newWorker } from "./runViews.ts";
 import { searchBackwards, sendable, type BackAsk, type Found } from "./backSearch.ts";
+import { sendCode } from "./runCode.ts";
 import { programText, type Step } from "./solverText.ts";
 import type { Doc, UI } from "./main.ts";
 
@@ -194,7 +195,7 @@ export function backwards(host: BackHost) {
     w.onmessage = (e: MessageEvent<Found>) => done(e.data);
     w.onerror = (e) => { e.preventDefault(); done({ answers: backwardsCache.get(key)?.answers ?? [], more: false, error: e.message || "the search failed" }); };
     try {
-      const ask: BackAsk = { backwards: true, code: doc().code, names: pres().names, def: ui.def, values: sent };
+      const ask: BackAsk = { backwards: true, code: sendCode(doc().code), names: pres().names, def: ui.def, values: sent };
       w.postMessage(ask);
       return true;
     } catch {
