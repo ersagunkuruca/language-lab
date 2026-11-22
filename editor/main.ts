@@ -192,7 +192,7 @@ export interface UI {
   newKind: "function" | "value" | "type" | "effect" | "interface";
   query: string;
   refused: boolean;
-  output: { def: Id; lines: string[]; error?: string; running?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[]; replayed?: boolean; paused?: number; at?: StopAt } | null;
+  output: { def: Id; lines: string[]; error?: string; running?: boolean; checking?: boolean; stuck?: Stuck; profile?: Profile; compiled?: boolean; answers?: LogEntry[]; replayed?: boolean; paused?: number; at?: StopAt } | null;
   // What Run gives a program that reads standard input, by program (I168).
   stdin?: Record<string, string>;
   // Run's arguments as typed, by program (E273); else the example's.
@@ -2166,7 +2166,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
       : ui.allowing === ui.def ? permissionsPanel(namer, permissionsAsked(ui.def)) : h("button", { class: "btn", type: "button", "data-act": "t-run" }, `Run ${namer.name(ui.def)}`));
     if (ui.output?.def === ui.def) {
       // What it prints is read out as it comes (a log), and a failure at once.
-      box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? "Running…" : "(no output)")));
+      box.append(h("pre", { class: "text out", role: "log", "aria-live": "polite", "aria-label": `What ${namer.name(ui.def)} printed` }, ui.output.lines.join("\n") || (going ? (ui.output.checking ? "Checking…" : "Running…") : "(no output)")));
       if (ui.output.error) box.append(h("p", { class: "status-line bad", role: "alert" }, ui.output.error));
       if (ui.output.stuck) box.append(stuckView(ui.output.stuck));
       // Where compiled main stopped (C143f): its definition opened, the node selected.

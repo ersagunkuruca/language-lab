@@ -54,13 +54,16 @@ export function runPanel(host: RunHost) {
   const shipped = () => { const k = shippedFor(doc().program); return k ? { shipped: k } : {}; };
   // Warmed with each program opened, not only the first (I320): calc's
   // main, run by the evaluator, waited a second on its check after open.
-  let warmed: { code: Code; def: Id } | null = null;
+  let warmed: { code: Code; def: Id } | null = null, warming = false;
   function warmRun(def: Id) {
     const code = prog();
     if (running || (warmed?.code === code && warmed.def === def)) return;
     idle ??= newWorker();
     warmed = { code, def };
     const warm: WarmAsk = { ...shipped(), warm: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def };
+    // Run pressed before it's done says it's checking (I320).
+    warming = true;
+    idle.onmessage = (e: MessageEvent<RunSays>) => { if ("checking" in e.data) warming = false; };
     idle.postMessage(warm);
   }
   // Started with the page, before any program is open: the worker takes
@@ -68,7 +71,7 @@ export function runPanel(host: RunHost) {
   // first second after opening waited on that.
   function startRun() { if (!idle && !running) idle = newWorker(); }
   function stopRun(why?: string) {
-    running?.terminate();
+    if (running) { running.terminate(); warming = false; }
     running = null;
     if (ui.output?.running) { ui.output = { ...ui.output, running: false, error: why ?? ui.output.error }; render(); }
   }
@@ -193,10 +196,11 @@ export function runPanel(host: RunHost) {
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
     const stdin = readsInput() ? stdinOf() : undefined;
     const ask: RunAsk = { ...shipped(), code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
-    ui.output = { def, lines: [], running: true };
+    ui.output = { def, lines: [], running: true, ...(warming ? { checking: true } : {}) };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;
       const m = e.data;
+      if ("checking" in m) { warming = false; ui.output = { ...ui.output, checking: m.checking }; render(); return; }
       if ("lines" in m) { ui.output = { ...ui.output, lines: [...ui.output.lines, ...m.lines] }; render(); return; }
       try { for (const [k, v] of m.files) localStorage.setItem(k, v); } catch { /* no storage */ }
       const lines = "done" in m && m.shown !== "unit" ? [...ui.output.lines, `→ ${m.shown}`] : ui.output.lines;

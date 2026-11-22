@@ -74,7 +74,7 @@ export type Profile = { def: Id; calls: number; ms: number }[];
 // `answers`: what the world answered the run, in order (E232a).
 // `at`: where a compiled main stopped, its node and definition (C143f).
 export type StopAt = { node: Id; def: Id };
-export type RunSays = { lines: string[] } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt } | { error: string; files: [string, string][]; stuck?: Stuck; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt };
+export type RunSays = { lines: string[] } | { checking: boolean } | { done: true; shown: string; files: [string, string][]; stuck?: Stuck; profile?: Profile; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt } | { error: string; files: [string, string][]; stuck?: Stuck; core?: true; printed?: CoreMain; answers?: LogEntry[]; paused?: true; at?: StopAt };
 
 // The program Build targets asked about last (whereAnswers.ts receivedOnto).
 let lastWhere: Code | null = null;
@@ -108,8 +108,8 @@ function withInput(world: World, stdin: string | undefined): World {
 // the code) are kept too: calc's run was 0.14 s of checking and 0.6 s of
 // resolving each time, then printing `→ 0` at once.
 let lastAsk: { key: string; code: Code; def?: Id; lib?: ReturnType<typeof checkedForRun> } | null = null;
-function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, string][] = []): ReturnType<typeof checkedForRun> {
-  const key = JSON.stringify([given, names, pins, held]);
+const askKey = (given: SentCode, names: Names, pins: Pins, held: [Id, string][]) => JSON.stringify([given, names, pins, held]);
+function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, string][] = [], key = askKey(given, names, pins, held)): ReturnType<typeof checkedForRun> {
   if (lastAsk?.key !== key) lastAsk = { key, code: receivedCode(given) };
   setDisplayNames(names);
   setProgramPins(pins);
@@ -152,7 +152,7 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
   if ("warm" in e.data) {
     const { code, names, pins, def, held } = e.data;
     try { const lib = checked(code, names, pins, def, held); resolvedFor(lib.code, lib.info, lib.names); } catch { /* the run says what's wrong */ }
-    return;
+    return post({ checking: false });
   }
   if ("choices" in e.data) {
     const { names, pins, main, held } = e.data;
@@ -212,7 +212,11 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     const world = logging.world;
     answers = logging.log;
     if (core && core.args === !!args && runPrinted(core, undefined, args, world, print, flush, () => [...wrote])) return;
-    const lib = checked(given, names, pins, def, held), info = lib.info;
+    // A check to do first is said (I320): Run pressed right after an edit.
+    const key = askKey(given, names, pins, held ?? []), toCheck = !(lastAsk?.key === key && lastAsk.def === def && lastAsk.lib);
+    if (toCheck) post({ checking: true });
+    const lib = checked(given, names, pins, def, held, key), info = lib.info;
+    if (toCheck) post({ checking: false });
     const own = lastAsk!.code.defs.filter((d) => !LIBRARY.code.nodes[d]);
     // Each lambda of the program's own definitions, by the definition it's in.
     const ownerOf = new Map<Id, Id>();
