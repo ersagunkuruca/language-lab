@@ -1069,11 +1069,19 @@ export function changedFromLayer(code: Code): Set<Id> | undefined {
   if (!changed) {
     const under = layer.nodes;
     changed = new Set<Id>();
-    let same = 0;
-    for (const id of nodeIds(code.nodes)) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
-    // A layer node gone is changed too; when every one is there as it was,
-    // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
-    if (same !== sizeOf(under)) for (const id of nodeIds(under)) if (code.nodes[id] === undefined) changed.add(id);
+    if (nodesUnder(code.nodes) === under) {
+      // Sitting right over the layer: only its own can differ (a node
+      // taken out is its own, undefined), so the layer's ~27,000 aren't
+      // walked (L266af).
+      const raw = rawNodes(code.nodes);
+      for (const id of Object.keys(raw)) if (raw[id] !== under[id]) changed.add(id);
+    } else {
+      let same = 0;
+      for (const id of nodeIds(code.nodes)) if (code.nodes[id] !== under[id]) changed.add(id); else same++;
+      // A layer node gone is changed too; when every one is there as it was,
+      // none is gone, and the layer's ~27,000 needn't be walked again (L215c2).
+      if (same !== sizeOf(under)) for (const id of nodeIds(under)) if (code.nodes[id] === undefined) changed.add(id);
+    }
     changedOnLayer.set(code.nodes, { layer, changed });
   }
   return changed;
