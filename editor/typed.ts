@@ -540,7 +540,11 @@ function refusal(first: TEdit & { ok: false }, why: string[], shared: string[]):
   // the one whose count fits has the reason that matters (I230: a List
   // for each led with the page's Cell one's "takes 3 inputs, given 2").
   const count = (key: string) => +/ takes \d+ inputs?, given \d+$/.test(key);
-  const kinds = [...places].sort((a, b) => count(a[0]) - count(b[0]) || b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
+  // When some version's count fits, the others' counts aren't said at all
+  // (I342: a print in for each's lambda under a Choice still ended "or for
+  // each takes 3 inputs, given 2").
+  const fits = [...places].filter(([key]) => !count(key));
+  const kinds = (fits.length ? fits : [...places]).sort((a, b) => b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
   if (kinds.length < 2) return { ...first, reason: kinds[0] };
   const which = shared.length ? `whichever ${shared.length > 1 ? `${shared.slice(0, -1).join(", ")} or ${shared.at(-1)}` : shared[0]} is meant` : "however it's read";
   return { ...first, reason: `nothing fits ${which}: ${kinds.slice(0, 2).join("; or ")}${kinds.length > 2 ? `; or ${kinds.length - 2} more` : ""}` };

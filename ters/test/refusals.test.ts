@@ -1,7 +1,7 @@
 // Refusals of a call to a name several definitions share (I230,
-// OUTSIDER-WRITE-2026-11-13 §2.4): the version whose input count fits leads
-// the message, and says what doesn't fit in it; MCP `defs` lists each
-// version with its id.
+// OUTSIDER-WRITE-2026-11-13 §2.4): the version whose input count fits says
+// what doesn't fit in it, and the others' counts aren't said (I342); MCP
+// `defs` lists each version with its id.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -23,11 +23,12 @@ const refused = (text: string): string => {
   return "";
 };
 
-test("a 2-input for each refused for another reason leads with that reason, not the 3-input version's count", () => {
+test("a 2-input for each refused for another reason says that reason, not the 3-input version's count", () => {
   const why = refused("‹for each›([1, 2, 3], (n) => print(n))");
-  assert.match(why, /for each gives this numbers, and it takes Text; or for each takes 3 inputs, given 2$/);
+  assert.match(why, /for each gives this numbers, and it takes Text$/);
+  assert.doesNotMatch(why, /takes 3 inputs/);
   // A divisor that may be 0 (I234: by 3 it has no Choice).
-  assert.match(refused("‹for each›([1, 2, 3], (n) => print(show(remainder(3, n))))"), /: main does Console while a Choice is open[^;]*; or for each takes 3 inputs, given 2$/);
+  assert.match(refused("‹for each›([1, 2, 3], (n) => print(show(remainder(3, n))))"), /^main does Console while a Choice is open[^;]*$/);
   // What fits still does.
   assert.equal(refused("‹for each›([1, 2, 3], (n) => print(show(n)))"), "");
 });
