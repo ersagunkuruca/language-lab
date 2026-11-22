@@ -9,7 +9,9 @@ import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, readChoices, staleChoices } from "../cli/choices.ts";
+import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, placeLines, readChoices, staleChoices } from "../cli/choices.ts";
+import { lowerCore } from "../../compiler/src/core-js.ts";
+import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 
 const root = fileURLToPath(new URL("../examples/", import.meta.url));
 
@@ -106,4 +108,20 @@ test("backwards' solves have their mode plans: equations or relational, with the
   assert.match(of("who was greeted"), /solve of greet for name from answer: relational, goals "hello, ", join text\(…\); at most one answer, ends; target JavaScript$/);
   assert.deepEqual(choices("backwards").filter((l) => / mode plan: /.test(l)), lines);
   assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation can be held yet/);
+});
+
+// Placements (L280a): where each map a page's handler sends away may run,
+// the GPU among them where it has a kernel.
+test("moths-page's maps go to the workers when slow, and one of Ints to the GPU too", () => {
+  const p = loadProgram(root + "moths-page"), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+  const info = infer(p.code, names, undefined, p.options);
+  const given: Program = { title: "moths-page", code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options };
+  const r = represented(given, main, true);
+  const ir = lowerCore(r.code, r.info, r.names, [main]);
+  const lines = placeLines(ir, new Set(Object.keys(gpuMaps(ir)).map(Number)), r.names);
+  assert.deepEqual(lines.map((l) => l.replace(/^\S+ /, "")).sort(), [
+    "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; target JavaScript page",
+    "place: tick's map: workers when slow; among main thread, workers; target JavaScript page",
+  ]);
+  assert.throws(() => heldOf([`held ${lines[0]}`]), /only a type's representation can be held yet/);
 });

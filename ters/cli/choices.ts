@@ -15,7 +15,7 @@ import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
 import { reachedImplementing } from "../src/lang/reached.ts";
-import { dependencies, isUse, subtree, useTarget, type NodeOf } from "../src/model.ts";
+import { dependencies, isUse, parentLookup, subtree, useTarget, type Code, type NodeOf } from "../src/model.ts";
 import { planSolve } from "../src/lang/solve.ts";
 import { determinism, solveMode } from "../src/lang/modes.ts";
 import { answerKeys } from "../src/lang/ports.ts";
@@ -145,6 +145,23 @@ export function modeLines(given: Program, main: Id, target = "JavaScript"): stri
   return lines;
 }
 
+// The placement entries (the third kind): where each map, keep or fold a
+// page's handler sends away may run (WHERE-IT-RUNS.md, scalar.ts
+// awayMaps): on the page's workers once it is slow, and on the GPU where
+// it has a kernel (gpu-maps.ts, `gpu`, by site) and the browser WebGPU.
+// By the function's id, with the definition it is in.
+export interface Lowered { code: Code; awayMaps?: { site: number; fn: Id; how: string }[] }
+const HOW: Record<string, string> = { map: "map", keep: "keep", add: "fold adding", max: "fold keeping the largest", min: "fold keeping the smallest", with: "fold of fields" };
+export function placeLines(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target = "JavaScript page"): string[] {
+  if (!ir.awayMaps?.length) return [];
+  const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  return ir.awayMaps.map((m) => {
+    const d = defOf(m.fn), on = gpu.has(m.site);
+    return `${m.fn} place: ${d ? all[d] ?? d : "a definition"}'s ${HOW[m.how] ?? m.how}: workers when slow${on ? ", the GPU where the browser has WebGPU" : ""}; among main thread, workers${on ? ", GPU" : ""}; target ${target}`;
+  });
+}
+
 export function choicesText(main: string, lines: readonly string[]): string {
   return [`# The compiler's choices for ${main} (L280a): picked again whenever their facts change.`, ...lines].join("\n") + "\n";
 }
@@ -161,7 +178,7 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
   for (const l of lines) {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
-    if (!m && /^\S+ (way|mode plan): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
+    if (!m && /^\S+ (way|mode plan|place): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
