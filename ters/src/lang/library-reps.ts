@@ -955,6 +955,13 @@ function looked(code: Code, info: Info): (def: Id) => Set<number> {
 // first, optional, all, seeded and with fuel run a function and hand on
 // what it answers (dice's `seeded` given a function making a list, C196).
 const PASSES_ON = new Set<Id>([S.first, S.optional, S.all, S.seeded, S.fuel]);
+// What a canvas renders (FRAMES.md): a frame's passes, a pass's draws and a
+// mesh's corners and triangles are read only by the runtime (raster.ts,
+// gpu-frame.ts), which takes an array or a list alike. So the program may
+// pass them about holding arrays: a list made into one of their cases is
+// converted as a builtin's is, and only taking one apart (a field read, a
+// match) keeps List as written.
+const RUNTIME_READ = new Set<Id>(["std.frame", "std.pass", "std.mesh"]);
 // Builtins that only move values of a variable type about (C70).
 const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // `owned`: the program's own types the rewrite leaves as they are, whose
@@ -964,8 +971,9 @@ const STRUCTURAL = new Set<Id>([S.oneOf, S.fail, ...Object.values(ARRAY_OPS)]);
 // of a library type holding lists (bounce's Algebra) may be passed about,
 // only not taken apart or made, since its lists stay as written.
 export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representation, asked: Representation[] = [], owned: Set<Id> = new Set(), asWritten?: Set<Id>): { nodes: Record<Id, Node>; reached: Id[]; made: Id[]; edges: Id[] } | null {
-  const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST), stored = new Set(asked.map((r) => r.of));
-  const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || inside(t.id) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
+  const program = new Set([...defs, ...owned]), inside = holdsType(code, LIST), stored = new Set([...asked.map((r) => r.of), ...RUNTIME_READ]);
+  // A runtime-read type (a frame's pass) holds what the runtime reads either way.
+  const hasList = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? t.id === LIST || (inside(t.id) && !RUNTIME_READ.has(t.id)) || t.args.some(hasList) : t.t === "fn" ? [...t.params, t.ret].some(hasList) : false; };
   // A type the library defines with a list in it (Set and Map as written,
   // Algebra): its definition isn't the program's, so the rewrite leaves
   // its fields List while the values in them would be arrays. A type
@@ -1003,7 +1011,11 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   };
   const takesApart = (n: Node): boolean => {
     if (n.kind === "arm") return !program.has(ownerOf(n.variant) ?? "");
-    return n.kind === "ref" && (code.nodes[n.target]?.kind === "variant" || code.nodes[n.target]?.kind === "field") && !program.has(ownerOf(n.target) ?? "");
+    if (n.kind !== "ref") return false;
+    const k = code.nodes[n.target]?.kind, owner = ownerOf(n.target) ?? "";
+    // Made, a runtime-read type's case is given lists (below).
+    if (k === "variant" && RUNTIME_READ.has(owner)) return false;
+    return (k === "variant" || k === "field") && !program.has(owner);
   };
   const nodes: Record<Id, Node> = {}, made: Id[] = [];
   const call = (fn: Id, arg: Id): Id => { const r = freshId(), c = freshId(); nodes[r] = { id: r, kind: "ref", target: fn }; nodes[c] = { id: c, kind: "call", fn: r, args: [arg] }; return c; };
@@ -1035,6 +1047,15 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
     const ty = info.typeOf.get(id);
     if (ty && libraryHolder(ty) && ((!asWritten && openHolder(ty)) || takesApart(n))) return null;
     const target = n.kind === "ref" ? n.target : null;
+    // A runtime-read type's case made with the program's arrays: each
+    // list it's given becomes one, as a builtin's list does.
+    if (target && code.nodes[target]?.kind === "variant" && RUNTIME_READ.has(ownerOf(target) ?? "")) {
+      const c = calledBy.get(id);
+      if (!c) continue;
+      const args = c.args.map((a) => { const t = info.typeOf.get(a), z = t && info.subst.zonk(t); return z?.t === "con" && z.id === LIST && !z.args.some(hasList) ? call(rep.meaning!, a) : a; });
+      if (args.some((a, i) => a !== c.args[i])) nodes[c.id] = { ...c, args };
+      continue;
+    }
     const edgeOf = target ? edge(target) : null;
     if (!target || (!edgeOf && (!SIGS[target] || code.nodes[target]?.kind === "def"))) continue;
     const at = info.typeOf.get(id);

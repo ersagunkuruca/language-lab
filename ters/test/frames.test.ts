@@ -123,3 +123,25 @@ test("CSS colours as a clear colour", () => {
   assert.deepEqual(cssColour("#0b1220").map((x) => Math.round(x * 255)), [11, 18, 32, 255]);
   assert.deepEqual(cssColour("rgba(0, 0, 0, 0.35)"), [0, 0, 0, 0.35]);
 });
+
+// G9d: the flock drawn with data (examples/flock-frame-page). Its first
+// frame, interpreted: the night sky round the box, the floor under it,
+// and birds over the floor.
+test("the flock page's first frame: sky, floor and birds", async () => {
+  const { loadProgram } = await import("../src/lang/load.ts");
+  const { join } = await import("node:path");
+  const p = loadProgram(join(import.meta.dirname, "../examples/flock-frame-page"));
+  const info = infer(p.code, p.pres.names, undefined, p.options);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const named = (n: string) => p.own.defs.find((d) => p.pres.names[d] === n)!;
+  const r = makeRunner(p.code, info, { print: () => {} });
+  const sky = r.value(named("start sky"));
+  const frame = [...r.call(r.value(named("frame of")), sky)][0] as Value;
+  const img = rasterize(frame, 64, 60, evaluatorCall);
+  const colours = new Set<string>();
+  for (let i = 0; i < img.rgba.length; i += 4) colours.add(img.rgba.slice(i, i + 3).join(","));
+  assert.deepEqual(px(img, 0, 0), [11, 18, 32, 255], "the clear colour");
+  assert.ok(colours.has([0.07, 0.11, 0.18].map((x) => Math.round(x * 255)).join(",")), "the floor");
+  // Birds: something pale (red above 150) in the picture.
+  assert.ok([...colours].some((c) => Number(c.split(",")[0]) > 150), "birds");
+});
