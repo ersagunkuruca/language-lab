@@ -1,0 +1,35 @@
+# The compiler's choices for main (L280a): picked again whenever their facts change.
+02ho65n2q4pvtsphuiifch9rpb schedule: flown's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript
+0hkh48ul5brbpbv3k489l0r80c schedule: flown's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript
+0lmbt8micglnnq8rom9dq40f46 schedule: limited's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+0uqile74d3s0huvbq4fs2gv2e9 schedule: flock over over flat map's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript
+4nbba9h3bbfqa02bof3genj60r schedule: steered's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+5k1q649q192fta3rtvmhh1vm4e schedule: swept's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+5kof31ta0udlvkjkh0ks1h8gmm schedule: steered's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+8g1e2f378ai8moh7u77c4jdovr schedule: flock over over flat map's flock over walk, its list made by map: one loop; among made then walked, one loop; target JavaScript
+8uls08bpobl4gg6ceiffismeah schedule: limited's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+a8qegr9j69vclnkved62e3mp9a schedule: flown's flock over walk, its list made by a call: one loop; among made then walked, one loop; target JavaScript
+a8qegr9j69vclnkved62e3mp9a schedule: flown's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript
+aeca7cjkhlfpqobg6k7r0cd7p6 schedule: seen from's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+at15us72orepaibs2iq7vsj210 schedule: cell along's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+crl0ld0nlk43v7ulraj7qt84is schedule: length of's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+e2vce0teh4dq2m0rnuiukfe20h schedule: wrapped cell's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+fdai5ts0ifm1mtgfv9te19i8qn schedule: flown's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript
+fnd0sghluef98tcd29rcnfpue1 schedule: random's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+foedegejm638ofudkopsmk9n8n schedule: met's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+i4g67ejpt2thr0om1le0akdvcm schedule: bird marks's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+i8srh9uull4m1jsp3p99i4fh1s schedule: corner's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+iimdf1troea5mcrjgjg9qlqpss schedule: swept's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+ipppcfrf8po9i9b7497phocdnq schedule: seen from's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+jle4n0vkfocbb8m3uffsalfo00 schedule: corner's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+ku2a01f3adso987kassf6dcvg6 place: ticked's map: workers when slow; among main thread, workers; target JavaScript page
+l3af03ilq3bhri0mevhqcnfhc7 schedule: cell along's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+lv8bsvluu5ikpqdf14r4nk0809 schedule: flown's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript
+ns5djrcaqbri42i8bcb8mculud schedule: flock over over flat map's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript
+oi5uuvc28omq5ppuobgqcd87o4 schedule: chance's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+pcps4pte8enqr128i1l2psp5dv schedule: swept's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+q8otfa02pp6lf1bopimcb7o0ij schedule: unit's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+qalhpavo6gvqcqp5s2n6le53cu schedule: corner's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
+r1unr4q06aqhkpkbi6akv6s4jr schedule: flock over over flat map's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript
+std.list representation: List as array of List from side, side cells, cell size, cells, reach squared, keep apart, match weight, gather weight, goal pull, wall push, margin, top speed, least speed, still, no flock, nobody, offsets, plus, minus, scaled, dot, length of, unit, kept in, in box, random, chance, cell along, cell key, wrapped cell, cell of, empty grid, filed, around cells, met, gathered, flock over, swept, goal, away from wall, walls, steered, limited, flown, ticked, bird at, start flock, credits, step, birds on page, held, turned, ticked sky, caught up, stepped, pressed, released, let go, gripped, drag turn, dragged, dropped, start sky, eye distance, lens, seen from, shade, bird marks, edge, floor lines, corner, box lines, marks of, i1ngva2nr4nsf261tr4v8mf1p5, ko7gp0uheejmkldka4cvk2v223, ncapk47c19e5ajiub8m4v2c24s; among array of List, List as written, tree of List; jobs append, carried append (in a loop), cons (in a loop), cons onto its field 0, cons onto its field 1, fold of items (in a loop), item at (in a loop), length, map (in a loop), match (in a loop), nil (in a loop), replace at (in a loop); target JavaScript
+std.set representation: Set as hash table; among weight-balanced tree, sorted list, hash table; jobs add item (in a loop), empty set (in a loop), has item (in a loop), remove item (in a loop); target JavaScript
