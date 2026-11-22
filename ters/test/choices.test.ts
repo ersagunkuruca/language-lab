@@ -198,3 +198,12 @@ test("queens' searches give their answers in the fair order", () => {
   assert.deepEqual(lines.map((l) => l.split(":")[1]), [" main's all of a search", " main's count of a search", " main's first of a search"]);
   assert.match(lines[0], /: answers in the fair order, its choices interleaved; among fair order; target JavaScript$/);
 });
+
+// A program's own row held where a pinned library definition is built by
+// its jobs (std's `natural`, (Int) -> Nat): the pin follows the rewrite.
+test("numbers' Nat held as binary is stored so, std's natural with it", () => {
+  const now = reps(choices("numbers"));
+  const held = `held ${now[0].replace("as int;", "as binary;")}`;
+  const stored = reps(choices("numbers", heldOf([held])));
+  assert.equal(`held ${stored[0]}`, held);
+});

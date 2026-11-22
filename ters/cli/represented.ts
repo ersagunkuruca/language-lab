@@ -1,7 +1,8 @@
 // A program with each type it uses stored as the chooser picks (lab.ts's
 // `ters compile`, `ters run`, and a sound's `ters render`, C137 s1).
 
-import { dependencies, idsSeeded, type Code, type Id } from "../src/model.ts";
+import { dependencies, idsSeeded, subtree, type Code, type Id } from "../src/model.ts";
+import type { Pins } from "../src/lang/signatures.ts";
 import type { Names } from "../src/presentation.ts";
 import { checksKept, infer, type Info } from "../src/lang/infer.ts";
 import { choose, jobProblem, represent, type Representation } from "../src/lang/represent.ts";
@@ -69,13 +70,19 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   let code = lib.code;
   const names = lib.names, chosen = [...lib.chosen], picks = [...(lib.picks ?? [])];
   const rows = storedRows(p.code, p.own, p.reps);
+  let pins = (p.options as Parameters<typeof infer>[3])?.pins;
   for (const of of new Set(rows.map((r) => r.of))) {
     const hold = p.held?.get(of), candidates = rows.filter((r) => r.of === of);
     const rep = hold === undefined ? choose(code, main, candidates).rep : candidates.find((r) => r.name === hold) ?? fail(`${p.names[of] ?? of} can't be held as ${hold}: it is stored as ${candidates.map((r) => r.name).join(", ")}`);
     if (rep.type === rep.of) continue;
     const problem = jobProblem(p.info, rep, p.names);
     if (problem) fail(`${p.title} can't be stored as ${rep.name}: ${problem}`);
+    const before = code;
     code = represent(code, defs, rep);
+    // A pinned definition the rewrite changed (std's `natural`, (Int) ->
+    // Nat, built by Binary's jobs) is pinned to the type stored: its
+    // callers are all here, stored so too.
+    pins = storedPins(pins, before, code, of, rep.type);
     chosen.push(`${p.names[of] ?? of} as ${rep.name}`);
     picks.push({ of, rep: rep.name });
   }
@@ -96,7 +103,7 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // one the checker sees getting smaller, and would spend a step a call
   // (C184: the pedal's following, matching and bands), nor is `is even`
   // through `match Nat′`. library-reps.ts checks its rewrite so too.
-  const info = same ? lib.info! : infer(code, names, undefined, { ...options, insiders: [...(options?.insiders ?? []), ...lib.insiders], ends: endedAsWritten(p.info, p.own), units: false });
+  const info = same ? lib.info! : infer(code, names, undefined, { ...options, ...(pins ? { pins } : {}), insiders: [...(options?.insiders ?? []), ...lib.insiders], ends: endedAsWritten(p.info, p.own), units: false });
   if (info.errors.length) fail(`${p.title} doesn't check on ${chosen.join(", ")}: ${info.errors.map((e) => e.message).join("; ")}`);
   return { ...p, code, names, info, chosen, picks };
 }
@@ -121,4 +128,31 @@ function reachedFrom<P extends Program>(p: P, main: Id): P {
   // is no cut.
   if (info.errors.length > p.info.errors.length) return p;
   return { ...p, code, own, info };
+}
+
+// The pins whose definitions a rewrite of `of` onto `to` changed (or
+// what they call), with
+// `of` read as `to` (the rest as they were, the same object where none).
+function storedPins(pins: Pins | undefined, before: Code, after: Code, of: Id, to: Id): Pins | undefined {
+  if (!pins) return pins;
+  const swap = (x: unknown): unknown => {
+    if (Array.isArray(x)) return x.map(swap);
+    if (!x || typeof x !== "object") return x;
+    const o = x as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(o)) out[k] = swap(o[k]);
+    if (o.t === "con" && o.id === of) out.id = to;
+    return out;
+  };
+  const mentions = (x: unknown): boolean => Array.isArray(x) ? x.some(mentions) : !!x && typeof x === "object" && ((x as { t?: string; id?: string }).t === "con" && (x as { id?: string }).id === of || Object.values(x).some(mentions));
+  const changed = new Map<Id, boolean>();
+  const own = (d: Id) => { let c = changed.get(d); if (c === undefined) changed.set(d, (c = subtree(after, d).some((id) => after.nodes[id] !== before.nodes[id]))); return c; };
+  let out: Pins | undefined;
+  for (const d of Object.keys(pins)) {
+    // Changed itself, or through what it calls (`nat literal`, by natural).
+    if (!after.nodes[d] || !mentions(pins[d].type) || !(own(d) || dependencies(after, d).some((x) => after.nodes[x]?.kind === "def" && own(x)))) continue;
+    out ??= { ...pins };
+    out[d] = swap(pins[d]) as Pins[string];
+  }
+  return out ?? pins;
 }
