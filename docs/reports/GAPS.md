@@ -4972,3 +4972,16 @@ The evaluator is 111x the ideal, the interpreter's (L281).
 Fix order: C280 (a fifth of the core IR, a runtime change), then C281 and
 C282, which are most of what `ters native` does beyond the ideal's work.
 
+### After C280
+
+Two pure calls read the thread count once, and a site whose last call
+took under a millisecond runs in place without probing (timed, so one
+that grows is planned again).
+
+| mini | 200 | 2000 | 20000 |
+|---|---|---|---|
+| core IR | 18.9 ms (3.5x) | 89.4 ms (3.5x) | 814 ms (3.5x) |
+| ideal JS | 5.4 ms | 25.7 ms | 234 ms |
+
+strings at 32 blocks stays 24x its ideal.
+

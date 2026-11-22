@@ -243,7 +243,9 @@ const quick = new WeakSet<Fn>();
 // quick: the first job pays for the workers' cold code.
 const alone = new WeakMap<Fn, number>(), unpaid = new WeakMap<Fn, number>();
 const UNPAID = 2;
-const SIZE = () => { try { const os = (globalThis as { process?: { getBuiltinModule?: (m: string) => unknown } }).process?.getBuiltinModule?.("node:os") as typeof import("node:os"); return Math.max(0, Math.min(3, (os.availableParallelism?.() ?? os.cpus().length) - 1)); } catch { return 0; } };
+let size: number | undefined;
+const SIZE = () => (size ??= sizeOf());
+const sizeOf = () => { try { const os = (globalThis as { process?: { getBuiltinModule?: (m: string) => unknown } }).process?.getBuiltinModule?.("node:os") as typeof import("node:os"); return Math.max(0, Math.min(3, (os.availableParallelism?.() ?? os.cpus().length) - 1)); } catch { return 0; } };
 function startPool(): Helper[] {
   const w = wt();
   if (!w || !mod || process.env.TERS_WORKERS === "0") return [];
@@ -521,6 +523,8 @@ const PROBE = { probe: true };
 let plan: null | { probe: Node } | { kids: [unknown, unknown] } = null, inBoth = false, second: unknown;
 let main: boolean | undefined;
 const isMain = () => (main ??= !!wt()?.isMainThread);
+// What each site's last call took, in milliseconds.
+const took = new WeakMap<Fn, number>();
 // Given f, how many inputs it takes (k), the first call's and the
 // second's, and the budget.
 export function bothPure(f: Fn, k: number): unknown {
@@ -545,6 +549,18 @@ export function bothPure(f: Fn, k: number): unknown {
     second = f(...b);
     return x;
   }
+  // A site whose last call took under a millisecond (mini's types, a few
+  // nodes each, met at every unification): run in place, timed, with no
+  // probing for leaves, which cost it more than the call (C280). One
+  // that took longer is planned and shared again.
+  const last = took.get(f);
+  if (last !== undefined && last < 1) {
+    const t0 = performance.now(), x = f(...a);
+    second = f(...b);
+    took.set(f, performance.now() - t0);
+    return x;
+  }
+  const t0 = performance.now();
   inBoth = true;
   try {
     const root: Node = { f, args: [], kids: [{ f, args: a }, { f, args: b }] };
@@ -576,6 +592,7 @@ export function bothPure(f: Fn, k: number): unknown {
     };
     const [x, y] = answer(root) as [unknown, unknown];
     second = y;
+    took.set(f, performance.now() - t0);
     return x;
   } finally { inBoth = false; plan = null; }
 }
