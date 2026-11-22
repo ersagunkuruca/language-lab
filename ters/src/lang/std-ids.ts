@@ -30,7 +30,8 @@ export const ARITH: typeof Std.ARITH = {
   "sub": "builtin.arith.sub",
   "mul": "builtin.arith.mul",
   "neg": "builtin.arith.neg",
-  "less": "builtin.arith.less"
+  "less": "builtin.arith.less",
+  "abs": "builtin.arith.abs"
 };
 export const ARITHMETIC: typeof Std.ARITHMETIC = "std.arithmetic";
 export const ARITHMETIC_V: typeof Std.ARITHMETIC_V = "std.arithmetic.arithmetic";
@@ -213,6 +214,7 @@ export const BUILTIN_INPUTS: typeof Std.BUILTIN_INPUTS = {
   "builtin.arith.mul": 2,
   "builtin.arith.neg": 1,
   "builtin.arith.less": 2,
+  "builtin.arith.abs": 1,
   "builtin.text.length": 1,
   "builtin.text.slice": 3,
   "builtin.text.characters": 1,
@@ -408,6 +410,7 @@ export const COMPUTE_ONLY: typeof Std.COMPUTE_ONLY = [
   "builtin.arith.mul",
   "builtin.arith.neg",
   "builtin.arith.less",
+  "builtin.arith.abs",
   "builtin.text.length",
   "builtin.text.slice",
   "builtin.text.characters",
@@ -1226,6 +1229,7 @@ export const stdNames: typeof Std.stdNames = {
   "builtin.arith.mul": "multiply",
   "builtin.arith.neg": "negate",
   "builtin.arith.less": "less than",
+  "builtin.arith.abs": "abs",
   "builtin.text.length": "length",
   "builtin.text.slice": "slice",
   "builtin.text.characters": "characters",

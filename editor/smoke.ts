@@ -323,7 +323,7 @@ async function stepOrder() {
   await p.locator('[data-set="program"]', { hasText: /physics/ }).first().click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
   // The graph itself, not the map's copy of it.
-  const marks = await p.locator(".p-graph svg.canvas > g.world .stepn").evaluateAll((es) => es.map((e) => ({ n: Number(e.textContent), y: e.getBoundingClientRect().y })));
+  const marks = await p.locator(".p-graph svg.canvas > g.world g:has(> rect.order) text.portl").evaluateAll((es) => es.map((e) => ({ n: Number(e.textContent), y: e.getBoundingClientRect().y })));
   const ys = marks.sort((a, b) => a.n - b.n).map((m) => m.y);
   if (marks.length < 7 || ys.some((y, i) => i && y <= ys[i - 1])) errors.push(`${where}: steps numbered ${JSON.stringify(marks)}`);
   const prints = await p.locator(".p-graph svg.canvas > g.world g:has(> text:text-is('print')) > rect.cn").evaluateAll((es) => es.map((e) => Math.round(e.getBoundingClientRect().x)));
@@ -331,7 +331,7 @@ async function stepOrder() {
   const first = async () => (await p.locator(".p-text .body").innerText()).split("\n").find((l) => l.startsWith("print("));
   const was = await first();
   await p.locator('.p-graph button:has-text("Fit")').first().click().catch(() => {});
-  await p.locator(".p-graph circle.reroute.silent").nth(1).click({ button: "right" });
+  await p.locator(".p-graph svg.canvas > g.world g:has(> rect.order) circle.inp[data-id]").nth(1).click({ button: "right" });
   await p.locator('.ctx-menu [data-menu="step-earlier"]').click({ timeout: 15000 }).catch(async () => errors.push(`${where}: step 2's menu has no Do it earlier: ${await p.locator(".ctx-menu").innerText().catch(() => "no menu")}`));
   if ((await first()) === was) errors.push(`${where}: Do it earlier on step 2 left ${was} first`);
   await p.locator('button[data-act="undo"]').first().click();
@@ -340,11 +340,11 @@ async function stepOrder() {
   // numbers (it took them all away, I281).
   await p.locator('[data-set="program"]', { hasText: "Eight queens" }).first().click();
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
-  const count = () => p.locator(".p-graph svg.canvas > g.world text.stepn").count();
+  const count = () => p.locator(".p-graph svg.canvas > g.world g:has(> rect.order) text.portl").count();
   const before = await count();
   await p.locator(".p-graph svg.canvas > g.world [data-edge]").nth(3).click({ force: true });
   if (!(await p.locator(".status[role=status]").innerText()).startsWith("Put a dot")) errors.push(`${where}: a click on a wire of Eight queens' main put no dot on it`);
-  else if (before !== 4 || (await count()) !== before) errors.push(`${where}: Eight queens' main numbers ${before} steps, and ${await count()} with a dot on a wire`);
+  else if (before < 4 || (await count()) !== before) errors.push(`${where}: Eight queens' main numbers ${before} steps, and ${await count()} with a dot on a wire`);
   await p.locator('button[data-act="undo"]').first().click();
   // count's action taken off its input lies loose where it was, and wires
   // back in by its frame's end (I286).

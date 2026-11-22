@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -93,6 +93,8 @@ usage:
   ters check <program>                   type-check, and list the definitions and their types; with <program>.choices
                                         beside it, its entries the compiler would now pick otherwise (stale) or adds (new)
   ters choices <program> [--main name]   write the compiler's choices for main to <program>.choices (L280a)
+                                        (an entry with "held" before it is kept, and every compile stores
+                                        its type so, where that keeps the meaning: L280c)
   ters qasm <program> --main f [--bits n] [--unroll n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
                                         its Ints n bits wide (default 8), scratch qubits uncomputed and reused;
@@ -646,11 +648,16 @@ function answeredHere(q: Program): Program {
   const info = infer(code, q.names, undefined, q.options);
   return { ...q, code, info, reps: representationsIn(code, info, q.names, q.own) };
 }
-const loaded = answeredHere(load(path));
+// The rows a person held in the program's choices (L280c): every compile
+// stores those types so.
+const choicesFile = choicesPath(path);
+const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choicesFile, "utf8")) : [];
+const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
+const loaded = { ...answeredHere(load(path)), ...(heldHere.size ? { held: heldHere } : {}) };
 const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
 // lowering is most of a run, and the same program lowers the same way.
-const runKeyed = command === "run" && main && defined < 0 && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
+const runKeyed = command === "run" && main && defined < 0 && !heldHere.size && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
 const kept = runKeyed ? keptRun(runKeyed) : undefined;
 const representedHere = () => represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app", false, command === "native" || command === "wasi" || command === "build-native-app");
 const p = main && defined < 0 && !kept ? representedHere() : loaded;
@@ -911,9 +918,8 @@ switch (command) {
     break;
   }
   case "choices": {
-    const file = choicesPath(path);
-    writeFileSync(file, choicesText(mainName, choiceLines(loaded, main, p.picks ?? [])));
-    console.log(`wrote ${file}`);
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, choiceLines(loaded, main, p.picks ?? []))));
+    console.log(`wrote ${choicesFile}`);
     break;
   }
   case "check": {
@@ -938,10 +944,15 @@ switch (command) {
       console.log(`${p.names[of] ?? of} is stored as ${c.rep.name}, the cheapest for the jobs ${mainName} uses`);
     }
     // The choices kept beside the program (L280a), against the picks made now.
-    const kept = choicesPath(path);
-    if (start && !p.info.errors.length && existsSync(kept)) {
+    // A held entry the compiler, choosing alone, would pick otherwise is
+    // said (L280c, rule 3), and kept.
+    if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
-      for (const l of staleChoices(readChoices(readFileSync(kept, "utf8")), choiceLines(loaded, start, now.picks ?? []))) console.log(l);
+      for (const l of staleChoices(writtenChoices, choiceLines(loaded, start, now.picks ?? []))) console.log(l);
+      if (heldHere.size) {
+        const alone = represented({ ...loaded, held: undefined }, start, true);
+        for (const l of heldWarnings(writtenChoices, choiceLines(loaded, start, alone.picks ?? []))) console.log(l);
+      }
     }
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;
     break;

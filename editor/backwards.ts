@@ -283,6 +283,7 @@ export function backwards(host: BackHost) {
       // A multivector result says what it is (L43d).
       const kind = p === "out" && !on && shown !== undefined && forwards ? (() => { const tr = traced(info); return tr?.result !== undefined ? kindOf(info, tr.result) : null; })() : null;
       box.append(h("label", { class: `port-row${on ? " known" : ""}` }, cb, h("span", { class: "pname" }, label), input, h("span", { class: "unit" }, unitOf(p), kind ? ` ${kind}` : "")));
+      if (!on && shown !== undefined && !any && part === undefined) longValue(input, nice(shown), `${ui.def}\u0000${p}`, box);
       if (part !== undefined) box.append(htmlPart(part, namer.name(ui.def)));
     }
     if (missing.length) box.append(h("p", { class: "status-line" }, `Give ${missing.map((k) => k === "out" ? "the result" : portName(k)).join(", ")} a value, or untick ${missing.length === 1 ? "it" : "them"} to solve for ${missing.length === 1 ? "it" : "them"}.`));
@@ -328,4 +329,28 @@ export function backwards(host: BackHost) {
   }
 
   return { LIMIT, backwardsPanel, knownPorts, portText, runBackwards, stopSearch };
+}
+
+// A long value (2,000 birds' records) is a box a few lines tall, its start
+// shown, with Show all and Copy under it; shown all, it scrolls. The one a
+// person opened stays open across runs.
+const LONG = 400, opened = new Set<string>();
+function longValue(out: HTMLElement, text: string, key: string, box: HTMLElement) {
+  if (text.length <= LONG && !text.includes("\n")) return;
+  const all = () => opened.has(key);
+  const fill = () => {
+    out.classList.toggle("long", !all());
+    out.classList.toggle("all", all());
+    // Shut, only the start is put in: the whole of a long one is slow to lay out.
+    out.textContent = all() ? text : text.slice(0, 2000);
+    toggle.textContent = all() ? "Show less" : "Show all";
+  };
+  const toggle = h("button", { class: "btn mini", type: "button", title: `${text.length.toLocaleString("en")} characters` }) as HTMLButtonElement;
+  toggle.addEventListener("click", () => { if (all()) opened.delete(key); else opened.add(key); fill(); });
+  const copy = h("button", { class: "btn mini", type: "button", title: "Copy the whole value" }, "Copy") as HTMLButtonElement;
+  copy.addEventListener("click", () => {
+    void window.navigator.clipboard?.writeText(text).then(() => { copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1200); }, () => { copy.textContent = "Couldn't copy"; });
+  });
+  fill();
+  box.append(h("div", { class: "port-more" }, toggle, copy));
 }

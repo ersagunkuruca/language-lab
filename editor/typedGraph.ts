@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { children, isCall, isUse, ownerOfTypeParts, portsOf, resolveRefs, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
+import { children, isCall, isUse, subtree, ownerOfTypeParts, portsOf, resolveRefs, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX } from "../ters/src/lang/std.ts";
@@ -61,7 +61,7 @@ import { solveMode } from "../ters/src/lang/modes.ts";
 import { portLabel } from "../ters/src/lang/equations.ts";
 import { implementationOps, isOperation } from "../ters/src/lang/records.ts";
 import { foldFrom, looseParts, takenApart } from "../ters/src/lang/render.ts";
-import { flattened, matchRows, patternText } from "../ters/src/lang/patterns.ts";
+import { flattened, matchRows, patternText, sharedOtherwise } from "../ters/src/lang/patterns.ts";
 
 const tw = (t: string, px = 7.4) => t.length * px;
 
@@ -342,6 +342,7 @@ interface Item {
   solid: boolean;       // wires running under it are drawn as tunnels
   label?: Box;          // words drawn outside it (a dot's name), relative to it
   name?: string;        // what it is called, for a folded box that holds it
+  note?: string;       // its own comment (E291), said by a folded box that holds it
   ran?: number;         // its place in the order effects run (E265), shown
   own?: { w: number; h: number }; // its own size, when it can be resized
 }
@@ -416,11 +417,19 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // uses are get nodes with those names, as it has no frame of its own.
   const lp = loose ? looseParts(code, defId, hooks.home ?? {}) : null;
   const looseIns = new Set(lp?.params ?? []);
-  const named = (b: Id) => (hooks.named.has(b) || looseIns.has(b)) && name(b) !== "_";
+  // A step done for its effect: `_ = print(…)`, or a binder with no name
+  // that nothing reads (one written in text as `print(…); 0` has none). An
+  // unnamed one was drawn as a let's dot called "?", out of the steps'
+  // column and numbering (Ersagun 2026-11-22: "weird decisions for the last
+  // action").
+  const reads = new Set<Id>();
+  { const d = node(defId); if (d) for (const x of subtree(code, d.id)) { const r = node(x); if (r?.kind === "ref") reads.add(r.target); } }
+  const quiet = (b: Id) => name(b) === "_" || (names[b] === undefined && !reads.has(b));
+  const named = (b: Id) => (hooks.named.has(b) || looseIns.has(b)) && !quiet(b);
   // A let's binder holding a use with no body, shown without its dot: the
   // use and its produced ports (L211).
   const fedBy = (b: Id): { use: Id; ports: string[] } | null => {
-    if (named(b) || name(b) === "_") return null;
+    if (named(b) || quiet(b)) return null;
     const v = lets(code).value.get(b), u = v ? node(v) : undefined;
     if (!isUse(u) || u.body !== undefined) return null;
     const ports = answerKeys(code, u);
@@ -479,18 +488,18 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     handle.append(s("rect", { x: w - 16, y: h - 16, width: 18, height: 18, class: "grip-hit" }), s("path", { d: `M${w - 12} ${h - 2} L${w - 2} ${h - 12} M${w - 7} ${h - 2} L${w - 2} ${h - 7}` }));
     g.append(titled(handle, "Drag to resize this node; double-click for its own size"));
   };
-  // A node's own comment, a grey line above it (E291, as the blocks put it
-  // above its line): its first line, clipped; all of it on hover.
-  const noteAbove = (g: SVGGElement, key: Id) => {
+  // A node's own comment, a speech mark on its top right corner, the
+  // comment on hover (Ersagun 2026-11-22, picked over E291's grey line
+  // above it, which ran into wires and neighbours).
+  const noteMark = (g: SVGGElement, key: Id, w: number) => {
     const c = key !== defId ? pres.comments[key] : undefined;
-    if (!c) return;
-    const all = resolveRefs(c, (r) => pres.names[r] ?? r), first = all.split("\n")[0];
-    g.append(titled(s("text", { x: 0, y: -6, class: "node-cmt" }, first.length > 56 ? `${first.slice(0, 55)}…` : first), all));
+    if (c) g.append(commentMark(w, resolveRefs(c, (r) => pres.names[r] ?? r)));
   };
   const item = (key: Id, w: number, h: number, draw: (g: SVGGElement) => void, extra: Partial<Item> = {}): Sub => {
-    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteAbove(g, key); };
+    const drawn = (g: SVGGElement) => { draw(g); grip(g, key, w, h); noteMark(g, key, w); };
     const own = natural.get(key);
-    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...extra });
+    const c = key !== defId ? pres.comments[key] : undefined;
+    items.set(key, { key, frame, w, h, auto: { x: 0, y: 0 }, draw: drawn, solid: true, ...(own && hooks.resized ? { own } : {}), ...(c ? { note: resolveRefs(c, (r) => pres.names[r] ?? r) } : {}), ...extra });
     return { w, h, outX: w, outY: h / 2, out: { item: key, dx: w, dy: h / 2 }, at: new Map([[key, { x: 0, y: 0 }]]) };
   };
   // A use of a binding wired into (item, dx, dy): a wire from its source,
@@ -787,7 +796,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     item(id, bw, bh, (g) => {
       g.append(titled(s("rect", { width: bw, height: bh, rx: 7, class: `cn${eff.does.length ? " eff" : ""}${eff.handles ? " handler" : ""}${sel(id)}${errs.has(id) ? " err" : ""}`, "data-id": id, "data-move": id }), typeOf(id)));
       if (badge) g.append(titled(s("text", { x: bw / 2, y: 11, class: "badge", "text-anchor": "middle" }, badge), eff.why ? `Choice: it can give no answer, ${eff.why}` : badge));
-      const ran = runOrder.get(id);
+      const ran = ranOf(id);
       if (ran) g.append(effectBadge(String(ran), `${ran === 1 ? "The first" : `Number ${ran}`} of the calls with effects here to run (${badge}): a call's inputs run left to right, then the call; a function written in place numbers its own from 1, as it runs when it's called (one with no inputs given to a call runs there, and goes on from it)`));
       g.append(s("text", { x: bw / 2, y: portNames ? top + 19 : top + (bh - top) / 2 + 5, class: "cl", "text-anchor": "middle" }, label));
       portNames?.forEach((l, i) => g.append(s("text", { x: 9, y: portY(i) + 4, class: "portl" }, l)));
@@ -811,7 +820,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         g.append(titled(add, list ? "Add an item at the end" : "Add an input at the end"));
       }
       g.append(titled(s("circle", { cx: bw, cy: bh / 2, r: 5, class: "outp", "data-out": id }), "Drag onto another input to share this value there"));
-    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label, ...(runOrder.has(id) ? { ran: runOrder.get(id) } : {}) });
+    }, { value: id, out: { x: bw, y: bh / 2 }, name: label === "list" || label === "apply" ? undefined : field ? label.slice(1) : label, ...(ranOf(id) ? { ran: ranOf(id) } : {}) });
     const { sub, bx, by } = withArgs(rows.map((r) => r.a), kids, bw, bh, id, portY);
     return { ...sub, outX: bx + bw, outY: by + bh / 2, out: { item: id, dx: bw, dy: bh / 2 } };
   };
@@ -941,6 +950,21 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     return { w: Math.max(sub.w, x + body.w), h: Math.max(sub.h, y + body.h), outX: x + body.outX, outY: y + body.outY, out: body.out, at: sub.at };
   };
 
+  // Statements, `print error(…); 2`: a run of lets with a step done for
+  // its effect. They're drawn as one "in order" node, an input each, top
+  // to bottom, the value it gives last (Ersagun 2026-11-22: "Would
+  // variadic input to a 'ordered actions' node work better?").
+  const ranOf = (id: Id) => runOrder.get(id);
+  const statements = (id: Id): boolean => {
+    for (let c = node(id); isCall(c) && node(c.fn).kind === "lambda"; ) {
+      const lam = node(c.fn) as NodeOf<"lambda">;
+      if (lam.params.some(quiet)) return true;
+      c = node(lam.body);
+    }
+    return false;
+  };
+  const acting = (v: Id) => subtree(code, v).some((x) => { const c = node(x); return isCall(c) && effectsOf(c).does.length > 0; });
+
   // A let: each value flows into its dot; wires from the dot run to the
   // uses. A dot nothing reads (`_ = print(…)`) is a step done for its
   // effect, before what follows. Shown named, the dot is a let node.
@@ -954,28 +978,31 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       rest = lam.body;
     }
     const at = new Map<Id, Pos>();
+    // Statements: each step done for its effect, and each named one that
+    // acts, is an input of the in order node.
+    const ordered = steps.some(([b]) => quiet(b));
+    const inOrder = ordered ? steps.filter(([b, v]) => quiet(b) || acting(v)).map(([b]) => b) : [];
+    const portY = new Map<Id, number>(), portFrom = new Map<Id, End>();
     const vals = steps.map(([, v]) => lay(v));
     const colW = Math.max(0, ...vals.map((v) => v.w));
     // Steps done only for their effects (print this, then that) read top
     // to bottom, the last one included: nothing flows sideways, so each
     // starts at the left edge, as lines of text do. Lets line up on the
     // right, where their dots are.
-    const sequence = steps.every(([b]) => name(b) === "_");
-    // Steps done for their effects are numbered in the order they run,
-    // whatever else the run of lets holds: a dot put on a wire is a let
-    // too, and it took every number away (Ersagun 2026-11-14). The menu's
-    // Do it earlier and later ask the same of each step.
-    const silentSteps = steps.filter(([b]) => name(b) === "_").map(([b]) => b);
-    const numbered = silentSteps.length > 0;
+    const sequence = steps.every(([b]) => quiet(b));
     let y = 0, w = 0, h = 0, right = 0;
     vals.forEach((v, i) => {
       const b = steps[i][0];
-      const silent = name(b) === "_";
       const vx = sequence ? 0 : colW - v.w;
       shift(at, v, vx, y);
       const py = y + v.outY, x = (sequence ? vx + v.outX : Math.max(colW, vx + v.outX)) + 22;
       const fed = dotless(b) ? fedBy(b) : null;
-      if (fed) {
+      portY.set(b, py);
+      if (quiet(b)) {
+        // Done for its effect: no dot, its value wires into its input.
+        portFrom.set(b, v.out);
+        right = Math.max(right, vx + v.w);
+      } else if (fed) {
         // A use with no body read only by its ports: they are the wires'
         // sources, and no dot is drawn (L211). One port is the value.
         if (fed.ports.length === 1) sources.set(b, sources.get(portKey(fed.use, 0))!);
@@ -995,24 +1022,19 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
         sources.set(b, { item: b, dx: bw, dy: bh / 2 });
         right = Math.max(right, x + bw);
       } else {
-        const r = silent ? (numbered ? 8 : 4) : 6;
-        const k = silentSteps.indexOf(b) + 1;
-        const t = silent ? `Step ${k} of ${silentSteps.length + 1}, done for its effect; then step ${k + 1}. Right-click the step to do it earlier or later` : `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`;
+        const r = 6;
         item(b, 2 * r, 2 * r, (g) => {
-          g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${silent ? " silent" : ""}${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), t));
-          // With the effects numbered (E265), they say the order: a step's
-          // own number beside them was a second count of the same thing,
-          // and the two disagreed (QA 11-15 Q3). The dot and its dashes stay.
-          if (silent && !hooks.order) g.append(s("text", { x: r, y: r + 3.5, class: "stepn", "text-anchor": "middle" }, String(k)));
-          if (!silent) g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
-        }, { value: silent ? undefined : b, out: { x: 2 * r, y: r }, solid: false, label: silent ? undefined : { x: r - tw(name(b), 6.8) / 2, y: -16, w: tw(name(b), 6.8), h: 14 } });
+          g.append(titled(s("circle", { cx: r, cy: r, r, class: `reroute${sel(b)}`, "data-src": b, "data-id": b, "data-move": b }), `${name(b)}${typeOf(b) ? ` : ${typeOf(b)}` : ""}. Drag from here to use it; right-click to show it as a let node`));
+          g.append(s("text", { x: r, y: -4, class: `dotl${names[b] === undefined ? " anon" : ""}`, "text-anchor": "middle" }, name(b)));
+        }, { value: b, out: { x: 2 * r, y: r }, solid: false, label: { x: r - tw(name(b), 6.8) / 2, y: -16, w: tw(name(b), 6.8), h: 14 } });
         at.set(b, { x, y: py - r });
         // The dot shows the value; the node feeding it needn't say it again.
-        if (!silent && "item" in v.out && items.get(v.out.item)) items.get(v.out.item)!.value = undefined;
+        if ("item" in v.out && items.get(v.out.item)) items.get(v.out.item)!.value = undefined;
         wires.push({ from: v.out, to: { item: b, dx: 0, dy: r }, cls: "", flow: true });
         sources.set(b, { item: b, dx: 2 * r, dy: r });
-        right = Math.max(right, x + 2 * r + (silent ? 0 : tw(name(b), 6.8) / 2));
+        right = Math.max(right, x + 2 * r + tw(name(b), 6.8) / 2);
       }
+      if (!quiet(b)) portFrom.set(b, sources.get(b) ?? v.out);
       w = Math.max(w, right);
       h = Math.max(h, y + v.h);
       y += v.h + 18;
@@ -1026,9 +1048,31 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const unit = (e: End) => ("item" in e ? e.item : "frameOut" in e ? e.frameOut : null);
       chains.push([...vals.map((v) => unit(v.out)), unit(body.out)].filter((u): u is Id => !!u));
     }
-    if (numbered) {
-      const dot = (b: Id): [End, End] => [{ item: b, dx: 8, dy: 16 }, { item: b, dx: 8, dy: 0 }];
-      silentSteps.forEach((b, i) => then.push([dot(b)[0], i + 1 < silentSteps.length ? dot(silentSteps[i + 1])[1] : body.out]));
+    if (ordered) {
+      // The value it gives goes under the steps, in the same column, and
+      // into the last input; the node's output is that value.
+      const bx = sequence ? 0 : Math.max(0, colW - body.w);
+      shift(at, body, bx, y);
+      const ys = [...inOrder.map((b) => portY.get(b)!), y + body.outY];
+      const froms = [...inOrder.map((b) => portFrom.get(b)!), body.out];
+      const down = Math.max(0, 28 - ys[0]);
+      if (down) for (const p of at.values()) p.y += down;
+      const top = ys[0] + down - 28, nw = 74, last = ys.at(-1)! - ys[0] + 28, nh = last + 14;
+      const key = n.id, nx = Math.max(w, bx + body.w) + 40;
+      item(key, nw, nh, (g) => {
+        g.append(titled(s("rect", { width: nw, height: nh, rx: 7, class: `cn order${sel(key)}`, "data-id": key, "data-move": key }), `In order: each input runs after the one above it, and the last is the value it gives${typeOf(key) ? ` : ${typeOf(key)}` : ""}`));
+        g.append(s("text", { x: nw / 2, y: 17, class: "cl", "text-anchor": "middle" }, "in order"));
+        ys.forEach((py, i) => {
+          const dy = py - ys[0] + 28, step = inOrder[i];
+          g.append(titled(s("circle", { cx: 0, cy: dy, r: 5, class: "inp", ...(step ? { "data-id": step } : {}) }), step ? `Step ${i + 1} of ${ys.length}. Right-click to do it earlier or later` : `Step ${i + 1} of ${ys.length}, the value it gives`));
+          g.append(s("text", { x: 11, y: dy + 4, class: "portl" }, String(i + 1)));
+        });
+        g.append(s("circle", { cx: nw, cy: last, r: 5, class: "outp" }));
+      }, { out: { x: nw, y: last } });
+      at.set(key, { x: nx, y: top });
+      froms.forEach((f, i) => wires.push({ from: f, to: { item: key, dx: 0, dy: ys[i] - ys[0] + 28 }, cls: "", flow: true }));
+      const oy = top + last;
+      return { w: nx + nw, h: Math.max(h, y + body.h) + down, outX: nx + nw, outY: oy, out: { item: key, dx: nw, dy: last }, at };
     }
     const bx = sequence ? 0 : right + 26;
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
@@ -1094,15 +1138,24 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const title = from ? `fold${type ? ` ${name(type)}` : ""} from ${starts.map(name).join(", ")}` : isIf ? "if" : apart ? (fields.length > APART ? `${name(armNodes[0].variant)}(…) =` : fields) : `${handles ? "handle" : n.kind}${type ? ` ${name(type)}` : ""}`;
     const labels = [isIf ? "condition" : "value"];
     const inputs: Id[] = [n.scrutinee];
-    const kids: (Sub | null)[] = [arg(n.scrutinee)];
+    // Steps handled or matched on, `handle split book(…); 0`, are framed:
+    // drawn loose, the steps read as run before the handle, outside it.
+    const sc = node(n.scrutinee);
+    const kids: (Sub | null)[] = [isCall(sc) && node(sc.fn).kind === "lambda" && !statements(n.scrutinee) ? region(n.scrutinee, "", [], n.scrutinee, "arm") : arg(n.scrutinee)];
     from?.args.forEach((a, i) => { labels.push(name(starts[i])); inputs.push(a); kids.push(arg(a)); });
     const values = inputs.length;
     // A case with nothing to name is a value, not a function: what it gives
     // is drawn wired straight into its port, with no () => frame round it
     // (CONFUSING.md item 2): an if's then and else, a case like nil.
     const plain = new Set<number>();
+    // One whose value comes after steps (print this, then 2) is framed all
+    // the same: drawn loose, its steps read as the definition's own, run
+    // before the match (Ersagun 2026-11-22, chapters' main: "the action
+    // ordering … is broken in both views").
     const addCase = (at: Id, binders: Id[], body: Id, title: string) => {
-      if (binders.length) { inputs.push(at); kids.push(region(at, title, binders, body, "arm")); return; }
+      const b = node(body);
+      if (binders.length || (isCall(b) && node(b.fn).kind === "lambda" && !statements(body))) {
+        if (!binders.length) title = ""; inputs.push(at); kids.push(region(at, title, binders, body, "arm")); return; }
       plain.add(inputs.length); inputs.push(body); kids.push(arg(body));
     };
     // A case that only takes one of its fields apart further draws as one
@@ -1112,7 +1165,10 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     const valueOf = (arm: NodeOf<"arm">) => { const v = arm.value ? node(arm.value) : null; return v?.kind === "lit" ? litLabel(v.value, 18).short : null; };
     const byValue = armNodes.some((a) => a.value);
     const all = n.kind === "match" && !handles && !isIf && !apart && !byValue && !hooks.tree?.has(id) ? matchRows(code, info, n) : null;
-    const rows = all && flattened(all) ? all : null;
+    // A case that says what the otherwise says is drawn once, as the
+    // otherwise, as the text reads it (sharedOtherwise): chapters' main drew
+    // the usage message twice, once for a list of one (Ersagun 2026-11-22).
+    const rows = all && flattened(all) ? (n.kind === "match" && n.otherwise ? sharedOtherwise(code, all, n.otherwise).rows : all) : null;
     for (const r of rows ?? []) {
       const pat = patternText(r.pat, name, name);
       labels.push(pat.length > APART ? `${pat.slice(0, APART - 1)}…` : pat);
@@ -1129,7 +1185,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const later = op?.kind === "variant" && op.later && arm.binds.length === op.fields.length + 1;
       addCase(arm.id, params, lam ? lam.body : arm.body, later ? paramsTitle(arm.binds.slice(0, -1).map(name), name(arm.binds.at(-1)!)) : paramsTitle(params.map(name)));
     }
-    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); plain.add(inputs.length); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
+    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); addCase(n.otherwise, [], n.otherwise, ""); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
     const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30);
     const bh = 30 + inputs.length * 20;
@@ -1305,6 +1361,17 @@ function group(scene: Scene, g: Id, members: Id[]) {
 // box, not on its corner: there it sat on a title above it, a frame's or
 // the signature line (QA 11-15 Q4), and the box's own words start inside.
 // Its inputs come in lower down the same edge.
+// A speech mark on a box's top right corner, saying it has a comment (how
+// many, past one); the comment on hover.
+function commentMark(w: number, text: string, n = 1): SVGElement {
+  const o = s("g", { class: "cmt-mark", transform: `translate(${w - 9} -7)` });
+  const bw = n > 1 ? 24 : 16;
+  o.append(s("path", { d: `M2 0 H${bw - 2} Q${bw} 0 ${bw} 2 V9 Q${bw} 11 ${bw - 2} 11 H7 L3 15 L4 11 H2 Q0 11 0 9 V2 Q0 0 2 0 Z` }));
+  if (n > 1) o.append(s("text", { x: bw / 2, y: 8.5, "text-anchor": "middle" }, String(n)));
+  else o.append(s("path", { class: "cmt-lines", d: "M4 4 H12 M4 7 H10" }));
+  o.append(s("title", {}, text));
+  return o;
+}
 function effectBadge(text: string, why: string): SVGElement {
   const o = s("g", { class: "effn" }), w = Math.max(18, tw(text, 6.2) + 10), x = -4 - w / 2;
   o.append(w > 18 ? s("rect", { x: x - w / 2, y: 0, width: w, height: 18, rx: 9 }) : s("circle", { cx: x, cy: 9, r: 9 }), s("text", { x, y: 12.5, "text-anchor": "middle" }, text));
@@ -1313,8 +1380,11 @@ function effectBadge(text: string, why: string): SVGElement {
 }
 
 const FOLDH = 44;
-// The longest name, and the longest line, a folded box lists.
-const HOLDN = 14, HOLDS = 24;
+// The longest name, and the longest line, a folded box lists, and the
+// longest title it shows: narrow, all of it on hover (Ersagun 2026-11-22:
+// "can we make collapsed frames narrower by default?").
+const HOLDN = 12, HOLDS = 16, FOLDT = 24;
+const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
   const parent = (f: Id) => scene.frames.get(f)?.parent ?? null;
   // The outermost folded frame among f and the frames around it.
@@ -1348,7 +1418,12 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     for (let i = 0; i < us.length;) { let j = i; while (j + 1 < us.length && us[j + 1] === us[j] + 1) j++; runs.push(j > i ? `${us[i]}–${us[j]}` : `${us[i]}`); i = j + 1; }
     return runs.join(", ");
   };
-  const size = (f: Frame) => ({ w: Math.max(f.minW, tw(f.title, 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
+  // The comments of the nodes a folded frame hides: its mark, with how many.
+  const notes = (f: Id, w: number): SVGElement[] => {
+    const all = [...scene.items.values()].filter((it) => it.note && hider(it.frame) === f).map((it) => it.note!);
+    return all.length ? [commentMark(w, all.join("\n\n"), all.length)] : [];
+  };
+  const size = (f: Frame) => ({ w: Math.max(tw(clip(f.title, FOLDT), 6.6) + 44, tw(holds(f.id), 6.4) + 20), h: FOLDH });
   const items = new Map<Id, Item>();
   for (const it of scene.items.values()) if (!hider(it.frame)) items.set(it.key, it);
   const frames = new Map<Id, Frame>();
@@ -1360,10 +1435,13 @@ function fold(scene: Scene, at: Record<Id, Pos>, folded?: Set<Id>): Scene {
     items.set(f.id, {
       key: f.id, frame: f.parent, w, h, auto: { x: b.x, y: b.y }, solid: true,
       draw: (g) => g.append(
-        s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id }),
-        s("text", { x: 10, y: 16, class: "rt" }, f.title),
+        ((r) => (r.append(s("title", {}, `${f.title}\n${holds(f.id)}`)), r))(s("rect", { width: w, height: h, rx: 9, class: `rg ${f.cls} folded`, "data-id": f.id, "data-move": f.id, "data-frame": f.id })),
+        s("text", { x: 10, y: 16, class: "rt" }, clip(f.title, FOLDT)),
         s("text", { x: 10, y: 34, class: "fold-n" }, holds(f.id)),
         foldToggle(w - 16, 16, f.id, "▸", "Unfold"),
+        // The comments of the nodes it hides (QA 11-22b L3: folded,
+        // they showed nowhere).
+        ...notes(f.id, w),
         ...(ran(f.id) ? [effectBadge(ran(f.id), `The calls with effects inside run as number ${ran(f.id)} here: unfold it to see which`)] : []),
       ),
     });

@@ -402,6 +402,9 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 .port-row input[type=text], .port-row output { font: 13px var(--font-code); min-width: 0; }
 .port-row output { padding: 4px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
 .port-row output.none { background: none; color: var(--muted); font-weight: 400; }
+.port-row output.long { max-height: 7.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.port-row output.all { max-height: 50vh; overflow: auto; white-space: pre-wrap; }
+.port-more { display: flex; gap: 6px; justify-content: flex-end; margin: -2px 0 4px; }
 .port-row .unit { font: 500 11px var(--font-code); color: var(--faint); min-width: 2.5em; }
 .alts ul { margin: 4px 0 0; padding-left: 18px; font: 12px var(--font-code); }
 .btn.back { font-weight: 600; }
@@ -441,8 +444,10 @@ select { width: 100%; padding: 5px 8px; border: 0; border-radius: 8px; backgroun
 .typed .ln { white-space: pre-wrap; }
 .tgraph text.pl { white-space: pre; }
 .typed .blk { display: block; }
-/* A hidden part (E290): click to show. */
-.typed .hid { cursor: pointer; padding: 0 4px; border-radius: 4px; background: var(--canvas); color: var(--muted); }
+/* A hidden part (E290): click to show. A chip in the accent, so it isn't
+   read as a text cut short, whose … is plain (QA 11-22b L1). */
+.typed .hid { cursor: pointer; padding: 0 5px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.typed .hid:hover { outline: 1px solid var(--accent); }
 .typed .step { display: block; }
 .typed .chain { display: flex; align-items: baseline; }
 .palette .opt-l { white-space: nowrap; flex-shrink: 0; }
@@ -523,7 +528,10 @@ pre.out { max-height: 260px; overflow: auto; margin: 8px 0 0; }
 .tgraph .cn.handler { fill: var(--tone-2); }
 .tgraph .cn.err, .tgraph .pill.err { stroke: var(--hot); stroke-width: 2.5; }
 .tgraph .cl { fill: var(--fg); font: 600 13px var(--font-ui); pointer-events: none; }
-.tgraph .node-cmt { fill: var(--muted); font: italic 11px var(--font-ui); }
+.tgraph .cmt-mark path { fill: var(--canvas); stroke: var(--muted); stroke-width: 1.2; }
+.tgraph .cmt-mark .cmt-lines { fill: none; stroke-linecap: round; }
+.tgraph .cmt-mark text { font: 700 8.5px var(--font-ui); fill: var(--muted); pointer-events: none; }
+.tgraph .cmt-mark:hover path { stroke: var(--accent); }
 .tgraph .badge { fill: var(--muted); font: 600 9.5px var(--font-ui); letter-spacing: .02em; pointer-events: none; }
 .tgraph .pill { stroke: none; cursor: pointer; }
 .tgraph .pill.var { fill: var(--lit); cursor: grab; }

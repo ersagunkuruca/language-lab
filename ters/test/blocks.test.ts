@@ -38,7 +38,7 @@ class El {
 }
 (globalThis as unknown as { document: unknown }).document = { createElement: (tag: string) => new El(tag) };
 const { renderTyped } = await import("../../editor/typed.ts");
-const { renderBlocks } = await import("../src/lang/render.ts");
+const { renderBlocks, blocksOf, blocksText } = await import("../src/lang/render.ts");
 
 const pane = (example: string, def: string) => {
   const p = loadProgram(join(root, "examples", example));
@@ -74,7 +74,9 @@ test("the Blocks pane shows every definition line for line as the blocks text pr
     for (const def of p.own.defs) {
       // A long text is clipped in the pane; what the text says is the same.
       const texts = (ls: string[]) => ls.map((l) => l.replace(/"(?:[^"\\]|\\.)*"(?: · \d+ lines)?/g, '"…"'));
-      const text = texts(renderBlocks(p.code, p.pres, info, def).split("\n"));
+      // (The pane's own text: it reads steps in braces, and short ones on
+      // one line, where the text an LLM reads keeps a step a line.)
+      const text = texts(blocksText(blocksOf(p.code, p.pres, info, def, { pane: true })));
       const shown = texts((renderTyped(p.code, p.pres, info, def, null) as unknown as El).lines());
       assert.deepEqual(shown, text, `${example} ${p.pres.names[def]}`);
     }

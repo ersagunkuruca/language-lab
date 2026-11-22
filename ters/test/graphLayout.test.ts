@@ -200,3 +200,38 @@ test("an action's steps keep one column in the order they run, each step's dot l
   assert.ok(p("s1").y < p("s2").y && p("s2").y < p("s3").y, "in the order they run");
   for (const [d, s] of [["d1", "s1"], ["d2", "s2"]]) assert.equal(p(d).y + 8, p(s).y + 15, `${d} is level with ${s}`);
 });
+
+test("an open frame spans as many columns as it holds: what's beside it needn't go past its whole width", () => {
+  // r is fed by frame f (three nodes in a row inside) and by b, fed by c.
+  // c's column is one f spans: c sits beside b, above or below f, not left of all of f.
+  const n = (id: string, frame: string | null, w = 60): TNode => ({ id, x: 0, y: 0, w, h: 30, frame });
+  const nodes = [n("r", null), n("b", null), n("c", null), n("x1", "f"), n("x2", "f"), n("x3", "f")];
+  const frames = [{ id: "f", parent: null, pad: [12, 26, 12, 12] as [number, number, number, number] }];
+  const w = (from: string, to: string) => ({ from, fx: 60, fy: 15, to, tx: 0, ty: 15, flow: true });
+  const at = arrange(nodes, frames, [w("x1", "x2"), w("x2", "x3"), w("x3", "r"), w("b", "r"), w("c", "b")]);
+  const placed = nodes.map((m) => ({ ...m, ...at.get(m.id)! }));
+  const box = frameBoxes(placed, frames).get("f")!;
+  const c = placed.find((m) => m.id === "c")!;
+  assert.ok(c.x + c.w > box.x, `c (${c.x}) is left of all of f (${box.x})`);
+  for (const m of placed.filter((m) => m.frame === null)) assert.ok(!overlaps(m, box), `${m.id} overlaps f`);
+});
+
+test("tidy keeps a spanning frame's place in the order of the columns it spans", () => {
+  // r is fed by frame f and by b, fed by c, which stands in a column f
+  // spans: c goes on f's side of b's input, above f when b plugs in
+  // above f, below it when b plugs in below (Ersagun 2026-11-22).
+  const n = (id: string, frame: string | null, w = 60, h = 30): TNode => ({ id, x: 0, y: 0, w, h, frame });
+  for (const bFirst of [true, false]) {
+    // c taller than b, so level with it c would reach into f.
+    const nodes = [n("r", null, 60, 60), n("b", null), n("c", null, 60, 90), n("x1", "f"), n("x2", "f"), n("x3", "f")];
+    const frames = [{ id: "f", parent: null, pad: [12, 26, 12, 12] as [number, number, number, number] }];
+    const w = (from: string, to: string, ty = 15) => ({ from, fx: 60, fy: 15, to, tx: 0, ty, flow: true });
+    const at = arrange(nodes, frames, [w("x1", "x2"), w("x2", "x3"), w("x3", "r", bFirst ? 45 : 10), w("b", "r", bFirst ? 10 : 45), w("c", "b")]);
+    const placed = nodes.map((m) => ({ ...m, ...at.get(m.id)! }));
+    const box = frameBoxes(placed, frames).get("f")!;
+    const c = placed.find((m) => m.id === "c")!, b = placed.find((m) => m.id === "b")!;
+    if (bFirst) { assert.ok(c.y + c.h <= box.y, `c (${c.y}) above f (${box.y})`); assert.ok(b.y < box.y, "b above f"); }
+    else { assert.ok(c.y >= box.y + box.h, `c (${c.y}) below f (${box.y + box.h})`); assert.ok(b.y > box.y, "b below f"); }
+    for (const m of placed.filter((m) => m.frame === null)) assert.ok(!overlaps(m, box), `${m.id} overlaps f`);
+  }
+});

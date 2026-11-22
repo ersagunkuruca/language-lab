@@ -410,6 +410,12 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
   for (const n of nodes) size.set(n.id, { w: n.w, h: n.h });
   // Each unit's place within its container, from the container's corner.
   const rel = new Map<string, Pos>();
+  // How many of its container's columns a unit takes: an open frame as
+  // many as its own contents have, so what's beside it in the columns it
+  // spans needn't be pushed past its whole width (Ersagun 2026-11-22: "can
+  // they span multiple columns … for the tidy algorithm?").
+  const span = new Map<string, number>();
+  const spanOf = (u: string) => span.get(u) ?? 1;
   const containers = [...frames.map((f) => f.id), null].sort((a, b) => depth(b) - depth(a));
   for (const c of containers) {
     const units = [...nodes.filter((n) => n.frame === c).map((n) => n.id), ...frames.filter((f) => f.parent === c).map((f) => f.id)]
@@ -427,7 +433,7 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
       if (rank.has(u)) return rank.get(u)!;
       if (seen.has(u)) return 0;
       seen.add(u);
-      const r = Math.max(-1, ...outs.get(u)!.map((e) => rankOf(e.to, seen))) + 1;
+      const r = Math.max(0, ...outs.get(u)!.map((e) => rankOf(e.to, seen) + spanOf(e.to)));
       rank.set(u, r);
       return r;
     };
@@ -435,7 +441,7 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     // Something nothing feeds (a constant, a cell) sits just left of the
     // nearest thing it feeds, not as far left as the longest path would put it.
     const fed = new Set(units.flatMap((u) => outs.get(u)!.map((e) => e.to)));
-    for (const u of units) if (!fed.has(u) && outs.get(u)!.length) rank.set(u, 1 + Math.min(...outs.get(u)!.map((e) => rank.get(e.to)!)));
+    for (const u of units) if (!fed.has(u) && outs.get(u)!.length) rank.set(u, Math.min(...outs.get(u)!.map((e) => rank.get(e.to)! + spanOf(e.to))));
     // A chain's units share the column of the one furthest left.
     const chainsIn = chains.map((ch) => [...new Set(ch.map((x) => unitIn(x, c)).filter((u): u is string => !!u && rank.has(u)))]).filter((ch) => ch.length > 1);
     for (const ch of chainsIn) { const r = Math.max(...ch.map((u) => rank.get(u)!)); for (const u of ch) rank.set(u, r); }
@@ -449,7 +455,14 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     };
     const cols: string[][] = [];
     for (const u of units) (cols[rank.get(u)!] ??= []).push(u);
+    for (let r = 0; r < cols.length; r++) cols[r] ??= [];
+    // A frame spanning columns stands in the ones left of its own: what's
+    // placed there goes round it.
+    const blockers: string[][] = cols.map(() => []);
+    for (const u of units) for (let k = 1; k < spanOf(u); k++) blockers[rank.get(u)! + k]?.push(u);
     const y = new Map<string, number>();
+    // Where each unit plugs in, kept for the columns a frame spans.
+    const plugs = new Map<string, [number, number]>();
     cols.forEach((col, r) => {
       const want = (u: string) => {
         const es = outs.get(u)!.filter((e) => y.has(e.to));
@@ -470,10 +483,36 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
       const ps = new Map(col.map((u) => [u, plug(u)]));
       const byPlug = (a: string, b: string) => ps.get(a)![0] - ps.get(b)![0] || ps.get(a)![1] - ps.get(b)![1] || ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!;
       const sorted = keepOrder(r ? [...col].sort(byPlug) : [...col]);
+      for (const u of col) plugs.set(u, ps.get(u)!);
       let bottom = -Infinity;
-      for (const u of sorted) { const t = r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap); y.set(u, t); bottom = t + size.get(u)!.h; }
+      const inWay = blockers[r].filter((b) => y.has(b)).sort((a, b) => y.get(a)! - y.get(b)!);
+      const walls = inWay.map((b) => [y.get(b)!, y.get(b)! + size.get(b)!.h]);
+      const clear = (t: number, h: number) => { for (const [a, b] of walls) if (t < b + gap && t + h + gap > a) t = b + gap; return t; };
+      const stack = (us: string[]) => { for (const u of us) { const t = clear(r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap), size.get(u)!.h); y.set(u, t); bottom = t + size.get(u)!.h; } };
+      // A frame spanning this column keeps its place in the column's order
+      // (Ersagun 2026-11-22: "keep the order of nodes taking multi column
+      // frames into account"): what plugs in above where the frame plugs
+      // in goes above it, the rest below.
+      const before = (b: string) => (u: string) => { const p = ps.get(u)!, q = plugs.get(b)!; return p[0] < q[0] || (p[0] === q[0] && (p[1] < q[1] || (p[1] === q[1] && ws.get(u)! < y.get(b)!))); };
+      let rest = sorted;
+      for (const b of inWay) {
+        const k = rest.findIndex((u) => !before(b)(u));
+        const above = k < 0 ? rest : rest.slice(0, k);
+        if (above.length) {
+          // Stacked as they want, then lifted to clear the frame's top,
+          // where there's room for them between it and what's above.
+          let t = bottom, tops: number[] = [];
+          for (const u of above) { const top = Math.max(ws.get(u)!, t + gap); tops.push(top); t = top + size.get(u)!.h; }
+          const lift = Math.max(0, t + gap - y.get(b)!);
+          if (tops[0] - lift < bottom + gap) break;
+          above.forEach((u, i) => y.set(u, tops[i] - lift));
+          rest = rest.slice(above.length);
+        }
+        bottom = Math.max(bottom, y.get(b)! + size.get(b)!.h);
+      }
+      stack(rest);
       // Pushed down to make room: move the column back up, half way.
-      if (r) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
+      if (r && !walls.length) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
     });
     // Each node then sits centred on the inputs that feed it, as a parent
     // over its children in Reingold and Tilford's tidy trees: from the
@@ -489,7 +528,7 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     for (const v of units) for (const t of new Set(outs.get(v)!.map((e) => e.to))) insOf.get(t)!.push(v);
     for (let r = cols.length - 2; r >= 0; r--) {
       const col = cols[r];
-      if (!col || col.some((u) => steps.has(u))) continue;
+      if (!col || col.some((u) => steps.has(u) || spanOf(u) > 1) || blockers[r].length) continue;
       const wants = col.map((u) => {
         const ins = insOf.get(u)!;
         if (!ins.length) return y.get(u)!;
@@ -512,7 +551,14 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     }
     // Columns right to left, each as wide as its widest; units meet the
     // column's right edge, nearer what they feed.
-    const widths = cols.map((col) => Math.max(...col.map((u) => size.get(u)!.w)));
+    const widths = cols.map((col) => Math.max(0, ...col.filter((u) => spanOf(u) === 1).map((u) => size.get(u)!.w)));
+    // A spanning frame wider than its columns widens the leftmost of them.
+    for (const u of units.filter((u) => spanOf(u) > 1)) {
+      const r = rank.get(u)!, last = Math.min(cols.length, r + spanOf(u)) - 1;
+      let room = (last - r) * colGap;
+      for (let k = r; k <= last; k++) room += widths[k];
+      if (size.get(u)!.w > room) widths[last] += size.get(u)!.w - room;
+    }
     let right = 0;
     const x = new Map<string, number>();
     for (let r = cols.length - 1; r >= 0; r--) { right += widths[r]; for (const u of cols[r]) x.set(u, right - size.get(u)!.w); right += colGap; }
@@ -524,7 +570,7 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
       rel.set(u, p);
       w = Math.max(w, p.x + size.get(u)!.w); h = Math.max(h, p.y + size.get(u)!.h);
     }
-    if (c) { const f = frames.find((g) => g.id === c)!; const [l, t, r, b] = f.pad; size.set(c, { w: w + l + r, h: Math.max(h + t + b, f.minH ?? 0) }); }
+    if (c) { const f = frames.find((g) => g.id === c)!; const [l, t, r, b] = f.pad; size.set(c, { w: w + l + r, h: Math.max(h + t + b, f.minH ?? 0) }); span.set(c, cols.length); }
   }
   // From the corner where the graph starts now, so laying out again moves nothing.
   const fb = frameBoxes(nodes, frames);

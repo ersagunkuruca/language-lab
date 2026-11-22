@@ -4833,3 +4833,56 @@ C275 first: it is most of every target's time and fuse-walks.ts is where
 it goes. Then C276, which also makes `ters wasi` run the program, then
 C277. The MCP rows go to the lanes that own the reader (I340 first: a
 program read wrong without a word).
+
+### After C275
+
+`compiler/src/scalar.ts` (zippedItems): a fold over `zipped(a, b)` of two
+arrays is a loop over both, item k their items at k, from the shorter's
+last back, as the fold over the array of pairs went; no array of pairs is
+made. Every way prints the same digits.
+
+| strings, 32 blocks | before | after |
+|---|---|---|
+| core IR | 15.2 s (47x) | 8.1 s (23x) |
+| `ters native` | 2.42 s | 2.26 s (12x the C) |
+
+Natively, callgrind at 2 blocks counts 36% fewer instructions; what is
+left is the library's FFT on cons lists (`lab_new`, counts and frees
+together 43%, `fft` 10%), the next stage after C276.
+
+### After C276
+
+deep-loops.ts (C222) takes `larger(x, highest(rest))` as `let r =
+highest(rest) in larger(x, r)` where what is given beside the call only
+reads, so its frames go on the heap: `ters wasi` prints what the ideal
+prints at 2, 8 and 32 blocks (32: 3.8 s, 10.5x the JS ideal). The core
+IR's generator for the same is 8% of its time, under the 10% rule.
+
+### After C277
+
+branches-rt.ts `shared`: a site's units run alone once, for their time,
+and a site whose shared jobs twice in a row take as long as that runs in
+place from then on; and a site marked so really does (its units went to
+the workers from the second on). strings on three workers: 8 blocks 3.2 →
+2.0 s, 32 blocks 12.7 → 8.2 s, as alone or a little better. What is left
+of the core IR's 23x is the library's FFT on lists and the collector.
+
+### C278, measured
+
+Arrays for the library's FFT, autocorrelation and spectrum (the chooser
+choosing between arrays and lists as written for each part) print the
+same and are slower: at 32 blocks core 9.95 → 11.2 s, native 2.30 →
+2.73 s. The FFT as the library writes it makes new lists at every level
+on any representation, so arrays only add conversions. Not landed. What
+the core IR spends its time on at 8 blocks: the collector 28%, YIN's
+`difference` 22% (a pair made for every item of its zipped fold, then
+taken apart), the FFT's maps and splits most of the rest.
+
+### After C279
+
+A list a loop builds onto a call of itself, the items so far kept newest
+first, is turned round at the end in its own cells in JavaScript, not
+made again (scalar.ts `turned`): strings at 32 blocks, three runs each,
+core 9.6 → 8.3 s. No pair per item in YIN's zipped fold was tried too and
+was within noise.
+

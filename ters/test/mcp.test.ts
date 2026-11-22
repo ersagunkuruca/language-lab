@@ -473,6 +473,61 @@ test("a list pattern's rest, `..more`, is the list after its items (I340)", asyn
   assert.match(bad.text, /comes last/);
 });
 
+// Round 20 waited minutes for an unknown name at the end of a chain of
+// `++`s to be refused: each split re-read the parts that don't read (I341).
+test("an unknown name at the end of a long ++ chain is refused at once (I341)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "said", kind: "function", params: ["n"] });
+  const started = performance.now();
+  const r = call("replace", { at: "said", find: "□", text: '"a" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ nosuch' });
+  assert.ok(r.error);
+  assert.match(r.text, /nothing is named nosuch/);
+  // Four shows took over 100 s; now well under a second.
+  assert.ok(performance.now() - started < 10000, `${Math.round(performance.now() - started)} ms`);
+  assert.match(text("replace", { at: "said", find: "□", text: '"a" ++ show(2.5) ++ "b" ++ show(n) ++ "c"' }), /show/);
+});
+
+// Round 20 wrote `reading(called, place, …) = nearest step(…); □`, a
+// record taken apart by a step before `;`, and was told "nothing is named
+// called here" (I343): it reads as on lines of its own.
+test("a record taken apart by a step before `;` reads as on lines (I343)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "Spot", kind: "type", first: "spot(x: Float64, y: Float64)" });
+  text("define", { name: "made", kind: "function", params: ["a"] });
+  text("replace", { at: "made", find: "□", text: "spot(a, a + 1.0)" });
+  text("define", { name: "area of", kind: "function", params: ["a"] });
+  assert.match(text("replace", { at: "area of", find: "□", text: "spot(px, py) = made(a); □" }), /spot\(px#\w+, py#\w+\) = it/);
+  text("replace", { at: "area of", find: "□", text: "px · py" });
+  assert.match(text("eval", { text: "area of(2.0)" }), /^= 6 :/);
+});
+
+// Game round 2 wrote `k = …; match xs` with the cases on the lines below,
+// and a match after `else` on one line (I318).
+test("a step before `;` with a match on the lines after, and a match after else on one line (I318)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "plus first", kind: "function", params: ["xs"] });
+  text("replace", { at: "plus first", find: "□", text: "k = 2; match xs\n  nil → k\n  cons(h, t) → h + k" });
+  assert.match(text("eval", { text: "plus first([5]) + plus first([])" }), /^= 9 :/);
+  text("define", { name: "or first", kind: "function", params: ["xs", "n"] });
+  text("replace", { at: "or first", find: "□", text: "if n > 0 then n else match xs; nil → 0; cons(h, t) → h" });
+  assert.match(text("eval", { text: "or first([5], 0) + or first([], 2)" }), /^= 7 :/);
+});
+
 // rota's main used `attempt` and a match on its Outcome (I217 M7).
 test("a handler is written as the view prints it: handle …, an operation's case, otherwise (I217 M7)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
@@ -569,3 +624,20 @@ test("replace: a match in parentheses or after else, and a tuple by its fields",
   assert.doesNotMatch(text("view", { at: "heads" }), /nested match/);
   assert.match(text("replace", { at: define("ends", ["p"]), text: "a = p.first\nb = p.third\na + b" }), /ends#\w+ : \(\(a, b, a\)\) -> a/);
 });
+
+// abs of an open input is the one abs for every number type, as + is, not
+// Float64's, which the library declares first (I342).
+test("abs of an open input is generic (I342)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "sizes", kind: "function", params: ["xs"] });
+  text("replace", { at: "sizes", find: "□", text: "map(xs, (x) => abs(x))" });
+  assert.match(text("view", { at: "sizes", depth: 1 }), /sizes\S* : \(List a\) -> List a where a is a Number/);
+  assert.match(text("eval", { text: "sizes([-2, 3])" }), /^= \[2, 3\] :/);
+  assert.match(text("eval", { text: "sizes([-2.5])" }), /^= \[2\.5\] :/);
+});
+

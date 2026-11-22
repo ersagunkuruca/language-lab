@@ -70,7 +70,10 @@ export interface Chosen { code: Code; names: Names; chosen: string[]; insiders: 
 // creating cons lists in the audio loop. That's just wrong").
 // `dataKeys`: the target's hash tables take keys that are data (C243,
 // HASH-KEYS-2026-11-15.md): a list, a set as written.
-export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean; dataKeys?: boolean }
+// `held`: the rows a person held in the program's choices (L280c,
+// CHOICES-2026-11-20.md), by the type's id: the row's name, which must be
+// one the chooser could pick here, so the meaning is kept.
+export interface LibraryOptions { hostMaps?: boolean; tables?: boolean; split?: boolean; sound?: boolean; dataKeys?: boolean; held?: ReadonlyMap<Id, string> }
 
 // The rows the chooser picks from for each type a program stores: its own
 // representations, and the library's rows for a type stored whole (std's
@@ -227,6 +230,15 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
   };
   if (!replayed) types: for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
+    const hold = options.held?.get(ty);
+    const refuse = (why: string): never => { throw new Error(`${names[ty] ?? LIBRARY.names[ty] ?? ty} can't be held as ${hold} here: ${why}`); };
+    if (hold !== undefined && hold !== spec.name && !asked.some((r) => r.of === ty)) {
+      if (ty === LIST) refuse("a list's choice can't be held yet");
+      if (!LIBRARY.reps.some((r) => r.of === ty && r.name === hold)) refuse(`it is stored as ${LIBRARY.reps.filter((r) => r.of === ty).map((r) => r.name).join(", ")}`);
+      if (skip.has(ty) || skip.has(hold + " " + ty)) refuse("the program stored so doesn't check");
+      if (inTableKeys(ty)) refuse("it is in a hash table's keys, which hash it as written");
+    }
+    if (hold === spec.name) continue;
     if (asked.some((r) => r.of === ty) || skip.has(ty) || inTableKeys(ty)) continue;
     // A hash table only where it is (hostMaps), and only where every map
     // has one holder, so a put changing it in place can't be seen.
@@ -239,6 +251,14 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const rows = LIBRARY.reps.filter((r) => r.of === ty && r.byType && !skip.has(r.name + " " + ty) && !(r.name === "tree of List" && runsBackwards())
       && (!r.oneHolder || (options.hostMaps && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))
         || (options.tables && (ty === MAP || ty === SET_TYPE) && inPlace(code, info, main, defs, r, tabled(), options.dataKeys))));
+    if (hold !== undefined) {
+      // Held: that row, where the chooser could have picked it (L280c).
+      const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen" : "the chooser can't pick it here");
+      if (!uses(code, main, [spec, row]).length) refuse(`main doesn't use it`);
+      if (keyed(info, defs, code, ty) || generic(info, defs, code, row) || !plainBoundary(code, defs, row)) refuse("its values cross where it can't be converted");
+      chosen.push(row);
+      continue;
+    }
     if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
     // What an edge does with its own lists (Bytes' `byte at`, by position)
     // is no job of theirs: the edge keeps them as written.
@@ -905,7 +925,8 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   const openHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (!closed(t) && t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(openHolder) : t.t === "fn" ? [...t.params, t.ret].some(openHolder) : false; };
   // What the rewrite reaches (represent.ts), and what it keeps as it is.
   const own = new Set<Id>();
-  for (const d of [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
+  const rowDefs = [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])];
+  for (const x of [...rowDefs, ...dependenciesOfAll(code, rowDefs)]) own.add(x);
   const reached = new Set<Id>(), todo = [...defs];
   while (todo.length) {
     const d = todo.pop()!;

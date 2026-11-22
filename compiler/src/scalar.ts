@@ -90,6 +90,9 @@ import { bakeCalls } from "./bake.ts";
 import { elaborate, verify } from "../../ters/src/lang/verify.ts";
 import { firstArms } from "../../ters/src/lang/first-arms.ts";
 import { countsInto } from "./fold-chunks.ts";
+import { originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "../../ters/src/lang/prelude-ids.ts";
+
+const ZIPPED = PRELUDE_DEFS["zipped"];
 import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
@@ -347,7 +350,7 @@ export function mapLocals(e: SExpr, m: (i: number) => number): SExpr {
     case "handle": return { ...r, reason: m(r.reason), save: m(r.save), ...(r.frame !== undefined ? { frame: m(r.frame) } : {}) };
     case "budget": return { ...r, save: m(r.save), res: m(r.res) };
     case "released": return r.st !== undefined ? { ...r, st: m(r.st) } : r;
-    case "make": return r.into !== undefined ? { ...r, into: m(r.into) } : r;
+    case "make": case "new": return r.into !== undefined ? { ...r, into: m(r.into) } : r;
     default: return r;
   }
 }
@@ -444,7 +447,10 @@ export type SExpr =
   | { k: "get"; rec: SExpr; t: RType; i: number }
   // A value of case c of t, and field i of one (it is that case: the
   // checker says so, or the match just looked).
-  | { k: "new"; t: DType; c: number; args: SExpr[] }
+  // `into` (C279): written into that local's value where it is a cell of
+  // the same case, its fields at `same` already these: the JavaScript
+  // printer's, other printers make it anew.
+  | { k: "new"; t: DType; c: number; args: SExpr[]; into?: number; same?: number[] }
   | { k: "field"; rec: SExpr; t: DType; c: number; i: number }
   // A written list (`list of`, L181b): items in order, each a value of
   // case c's head, made into case c from the end onto t's empty case. Flat,
@@ -4249,6 +4255,21 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         const atLeast0: SExpr = { k: "if", t: "int", cond: { k: "rt", fn: "int.less", args: [n, { k: "int", v: 0n }] }, then: { k: "int", v: 0n }, else: n };
         return { k: "let", i: nl, value: range, body: { k: "call", fn: ci.fn, args: [{ k: "int", v: 0n }, atLeast0, ci.start, ...outside], tail } };
       }
+      // Over `zipped` of two arrays (C275, YIN's difference): no array of
+      // pairs, item k read from both arrays at k, from the shorter's last
+      // back. A copy on a split's side counts too: what it is given are
+      // arrays here, and the pairs are of their items whatever it gives.
+      const z = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? s.args[0] : null;
+      const zf = z?.k === "call" ? funcs[z.fn] : null;
+      const zi = z?.k === "call" && zf && (SPLIT_COPIED_FROM.get(zf.def) ?? originalOf(zf.def)) === ZIPPED && zf.params.length === 2 && zf.params.every(isArray) ? zippedItems(st, result, arms, free, env, f, zf.params as AType[]) : null;
+      if (zi && z?.k === "call") {
+        const l1 = f.locals.push(zi.arrays[0]) - 1, l2 = f.locals.push(zi.arrays[1]) - 1, nl = f.locals.push("int") - 1;
+        const a1: SExpr = { k: "local", i: l1 }, a2: SExpr = { k: "local", i: l2 }, n: SExpr = { k: "local", i: nl };
+        const n1: SExpr = { k: "rt", fn: `array.length.a${zi.arrays[0].index}`, args: [a1] }, n2: SExpr = { k: "rt", fn: `array.length.a${zi.arrays[1].index}`, args: [a2] };
+        return { k: "let", i: l1, value: z.args[0], body: { k: "let", i: l2, value: z.args[1], body: {
+          k: "let", i: nl, value: { k: "if", t: "int", cond: { k: "rt", fn: "int.less", args: [n1, n2] }, then: n1, else: n2 },
+          body: { k: "call", fn: zi.fn, args: [a1, a2, n, zi.start, ...outside], tail } } } };
+      }
       const ai = s.k === "rt" && /^array\.items\.a\d+$/.test(s.fn) ? arrayItems(st, result, arms, free, env, f, [...arrays.values()][Number(/\d+$/.exec(s.fn)![0])]) : null;
       if (ai && s.k === "rt") {
         const al = f.locals.push(ai.array) - 1, a: SExpr = { k: "local", i: al };
@@ -4750,6 +4771,40 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const start = expr(nil.body, env, f, false);
     if (opts.host && !counted) restAsView((g.body as Extract<SExpr, { k: "if" }>).else, start, array, k, x);
     return { fn: gi, start, array };
+  }
+  // A fold over zipped(a, b) of two arrays read in place (C275): as
+  // arrayItems, the item at k the pair of a's and b's items at k. Only
+  // where the arm reads the item as it is, the pair its head field holds.
+  function zippedItems(st: DType, result: LType, arms: NodeOf<"arm">[], free: Id[], env: Map<Id, number>, f: SFunc, arrays: AType[]): { fn: number; start: SExpr; arrays: AType[] } | null {
+    const nil = arms.find((a) => !a.results.some((x) => x)), cons = arms.find((a) => a.results.some((x) => x));
+    if (!nil || !cons || arms.length !== 2 || st.cases.length !== 2) return null;
+    const c = st.cases.find((x) => x.variant === cons.variant)!;
+    const head = c.fields.findIndex((x) => x.t !== st), tail = c.fields.findIndex((x) => x.t === st);
+    if (head < 0 || tail < 0) return null;
+    const pair = c.fields[head].t;
+    if (!isRecord(pair) || pair.fields.length !== 2 || pair.fields[0].t !== arrays[0].item || pair.fields[1].t !== arrays[1].item) return null;
+    if (cons.binds[tail] && refsIn(cons.body).includes(cons.binds[tail]!)) return null;
+    const caps = free.map((b) => f.locals[env.get(b)!]);
+    const params: LType[] = [arrays[0], arrays[1], "int", result, ...caps];
+    const g: SFunc = { def: cons.id, name: `${f.name}.fold.zipped`, params, result, locals: [...params], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    let inner = new Map(free.map((b, j) => [b, 4 + j]));
+    const k = g.locals.push("int") - 1, x = g.locals.push(pair) - 1;
+    if (cons.binds[head]) inner = new Map(inner).set(cons.binds[head]!, x);
+    inner = new Map(inner).set(cons.results[tail]!, 3);
+    const a1: SExpr = { k: "local", i: 0 }, a2: SExpr = { k: "local", i: 1 }, left: SExpr = { k: "local", i: 2 }, at: SExpr = { k: "local", i: k };
+    g.body = {
+      k: "if", t: result, cond: { k: "rt", fn: "int.equal", args: [left, { k: "int", v: 0n }] }, then: { k: "local", i: 3 },
+      else: {
+        k: "let", i: k, value: { k: "rt", fn: "int.sub", args: [left, { k: "int", v: 1n }] },
+        body: {
+          k: "let", i: x, value: { k: "make", t: pair, args: [{ k: "rt", fn: `array.get.a${arrays[0].index}`, args: [a1, at] }, { k: "rt", fn: `array.get.a${arrays[1].index}`, args: [a2, at] }] },
+          body: { k: "call", fn: gi, args: [a1, a2, at, expr(cons.body, inner, g, false), ...free.map((_, j): SExpr => ({ k: "local", i: 4 + j }))], tail: true },
+        },
+      },
+    };
+    if (fails(g.body, funcs)) g.partial = true;
+    return { fn: gi, start: expr(nil.body, env, f, false), arrays };
   }
   // `array of List`'s own fold hands each arm the rest of the array as it
   // goes, pushing each item onto what it had: a new array per fold,
@@ -5448,8 +5503,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // input, so each such end is a tail call, and every other end gives
   // them turned round onto its answer: the same list, built in the same
   // order. (Tail recursion modulo cons, done by reversing rather than
-  // filling holes, since WasmGC cells are immutable; the JS backend
-  // fills holes, G22.)
+  // filling holes, since WasmGC cells are immutable; in JavaScript the
+  // reverse turns the cells where they are, `turned`, C279.)
   function modCons(from: number) {
     const end = funcs.length;
     for (let i = from; i < end; i++) {
@@ -5484,11 +5539,30 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           }
         }
         // Not a tail call any more: its answer is turned round onto.
-        return { k: "call", fn: reverse(t), tail: true, args: [acc, "tail" in e && e.tail ? { ...e, tail: false } as SExpr : e] };
+        return { k: "call", fn: turned(t), tail: true, args: [acc, "tail" in e && e.tail ? { ...e, tail: false } as SExpr : e] };
       };
       h.body = onto(mapLocals(g.body, (j) => (j < p ? j : j + 1)));
       g.body = { k: "call", fn: hi, tail: true, args: [...g.params.map((_, j): SExpr => ({ k: "local", i: j })), { k: "new", t, c: nil, args: [] }] };
     }
+  }
+  // The items so far turned round onto an answer: as reverse, but given
+  // only lists made here and seen by nothing else (the `onto` copy's
+  // input, made cell by cell by it), so each cell is turned where it is
+  // (`into`, the JavaScript printer's), no list made a second time (C279).
+  // Tail recursion modulo cons by filling holes is what this gives, as
+  // OCaml's (Bour, Clément and Scherer 2021); WasmGC's cells are
+  // immutable, and C's reuse a cell given once already (Perceus).
+  function turned(d: DType): number {
+    const key = `turned:${d.key}`;
+    if (index.has(key)) return index.get(key)!;
+    const g: SFunc = { def: d.def, name: `${d.name}.turned`, params: [d, d], result: d, locals: [d, d], body: { k: "num", v: 0 }, spends: false, budgeted: false, inner: true };
+    const gi = funcs.push(g) - 1;
+    index.set(key, gi);
+    const cons = d.cases.findIndex((c) => c.variant === CONS), l: SExpr = { k: "local", i: 0 };
+    g.body = { k: "case", scrut: l, s: 0, t: d, result: d, arms: d.cases.map((_, k): SExpr => (k !== cons ? { k: "local", i: 1 } : {
+      k: "call", fn: gi, tail: true, args: [{ k: "field", rec: l, t: d, c: k, i: 1 }, { k: "new", t: d, c: k, args: [{ k: "field", rec: l, t: d, c: k, i: 0 }, { k: "local", i: 1 }], into: 0, same: [0] }],
+    })) };
+    return gi;
   }
   // A list turned round onto another, a loop.
   function reverse(d: DType): number {

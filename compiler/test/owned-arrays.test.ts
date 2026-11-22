@@ -22,6 +22,7 @@ import { preludeDef } from "../../ters/src/lang/arith.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { ownedArrays } from "../src/owned-arrays.ts";
+import { arrayOf, itemsIn, replaceOwned, restOf } from "../../ters/src/lang/array-view.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWasm } from "../src/wasm.ts";
 
@@ -118,4 +119,22 @@ test("a map whose function reads the array it maps makes a new one", () => {
   const r = mapped((k, a, map) => map(a, (x) => k.call(INT_OPS.add, x, last(k, a))));
   assert.equal(r.inPlace, false);
   assert.deepEqual(r.compiled, r.evaluator);
+});
+
+// A map in place over an array another view shares (a rest of it): the
+// first replace keeps a version, the map's next read of what it was given
+// makes that the newest again, and the next replace copies the array out
+// once (C278), so the reads that follow undo one change, not every one
+// since: strings' inverse fft on a spectrum, n² before.
+test("a map in place over a shared array copies it once, so its reads stay constant", () => {
+  const n = 2000, a = arrayOf(Array.from({ length: n }, (_, i) => i));
+  restOf(a);
+  let made = a;
+  for (let j = n - 1; j >= 0; j--) made = replaceOwned(made, j, (a.buf.items[a.start + j] as number) * 2);
+  // What a's version undoes to be read: one change, or none.
+  let behind = 0;
+  for (let v = a.ver as { cur: unknown; next: unknown }; !v.cur; v = v.next as typeof v) behind++;
+  assert.ok(behind <= 1, `${behind}`);
+  assert.deepEqual(itemsIn(made), Array.from({ length: n }, (_, i) => 2 * i));
+  assert.deepEqual(itemsIn(a), Array.from({ length: n }, (_, i) => i));
 });

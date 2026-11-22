@@ -108,7 +108,7 @@ export function tookType(code: Code, info: Info | null, names: Names, id: Id): s
 // The pane draws what the blocks text prints (render.ts blocksOf), so the
 // two can't drift apart: a piece that stands for a node is a span you can
 // click, with its type on hover; a group of lines is a box.
-export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = [], shapes: { shape?: Record<Id, Shape>; depth?: number } = {}): HTMLElement {
+export function renderTyped(code: Code, pres: Presentation, info: Info | null, defId: Id, selected: Id | null, loose?: Record<Id, Id>, groups: Groups = {}, folded: Id[] = [], shapes: { shape?: Record<Id, Shape>; depth?: number; width?: number } = {}): HTMLElement {
   const errorAt = new Map((info?.errors ?? []).map((e) => [e.id, e.message]));
   const cls = (id: Id | undefined, c: string | undefined) => (id ? `x ${c ?? ""}${selected === id ? " sel" : ""}${errorAt.has(id) ? " err" : ""}` : c);
   const title = (id: Id | undefined, more?: string) => {
@@ -540,7 +540,11 @@ function refusal(first: TEdit & { ok: false }, why: string[], shared: string[]):
   // the one whose count fits has the reason that matters (I230: a List
   // for each led with the page's Cell one's "takes 3 inputs, given 2").
   const count = (key: string) => +/ takes \d+ inputs?, given \d+$/.test(key);
-  const kinds = [...places].sort((a, b) => count(a[0]) - count(b[0]) || b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
+  // When some version's count fits, the others' counts aren't said at all
+  // (I342: a print in for each's lambda under a Choice still ended "or for
+  // each takes 3 inputs, given 2").
+  const fits = [...places].filter(([key]) => !count(key));
+  const kinds = (fits.length ? fits : [...places]).sort((a, b) => b[1].n - a[1].n).map(([key, p]) => p.other ?? `${key.split("\u0000")[0]} needs ${p.wants.join(" or ")} here, got ${p.got}`);
   if (kinds.length < 2) return { ...first, reason: kinds[0] };
   const which = shared.length ? `whichever ${shared.length > 1 ? `${shared.slice(0, -1).join(", ")} or ${shared.at(-1)}` : shared[0]} is meant` : "however it's read";
   return { ...first, reason: `nothing fits ${which}: ${kinds.slice(0, 2).join("; or ")}${kinds.length > 2 ? `; or ${kinds.length - 2} more` : ""}` };
@@ -759,6 +763,13 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // not the one std happens to declare first. Where a generic one is
   // among them (+ for every number type), the order is left as it was.
   const generic = t.alts.some((op) => op.startsWith("builtin.arith."));
+  // The generic one first, as + is by its glyph: abs is found by name,
+  // where Float64's is declared first, and `(x) => abs(x)` read as
+  // Float64's (I342). At a Float64 or an Int it is that type's anyway.
+  if (generic && !t.alts[0].startsWith("builtin.arith.")) {
+    const g = t.alts.find((op) => op.startsWith("builtin.arith."))!;
+    return leaveOpen(info, { ...t, alts: [g, ...t.alts.filter((op) => op !== g)] });
+  }
   // (The Int one takes its twin's place, so Float64's stays before
   // another type's: show(1.5) is Float64's show, not Algebraic's, I248.)
   const twinned = (op: Id) => !generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."));
@@ -963,7 +974,27 @@ const wordyNames = (names: Names): string[] => {
   return w;
 };
 
+// What a text failed to read as, kept for the same program, names and
+// scope: an operator chain is split at each of its operators in turn, and
+// a part that doesn't read was read again for every split around it, so
+// an unknown name at the end of `"a" ++ show(2.5) ++ "b" ++ … ++ nosuch`
+// took 7 s with two shows and minutes with four (I341). Only refusals are
+// kept: a reading holds fresh ids, which two places mustn't share.
+const refused = new WeakMap<Code, WeakMap<Names, WeakMap<Map<string, Id>, Map<string, { error: string }>>>>();
 function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
+  let byNames = refused.get(code);
+  if (!byNames) refused.set(code, (byNames = new WeakMap()));
+  let byScope = byNames.get(names);
+  if (!byScope) byNames.set(names, (byScope = new WeakMap()));
+  let kept = byScope.get(scope);
+  if (!kept) byScope.set(scope, (kept = new Map()));
+  const known = kept.get(text);
+  if (known) return known;
+  const r = reading(text, code, names, scope);
+  if ("error" in r) kept.set(text, r);
+  return r;
+}
+function reading(text: string, code: Code, names: Names, scope: Map<string, Id>): Typed | { error: string } {
   const t = text.trim();
   // A name of several words alone, quoted as the view prints it: map(xs,
   // ‹rack row›) (I187), as ‹rack row›(r) already reads.
@@ -995,7 +1026,9 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   const word = (n: string) => new RegExp(`(?<![\\p{L}\\p{N}_'])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}_'])`, "gu");
   const longer = (n: string) => [...new Set([...scope.keys(), ...wordyNames(names)])].filter((m) => m !== n && m.includes(" ") && word(n).test(m)).sort((a, b) => b.length - a.length);
   const shadows = [...scope].some(([n, id]) => {
-    if (code.defs.includes(id) || !word(n).test(bare)) return false;
+    // (A name not in the text at all is looked for no further: I341, this
+    // was most of each reading, its scope's every name a pattern.)
+    if (!bare.includes(n) || code.defs.includes(id) || !word(n).test(bare)) return false;
     const rest = longer(n).reduce((x, m) => x.replace(word(m), " "), bare);
     return word(n).test(rest);
   });
@@ -1018,6 +1051,8 @@ function typedOut(text: string, code: Code, names: Names, scope: Map<string, Id>
   // What the text prints, read back (E178): a □ left to fill later, a
   // step name = value; rest, and a list of anything.
   if (t === "□") return { hole: true };
+  // Steps in braces, { a; b }, as the blocks print them (E299).
+  if (/^\{[\s\S]*\}$/.test(t) && topLevel(t.slice(1, -1), ";")) return typedOut(t.slice(1, -1).trim(), code, names, scope);
   const steps = topLevel(t, ";");
   // A step with no name, write(a, x); write(b, y), is done for what it
   // does: its value is named _, read by nothing (E190), as E183 prints it.
@@ -1412,8 +1447,8 @@ function topLevel(text: string, by = ","): string[] | undefined {
     const c = text[i];
     if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
     if (quoted) continue;
-    if ("([".includes(c)) depth++;
-    else if (")]".includes(c) && --depth < 0) return undefined;
+    if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c) && --depth < 0) return undefined;
     else if (c === by && depth === 0) { out.push(text.slice(from, i)); from = i + 1; }
   }
   if (depth || quoted) return undefined;

@@ -43,7 +43,7 @@ export class NotEquations extends Error {}
 // equations are solved, they are Float64's own.
 export const NUMERIC: Record<Id, string> = {
   ...Object.fromEntries(Object.keys(impl).map((op) => [`builtin.${op}`, op])), [S.abs]: "abs",
-  [ARITH.add]: "add", [ARITH.sub]: "sub", [ARITH.mul]: "mul", [ARITH.neg]: "neg",
+  [ARITH.add]: "add", [ARITH.sub]: "sub", [ARITH.mul]: "mul", [ARITH.neg]: "neg", [ARITH.abs]: "abs",
 };
 const arityOf = (op: string) => (op === "abs" ? 1 : impl[op as keyof typeof impl].length);
 

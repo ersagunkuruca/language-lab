@@ -48,10 +48,15 @@ export function runPanel(host: RunHost) {
   // ends it, and the next run starts another.
   let idle: Worker | null = null;
   const worker = () => { const w = idle ?? newWorker(); idle = null; return w; };
+  // Warmed with each program opened, not only the first (I320): calc's
+  // main, run by the evaluator, waited a second on its check after open.
+  let warmed: { code: Code; def: Id } | null = null;
   function warmRun(def: Id) {
-    if (idle || running) return;
-    idle = newWorker();
-    const warm: WarmAsk = { warm: true, code: sendCode(prog()), names: pres().names, pins: pins(), def };
+    const code = prog();
+    if (running || (warmed?.code === code && warmed.def === def)) return;
+    idle ??= newWorker();
+    warmed = { code, def };
+    const warm: WarmAsk = { warm: true, code: sendCode(code), names: pres().names, pins: pins(), def };
     idle.postMessage(warm);
   }
   function stopRun(why?: string) {

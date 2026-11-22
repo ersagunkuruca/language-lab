@@ -595,6 +595,9 @@ function showProgram() {
   // A program's open definition may be below the navigator's fold (pedal's
   // main): bring it into view.
   document.querySelector(".p-nav .nav-row[data-def].on")?.scrollIntoView({ block: "nearest" });
+  // Run's worker checks this program while it is read (I320), as it
+  // does the first one (started).
+  if (!EMBED) { const at = doc.program; setTimeout(() => { const m = defNamed("main"); if (m && doc.program === at && typesOf()) warmRun(m); }, 300); }
 }
 
 // ---------------------------------------------------------------- programs and files
@@ -1189,9 +1192,42 @@ let blocksKept: { from: unknown[]; el: HTMLElement } | null = null;
 // Ersagun 2026-11-22: "nesting depth limits by default"). All shows them,
 // and every part hidden by hand.
 const BLOCKS_DEPTH = 3;
-const blockShapes = () => ui.fit === "all"
+const blockShapes = () => ({ ...(ui.fit === "all"
   ? { shape: Object.fromEntries(Object.entries(doc.layout.shape ?? {}).filter(([, v]) => v !== "hidden")) }
-  : { shape: doc.layout.shape, depth: BLOCKS_DEPTH };
+  : { shape: doc.layout.shape, depth: BLOCKS_DEPTH }), ...(blocksChars ? { width: blocksChars } : {}) });
+// The characters a Blocks line has room for in the pane as wide as it is
+// now: too wide a line is laid out indented against that, not a fixed 80
+// (QA 11-22b M1: a page program's Blocks are 280 px wide). Measured again
+// as the pane is resized.
+let blocksChars = 0, blocksWatched: Element | null = null, charPx = 0;
+const blocksRoom = (): number => {
+  const body = document.querySelector<HTMLElement>(".p-text .body"), typed = body?.querySelector<HTMLElement>(".typed");
+  if (!body || !typed || !body.clientWidth) return 0;
+  if (!charPx) {
+    const probe = h("span", { style: "position: absolute; visibility: hidden; white-space: pre" }, "0".repeat(40));
+    typed.append(probe);
+    charPx = probe.getBoundingClientRect().width / 40;
+    probe.remove();
+  }
+  // Less room for the definition's own indent and the pane's padding.
+  // Never wider than the text's own 80; never so narrow that a line breaks
+  // into a word a line (below 40 the pane scrolls sideways instead).
+  return charPx ? Math.min(80, Math.max(40, Math.floor((body.clientWidth - 48) / charPx))) : 0;
+};
+const refitBlocks = () => {
+  const n = blocksRoom();
+  if (n && n !== (blocksChars || 80)) { blocksChars = n === 80 ? 0 : n; render(); }
+};
+const blocksFit = new ResizeObserver(refitBlocks);
+const watchBlocks = () => requestAnimationFrame(() => {
+  const body = document.querySelector(".p-text .body");
+  if (body !== blocksWatched) {
+    blocksFit.disconnect();
+    if (body) blocksFit.observe(body);
+    blocksWatched = body;
+  }
+  refitBlocks();
+});
 function setShape(id: Id, to: Shape | null) {
   const shape = { ...(doc.layout.shape ?? {}) };
   if (to) shape[id] = to; else delete shape[id];
@@ -1199,7 +1235,8 @@ function setShape(id: Id, to: Shape | null) {
 }
 function blocksOf(info: T.Info): HTMLElement {
   const p = typedPres();
-  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded, doc.layout.shape, ui.fit];
+  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded, doc.layout.shape, ui.fit, blocksChars];
+  watchBlocks();
   if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes()) }).el;
   for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
   if (ui.selected) for (const e of blocksKept.el.querySelectorAll(`[data-id="${CSS.escape(ui.selected)}"]`)) e.classList.add("sel");
