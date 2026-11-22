@@ -255,6 +255,18 @@ export function choicesText(main: string, lines: readonly string[]): string {
 // compiler stores the type as it says, where that keeps the meaning (the
 // chooser could pick that row), and says when it would pick another.
 export const HELD = "held ";
+const PLACE = /^(\S+) place: .*: ([^:;]+); among [^;]+; target (.+)$/;
+// The placements held on the main thread (L280h), by the node each is
+// about, for JavaScript (a page's or a command-line program's workers)
+// and for C's threads.
+export function heldPlaces(lines: readonly string[]): { js: Id[]; c: Id[] } {
+  const out = { js: [] as Id[], c: [] as Id[] };
+  for (const l of lines) {
+    const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
+    if (p && p[2] === "main thread") (p[3] === "C" ? out.c : out.js).push(p[1]);
+  }
+  return out;
+}
 const ENTRY = /^(\S+) representation: .*? as ([^;]+?); among /;
 // The held entries' rows, by the type's id: a split's with the
 // definitions it is from (`array of List from a, b`).
@@ -263,7 +275,10 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
   for (const l of lines) {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
-    if (!m && /^\S+ (way|mode plan|place|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation can be held yet: ${l}`);
+    // A placement held on the main thread (L280h): heldPlaces's.
+    const place = PLACE.exec(l.slice(HELD.length));
+    if (!m && place) { if (place[2] !== "main thread") throw new Error(`a placement can be held only on the main thread yet: ${l}`); continue; }
+    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation or a placement can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
@@ -280,7 +295,9 @@ const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // alone, picks another row (`alone`, the entries made with nothing held).
 export function heldWarnings(written: readonly string[], alone: readonly string[]): string[] {
   const picks = new Map(alone.flatMap((l) => { const m = ENTRY.exec(l); return m ? [[m[1], m[2]] as const] : []; }));
-  return [...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`);
+  const placed = new Map(alone.flatMap((l) => { const p = PLACE.exec(l); return p ? [[`${p[1]} ${p[3]}`, p[2]] as const] : []; }));
+  const places = written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; const was = p && placed.get(`${p[1]} ${p[3]}`); return p && was && was !== p[2] ? [`held   ${p[1]} (${p[3]}): ${p[2]}, where the compiler would run it on ${was}`] : []; });
+  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places];
 }
 
 // The entries of a choices file, its comments left out.

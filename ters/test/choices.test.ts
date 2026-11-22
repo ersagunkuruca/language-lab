@@ -6,14 +6,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, placeLines, readChoices, scheduleLines, staleChoices } from "../cli/choices.ts";
+import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlaces, heldWarnings, placeLines, readChoices, scheduleLines, staleChoices } from "../cli/choices.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 
@@ -113,7 +113,7 @@ test("backwards' solves have their mode plans: equations or relational, with the
   assert.match(of("missing addend"), /solve of add for input 2 from input 1, answer: equations; exactly one answer; target JavaScript$/);
   assert.match(of("who was greeted"), /solve of greet for name from answer: relational, goals "hello, ", join text\(…\); at most one answer, ends; target JavaScript$/);
   assert.deepEqual(choices("backwards").filter((l) => / mode plan: /.test(l)), lines);
-  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation can be held yet/);
+  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation or a placement can be held yet/);
 });
 
 // Placements (L280a): where each map a page's handler sends away may run,
@@ -129,7 +129,7 @@ test("moths-page's maps go to the workers when slow, and one of Ints to the GPU 
     "place: range from's map: workers when slow, the GPU where the browser has WebGPU; among main thread, workers, GPU; target JavaScript page",
     "place: tick's map: workers when slow; among main thread, workers; target JavaScript page",
   ]);
-  assert.throws(() => heldOf([`held ${lines[0]}`]), /only a type's representation can be held yet/);
+  assert.throws(() => heldOf([`held ${lines[0]}`]), /a placement can be held only on the main thread yet/);
 });
 
 // A whole program's lists held (L280c): as arrays or trees, alone, where
@@ -206,4 +206,24 @@ test("numbers' Nat held as binary is stored so, std's natural with it", () => {
   const held = `held ${now[0].replace("as int;", "as binary;")}`;
   const stored = reps(choices("numbers", heldOf([held])));
   assert.equal(`held ${stored[0]}`, held);
+});
+
+// A placement held on the main thread (L280h): the work stays there, on
+// JavaScript and on C apart, and a check says where the compiler would
+// run it.
+test("collatz's keep held on the main thread runs there, said by a check, the same answers", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "collatz"), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  try {
+    cpSync(root + "collatz", at, { recursive: true });
+    const plain = run("run", at);
+    run("choices", at);
+    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
+    writeFileSync(`${at}.choices`, text);
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; target JavaScript/)![1]], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; target C/)![1]] });
+    assert.equal(run("run", at), plain);
+    const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
+    assert.deepEqual(said.map((l) => l.replace(/^held   \S+ /, "")).sort(), ["(C): main thread, where the compiler would run it on threads when slow", "(JavaScript): main thread, where the compiler would run it on worker threads when slow"]);
+    assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace(": main thread;", ": GPU;")]), /a placement can be held only on the main thread yet/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

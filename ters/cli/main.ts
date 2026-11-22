@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -52,7 +52,10 @@ import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } f
 // The compilers, and what imports them, read only for a command that
 // compiles: `ters check` and the module commands start without them
 // (I193: Node reading the compiler's sources was a third of a check).
-const compiles = !["check", "hosts", "publish", "broken", "fetch", "diff", "merge", "git-diff", "git-setup"].includes(process.argv[2] ?? "");
+// A check of a program with its choices beside it lowers it too, for the
+// placements' entries (L280a, L280h).
+const checksChoices = process.argv[2] === "check" && !!process.argv[3] && existsSync(choicesPath(process.argv[3]));
+const compiles = checksChoices || !["check", "hosts", "publish", "broken", "fetch", "diff", "merge", "git-diff", "git-setup"].includes(process.argv[2] ?? "");
 const { pageDocument } = compiles ? await import("../src/lang/page.ts") : ({} as typeof import("../src/lang/page.ts"));
 const { CFLAGS, emitC } = compiles ? await import("../../compiler/src/c.ts") : ({} as typeof import("../../compiler/src/c.ts"));
 const { emitWasm } = compiles ? await import("../../compiler/src/wasm.ts") : ({} as typeof import("../../compiler/src/wasm.ts"));
@@ -660,11 +663,15 @@ function answeredHere(q: Program): Program {
 const choicesFile = choicesPath(path);
 const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choicesFile, "utf8")) : [];
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
+// And the placements held on the main thread (L280h), for every lowering.
+const placesHeld = heldPlaces(writtenChoices), holdsPlaces = placesHeld.js.length + placesHeld.c.length > 0;
+const onMainThread = async (js: Id[], c: Id[]) => (await import("../../compiler/src/scalar.ts")).keepOnMainThread(js, c);
+if (holdsPlaces) await onMainThread(placesHeld.js, placesHeld.c);
 const loaded = { ...answeredHere(load(path)), ...(heldHere.size ? { held: heldHere } : {}) };
 const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
 // lowering is most of a run, and the same program lowers the same way.
-const runKeyed = command === "run" && main && defined < 0 && !heldHere.size && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
+const runKeyed = command === "run" && main && defined < 0 && !heldHere.size && !holdsPlaces && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
 const kept = runKeyed ? keptRun(runKeyed) : undefined;
 const representedHere = () => represented(loaded, main, command !== "native" && command !== "wasi" && command !== "build-native-app", command === "native" || command === "wasi" || command === "build-native-app", false, command === "native" || command === "wasi" || command === "build-native-app");
 const p = main && defined < 0 && !kept ? representedHere() : loaded;
@@ -974,9 +981,13 @@ switch (command) {
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
       for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...scheduleLines(now, start), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
-      if (heldHere.size) {
+      if (heldHere.size || holdsPlaces) {
         const alone = represented({ ...loaded, held: undefined }, start, true);
-        for (const l of heldWarnings(writtenChoices, choiceLines(loaded, start, alone.picks ?? []))) console.log(l);
+        // Where the compiler alone would run the work held on the main thread.
+        if (holdsPlaces) await onMainThread([], []);
+        const placedAlone = holdsPlaces ? [...await places(alone, start), ...cPlaces(start)] : [];
+        if (holdsPlaces) await onMainThread(placesHeld.js, placesHeld.c);
+        for (const l of heldWarnings(writtenChoices, [...choiceLines(loaded, start, alone.picks ?? []), ...placedAlone])) console.log(l);
       }
     }
     process.exitCode = p.info.errors.length || wrongGrades.length ? 1 : 0;
