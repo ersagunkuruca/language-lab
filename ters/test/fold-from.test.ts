@@ -17,7 +17,9 @@ test("a fold to a function, applied to a start, reads as a fold from that start"
   const safe = text("queens", "safe");
   assert.match(safe, /^ {2}fold placed from distance = 1$/m);
   assert.match(safe, /^ {4}nil → true$/m);
-  assert.match(safe, /^ {4}cons\(queen, others\) with ‹others safe› → .*‹others safe›\(distance \+ 1\)$/m);
+  // Too wide for one line, the case's value goes under it (E289).
+  assert.match(safe, /^ {4}cons\(queen, others\) with ‹others safe› →$/m);
+  assert.match(safe, /^ {6}and ‹others safe›\(distance \+ 1\)$/m);
   assert.doesNotMatch(safe, /apply|=>/);
   // Two accumulators read in brackets.
   assert.match(text("numbers", "fold Nat′"), /^ {2}fold n from \(from = zero′, r = ‹if zero›\(\)\)$/m);

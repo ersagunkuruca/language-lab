@@ -288,7 +288,8 @@ test("an if's condition and branches read as what they are: a match condition sh
   // print belongs to its own branch.
   const run = lines("run line");
   const q = run.indexOf(`else if t = symbol("?")`);
-  assert.deepEqual(run.slice(q + 1, q + 7), ["then", "print(parenthesized(‹whole expression›(slice(line, first(find(line, \"?\"), else 0) + 1, length(line)))))", "bindings", "else", "print(show(evaluate(‹whole expression›(line), bindings)))", "bindings"]);
+  // Too wide for a line, the first print's call is laid out indented (E289).
+  assert.deepEqual(run.slice(q + 1, q + 13), ["then", "print(", "parenthesized(", "‹whole expression›(", "slice(line, first(find(line, \"?\"), else 0) + 1, length(line))", ")", ")", ")", "bindings", "else", "print(show(evaluate(‹whole expression›(line), bindings)))", "bindings"]);
   // No example shows a part of its program as a placeholder.
   for (const name of ["calc", "converter", "ledger", "countdown", "queens", "algebra", "effects"]) {
     const e = load(name), ei = infer(e.code, e.pres.names);

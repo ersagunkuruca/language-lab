@@ -76,6 +76,9 @@ export function litLabel(v: string | number | boolean, max = SHORT): { short: st
 // `glyph`: the infix operator an operand is written with, if any.
 type I = { p: Piece[]; prec: number; glyph?: string };
 const ATOM = 100;
+// How wide a line of the blocks gets before its parts go on lines of
+// their own (E289).
+const WIDTH = 80;
 const part = (cls: string, kids: Piece[], id?: Id, title?: string): Part => ({ cls, kids, ...(id ? { id } : {}), ...(title ? { title } : {}) });
 const kw = (s: string) => part("kw", [s]);
 const pn = (s: string) => part("pn", [s]);
@@ -197,6 +200,25 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     return false;
   };
 
+  // Too wide for one line (E289): a call, a lambda or an if that would run
+  // past WIDTH, with what goes before it, is laid out as a tall one is,
+  // its parts one under another, indented (Ersagun 2026-11-22: "Some
+  // programs are very hard to read this way").
+  const widths = new Map<Id, number>();
+  let measuring = false;
+  const wide = (id: Id, lead: Piece[] = []): boolean => {
+    const n = node(id);
+    if (!(isCall(n) || n.kind === "lambda" || (n.kind === "match" && isBool(n)))) return false;
+    let w = widths.get(id);
+    if (w === undefined) {
+      measuring = true;
+      try { w = pieceText(inline(id).p).length; } finally { measuring = false; }
+      widths.set(id, w);
+    }
+    return w + pieceText(lead).length > WIDTH;
+  };
+  const tallOrWide = (id: Id, lead: Piece[] = []) => tall(id) || wide(id, lead);
+
   const paren = (r: I, ok: boolean): Piece[] => (ok ? r.p : [pn("("), ...r.p, pn(")")]);
   const atom = (...p: Piece[]): I => ({ p, prec: ATOM });
 
@@ -230,7 +252,9 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
         // A number with a unit says it: 9.81 m/s² (L252).
         const unit = n.unit && Object.keys(n.unit).length ? ` ${formatUnit(n.unit)}` : "";
         if (typeof n.value !== "string" || n.of !== undefined) return atom(part("lit", [(n.of === NUMBER && Number.isInteger(n.value) ? `${n.value}.0` : String(n.value)) + unit], id));
-        if (pane) { const l = litLabel(n.value); return atom(part("lit", [l.short], id, l.full)); }
+        // A width is measured as the pane shows a text, so the pane and the
+        // text break at the same places.
+        if (pane || measuring) { const l = litLabel(n.value); return atom(part("lit", [l.short], id, l.full)); }
         return atom(part("lit", [JSON.stringify(n.value)], id));
       }
       case "hole": {
@@ -377,13 +401,13 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       return hold([ln(...lead, ...inline(tab.fn).p), grp(rows)], "blk table");
     }
     const items = listItems(id);
-    if (items && (tall(id) || pieceText(inline(id).p).length > 70)) {
+    if (items && (tall(id) || wide(id, lead))) {
       // A list of tall items (a page's elements) is still a list: [ … ],
       // one item under another, as on one line.
       const rows = items.flatMap((x, i) => (i < items.length - 1 ? appendLast(block(x, []), pn(",")) : block(x, [])));
       return hold([ln(...lead, pn("[")), grp(rows), ln(pn("]"))]);
     }
-    if (!tall(id)) return [ln(...lead, ...inline(id).p)];
+    if (!tallOrWide(id, lead)) return [ln(...lead, ...inline(id).p)];
     if (isCall(n) && isLet(n)) {
       // A run of steps is one column, each step its own line: x = …, then
       // the next, not each one nested inside the one before (the right-
@@ -404,7 +428,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     if (n.kind === "match" && isBool(n)) {
       const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
       const t = arm(TRUE), f = arm(FALSE);
-      if (!tall(n.scrutinee) && !tall(t.body) && !tall(f.body)) {
+      if (!tall(n.scrutinee) && !tall(t.body) && !tall(f.body) && !wide(id, lead)) {
         return [ln(...lead, part("blk", [kw("if "), ...inline(n.scrutinee).p, part("arm", [kw(" then "), ...inline(t.body).p], t.id), part("arm", [kw(" else "), ...inline(f.body).p], f.id)], id))];
       }
       // A tall condition goes under the if, deeper than then and else, so
@@ -543,7 +567,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
       if (nota?.fixity === "infix" && ops.length >= 2) {
         const p = nota.prec ?? 5;
         const one = (a: Id, lead: Piece[]): Blk[] => {
-          if (!tall(a)) { const r = inline(a); return [ln(...lead, ...paren(r, r.prec > p))]; }
+          if (!tallOrWide(a, lead)) { const r = inline(a); return [ln(...lead, ...paren(r, r.prec > p))]; }
           const lines = block(a, []);
           // An if on one line takes in everything after its else, so as an
           // operand it is bracketed: (if c < 0 then "-" else "") ++ …
@@ -553,9 +577,19 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
           // and what follows as its own line (Ersagun 2026-11-14 on
           // Lockstep's `fixed(steps) = position` then `++ show(steps)`).
           if (hasSteps(a)) return [ln(...lead, pn("(")), grp(lines, 2), ln(pn(")"))];
+          // One only too wide that binds looser than the operator keeps its
+          // brackets around its lines: a · (b + c), not a · b + c.
+          if (!tall(a) && inline(a).prec <= p) return [ln(...lead, pn("(")), grp(lines, 2), ln(pn(")"))];
           return lines.length === 1 && "line" in lines[0] && an.kind === "match" && isBool(an) ? [ln(...lead, pn("("), ...lines[0].line, pn(")"))] : block(a, lead);
         };
-        return hold(ops.flatMap((a, i) => one(a, i ? [part("op", [`${nota.glyph} `], n.fn)] : lead)));
+        const chain = (first: Piece[]) => ops.flatMap((a, i) => one(a, i ? [part("op", [`${nota.glyph} `], n.fn)] : first));
+        // Only too wide, after a name or an arrow: the operands go under it,
+        // indented, so they don't read as lines of their own.
+        //   ‹total› =
+        //     a
+        //     + b
+        if (!tall(id) && lead.length) return hold([ln(...trimEnd(lead)), grp(chain([]))]);
+        return hold(chain(lead));
       }
       // A fold to a function, applied: what queens' safe does to thread a
       // distance through the fold. It reads as a fold with an accumulator,
@@ -588,7 +622,7 @@ export function blocksOf(code: Code, pres: Presentation, info: Info | null, defI
     }
     return [ln(...lead, ...inline(id).p)];
   };
-  const hang = (id: Id, head: Piece[]): Blk[] => (tall(id) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
+  const hang = (id: Id, head: Piece[]): Blk[] => (tallOrWide(id, head) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
 
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;
