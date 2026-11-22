@@ -52,7 +52,7 @@ import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
-import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { BRANCH_NAMES, BRANCH_WORLDS, branches } from "./core-branches.ts";
@@ -1101,10 +1101,11 @@ export function coreModule(ir: CoreIR, name: string, runtime: string, world: str
 // relation's mode (modes.ts, `…$mode0`): it is printed inside the body
 // `R.moded` is given, so it isn't in scope here (I206: backwards' compiled
 // module threw on load, f5057927$mode0 is not defined).
-function withFunctionsNamed(js: string, call = "R.branchesFrom(import.meta.url, "): string {
+// And the workers it starts where the choices hold how many (L280e).
+function withFunctionsNamed(js: string, call = "R.branchesFrom(import.meta.url, ", workers = poolHeld("JavaScript")): string {
   const fns = [...new Set([...js.matchAll(/^\s*function\*?\s+(f[\w$]*)\s*\(/gm)].map((m) => m[1]))].filter((f) => !/\$mode\d+(\$into)?$/.test(f));
   const at = js.lastIndexOf("\nreturn {");
-  return `${js.slice(0, at)}\n${call}{ ${fns.join(", ")} }, R.closure, R.Aborted);${js.slice(at)}`;
+  return `${js.slice(0, at)}\n${call}{ ${fns.join(", ")} }, R.closure, R.Aborted${workers === undefined ? "" : `, ${workers}`});${js.slice(at)}`;
 }
 
 // What a tool needs to go from the printed JavaScript back to the program
@@ -1386,7 +1387,7 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const js0 = bare ? moduleTags(ir, !!hosts || worklet !== undefined, only).js : all;
   // A map on the page's workers (C61 c′): the functions by name, and the
   // page's own script, which each worker runs (core-page.ts).
-  const js1 = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ") : js0;
+  const js1 = worlds.includes("mapAway") || worlds.includes("searchAway") ? withFunctionsNamed(js0, "R.pageBranches(typeof document === \"undefined\" ? undefined : document.currentScript?.textContent ?? undefined, ", poolHeld("JavaScript page")) : js0;
   // Its maps the GPU may run, each as a kernel (C61 d′, gpu-maps.ts).
   const kernels = worlds.includes("mapAway") ? gpuMaps(ir) : {};
   const js = Object.keys(kernels).length ? `R.pageGpu(${JSON.stringify(kernels)});\n${js1}` : js1;
