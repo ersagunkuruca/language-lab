@@ -382,7 +382,9 @@ static void lab_pool_run(void (*fn)(void *), void *arg) {
 // Items that took a millisecond on this thread are worth sharing.
 // Or, for a map's items, when the items done so far say all of them
 // would take a millisecond (examples/herd: a map each tick of some 6 ms,
-// which waited a millisecond of every tick on this thread).
+// which waited a millisecond of every tick on this thread). Asked after
+// 1, 2, 4, 8 … items, not after each: the clock read after every item of
+// maps that stay on this thread was 0.6 s of a greenhouse night (C266).
 static int lab_par_ahead(const struct timespec *t0, int64_t done, int64_t n) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);
@@ -4146,7 +4148,7 @@ ${job === "map" ? `  // Already on the threads (a map inside a map's item, moths
     if (lab_st) { k = left - 1; goto failed; }
     j.bad[--left] = 0;${tests ? `
     if (${decides("j.out[left]")}) { k = left; goto found; }` : ""}
-    if (left > 0 && lab_par_ahead(&t0, n - left, n)) break;
+    if (left > 0 && !((n - left) & (n - left - 1)) && lab_par_ahead(&t0, n - left, n)) break;
   }
   if (left > 0${fuelled ? " && lab_fuel == INFINITY" : ""} && lab_pool_ready()) {
     lab_share_no = 0;
