@@ -22,9 +22,40 @@ const rebinds: Rebinds = (e, i) => (e.k === "let" && e.i === i) || (e.k === "cas
   || (e.k === "budget" && (e.save === i || e.res === i));
 const reads = (e: SExpr, i: number): boolean => (e.k === "local" && e.i === i) || kids(e).some((x) => reads(x, i));
 const binds = (e: SExpr, i: number): boolean => rebinds(e, i) || kids(e).some((x) => binds(x, i));
+// Local i bound in exactly one place in e.
+const count = (e: SExpr, i: number): number => (rebinds(e, i) ? 1 : 0) + kids(e).reduce((n, k) => n + count(k, i), 0);
+const once = (e: SExpr, i: number): boolean => count(e, i) === 1;
 
 export function closureArgs(ir: CoreIR): void {
   const funcs = ir.funcs;
+  type Cap = Extract<SExpr, { k: "cap" }>;
+  const isCap = (e: SExpr, shape: number, c: number): e is Cap => e.k === "cap" && e.shape === shape && e.i === c;
+  // Every read of a known local in body is a call of it, or it is handed
+  // on as it is to another function's input only ever called, or captured
+  // by a closure whose code only ever calls what it captured there.
+  const onlyCalled = (body: SExpr, known: (i: number) => boolean, direct: (e: SExpr) => boolean): boolean => {
+    let ok = true;
+    // A let naming a known local (`l5 = l2`) names it too.
+    const also = new Set<number>(), knows = (i: number) => known(i) || also.has(i);
+    const walk = (e: SExpr) => {
+      if (!ok) return;
+      if (e.k === "let" && ((e.value.k === "local" && knows(e.value.i)) || direct(e.value)) && once(body, e.i)) { also.add(e.i); walk(e.body); return; }
+      if (e.k === "apply" && ((e.fn.k === "local" && knows(e.fn.i)) || direct(e.fn))) { if (e.cps) ok = false; e.args.forEach(walk); return; }
+      if (e.k === "call") {
+        e.args.forEach((a, k) => { if (a.k === "local" && knows(a.i)) { if (e.cps || !applied(e.fn, k)) ok = false; } else walk(a); });
+        return;
+      }
+      if (e.k === "closure" && !ir.shader) {
+        e.caps.forEach((a, c) => { if (a.k === "local" && knows(a.i)) { if (!capApplied(e.fn, e.shape, c)) ok = false; } else walk(a); });
+        return;
+      }
+      if ((e.k === "local" && knows(e.i)) || direct(e)) { ok = false; return; }
+      kids(e).forEach(walk);
+    };
+    walk(body);
+    return ok;
+  };
+  const never = () => false;
   // Input j of function fi is only ever called, or handed on as it is to
   // another function's input that is only ever called: optimistic, so a
   // loop handing it to itself counts.
@@ -34,44 +65,90 @@ export function closureArgs(ir: CoreIR): void {
     if (memo.has(key)) return memo.get(key)!;
     memo.set(key, true);
     const f = funcs[fi];
-    let ok = !f.multi && f.answer === undefined && !binds(f.body, j);
-    const walk = (e: SExpr) => {
-      if (!ok) return;
-      if (e.k === "apply" && e.fn.k === "local" && e.fn.i === j) { if (e.cps) ok = false; e.args.forEach(walk); return; }
-      if (e.k === "call") {
-        e.args.forEach((a, k) => { if (a.k === "local" && a.i === j) { if (e.cps || !applied(e.fn, k)) ok = false; } else walk(a); });
-        return;
-      }
-      if (e.k === "local" && e.i === j) { ok = false; return; }
-      kids(e).forEach(walk);
-    };
-    walk(f.body);
+    const ok = !f.multi && f.answer === undefined && !binds(f.body, j) && onlyCalled(f.body, (i) => i === j, never);
     memo.set(key, ok);
     return ok;
   };
-  // The copies made: function, input, the closure's function.
+  // The locals a closure's code names capture c by (`let x = cap c`), each
+  // bound once; null when the capture is read some other way.
+  const capLocals = (g: SFunc, shape: number, c: number): Set<number> | null => {
+    const xs = new Set<number>();
+    let ok = true;
+    const walk = (e: SExpr) => {
+      if (e.k === "let" && isCap(e.value, shape, c)) xs.add(e.i);
+      kids(e).forEach(walk);
+    };
+    walk(g.body);
+    for (const x of xs) if (!once(g.body, x)) ok = false;
+    return ok ? xs : null;
+  };
+  // Capture c of a closure of function g's (in shapes[shape]) is only ever
+  // called: G1b4, `updated in pool`'s function, captured by the slot's
+  // `(slot) => … some(f(item))` that map calls.
+  const capMemo = new Map<string, boolean>();
+  const capApplied = (gi: number, shape: number, c: number): boolean => {
+    const key = `${gi}|${shape}|${c}`;
+    if (capMemo.has(key)) return capMemo.get(key)!;
+    capMemo.set(key, true);
+    const g = funcs[gi];
+    const xs = capLocals(g, shape, c);
+    // (The let naming it is the one read that isn't a call.)
+    const ok = !!xs && !g.multi && g.answer === undefined && onlyCalled(dropCapLets(g.body, shape, c), (i) => xs.has(i), (e) => isCap(e, shape, c));
+    capMemo.set(key, ok);
+    return ok;
+  };
+  const dropCapLets = (e: SExpr, shape: number, c: number): SExpr => {
+    const x = mapKids(e, (k) => dropCapLets(k, shape, c));
+    return x.k === "let" && isCap(x.value, shape, c) ? { ...x, value: { k: "num", v: 0 } as SExpr } : x;
+  };
+  // The copies made: function, input (or capture), the closure's function.
   const copies = new Map<string, number>();
+  const limit = funcs.length * 2 + 64;
+  // f's body with each known local's calls made calls of g directly.
+  const rwKnown = (body: SExpr, known: (i: number) => boolean, direct: (e: SExpr) => boolean, g: number): SExpr => {
+    const also = new Set<number>(), knows = (i: number) => known(i) || also.has(i);
+    const rw = (e: SExpr): SExpr => {
+      if (e.k === "let" && ((e.value.k === "local" && knows(e.value.i)) || direct(e.value)) && once(body, e.i)) also.add(e.i);
+      if (e.k === "apply" && ((e.fn.k === "local" && knows(e.fn.i)) || direct(e.fn))) return { k: "call", fn: g, args: [e.fn, ...e.args.map(rw)], tail: e.tail };
+      if (e.k === "call") {
+        const k = e.args.findIndex((a) => a.k === "local" && knows(a.i));
+        return { ...e, fn: k >= 0 ? copy(e.fn, k, g) : e.fn, args: e.args.map(rw) };
+      }
+      if (e.k === "closure" && !ir.shader) {
+        const c = e.caps.findIndex((a) => a.k === "local" && knows(a.i));
+        return { ...e, fn: c >= 0 ? capCopy(e.fn, e.shape, c, g) : e.fn, caps: e.caps.map(rw) };
+      }
+      return mapKids(e, rw);
+    };
+    return rw(body);
+  };
   const copy = (fi: number, j: number, g: number): number => {
     const key = `${fi}|${j}|${g}`;
     if (copies.has(key)) return copies.get(key)!;
+    if (funcs.length > limit) return fi;
     const f = funcs[fi];
     const c: SFunc = { ...f, name: `${f.name}·${funcs[g].name}`, inner: true, body: f.body };
     const ci = funcs.push(c) - 1;
     copies.set(key, ci);
-    const rw = (e: SExpr): SExpr => {
-      if (e.k === "apply" && e.fn.k === "local" && e.fn.i === j) return { k: "call", fn: g, args: [e.fn, ...e.args.map(rw)], tail: e.tail };
-      if (e.k === "call") {
-        const k = e.args.findIndex((a) => a.k === "local" && a.i === j);
-        return { ...e, fn: k >= 0 ? copy(e.fn, k, g) : e.fn, args: e.args.map(rw) };
-      }
-      return mapKids(e, rw);
-    };
-    c.body = rw(f.body);
+    c.body = rwKnown(f.body, (i) => i === j, never, g);
     return ci;
   };
-  // Each call given a closure where the function only calls it.
-  const n = funcs.length;
-  for (let fi = 0; fi < n; fi++) {
+  // A copy of closure code h whose capture c is known to be g's closure.
+  const capCopy = (hi: number, shape: number, c: number, g: number): number => {
+    const key = `cap|${hi}|${shape}|${c}|${g}`;
+    if (copies.has(key)) return copies.get(key)!;
+    if (funcs.length > limit) return hi;
+    const h = funcs[hi];
+    const xs = capLocals(h, shape, c) ?? new Set<number>();
+    const cc: SFunc = { ...h, name: `${h.name}·${funcs[g].name}`, inner: true, body: h.body };
+    const ci = funcs.push(cc) - 1;
+    copies.set(key, ci);
+    cc.body = rwKnown(h.body, (i) => xs.has(i), (e) => isCap(e, shape, c), g);
+    return ci;
+  };
+  // Each call given a closure where the function only calls it, copies
+  // included: a copy's calls may be given closures written in it.
+  for (let fi = 0; fi < funcs.length; fi++) {
     const rw = (e: SExpr): SExpr => {
       let r = mapKids(e, rw);
       // Each closure in turn: the copy for one is copied for the next.
