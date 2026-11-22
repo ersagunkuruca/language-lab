@@ -624,3 +624,20 @@ test("replace: a match in parentheses or after else, and a tuple by its fields",
   assert.doesNotMatch(text("view", { at: "heads" }), /nested match/);
   assert.match(text("replace", { at: define("ends", ["p"]), text: "a = p.first\nb = p.third\na + b" }), /ends#\w+ : \(\(a, b, a\)\) -> a/);
 });
+
+// abs of an open input is the one abs for every number type, as + is, not
+// Float64's, which the library declares first (I342).
+test("abs of an open input is generic (I342)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "sizes", kind: "function", params: ["xs"] });
+  text("replace", { at: "sizes", find: "□", text: "map(xs, (x) => abs(x))" });
+  assert.match(text("view", { at: "sizes", depth: 1 }), /sizes\S* : \(List a\) -> List a where a is a Number/);
+  assert.match(text("eval", { text: "sizes([-2, 3])" }), /^= \[2, 3\] :/);
+  assert.match(text("eval", { text: "sizes([-2.5])" }), /^= \[2\.5\] :/);
+});
+
