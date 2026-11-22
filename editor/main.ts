@@ -1149,7 +1149,7 @@ function kindLabel(id: Id): string {
 
 // The program's choices for main (E292), for the Choices tab and the
 // badges on the nodes they are about.
-const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
+const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, blocked: () => { const info = typesOf(); if (!info) return "the check"; const e = errorsIn(info), o = holesIn(info); return e ? `${e} type error${e === 1 ? "" : "s"}` : o ? `${o} hole${o === 1 ? "" : "s"}` : null; }, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
 const openChoice = (id: Id) => {
   ui.panel = "choices"; ui.choiceAt = id;
   if (onePane()) ui.pane = "side";
