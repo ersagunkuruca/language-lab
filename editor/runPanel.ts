@@ -17,6 +17,7 @@ import type * as T from "./typed.ts";
 import { h } from "./dom.ts";
 import { newWorker } from "./runViews.ts";
 import type { RunAsk, RunSays, WarmAsk } from "./runWorker.ts";
+import { shippedFor } from "./checkStore.ts";
 import { line, sendCode, words } from "./runCode.ts";
 import { savedFrom } from "../ters/src/lang/tests.ts";
 import type { CoreMain } from "./coreMain.ts";
@@ -48,6 +49,9 @@ export function runPanel(host: RunHost) {
   // ends it, and the next run starts another.
   let idle: Worker | null = null;
   const worker = () => { const w = idle ?? newWorker(); idle = null; return w; };
+  // The program's definition groups as the build checked them (E314,
+  // checkStore.ts), for the worker's check of it.
+  const shipped = () => { const k = shippedFor(doc().program); return k ? { shipped: k } : {}; };
   // Warmed with each program opened, not only the first (I320): calc's
   // main, run by the evaluator, waited a second on its check after open.
   let warmed: { code: Code; def: Id } | null = null;
@@ -56,7 +60,7 @@ export function runPanel(host: RunHost) {
     if (running || (warmed?.code === code && warmed.def === def)) return;
     idle ??= newWorker();
     warmed = { code, def };
-    const warm: WarmAsk = { warm: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def };
+    const warm: WarmAsk = { ...shipped(), warm: true, code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def };
     idle.postMessage(warm);
   }
   // Started with the page, before any program is open: the worker takes
@@ -188,7 +192,7 @@ export function runPanel(host: RunHost) {
     // A program from a file runs with only what was allowed (E229).
     const asked = permissionsAsked(def), deny = asked.filter((e) => !doc().allowed?.includes(e));
     const stdin = readsInput() ? stdinOf() : undefined;
-    const ask: RunAsk = { code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
+    const ask: RunAsk = { ...shipped(), code: sendCode(code), names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), def, title, files, args: given?.args, ...(kept ? { core: kept } : {}), ...(deny.length ? { deny } : {}), ...(stdin !== undefined && !replay ? { stdin } : {}), ...(replay ? { replay, ...(until !== undefined ? { until } : {}) } : {}) };
     ui.output = { def, lines: [], running: true };
     w.onmessage = (e: MessageEvent<RunSays>) => {
       if (running !== w || !ui.output) return;

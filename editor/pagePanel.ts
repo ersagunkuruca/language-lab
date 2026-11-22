@@ -2,6 +2,7 @@
 // main.ts, E228e): a picture is drawn live on the GPU (editor/picture.ts),
 // a page runs in a frame (page.ts), and both go on across renders. What
 // they read of the editor comes through `PageHost`.
+import { shippedFor } from "./checkStore.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
@@ -51,6 +52,8 @@ export interface PageHost {
 
 export function pagePanels(host: PageHost) {
   const { doc, prog, pres, ownDefs, typesOf, render, ui, errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins } = host;
+  // The program's definition groups as the build checked them (E314).
+  const shippedOf = () => { const k = shippedFor(doc().program); return k ? { shipped: k } : {}; };
   // The prebuilt index read now, so opening a shipped page knows at once
   // whether its compiled page is there (startPage, I311).
   void prebuiltIndex();
@@ -518,7 +521,7 @@ export function pagePanels(host: PageHost) {
     };
     w.onmessage = (e: MessageEvent<CompileSays>) => done(e.data as CompiledPage | { error: string });
     w.onerror = (e) => { e.preventDefault(); done({ error: e.message || "the compiler failed" }); };
-    const ask: CompileAsk = { compilePage: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
+    const ask: CompileAsk = { ...shippedOf(), compilePage: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
     w.postMessage(ask);
   }
   // The program printed from the core IR (E244) runs on a fresh copy of its
@@ -604,7 +607,7 @@ export function pagePanels(host: PageHost) {
       const w = newWorker();
       w.onmessage = (e: MessageEvent<CompileSays>) => { w.terminate(); if ("saved" in e.data) ok(e.data.saved); else fail(new Error("error" in e.data ? e.data.error : "the compiler gave no page")); };
       w.onerror = (e) => { e.preventDefault(); w.terminate(); fail(new Error(e.message || "the compiler failed")); };
-      const ask: CompileAsk = { compilePage: true, saved: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
+      const ask: CompileAsk = { ...shippedOf(), compilePage: true, saved: true, code, names: pres().names, pins: pins(), held: Object.entries(doc().heldReps ?? {}), main };
       w.postMessage(ask);
     })).then((made) => { savedPages.set(code, made); return made; });
   }

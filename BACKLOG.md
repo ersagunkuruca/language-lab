@@ -70,7 +70,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E314 | A first visit checks each example as it opens, on the editor's thread (sheet 0.44 s of a 0.78 s open; QA-2026-11-22d L1) and again in Run's worker (I320's rest: calc's Run in the first half second waits 0.5 to 0.8 s on calc's check); a later visit reads the definition groups' checks kept in the browser (checkStore.ts), sheet 0.18 s. Ship each example's kept group checks beside it, read when it opens (not in checks.json, already 8.9 MB): measured 11-22 as JSON, calc 113 KB, sheet 321 KB, greenhouse-page 659 KB | QA 11-22d, I320 | P2 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
