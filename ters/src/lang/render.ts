@@ -563,7 +563,16 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
         }
         if (n.kind === "match" && n.otherwise) row(n.otherwise, [kw("otherwise")]);
       }
-      return hold([ln(...lead, kw(`${handles ? "handle" : n.kind} `), ...inline(n.scrutinee).p), grp(arms)]);
+      // Steps handled or matched on go under the word, deeper than the
+      // arms, in their order (Ersagun 2026-11-22, chapters' main read
+      // `handle ((_) => 0)(‹split book›(path, folder))`):
+      //   handle
+      //       ‹split book›(path, folder)
+      //       0
+      //     abort(why) → …
+      const word = kw(`${handles ? "handle" : n.kind}`);
+      if (tall(n.scrutinee)) return hold([ln(...lead, word), grp(block(n.scrutinee, []), 4), grp(arms)]);
+      return hold([ln(...lead, word, " ", ...inline(n.scrutinee).p), grp(arms)]);
     }
     if (isBound(n)) {
       // A use of a definition with results, in the direction it declares

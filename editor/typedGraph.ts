@@ -33,7 +33,7 @@
 // (a tunnel). NODE-EDITOR.md says why.
 
 import type { Code, Id, NodeOf, Use } from "../ters/src/model.ts";
-import { children, isCall, isUse, ownerOfTypeParts, portsOf, resolveRefs, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
+import { children, isCall, isUse, subtree, ownerOfTypeParts, portsOf, resolveRefs, useTarget, type Call, nodeValues } from "../ters/src/model.ts";
 import type { Presentation } from "../ters/src/presentation.ts";
 import type { Info } from "../ters/src/lang/infer.ts";
 import { ASSOCIATIVE, chainOperands, CONS, NIL, S, SIGS, TRUE, FALSE, TUPLE_MAX } from "../ters/src/lang/std.ts";
@@ -416,11 +416,19 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
   // uses are get nodes with those names, as it has no frame of its own.
   const lp = loose ? looseParts(code, defId, hooks.home ?? {}) : null;
   const looseIns = new Set(lp?.params ?? []);
-  const named = (b: Id) => (hooks.named.has(b) || looseIns.has(b)) && name(b) !== "_";
+  // A step done for its effect: `_ = print(…)`, or a binder with no name
+  // that nothing reads (one written in text as `print(…); 0` has none). An
+  // unnamed one was drawn as a let's dot called "?", out of the steps'
+  // column and numbering (Ersagun 2026-11-22: "weird decisions for the last
+  // action").
+  const reads = new Set<Id>();
+  { const d = node(defId); if (d) for (const x of subtree(code, d.id)) { const r = node(x); if (r?.kind === "ref") reads.add(r.target); } }
+  const quiet = (b: Id) => name(b) === "_" || (names[b] === undefined && !reads.has(b));
+  const named = (b: Id) => (hooks.named.has(b) || looseIns.has(b)) && !quiet(b);
   // A let's binder holding a use with no body, shown without its dot: the
   // use and its produced ports (L211).
   const fedBy = (b: Id): { use: Id; ports: string[] } | null => {
-    if (named(b) || name(b) === "_") return null;
+    if (named(b) || quiet(b)) return null;
     const v = lets(code).value.get(b), u = v ? node(v) : undefined;
     if (!isUse(u) || u.body !== undefined) return null;
     const ports = answerKeys(code, u);
@@ -960,17 +968,17 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // to bottom, the last one included: nothing flows sideways, so each
     // starts at the left edge, as lines of text do. Lets line up on the
     // right, where their dots are.
-    const sequence = steps.every(([b]) => name(b) === "_");
+    const sequence = steps.every(([b]) => quiet(b));
     // Steps done for their effects are numbered in the order they run,
     // whatever else the run of lets holds: a dot put on a wire is a let
     // too, and it took every number away (Ersagun 2026-11-14). The menu's
     // Do it earlier and later ask the same of each step.
-    const silentSteps = steps.filter(([b]) => name(b) === "_").map(([b]) => b);
+    const silentSteps = steps.filter(([b]) => quiet(b)).map(([b]) => b);
     const numbered = silentSteps.length > 0;
     let y = 0, w = 0, h = 0, right = 0;
     vals.forEach((v, i) => {
       const b = steps[i][0];
-      const silent = name(b) === "_";
+      const silent = quiet(b);
       const vx = sequence ? 0 : colW - v.w;
       shift(at, v, vx, y);
       const py = y + v.outY, x = (sequence ? vx + v.outX : Math.max(colW, vx + v.outX)) + 22;
@@ -1028,7 +1036,12 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     }
     if (numbered) {
       const dot = (b: Id): [End, End] => [{ item: b, dx: 8, dy: 16 }, { item: b, dx: 8, dy: 0 }];
-      silentSteps.forEach((b, i) => then.push([dot(b)[0], i + 1 < silentSteps.length ? dot(silentSteps[i + 1])[1] : body.out]));
+      // The last leads to the top of what the steps lead to, as each leads
+      // to the top of the next, not to its output on the far side (it
+      // crossed what it pointed at).
+      const out = body.out, last = "item" in out ? items.get(out.item) : undefined;
+      const next: End = last && "item" in out ? { item: out.item, dx: last.w / 2, dy: 0 } : out;
+      silentSteps.forEach((b, i) => then.push([dot(b)[0], i + 1 < silentSteps.length ? dot(silentSteps[i + 1])[1] : next]));
     }
     const bx = sequence ? 0 : right + 26;
     const by = sequence ? y : Math.max(0, (Math.max(valsH, body.h) - body.h) / 2);
@@ -1101,8 +1114,14 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
     // is drawn wired straight into its port, with no () => frame round it
     // (CONFUSING.md item 2): an if's then and else, a case like nil.
     const plain = new Set<number>();
+    // One whose value comes after steps (print this, then 2) is framed all
+    // the same: drawn loose, its steps read as the definition's own, run
+    // before the match (Ersagun 2026-11-22, chapters' main: "the action
+    // ordering … is broken in both views").
     const addCase = (at: Id, binders: Id[], body: Id, title: string) => {
-      if (binders.length) { inputs.push(at); kids.push(region(at, title, binders, body, "arm")); return; }
+      const b = node(body);
+      if (binders.length || (isCall(b) && node(b.fn).kind === "lambda")) {
+        if (!binders.length) title = ""; inputs.push(at); kids.push(region(at, title, binders, body, "arm")); return; }
       plain.add(inputs.length); inputs.push(body); kids.push(arg(body));
     };
     // A case that only takes one of its fields apart further draws as one
@@ -1129,7 +1148,7 @@ function build(code: Code, pres: Presentation, info: Info | null, defId: Id, hoo
       const later = op?.kind === "variant" && op.later && arm.binds.length === op.fields.length + 1;
       addCase(arm.id, params, lam ? lam.body : arm.body, later ? paramsTitle(arm.binds.slice(0, -1).map(name), name(arm.binds.at(-1)!)) : paramsTitle(params.map(name)));
     }
-    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); plain.add(inputs.length); inputs.push(n.otherwise); kids.push(lay(n.otherwise)); }
+    if (n.kind === "match" && n.otherwise) { labels.push("otherwise"); addCase(n.otherwise, [], n.otherwise, ""); }
     const lw = Math.max(0, ...labels.map((l) => tw(l, 6.6)));
     const bw = Math.max(64, tw(title, 8.2) + 24, lw + 30);
     const bh = 30 + inputs.length * 20;
