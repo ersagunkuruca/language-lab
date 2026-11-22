@@ -30,7 +30,6 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
-| L Language and library | "Speed up the interpreter on real programs" | L281e, L281f (P3; L281a to L281d and L281g done) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -194,13 +193,6 @@ all of these.
 | L280g | Spatial partitioning as representations of the "pairs nearer than r" job: all pairs as its meaning, grid and tree as implementations, cell size as a parameter. Needs a program that uses it (flock or Night watch) | Ersagun 2026-11-20 | P3 | L | |
 | L280h | Where work runs (C61's GPU, workers or main thread) kept and tunable in the choices, per loop | Ersagun 2026-11-20 | P3 | M | |
 | L280i | A published library carries its own types' and ways' choices, keyed by content hash (when sharing needs it) | Ersagun 2026-11-20 | P3 | M | |
-
-### Speed of the interpreter ([INTERPRETER-SPEED-2026-11-21](docs/reports/INTERPRETER-SPEED-2026-11-21.md); Ersagun 2026-11-21: the looper's main took 12.8 s interpreted)
-
-| id | item | source | pri | size | status |
-|---|---|---|---|---|---|
-| L281e | One stop keeps a function on the machine for good: after 4 stops `map` runs step by step for every later call, also those given a function that only computes (the looper's 281 maps, stopped by a change that reads a cell). Decide per call, or try again later | interpreter profile 2026-11-21 | P3 | S | |
-| L281f | The machine itself is about 3 µs a call: each step looks its node up, makes a frame per part and copies the parts so far (`[...f.vals, v]`). Effects and handlers always run there (crew's scheduler). Make each node into a function of the machine once, as direct runs do | interpreter profile 2026-11-21 | P3 | L | |
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 

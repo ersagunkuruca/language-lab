@@ -335,6 +335,8 @@ class LambdaMeta {
   // derivative, passed to a helper's Run) is called as a function, since
   // its nodes may not be this runner's (I196).
   readonly by: object;
+  // What its runner knows of its lambda (run.ts Lam), found once.
+  lam: unknown = undefined;
   constructor(node: NodeOf<"lambda">, scope: Env, by: object) { this.lambda = node.id; this.node = node; this.scope = scope; this.by = by; }
   get env() { return toMap(this.scope); }
 }
@@ -832,15 +834,26 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
     return a;
   };
-  // Tries and stops of each lambda: one that stops often stays on the machine.
-  const tries = new Map<Id, { n: number; stops: number }>();
-  const machineOnly = new Set<Id>();
-  const stopped = (lambda: Id) => {
-    const t = tries.get(lambda) ?? { n: 0, stops: 0 };
-    t.stops++;
-    if (t.stops > 4 && t.stops * 4 > t.n) machineOnly.add(lambda);
+  // What is known of each lambda, kept on its closures so that a call
+  // looks nothing up (L281f): its tries and stops (one that stops often
+  // stays on the machine), what its type says, and its body made.
+  type Lam = { n: number; stops: number; only: boolean; acts: boolean; chooses: boolean; body: Direct | undefined; search: Search | undefined };
+  const lams = new Map<Id, Lam>();
+  const lamOf = (c: LambdaMeta): Lam => {
+    let l = c.lam as Lam | undefined;
+    if (l) return l;
+    l = lams.get(c.lambda);
+    if (!l) lams.set(c.lambda, l = { n: 0, stops: 0, only: false, acts: acts(c.node), chooses: chooses(c.node), body: undefined, search: undefined });
+    return (c.lam = l);
   };
-  const directly = (n: NodeOf<"lambda">) => !machineOnly.has(n.id) && !acts(n);
+  const stopped = (c: LambdaMeta) => {
+    const t = lamOf(c);
+    t.stops++;
+    if (t.stops > 4 && t.stops * 4 > t.n) t.only = true;
+  };
+  // Whether a call runs directly: one that only computes, or, when nothing
+  // counts fuel, one that may fail too (failsAtMost below).
+  const runsDirect = (c: LambdaMeta, fuel: Fuel | null): boolean => { const l = lamOf(c); return !l.only && (!l.acts || (!fuel && l.chooses)); };
   const single = (r: Iterable<Value>): Value => {
     if (Array.isArray(r)) { if (r.length === 1) return r[0]; throw r.length ? NEED : FAILED; }
     const it = r[Symbol.iterator](), a = it.next();
@@ -852,7 +865,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // runs directly when nothing counts fuel: one that may choose stops at
   // its first choice (NEED), one that fails gives FAILED. `lookup entry`
   // and `value at` ran on the machine (pond's page, 2.3 million calls).
-  const failsAtMost = (n: NodeOf<"lambda">) => !machineOnly.has(n.id) && chooses(n);
   // How deep in direct runs this is: a machine started inside one (a
   // builtin or host way calling a function back) may act on nothing
   // either, so its world builtins and operations stop the run too, before
@@ -892,10 +904,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     directDepth++;
     try {
       while (true) {
-        const t = tries.get(c.lambda);
-        if (t) t.n++; else tries.set(c.lambda, { n: 1, stops: 0 });
+        const l = lamOf(c);
+        l.n++;
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
-        const r = directLast(c.node.body, bind(c.scope, c.node.params, args));
+        const r = (l.body ??= compiledLastOf(c.node.body))(bind(c.scope, c.node.params, args));
         if (!(r instanceof TailCall)) {
           if (!hole) return r;
           hole.fields[at] = r;
@@ -910,7 +922,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     }
     catch (e) {
       if (e instanceof Aborted && aborts(c0.node)) e = NEED;
-      if (e === NEED || e instanceof RangeError) { stopped(c0.lambda); if (c !== c0) stopped(c.lambda); }
+      if (e === NEED || e instanceof RangeError) { stopped(c0); if (c !== c0) stopped(c); }
       throw e;
     }
     finally { directDepth--; }
@@ -924,7 +936,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
   const callDirect = (f: Value, args: Value[]): Value => {
     const c = closureOf(f);
-    if (c && (directly(c.node) || (!directFuel && failsAtMost(c.node)))) return enter(c, args);
+    if (c && runsDirect(c, directFuel)) return enter(c, args);
     const h = HANDLED.get(f as Fn);
     if (h && searchesUnder(h, directFuel)) {
       // Under fuel the whole run goes to the machine, which runs out where
@@ -948,7 +960,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Nodes in a body's last place, made apart: their calls to functions
   // that run directly give a TailCall for `enter` to make (L281a).
   const compiledLast = new Map<Id, Direct>();
-  const directLast = (id: Id, env: Env): Value => (compiledLast.get(id) ?? compileLast(id))(env);
   const needs: Direct = () => { throw NEED; };
   // Whether a scope given from outside (ev) binds something besides binders.
   let looseScopes = false;
@@ -983,7 +994,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           return (env) => (looseScopes ? refValue(target, env) : (v ??= refValue(target, null)));
         }
         // A constructor or a field isn't in a scope either (L118d3).
-        if (t?.kind === "variant" || t?.kind === "field") return (env) => refValue(target, looseScopes ? env : null);
+        // Its value is kept too: a constructor's function, or the value of
+        // one with no parts, which nothing changes (L281h).
+        if (t?.kind === "variant" || t?.kind === "field") {
+          let v: Value | undefined;
+          return (env) => (looseScopes ? refValue(target, env) : (v ??= refValue(target, null)));
+        }
         // A binder: its scope walked here, not through refValue (L118d3).
         return (env) => {
           for (let e = env; e; e = e.up) if (e.b === target) return e.v;
@@ -1061,7 +1077,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
           for (let i = 0; i < k; i++) vs[i] = as[i](env);
           const c = closureOf(f);
-          return c && (directly(c.node) || (!directFuel && failsAtMost(c.node))) ? (new TailCall(c, vs) as unknown as Value) : callDirect(f, vs);
+          return c && runsDirect(c, directFuel) ? (new TailCall(c, vs) as unknown as Value) : callDirect(f, vs);
         };
         return (env) => {
           if (steps) spendDirect();
@@ -1121,9 +1137,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   type K = (v: Value) => boolean;
   type Search = (env: Env, k: K) => boolean;
   const searches = new Map<Id, Search>();
-  const search = (id: Id, env: Env, k: K): boolean => (searches.get(id) ?? searchOf(id))(env, k);
   const searchOf = (id: Id): Search => { const d = searchNode(id); searches.set(id, d); return d; };
   const searchingNeeds: Search = () => { throw NEED; };
+  // A node's search, found when first run and kept where it is run.
+  const searchAt = (id: Id): (() => Search) => { let d: Search | undefined; return () => (d ??= searches.get(id) ?? searchOf(id)); };
   // Whether a lambda's type says it only computes and chooses.
   const choosing = new Map<Id, boolean>();
   const chooses = (n: NodeOf<"lambda">): boolean => {
@@ -1138,11 +1155,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // The values of a call, each given to k in the order the machine finds them.
   const callSearch = (f: Value, args: Value[], k: K): boolean => {
     const c = closureOf(f);
-    if (c && !machineOnly.has(c.lambda)) {
-      if (!acts(c.node)) { let v: Value; try { v = enter(c, args); } catch (e) { if (e === FAILED) return false; throw e; } return k(v); }
-      if (chooses(c.node)) {
-        rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
-        return search(c.node.body, bind(c.scope, c.node.params, args), k);
+    const l = c && lamOf(c);
+    if (l && !l.only) {
+      if (!l.acts) { let v: Value; try { v = enter(c!, args); } catch (e) { if (e === FAILED) return false; throw e; } return k(v); }
+      if (l.chooses) {
+        rt.entered?.(copyOf?.get(c!.lambda) ?? c!.lambda, args, c!.lambda);
+        return (l.search ??= searches.get(c!.node.body) ?? searchOf(c!.node.body))(bind(c!.scope, c!.node.params, args), k);
       }
     }
     if (pureFns.has(f as Fn) || pureJets.has(f as Fn)) {
@@ -1169,18 +1187,18 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         // An argument with one value (a literal, a name, a function) is
         // worked out directly, not through a continuation: fewer frames a
         // level, so a search that recurses deeply fits JavaScript's stack.
-        const one = argIds.map((a) => (simple(a) ? compiledOf(a) : null));
+        const one = argIds.map((a) => (simple(a) ? compiledOf(a) : null)), sArgs = argIds.map(searchAt);
         // The arguments' values, left to right, each one's alternatives in turn.
         const each = (env: Env, i: number, vs: Value[], done: (vs: Value[]) => boolean): boolean => {
           for (; i < count && one[i]; i++) vs[i] = one[i]!(env);
           if (i === count) return done(vs.slice());
-          return search(argIds[i], env, (v) => { vs[i] = v; return each(env, i + 1, vs, done); });
+          return sArgs[i]()(env, (v) => { vs[i] = v; return each(env, i + 1, vs, done); });
         };
         const sc = shortCircuitOf(n);
-        if (sc !== null) return (env, k) => search(argIds[0], env, (x) => ((x as Data).tag === sc ? k(x) : search(argIds[1], env, k)));
+        if (sc !== null) return (env, k) => sArgs[0]()(env, (x) => ((x as Data).tag === sc ? k(x) : sArgs[1]()(env, k)));
         if (head.kind === "lambda") {
-          const params = head.params, body = head.body;
-          return (env, k) => each(env, 0, new Array<Value>(count), (vs) => search(body, bind(env, params, vs), k));
+          const params = head.params, body = searchAt(head.body);
+          return (env, k) => each(env, 0, new Array<Value>(count), (vs) => body()(bind(env, params, vs), k));
         }
         const fn = n.fn;
         if (simple(fn)) {
@@ -1194,23 +1212,26 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           // A step for each call, once its inputs are chosen (I293).
           return (env, k) => { const f = f0(env); return each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendDirect(); return callSearch(f, vs, k); }); };
         }
-        return (env, k) => search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendDirect(); return callSearch(f, vs, k); }));
+        const sFn = searchAt(fn);
+        return (env, k) => sFn()(env, (f) => each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendDirect(); return callSearch(f, vs, k); }));
       }
       case "match": {
         if (handlerOf(n)) return searchingNeeds;
-        const arms = matchArms(n), scrutinee = n.scrutinee, otherwise = n.otherwise;
+        const scrutinee = n.scrutinee, otherwise = n.otherwise == null ? undefined : searchAt(n.otherwise);
+        const arms = new Map([...matchArms(n)].map(([tag, arm]) => [tag, { binds: arm.binds, body: searchAt(arm.body) }]));
         if (simple(scrutinee)) {
           const sd = compiledOf(scrutinee);
           return (env, k) => {
             const d = sd(env) as Data, arm = arms.get(d.tag);
-            if (arm) return search(arm.body, bind(env, arm.binds, d.fields), k);
-            return search(otherwise!, env, k);
+            if (arm) return arm.body()(bind(env, arm.binds, d.fields), k);
+            return otherwise!()(env, k);
           };
         }
-        return (env, k) => search(scrutinee, env, (d) => {
+        const sScrutinee = searchAt(scrutinee);
+        return (env, k) => sScrutinee()(env, (d) => {
           const arm = arms.get((d as Data).tag);
-          if (arm) return search(arm.body, bind(env, arm.binds, (d as Data).fields), k);
-          return search(otherwise!, env, k);
+          if (arm) return arm.body()(bind(env, arm.binds, (d as Data).fields), k);
+          return otherwise!()(env, k);
         });
       }
       // The rest on a machine of its own, every value it gives.
@@ -1222,9 +1243,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const SEARCHES = new Set<Id>([S.first, S.optional, S.all, S.count]);
   const handledDirect = (h: Id, args: Value[]): Value => {
     const body = closureOf(args[0]);
-    if (!SEARCHES.has(h) || !body || machineOnly.has(body.lambda) || !chooses(body.node)) throw NEED;
-    const t = tries.get(body.lambda);
-    if (t) t.n++; else tries.set(body.lambda, { n: 1, stops: 0 });
+    if (!SEARCHES.has(h) || !body || lamOf(body).only || !lamOf(body).chooses) throw NEED;
+    lamOf(body).n++;
     directDepth++;
     try {
       if (h === S.first || h === S.optional) {
@@ -1239,7 +1259,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     } catch (e) {
       // An abort goes to the machine, which runs the search again (L118d2).
       if (e instanceof Aborted && aborts(body.node)) e = NEED;
-      if (e === NEED || e instanceof RangeError) stopped(body.lambda);
+      if (e === NEED || e instanceof RangeError) stopped(body);
       throw e;
     }
     finally { directDepth--; }
@@ -1323,7 +1343,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (c) {
         // Directly first (L118c), spending from its fuel (L281c).
         const fuel = this.fuel;
-        if (directly(c.node) || (!fuel && failsAtMost(c.node))) {
+        if (runsDirect(c, fuel)) {
           try { return this.ret(fuel ? underFuel(fuel, () => enter(c, args)) : enter(c, args)); } catch (e) { if (e === FAILED) return this.fail(); if (e !== NEED && !(e instanceof RangeError)) throw e; }
         }
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
