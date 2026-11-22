@@ -493,6 +493,10 @@ function directRefs(code: Code, def: Id): Id[] {
 const armsOver = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, variants: Set<Id>) =>
   n.arms.some((a) => variants.has((code.nodes[a] as NodeOf<"arm">).variant));
 
+// The job a match or fold on T is (`match`, `fold`, `fold of items`), or
+// undefined where its arms aren't T's (L280d's measured runs count it).
+export const matchJob = (code: Code, n: NodeOf<"match"> | NodeOf<"fold">, t: Id): string | undefined => (armsOver(code, n, new Set(variantsOf(code, t))) ? foldJob(code, n, t) : undefined);
+
 export interface Choice {
   rep: Representation;
   table: { rep: string; costs: Record<string, string> }[];

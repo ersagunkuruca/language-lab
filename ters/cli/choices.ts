@@ -12,7 +12,7 @@ import type { Measure } from "../src/lang/run.ts";
 import type { Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { S } from "../src/lang/std.ts";
-import { CARRIED, HEAD, looped, uses, type Measured, type Representation } from "../src/lang/represent.ts";
+import { CARRIED, FOLD_OF_ITEMS, HEAD, looped, matchJob, uses, type Measured, type Representation } from "../src/lang/represent.ts";
 import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
@@ -406,12 +406,18 @@ export function measuring(given: Program, main: Id, picks: readonly Pick[]): Mea
   const casesOf = (t: Id): Id[] => { const d = code.nodes[t]; return d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : []; };
   // Each job's call nodes, by the type and the job (`T job`).
   const jobOf = new Map<Id, Id>(), typeOf = new Map<string, Id>();
-  for (const t of new Set(picks.map((p) => p.of))) for (const j of jobsOf(given, t)) if (!jobOf.has(j)) { jobOf.set(j, t); typeOf.set(`${t} ${j}`, t); }
+  const picked = new Set(picks.map((p) => p.of));
+  for (const t of picked) for (const j of jobsOf(given, t)) if (!jobOf.has(j)) { jobOf.set(j, t); typeOf.set(`${t} ${j}`, t); }
   const own = new Set(given.own), calls = new Map<Id, string>();
   for (const d of [main, ...dependencies(code, main)]) {
     if (!own.has(d)) continue;
     for (const id of subtree(code, d)) {
       const n = code.nodes[id];
+      // A match or fold on a picked type: its job (`match`, `fold`).
+      if (n?.kind === "match" || n?.kind === "fold") {
+        for (const t of picked) { const j = matchJob(code, n, t); if (j) { calls.set(id, `${t} ${j}`); typeOf.set(`${t} ${j}`, t); break; } }
+        continue;
+      }
       if (n?.kind !== "call") continue;
       const f = code.nodes[n.fn], t = f?.kind === "ref" ? jobOf.get(f.target) : undefined;
       if (t !== undefined) calls.set(id, `${t} ${(f as NodeOf<"ref">).target}`);
@@ -461,7 +467,7 @@ function jobsOf(given: Program, t: Id): Set<Id> {
   const code = given.code, d = code.nodes[t];
   const cases = d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : [];
   const own = storedRows(code, given.own, given.reps).filter((r) => r.of === t), rows = own.length ? own : LIBRARY.reps.filter((r) => r.of === t);
-  return new Set([...cases, ...rows.flatMap((r) => Object.keys(r.cost)).filter((k) => code.nodes[k]?.kind === "def")]);
+  return new Set([...cases, ...rows.flatMap((r) => Object.keys(r.cost)).filter((k) => code.nodes[k]?.kind === "def"), "match", "fold", FOLD_OF_ITEMS]);
 }
 const MEASURED = /^\S+ measured: /;
 const MEASURE = /^(\S+) measured: [^:]*: ([^;]+?)(?:; up to (\d+) items?)?; from a run with .*$/;

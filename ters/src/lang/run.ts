@@ -970,6 +970,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const needs: Direct = () => { throw NEED; };
   // Whether a scope given from outside (ev) binds something besides binders.
   let looseScopes = false;
+  // A match or fold measured (L280d): counted, and now and then what it
+  // takes apart sized.
+  const measuredAt = (id: Id): ((v: Value) => void) | undefined => {
+    const m = rt.measure, job = m?.calls.get(id);
+    if (!m || job === undefined) return undefined;
+    return (v) => {
+      const c = (m.counts.get(job) ?? 0) + 1;
+      m.counts.set(job, c);
+      if ((c & (c - 1)) === 0 || (c & 4095) === 0) m.gave(job, v);
+    };
+  };
   const compile = (id: Id): Direct => {
     const d = compileNode(id);
     compiled.set(id, d);
@@ -1114,8 +1125,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         let scrutinee: Direct | undefined, otherwise: Direct | undefined;
         const arms = new Map<Id, { binds: Id[]; body: Direct | undefined; id: Id }>();
         for (const [tag, arm] of matchArms(n)) arms.set(tag, { binds: arm.binds, body: undefined, id: arm.body });
+        const seen = measuredAt(id);
         return (env) => {
           const d = (scrutinee ??= compiledOf(n.scrutinee))(env) as Data, arm = arms.get(d.tag);
+          if (seen) seen(d);
           if (arm) return (arm.body ??= partOf(arm.id))(bind(env, arm.binds, d.fields));
           return (otherwise ??= partOf(n.otherwise!))(env);
         };
@@ -1128,7 +1141,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // times for `path`'s 400 steps (I189).
       case "fold": {
         let scrutinee: Direct | undefined;
-        const bodies = new Map<Id, Direct>();
+        const bodies = new Map<Id, Direct>(), seen = measuredAt(id);
         return (env) => {
           const arms = foldArms(n);
           const go = (d: Data): Value => {
@@ -1142,7 +1155,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             if (!body) bodies.set(arm.arm.id, (body = compiledOf(arm.arm.body)));
             return body(inner);
           };
-          return go((scrutinee ??= compiledOf(n.scrutinee))(env) as Data);
+          const d = (scrutinee ??= compiledOf(n.scrutinee))(env) as Data;
+          if (seen) seen(d);
+          return go(d);
         };
       }
       default: return (env) => single(run((m) => m.eval(id, env)));
@@ -1753,6 +1768,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
     resume(f: Frame) {
       const v = this.val;
+      // A match or fold measured (L280d), its value taken apart now.
+      if ((f.t === "match" || f.t === "fold") && rt.measure) { const m = rt.measure, job = m.calls.get(f.n.id); if (job !== undefined) { const c = (m.counts.get(job) ?? 0) + 1; m.counts.set(job, c); if ((c & (c - 1)) === 0 || (c & 4095) === 0) m.gave(job, v); } }
       switch (f.t) {
         case "parts": return this.parts(f.ids, f.i + 1, [...f.vals, v], f.env, f.n);
         case "match": {
