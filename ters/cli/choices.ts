@@ -8,6 +8,7 @@
 // (REPRESENTATIONS.md), and the compiler picks every entry again.
 
 import type { Id } from "../src/model.ts";
+import type { Measure } from "../src/lang/run.ts";
 import type { Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { S } from "../src/lang/std.ts";
@@ -386,8 +387,79 @@ export const readChoices = (text: string): string[] => text.split("\n").filter((
 // What a check says of a choices file against the picks made now.
 export function staleChoices(written: readonly string[], now: readonly string[]): string[] {
   const isHeld = heldIn(written);
-  written = written.filter((l) => !l.startsWith(HELD));
+  // A measured entry is what a run found, not a pick: never stale.
+  written = written.filter((l) => !l.startsWith(HELD) && !MEASURED.test(l));
   now = now.filter((l) => !isHeld(l));
   const was = new Set(written), is = new Set(now);
   return [...written.filter((l) => !is.has(l)).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(l)).map((l) => `new    ${l}`)];
 }
+
+// Measured (L280d): each type with a pick, how often main's own
+// definitions call its jobs in a run (its constructors and the functions
+// its rows implement), and the largest value of it those calls gave, in
+// items (its cases with parts: a list's cells, a tree's nodes). Written
+// by `ters choices --measure`, kept as written until measured again
+// (CHOICES rule 4: measurements are committed).
+export interface Measuring { measure: Measure; lines: (args: readonly string[]) => string[] }
+export function measuring(given: Program, main: Id, picks: readonly Pick[]): Measuring {
+  const names = { ...LIBRARY.names, ...given.names }, code = given.code;
+  const stored = storedRows(code, given.own, given.reps);
+  const rowsOf = (of: Id): Representation[] => { const own = stored.filter((r) => r.of === of); return own.length ? own : LIBRARY.reps.filter((r) => r.of === of); };
+  const casesOf = (t: Id): Id[] => { const d = code.nodes[t]; return d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : []; };
+  // Each job's call nodes, by the type and the job (`T job`).
+  const jobOf = new Map<Id, Id>(), typeOf = new Map<string, Id>();
+  for (const t of new Set(picks.map((p) => p.of))) {
+    const jobs = new Set([...casesOf(t), ...rowsOf(t).flatMap((r) => Object.keys(r.cost)).filter((k) => code.nodes[k]?.kind === "def")]);
+    for (const j of jobs) if (!jobOf.has(j)) { jobOf.set(j, t); typeOf.set(`${t} ${j}`, t); }
+  }
+  const own = new Set(given.own), calls = new Map<Id, string>();
+  for (const d of [main, ...dependencies(code, main)]) {
+    if (!own.has(d)) continue;
+    for (const id of subtree(code, d)) {
+      const n = code.nodes[id];
+      if (n?.kind !== "call") continue;
+      const f = code.nodes[n.fn], t = f?.kind === "ref" ? jobOf.get(f.target) : undefined;
+      if (t !== undefined) calls.set(id, `${t} ${(f as NodeOf<"ref">).target}`);
+    }
+  }
+  // A value's items: the cells of the recursive types it is made of (a
+  // list's, a tree's), through the parts whose type is written as one of
+  // its types (not an item's, which is a type parameter), up to 10
+  // million: a Map's entries list, a list's cells.
+  const fieldTypes = (t: Id): Id[] => casesOf(t).flatMap((c) => (code.nodes[c] as NodeOf<"variant">).fields.flatMap((f) => {
+    const tr = code.nodes[(code.nodes[f] as NodeOf<"field">).type as Id] as { kind?: string; target?: Id } | undefined;
+    return tr?.kind === "tref" && tr.target && casesOf(tr.target).length ? [tr.target] : [];
+  }));
+  const all = new Map<Id, Set<string>>(), items = new Map<Id, Set<string>>();
+  for (const t of new Set(typeOf.values())) {
+    const reached = new Set<Id>([t]);
+    for (const x of reached) for (const y of fieldTypes(x)) reached.add(y);
+    const recursive = [...reached].filter((x) => fieldTypes(x).includes(x));
+    all.set(t, new Set([...reached].flatMap(casesOf)));
+    items.set(t, new Set(recursive.flatMap((x) => casesOf(x).filter((c) => (code.nodes[c] as NodeOf<"variant">).fields.length))));
+  }
+  const largest = new Map<Id, number>();
+  const sizeOf = (t: Id, v: unknown): number => {
+    const of = all.get(t)!, cells = items.get(t)!;
+    let n = 0;
+    const todo: unknown[] = [v];
+    while (todo.length && n < 1e7) {
+      const x = todo.pop() as { tag?: unknown; fields?: unknown[] } | null;
+      if (!x || typeof x !== "object" || typeof x.tag !== "string" || !of.has(x.tag) || !Array.isArray(x.fields)) continue;
+      if (cells.has(x.tag)) n++;
+      for (const y of x.fields) todo.push(y);
+    }
+    return n;
+  };
+  const measure: Measure = { calls, counts: new Map(), gave: (job, v) => { const t = typeOf.get(job)!, n = sizeOf(t, v); if (n > (largest.get(t) ?? 0)) largest.set(t, n); } };
+  const lines = (args: readonly string[]) => [...new Set(typeOf.values())].flatMap((t) => {
+    const counted = [...measure.counts].filter(([j, c]) => typeOf.get(j) === t && c > 0).map(([j, c]) => [names[j.slice(t.length + 1)] ?? j.slice(t.length + 1), c] as const).sort(([a], [b]) => a.localeCompare(b));
+    if (!counted.length) return [];
+    const most = largest.get(t);
+    return [`${t} measured: ${names[t] ?? t}: ${counted.map(([j, c]) => `${j} ${c} ${c === 1 ? "time" : "times"}`).join(", ")}${most ? `; up to ${most} ${most === 1 ? "item" : "items"}` : ""}; from a run with ${args.length ? args.join(" ") : "no arguments"}`];
+  });
+  return { measure, lines };
+}
+const MEASURED = /^\S+ measured: /;
+// The measured entries of a choices file, kept as written.
+export const measuredIn = (lines: readonly string[]): string[] => lines.filter((l) => MEASURED.test(l));

@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuring, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -950,7 +950,16 @@ switch (command) {
     break;
   }
   case "choices": {
-    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main)].sort())));
+    // With --measure (L280d), main run as written with the arguments
+    // after it, its types' jobs counted; else the measured entries kept.
+    const m = rest.indexOf("--measure");
+    let measured = measuredIn(writtenChoices);
+    if (m >= 0) {
+      const args = rest.slice(m + 1), counting = measuring(loaded, main, p.picks ?? []);
+      try { runProgram(loaded.code, loaded.info, main, args, { print: () => {}, names: loaded.names, world: world(), hosts, measure: counting.measure }); } catch (e) { fail(`the run to measure stopped: ${(e as Error).message}`); }
+      measured = counting.lines(args);
+    }
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main), ...measured].sort())));
     console.log(`wrote ${choicesFile}`);
     break;
   }

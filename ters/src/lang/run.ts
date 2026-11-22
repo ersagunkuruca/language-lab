@@ -432,7 +432,14 @@ export interface Runtime {
   // The host's answers to the program's own effects (hosts.ts, FOREIGN.md):
   // hosts/js.js's default export, by operation id.
   hosts?: Hosts;
+  // Counted while the run goes (L280d, cli/choices.ts measuredLines): each
+  // call node listed, by the job it is, and what it gave now and then.
+  measure?: Measure;
 }
+// A run's measurements: the calls to count, by node, each the job it
+// counts as; `gave` told what a call was given and gave at its 1st, 2nd,
+// 4th, … call and every 4096th after.
+export interface Measure { calls: ReadonlyMap<Id, string>; counts: Map<string, number>; gave: (job: string, v: unknown) => void }
 
 // What the world effects do. A failure throws, with a message that becomes
 // the reason the program's Abort is given.
@@ -1020,6 +1027,22 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (sc !== null) {
           let second: Direct | undefined;
           return (env) => { const x = argsOf()[0](env) as Data; return x.tag === sc ? x : (second ??= partOf(n.args[1]))(env); };
+        }
+        // A call measured (L280d): counted, and now and then what it was
+        // given and what it gave.
+        const m = rt.measure, job = m?.calls.get(id);
+        if (m && job !== undefined) {
+          let f: Direct | undefined;
+          return (env) => {
+            if (steps) spendDirect();
+            const g = (f ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
+            for (let i = 0; i < k; i++) vs[i] = as[i](env);
+            const c = (m.counts.get(job) ?? 0) + 1;
+            m.counts.set(job, c);
+            const v = callDirect(g, vs);
+            if ((c & (c - 1)) === 0 || (c & 4095) === 0) for (const x of [v, ...vs]) m.gave(job, x);
+            return v;
+          };
         }
         if (head.kind === "lambda") {
           let body: Direct | undefined;
