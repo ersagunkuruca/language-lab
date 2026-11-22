@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings, placeLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldWarnings, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { storedRows } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -936,7 +936,7 @@ switch (command) {
     break;
   }
   case "choices": {
-    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...await places(p, main), ...cPlaces(main)].sort())));
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main)].sort())));
     console.log(`wrote ${choicesFile}`);
     break;
   }
@@ -966,7 +966,7 @@ switch (command) {
     // said (L280c, rule 3), and kept.
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
-      for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
+      for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...scheduleLines(now, start), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
       if (heldHere.size) {
         const alone = represented({ ...loaded, held: undefined }, start, true);
         for (const l of heldWarnings(writtenChoices, choiceLines(loaded, start, alone.picks ?? []))) console.log(l);

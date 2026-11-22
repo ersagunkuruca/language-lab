@@ -4,7 +4,7 @@
 // the facts the pick read. `ters choices` writes `<program>.choices`;
 // `ters check` says which entries are stale (the facts or the pick came
 // out otherwise) and which are new. Representations, ways, mode plans
-// and placements for now, on JavaScript's target; the code never selects
+// placements and schedules for now, on JavaScript's target; the code never selects
 // (REPRESENTATIONS.md), and the compiler picks every entry again.
 
 import type { Id } from "../src/model.ts";
@@ -210,6 +210,21 @@ export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; 
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
   return [...new Set(ir.threadSites.filter((t) => kept.has((t.e as { fn?: string }).fn ?? "")).map((t) => `${t.at} place: ${nameOf(defOf(t.at))}'s ${THREADS[t.how] ?? t.how}: threads when slow; among main thread, threads; target C`))];
+}
+
+// The schedule entries (the fourth kind, the order and grouping of
+// work): each walk main reaches taken where its list is made, as the
+// rounds took them (fuse-walks.ts), by the call's id. The items are met
+// in the same order, one loop for both.
+export function scheduleLines(p: { code: Code; names: Names; fused?: readonly { at: Id; walker: Id; over: string }[] }, main: Id, target = "JavaScript"): string[] {
+  if (!p.fused?.length) return [];
+  const all = { ...LIBRARY.names, ...p.names }, up = parentLookup(p.code), reached = new Set([main, ...dependencies(p.code, main)]);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && p.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return [...new Set(p.fused.flatMap((f) => {
+    const d = defOf(f.at);
+    return d && reached.has(d) ? [`${f.at} schedule: ${nameOf(d)}'s ${nameOf(f.walker)} walk, its list made by ${f.over}: one loop; among made then walked, one loop; target ${target}`] : [];
+  }))];
 }
 
 export function choicesText(main: string, lines: readonly string[]): string {

@@ -13,7 +13,7 @@ import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
 import { represented, type Program } from "../cli/represented.ts";
-import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, placeLines, readChoices, staleChoices } from "../cli/choices.ts";
+import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldWarnings, placeLines, readChoices, scheduleLines, staleChoices } from "../cli/choices.ts";
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 
@@ -176,4 +176,15 @@ test("collatz's keep and fold run on C's threads when slow, as written by ters c
       "place: walks of's fold of fields: threads when slow; among main thread, threads; target C",
     ]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// Schedules (L280a): each walk main reaches taken where its list is made
+// (fuse-walks.ts), one loop for both.
+test("moths-page's walks over the lists its maps make are one loop each", () => {
+  const p = loadProgram(root + "moths-page"), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+  const info = infer(p.code, names, undefined, p.options);
+  const given: Program = { title: "moths-page", code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options };
+  const lines = scheduleLines(represented(given, main, true), main).map((l) => l.replace(/^\S+ /, "")).sort();
+  assert.ok(lines.includes("schedule: moved's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript"), lines.join("\n"));
+  assert.ok(lines.every((l) => / walk, its list made by (map|flat map|a call|lets): one loop; among made then walked, one loop; target JavaScript$/.test(l)));
 });
