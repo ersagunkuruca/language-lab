@@ -71,8 +71,29 @@ const libraryKey = (lib: Code, opts: Options, pins: [Id, unknown][], kind: Libra
   return name && `${BUILD}|${kind}|${name}|${hash(JSON.stringify([ids(opts.hidden), ids(opts.insiders), ids(opts.library), pins]))}`;
 };
 
+export const hashOf = hash;
+
+// The groups a shipped example's check has (E314, keptChecks.ts), read
+// with its folders (exampleFiles.ts): taken when first asked for, and kept
+// in this browser as a group checked here is.
+type Shipped = { labExampleKept?: Record<string, unknown>; labExampleKeptBy?: Record<string, Record<string, unknown>> };
+// A program's groups as shipped, by key; Run's worker is sent them with
+// each ask (runPanel.ts), as it has no page to read them from.
+export function addShipped(k: Record<string, unknown>, program?: string) {
+  const g = globalThis as Shipped;
+  Object.assign((g.labExampleKept ??= {}), k);
+  if (program) (g.labExampleKeptBy ??= {})[program] = k;
+}
+export const shippedFor = (program: string): Record<string, unknown> | undefined => (globalThis as Shipped).labExampleKeptBy?.[program];
+const shippedGroup = (key: string): unknown => {
+  const raw = (globalThis as Shipped).labExampleKept?.[key];
+  if (raw === undefined) return undefined;
+  const v = unpack(raw);
+  writeLater(key, v);
+  return v;
+};
 export const groupStore: GroupStore = {
-  load: (key) => kept.get(`${BUILD}|group|${hash(key)}`) as Closed | undefined,
+  load: (key) => { const k = `${BUILD}|group|${hash(key)}`; return (kept.get(k) ?? shippedGroup(k)) as Closed | undefined; },
   save: (key, c) => writeLater(`${BUILD}|group|${hash(key)}`, c),
 };
 

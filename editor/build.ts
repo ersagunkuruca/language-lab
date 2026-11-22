@@ -94,19 +94,31 @@ const runtimeFile = (id: string, t: string) => {
 // for: the program it reopens (main.ts STORE's `current`, written first),
 // one a link asks for (`?program=`), and the first example, which main.ts
 // makes before either. document.write, so they run before the script.
+// What a fresh page would check of the library first, made in a process
+// of its own (keptChecks.ts, I213), and each example's definition groups
+// (E314), a script each, read with the example's folders.
+{
+  const r = spawnSync(process.execPath, [here + "keptChecks.ts", JSON.parse(CHECKS_KEY), site + "checks.json"], { cwd: here + "../ters", stdio: "inherit" });
+  if (r.status !== 0) throw new Error("keptChecks.ts failed");
+  console.log(`checks.json: ${(statSync(site + "checks.json").size / 1024).toFixed(0)} KB`);
+}
+const exampleChecks: Record<string, string> = JSON.parse(readFileSync(site + "example-checks.json", "utf8"));
 rmSync(site + "example-files", { recursive: true, force: true });
 mkdirSync(site + "example-files");
 const files = exampleFiles(manifest, (name, t) => writeFileSync(site + name, t));
 const folders = Object.fromEntries(manifest.programs.filter((p) => p.editor !== false && p.folders?.length).map((p) => [p.program, p.folders]));
 const first = manifest.programs.find((p) => p.editor !== false)!.program;
 const exampleStart = `<script type="application/json" id="lab-example-files">${JSON.stringify(files)}</script>
+<script type="application/json" id="lab-example-checks">${JSON.stringify(exampleChecks)}</script>
 <script>(() => {
-  const files = ${JSON.stringify(files)}, folders = ${JSON.stringify(folders)};
+  const files = ${JSON.stringify(files)}, folders = ${JSON.stringify(folders)}, checks = ${JSON.stringify(exampleChecks)};
   const want = [${JSON.stringify(first)}, "numbers"];
   try { const m = /^\\{"current":("(?:[^"\\\\]|\\\\.)*")/.exec((localStorage.getItem("projectional-editor-v5") ?? "").slice(0, 400)); if (m) want.push(JSON.parse(m[1])); } catch {}
   const asked = new URLSearchParams(location.search).get("program"); if (asked) want.push(asked);
   self.labExamples = {}; self.labExample = (f, t) => { self.labExamples[f] = t; };
+  self.labExampleKept = {}; self.labExampleKeptBy = {}; self.labExampleChecks = (b, p, k) => { self.labExampleKeptBy[p] = k; Object.assign(self.labExampleKept, k); };
   for (const f of new Set(want.flatMap((p) => folders[p] ?? []))) if (files[f]) document.write('<script src="' + files[f] + '"><\\/script>');
+  for (const p of new Set(want)) if (checks[p]) document.write('<script src="' + checks[p] + '"><\\/script>');
 })();</script>
 `;
 const data = runtimeFile("lab-core-page-runtime", await corePageRuntime()) + runtimeFile("lab-core-worklet-runtime", await coreWorkletRuntime()) + text("lab-core-page-plain-runtime", await corePageRuntime(true)) + text("lab-core-worklet-plain-runtime", await coreWorkletRuntime(true)) + text("lab-run-worker", worker.outputFiles[0].text) + exampleStart;
@@ -127,13 +139,6 @@ const icon = /<link rel="icon"[^>]*>/.exec(page)?.[0] ?? "";
 const preloads = [libraryName, ...(folders[first] ?? []).map((f) => files[f]).filter(Boolean)].map((src) => `<link rel="preload" href="${src}" as="script">\n`).join("");
 writeFileSync(site + "index.html", `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${page.slice(0, bodyAt)}${preloads}</head>\n<body>\n${page.slice(bodyAt)}</body>\n</html>\n`);
 console.log(`index.html: ${(page.length / 1024).toFixed(0)} KB`);
-// What a fresh page would check of the library first, made in a process
-// of its own (keptChecks.ts, I213).
-{
-  const r = spawnSync(process.execPath, [here + "keptChecks.ts", JSON.parse(CHECKS_KEY), site + "checks.json"], { cwd: here + "../ters", stdio: "inherit" });
-  if (r.status !== 0) throw new Error("keptChecks.ts failed");
-  console.log(`checks.json: ${(statSync(site + "checks.json").size / 1024).toFixed(0)} KB`);
-}
 
 // Each shipped page example and picture compiled once, here (E245,
 // prebuild.ts): the editor takes it from prebuilt/ instead of compiling it.

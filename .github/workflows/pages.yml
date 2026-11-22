@@ -51,7 +51,7 @@ jobs:
         run: |
           mkdir _site
           git archive HEAD | tar -x -C _site
-          cp -r index.html learn.html tutorial.html guide.html reactive.html shaders.html apps prebuilt runtimes library.*.js example-files checks.json ters.mjs _site/
+          cp -r index.html learn.html tutorial.html guide.html reactive.html shaders.html apps prebuilt runtimes library.*.js example-files example-checks checks.json ters.mjs _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

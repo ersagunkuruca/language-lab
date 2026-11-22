@@ -11,6 +11,7 @@
 // so a page opened from file:// reads them too.
 
 import manifest from "./examples.json" with { type: "json" };
+import { addShipped } from "./checkStore.ts";
 
 type Tables = Record<string, unknown>;
 const store = () => ((globalThis as { labExamples?: Record<string, Tables> }).labExamples ??= {});
@@ -44,6 +45,30 @@ function readFolder(folder: string): Promise<void> {
   })));
   return p;
 }
+// A program's definition groups as the build checked them (E314,
+// keptChecks.ts), named in `lab-example-checks`: read with its folders, so
+// a first visit's check of it takes them (checkStore.ts groupStore). One
+// that can't be read is checked here instead.
+let checkSrcs: Record<string, string> | null | undefined;
+const checksRead = new Map<string, Promise<void>>();
+function readChecks(program: string): Promise<void> {
+  if (checkSrcs === undefined) {
+    const el = typeof document === "object" ? document.getElementById("lab-example-checks") : null;
+    checkSrcs = el ? JSON.parse(el.textContent ?? "{}") : null;
+  }
+  const src = checkSrcs?.[program];
+  if (!src) return Promise.resolve();
+  let p = checksRead.get(program);
+  if (!p) checksRead.set(program, (p = new Promise<void>((done) => {
+    const g = globalThis as { labExampleChecks?: (b: string, p: string, k: Record<string, unknown>) => void };
+    g.labExampleChecks ??= (_, p, k) => addShipped(k, p);
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = s.onerror = () => { s.remove(); done(); };
+    document.head.appendChild(s);
+  })));
+  return p;
+}
 // The example programs' folders read, so each can be opened.
 export const readExamples = (programs: string[]): Promise<void> =>
-  Promise.all([...new Set(programs.flatMap(foldersOf))].map(readFolder)).then(() => undefined);
+  Promise.all([...[...new Set(programs.flatMap(foldersOf))].map(readFolder), ...programs.map(readChecks)]).then(() => undefined);

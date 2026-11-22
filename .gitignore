@@ -12,6 +12,8 @@
 /library.*.js
 /example-files/
 /checks.json
+/example-checks.json
+/example-checks/
 /ters.mjs
 
 # Scratch scripts (REVIEW-2026-10-26.md §4): keep them out of commits.

@@ -35,3 +35,39 @@ sameAs(code, LIBRARY);
 // Each value as its packed JSON, so the page parses the file once.
 const kept = Object.entries(entries()).map(([k, v]) => `${JSON.stringify(k)}:${v}`).join(",");
 writeFileSync(out, `{"build":${JSON.stringify(build)},"kept":{${kept}}}`);
+
+// Each shipped example's definition groups as the editor checks it on
+// opening (E314): a script beside its folders' (exampleFiles.ts), read
+// with them, so a first visit opens it with them as a later visit reads
+// them from IndexedDB. `<out dir>/example-checks.json` names each file.
+const { groupStore, hashOf, pack } = await import("./checkStore.ts");
+const { onTodaysIds } = await import("../ters/src/lang/std.ts");
+const { exampleTables } = await import("./examplesPlugin.ts");
+const { createHash } = await import("node:crypto");
+const { mkdirSync, rmSync } = await import("node:fs");
+const manifest = (await import("./examples.json", { with: { type: "json" } })).default as import("./examplesPlugin.ts").Manifest;
+const site = out.slice(0, out.lastIndexOf("/") + 1), dirName = "example-checks/";
+rmSync(site + dirName, { recursive: true, force: true });
+mkdirSync(site + dirName, { recursive: true });
+const used = new Map<string, unknown>();
+const { load, save } = groupStore;
+groupStore.load = (k) => { const c = load(k); if (c) used.set(k, c); return c; };
+groupStore.save = (k, c) => { used.set(k, c); save(k, c); };
+const files: Record<string, string> = {};
+for (const m of manifest.programs.filter((p) => p.editor !== false && !p.built && p.folders?.length)) {
+  const fs = (m.folders ?? []).map((f) => onTodaysIds(exampleTables(manifest, f)) as { code?: unknown; names?: Record<string, string>; signatures?: Record<string, unknown> });
+  const code = merge(LIBRARY.code, fs.map((f) => f.code as import("../ters/src/model.ts").Code).reduce((a, b) => merge(a, b)));
+  const names = { ...LIBRARY.names, ...Object.assign({}, ...fs.map((f) => f.names ?? {})) };
+  used.clear();
+  try {
+    T.setDisplayNames(names);
+    T.setProgramPins(Object.assign({}, ...fs.map((f) => f.signatures ?? {})));
+    T.infer(code, names);
+  } catch (e) { console.log(`example checks: ${m.program} wasn't checked (${(e as Error).message})`); continue; }
+  if (!used.size) continue;
+  const text = `labExampleChecks(${JSON.stringify(build)},${JSON.stringify(m.program)},{${[...used].map(([k, v]) => `${JSON.stringify(`${build}|group|${hashOf(k)}`)}:${pack(v)}`).join(",")}});\n`;
+  const name = `${dirName}${m.program.replace(/[^\w-]+/g, "-")}.${createHash("sha1").update(text).digest("hex").slice(0, 12)}.js`;
+  writeFileSync(site + name, text);
+  files[m.program] = name;
+}
+writeFileSync(site + "example-checks.json", JSON.stringify(files));

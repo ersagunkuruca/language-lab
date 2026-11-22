@@ -30,7 +30,7 @@ import { received, searchBackwards, type BackAsk, type Found } from "./backSearc
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
-import { loadChecks } from "./checkStore.ts";
+import { addShipped, loadChecks } from "./checkStore.ts";
 import { choicesFor } from "./choicesFor.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
@@ -38,17 +38,17 @@ import { choicesFor } from "./choicesFor.ts";
 // lowering again.
 // `replay`: answer from an earlier run's log instead of the world (E232b);
 // `until`: give only that many of its answers, then pause (E232c).
-export type RunAsk = { code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
+export type RunAsk = { shipped?: Record<string, unknown>; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id; title: string; files: [string, string][]; args?: string[]; core?: CoreMain; deny?: Id[]; stdin?: string; replay?: LogEntry[]; until?: number };
 // Run's worker is kept between runs and started before the first (I177):
 // `warm` checks the program, so the library's check is kept by the time
 // Run main is pressed.
-export type WarmAsk = { warm: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id };
+export type WarmAsk = { shipped?: Record<string, unknown>; warm: true; code: SentCode; names: Names; pins: Pins; held?: [Id, string][]; def: Id };
 // args: main takes the command line's words, as `ters run` gives them (E212).
 // A page compiled the way "Open in a tab" does (page.ts corePageFile), off the
 // page's thread: the preview swaps it in when it's ready (main.ts startPage).
 // `saved`: only the page as Open in a tab gives it (pageCompile.ts
 // compileSavedPage), a page with sound's too.
-export type CompileAsk = { compilePage: true; code: Code; names: Names; pins: Pins; held?: [Id, string][]; main: Id; saved?: true };
+export type CompileAsk = { shipped?: Record<string, unknown>; compilePage: true; code: Code; names: Names; pins: Pins; held?: [Id, string][]; main: Id; saved?: true };
 // Printed from the core IR (core-js.ts corePageScript), the script
 // calling $core.startCorePage (E244).
 export type CompileSays = CompiledPage | { saved: SavedScripts } | { error: string };
@@ -143,6 +143,8 @@ function placed(held: [Id, string][] = []): [Id, string][] {
 
 function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>) {
   answers = null; paused = false;
+  // The program's groups as the build checked them (E314), from the page.
+  if ("shipped" in e.data && e.data.shipped) addShipped(e.data.shipped);
   // The choices list every placement as the compiler makes it, the held
   // marked (choicesFor.ts); runs and pages are lowered with them held.
   if ("held" in e.data && !("choices" in e.data)) e.data.held = placed(e.data.held);
