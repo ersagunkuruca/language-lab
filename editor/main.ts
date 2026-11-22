@@ -1038,25 +1038,24 @@ let graphLater = false;
 
 // ---------------------------------------------------------------- gestures
 
-// A descriptive name is a second name. A node that has only its short
-// one is renamed there, so the name you give is the one the program has
-// (ters and the compiler read the short names) and not a second one.
-const nameLayer = (id: Id): Layer => (ui.layer === "descriptive" && doc.names.descriptive[id] === undefined ? "short" : ui.layer);
+// Each name set is edited in its own field (E287): a descriptive name is
+// a second name, given beside the short one (ters and the compiler read
+// the short names); an empty one falls back to the short.
+const namesOn = (l: Layer): Names => layer<Names>(LIBRARY.names, ...fileModules(doc).map((m) => m.names), looseNames(), doc.names.short, l === "descriptive" ? doc.names.descriptive : {});
 
-function rename(id: Id, value: string) {
-  const clash = Top.nameClash(doc.code, pres().names, id, value);
+function rename(id: Id, value: string, set: Layer) {
+  const clash = Top.nameClash(doc.code, namesOn(set), id, value);
   if (clash) {
     ui.note = `Refused: ${clash}. Nothing changed.`;
     ui.touched = [];
     ui.refused = true;
     return render();
   }
-  const layer = nameLayer(id);
-  const names = { ...doc.names[layer] };
+  const names = { ...doc.names[set] };
   if (value.trim()) names[id] = value; else delete names[id];
   const k = node(id).kind;
-  const what = k === "call" ? (value.trim() ? "Named this step" : "Inlined this step") : "Renamed";
-  commit({ names: { ...doc.names, [layer]: names } }, [`names.${layer}.json`], `${what}. Only names.${layer}.json changed; the meaning hash is the same.`);
+  const what = set === "short" && k === "call" ? (value.trim() ? "Named this step" : "Inlined this step") : "Renamed";
+  commit({ names: { ...doc.names, [set]: names } }, [`names.${set}.json`], `${what}. Only names.${set}.json changed; the meaning hash is the same.`);
 }
 
 function setComment(id: Id, value: string) {
@@ -1258,12 +1257,16 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     call ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call, title: "Draw the call as the definition's body, in place. A view only." }, (doc.layout.inline ?? []).includes(call) ? "Collapse" : "Show inline") : null));
 
   if (n.kind === "binder" || n.kind === "def" || n.kind === "variant" || n.kind === "field") {
-    const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
-    const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false", "data-commit": true }) as HTMLInputElement;
-    input.addEventListener("change", () => rename(id, input.value));
-    // Enter saves (the change) and goes back to the program.
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
-    out.append(h("label", { class: "field", for: "f-name" }, h("span", { class: "field-head" }, "Name", fileTag(`names.${nameLayer(id)}`)), input));
+    // One field a name set, the shown set's first (the menu's Rename goes to it).
+    const field = (l: Layer) => {
+      const fid = l === ui.layer ? "f-name" : `f-name-${l}`;
+      const input = h("input", { id: fid, type: "text", value: doc.names[l][id] ?? "", placeholder: l === "descriptive" ? doc.names.short[id] ?? "" : "", autocomplete: "off", spellcheck: "false", "data-commit": true }) as HTMLInputElement;
+      input.addEventListener("change", () => rename(id, input.value, l));
+      // Enter saves (the change) and goes back to the program.
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
+      return h("label", { class: "field", for: fid }, h("span", { class: "field-head" }, l === "short" ? "Short name" : "Descriptive name", fileTag(`names.${l}`)), input);
+    };
+    out.append(...(ui.layer === "short" ? ["short", "descriptive"] as const : ["descriptive", "short"] as const).map(field));
     // Next to the definition it embeds, as well as in the Program tab.
     if (n.kind === "def" && id === ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: this definition's graph, blocks and Run" }, "Copy embed link")));
   }
