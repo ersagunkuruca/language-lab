@@ -14,7 +14,7 @@
 // meaning: tests check every implementation against the definition it
 // replaces, through `meaning`.
 
-import { children, changedFromLayer, parentLookup, dependencies, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, subtreeKept, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues } from "../model.ts";
+import { children, changedFromLayer, parentLookup, dependenciesOfAll, freshId, layerOf, nodesWhere, nodesOfKind, scanningOnLayer, subtree, subtreeKept, type Code, type Id, type Node, type NodeData, type NodeOf, isCall, type Call, isUse, isBound, bindsOf, useKids, copyNodes, nodeValues } from "../model.ts";
 import { notePieces, type Info } from "./infer.ts";
 import { CONS, COST, INT_OPS, JOBS, LIST, LITERAL_V, REPRESENTATION_V, S, TEXT_OPS, writtenItems } from "./std.ts";
 import { INT, NUMBER } from "./types.ts";
@@ -592,10 +592,10 @@ export function represent(code: Code, entries: Id[], rep: Representation, keep: 
   // The representation's own code stays as it is: it's written on R, and
   // `meaning` is written on T.
   const own = new Set<Id>(keep);
-  for (const d of [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : []), ...(rep.literal ? [rep.literal] : []), ...(rep.store ? [rep.store] : [])]) {
-    own.add(d);
-    for (const x of dependencies(code, d)) own.add(x);
-  }
+  // Walked together, so what the jobs share is walked once.
+  const rowDefs = [...Object.values(rep.impl), ...(rep.meaning ? [rep.meaning] : []), ...(rep.literal ? [rep.literal] : []), ...(rep.store ? [rep.store] : [])];
+  for (const d of rowDefs) own.add(d);
+  for (const x of dependenciesOfAll(code, rowDefs)) own.add(x);
   // Rewrite what the entry reaches, not going inside replaced functions.
   const todo = new Set<Id>();
   // A job's copy (a library definition the lists' rewrite copied, as it

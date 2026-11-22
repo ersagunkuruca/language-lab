@@ -691,6 +691,7 @@ export function dependenciesOfAll(code: Code, roots: Id[], into?: Set<Id>): Set<
 // (each of a palette's fillings) has its base's, worked out once (E103:
 // the modes of each filling's solves asked for it, 30 ms a hole).
 const ownersKept = new WeakMap<Code, Map<Id, Id>>();
+const ownersOf = new WeakMap<Code, { defs: Id[]; n: number; nodes: Record<Id, Node>; map: Map<Id, Id> }>();
 const typePart = (n: Node | undefined) => n?.kind === "def" || n?.kind === "typedef" || n?.kind === "variant";
 export function ownerOfTypeParts(code: Code): Map<Id, Id> {
   const from = derived.get(code);
@@ -699,7 +700,14 @@ export function ownerOfTypeParts(code: Code): Map<Id, Id> {
     if (!kept) ownersKept.set(from.base, (kept = ownerOfTypeParts(from.base)));
     return kept;
   }
+  // Once per version (dependencies asks for every root it walks from:
+  // 206 times in a compile of machine, over 15 versions, 34 ms). A pass
+  // adding to a version in place (dsl.ts) pushes a def, so a version with
+  // other defs or nodes than when it was found finds it again.
+  const was = ownersOf.get(code);
+  if (was && was.defs === code.defs && was.n === code.defs.length && was.nodes === code.nodes) return was.map;
   const out = new Map<Id, Id>();
+  ownersOf.set(code, { defs: code.defs, n: code.defs.length, nodes: code.nodes, map: out });
   // Every def is a top-level one, so the defs list is enough: a scan of
   // every node made it the slow part of checking a palette's offers.
   for (const d of code.defs) {

@@ -925,7 +925,8 @@ export function listBoundary(code: Code, info: Info, defs: Id[], rep: Representa
   const openHolder = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" ? (!closed(t) && t.id !== LIST && !program.has(t.id) && !stored.has(t.id) && inside(t.id)) || t.args.some(openHolder) : t.t === "fn" ? [...t.params, t.ret].some(openHolder) : false; };
   // What the rewrite reaches (represent.ts), and what it keeps as it is.
   const own = new Set<Id>();
-  for (const d of [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])]) for (const x of [d, ...dependencies(code, d)]) own.add(x);
+  const rowDefs = [...Object.values(rep.impl), rep.meaning!, ...(rep.store ? [rep.store] : [])];
+  for (const x of [...rowDefs, ...dependenciesOfAll(code, rowDefs)]) own.add(x);
   const reached = new Set<Id>(), todo = [...defs];
   while (todo.length) {
     const d = todo.pop()!;
