@@ -1159,7 +1159,15 @@ function textPanel(info: T.Info): string {
 // ---------------------------------------------------------------- typed programs
 
 // The blocks show a type's one effect-row variable as … (E261).
-const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style), rowDots: true } });
+// The blocks' own style, its operators written as the notation switch
+// says (a · b, a * b, (* a b)): the switch reads in every view.
+const blocksStyles = new Map<StyleName, Style>();
+const blocksStyleFor = (s: StyleName): Style => {
+  let k = blocksStyles.get(s);
+  if (!k) blocksStyles.set(s, k = { ...BLOCKS_STYLE, notation: { ...BLOCKS_STYLE.notation, ...styles[s].notation }, rowDots: true });
+  return k;
+};
+const blocksPres = (): Presentation => ({ ...pres(), style: blocksStyleFor(ui.style) });
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
 // The same names object while the program, the definition and the names
 // are, so what is kept by the names (shown types, E200b) is kept.
@@ -1175,7 +1183,7 @@ const typedPres = (): Presentation => withHandles(blocksPres());
 let blocksKept: { from: unknown[]; el: HTMLElement } | null = null;
 function blocksOf(info: T.Info): HTMLElement {
   const p = typedPres();
-  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, doc.layout.groups, doc.layout.folded];
+  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded];
   if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded) }).el;
   for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
   if (ui.selected) for (const e of blocksKept.el.querySelectorAll(`[data-id="${CSS.escape(ui.selected)}"]`)) e.classList.add("sel");
