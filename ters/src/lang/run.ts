@@ -847,6 +847,20 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // either, so its world builtins and operations stop the run too, before
   // they act.
   let directDepth = 0;
+  // The `with fuel` a direct run spends from (L281c): each call into a
+  // definition that may not end spends one, as on the machine. Running out
+  // stops the run, and the machine runs the call again from the fuel there
+  // was, so it runs out where the machine does.
+  let directFuel: Fuel | null = null;
+  const spendDirect = () => { if (directFuel) { if (--directFuel.left < 0) throw NEED; } else spendStep(); };
+  const underFuel = <T,>(fuel: Fuel, f: () => T): T => {
+    const left = fuel.left, was = directFuel, around = ambient;
+    directFuel = fuel; ambient = fuel;
+    try { return f(); } catch (e) { fuel.left = left; throw e; } finally { directFuel = was; ambient = around; }
+  };
+  // Of the searches, those whose spending doesn't hang on the order they
+  // look in (every answer is looked for), run directly under fuel too.
+  const searchesUnder = (h: Id, fuel: Fuel | null) => SEARCHES.has(h) && (!fuel || h === S.all || h === S.count);
   const builtinFns = new Set<Fn>(Object.values(builtins));
   // A call in a body's last place to a function that runs directly too
   // comes back here as a TailCall, and is made in the same loop, not on
@@ -899,7 +913,11 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     const c = closureOf(f);
     if (c && directly(c.node)) return enter(c, args);
     const h = HANDLED.get(f as Fn);
-    if (h && SEARCHES.has(h)) { try { return handledDirect(h, args); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; } }
+    if (h && searchesUnder(h, directFuel)) {
+      // Under fuel the whole run goes to the machine, which runs out where
+      // it should (a machine of its own here would end only its part).
+      try { return handledDirect(h, args); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; if (directFuel) throw NEED; }
+    }
     if (pureFns.has(f as Fn) || pureJets.has(f as Fn) || h) {
       let r: Iterable<Value>;
       try { r = (f as Fn)(...args); } catch (e) { if (e instanceof OutOfSteps || e instanceof Aborted) throw e; throw NEED; }
@@ -1026,14 +1044,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           };
         }
         if (last) return (env) => {
-          if (steps) spendStep();
+          if (steps) spendDirect();
           const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
           for (let i = 0; i < k; i++) vs[i] = as[i](env);
           const c = closureOf(f);
           return c && directly(c.node) ? (new TailCall(c, vs) as unknown as Value) : callDirect(f, vs);
         };
         return (env) => {
-          if (steps) spendStep();
+          if (steps) spendDirect();
           const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
           for (let i = 0; i < k; i++) vs[i] = as[i](env);
           return callDirect(f, vs);
@@ -1155,15 +1173,15 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (simple(fn)) {
           const f0 = compiledOf(fn);
           if (one.every((d) => d)) return (env, k) => {
-            if (steps) spendStep();
+            if (steps) spendDirect();
             const f = f0(env), vs = new Array<Value>(count);
             for (let i = 0; i < count; i++) vs[i] = one[i]!(env);
             return callSearch(f, vs, k);
           };
           // A step for each call, once its inputs are chosen (I293).
-          return (env, k) => { const f = f0(env); return each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendStep(); return callSearch(f, vs, k); }); };
+          return (env, k) => { const f = f0(env); return each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendDirect(); return callSearch(f, vs, k); }); };
         }
-        return (env, k) => search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendStep(); return callSearch(f, vs, k); }));
+        return (env, k) => search(fn, env, (f) => each(env, 0, new Array<Value>(count), (vs) => { if (steps) spendDirect(); return callSearch(f, vs, k); }));
       }
       case "match": {
         if (handlerOf(n)) return searchingNeeds;
@@ -1275,6 +1293,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // (SPEC 5.6, I294): the choice points made inside it go, an `all` or
     // `count` inside it among them, so none gives what it had so far.
     outOfFuel() {
+      // A machine inside a direct run under fuel (L281c) can't end the
+      // whole action: the run stops, and the machine around runs it.
+      if (directFuel) throw NEED;
       const b = this.fuel?.base;
       if (b !== undefined && this.cps.length > b) this.cps.length = b;
       this.fail();
@@ -1287,9 +1308,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       if (rest) return this.resumeRest(rest, args[0]);
       const c = closureOf(f);
       if (c) {
-        // Directly first, where nothing counts fuel (L118c).
-        if (!this.fuel && directly(c.node)) {
-          try { return this.ret(enter(c, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; }
+        // Directly first (L118c), spending from its fuel (L281c).
+        if (directly(c.node)) {
+          const fuel = this.fuel;
+          try { return this.ret(fuel ? underFuel(fuel, () => enter(c, args)) : enter(c, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; }
         }
         rt.entered?.(copyOf?.get(c.lambda) ?? c.lambda, args, c.lambda);
         return this.eval(c.node.body, bind(c.scope, c.node.params, args));
@@ -1297,7 +1319,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       const h = HANDLED.get(f as Fn);
       if (h) {
         // A search run directly first (L118d).
-        if (!this.fuel && SEARCHES.has(h)) { try { return this.ret(handledDirect(h, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; } }
+        const fuel = this.fuel;
+        if (searchesUnder(h, fuel)) { try { return this.ret(fuel ? underFuel(fuel, () => handledDirect(h, args)) : handledDirect(h, args)); } catch (e) { if (e !== NEED && !(e instanceof RangeError)) throw e; } }
         return this.handle(h, args);
       }
       if (directDepth && builtinFns.has(f as Fn) && !pureFns.has(f as Fn)) throw NEED;
