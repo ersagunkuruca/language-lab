@@ -17,6 +17,7 @@ import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
 import { HTML_V, MARK_V } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
 import { rasterize } from "./raster.ts";
+import { GpuFrames, sitedOf } from "./gpu-frame.ts";
 
 export interface Node_ { textContent: string | null }
 export interface El extends Node_ {
@@ -410,7 +411,30 @@ const TYPED = new Set(["input", "textarea", "select"]);
 // The marks a canvas paints (std.ts Mark), on its 2D context, in its own
 // units. A compiled record's fields are f0, f1, … and the evaluator's are
 // in fields, so each is read either way.
+// A canvas renders with WebGPU when every draw of its first frame has a
+// site the compiled page printed (gpu-frame.ts), and with raster.ts on the
+// CPU otherwise: a canvas keeps the one kind of context it first gave. While
+// WebGPU starts, the latest frame waits and is drawn once it can be.
+const rendering = new WeakMap<El, { gpu: GpuFrames | null | "opening"; latest: Value | null }>();
+const allSited = (frame: Value) => fromList((frame as Data).fields?.[0] ?? (frame as unknown as Record<string, Value>).f0).every((p) => fromList(((p as Data).fields ?? [])[3] ?? (p as unknown as Record<string, Value>).f3).every((d) => sitedOf(d as Data)));
 function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
+  if (v === null) return;
+  let r = rendering.get(e);
+  if (!r) {
+    r = { gpu: null, latest: null };
+    rendering.set(e, r);
+    if ((globalThis.navigator as Navigator | undefined)?.gpu && allSited(v)) {
+      const state = r;
+      state.gpu = "opening";
+      void GpuFrames.open(e as unknown as HTMLCanvasElement).catch(() => null).then((g) => {
+        state.gpu = g;
+        if (state.latest !== null) renderFrame(e, state.latest, call);
+      });
+    }
+  }
+  r.latest = v;
+  if (r.gpu === "opening") return;
+  if (r.gpu && r.gpu.draw(v, sitedOf) !== false) return;
   const c = e.getContext?.("2d");
   if (!c?.createImageData || !c.putImageData || v === null) return;
   const w = e.width || 300, h = e.height || 150;
