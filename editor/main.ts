@@ -25,7 +25,7 @@ import { renderSexpr } from "../ters/src/render/sexpr.ts";
 import { Namer } from "../ters/src/render/namer.ts";
 import { BOOL, CHECK, CONS, onTodaysIds, SOME, TRUE } from "../ters/src/lang/std.ts";
 import { CHOICE, DIVERGE, WORLD, showIn, type Type } from "../ters/src/lang/types.ts";
-import { renderBlocks } from "../ters/src/lang/render.ts";
+import { renderBlocks, type Shape } from "../ters/src/lang/render.ts";
 import { needsHandling, OutOfSteps, type Data, type Value } from "../ters/src/lang/run.ts";
 import type { Profile, StopAt, Stuck } from "./runWorker.ts";
 import { hostSkeleton } from "../ters/src/lang/hosts.ts";
@@ -91,6 +91,8 @@ interface Layout {
   named?: Id[];
   // Frames drawn folded into one box (a lambda, a let, a match arm...). A view.
   folded?: Id[];
+  // How a part is laid out in the blocks, picked in its menu (E290). A view.
+  shape?: Record<Id, Shape>;
   // Framed parts that start folded in the graph (deepFunctions) and were opened.
   unfolded?: Id[];
   // Per definition: which ports (parameters, and "out" for the result) you
@@ -177,6 +179,8 @@ export interface UI {
   find: string;
   style: StyleName;
   text: TextView;
+  // Blocks: calls nested deeper than BLOCKS_DEPTH in a line hidden as …, or all shown (E290).
+  fit: "fit" | "all";
   touched: string[];
   note: string;
   mode: null | "split" | "new-def";
@@ -401,6 +405,7 @@ const ui: UI = {
   find: "",
   style: "math",
   text: "blocks",
+  fit: "fit",
   touched: [],
   note: READONLY ? "Read-only: Run's inputs change, the code doesn't. Open in the editor to change it." : EMBED ? OPENING : `${OPENING} Run lets you run any function backwards.`,
   mode: null,
@@ -1180,10 +1185,22 @@ const typedPres = (): Presentation => withHandles(blocksPres());
 // A definition's blocks, kept while only the selection changes (E200b):
 // the selection is a class, moved on the kept element.
 let blocksKept: { from: unknown[]; el: HTMLElement } | null = null;
+// A line's calls nested deeper than this read as … until clicked (E290;
+// Ersagun 2026-11-22: "nesting depth limits by default"). All shows them,
+// and every part hidden by hand.
+const BLOCKS_DEPTH = 3;
+const blockShapes = () => ui.fit === "all"
+  ? { shape: Object.fromEntries(Object.entries(doc.layout.shape ?? {}).filter(([, v]) => v !== "hidden")) }
+  : { shape: doc.layout.shape, depth: BLOCKS_DEPTH };
+function setShape(id: Id, to: Shape | null) {
+  const shape = { ...(doc.layout.shape ?? {}) };
+  if (to) shape[id] = to; else delete shape[id];
+  commit({ layout: { ...doc.layout, shape } }, ["layout.json"], `${to === "hidden" ? "Hidden" : to === "shown" ? "Shown" : to === "line" ? "On one line" : to === "lines" ? "Indented" : "Laid out as it fits"}. Only the layout changed.`);
+}
 function blocksOf(info: T.Info): HTMLElement {
   const p = typedPres();
-  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded];
-  if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded) }).el;
+  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded, doc.layout.shape, ui.fit];
+  if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes()) }).el;
   for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
   if (ui.selected) for (const e of blocksKept.el.querySelectorAll(`[data-id="${CSS.escape(ui.selected)}"]`)) e.classList.add("sel");
   return blocksKept.el;
@@ -1837,7 +1854,7 @@ function toggleFolded(f: Id) {
 // Right-click in the graph or the Blocks pane (editor/graphMenu.ts, E228n).
 const { graphMenu, menuAction } = graphMenuOf({
   doc: () => doc, ui, graph: () => graph, view: () => view, undo, applyT: (e) => applyT(e), commit, render, select, openDef, calleeDef, typesOf, typedPres, defBody, stepAt, lkey, isNamed,
-  bindersOf, fnSet, groupable, groupPicked, groupToFunction, ungroup, partCalls, wrappable, graphFolded, toggleFolded, toggleInline, toggleNamed, allNamed, paletteFor, runTop, fillPalette,
+  bindersOf, fnSet, groupable, groupPicked, groupToFunction, ungroup, partCalls, wrappable, graphFolded, toggleFolded, toggleInline, toggleNamed, allNamed, paletteFor, runTop, fillPalette, setShape,
   setReveal: (f) => { revealNext = f; }, setSwapped: (s) => { swapped = s; }, setWrapping: (w) => { wrapping = w; },
 });
 
@@ -2330,6 +2347,7 @@ const cycling = (el: HTMLElement) => (el.classList.add("cycle"), el);
 const SEG_TITLES: Record<string, string> = {
   layer: "Which names to show: short ones, or longer descriptive ones. Same code either way",
   style: "How the text writes operators: a · b, a * b, or (* a b). Same code either way",
+  fit: "Fit: calls nested deep in a line show as …, click one to show it. All: everything shown",
 };
 function seg(name: string, value: string, options: [string, string][]) {
   return h("div", { class: "seg", role: "group", "aria-label": SEG_TITLES[name] ?? name, ...(SEG_TITLES[name] ? { title: SEG_TITLES[name] } : {}) },
@@ -2574,6 +2592,7 @@ function draw() {
         h("section", { class: "panel p-text", "aria-label": "Text" },
           h("div", { class: "text-head" }, h("h2", {}, "Text"),
             seg("text", ui.text, [["blocks", "Blocks"], ["let", "Steps"], ["nested", "Nested"], ["sexpr", "Lisp"]]),
+            ui.text === "blocks" ? seg("fit", ui.fit, [["fit", "Fit"], ["all", "All"]]) : null,
             ...(ui.text === "blocks" ? gesturesTip(TOUCH ? "Tap a part for its type; tap a □ to fill it; double-tap a name to open it" : "Hover for types; click a □ to fill it; double-click a name to open it") : [])),
           sameLine(namer),
           h("div", { class: "body" }, textView))),
@@ -2616,11 +2635,11 @@ document.addEventListener("click", (e) => {
   if (set) {
     if (set.dataset.set === "program") return switchProgram(set.dataset.value!);
     if (set.dataset.set === "new-kind") { ui.newKind = set.dataset.value as UI["newKind"]; return render(); }
-    const k = set.dataset.set as "layer" | "style" | "text";
+    const k = set.dataset.set as "layer" | "style" | "text" | "fit";
     const all = [...(set.parentElement?.children ?? [])] as HTMLElement[];
     const shut = set.classList.contains("on") && set.parentElement?.classList.contains("cycle") && all.some((b) => b !== set && getComputedStyle(b).display === "none");
     (ui as unknown as Record<string, string>)[k] = shut ? all[(all.indexOf(set) + 1) % all.length].dataset.value! : set.dataset.value!;
-    if (k !== "text") { ui.touched = []; ui.note = k === "layer" ? "Names switched · same code" : "Notation switched · same code"; }
+    if (k !== "text" && k !== "fit") { ui.touched = []; ui.note = k === "layer" ? "Names switched · same code" : "Notation switched · same code"; }
     return render();
   }
   // A definition found in another program: open it there.
@@ -2724,6 +2743,9 @@ document.addEventListener("click", (e) => {
     if (a === "t-undot" && ui.selected && typesOf()) return void applyT(T.removeDot(doc.code, doc.names.short, typesOf()!, ui.def, ui.selected, { of: doc.loose ?? {}, home: doc.home ?? {} }));
     return;
   }
+  // A hidden part (…) shows where it is clicked (E290).
+  const hid = t.closest<HTMLElement>(".blocks-wrap .hid[data-id]");
+  if (hid && Date.now() - blocksHeld >= 800) { e.stopPropagation(); return setShape(hid.dataset.id!, "shown"); }
   const hit = blocksHit(t);
   if (hit && Date.now() - blocksHeld < 800) return;
   if (hit) { e.stopPropagation(); return select(hit); }
