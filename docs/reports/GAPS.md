@@ -5074,3 +5074,20 @@ crew's tasks' array, built from the back by a function calling itself,
 stays rows (columns.ts), so a task put in front goes into the room
 instead of copying every column. bench-crew: 1,000 tasks 304 → 101 ms
 (27.3x → 9.2x the ideal); 2,000 tasks 1.19 → 0.22 s.
+
+### fit again, after the sweep (C288)
+
+A fresh profile of fit at 5,000 points (core IR 0.70 s, ideal 34 ms):
+13% each in the logistic's value and its gradient (`exp`), 13% the
+collector, 4.5% making closures. Two causes:
+
+- Every point at every step made three closures: `predict` applies
+  `value at(model, x)`, and `slopes` the derivative of it, each made
+  through the runtime. Fixed (C288, known-closures.ts): a closure made
+  only to be applied at once is a call of its code, the captures given
+  as inputs. 576 → 252 ms (19.2x → 8.2x).
+- The program computes the model 2.5x as often as the ideal (4.96
+  million logistic values against 1.99 million): a step's `sse` walks
+  the points, then `sums` walks them again for the step it took, where
+  the ideal keeps the sums it tested. That's how fit is written, not
+  something the compiler adds.

@@ -23,6 +23,7 @@ import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
+import { knownClosures } from "./known-closures.ts";
 import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
 import { keptItems, pushedInOrder } from "./kept-items.ts";
@@ -785,6 +786,8 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
   // A read or write at an item path, given the path's parts (C273).
   if (!envSet("NO_ITEM_PATHS")) itemPaths(ir);
+  // A closure made only to be applied at once, a call of its code (C288).
+  if (!envSet("NO_KNOWN_CLOSURES")) knownClosures(ir);
   // Small pure functions put in place, so that sharing reaches across
   // them (C194); then a pure call made twice with the same inputs, made
   // once (C189).
