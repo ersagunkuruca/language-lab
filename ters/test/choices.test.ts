@@ -189,6 +189,13 @@ test("moths-page's walks over the lists its maps make are one loop each", () => 
   const lines = scheduleLines(represented(given, main, true), main).map((l) => l.replace(/^\S+ /, "")).sort();
   assert.ok(lines.includes("schedule: moved's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript"), lines.join("\n"));
   assert.ok(lines.every((l) => / walk, its list made by (map|flat map|a call|lets): one loop; among made then walked, one loop; target JavaScript$/.test(l)));
+  // Named by the program's own definitions, never one a round made (E309).
+  assert.ok(lines.every((l) => !/ over (flat )?map\b/.test(l)), lines.join("\n"));
+});
+
+// A goal calling a function only known when it runs, by its parameter's name (E311).
+test("calc's inverse solves by calling f, named so", () => {
+  assert.ok(choices("calc").some((l) => / mode plan: inverse's solve of applied .*: relational, goals f\(…\);/.test(l)));
 });
 
 // Search order (L280a's schedules): each search main reaches, its answers

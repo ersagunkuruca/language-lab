@@ -217,14 +217,19 @@ export function threadLines(ir: Lowered & { threadSites?: { e: unknown; at: Id; 
 // work): each walk main reaches taken where its list is made, as the
 // rounds took them (fuse-walks.ts), by the call's id. The items are met
 // in the same order, one loop for both.
-export function scheduleLines(p: { code: Code; names: Names; fused?: readonly { at: Id; walker: Id; over: string }[] }, main: Id, target = "JavaScript"): string[] {
+// Named by the program's own definitions (E309): a call in a definition
+// a round made is the one the program wrote in the definition it was
+// made from, and a walker a round made the walker it was copied from.
+export function scheduleLines(p: { code: Code; names: Names; fused?: readonly { at: Id; walker: Id; over: string; made?: Id }[] }, main: Id, target = "JavaScript"): string[] {
   if (!p.fused?.length) return [];
   const all = { ...LIBRARY.names, ...p.names }, up = parentLookup(p.code), reached = new Set([main, ...dependencies(p.code, main)]);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && p.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  const inDef = new Map<Id, Id>(), walkerOf = new Map<Id, Id>();
   return [...new Set(p.fused.flatMap((f) => {
-    const d = defOf(f.at);
-    return d && reached.has(d) ? [`${f.at} schedule: ${nameOf(d)}'s ${nameOf(f.walker)} walk, its list made by ${f.over}: one loop; among made then walked, one loop; target ${target}`] : [];
+    const d = defOf(f.at), at = d && (inDef.get(d) ?? d), walker = walkerOf.get(f.walker) ?? f.walker;
+    if (f.made && at) { inDef.set(f.made, at); walkerOf.set(f.made, walker); }
+    return d && at && reached.has(d) ? [`${f.at} schedule: ${nameOf(at)}'s ${nameOf(walker)} walk, its list made by ${f.over}: one loop; among made then walked, one loop; target ${target}`] : [];
   }))];
 }
 
