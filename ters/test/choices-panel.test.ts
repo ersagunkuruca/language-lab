@@ -15,6 +15,9 @@ test("an entry of each kind reads as what it is about, its pick and what it was 
   assert.deepEqual([place.about, place.pick, place.among], ["tick's map", "workers when slow", ["main thread", "workers"]]);
   const mode = parseChoice("m1 mode plan: f's solve of g for answer from x: equations; exactly one answer; target JavaScript")!;
   assert.deepEqual([mode.about, mode.pick, mode.among, mode.facts], ["f's solve of g for answer from x", "equations", [], ["exactly one answer"]]);
+  // A walk's row is the walk; how its list is made is a fact.
+  const walk = parseChoice("w1 schedule: flown's flock over walk, its list made by lets: one loop; among made then walked, one loop; target JavaScript")!;
+  assert.deepEqual([walk.about, walk.pick, walk.facts], ["flown's flock over walk", "one loop", ["its list made by lets"]]);
   assert.equal(parseChoice("# a comment"), null);
   // Every kind has its section.
   for (const k of ["representation", "way", "mode plan", "place", "schedule"]) assert.ok(SECTIONS.some(([, ks]) => ks.includes(k as never)), k);
