@@ -831,7 +831,10 @@ const webUnit = (m: WebJob, f: unknown, x: unknown): unknown => (m.how === "coun
 // The map of xs by f, given to k: on the page's workers where there are
 // any and the map is worth them, else here and at once.
 // A record of Ints's fold (how "with", C42g) is put together by join.
-export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, join: Fn | undefined, k: (v: unknown) => unknown): unknown {
+// `on`: where the page's choices hold it (L280h): its workers from the
+// first items, or the GPU where this site has a kernel and the browser
+// WebGPU, whatever either took the last time.
+export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: AwayHow, z: unknown, join: Fn | undefined, k: (v: unknown) => unknown, on?: "workers" | "GPU"): unknown {
   const unbudgeted = fuel === Infinity || fuel === undefined;
   const inTurn = () => (isFold(how) ? foldInOrder(xs, f, z as Int, how, join) : mapInOrder(xs, f, how === "keep"));
   if (canShare()) return k(!unbudgeted ? inTurn() : isFold(how) ? foldPure(xs, f, z as Int, how, site, join) : mapPure(xs, f, site, how === "keep"));
@@ -842,11 +845,13 @@ export function mapAway(xs: unknown, f: Fn, fuel: unknown, site: number, how: Aw
   // On the GPU (C61 d′), where this site has a kernel and it pays.
   // A fold's Ints added or kept there too (C42f), the empty list's last.
   // A record of Ints's (C42g) each field's, given back as a record like z.
-  if (gpuWorth(site, items.length)) {
+  if (on === "GPU" ? !!gpuSites[site] && !!(globalThis as { navigator?: { gpu?: unknown } }).navigator?.gpu : on !== "workers" && gpuWorth(site, items.length)) {
     const m = gpuSites[site], ids = how === "with" ? m.hows?.map((h) => IDENTITY[h]) : isFold(how) ? [IDENTITY[how]] : [];
     const a = int32s(items), c = ids && capsOf(f, m, ids);
     if (a && c) return gpuMap(items, a, c, xs, f, site, isFold(how) ? (vs) => k((vs as Int[]).reduce(both(how, join), z as Int)) : (vs) => k(sameKind(xs, vs)), () => k(inTurn()), how === "with" ? z : undefined);
   }
+  // Held on the workers: started now, for these items.
+  if (on === "workers") w.workers ??= startWeb(w);
   // Before there are workers: here, timed, and workers started for the next.
   if (!w.workers) {
     const v = inTurn();

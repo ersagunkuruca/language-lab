@@ -633,8 +633,12 @@ export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = {
 // runtime call given true (branches-rt.ts `always`), by the node its
 // entry is about (sharedSites's `at`); and C's on its threads
 // (threadSites's `at`).
-let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id> } = { js: new Set(), c: new Set() };
-export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = []) { onWorkers = { js: new Set(js), c: new Set(c) }; }
+// A page's (awayMaps's `fn`) on its workers or its GPU.
+let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU"> } = { js: new Set(), c: new Set(), page: new Map() };
+export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page) }; }
+const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at); return on ? [{ k: "text", v: on }] : []; };
+// map.worth's say, true where its site is held anywhere off the main thread.
+const worthHeld = (at: Id, away: boolean): SExpr[] => ((away ? onWorkers.page.has(at) : onWorkers.js.has(at)) ? [{ k: "bool", v: true }] : []);
 const always = (at: Id): SExpr[] => (onWorkers.js.has(at) ? [{ k: "bool", v: true }] : []);
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
@@ -1726,7 +1730,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             // the GPU's kernel takes them after the item.
             if (fnAway?.k === "closure" && (fnAway.src && "binders" in fnAway.src || !fnAway.caps.length)) awayMaps.push({ site: (site as { v: number }).v, fn: n.args[1], how: kind, caps: fnAway.src && "binders" in fnAway.src ? fnAway.src.binders : [] });
             const shared: SExpr = away
-              ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }, { k: "num", v: 0 }], t, suspends: true }
+              ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }, { k: "num", v: 0 }, ...awayOn(n.args[1])], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site, ...always(n.args[1])] };
             if (!away) sharedSites.push({ site: (site as { v: number }).v, at: n.args[1], how: kind === "all" ? "every" : kind === "first" ? "first where" : kind });
             // first where's runtime gives the item found, as a list of it
@@ -1737,7 +1741,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
               given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
               try { then = { k: "let", i: one, value: shared, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
             }
-            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site, ...(away ? [] : always(n.args[1]))] }, then, else: plain, t } };
+            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site, ...worthHeld(n.args[1], away)] }, then, else: plain, t } };
           }
         }
         // The same in C (L101, c.ts `par:map`), an array's: on threads,
@@ -4264,9 +4268,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (waitsIn(f)) awayMaps.push({ site: (site as { v: number }).v, fn: each.arm.id, how: each.how, caps: each.free, params: [each.arm.binds[0], each.arm.results[1]!], ...(each.hows ? { hows: each.hows } : {}) });
         else sharedSites.push({ site: (site as { v: number }).v, at: each.arm.id, how: each.how });
         const shared: SExpr = waitsIn(f)
-          ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil, each.join ?? { k: "num", v: 0 }], t: res, suspends: true }
+          ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil, each.join ?? { k: "num", v: 0 }, ...awayOn(each.arm.id)], t: res, suspends: true }
           : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : always(each.arm.id).length ? [{ k: "num", v: 0 } as SExpr] : []), ...always(each.arm.id)] };
-        return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site, ...(waitsIn(f) ? [] : always(each.arm.id))] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: res } };
+        return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site, ...worthHeld(each.arm.id, waitsIn(f))] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: res } };
         }
       }
       return inTurn(s);

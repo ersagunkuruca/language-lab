@@ -265,21 +265,22 @@ const PLACE = /^(\S+) place: .*: ([^:;]+); among [^;]+; target (.+)$/;
 // about, for JavaScript (a page's or a command-line program's workers)
 // and for C's threads; and a command-line program's held on its worker
 // threads (`workers`), or C's on its threads (`threads`), shared out from
-// its first items.
-export function heldPlaces(lines: readonly string[]): { js: Id[]; c: Id[]; workers: Id[]; threads: Id[] } {
-  const out = { js: [] as Id[], c: [] as Id[], workers: [] as Id[], threads: [] as Id[] };
+// its first items; and a page's on its workers or its GPU (`page`).
+export function heldPlaces(lines: readonly string[]): { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][] } {
+  const out = { js: [] as Id[], c: [] as Id[], workers: [] as Id[], threads: [] as Id[], page: [] as [Id, "workers" | "GPU"][] };
   for (const l of lines) {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
     if (p && p[2] === "main thread") (p[3] === "C" ? out.c : out.js).push(p[1]);
     if (p && p[2] === "worker threads" && p[3] === "JavaScript") out.workers.push(p[1]);
     if (p && p[2] === "threads" && p[3] === "C") out.threads.push(p[1]);
+    if (p && (p[2] === "workers" || p[2] === "GPU") && p[3] === "JavaScript page") out.page.push([p[1], p[2]]);
   }
   return out;
 }
-// What a placement can be held on: the main thread anywhere, a
-// command-line program's worker threads, C's threads (not yet a page's
-// workers or its GPU).
-const HOLDABLE = (on: string, target: string) => on === "main thread" || (on === "worker threads" && target === "JavaScript") || (on === "threads" && target === "C");
+// What a placement can be held on: what its entry is among (the main
+// thread, a command-line program's worker threads, C's threads, a page's
+// workers, and its GPU where the site has a kernel).
+const HOLDABLE = (l: string, on: string) => / among ([^;]+);/.exec(l)?.[1].split(", ").includes(on) ?? false;
 const ENTRY = /^(\S+) representation: .*? as ([^;]+?); among /;
 // The held entries' rows, by the type's id: a split's with the
 // definitions it is from (`array of List from a, b`).
@@ -290,7 +291,7 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
     const m = ENTRY.exec(l.slice(HELD.length));
     // A placement held (L280h): heldPlaces's.
     const place = PLACE.exec(l.slice(HELD.length));
-    if (!m && place) { if (!HOLDABLE(place[2], place[3])) throw new Error(`a placement can be held on the main thread, worker threads or C's threads, not yet a page's workers or GPU: ${l}`); continue; }
+    if (!m && place) { if (!HOLDABLE(l, place[2])) throw new Error(`a placement is held on one of what it is among: ${l}`); continue; }
     if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation or a placement can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
