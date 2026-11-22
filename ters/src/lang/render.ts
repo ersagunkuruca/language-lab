@@ -222,6 +222,8 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
   // Does this expression need lines of its own?
   const tall = (id: Id): boolean => {
     const n = node(id);
+    // A part picked Hide is one "…", whatever it holds.
+    if (shapes[id] === "hidden" && isCall(n) && !isLet(n)) return false;
     // A use with no body is an expression (L211f): it is tall when a given is.
     if (isUse(n) && !isBound(n)) return Object.values(n.given).some(tall);
     if (n.kind === "match" || n.kind === "fold" || isUse(n) || isLet(n)) return true;
@@ -245,7 +247,13 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     const f = node(n.fn), fix = f.kind === "ref" ? pres.style.notation[f.target]?.fixity : undefined;
     return fix !== "infix" && fix !== "prefix" && !(f.kind === "ref" && node(f.target)?.kind === "field");
   };
-  const hidden = (id: Id) => counts(id) && (shapes[id] === "hidden" || (opts.depth !== undefined && depth > opts.depth && shapes[id] !== "shown"));
+  // Any call picked Hide is hidden, an operator's or a list's too (the
+  // menu offers Hide on each: on `a + b` it did nothing); depth hides only
+  // the calls that count as a level.
+  const hidden = (id: Id) => {
+    if (shapes[id] === "hidden") { const n = node(id); return isCall(n) && !isLet(n); }
+    return counts(id) && opts.depth !== undefined && depth > opts.depth && shapes[id] !== "shown";
+  };
   const widths = new Map<Id, number>();
   let measuring = false;
   const wide = (id: Id, lead: Piece[] = []): boolean => {
@@ -433,6 +441,8 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     const n = node(id);
     // A block you can click.
     const hold = (kids: Blk[], cls = "blk") => [grp(kids, 0, id, cls)];
+    // A part picked Hide is its "…", however it is laid out shown.
+    if (hidden(id)) return [ln(...lead, ...inline(id).p)];
     // An implementation reads as its operations, one a line (area: …): it
     // is the interface's record at a type, which no one calls by name.
     const ops = isCall(n) ? implementationOps(code, n.fn) : null;
@@ -460,7 +470,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
       const rows = items.flatMap((x, i) => (i < items.length - 1 ? appendLast(block(x, []), pn(",")) : block(x, [])));
       return hold([ln(...lead, pn("[")), grp(rows), ln(pn("]"))]);
     }
-    if (hidden(id) || !tallOrWide(id, lead)) return [ln(...lead, ...inline(id).p)];
+    if (!tallOrWide(id, lead)) return [ln(...lead, ...inline(id).p)];
     if (isCall(n) && isLet(n)) {
       // A run of steps is one column, each step its own line: x = …, then
       // the next, not each one nested inside the one before (the right-
