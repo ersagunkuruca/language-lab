@@ -140,3 +140,20 @@ test("divisors' lists held as trees are made so and said; where a list can't be 
   assert.throws(() => choices("backwards", new Map([["std.list", "tree of List"]])), /runs something on lists backwards/);
   assert.throws(() => choices("conjugate", new Map([["std.list", "array of List"]])), /runs something on lists backwards/);
 });
+
+// A command-line program's placements (L280a): each map, fold or search
+// it shares out on worker threads once slow, where its code kept it.
+test("collatz's keep and fold go to worker threads when slow; queens' searches too", () => {
+  const places = (name: string) => {
+    const p = loadProgram(root + name), names = p.pres.names, main = p.own.defs.find((d) => names[d] === "main")!;
+    const info = infer(p.code, names, undefined, p.options);
+    const given: Program = { title: name, code: p.code, own: p.own.defs, names, info, reps: representationsIn(p.code, info, names, p.own.defs), options: p.options };
+    const r = represented(given, main, true);
+    return placeLines(lowerCore(r.code, r.info, r.names, [main]), new Set(), r.names).map((l) => l.replace(/^\S+ /, "")).sort();
+  };
+  assert.deepEqual(places("collatz"), [
+    "place: main's keep: worker threads when slow; among main thread, worker threads; target JavaScript",
+    "place: walks of's fold of fields: worker threads when slow; among main thread, worker threads; target JavaScript",
+  ]);
+  assert.deepEqual(places("queens").map((l) => l.split(":")[1]), [" main's count of a search's answers", " main's search for all answers", " main's search for the first answer"]);
+});
