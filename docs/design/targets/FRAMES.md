@@ -151,8 +151,8 @@ as a site, and gpu-frame.ts draws the sites it is given:
   kind }`: the field indices to follow, and `f32` (a Float64), `i32` (an
   Int) or `bool` (1 or 0). `caps` gives the leaves of each value read,
   and `instance` and `corner` give those of one instance and one corner.
-  An instance the vertex function never reads (a floor drawn once for the
-  whole state) has no leaves.
+  Only the leaves the vertex function reads cross (G8a), so an instance
+  it never reads (a floor drawn once for the whole state) has none.
 - The module's entries are `lab_vs` and `lab_fs`. In group 0, binding 0
   is `var<uniform> lab_caps: array<vec4u, N>`, the leaves of the values
   read, four to a vec4u. Binding 1 is `var<storage, read> lab_inst:

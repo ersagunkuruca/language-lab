@@ -170,6 +170,31 @@ test("a page whose canvas renders a frame hands its draws' sites to the runtime 
   assert.ok(js.indexOf("pageDraws(") < js.indexOf("startCorePage("), "the sites are known before the page starts");
 });
 
+// Instances of three fields of which the vertex function reads one, in a
+// function it calls (G8): only that one crosses, the rest is 0 there.
+const spread = () => program((k, t) => {
+  const num = () => k.tref(NUMBER);
+  const bird = k.type("Bird", [], [["bird", [["x", num], ["speed", num], ["hue", num]]]]);
+  const across = k.def("across");
+  k.define(across, k.fn(["b", "c"], (b, c) => k.call(B.add, k.call(B.mul, t.cx(c), k.lit(0.25)), k.call(bird.f["bird.x"], b))));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(FRAME_V.frame, k.list(t.pass("#000", false,
+    k.call(FRAME_OPS.draw, t.square(), k.list(k.call(bird.v.bird, k.lit(-0.5), k.lit(3), k.lit(9)), k.call(bird.v.bird, k.lit(0.5), k.lit(4), k.lit(8))),
+      k.fn(["b", "c"], (b, c) => k.call(FRAME_V.placed, t.point(k.call(across, b, c), k.call(B.mul, t.cy(c), k.lit(0.5)), k.lit(0.5)), t.cx(c))),
+      k.fn(["a"], (a) => t.colour(a, k.lit(1), k.lit(0)))))))));
+  return main;
+});
+
+test("only the fields of an instance its vertex function reads cross, through the functions it calls (G8)", () => {
+  const p = spread();
+  assert.deepEqual([...p.draws.refused], []);
+  assert.deepEqual(p.draws.sites[0].instance, [{ path: [0], kind: "f32" }]);
+  // The corner's two fields are both read.
+  assert.equal(p.draws.sites[0].corner.length, 2);
+  const w = drawWords(p.draws.sites[0], fromList(part(fromList(part(p.compiled(), 0))[0], 3))[0] as unknown as { fields: Value[] });
+  assert.deepEqual([...new Float32Array(Uint32Array.from(w.instances).buffer)], [-0.5, 0.5, 0, 0]);
+});
+
 // Chromium: CHROMIUM, or Playwright's own in /opt/pw-browsers.
 const chromiumPath = (): string | undefined => {
   if (process.env.CHROMIUM) return process.env.CHROMIUM;
@@ -247,7 +272,7 @@ test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ram
     await page.goto(`file://${blank}`);
     assert.ok(await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu), "Chromium has WebGPU");
     const width = 16, height = 8;
-    for (const [name, p] of [["ramp", ramp()], ["near and far, depth", nearFar(true)], ["near and far, no depth", nearFar(false)]] as const) {
+    for (const [name, p] of [["ramp", ramp()], ["near and far, depth", nearFar(true)], ["near and far, no depth", nearFar(false)], ["only the read field", spread()]] as const) {
       const want = rasterize(p.evaluated(), width, height, evaluatorCall).rgba;
       const got = await page.evaluate(`(${RENDER})(${JSON.stringify({ width, height, passes: onGpu(p.compiled(), p.draws.sites) })})`) as { errors: string[]; rgba: number[] };
       assert.deepEqual(got.errors, [], name);

@@ -29,7 +29,7 @@ import { withNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { NUMBER, type Type } from "../../ters/src/lang/types.ts";
 import type { Names } from "../../ters/src/presentation.ts";
-import { isRecord, lowerScalar, type CoreIR, type LType, type RType } from "./scalar.ts";
+import { isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 import { emitWgsl, vectorWidth } from "./wgsl.ts";
 
 // The leaves and the site, as the runtime reads them (gpu-frame.ts).
@@ -63,6 +63,11 @@ function rebuilt(t: LType, structs: Structs, leaf: (k: number, kind: Word) => st
   if (!s) throw new Error(`no WGSL type for ${r.name}`);
   return `${s.name}(${r.fields.map((f) => rebuilt(f.t, structs, leaf, at)).join(", ")})`;
 }
+// The k-th of all the leaves: its word among those that cross, or 0.
+const only = (all: Leaf[], kept: Leaf[], word: (k: number) => string) => (k: number, kind: Word) => {
+  const j = kept.indexOf(all[k]);
+  return j < 0 ? zero(kind) : fromWord(word)(j, kind);
+};
 // A leaf from the k-th u32 of a buffer.
 const fromWord = (word: (k: number) => string) => (k: number, kind: Word) => (kind === "f32" ? `bitcast<f32>(${word(k)})` : kind === "i32" ? `bitcast<i32>(${word(k)})` : `(${word(k)} != 0u)`);
 // WGSL reading field j of e, a value of record type t.
@@ -73,6 +78,42 @@ function leafAt(e: string, t: LType, path: number[], structs: Structs): string {
   for (const j of path) { x = field(x, ty as RType, j, structs); ty = (ty as RType).fields[j].t; }
   return x;
 }
+
+// The parts of input `param` of funcs[fi] it reads: each a path of
+// fields, [] for the whole; through the calls it is handed to, as it is.
+// null where it goes anywhere else (a closure, a record made of it).
+export function readPaths(funcs: SFunc[], fi: number, param: number, seen = new Set<string>()): number[][] | null {
+  const key = `${fi}:${param}`;
+  if (seen.has(key)) return [[]];
+  seen.add(key);
+  const out: number[][] = [];
+  let whole = false;
+  const walk = (e: SExpr): void => {
+    if (whole) return;
+    // A chain of fields from the input.
+    const path: number[] = [];
+    let x: SExpr = e;
+    while (x.k === "get") { path.unshift(x.i); x = x.rec; }
+    if (x.k === "local" && x.i === param) { out.push(path); return; }
+    if (e.k === "call" && !e.cps) {
+      e.args.forEach((a, j) => {
+        if (a.k === "local" && a.i === param) {
+          const inner = readPaths(funcs, e.fn, j, seen);
+          if (!inner) whole = true; else out.push(...inner);
+        } else walk(a);
+      });
+      return;
+    }
+    // Bound to another local: that local's reads too, by its lets.
+    if (e.k === "let" && e.value.k === "local" && e.value.i === param) { whole = true; return; }
+    kids(e).forEach(walk);
+  };
+  walk(funcs[fi].body);
+  return whole ? null : out;
+}
+// The leaves a set of read paths reaches.
+const reached = (leaves: Leaf[], paths: number[][] | null): Leaf[] => (paths === null ? leaves : leaves.filter((l) => paths.some((p) => p.every((x, j) => l.path[j] === x) || l.path.every((x, j) => p[j] === x))));
+const zero = (kind: Word) => (kind === "f32" ? "0.0" : kind === "i32" ? "0i" : "false");
 
 // Whether e reads binder b.
 const reads = (nodes: Code["nodes"], e: Id, b: Id): boolean => {
@@ -144,7 +185,10 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const structs = sh.structs;
   // The inputs' leaves: the instance, the corner, then each value read.
   const [it, ct] = vf.params, capLs = vf.params.slice(2);
-  const instance = unread ? [] : leavesOf(it), corner = leavesOf(ct), capLeaves = capLs.map((t) => leavesOf(t));
+  const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t) => leavesOf(t));
+  // Only what the vertex function reads of an instance and of a corner
+  // crosses (G8): the rest is 0 in the shader.
+  const instance = allInstance && reached(allInstance, readPaths(l.funcs, vi, 0)), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
   if (!instance) throw new Error("its instances aren't records of Float64s, Ints and Bools");
   if (!corner) throw new Error("its mesh's corners aren't records of Float64s, Ints and Bools");
   if (capLeaves.some((x) => !x)) throw new Error("reads a value that isn't Float64s, Ints, Bools or records of them");
@@ -194,7 +238,7 @@ ${vary.join("\n")}
 @vertex fn lab_vs(@builtin(vertex_index) lab_vi: u32, @builtin(instance_index) lab_ii: u32) -> LabPlaced {
   // Every binding read, so the layout made from the module has all three.
   _ = lab_caps[0]; _ = lab_inst[0]; _ = lab_corner[0];
-${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, fromWord((j) => `lab_inst[lab_ii * ${nI}u + ${j}u]`)), rebuilt(ct, structs, fromWord((j) => `lab_corner[lab_vi * ${nC}u + ${j}u]`)), ...capsWgsl].join(", ")});
+${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, only(allInstance!, instance, (j) => `lab_inst[lab_ii * ${nI}u + ${j}u]`)), rebuilt(ct, structs, only(allCorner!, corner, (j) => `lab_corner[lab_vi * ${nC}u + ${j}u]`)), ...capsWgsl].join(", ")});
   var o: LabPlaced;
   o.position = ${clip};
 ${carry.join("\n")}
