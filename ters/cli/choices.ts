@@ -263,12 +263,14 @@ export const HELD = "held ";
 const PLACE = /^(\S+) place: .*: ([^:;]+); among [^;]+; target (.+)$/;
 // The placements held on the main thread (L280h), by the node each is
 // about, for JavaScript (a page's or a command-line program's workers)
-// and for C's threads.
-export function heldPlaces(lines: readonly string[]): { js: Id[]; c: Id[] } {
-  const out = { js: [] as Id[], c: [] as Id[] };
+// and for C's threads; and a command-line program's held on its worker
+// threads (`workers`), shared out from its first items.
+export function heldPlaces(lines: readonly string[]): { js: Id[]; c: Id[]; workers: Id[] } {
+  const out = { js: [] as Id[], c: [] as Id[], workers: [] as Id[] };
   for (const l of lines) {
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
     if (p && p[2] === "main thread") (p[3] === "C" ? out.c : out.js).push(p[1]);
+    if (p && p[2] === "worker threads" && p[3] === "JavaScript") out.workers.push(p[1]);
   }
   return out;
 }
@@ -280,9 +282,10 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
   for (const l of lines) {
     if (!l.startsWith(HELD)) continue;
     const m = ENTRY.exec(l.slice(HELD.length));
-    // A placement held on the main thread (L280h): heldPlaces's.
+    // A placement held on the main thread, or a command-line program's
+    // on worker threads (L280h): heldPlaces's.
     const place = PLACE.exec(l.slice(HELD.length));
-    if (!m && place) { if (place[2] !== "main thread") throw new Error(`a placement can be held only on the main thread yet: ${l}`); continue; }
+    if (!m && place) { if (place[2] !== "main thread" && !(place[2] === "worker threads" && place[3] === "JavaScript")) throw new Error(`a placement can be held only on the main thread, or a command-line program's on worker threads, yet: ${l}`); continue; }
     if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation or a placement can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
@@ -292,8 +295,15 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
 // The entries written again: the held ones as they were, the rest as
 // picked now (with the held ones held).
 export function heldAndPicked(written: readonly string[], now: readonly string[]): string[] {
-  const held = written.filter((l) => l.startsWith(HELD)), of = new Set(heldOf(held).keys());
-  return [...held, ...now.filter((l) => !of.has(ENTRY.exec(l)?.[1] ?? ""))].sort((a, b) => key(a).localeCompare(key(b)));
+  const held = written.filter((l) => l.startsWith(HELD)), isHeld = heldIn(held);
+  return [...held, ...now.filter((l) => !isHeld(l))].sort((a, b) => key(a).localeCompare(key(b)));
+}
+// Whether an entry made now is one a held entry stands for: a type's,
+// by the type, or a placement's, by its node and target.
+function heldIn(written: readonly string[]): (l: string) => boolean {
+  const of = new Set(heldOf(written).keys());
+  const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[3]}`] : []; }));
+  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[3]}`)); };
 }
 const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // What a check says of the held entries: where the compiler, choosing
@@ -310,9 +320,9 @@ export const readChoices = (text: string): string[] => text.split("\n").filter((
 
 // What a check says of a choices file against the picks made now.
 export function staleChoices(written: readonly string[], now: readonly string[]): string[] {
-  const of = new Set(heldOf(written).keys());
+  const isHeld = heldIn(written);
   written = written.filter((l) => !l.startsWith(HELD));
-  now = now.filter((l) => !of.has(ENTRY.exec(l)?.[1] ?? ""));
+  now = now.filter((l) => !isHeld(l));
   const was = new Set(written), is = new Set(now);
   return [...written.filter((l) => !is.has(l)).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(l)).map((l) => `new    ${l}`)];
 }

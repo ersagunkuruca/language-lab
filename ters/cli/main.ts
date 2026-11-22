@@ -664,9 +664,9 @@ const choicesFile = choicesPath(path);
 const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choicesFile, "utf8")) : [];
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
-const placesHeld = heldPlaces(writtenChoices), holdsPlaces = placesHeld.js.length + placesHeld.c.length > 0;
-const onMainThread = async (js: Id[], c: Id[]) => (await import("../../compiler/src/scalar.ts")).keepOnMainThread(js, c);
-if (holdsPlaces) await onMainThread(placesHeld.js, placesHeld.c);
+const placesHeld = heldPlaces(writtenChoices), holdsPlaces = placesHeld.js.length + placesHeld.c.length + placesHeld.workers.length > 0;
+const onMainThread = async (js: Id[], c: Id[], workers: Id[]) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(js, c); s.shareAlways(workers); };
+if (holdsPlaces) await onMainThread(placesHeld.js, placesHeld.c, placesHeld.workers);
 const loaded = { ...answeredHere(load(path)), ...(heldHere.size ? { held: heldHere } : {}) };
 const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
@@ -984,9 +984,9 @@ switch (command) {
       if (heldHere.size || holdsPlaces) {
         const alone = represented({ ...loaded, held: undefined }, start, true);
         // Where the compiler alone would run the work held on the main thread.
-        if (holdsPlaces) await onMainThread([], []);
+        if (holdsPlaces) await onMainThread([], [], []);
         const placedAlone = holdsPlaces ? [...await places(alone, start), ...cPlaces(start)] : [];
-        if (holdsPlaces) await onMainThread(placesHeld.js, placesHeld.c);
+        if (holdsPlaces) await onMainThread(placesHeld.js, placesHeld.c, placesHeld.workers);
         for (const l of heldWarnings(writtenChoices, [...choiceLines(loaded, start, alone.picks ?? []), ...placedAlone])) console.log(l);
       }
     }

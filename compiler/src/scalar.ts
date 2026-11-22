@@ -628,6 +628,13 @@ export { reachedFrom, reachedWithShows };
 // lowers (cli/main.ts), from `<program>.choices`.
 let onMain: { js: ReadonlySet<Id>; c: ReadonlySet<Id> } = { js: new Set(), c: new Set() };
 export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = { js: new Set(js), c: new Set(c) }; }
+// And the ones held on worker threads (L280h): a command-line program's
+// map, keep, fold or search shared out from its first items, its
+// runtime call given true (branches-rt.ts `always`), by the node its
+// entry is about (sharedSites's `at`).
+let onWorkers: ReadonlySet<Id> = new Set();
+export function shareAlways(js: Iterable<Id>) { onWorkers = new Set(js); }
+const always = (at: Id): SExpr[] => (onWorkers.has(at) ? [{ k: "bool", v: true }] : []);
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
@@ -1713,7 +1720,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             if (fnAway?.k === "closure" && (fnAway.src && "binders" in fnAway.src || !fnAway.caps.length)) awayMaps.push({ site: (site as { v: number }).v, fn: n.args[1], how: kind, caps: fnAway.src && "binders" in fnAway.src ? fnAway.src.binders : [] });
             const shared: SExpr = away
               ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }, { k: "num", v: 0 }], t, suspends: true }
-              : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
+              : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site, ...always(n.args[1])] };
             if (!away) sharedSites.push({ site: (site as { v: number }).v, at: n.args[1], how: kind === "all" ? "every" : kind === "first" ? "first where" : kind });
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.
@@ -1723,7 +1730,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
               given.set(n.id, [{ k: "local", i: one }, expr(n.args[1], env, f, false)]);
               try { then = { k: "let", i: one, value: shared, body: expr(id, env, f, tail) }; } finally { given.delete(n.id); }
             }
-            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then, else: plain, t } };
+            return { k: "let", i: l, value: items, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site, ...(away ? [] : always(n.args[1]))] }, then, else: plain, t } };
           }
         }
         // The same in C (L101, c.ts `par:map`), an array's: on threads,
@@ -4251,8 +4258,8 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         else sharedSites.push({ site: (site as { v: number }).v, at: each.arm.id, how: each.how });
         const shared: SExpr = waitsIn(f)
           ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil, each.join ?? { k: "num", v: 0 }], t: res, suspends: true }
-          : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : [])] };
-        return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: res } };
+          : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : always(each.arm.id).length ? [{ k: "num", v: 0 } as SExpr] : []), ...always(each.arm.id)] };
+        return { k: "let", i: l, value: whole, body: { k: "if", cond: { k: "rt", fn: "map.worth", args: [xs, site, ...(waitsIn(f) ? [] : always(each.arm.id))] }, then: shared, else: inTurn(arr ? { ...s, args: [xs] } : xs), t: res } };
         }
       }
       return inTurn(s);
@@ -4995,7 +5002,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           return { k: "let", i: got, value: away, body: { k: "attempt", body: { k: "rt", fn: "first.one", args: [local(got)] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t } };
         }
         sharedSites.push({ site: mapSites, at: n.id, how: "first" });
-        return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
+        return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, ...always(n.id)] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
       }
     }
     if (opts.host && !fibers && (kind === "count" || kind === "all") && !onMain.js.has(n.id) && countsShared().has(n.id)) {
@@ -5005,7 +5012,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // In a function that may wait (a page's handler), on the page's
       // workers, the rest of it given (C61 c′4, branches-rt.ts searchAway).
       if (c && waitsIn(f)) return { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: kind === "all" && isArray(t) }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: kind }], t, suspends: true };
-      if (c) { sharedSites.push({ site: mapSites, at: n.id, how: kind }); return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }; }
+      if (c) { sharedSites.push({ site: mapSites, at: n.id, how: kind }); return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, ...always(n.id)] }; }
     }
     // The same count in C (C203): the search a closure of nothing giving
     // its count, which c.ts `par:count:search` runs with each item of its first

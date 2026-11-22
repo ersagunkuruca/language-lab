@@ -26,7 +26,7 @@ function rt(name: string): Fn | undefined {
   // all pass and any pass, stopping at the first item that decides (C43).
   if (name === "all.pure" || name === "any.pure") {
     const any = name === "any.pure";
-    return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (unbounded(fuel) ? testPure(xs, f as (x: unknown) => unknown, site as number, any) : testInOrder(xs, f as (x: unknown) => unknown, any));
+    return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? testPure(xs, f as (x: unknown) => unknown, site as number, any, !!always) : testInOrder(xs, f as (x: unknown) => unknown, any));
   }
   // Two calls of a function in its own body (C61 e): the first's answer,
   // and then the second's.
@@ -34,31 +34,36 @@ function rt(name: string): Fn | undefined {
   if (name === "both.second") return bothSecond as Fn;
   if (name === "both.on") return bothOn as Fn;
   // first where, its answer's item as a list of one or none (C43).
-  if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (unbounded(fuel) ? firstPure(xs, f as (x: unknown) => unknown, site as number) : firstInOrder(xs, f as (x: unknown) => unknown));
+  if (name === "first.pure") return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? firstPure(xs, f as (x: unknown) => unknown, site as number, !!always) : firstInOrder(xs, f as (x: unknown) => unknown));
   // A count whose search's first choice is shared out (C43), and that
   // choice, which keeps one item in each run of it.
-  if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown) => (unbounded(fuel) ? searchPure(search, site as number, "count") : countEvery(search));
+  if (name === "count.search") return (search: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? searchPure(search, site as number, "count", !!always) : countEvery(search));
   // all's, an array or a list of the runtime's as its type says.
-  if (name === "all.search") return (search: unknown, array: unknown, fuel: unknown, site: unknown) => {
-    const xs = (unbounded(fuel) ? searchPure(search, site as number, "all") : allEvery(search)) as Value[];
+  if (name === "all.search") return (search: unknown, array: unknown, fuel: unknown, site: unknown, always?: unknown) => {
+    const xs = (unbounded(fuel) ? searchPure(search, site as number, "all", !!always) : allEvery(search)) as Value[];
     return array ? arrayOf(xs) : toList(xs);
   };
   // first's: its answer, or FAIL for the default.
-  if (name === "first.search") return (search: unknown, fuel: unknown, site: unknown) => {
-    const xs = (unbounded(fuel) ? searchPure(search, site as number, "first") : firstOf(search)) as unknown[];
+  if (name === "first.search") return (search: unknown, fuel: unknown, site: unknown, always?: unknown) => {
+    const xs = (unbounded(fuel) ? searchPure(search, site as number, "first", !!always) : firstOf(search)) as unknown[];
     if (!xs.length) throw FAIL;
     return xs[0];
   };
   // A fold of a list adding an Int for each item, or keeping the largest
   // or the smallest, after the empty list's z (C42).
-  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, join?: unknown) => (unbounded(fuel) ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join as (x: unknown) => unknown) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join as (x: unknown) => unknown));
+  // A site held on worker threads (L280h) is given true after the join
+  // (0 where it has none).
+  if (name === "fold.pure") return (xs: unknown, f: unknown, z: unknown, how: unknown, fuel: unknown, site: unknown, by?: unknown, always?: unknown) => {
+    const join = by === undefined || typeof by === "number" ? undefined : by as (x: unknown) => unknown;
+    return unbounded(fuel) ? foldPure(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", site as number, join, !!always) : foldInOrder(xs, f as (x: unknown) => unknown, z as I.Int, how as "add", join);
+  };
   if (name === "choose.split") return chooseSplit as Fn;
   if (name === "range.split") return ((x: number) => rangeSplit(rangeCount(x))) as Fn;
   if (name === "split.hold") return splitHold as Fn;
   if (name === "split.give") return splitGive as Fn;
   if (name === "map.pure" || name === "keep.pure") {
     const keep = name === "keep.pure";
-    return (xs: unknown, f: unknown, fuel: unknown, site: unknown) => (unbounded(fuel) ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
+    return (xs: unknown, f: unknown, fuel: unknown, site: unknown, always?: unknown) => (unbounded(fuel) ? mapPure(xs, f as (x: unknown) => unknown, site as number, keep, !!always) : mapInOrder(xs, f as (x: unknown) => unknown, keep));
   }
   return undefined;
 }
