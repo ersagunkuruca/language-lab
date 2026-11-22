@@ -581,7 +581,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; derived?: Map<string, FType> }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; sharedSites?: { site: number; at: Id; how: string }[]; derived?: Map<string, FType> }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -980,6 +980,11 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
   const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
+  // A command-line program's work shared out on worker threads where it
+  // is worth it (C42, C43): its site, the node it is about (a map's
+  // function, a fold's item arm, a search) and how; the program's choices
+  // list those its code kept (cli/choices.ts placeLines).
+  const sharedSites: { site: number; at: Id; how: string }[] = [];
   for (const n of opts.host || fibers ? allDefs : []) {
     if (n.kind !== "def" || !n.body || (code.nodes[n.body]?.kind === "typedef" && notOwn(n, code.nodes[n.body] as NodeOf<"typedef">)) || n.id.startsWith("std.")) continue;
     const td = code.nodes[n.body];
@@ -1697,6 +1702,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             const shared: SExpr = away
               ? { k: "world", op: "mapAway", aborts: true, args: [xs, fnAway!, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: kind }, { k: "num", v: 0 }, { k: "num", v: 0 }], t, suspends: true }
               : { k: "rt", fn: `${kind}.pure`, args: [xs, expr(n.args[1], env, f, false), { k: "rt", fn: "fuel.get", args: [] }, site] };
+            if (!away) sharedSites.push({ site: (site as { v: number }).v, at: n.args[1], how: kind });
             // first where's runtime gives the item found, as a list of it
             // or of none, which first where as compiled then answers from.
             let then: SExpr = shared;
@@ -4229,6 +4235,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // item's arm, given the rest's Int as the join's identity; a
         // record of Ints's (C42g) given each field's.
         if (waitsIn(f)) awayMaps.push({ site: (site as { v: number }).v, fn: each.arm.id, how: each.how, caps: each.free, params: [each.arm.binds[0], each.arm.results[1]!], ...(each.hows ? { hows: each.hows } : {}) });
+        else sharedSites.push({ site: (site as { v: number }).v, at: each.arm.id, how: each.how });
         const shared: SExpr = waitsIn(f)
           ? { k: "world", op: "mapAway", aborts: true, args: [xs, each.fn, { k: "rt", fn: "fuel.get", args: [] }, site, { k: "text", v: each.how }, each.nil, each.join ?? { k: "num", v: 0 }], t: res, suspends: true }
           : { k: "rt", fn: "fold.pure", args: [xs, each.fn, each.nil, { k: "text", v: each.how }, { k: "rt", fn: "fuel.get", args: [] }, site, ...(each.join ? [each.join] : [])] };
@@ -4974,6 +4981,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const away: SExpr = { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: false }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: "first" }], t, suspends: true };
           return { k: "let", i: got, value: away, body: { k: "attempt", body: { k: "rt", fn: "first.one", args: [local(got)] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t } };
         }
+        sharedSites.push({ site: mapSites, at: n.id, how: "first" });
         return { k: "attempt", body: { k: "rt", fn: "first.search", args: [c, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }, res, ok: local(res), otherwise: expr(dflt, env, f, false), t };
       }
     }
@@ -4984,7 +4992,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
       // In a function that may wait (a page's handler), on the page's
       // workers, the rest of it given (C61 c′4, branches-rt.ts searchAway).
       if (c && waitsIn(f)) return { k: "world", op: "searchAway", aborts: true, args: [c, { k: "bool", v: kind === "all" && isArray(t) }, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }, { k: "text", v: kind }], t, suspends: true };
-      if (c) return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] };
+      if (c) { sharedSites.push({ site: mapSites, at: n.id, how: kind }); return { k: "rt", fn: `${kind}.search`, args: [c, ...how, { k: "rt", fn: "fuel.get", args: [] }, { k: "num", v: mapSites++ }] }; }
     }
     // The same count in C (C203): the search a closure of nothing giving
     // its count, which c.ts `par:count:search` runs with each item of its first
@@ -5915,7 +5923,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const derived = new Map([...fns.values()].flatMap((t): [string, FType][] => (derivedKeys.has(plainKey(t)) ? [[t.key, derivativeType(t)]] : [])));
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(derived.size ? { derived } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(sharedSites.length ? { sharedSites } : {}), ...(derived.size ? { derived } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a
