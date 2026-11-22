@@ -145,3 +145,4 @@ export const arith$sub = /* @__PURE__ */ unresolved("subtract");
 export const arith$mul = /* @__PURE__ */ unresolved("multiply");
 export const arith$neg = /* @__PURE__ */ unresolved("negate");
 export const arith$less = /* @__PURE__ */ unresolved("less than");
+export const arith$abs = /* @__PURE__ */ unresolved("abs");
