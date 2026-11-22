@@ -132,7 +132,9 @@ export function foldFrom(code: Code, n: Call, nameOf: (id: Id) => string): { fol
 // line, on lines of their own, hidden as …, or shown when it is deeper
 // than the depth hides. A view: kept in layout.json.
 export type Shape = "line" | "lines" | "hidden" | "shown";
-type BlocksOpts = { pane?: boolean; loose?: Record<Id, Id>; shape?: Record<Id, Shape>; depth?: number };
+// `width`: the characters a line may take, the pane's own width where it
+// is known (QA 11-22b M1), else WIDTH.
+type BlocksOpts = { pane?: boolean; loose?: Record<Id, Id>; shape?: Record<Id, Shape>; depth?: number; width?: number };
 export function blocksOf(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: BlocksOpts = {}): Blk[] {
   const bs = blocksBare(code, pres, info, defId, opts);
   return pres.style.comments === false ? bs : noted(bs, pres, defId);
@@ -161,6 +163,7 @@ function noted(bs: Blk[], pres: Presentation, defId: Id): Blk[] {
 function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id, opts: BlocksOpts): Blk[] {
   const names = pres.names;
   const pane = !!opts.pane;
+  const width = opts.width ?? WIDTH;
   // A binder nobody named is called for its type (items, x, event), as the
   // editor names a new parameter; only what isn't a binder shows its id.
   const given = new Map<Id, string>();
@@ -212,7 +215,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     let at = id;
     for (let c = node(at); isLet(c); c = node(at)) { const l = node((c as Call).fn) as NodeOf<"lambda">; parts.push(...(c as Call).args); at = l.body; }
     if (at === id || [...parts, at].some(tall)) return false;
-    return pieceText([...lead, ...inline(id).p]).length <= WIDTH;
+    return pieceText([...lead, ...inline(id).p]).length <= width;
   };
   // A match whose arms are an effect's operations handles it.
   const isHandler = (n: NodeOf<"match">) => {
@@ -282,7 +285,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
       try { w = pieceText(inline(id).p).length; } finally { measuring = false; }
       widths.set(id, w);
     }
-    return w + pieceText(lead).length > WIDTH;
+    return w + pieceText(lead).length > width;
   };
   const tallOrWide = (id: Id, lead: Piece[] = []) => tall(id) || wide(id, lead);
 
