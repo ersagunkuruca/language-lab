@@ -118,6 +118,10 @@ export function readRecording(top: string, coverage: string, reads: string): Pic
   return { code, files: [...files].sort(), dirs: [...dirs].sort(), trees: [...trees].sort() };
 }
 
+// The longest a file may run while recorded: the slowest pass in about
+// 6.5 minutes (resolve-once.test), and a share has 20.
+export const LIMIT_SECONDS = 480;
+
 // Runs one test file (a path from the top) in its package with coverage and
 // the reads recorder on, and gives its entry, with what the run printed
 // (kept to say why it failed).
@@ -126,7 +130,7 @@ export function readRecording(top: string, coverage: string, reads: string): Pic
 // script's counters until the process runs out of memory (editing-3.test,
 // 42 s plain, out of memory at 61 s with coverage). They are found by
 // imports instead (affected.ts `bundles`).
-export function recordOne(top: string, test: string, at: string, env: NodeJS.ProcessEnv = process.env, coverage = true): Promise<{ entry: Entry; output: string }> {
+export function recordOne(top: string, test: string, at: string, env: NodeJS.ProcessEnv = process.env, coverage = true, limitSeconds = LIMIT_SECONDS): Promise<{ entry: Entry; output: string }> {
   const pkg = test.split("/")[0];
   const scratch = mkdtempSync(join(tmpdir(), "ters-map-"));
   const covDir = join(scratch, "coverage"), reads = join(scratch, "reads");
@@ -136,16 +140,23 @@ export function recordOne(top: string, test: string, at: string, env: NodeJS.Pro
   // to that one instead of running the file.
   const { NODE_TEST_CONTEXT: _, ...rest } = env;
   return new Promise((done) => {
+    // In a group of its own, so a file that never ends is stopped with
+    // what it started (Check main 11-22: three of six shares waited on one
+    // until the job's 20 minutes ran out, so no run finished and no one
+    // could see which file it was).
     const c = spawn("node", ["--test", "--test-reporter=dot", relative(pkg, test)], {
-      cwd: join(top, pkg), stdio: ["ignore", "pipe", "pipe"],
+      cwd: join(top, pkg), stdio: ["ignore", "pipe", "pipe"], detached: true,
       env: { ...rest, ...(coverage ? { TERS_COVERAGE: covDir } : {}), TERS_READS: reads, TERS_TOP: top, NODE_OPTIONS: [env.NODE_OPTIONS, preload].filter(Boolean).join(" ") },
     });
-    let output = "";
+    let output = "", late = false;
+    const limit = setTimeout(() => { late = true; try { process.kill(-c.pid!, "SIGKILL"); } catch { c.kill("SIGKILL"); } }, limitSeconds * 1000);
     c.stdout.on("data", (d) => { output += d; });
     c.stderr.on("data", (d) => { output += d; });
     c.on("close", (status) => {
+      clearTimeout(limit);
+      if (late) output += `\nstopped: still running after ${limitSeconds} s\n`;
       const seconds = Math.round((Date.now() - start) / 100) / 10;
-      const entry: Entry = { at, ran: new Date(start).toISOString(), passed: status === 0, seconds, ...readRecording(top, covDir, reads) };
+      const entry: Entry = { at, ran: new Date(start).toISOString(), passed: status === 0 && !late, seconds, ...readRecording(top, covDir, reads) };
       rmSync(scratch, { recursive: true, force: true });
       done({ entry, output });
     });
