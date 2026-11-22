@@ -30,6 +30,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: C267 (the cells' Ints, now the flock's largest gap), C265 (the greenhouse's reads), G1b with G3d (columns) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
+| L Language and library | "Speed up the interpreter on real programs" | L281g, L281c, L281d (L281a, L281b done 2026-11-21) |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
 ## Inbox
@@ -202,6 +203,16 @@ all of these.
 | L280g | Spatial partitioning as representations of the "pairs nearer than r" job: all pairs as its meaning, grid and tree as implementations, cell size as a parameter. Needs a program that uses it (flock or Night watch) | Ersagun 2026-11-20 | P3 | L | |
 | L280h | Where work runs (C61's GPU, workers or main thread) kept and tunable in the choices, per loop | Ersagun 2026-11-20 | P3 | M | |
 | L280i | A published library carries its own types' and ways' choices, keyed by content hash (when sharing needs it) | Ersagun 2026-11-20 | P3 | M | |
+
+### Speed of the interpreter ([INTERPRETER-SPEED-2026-11-21](docs/reports/INTERPRETER-SPEED-2026-11-21.md); Ersagun 2026-11-21: the looper's main took 12.8 s interpreted)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L281c | Under `with fuel` nothing runs directly: every call counts fuel on the machine. Countdown's page is 14 s, all of it there (`join` and `valid` 1.7 million calls each). Count fuel in direct runs too | interpreter profile 2026-11-21 | P2 | M | |
+| L281d | A function whose type may choose (`lookup entry` and `value at`, row `choice`) always runs on the machine when called outside a search run directly, though it gives one answer or none. Pond's page: 2.3 million machine calls, about 4.5 s. Run such a call as a direct search and take its answer when it has exactly one | interpreter profile 2026-11-21 | P2 | M | |
+| L281e | One stop keeps a function on the machine for good: after 4 stops `map` runs step by step for every later call, also those given a function that only computes (the looper's 281 maps, stopped by a change that reads a cell). Decide per call, or try again later | interpreter profile 2026-11-21 | P3 | S | |
+| L281f | The machine itself is about 3 µs a call: each step looks its node up, makes a frame per part and copies the parts so far (`[...f.vals, v]`). Effects and handlers always run there (crew's scheduler). Make each node into a function of the machine once, as direct runs do | interpreter profile 2026-11-21 | P3 | L | |
+| L281g | Before main runs, `makeRunner` resolves arithmetic by checking the program again: 3.1 s of crew's 3.5 s and 3.2 s of break's 3.4 s, cold in node. Measure in the editor first (its warm-up may already pay it), then keep it with the check | interpreter profile 2026-11-21 | P2 | S | |
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
