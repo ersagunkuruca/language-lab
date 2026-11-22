@@ -705,8 +705,10 @@ async function runInputs() {
   const stdin = await p.locator("#t-stdin").inputValue();
   if (!stdin.startsWith("1 + 2")) errors.push(`${where}: calc's standard input is ${JSON.stringify(stdin)}`);
   await p.locator('[data-set="program"]', { hasText: /sheet, a spreadsheet/ }).first().click();
-  // What main does, behind Run's ⓘ (E276).
-  if (!(await p.locator(".run-head .tip").getAttribute("title"))?.startsWith("Runs the sheet")) errors.push(`${where}: Run's ⓘ doesn't say what sheet's main does`);
+  // What main does, once, in the Definition panel's comment box (E288; E276's ⓘ repeated it).
+  await p.locator('[data-panel="node"]').click();
+  if (!(await p.locator("#f-comment").inputValue()).startsWith("Runs the sheet")) errors.push(`${where}: the comment box doesn't say what sheet's main does`);
+  if (await p.locator(".run-head").count()) errors.push(`${where}: Run still repeats main's comment`);
   const args = await p.locator("#t-args").inputValue();
   if (args !== "budget.txt") errors.push(`${where}: sheet's arguments are ${JSON.stringify(args)}`);
   const file = p.locator("#t-file");

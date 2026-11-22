@@ -5,13 +5,13 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
-import { LIST_SHAPE, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { LIST_SHAPE, LIST_SHAPE_BOOLS, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
 import { Cells, NoValue, Pending, pathValue } from "../../ters/src/lang/cells.ts";
@@ -314,6 +314,11 @@ function hostFn(name: string, cells?: Record<Id, (...xs: Value[]) => Value | und
   const [, id, how] = name.split(":");
   const out = how === "bool" ? (v: unknown) => v === true || (v as { tag?: Id }).tag === TRUE : how === "deep" ? (v: unknown) => turned(v, toBoolean) : (v: unknown) => v;
   const into = how === "deep" ? (x: unknown) => turned(x, inn) : inn;
+  // each and each of over data holding a Bool take their list as it is:
+  // a view (each of a row's item's steps), whose identity each of finds
+  // its list by, or compiled data, whose Bools the rows read as booleans.
+  const rows = how === "deep" ? cells?.[`${id}:deep`] : undefined;
+  if (rows) return (...xs) => { const v = rows(...(xs as Value[])); if (v === undefined) throw FAIL; return v; };
   const cell = cells?.[id];
   if (cell) return (...xs) => { const v = cell(...(xs.map(into) as Value[])); if (v === undefined) throw FAIL; return out(v); };
   const one = BUILTINS.one[id], many = BUILTINS.many[id];
@@ -395,9 +400,14 @@ export const planned = (make: (p: Record<string, unknown>) => (...xs: unknown[])
 // Cells' operations (run.ts cellOps) on the runtime's handler, calling the
 // program's closures: no answer is a formula with no value.
 function cellFns(cells: Cells) {
-  return cellOps(cells, (f, ...xs) => {
-    try { return inn((f as unknown as (...a: unknown[]) => unknown)(...xs)) as Value; } catch (e) { if (e === FAIL) throw new NoValue("gave no value"); throw e; }
-  });
+  const call = (back: (v: unknown) => unknown) => (f: Value, ...xs: Value[]) => {
+    try { return back((f as unknown as (...a: unknown[]) => unknown)(...xs)) as Value; } catch (e) { if (e === FAIL) throw new NoValue("gave no value"); throw e; }
+  };
+  // each and each of over data holding a Bool (`:deep`, I331): its rows'
+  // views read its Bools as booleans, the same view each time (so each of
+  // finds its list), and what a row gives is turned the evaluator's way.
+  const deep = cellOps(cells, call((v) => turned(v, inn)), LIST_SHAPE_BOOLS);
+  return { ...cellOps(cells, call(inn)), [`${CELL_OPS.each}:deep`]: deep[CELL_OPS.each], [`${CELL_OPS.eachOf}:deep`]: deep[CELL_OPS.eachOf] };
 }
 
 // A relational solve's mode plan written out (C167b, core-solve.ts

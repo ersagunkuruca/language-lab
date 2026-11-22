@@ -507,8 +507,17 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           // An array of records as columns (columns.ts, C60): an array per
           // field, a Float64Array for a Float64.
           {
-            const m = /^array\.c(new|build|push|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
+            const m = /^array\.c(new|build|push|copy|front|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
+              // A copy of an array's columns, to write an item into; or with
+              // one more item in front, at 0 (G1b4).
+              if (m[1] === "copy" || m[1] === "front") {
+                const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
+                const c = temp(), w = temp(), at = m[1] === "front" ? 1 : 0;
+                pre.push(`${d}const ${c} = ${xs[0]}, ${w} = { n: ${c}.n + ${at} };`);
+                ts.forEach((x, i) => pre.push(`${d}{ const g = new ${x === "f64" ? "Float64Array" : "Array"}(Math.max(8, ${c}.n + 1)); for (let k = 0; k < ${c}.n; k++) g[k + ${at}] = ${c}.c${i}[k]; ${w}.c${i} = g; }`));
+                return w;
+              }
               // An array a loop builds by pushes (G1b2): room for eight,
               // each column twice the size when full.
               if (m[1] === "build" || m[1] === "push") {

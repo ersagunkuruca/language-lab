@@ -34,7 +34,7 @@ import * as T from "./typed.ts";
 import { typedGraph, type GraphView, type MenuTarget } from "./typedGraph.ts";
 import { builtinName, builtinOf, definitionOf } from "./define.ts";
 import { follow, type Pos } from "./canvas.ts";
-import { edit, fileTag, gesturesTip, h, head, tip, type Kid } from "./dom.ts";
+import { edit, fileTag, gesturesTip, growing, h, head, type Kid } from "./dom.ts";
 import { guide } from "./guide.ts";
 import { navigatorPanel } from "./navigator.ts";
 import { runPanel } from "./runPanel.ts";
@@ -1038,25 +1038,24 @@ let graphLater = false;
 
 // ---------------------------------------------------------------- gestures
 
-// A descriptive name is a second name. A node that has only its short
-// one is renamed there, so the name you give is the one the program has
-// (ters and the compiler read the short names) and not a second one.
-const nameLayer = (id: Id): Layer => (ui.layer === "descriptive" && doc.names.descriptive[id] === undefined ? "short" : ui.layer);
+// Each name set is edited in its own field (E287): a descriptive name is
+// a second name, given beside the short one (ters and the compiler read
+// the short names); an empty one falls back to the short.
+const namesOn = (l: Layer): Names => layer<Names>(LIBRARY.names, ...fileModules(doc).map((m) => m.names), looseNames(), doc.names.short, l === "descriptive" ? doc.names.descriptive : {});
 
-function rename(id: Id, value: string) {
-  const clash = Top.nameClash(doc.code, pres().names, id, value);
+function rename(id: Id, value: string, set: Layer) {
+  const clash = Top.nameClash(doc.code, namesOn(set), id, value);
   if (clash) {
     ui.note = `Refused: ${clash}. Nothing changed.`;
     ui.touched = [];
     ui.refused = true;
     return render();
   }
-  const layer = nameLayer(id);
-  const names = { ...doc.names[layer] };
+  const names = { ...doc.names[set] };
   if (value.trim()) names[id] = value; else delete names[id];
   const k = node(id).kind;
-  const what = k === "call" ? (value.trim() ? "Named this step" : "Inlined this step") : "Renamed";
-  commit({ names: { ...doc.names, [layer]: names } }, [`names.${layer}.json`], `${what}. Only names.${layer}.json changed; the meaning hash is the same.`);
+  const what = set === "short" && k === "call" ? (value.trim() ? "Named this step" : "Inlined this step") : "Renamed";
+  commit({ names: { ...doc.names, [set]: names } }, [`names.${set}.json`], `${what}. Only names.${set}.json changed; the meaning hash is the same.`);
 }
 
 function setComment(id: Id, value: string) {
@@ -1159,7 +1158,15 @@ function textPanel(info: T.Info): string {
 // ---------------------------------------------------------------- typed programs
 
 // The blocks show a type's one effect-row variable as … (E261).
-const blocksPres = (): Presentation => ({ ...pres(), style: { ...(blocksStyle as unknown as Style), rowDots: true } });
+// The blocks' own style, its operators written as the notation switch
+// says (a · b, a * b, (* a b)): the switch reads in every view.
+const blocksStyles = new Map<StyleName, Style>();
+const blocksStyleFor = (s: StyleName): Style => {
+  let k = blocksStyles.get(s);
+  if (!k) blocksStyles.set(s, k = { ...BLOCKS_STYLE, notation: { ...BLOCKS_STYLE.notation, ...styles[s].notation }, rowDots: true });
+  return k;
+};
+const blocksPres = (): Presentation => ({ ...pres(), style: blocksStyleFor(ui.style) });
 // Typed views: unnamed dots get a handle (•1, •2) for display only.
 // The same names object while the program, the definition and the names
 // are, so what is kept by the names (shown types, E200b) is kept.
@@ -1175,7 +1182,7 @@ const typedPres = (): Presentation => withHandles(blocksPres());
 let blocksKept: { from: unknown[]; el: HTMLElement } | null = null;
 function blocksOf(info: T.Info): HTMLElement {
   const p = typedPres();
-  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, doc.layout.groups, doc.layout.folded];
+  const from = [doc.code, info, ui.def, p.names, p.comments, p.hints, p.style, doc.layout.groups, doc.layout.folded];
   if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) return (blocksKept = { from, el: T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded) }).el;
   for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
   if (ui.selected) for (const e of blocksKept.el.querySelectorAll(`[data-id="${CSS.escape(ui.selected)}"]`)) e.classList.add("sel");
@@ -1218,6 +1225,27 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const outer = enclosing(id);
   const upBtn = outer ? h("button", { class: "btn mini", type: "button", title: "Select what this is in (Alt+↑)", "data-act": "goto-node", "data-target": outer }, "↑ Outer") : null;
   out.append(h("div", { class: "insp-head" }, h("span", { class: "kind", title: `id ${id} in code.json` }, kindLabel(id))), ...(upBtn ? [h("div", { class: "acts up" }, upBtn)] : []));
+  // Its comment first, in one box as tall as its text (E288), saved in
+  // comments.json.
+  {
+    const ta = growing(h("textarea", { id: "f-comment", placeholder: "Comment", "aria-label": "Comment" }) as HTMLTextAreaElement);
+    // References show as {name}; on the way back a {name} that is one of them,
+    // or that only one node carries, becomes that node's id again.
+    const raw = doc.comments[id] ?? "";
+    const refs = [...raw.matchAll(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"))].map((m) => m[1]);
+    ta.value = resolveRefs(raw, (ref) => `{${names[ref] ?? ref}}`);
+    ta.addEventListener("change", () => {
+      const back = ta.value.replace(/\{([^{}]+)\}/g, (whole, nm: string) => {
+        const mine = refs.find((r) => names[r] === nm);
+        const all = Object.keys(names).filter((r) => names[r] === nm && doc.code.nodes[r]);
+        const ref = mine ?? (all.length === 1 ? all[0] : undefined);
+        return ref ? `{${ref}}` : whole;
+      });
+      if (back !== raw) setComment(id, back);
+    });
+    ta.title = "Saved in comments.json";
+    out.append(h("label", { class: "field comment", for: "f-comment" }, ta));
+  }
   const t = T.typeOf(info, id, names);
   const hole = info.holes.get(id);
   // With the unit it needs, a pin's included (QA 11-15 Q1).
@@ -1250,12 +1278,16 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
     call ? h("button", { class: "btn", type: "button", "data-act": "inline", "data-target": call, title: "Draw the call as the definition's body, in place. A view only." }, (doc.layout.inline ?? []).includes(call) ? "Collapse" : "Show inline") : null));
 
   if (n.kind === "binder" || n.kind === "def" || n.kind === "variant" || n.kind === "field") {
-    const current = doc.names[ui.layer][id] ?? doc.names.short[id] ?? "";
-    const input = h("input", { id: "f-name", type: "text", value: current, autocomplete: "off", spellcheck: "false", "data-commit": true }) as HTMLInputElement;
-    input.addEventListener("change", () => rename(id, input.value));
-    // Enter saves (the change) and goes back to the program.
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
-    out.append(h("label", { class: "field", for: "f-name" }, h("span", { class: "field-head" }, "Name", fileTag(`names.${nameLayer(id)}`)), input));
+    // One field a name set, the shown set's first (the menu's Rename goes to it).
+    const field = (l: Layer) => {
+      const fid = l === ui.layer ? "f-name" : `f-name-${l}`;
+      const input = h("input", { id: fid, type: "text", value: doc.names[l][id] ?? "", placeholder: l === "descriptive" ? doc.names.short[id] ?? "" : "", autocomplete: "off", spellcheck: "false", "data-commit": true }) as HTMLInputElement;
+      input.addEventListener("change", () => rename(id, input.value, l));
+      // Enter saves (the change) and goes back to the program.
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); input.blur(); toProgram(); } });
+      return h("label", { class: "field", for: fid }, h("span", { class: "field-head" }, l === "short" ? "Short name" : "Descriptive name", fileTag(`names.${l}`)), input);
+    };
+    out.append(...(ui.layer === "short" ? ["short", "descriptive"] as const : ["descriptive", "short"] as const).map(field));
     // Next to the definition it embeds, as well as in the Program tab.
     if (n.kind === "def" && id === ui.def) out.append(h("div", { class: "acts" }, h("button", { class: "btn", type: "button", "data-act": "embed-link", title: "A link for an iframe on another page: this definition's graph, blocks and Run" }, "Copy embed link")));
   }
@@ -1424,22 +1456,6 @@ function typedInspector(namer: Namer, p: Presentation, info: T.Info): HTMLElemen
   const structure = structurePanel(info, names);
   if (structure) out.append(structure);
 
-  const ta = h("textarea", { id: "f-comment", rows: "2", placeholder: "Add a note to this node" }) as HTMLTextAreaElement;
-  // References show as {name}; on the way back a {name} that is one of them,
-  // or that only one node carries, becomes that node's id again.
-  const raw = doc.comments[id] ?? "";
-  const refs = [...raw.matchAll(new RegExp(`\\{(${ID_PATTERN})\\}`, "g"))].map((m) => m[1]);
-  ta.value = resolveRefs(raw, (ref) => `{${names[ref] ?? ref}}`);
-  ta.addEventListener("change", () => {
-    const back = ta.value.replace(/\{([^{}]+)\}/g, (whole, nm: string) => {
-      const mine = refs.find((r) => names[r] === nm);
-      const all = Object.keys(names).filter((r) => names[r] === nm && doc.code.nodes[r]);
-      const ref = mine ?? (all.length === 1 ? all[0] : undefined);
-      return ref ? `{${ref}}` : whole;
-    });
-    if (back !== raw) setComment(id, back);
-  });
-  out.append(h("label", { class: "field", for: "f-comment" }, h("span", { class: "field-head" }, "Comment", fileTag("comments")), ta));
   return out;
 }
 
@@ -2118,14 +2134,9 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   return box;
 }
 
-// Run's head, and for main its comment behind an ⓘ (E276): what the
-// program does and what to give it, without reading its code.
-function runHead(): HTMLElement {
-  const about = ui.def === defNamed("main") ? doc.comments[ui.def] : undefined;
-  if (!about) return h("h2", {}, "Run");
-  const [b, note] = tip(about, "What main does");
-  return h("div", { class: "run-head" }, h("h2", {}, "Run"), b, note);
-}
+// Run's head. Main's comment is in the Definition panel's box, once
+// (E288: an ⓘ here repeated it).
+const runHead = (): HTMLElement => h("h2", {}, "Run");
 
 const { page, pageSection, pictureSection, savePage, saveLog } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
