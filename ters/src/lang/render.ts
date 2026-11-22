@@ -204,7 +204,10 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
   // A run of steps short enough to read on one line, each step and what it
   // gives one line high: `print error(…); 2` after a case's arrow, or after
   // handle (Ersagun 2026-11-22, chapters' main).
+  // Only in the pane: the text an LLM reads (mcp) keeps a step a line,
+  // each with its id.
   const stepsFit = (id: Id, lead: Piece[]): boolean => {
+    if (!pane) return false;
     const parts: Id[] = [];
     let at = id;
     for (let c = node(at); isLet(c); c = node(at)) { const l = node((c as Call).fn) as NodeOf<"lambda">; parts.push(...(c as Call).args); at = l.body; }
@@ -391,7 +394,9 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
           enter(f.params);
           const rest = inline(f.body).p;
           leave(f.params);
-          return { p: [part("call steps", [...steps, ...rest], id)], prec: 0 };
+          // In braces, a block as in C (Ersagun 2026-11-22): where the
+          // steps end is plain wherever the run sits.
+          return pane ? atom(part("call steps", [pn("{ "), ...steps, ...rest, pn(" }")], id)) : { p: [part("call steps", [...steps, ...rest], id)], prec: 0 };
         }
         const nota = f.kind === "ref" ? pres.style.notation[f.target] : undefined;
         const ops = chainOperands(code, id);
@@ -499,18 +504,35 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
       // A run of steps is one column, each step its own line: x = …, then
       // the next, not each one nested inside the one before (the right-
       // nested lets are how the tree holds an order, not how it reads).
-      const lam = node(n.fn) as NodeOf<"lambda">;
-      // The values can't see the names they're bound to, so show them first.
-      enter(lam.params);
-      const labels = lam.params.map(bind);
-      leave(lam.params);
-      // A step done for what it does, that nothing reads, is just the step.
-      const unread = (p: Id) => base(p) === "_" || (!names[p] && !subtree(code, lam.body).some((x) => (node(x) as { target?: Id }).target === p));
-      const steps = lam.params.flatMap((p, i) => block(n.args[i], unread(p) ? [] : [labels[i], pn(" = ")]));
-      enter(lam.params);
-      const rest = block(lam.body, lead);
-      leave(lam.params);
-      return [...hold(steps, "step"), ...rest];
+      // In braces, each step ending in `;`, as a C block (Ersagun
+      // 2026-11-22: "a C-like {} block"); for mcp, a step a line as before.
+      if (!pane) {
+        const lam = node(n.fn) as NodeOf<"lambda">;
+        enter(lam.params);
+        const labels = lam.params.map(bind);
+        leave(lam.params);
+        const steps = lam.params.flatMap((p, i) => block(n.args[i], unreadStep(p, lam.body) ? [] : [labels[i], pn(" = ")]));
+        enter(lam.params);
+        const rest = block(lam.body, lead);
+        leave(lam.params);
+        return [...hold(steps, "step"), ...rest];
+      }
+      const steps: Blk[] = [], entered: Id[][] = [];
+      let at: Id = id;
+      for (let c = node(at); isCall(c) && isLet(c); c = node(at)) {
+        const lam = node(c.fn) as NodeOf<"lambda">, args = c.args;
+        // The values can't see the names they're bound to, so show them first.
+        enter(lam.params);
+        const labels = lam.params.map(bind);
+        leave(lam.params);
+        steps.push(...lam.params.flatMap((p, i) => appendLast(block(args[i], unreadStep(p, lam.body) ? [] : [labels[i], pn(" = ")]), pn(";"))));
+        enter(lam.params);
+        entered.push(lam.params);
+        at = lam.body;
+      }
+      const rest = block(at, []);
+      for (const ps of entered.reverse()) leave(ps);
+      return hold([ln(...lead, pn("{")), grp([...hold(steps, "step"), ...rest]), ln(pn("}"))]);
     }
     if (n.kind === "match" && isBool(n)) {
       const arm = (v: Id) => node(n.arms.find((a) => (node(a) as NodeOf<"arm">).variant === v)!) as NodeOf<"arm">;
@@ -533,7 +555,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
       }
       // A branch with steps before its value gets then/else on a line of
       // its own, so the steps are inside the branch, not before the word.
-      const branch = (a: NodeOf<"arm">, w: string) => grp(hasSteps(a.body) ? [ln(kw(w)), grp(block(a.body, []))] : block(a.body, [kw(`${w} `)]), 2, a.id, "arm");
+      const branch = (a: NodeOf<"arm">, w: string) => grp(hasSteps(a.body) && !(pane && isLet(node(a.body))) ? [ln(kw(w)), grp(block(a.body, []))] : block(a.body, [kw(`${w} `)]), 2, a.id, "arm");
       return hold([...head, branch(t, "then"), branch(f, "else")]);
     }
     // A match with one case on a type with one case always matches: it is
@@ -718,7 +740,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
     }
     return [ln(...lead, ...inline(id).p)];
   };
-  const hang = (id: Id, head: Piece[]): Blk[] => (stepsFit(id, head) ? [ln(...head, ...inline(id).p)] : tallOrWide(id, head) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
+  const hang = (id: Id, head: Piece[]): Blk[] => (stepsFit(id, head) ? [ln(...head, ...inline(id).p)] : pane && isLet(node(id)) ? block(id, head) : tallOrWide(id, head) ? [ln(...trimEnd(head)), grp(block(id, []))] : block(id, head));
 
   const def = node(defId) as NodeOf<"def">;
   const body = def.body ? node(def.body) : null;

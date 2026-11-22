@@ -1051,6 +1051,8 @@ function reading(text: string, code: Code, names: Names, scope: Map<string, Id>)
   // What the text prints, read back (E178): a □ left to fill later, a
   // step name = value; rest, and a list of anything.
   if (t === "□") return { hole: true };
+  // Steps in braces, { a; b }, as the blocks print them (E299).
+  if (/^\{[\s\S]*\}$/.test(t) && topLevel(t.slice(1, -1), ";")) return typedOut(t.slice(1, -1).trim(), code, names, scope);
   const steps = topLevel(t, ";");
   // A step with no name, write(a, x); write(b, y), is done for what it
   // does: its value is named _, read by nothing (E190), as E183 prints it.
@@ -1445,8 +1447,8 @@ function topLevel(text: string, by = ","): string[] | undefined {
     const c = text[i];
     if (c === '"' && text[i - 1] !== "\\") quoted = !quoted;
     if (quoted) continue;
-    if ("([".includes(c)) depth++;
-    else if (")]".includes(c) && --depth < 0) return undefined;
+    if ("([{".includes(c)) depth++;
+    else if (")]}".includes(c) && --depth < 0) return undefined;
     else if (c === by && depth === 0) { out.push(text.slice(from, i)); from = i + 1; }
   }
   if (depth || quoted) return undefined;

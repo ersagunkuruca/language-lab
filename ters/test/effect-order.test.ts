@@ -98,16 +98,17 @@ test("a folded frame says the numbers of the calls with effects inside it", () =
   assert.deepEqual(shut.map(([, k]) => k), [1, "1–2" as unknown as number]);
 });
 
-// QA 11-15 Q3: one count of the order at a time. With the effects numbered,
-// the steps' dots keep their dashes but not their own numbers.
-test("with the effects numbered, the steps' dots don't number the steps too", () => {
+// QA 11-15 Q3: one count of the order at a time. The steps are the in
+// order node's inputs, numbered there, on or off; the effects' own numbers
+// are the overlay's, on only when it is.
+test("with the effects numbered, the steps are still the in order node's inputs", () => {
   const s = program('print("a")\nprint("b")\nprint("c")');
   const def = s.own.find((d) => s.name(d) === "main")!;
-  const stepNumbers = (order: boolean) => (typedGraph(s.code, { names: s.allNames, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as never, s.info, def, {
+  const ports = (order: boolean) => (typedGraph(s.code, { names: s.allNames, comments: {}, hints: {}, style: { view: "blocks", notation: {} } } as never, s.info, def, {
     selected: null, select() {}, open() {}, canUse: () => null, use() {}, clear() {}, addDot() {},
     canShare: () => () => null, share() {}, at: {}, moved() {}, named: new Set(), order,
-  }).root as unknown as El).all().filter((e) => e.getAttribute("class") === "stepn").map((e) => e.textContent);
-  assert.deepEqual(stepNumbers(false), ["1", "2"]);
-  assert.deepEqual(stepNumbers(true), []);
+  }).root as unknown as El).all().filter((e) => e.getAttribute("class") === "portl" && e.parentElement?.children.some((c) => /\border\b/.test(c.getAttribute("class") ?? ""))).map((e) => e.textContent);
+  assert.deepEqual(ports(false), ["1", "2", "3"]);
+  assert.deepEqual(ports(true), ["1", "2", "3"]);
   assert.deepEqual(numbered(s).map(([, k]) => k), [1, 2, 3]);
 });
