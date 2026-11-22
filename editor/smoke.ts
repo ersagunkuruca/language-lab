@@ -792,6 +792,8 @@ async function pagePreview() {
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   const f = p.frameLocator("iframe.page");
+  // Once it's drawn: read before, the frame is still the empty one.
+  await f.locator("#hundred").waitFor({ timeout: 30000 }).catch(() => {});
   // The page has the base look (page.ts PAGE_BASE), not the browser's serif.
   const font = await f.locator("body").evaluate((e) => getComputedStyle(e).fontFamily);
   if (!font.includes("system-ui")) errors.push(`${where}: the page is in the browser's default font (${font})`);
