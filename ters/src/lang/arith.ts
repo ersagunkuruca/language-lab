@@ -129,7 +129,12 @@ export function resolveArithmetic(code: Code, info: Info, names: Names = {}, cos
 // them is, so the library's kept resolving serves it (I330): a copy put on
 // the layer, its own nodes found against the layer's.
 function onLibrary(code: Code): Code {
-  if (layerOf(code) || !derived.has(code)) return code;
+  // One on the layer and edited from another too (the editor checks an
+  // edit put on the library before it is told what changed) is copied
+  // too: scanningOnLayer reads a derived program as derived, and the
+  // library's resolving was dropped for it (QA 11-22d: an edit of Night
+  // watch typed all 807 library bodies, 2.7 s of the editor's thread).
+  if (!derived.has(code)) return code;
   let at: Code | undefined = code;
   for (let i = 0; at && !layerOf(at) && i < 64; i++) at = derived.get(at)?.base;
   const lib = at && layerOf(at);
