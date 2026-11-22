@@ -75,3 +75,14 @@ test("herd's trig: each operation it uses, as written among its ways; none it do
   assert.match(ways[0], /; among as written, cos by sin, cos by polar; target JavaScript$/);
   assert.deepEqual(choices("numbers").filter((l) => l.includes(" way: ")), []);
 });
+
+// Mode plans (L280a): each solve main reaches, by its id, with what is
+// known and asked, and how it is run.
+test("backwards' solves have their mode plans: equations or relational, with the goals in order", () => {
+  const lines = choices("backwards").filter((l) => / mode plan: /.test(l));
+  const of = (who: string) => lines.find((l) => l.includes(` mode plan: ${who}'s solve`))!;
+  assert.match(of("missing addend"), /solve of add for input 2 from input 1, answer: equations; exactly one answer; target JavaScript$/);
+  assert.match(of("who was greeted"), /solve of greet for name from answer: relational, goals "hello, ", join text\(…\); at most one answer, ends; target JavaScript$/);
+  assert.deepEqual(choices("backwards").filter((l) => / mode plan: /.test(l)), lines);
+  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation can be held yet/);
+});
