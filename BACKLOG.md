@@ -69,7 +69,7 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E314 | Opening a big program holds the editor's thread for 0.4 to 0.8 s (sheet 0.78 s; QA-2026-11-22d L1) | QA 11-22d | P3 | M | |
+| E314 | Opening a big program holds the editor's thread for 0.4 to 0.8 s (sheet 0.78 s; QA-2026-11-22d L1). Measured 11-22: only a first visit; it is the program's check (sheet 0.44 s, 0.24 s of it the modes asked of its relations, modes.ts seenVerdict), and a later visit reads the groups' checks kept in the browser (checkStore.ts): sheet 0.18 s. Shipping the examples' kept checks beside checks.json would cover the first visit; its size isn't measured | QA 11-22d | P3 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
