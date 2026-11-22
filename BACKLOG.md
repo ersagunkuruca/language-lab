@@ -57,7 +57,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E310 | The side panel's seven tabs fit one line at 1400 px (QA-2026-11-22c L2): they need 406 px and the panel has 318, so two lines, or fewer tabs; Ersagun's call. The phone half (L4, a row's count beside its name) done in #3066 | QA 11-22c | P3 | S | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
 
@@ -70,7 +69,7 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E314 | Opening a big program holds the editor's thread for 0.4 to 0.8 s (sheet 0.78 s; QA-2026-11-22d L1) | QA 11-22d | P3 | M | |
+| E314 | Opening a big program holds the editor's thread for 0.4 to 0.8 s (sheet 0.78 s; QA-2026-11-22d L1). Measured 11-22: only a first visit; it is the program's check (sheet 0.44 s, 0.24 s of it the modes asked of its relations, modes.ts seenVerdict), and a later visit reads the groups' checks kept in the browser (checkStore.ts): sheet 0.18 s. Shipping the examples' kept checks beside checks.json would cover the first visit; its size isn't measured | QA 11-22d | P3 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
