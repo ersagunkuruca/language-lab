@@ -169,7 +169,7 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
       // from a, b`) is the compiler's to make.
       const holdable = e.kind === "representation" && at >= 0, would = c.would.get(e.id);
       return h("div", { class: `choice${open && ids.includes(open) ? " on" : ""}`, "data-choice-row": ids.join(" "), title: [...e.facts, `target ${e.target}`].join("\n") },
-        h("div", { class: "choice-head" }, h("span", {}, about, same.length > 1 ? h("span", { class: "choice-n" }, ` ×${same.length}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
+        h("div", { class: "choice-head" }, h("span", { class: "choice-name" }, about, same.length > 1 ? h("span", { class: "choice-n" }, `×${same.length}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
         h("div", { class: "file-chips" }, ...chips.map((a, i) => i !== on && holdable
           ? h("button", { class: "chip-btn", type: "button", "data-act": "choice-hold", "data-of": e.id, "data-rep": a, title: `Store ${e.about} as ${a}` }, a)
           : h("span", { class: `chip-btn${i === on ? " on" : ""}`, ...(i === on && a !== e.pick ? { title: e.pick } : {}) }, a))),
