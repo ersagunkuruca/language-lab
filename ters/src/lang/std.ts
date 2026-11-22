@@ -199,6 +199,10 @@ export const ATTRIBUTE = typedef("std.attribute", "Attribute", [], [
   // to say Stop, a Measure button starts the sound it needs), and a click
   // on the element no longer starts and stops it. Its type by fixed ids.
   ["listening while", [["on", () => node({ id: "std.attribute.listening while.on.type", kind: "tref", target: CELL, args: [node({ id: "std.attribute.listening while.on.item", kind: "tref", target: BOOL, args: [] })] })]]],
+  // What a canvas element renders (BACKLOG G9b, FRAMES.md): the frame the
+  // view gives, drawn again whenever a cell the view read changes. Its type
+  // by fixed ids, as paint's.
+  ["render", [["frame", () => node({ id: "std.attribute.render.frame.type", kind: "tfun", params: [], result: node({ id: "std.attribute.render.frame.result", kind: "tref", target: "std.frame", args: [] }), effects: [VIEW_ROW] })]]],
 ]);
 export const HTML = typedef("std.html", "Html", [], [
   ["element", [["tag", () => tref(STRING)], ["attributes", () => tref(LIST, tref(ATTRIBUTE))], ["children", (_, self) => tref(LIST, tref(self))]]],
@@ -335,7 +339,7 @@ tn += 4 + 9 + 16;
 // for the checker's message.
 export const SMART: Record<Id, string> = { [ALGEBRAIC_V]: "as algebraic or square root", [MAP_V]: "empty map, as map or put", [SET_V]: "empty set, as set or add item" };
 for (const v of Object.keys(SMART)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
-export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", listenStereo: "std.attribute.listen in stereo", listeningWhile: "std.attribute.listening while", paint: "std.attribute.paint", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
+export const HTML_V = { element: "std.html.element", text: "std.html.text", part: "std.html.part", property: "std.attribute.property", on: "std.attribute.on", listen: "std.attribute.listen", listenStereo: "std.attribute.listen in stereo", listeningWhile: "std.attribute.listening while", paint: "std.attribute.paint", render: "std.attribute.render", event: "std.event.event", microphone: "std.input.microphone", recording: "std.input.recording", noInput: "std.input.no input" } as const;
 
 export const TRUE = "std.bool.true", FALSE = "std.bool.false", UNIT_V = "std.unit.unit";
 export const NIL = "std.list.nil", CONS = "std.list.cons";
@@ -1391,6 +1395,46 @@ export const MARK = typedef("std.mark", "Mark", [], [
   ["writing", [["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["text", () => tref(STRING)], ["size", () => tref(NUMBER)], ["fill", () => tref(STRING)]]],
 ]);
 export const MARK_V = { disk: "std.mark.disk", rectangle: "std.mark.rectangle", segment: "std.mark.segment", writing: "std.mark.writing" } as const;
+// What a canvas renders (BACKLOG G9b, docs/design/targets/FRAMES.md): a
+// frame is passes, each drawing into the screen or a texture, cleared to a
+// CSS colour, with or without a depth buffer, and its draws. A draw is a
+// mesh, its instances, and a vertex and a fragment function, made by
+// `draw`, whose type hides the instances' type: a frame lists draws of
+// birds and of the floor together, and nothing takes a draw apart but the
+// runtime. A mesh's corners, a placed corner's position and a fragment's
+// colour are records of Float64s, the program's own (a Vec3, a Colour).
+// Their types by fixed ids, so no numbered one moves.
+const ftref = (at: string, target: Id, ...args: Id[]) => fixedTref(`std.frames.t.${at}`, target, ...args);
+export const MESH = typedef("std.mesh", "Mesh", ["corner"], [
+  ["mesh", [["corners", ([c]) => ftref("mesh.corners", LIST, ftref("mesh.corners.item", c))], ["triangles", () => ftref("mesh.triangles", LIST, ftref("mesh.triangles.item", INT))]]],
+]);
+export const PLACED = typedef("std.placed", "Placed", ["position", "carried"], [
+  ["placed", [["position", ([p]) => ftref("placed.position", p)], ["carried", ([, v]) => ftref("placed.carried", v)]]],
+]);
+export const TARGET = typedef("std.target", "Target", [], [
+  ["screen", []],
+  ["texture", [["name", () => ftref("texture.name", STRING)], ["width", () => ftref("texture.width", INT)], ["height", () => ftref("texture.height", INT)]]],
+]);
+export const DRAW = typedef("std.draw", "Draw", [], []);
+export const PASS = typedef("std.pass", "Pass", [], [
+  ["pass", [["into", () => ftref("pass.into", TARGET)], ["clear", () => ftref("pass.clear", STRING)], ["depth", () => ftref("pass.depth", BOOL)], ["draws", () => ftref("pass.draws", LIST, ftref("pass.draws.item", DRAW))]]],
+]);
+export const FRAME = typedef("std.frame", "Frame", [], [
+  ["frame", [["passes", () => ftref("frame.passes", LIST, ftref("frame.passes.item", PASS))]]],
+]);
+export const FRAME_V = { mesh: "std.mesh.mesh", placed: "std.placed.placed", screen: "std.target.screen", texture: "std.target.texture", pass: "std.pass.pass", frame: "std.frame.frame", draw: "builtin.frame.draw" } as const;
+// draw(mesh, instances, vertex, fragment): the vertex function places
+// each corner of the mesh for each instance and gives what the fragment
+// is given between corners; the fragment gives the colour. Both pure, as
+// a shader is.
+export const FRAME_OPS = {
+  draw: builtin("frame.draw", "draw", (s) => {
+    const c = s.fresh(false, true), i = s.fresh(), p = s.fresh(false, true), v = s.fresh(), k = s.fresh(false, true);
+    const con = (id: Id, args: Type[] = []): Type => ({ t: "con", id, args });
+    const none = { effs: [], tail: null };
+    return fn([con(MESH, [c]), list(i), fn([i, c], con(PLACED, [p, v]), none), fn([v], k, none)], con(DRAW), s.freshRow());
+  }),
+};
 // Ids that were renamed, as a saved program may still use them: std's Pair
 // is Tuple2 (L139).
 export const RENAMED_IDS: Record<Id, Id> = {
@@ -1423,7 +1467,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
   return x;
 }
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number
 // of inputs, and the builtins that only compute (their row has at most

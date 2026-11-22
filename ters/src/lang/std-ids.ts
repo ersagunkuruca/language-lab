@@ -293,7 +293,8 @@ export const BUILTIN_INPUTS: typeof Std.BUILTIN_INPUTS = {
   "builtin.fields.listed": 1,
   "builtin.set": 3,
   "builtin.json.of": 1,
-  "builtin.json.from": 1
+  "builtin.json.from": 1,
+  "builtin.frame.draw": 4
 };
 export const BYTES: typeof Std.BYTES = "std.bytes";
 export const BYTES_V: typeof Std.BYTES_V = "std.bytes.bytes";
@@ -489,7 +490,8 @@ export const COMPUTE_ONLY: typeof Std.COMPUTE_ONLY = [
   "builtin.fields.listed",
   "builtin.set",
   "builtin.json.of",
-  "builtin.json.from"
+  "builtin.json.from",
+  "builtin.frame.draw"
 ];
 export const CONS: typeof Std.CONS = "std.list.cons";
 export const CONSOLE_TYPE: typeof Std.CONSOLE_TYPE = "effect.console";
@@ -499,6 +501,7 @@ export const DATE_V: typeof Std.DATE_V = "std.date.date";
 export const DIVIDE: typeof Std.DIVIDE = "std.division.division.divide";
 export const DIVISION: typeof Std.DIVISION = "std.division";
 export const DIVISION_V: typeof Std.DIVISION_V = "std.division.division";
+export const DRAW: typeof Std.DRAW = "std.draw";
 export const EMBEDDING: typeof Std.EMBEDDING = "std.embedding";
 export const EMBEDDING_MAP: typeof Std.EMBEDDING_MAP = "std.embedding.embedding.map";
 export const EMBEDDING_V: typeof Std.EMBEDDING_V = "std.embedding.embedding";
@@ -526,6 +529,19 @@ export const FILE_OPS: typeof Std.FILE_OPS = {
   "addBytes": "std.kept files.file add bytes"
 };
 export const FIRST: typeof Std.FIRST = "std.tuple2.tuple.first";
+export const FRAME: typeof Std.FRAME = "std.frame";
+export const FRAME_OPS: typeof Std.FRAME_OPS = {
+  "draw": "builtin.frame.draw"
+};
+export const FRAME_V: typeof Std.FRAME_V = {
+  "mesh": "std.mesh.mesh",
+  "placed": "std.placed.placed",
+  "screen": "std.target.screen",
+  "texture": "std.target.texture",
+  "pass": "std.pass.pass",
+  "frame": "std.frame.frame",
+  "draw": "builtin.frame.draw"
+};
 export const FROM_FRACTION: typeof Std.FROM_FRACTION = "std.literal.literal.from fraction";
 export const HANDLER_ROW: typeof Std.HANDLER_ROW = "std.row.handler";
 export const HASH_SET_OPS: typeof Std.HASH_SET_OPS = {
@@ -547,6 +563,7 @@ export const HTML_V: typeof Std.HTML_V = {
   "listenStereo": "std.attribute.listen in stereo",
   "listeningWhile": "std.attribute.listening while",
   "paint": "std.attribute.paint",
+  "render": "std.attribute.render",
   "event": "std.event.event",
   "microphone": "std.input.microphone",
   "recording": "std.input.recording",
@@ -640,6 +657,7 @@ export const MARK_V: typeof Std.MARK_V = {
   "segment": "std.mark.segment",
   "writing": "std.mark.writing"
 };
+export const MESH: typeof Std.MESH = "std.mesh";
 export const MY_LATENCY_OP: typeof Std.MY_LATENCY_OP = "std.settings.my sound latency";
 export const MY_LOCALE_OP: typeof Std.MY_LOCALE_OP = "std.settings.my locale";
 export const MY_ZONE_OP: typeof Std.MY_ZONE_OP = "std.settings.my time zone";
@@ -691,6 +709,7 @@ export const PAGE_VIEW: typeof Std.PAGE_VIEW = [
 ];
 export const PAIR: typeof Std.PAIR = "std.tuple2";
 export const PAIR_V: typeof Std.PAIR_V = "std.tuple2.tuple";
+export const PASS: typeof Std.PASS = "std.pass";
 export const PERMISSIONS: typeof Std.PERMISSIONS = "std.permissions";
 export const PIPE: typeof Std.PIPE = "std.pipe";
 export const PIPE_OPS: typeof Std.PIPE_OPS = {
@@ -699,6 +718,7 @@ export const PIPE_OPS: typeof Std.PIPE_OPS = {
   "finished": "std.pipe.finished",
   "sent": "std.pipe.sent"
 };
+export const PLACED: typeof Std.PLACED = "std.placed";
 export const POOL: typeof Std.POOL = "std.pool";
 export const POOL_KEY: typeof Std.POOL_KEY = "std.pool key";
 export const POOL_KEY_V: typeof Std.POOL_KEY_V = "std.pool key.pool key";
@@ -823,6 +843,7 @@ export const TABLE_OPS: typeof Std.TABLE_OPS = {
   "entries": "builtin.table.entries",
   "keys": "builtin.table.keys"
 };
+export const TARGET: typeof Std.TARGET = "std.target";
 export const TENSOR: typeof Std.TENSOR = "std.tensor";
 export const TENSOR_V: typeof Std.TENSOR_V = "std.tensor.tensor";
 export const TEXT_OPS: typeof Std.TEXT_OPS = {
@@ -1005,6 +1026,8 @@ export const stdNames: typeof Std.stdNames = {
   "std.attribute.listen in stereo": "listen in stereo",
   "std.attribute.listening while.on": "on",
   "std.attribute.listening while": "listening while",
+  "std.attribute.render.frame": "frame",
+  "std.attribute.render": "render",
   "std.attribute": "Attribute",
   "std.html.element.tag": "tag",
   "std.html.element.attributes": "attributes",
@@ -1619,6 +1642,34 @@ export const stdNames: typeof Std.stdNames = {
   "std.mark.writing.fill": "fill",
   "std.mark.writing": "writing",
   "std.mark": "Mark",
+  "std.mesh.corner": "corner",
+  "std.mesh.mesh.corners": "corners",
+  "std.mesh.mesh.triangles": "triangles",
+  "std.mesh.mesh": "mesh",
+  "std.mesh": "Mesh",
+  "std.placed.position": "position",
+  "std.placed.carried": "carried",
+  "std.placed.placed.position": "position",
+  "std.placed.placed.carried": "carried",
+  "std.placed.placed": "placed",
+  "std.placed": "Placed",
+  "std.target.screen": "screen",
+  "std.target.texture.name": "name",
+  "std.target.texture.width": "width",
+  "std.target.texture.height": "height",
+  "std.target.texture": "texture",
+  "std.target": "Target",
+  "std.draw": "Draw",
+  "std.pass.pass.into": "into",
+  "std.pass.pass.clear": "clear",
+  "std.pass.pass.depth": "depth",
+  "std.pass.pass.draws": "draws",
+  "std.pass.pass": "pass",
+  "std.pass": "Pass",
+  "std.frame.frame.passes": "passes",
+  "std.frame.frame": "frame",
+  "std.frame": "Frame",
+  "builtin.frame.draw": "draw",
   "builtin.sqrt": "sqrt",
   "builtin.pow": "power"
 };
