@@ -634,12 +634,15 @@ export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = {
 // entry is about (sharedSites's `at`); and C's on its threads
 // (threadSites's `at`).
 // A page's (awayMaps's `fn`) on its workers or its GPU.
-let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU"> } = { js: new Set(), c: new Set(), page: new Map() };
-export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page) }; }
-const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at); return on ? [{ k: "text", v: on }] : []; };
+// And JavaScript's runs held (L280e): how many its items are cut into,
+// given after where (false, or "", where only the runs are held).
+let onWorkers: { js: ReadonlySet<Id>; c: ReadonlySet<Id>; page: ReadonlyMap<Id, "workers" | "GPU">; runs: ReadonlyMap<Id, number> } = { js: new Set(), c: new Set(), page: new Map(), runs: new Map() };
+export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterable<[Id, "workers" | "GPU"]> = [], runs: Iterable<[Id, number]> = []) { onWorkers = { js: new Set(js), c: new Set(c), page: new Map(page), runs: new Map(runs) }; }
+const runsOf = (at: Id): SExpr[] => { const n = onWorkers.runs.get(at); return n ? [{ k: "num", v: n }] : []; };
+const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = runsOf(at); return on || n.length ? [{ k: "text", v: on ?? "" }, ...n] : []; };
 // map.worth's say, true where its site is held anywhere off the main thread.
 const worthHeld = (at: Id, away: boolean): SExpr[] => ((away ? onWorkers.page.has(at) : onWorkers.js.has(at)) ? [{ k: "bool", v: true }] : []);
-const always = (at: Id): SExpr[] => (onWorkers.js.has(at) ? [{ k: "bool", v: true }] : []);
+const always = (at: Id): SExpr[] => { const n = runsOf(at); return onWorkers.js.has(at) || n.length ? [{ k: "bool", v: onWorkers.js.has(at) }, ...n] : []; };
 
 export function lowerScalar(code: Code, info: Info, names: Names, roots: Id[], opts: { records?: boolean; data?: boolean; dataKeys?: boolean; shader?: boolean; host?: boolean; hosted?: Set<Id>; releases?: boolean; handlers?: boolean; threads?: boolean; cells?: boolean; closureArgs?: boolean; stepped?: boolean; bake?: false; reached?: true; printed?: (code: Code, id: Id) => boolean } = {}): CoreIR {
   // The function types whose closures give several answers: found as
