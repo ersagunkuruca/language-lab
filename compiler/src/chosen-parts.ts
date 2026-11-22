@@ -71,12 +71,17 @@ export function chosenParts(ir: CoreIR): number {
   const inlinable = (g: SFunc) => !g.inner && !g.partial && !g.spends && !g.budgeted && !g.multi && !g.piece && !g.value && g.bail === undefined && size(g.body) <= MAX_SIZE && choice(g.body);
   ir.funcs.forEach((f, fi) => {
     const before = n;
-    const go = (e: SExpr): SExpr => {
+    // A function put in place isn't put in place again inside what it
+    // became, nor is f itself: scan's `parse alt`, `parse seq` and `parse
+    // atom` call each other, and each body put in place brought the next
+    // call, until f had thousands of locals (Invalid array length).
+    const go = (e: SExpr, seen: ReadonlySet<SFunc> = new Set([f])): SExpr => {
       if (e.k === "let" && !e.check && !e.seeded && splittable(f.locals[e.i])) {
-        const done = parts(f, e, inlinable, ir);
-        if (done) { n++; return go(done); }
+        const g = e.value.k === "call" ? ir.funcs[e.value.fn] : undefined;
+        const done = parts(f, e, (h) => !seen.has(h) && inlinable(h), ir);
+        if (done) { n++; return go(done, g ? new Set(seen).add(g) : seen); }
       }
-      return mapKids(e, go);
+      return mapKids(e, (x) => go(x, seen));
     };
     f.body = go(f.body);
     // A match on a case chosen between, in each choice (G1b3); then the
