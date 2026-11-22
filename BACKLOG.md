@@ -25,10 +25,10 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row (startup: E280 to E284 done, E283 closed measured, 2026-11-21) |
-| C Compiler and targets | "Compiler lane" | C284 (the greenhouse in wasi) |
+| C Compiler and targets | "Compiler lane" | no open row (C283, C284 closed measured 2026-11-22; next from GAPS) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| G Game | "Build a game to test Ters against engines" | stage 1: C284 (the greenhouse in wasi, 2.2x native) (C265, C267 done, C283 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
+| G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
 
@@ -94,7 +94,6 @@ New targets and speed rank below every language item (Ersagun,
 
 | id | item | source | added |
 |---|---|---|---|
-| C284 | The greenhouse in wasi is 2.1x native through C (600 ticks of 2,000 moths: 1.7 to 1.8 s against 0.85 s, 11-22). A profile under Node puts 30% in `met`, 18% in the walk over a cell's moths (`gathered$from counted`) and 10% in the collector. C passes Thing, Flock and Vec by value, as structs; WebAssembly makes a GC struct for every one: `offset to` and `plus` make a Vec each, and every near moth a new Flock and three Vecs (10 million of 31.8 million looked at). The Flock's count is an eqref Int added through `int.add`. Not the cause: exports (none but main changed nothing) and inlining (V8 already inlines the small calls). The fix to build: a record of a few numbers passed and returned as its fields (multi-value params and results), as C passes it | GAPS game round 2 (GH6), 11-22 | 2026-11-22 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
 
