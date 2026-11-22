@@ -42,17 +42,17 @@ test("strings: arguments that aren't whole numbers are 8 blocks", () => {
   assert.deepEqual(w.core(["x"], {}), ideal(8));
 });
 
-// The program as `ters wasi` and `ters native` build it. WebAssembly at 0
-// blocks only: a loop of 12000 samples is deeper than its stack (C275).
+// The program as `ters wasi` and `ters native` build it, at two blocks: a
+// loop of 24000 samples, deeper than WebAssembly's stack before C276.
 test("strings through ters wasi and ters native prints what the ideal prints", async () => {
   const lab = join(import.meta.dirname, "../../ters/cli/ters.ts"), dir = mkdtempSync(join(tmpdir(), "strings-"));
   const made = spawnSync(process.execPath, [lab, "wasi", folder, "-o", join(dir, "s.wasm")], { encoding: "utf8" });
   assert.equal(made.status, 0, made.stderr);
   const of = join(dir, "out.txt"), fd = openSync(of, "w");
-  const wasi = new WASI({ version: "preview1", args: ["s", "0"], stdout: fd, stderr: fd, returnOnExit: true });
+  const wasi = new WASI({ version: "preview1", args: ["s", "2"], stdout: fd, stderr: fd, returnOnExit: true });
   wasi.start(new WebAssembly.Instance(await WebAssembly.compile(readFileSync(join(dir, "s.wasm"))), wasi.getImportObject() as WebAssembly.Imports));
   closeSync(fd);
-  assert.equal(readFileSync(of, "utf8"), ideal(0).out.join("\n") + "\n", "ters wasi");
+  assert.equal(readFileSync(of, "utf8"), ideal(2).out.join("\n") + "\n", "ters wasi");
   if (skip) return;
   const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "s")], { encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);

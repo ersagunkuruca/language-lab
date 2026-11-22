@@ -4850,3 +4850,11 @@ Natively, callgrind at 2 blocks counts 36% fewer instructions; what is
 left is the library's FFT on cons lists (`lab_new`, counts and frees
 together 43%, `fft` 10%), the next stage after C276.
 
+### After C276
+
+deep-loops.ts (C222) takes `larger(x, highest(rest))` as `let r =
+highest(rest) in larger(x, r)` where what is given beside the call only
+reads, so its frames go on the heap: `ters wasi` prints what the ideal
+prints at 2, 8 and 32 blocks (32: 3.8 s, 10.5x the JS ideal). The core
+IR's generator for the same is 8% of its time, under the 10% rule.
+
