@@ -39,7 +39,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | added |
 |---|---|---|---|
-| I340 | MCP: a list pattern's rest, `[before, at, after, ..more]`, is read as a fourth item named "..more" (view prints `‹..more›`), so the arm matches exactly four items. Wrong program, no refusal; the reader is editor/typed.ts's (GAPS round 20 ST6) | round 20 (strings), 2026-11-22 | 2026-11-22 |
 | I341 | MCP: an unknown name at the end of a long `++` chain of shows takes minutes to refuse (exponential): `"a" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ nosuch` 7 s, four shows over 100 s (GAPS round 20 ST6) | round 20 (strings), 2026-11-22 | 2026-11-22 |
 | I342 | MCP refusals that name the wrong thing: a print of a Float64 `/` inside `for each`'s lambda is "for each takes 3 inputs, given 2" (the cause is Console while a Choice is open); a let named `length` hides the function and `show(length(xs))` is "string report works only on a Number with <"; `abs` on Float64s reads as Int's abs and fails two steps later (GAPS round 20 ST6) | round 20 (strings), 2026-11-22 | 2026-11-22 |
 | I343 | MCP: a let that takes a record apart, `reading(called, place, octave, off, target) = nearest step(…)`, is "nothing is named called here"; the same in a match arm reads (GAPS round 20 ST6) | round 20 (strings), 2026-11-22 | 2026-11-22 |

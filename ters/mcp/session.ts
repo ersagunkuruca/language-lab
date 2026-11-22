@@ -707,7 +707,17 @@ export class Session {
       const bad = cases.find((c, i) => !lists[i] && c !== other);
       if (bad) return { ok: false, reason: `with list patterns, the other cases are otherwise, not ${bad.trim()}` };
       const fallback = other ? dedent(other.trim().replace(/^otherwise\s*(?:→|->)/, "")) || "□" : "□";
-      const written = lists.filter(Boolean).map((k) => ({ names: k![1].trim() ? k![1].split(",").map((x) => x.trim()) : [], body: dedent(k![2]) || "□" }));
+      const written: ListCase[] = [];
+      for (const k of lists) {
+        if (!k) continue;
+        const items = k[1].trim() ? k[1].split(",").map((x) => x.trim()) : [];
+        // `..more` last: the rest of the list, however long (I340: read as
+        // a fourth item, `[before, at, after, ..more]` matched four items).
+        const at = items.findIndex((x) => x.startsWith(".."));
+        if (at >= 0 && at !== items.length - 1) return { ok: false, reason: `a list pattern's rest, ${items[at]}, comes last` };
+        const rest = at >= 0 ? items.pop()!.slice(2).trim() || "_" : undefined;
+        written.push({ names: items, rest, body: dedent(k[2]) || "□" });
+      }
       return this.fill(code, names, hole, listMatch(head, 0, written, fallback), def, as);
     }
     const parsed = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
@@ -1254,15 +1264,26 @@ function topLevel(text: string, sep: string): string[] {
 // and a length no pattern has is the fallback. An item named alike by
 // every pattern still going is the cons's field; else the field is
 // `item k` and each pattern names it with a step.
-function listMatch(on: string, k: number, alive: { names: string[]; body: string }[], fallback: string): string {
-  const ends = alive.find((c) => c.names.length === k);
+// A list pattern's items, and its rest (`..more`) when it has one.
+type ListCase = { names: string[]; rest?: string; body: string };
+// The matches on nil and cons that list patterns stand for, from the k-th
+// item on. A pattern with a rest after k items matches every list from
+// there: the lengths no pattern before it wrote get it, its rest named.
+function listMatch(on: string, k: number, alive: ListCase[], fallback: string): string {
+  const open = alive.findIndex((c) => c.rest !== undefined && c.names.length === k);
+  if (open >= 0) {
+    const c = alive[open];
+    fallback = c.rest === "_" || c.rest === on ? c.body : `${c.rest} = ${on}\n${c.body}`;
+    alive = alive.slice(0, open);
+  }
+  const ends = alive.find((c) => c.rest === undefined && c.names.length === k);
   const longer = alive.filter((c) => c.names.length > k);
   const block = (t: string) => t.split("\n").map((l) => "    " + l).join("\n");
   const nil = `  nil →\n${block(ends ? ends.body : fallback)}`;
-  if (!longer.length) return `match ${on}\n${nil}\n  cons(item ${k + 1}, rest ${k + 1}) →\n${block(fallback)}`;
+  if (!longer.length) return open >= 0 && !ends ? fallback : `match ${on}\n${nil}\n  cons(item ${k + 1}, rest ${k + 1}) →\n${block(fallback)}`;
   const named = longer[0].names[k];
   const field = named !== "_" && longer.every((c) => c.names[k] === named) ? named : `item ${k + 1}`;
-  const next = longer.map((c) => ({ names: c.names, body: c.names[k] === field || c.names[k] === "_" ? c.body : `${c.names[k]} = ${field}\n${c.body}` }));
+  const next = longer.map((c) => ({ ...c, body: c.names[k] === field || c.names[k] === "_" ? c.body : `${c.names[k]} = ${field}\n${c.body}` }));
   return `match ${on}\n${nil}\n  cons(${field}, rest ${k + 1}) →\n${block(listMatch(`rest ${k + 1}`, k + 1, next, fallback))}`;
 }
 

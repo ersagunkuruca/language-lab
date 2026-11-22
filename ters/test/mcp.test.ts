@@ -447,6 +447,32 @@ test("list patterns, `tuple(a, b) = e`, and steps on lines in a case are read as
   assert.match(text("eval", { text: "doubled first([4])" }), /^= 9 :/);
 });
 
+// Round 20's YIN wrote `[before, at, after, ..more]`, read as a fourth
+// item named "..more" (I340): the rest is the list after the items written.
+test("a list pattern's rest, `..more`, is the list after its items (I340)", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "after two", kind: "function", params: ["xs"] });
+  const shown = text("replace", { at: "after two", find: "□", text: "match xs\n  [a, b, ..more] → a + b + length(more)\n  [a] → a\n  otherwise → 0" });
+  assert.doesNotMatch(shown, /‹\.\.more›/);
+  assert.match(text("eval", { text: "after two([3, 4])" }), /^= 7 :/);
+  assert.match(text("eval", { text: "after two([3, 4, 9, 9, 9])" }), /^= 10 :/);
+  assert.match(text("eval", { text: "after two([5])" }), /^= 5 :/);
+  assert.match(text("eval", { text: "after two([])" }), /^= 0 :/);
+  // A rest alone is the whole list; one written before the end is refused.
+  text("define", { name: "whole", kind: "function", params: ["xs"] });
+  text("replace", { at: "whole", find: "□", text: "match xs\n  [] → 0\n  [..all] → length(all)" });
+  assert.match(text("eval", { text: "whole([1, 2, 3])" }), /^= 3 :/);
+  text("define", { name: "bad", kind: "function", params: ["xs"] });
+  const bad = call("replace", { at: "bad", find: "□", text: "match xs\n  [..more, a] → a\n  otherwise → 0" });
+  assert.ok(bad.error);
+  assert.match(bad.text, /comes last/);
+});
+
 // rota's main used `attempt` and a match on its Outcome (I217 M7).
 test("a handler is written as the view prints it: handle …, an operation's case, otherwise (I217 M7)", async () => {
   const { cpSync, mkdtempSync } = await import("node:fs");
