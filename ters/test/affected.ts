@@ -230,6 +230,9 @@ const gpu = all || setup || code.some((f) => closure(["compiler/gpu.ts"]).has(f)
 // A page with sound (AUDIO.md): what builds it and what it runs on, and the pedal.
 const soundInputs = closure(["ters/test/sound-browser.ts", "ters/cli/web.ts", "compiler/src/core-sound.ts", "compiler/src/core-page.ts"]);
 const sound = all || setup || code.some((f) => soundInputs.has(f) || f.startsWith("ters/examples/pedal/"));
+// Frames on WebGPU (FRAMES.md): what draws them, on the GPU and the CPU.
+const framesInputs = closure(["ters/test/frames-browser.ts"]);
+const frames = all || setup || code.some((f) => framesInputs.has(f));
 
 // The slow files (T13): left for Check main and the nightly run, unless
 // the change edits the test file itself.
@@ -340,6 +343,7 @@ if (page && browser && !shard) {
 }
 if (gpu && browser && !shard) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
 if (sound && browser && !shard) runs.push({ what: "sound in a browser", cwd: "ters", cmd: ["node", "test/sound-browser.ts"] });
+if (frames && browser && !shard) runs.push({ what: "frames on WebGPU", cwd: "ters", cmd: ["node", "test/frames-browser.ts"] });
 
 console.log(all ? `everything, every sweep in full${shard ? `: share ${shard[0]} of ${shard[1]}` : browserOnly ? ": the browser tests" : ""}` : `${changed.length} files changed since ${base}${setup ? ", a package's setup among them: everything" : ""}${shard ? `: share ${shard[0]} of ${shard[1]}` : ""}`);
 for (const r of runs) console.log(`  ${r.what}`);
