@@ -307,15 +307,28 @@ export function changeAt(v: Value, steps: Step[], change: (part: Value) => Value
 // The places where b differs from a, outermost first, or null when there
 // are more than a few (then every reader wakes). Parts that are the same
 // object are the same; a list whose length changed differs as a whole.
+// Each place with the two parts there; `sure` when they can't be equal (a
+// list whose length changed), so a write needn't compare them.
 const MAX_DIFFERENCES = 16;
-function differences(a: Value, b: Value, lists: Lists): Step[][] | null {
-  const out: Step[][] = [];
+type Place = { at: Step[]; a: Value; b: Value; sure: boolean };
+function differences(a: Value, b: Value, lists: Lists): Place[] | null {
+  const out: Place[] = [];
   const views = lists.views;
   const go = (x: Value, y: Value, at: Step[]): boolean => {
     if (x === y) return true;
     if (views && views.isList(x) && views.isList(y)) {
-      const xs = lists.from(x), ys = lists.from(y);
-      if (xs.length === ys.length) { for (let i = 0; i < xs.length; i++) if (!go(xs[i], ys[i], [...at, { item: i }])) return false; return true; }
+      // Walked together, the items that are the same object (all but one,
+      // after a card is added) skipped without copying either list.
+      const apart: [number, Value, Value][] = [];
+      let p = x as unknown as Data, q = y as unknown as Data, i = 0;
+      // One put in front (an undo list, latest first) or taken off it.
+      if ((q.tag === views.cons && q.fields[1] === p) || (p.tag === views.cons && p.fields[1] === q)) { out.push({ at, a: x, b: y, sure: true }); return out.length <= MAX_DIFFERENCES; }
+      for (; p !== q && p.tag === views.cons && q.tag === views.cons; i++, p = p.fields[1] as unknown as Data, q = q.fields[1] as unknown as Data) {
+        if (p.fields[0] !== q.fields[0]) apart.push([i, p.fields[0], q.fields[0]]);
+      }
+      if (p === q || (p.tag !== views.cons && q.tag !== views.cons)) { for (const [i, u, w] of apart) if (!go(u, w, [...at, { item: i }])) return false; return true; }
+      out.push({ at, a: x, b: y, sure: true });
+      return out.length <= MAX_DIFFERENCES;
     } else if (typeof x === "object" && typeof y === "object" && x !== null && y !== null && "fields" in x && "fields" in y) {
       const d = x as unknown as Data, e = y as unknown as Data;
       if (d.tag === e.tag && d.fields.length === e.fields.length && !(views && (views.isList(x) || views.isList(y)))) {
@@ -323,10 +336,37 @@ function differences(a: Value, b: Value, lists: Lists): Step[][] | null {
         return true;
       }
     }
-    out.push(at);
+    out.push({ at, a: x, b: y, sure: false });
     return out.length <= MAX_DIFFERENCES;
   };
   return go(a, b, []) ? out : null;
+}
+
+// The items b puts into the list a, as inserts, when b is a's items (the
+// same objects) with some put in at one place; [] when b has a's items
+// and no more. Null otherwise (not lists, any other change).
+function inserted(a: Value, b: Value, lists: Lists): Edit[] | null {
+  const views = lists.views;
+  if (a === b || !views || !views.isList(a) || !views.isList(b)) return null;
+  // Put in at the end, the common case, walked without copying.
+  let p = a as unknown as Data, q = b as unknown as Data, at = 0;
+  for (; p !== q && p.tag === views.cons && q.tag === views.cons && p.fields[0] === q.fields[0]; at++) { p = p.fields[1] as unknown as Data; q = q.fields[1] as unknown as Data; }
+  if (p === q) return [];
+  if (p.tag !== views.cons) {
+    const out: Edit[] = [];
+    for (; q.tag === views.cons && out.length <= 32; q = q.fields[1] as unknown as Data) out.push({ at: [], kind: "insert", i: at++ });
+    return out;
+  }
+  const xs = lists.from(a), ys = lists.from(b);
+  if (ys.length < xs.length) return null;
+  let k = 0;
+  while (k < xs.length && xs[k] === ys[k]) k++;
+  let e = 0;
+  while (e < xs.length - k && xs[xs.length - 1 - e] === ys[ys.length - 1 - e]) e++;
+  if (k + e < xs.length) return null;
+  const out: Edit[] = [];
+  for (let i = k; i < ys.length - e; i++) out.push({ at: [], kind: "insert", i });
+  return out;
 }
 
 // The three edits of a list: an item put in at i (at the end when i is past
@@ -351,6 +391,10 @@ export const listEdits = {
 // the reactive part: whatever is written or made a formula's value is
 // copied out of them first (plainOf), so a cell never holds another's view.
 const VIEWS = new WeakMap<object, () => Value>();
+// The values found to have no view inside (C287): a value doesn't change,
+// so the state written again with one card more is walked only where it's
+// new, not through every card and every step of its history.
+const PLAIN = new WeakSet<object>();
 const keyIs = (a: Step[], b: Step[]) => a.length <= b.length && a.every((s, i) => ("item" in s ? "item" in b[i] && b[i].item === (s as { item: number }).item : "field" in s && "field" in b[i] && (b[i] as { field: number }).field === s.field));
 // Where a row is after an edit of the list its each maps; -1 once removed.
 function shifted(i: number, e: Edit): number {
@@ -560,15 +604,21 @@ export class Cells {
     if (at === undefined && v === n.value) return;
     // An edit (at given) copied its new part out of views already.
     if (at === undefined) v = this.plainOf(v);
-    if (this.same(n.value as Value, v)) return;
+    // Compared only where they differ (C287: the state written again with a
+    // card more is the old one but for its list of cards, which is longer).
+    const lists = this.shape ?? this.compared;
+    const looked = at === undefined && n.value !== undefined && !!lists;
+    const apart = looked ? differences(n.value as Value, v, lists!) : null;
+    if (apart ? apart.every((p) => !p.sure && this.same(p.a, p.b)) : this.same(n.value as Value, v)) return;
     const was = at === undefined ? n.value as Value : undefined;
     if (this.journal) { const old = n.value as Value; this.journal.undo.push(() => this.write(c, old)); }
     n.value = v;
     if (this.onWrite) this.onWrite(this.order.get(n)!, v);
-    this.wake(n, at, what, was, v);
+    this.wake(n, at, what, was, v, looked ? apart : undefined);
   }
 
-  private wake(n: CellNode, at: Step[] | undefined, what: Edit | undefined, was: Value | undefined, v: Value): void {
+  // `apart`: the places where was and v differ, when the write found them.
+  private wake(n: CellNode, at: Step[] | undefined, what: Edit | undefined, was: Value | undefined, v: Value, apart?: Place[] | null): void {
     // A change at a place wakes the readers of that place, of a place
     // inside it and of one around it; the rest read elsewhere (L98).
     // A place read through a view wakes only for an edit there or around
@@ -577,7 +627,8 @@ export class Cells {
     // what they share skipped, so only their readers wake (C86, as Solid's
     // `reconcile` diffs an immutable value into a store).
     const lists = this.shape ?? this.compared;
-    const ats = at ? [at] : was !== undefined && lists ? differences(was, v, lists) : null;
+    const found = at || apart !== undefined ? apart : was !== undefined && lists ? differences(was, v, lists) : null;
+    const ats = at ? [at] : found ? found.map((p) => p.at) : null;
     const keys = ats?.map(keyOf);
     if (what && at && what.kind !== "write") for (const o of n.observers) o.shift?.(what, at);
     const hits = (at: Step[]) => (seen: Seen) => {
@@ -797,15 +848,18 @@ export class Cells {
     const lists = this.shape;
     if (!lists) return v;
     const out = (x: Value): Value => {
-      if (typeof x !== "object" || x === null) return x;
+      if (typeof x !== "object" || x === null || PLAIN.has(x as unknown as object)) return x;
       const seen = VIEWS.get(x as unknown as object);
       if (seen) return seen();
       if (lists.views!.isList(x)) {
         const xs = lists.from(x), ys = xs.map(out);
-        return ys.some((y, i) => y !== xs[i]) ? lists.to(ys) : x;
+        if (ys.some((y, i) => y !== xs[i])) return lists.to(ys);
+      } else {
+        const d = x as unknown as Data, fields = d.fields.map(out);
+        if (fields.some((f, i) => f !== d.fields[i])) return { tag: d.tag, fields } as unknown as Value;
       }
-      const d = x as unknown as Data, fields = d.fields.map(out);
-      return fields.some((f, i) => f !== d.fields[i]) ? ({ tag: d.tag, fields } as unknown as Value) : x;
+      PLAIN.add(x as unknown as object);
+      return x;
     };
     return out(v);
   }
@@ -956,7 +1010,12 @@ export class Cells {
         else return null;
       }
       if (next.length !== xs.length) return null;
-      return { rows: next.map((r, i) => (r ? { ...r, item: xs[i] } : row(xs[i], i, made))), gone };
+      // The rows kept are given their items once every new one is made (a
+      // run stopped part way leaves the rows as they were).
+      const kept: number[] = [];
+      for (let i = 0; i < next.length; i++) { if (!next[i]) next[i] = row(xs[i], i, made); else if (next[i].item !== xs[i]) kept.push(i); }
+      for (const i of kept) next[i].item = xs[i];
+      return { rows: next, gone };
     };
     const cell = this.node(() => {
       const old = [...rows], made: CellNode[] = [];
@@ -973,11 +1032,21 @@ export class Cells {
         const followed = edits && edits.length && rows.length ? follow(edits, xs, made) : null;
         if (followed) { rows = followed.rows; gone = followed.gone; }
         else {
-          rows = xs.map((item, at) => {
-            const i = old.findIndex((r) => this.same(r.item, item));
-            return i >= 0 ? old.splice(i, 1)[0] : row(item, at, made);
-          });
-          gone = old;
+          // The rows that kept their place and their item first (C287: an
+          // add at the end matched every row again, each with a call of
+          // equal and a splice at the front of the old rows); the rest
+          // by the same item, then an equal one.
+          let k = 0;
+          while (k < old.length && k < xs.length && old[k].item === xs[k]) k++;
+          const rest = old.slice(k);
+          rows = old.slice(0, k);
+          for (let at = k; at < xs.length; at++) {
+            const item = xs[at];
+            let i = rest.findIndex((r) => r.item === item);
+            if (i < 0) i = rest.findIndex((r) => this.same(r.item, item));
+            rows.push(i >= 0 ? rest.splice(i, 1)[0] : row(item, at, made));
+          }
+          gone = rest;
         }
         rows.forEach((r, i) => { r.spot.i = i; });
       } catch (e) {
@@ -1116,9 +1185,19 @@ export class Cells {
     this.runs++;
     this.onRun?.(n);
     const first = n.runs === 1;
-    if (first || !this.same(n.value as Value, v)) {
+    if (first) { n.value = v; return; }
+    // A list that only gained items (C287: a card added, and the cards
+    // shown are the old ones and it): its eaches follow the inserts, one
+    // row made, instead of matching every row again.
+    const lists = this.shape ?? this.compared;
+    const grown = lists ? inserted(n.value as Value, v, lists) : null;
+    if (grown && !grown.length) return;
+    if (grown || !this.same(n.value as Value, v)) {
       n.value = v;
-      if (!first) for (const o of n.observers) o.state = DIRTY;
+      for (const o of n.observers) {
+        o.state = DIRTY;
+        if (o.edits) { if (grown && o.edits.length + grown.length <= 32) o.edits.push(...grown); else o.edits = null; }
+      }
     }
   }
 }
