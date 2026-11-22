@@ -208,7 +208,37 @@ const spelling = (x: unknown): string => {
   for (let i = 0; i < fs.length; i++) s += (i ? "," : "") + spelling(fs[i]);
   return s + ")";
 };
-export const held = (key: unknown) => (typeof key === "object" && key !== null ? spelling(key) : key);
+// A tuple of Ints and Texts is spelled once (I215 again, C289): its
+// spelling is kept by its parts, so a read of a key met before makes no
+// text, and gives the same text, whose hash is kept, to the table. rota's
+// `(person, day)` and `(day, shift)` reads spelled a fresh text each time,
+// a fifth of its run. Thrown away when it grows past `SPELT`.
+const SPELT = 1 << 20;
+let spelt = new Map<unknown, unknown>(), nSpelt = 0;
+const kept = (fs: unknown[]): string | null => {
+  let m = spelt;
+  for (let i = 0; i < fs.length; i++) {
+    const p = fs[i];
+    if (typeof p !== "string" && typeof p !== "number") return null;
+    let n = m.get(p);
+    if (i === fs.length - 1) {
+      if (n === undefined) {
+        if (++nSpelt > SPELT) { spelt = new Map(); nSpelt = 0; return null; }
+        n = spelling({ fields: fs });
+        m.set(p, n);
+      }
+      return n as string;
+    }
+    if (n === undefined) m.set(p, (n = new Map()));
+    m = n as Map<unknown, unknown>;
+  }
+  return null;
+};
+export const held = (key: unknown) => {
+  if (typeof key !== "object" || key === null) return key;
+  const fs = (key as { fields: unknown[] }).fields;
+  return (fs.length && kept(fs)) || spelling(key);
+};
 export const valueOf = (v: unknown) => (v instanceof Keyed ? v.value : v);
 // The value at key, or `none` when there is none: no list of answers made
 // for each read (compiled JS's `value at`, core-rt.ts).

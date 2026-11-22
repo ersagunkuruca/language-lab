@@ -5091,3 +5091,22 @@ collector, 4.5% making closures. Two causes:
   the points, then `sums` walks them again for the step it took, where
   the ideal keeps the sums it tested. That's how fit is written, not
   something the compiler adds.
+
+### rota again, after the sweep (C289)
+
+A fresh profile of `ters compile`'s rota at 14 x 16 (0.43 s from the
+command line): the table read 13%, the tuple key's spelling 7% and its
+quote test 2.5%, the collector 12%. The reads are `can work`'s: `on
+slot` and `shift on` look up `(person, day)` and `(day, shift)`, and
+`load of` a person's count, each read building a fresh text such as
+`("Ada",3)` and hashing it again. Fixed (C289, table.ts `held`): a tuple
+of Ints and Texts is spelled once and that spelling kept by its parts, so
+a key met before gives the same text, with its hash, and none is made.
+bench-rota core: 14 x 16 412 → 318 ms (12.7x → 8.7x), 21 x 18 1,101 →
+843 ms (12.6x → 9.4x), the same output.
+
+What is left is R4's: the rota's three persistent maps copied or
+versioned per branch where the ideal changes arrays and undoes them, each
+place's candidates a `keep`, a `sort by` on tuples (`merge by key` 4%)
+and a `map`, and the `set tree has` of the plan's off days (3.4%). No
+single piece of that is 10%.
