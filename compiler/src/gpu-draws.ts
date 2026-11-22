@@ -242,7 +242,7 @@ ${start}  let p = ${vEntry}(${[unread ? "0.0" : rebuilt(it, structs, only(allIns
   var o: LabPlaced;
   o.position = ${clip};
 ${carry.join("\n")}
-${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { o.position = vec4f(bitcast<f32>(0x7fc00000u)); }\n` : ""}  return o;
+${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { var nan = 0x7fc00000u; o.position = vec4f(bitcast<f32>(nan)); }\n` : ""}  return o;
 }
 @fragment fn lab_fs(o: LabPlaced) -> @location(0) vec4f {
 ${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
