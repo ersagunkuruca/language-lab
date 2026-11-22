@@ -617,6 +617,7 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
 }` },
   "text.length": { uses: [], c: `static lab_int lab_text_length(lab_cell *t) { int64_t k = lab__chars(t); lab_drop(t); return LAB_SMALL(k); }` },
   "text.size": { uses: [], c: `static int32_t lab_text_size(lab_cell *t) { int32_t n = (int32_t)LAB_TN(t); lab_drop(t); return n; }` },
+  "text.after": { uses: [], c: `static int32_t lab_text_after(lab_cell *t, int32_t i) { const uint8_t *b = LAB_TB(t); uint32_t n = LAB_TN(t); do i++; while ((uint32_t)i < n && (b[i] & 0xc0) == 0x80); lab_drop(t); return i; }` },
   "text.before": { uses: [], c: `static int32_t lab_text_before(lab_cell *t, int32_t i) { int32_t r = (int32_t)lab__back(LAB_TB(t), (uint32_t)i); lab_drop(t); return r; }` },
   "text.bytes": { uses: [], c: `static lab_cell *lab_text_bytes(lab_cell *t, int32_t a, int32_t b) { return lab__part(t, (uint32_t)a, (uint32_t)b, LAB_UNCOUNTED); }` },
   // Characters from up to, not including, to, clamped: it never fails.
