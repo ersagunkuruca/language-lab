@@ -5,6 +5,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { loadProgram } from "../src/lang/load.ts";
 import { infer } from "../src/lang/infer.ts";
 import { representationsIn } from "../src/lang/represent.ts";
@@ -156,4 +160,20 @@ test("collatz's keep and fold go to worker threads when slow; queens' searches t
     "place: walks of's fold of fields: worker threads when slow; among main thread, worker threads; target JavaScript",
   ]);
   assert.deepEqual(places("queens").map((l) => l.split(":")[1]), [" main's count of a search's answers", " main's search for all answers", " main's search for the first answer"]);
+});
+
+// C's threads (L280a): `ters choices` writes, beside JavaScript's worker
+// threads, each call `ters native` runs on its threads.
+test("collatz's keep and fold run on C's threads when slow, as written by ters choices", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), at = join(dir, "collatz");
+  try {
+    cpSync(root + "collatz", at, { recursive: true });
+    const r = spawnSync(process.execPath, [fileURLToPath(new URL("../cli/ters.ts", import.meta.url)), "choices", at], { encoding: "utf8" });
+    assert.equal(r.status, 0, r.stderr);
+    const c = readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.endsWith("target C")).map((l) => l.replace(/^\S+ /, "")).sort();
+    assert.deepEqual(c, [
+      "place: main's keep: threads when slow; among main thread, threads; target C",
+      "place: walks of's fold of fields: threads when slow; among main thread, threads; target C",
+    ]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
