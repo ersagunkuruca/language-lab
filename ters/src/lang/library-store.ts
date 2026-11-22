@@ -116,6 +116,30 @@ export const groupStore: GroupStore = {
   },
 };
 
+// The chooser's decisions (library-reps.ts, L280b) kept on disk by their
+// key, which names the program but for its literals, and the chooser's
+// source with what it imports: a decision of another chooser isn't read.
+const DECIDED = join(DIR, "decided"), KEEP_DECIDED = 2000;
+// A decision names the library's rows by their place: those too.
+let chooser: string | undefined;
+const chooserHash = () => chooser ??= createHash("sha1").update(graphHash(join(root, "src", "lang", "library-reps.ts"))).update(JSON.stringify(LIBRARY.reps.map((r) => [r.of, r.name, r.def]))).digest("hex");
+const decidedFile = (key: string) => join(DECIDED, `${createHash("sha1").update(chooserHash()).update(key).digest("hex").slice(0, 24)}.json`);
+export const decidedStore: { load(key: string): unknown; save(key: string, d: unknown): void } = {
+  load(key) { try { return JSON.parse(readFileSync(decidedFile(key), "utf8")); } catch { return undefined; } },
+  save(key, d) {
+    try {
+      mkdirSync(DECIDED, { recursive: true });
+      const file = decidedFile(key), tmp = `${file}.${process.pid}.tmp`;
+      writeFileSync(tmp, JSON.stringify(d));
+      renameSync(tmp, file);
+      if (Math.random() < 0.02) {
+        const kept = readdirSync(DECIDED);
+        if (kept.length > KEEP_DECIDED) for (const { f } of kept.map((f) => ({ f, t: statSync(join(DECIDED, f)).mtimeMs })).sort((a, b) => b.t - a.t).slice(KEEP_DECIDED / 2)) rmSync(join(DECIDED, f), { force: true });
+      }
+    } catch { /* decided again next time */ }
+  },
+};
+
 // A Subst's hooks are the check's own functions: a check over the library
 // sets its own (infer.ts), so the library's are left out and the defaults
 // stand in.

@@ -171,8 +171,15 @@ function stably({ result: r, made }: { result: Chosen & { reps: Representation[]
 // by its place in that compile, what was asked and what was skipped, so
 // no choice's program (a second of greenhouse-page's, a megabyte written
 // out) is keyed itself.
-type Decided = { split: "groups"; made: GroupSplit } | { split: "holders"; tree: number } | { chosen: number[] };
+export type Decided = { split: "groups"; made: GroupSplit } | { split: "holders"; tree: number } | { chosen: number[] };
 const decidedKept = keptMap<string, Decided>();
+// And on disk where the command line keeps them (L280b, library-store.ts
+// decidedStore): the next command's compile of the same program, but for
+// its numbers, texts and truth values, takes the choice without the
+// chooser (machine: about 0.3 s of a cold compile).
+export interface DecidedStore { load(key: string): Decided | undefined; save(key: string, d: Decided): void }
+let decidedStore: DecidedStore | null = null;
+export function keepDecisionsIn(store: DecidedStore | null) { decidedStore = store; }
 let context: { key: string; n: number } | undefined;
 export function choosingFor<T>(key: string, f: () => T): T {
   const was = context;
@@ -183,8 +190,8 @@ export function choosingFor<T>(key: string, f: () => T): T {
 function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], asked: Representation[], skip: Set<Id>, options: LibraryOptions): Chosen & { reps: Representation[] } {
   const chosen: Representation[] = [];
   const key = context && `${context.key}#${context.n++}|${JSON.stringify([asked, [...skip].sort()])}`;
-  const was = key ? decidedKept.get(key) : undefined;
-  const keep = (d: Decided) => { if (!key) return; if (decidedKept.size >= 16) decidedKept.clear(); decidedKept.set(key, d); };
+  const was = key ? decidedKept.get(key) ?? decidedStore?.load(key) : undefined;
+  const keep = (d: Decided) => { if (!key) return; if (decidedKept.size >= 16) decidedKept.clear(); decidedKept.set(key, d); decidedStore?.save(key, d); };
   let replayed = false;
   if (was && "split" in was) {
     const s = was.split === "groups" ? splitByGroups(code, info, names, main, defs, was.made) : splitByHolders(code, info, names, main, defs, LIBRARY.reps[was.tree]);
