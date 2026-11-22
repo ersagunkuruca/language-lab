@@ -4679,3 +4679,157 @@ instructions of before. What is left of FL1 is the cell arithmetic on
 big-capable Ints (`wrapped cell` 17%, `cell key` 9%), which is FL2,
 C267. The greenhouse's night is 18% shorter natively (its moths' nine
 cells and its wave adding fuse too); moths' barely moves.
+
+## Round 20: strings, the instrument app's signal code (2026-11-22, C262)
+
+`compiler/gaps/strings` is the bigger-program round on the instrument app
+(INSTRUMENT-APP-2026-11-17, C262): the FFT, a pitch finder and the
+looper's buffer, against code written by hand. It plucks a guitar's six
+open strings and listens to them:
+- each string is a Karplus-Strong string: a `Queue Float64` one period
+  long, filled with noise from a linear congruential generator, each
+  sample out of the front and the mean of it and the one before, a little
+  quieter, in at the back;
+- a fifth of a second in, each string is cut into blocks of 2048 samples
+  (8 blocks, or as many as asked), and each block is heard three ways:
+  YIN's normalized difference at every lag below 1024 (a million
+  multiply-adds a block), the McLeod pitch method as the tuner example
+  finds it (the library's `autocorrelation` by FFT, 4096 points), and the
+  loudest partial of a Hann-windowed spectrum (`spectrum`, 2048 points);
+- YIN's pitch is read off 12-TET (`nearest step`);
+- the looper overdubs all six onto a loop of 12000 samples a block
+  (`map` over `zipped`), undoes the last and redoes it.
+
+**34 definitions**, all functions and values on lists, the library's
+signals and tunings doing the rest. It was written through the MCP
+(`gaps-round20/` in the project's files, `head.ts` and `body.ts`): no
+`replace` was refused once the text was right, four `as` answers were
+given, and the text had to change six ways first (ST6). The whole driver
+runs in 12 s, against round 19's 7 minutes (I304's fixes).
+
+Files:
+- `compiler/gaps/strings/`: the program and its README (credits).
+- `compiler/gaps/strings.ideal.js`: the same by hand: `Float64Array`s, a
+  ring buffer for each string, one in-place radix-2 FFT. The in-place FFT
+  does the library's arithmetic in the library's order (bit reversal is
+  the recursion's evens and odds, each stage one level of it, the same
+  twiddles), and sums are added from the end as `sum` adds them, so it
+  prints the same digits.
+- `compiler/gaps/strings.ideal.c`: the same in C, `cc -O2`.
+- `compiler/gaps/strings.ts`: the evaluator, the core IR's module and the
+  ideal, in one process.
+- `compiler/test/strings.test.ts`: the three agree on no blocks; the core
+  IR and the ideal on two and on arguments that aren't whole numbers, and
+  YIN and McLeod's method hear each string at its pitch. `ters native` at
+  two blocks and `ters wasi` at none print what the ideal prints.
+- `compiler/gaps/bench-strings.ts`: the table below.
+
+**Correctness.** The evaluator, the core IR's module, `ters native` and
+both ideals print the same at every size tried. `ters wasi` does up to no
+blocks and fails past them (ST3). The program's YIN found nothing at first:
+the MCP had read its list pattern wrong (ST6), and writing the ideal is
+what showed it.
+
+### Results
+
+```
+blocks way        heard and looped   against the JS ideal
+2      evaluator   113508 ms   921x
+2      core           682 ms    31x
+2      ideal JS        22 ms
+2      ideal C         16 ms   0.7x  (a process)
+2      native         159 ms   7.1x  (a process, start-up included)
+8      core          2955 ms    34x
+8      ideal JS        86 ms
+8      ideal C         51 ms   0.6x  (a process)
+8      native         630 ms   7.3x  (a process)
+32     core         15163 ms    47x
+32     ideal JS       325 ms
+32     ideal C        186 ms   0.6x  (a process)
+32     native        2417 ms   7.4x  (a process)
+```
+
+The command was `BUILT=1 EVALUATOR=2 node compiler/gaps/bench-strings.ts
+2 8 32`. Native is 13x the C. The core IR grows faster than the ideal; at
+8 blocks it is 2.8 s alone (`TERS_WORKERS=0`) and 3.3 s with workers
+(ST4).
+
+Where the core IR's 2.8 s at 8 blocks go, alone (a CPU profile, self
+time): the garbage collector 25%; `zipped` made into a list of pairs for
+YIN's difference 23% and the `sum` over it 11% (ST1); `highest` through
+its heap stack 8% (ST2); `arrayOf` 5%. Natively (callgrind at 2 blocks)
+it is the same walk: pushing the pairs 23%, the difference 16%, `lab_new`
+11%, counts and frees 12%, the FFT 6%.
+
+### The gaps, ranked
+
+**ST1. `zipped` makes a pair per item, and a list of them, for its
+consumer (C275).** `difference(xs, w, lag) = sum(map(zipped(take(xs, w),
+take(drop(xs, lag), w)), (q) => (q.first − q.second)²))` is YIN's inner
+loop. Every target makes the 1024 pairs, pushes them onto an array, maps
+them and then sums: a million pairs a block. The ideal reads the two
+arrays by position. fuse-walks.ts (G3b) fuses `map` and `flat map` into
+the walk that consumes them; `zipped` of two lists read by position could
+be read the same way, with no pair made: two thirds of the core IR's time
+and of native's.
+
+**ST2. A recursion that combines after its call is a heap stack in JS and
+a deep stack everywhere (C276).** `highest(xs)` is `larger(x,
+highest(rest))`, the tuner's own. Past depth 1000 the core IR goes
+through a generator (`R.drive`, 8%); C runs on a 1 GiB stack; WebAssembly
+has neither (ST3). The list's items could be walked into an array first
+and combined from its end, in a loop, for any such definition whose
+answer is the combination of an item and the call on the rest.
+
+**ST3. `ters wasi` runs out of stack on a loop of 12000 samples (C276).**
+"RangeError: Maximum call stack size exceeded" in `highest at Float64`,
+12000 deep. The same fix as ST2.
+
+**ST4. Workers make the blocks slower (C277).** `map(fs, (f) => yin
+pitch(f, rate))` over 8 blocks goes to the workers: 3.3 s with them, 2.8
+s without, 8 s of CPU. Each block is sent encoded as a list of 2048
+Float64s per worker per map, three maps per string, and `shared` waits.
+What a map item costs was measured, but not what sending it costs.
+
+**ST5. A list of lists between representations was a definition used as
+a value (C274, fixed).** `ters native` and `ters wasi` refused the whole
+program: "main isn't in C: calls report, which calls string report, which
+calls lists as written, which uses items of array as a value". rep-split
+converts a `List (List Float64)` (the blocks) with `map(meaning(l),
+items of array)`; now it maps a lambda that calls it.
+
+**ST6. Text the MCP reads wrong, or refuses with the wrong reason.**
+- A list pattern's rest, `[before, at, after, ..more]`, is read as a
+  fourth item named "..more" (view prints `‹..more›`), so the arm matches
+  only four items and YIN found no pitch. No refusal (I340).
+- An unknown name at the end of a long `++` chain takes minutes to refuse:
+  `"a" ++ show(2.5) ++ "b" ++ show(2.5) ++ "b" ++ nosuch` 7 s, four shows
+  over 100 s (I341).
+- Three refusals name the wrong thing (I342): a print of what a Float64
+  `/` gives, inside `for each`'s lambda, is "for each takes 3 inputs,
+  given 2" (the cause, Console while a Choice is open, shows when the print
+  is alone); a let named `length` hides the function, and `show(length(
+  layers))` is "string report works only on a Number with <"; `abs` reads
+  as the Int one on Float64s, and the mismatch is reported two steps later
+  at a print.
+- A let that takes a record apart, `reading(called, place, octave, off,
+  target) = nearest step(…)`, is "nothing is named called here" (I343);
+  a match in a helper definition reads.
+- `map(range(k), (i) => 0.0)` is a list of Ints, as the language says (a
+  whole literal nothing fixes); not a gap.
+
+**ST7. Smaller things, seen, not rows yet.**
+- The evaluator is 921x the ideal (scan's 325x): YIN's million steps a
+  block.
+- `loudest partial` hears a high harmonic of most strings (the spectrum's
+  tallest peak), as it should; tuners don't use it, which is why it is
+  the third way.
+- The looper's buffer is a list here, not a cell: C261 measured the cell's
+  array, and the looper example keeps it there.
+
+### Proposed order
+
+C275 first: it is most of every target's time and fuse-walks.ts is where
+it goes. Then C276, which also makes `ters wasi` run the program, then
+C277. The MCP rows go to the lanes that own the reader (I340 first: a
+program read wrong without a word).

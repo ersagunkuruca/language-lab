@@ -216,7 +216,10 @@ export function splitLists(code: Code, info: Info, names: Names, own: Id[], main
       if (item === null) return null;
       if (!item) return stored ? rep.store! : rep.meaning!;
       const d = k.def(stored ? "stored lists" : "lists as written");
-      k.define(d, k.fn(["list"], (l) => (stored ? k.call(rep.store!, k.call(MAP_FN, l, k.x(item))) : k.call(MAP_FN, k.call(rep.meaning!, l), k.x(item)))));
+      // Each item through a lambda, not the converter as a value: a named
+      // definition as a value needs a heap in C and WebAssembly (C274).
+      const byItem = () => k.fn(["item"], (x) => k.call(item, x));
+      k.define(d, k.fn(["list"], (l) => (stored ? k.call(rep.store!, k.call(MAP_FN, l, byItem())) : k.call(MAP_FN, k.call(rep.meaning!, l), byItem()))));
       return d;
     }
     // The program's own types convert their own fields where they're read
