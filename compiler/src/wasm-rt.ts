@@ -9467,6 +9467,108 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       drop
       i32.const 0`,
   },
+  // A file's kind, size and time last changed (C310, as world.ts answers
+  // file info): path_filestat_get not following a link, so a link is a
+  // link. Its File info, Instant and File kind given by wasm.ts as $Info,
+  // $Instant and $Kind, its size an Int (wasm.ts drops int.of where the
+  // field is an i64). Modified in ms first, then seconds, as Node's mtimeMs.
+  "wasi.fileInfo": {
+    params: [["path", "text"]], result: "Info" as VT, partial: true,
+    locals: [["n", "i32"], ["e", "i32"], ["ft", "i32"], ["ns", "i64"]],
+    uses: ["wasi.put", "wasi.fail", "wasi_path_filestat_get", "int.of"],
+    body: `
+      local.get $path
+      call $wasi.put
+      local.set $n
+      i32.const 3
+      i32.const 0
+      i32.const @buf
+      local.get $n
+      i32.const 8
+      call $wasi_path_filestat_get
+      local.tee $e
+      if void
+        ref.null $Info
+        local.get $e
+        local.get $path
+        call $wasi.fail
+        return
+      end
+      i32.const 24
+      i32.load8_u
+      local.set $ft
+      local.get $ft
+      i32.const 4
+      i32.eq
+      if i32
+        i32.const 0
+      else
+        local.get $ft
+        i32.const 3
+        i32.eq
+        if i32
+          i32.const 1
+        else
+          i32.const 2
+          i32.const 3
+          local.get $ft
+          i32.const 7
+          i32.eq
+          select
+        end
+      end
+      local.set $ft
+      block Kind
+        local.get $ft
+        i32.eqz
+        if void
+          i32.const 0
+          struct.new $Kind.c0
+          br 1
+        end
+        local.get $ft
+        i32.const 1
+        i32.eq
+        if void
+          i32.const 1
+          struct.new $Kind.c1
+          br 1
+        end
+        local.get $ft
+        i32.const 2
+        i32.eq
+        if void
+          i32.const 2
+          struct.new $Kind.c2
+          br 1
+        end
+        i32.const 3
+        struct.new $Kind.c3
+      end
+      i32.const 40
+      i64.load
+      call $int.of
+      i32.const 56
+      i64.load
+      local.tee $ns
+      i64.const 1000000000
+      i64.div_u
+      f64.convert_i64_u
+      f64.const 1000
+      f64.mul
+      local.get $ns
+      i64.const 1000000000
+      i64.rem_u
+      f64.convert_i64_u
+      f64.const 1000000
+      f64.div
+      f64.add
+      f64.const 1000
+      f64.div
+      struct.new $Instant
+      struct.new $Info
+      i32.const 0`,
+  },
   "wasi.fileExists": {
     params: [["path", "text"]], result: "i32", locals: [["n", "i32"]], uses: ["wasi.put", "wasi_path_filestat_get"],
     body: `

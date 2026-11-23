@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, mkdtempSync, openSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { WASI } from "node:wasi";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Id } from "../../ters/src/model.ts";
@@ -16,6 +17,7 @@ import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { FILE_INFO_V, FILE_KIND_V, INSTANT_V, INT_OPS, IO, S } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm, runMain as runWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
 
 function program() {
@@ -63,4 +65,44 @@ test("file info in C answers as the evaluator does: a file, a folder, a link, an
   const log = JSON.parse(readFileSync(join(dir, "log.json"), "utf8")) as { op: string; args: unknown[]; answer?: { kind: string; size: number; modified: number }; threw?: string }[];
   assert.deepEqual(log.map((x) => [x.op, x.args[0], x.answer?.kind ?? x.threw]), [["fileInfo", "a.txt", "file"], ["fileInfo", "dir", "folder"], ["fileInfo", "ln", "link"], ["fileInfo", "nope", "no such file or folder: nope"]]);
   assert.equal(log[0].answer!.size, 5);
+});
+
+// The folder the runs look at, and what the evaluator prints in it.
+function folder(p: ReturnType<typeof program>) {
+  const dir = mkdtempSync(join(tmpdir(), "file-info-wasm-"));
+  writeFileSync(join(dir, "a.txt"), "hello");
+  mkdirSync(join(dir, "dir"));
+  symlinkSync("a.txt", join(dir, "ln"));
+  const printed: string[] = [], cwd = process.cwd();
+  process.chdir(dir);
+  try { runProgram(p.code, p.info, p.main, [], { print: (x) => printed.push(x), names: p.names, world: nodeWorld() }); } finally { process.chdir(cwd); }
+  return { dir, printed };
+}
+
+test("file info in a WASI command answers as the evaluator does, and a missing file's reason (C310)", () => {
+  const p = program();
+  const l = lowerScalar(p.code, p.info, p.names, [p.main], { data: true, releases: true, handlers: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const m = emitWasm(l, { wasi: true, main: p.main });
+  const { dir, printed } = folder(p), out = join(dir, "out.txt"), fd = openSync(out, "w");
+  const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
+  const status = w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  closeSync(fd);
+  assert.notEqual(status, 0);
+  const lines = readFileSync(out, "utf8").split("\n").filter((x) => x);
+  assert.deepEqual(lines.slice(0, printed.length), printed);
+  assert.match(lines.slice(printed.length).join("\n"), /nope/);
+});
+
+test("file info in WebAssembly with a JavaScript host answers as the evaluator does (C310)", async () => {
+  const p = program();
+  const l = lowerScalar(p.code, p.info, p.names, [p.main], { data: true, releases: true, handlers: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const f = l.funcs.find((g) => g.def === p.main && !g.inner)!;
+  const { dir, printed } = folder(p), was = process.cwd(), got: string[] = [], errs: string[] = [];
+  let status = 0;
+  try { process.chdir(dir); status = await runWasm(l, emitWasm(l), f.name, [], { print: (x) => got.push(x), world: { ...nodeWorld(), error: (x: string) => errs.push(x) } }); } finally { process.chdir(was); }
+  assert.equal(status, 1);
+  assert.deepEqual(got, printed);
+  assert.match(errs.join("\n"), /no such file or folder: nope/);
 });
