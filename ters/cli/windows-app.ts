@@ -1119,8 +1119,40 @@ static Node *showing(const char *what, int listening) {
   }
   return NULL;
 }
+// The folder the app started in, where a check's shots go.
+static WCHAR START[MAX_PATH];
+// "shot name": the window's inside as it is drawn, to name.bmp in the
+// folder the app started in (a check's screenshot of this window alone,
+// whatever is over it on the runner's screen; C319).
+static void shot(const char *name) {
+  RECT r; GetClientRect(W, &r);
+  int w = r.right, h = r.bottom;
+  if (w <= 0 || h <= 0) { say("shot %s: no window\n", name); return; }
+  HDC wdc = GetDC(W), mdc = CreateCompatibleDC(wdc);
+  HBITMAP bm = CreateCompatibleBitmap(wdc, w, h);
+  HGDIOBJ was = SelectObject(mdc, bm);
+  // PW_CLIENTONLY | PW_RENDERFULLCONTENT, which takes what Direct2D drew.
+  if (!PrintWindow(W, mdc, 3)) BitBlt(mdc, 0, 0, w, h, wdc, 0, 0, SRCCOPY);
+  BITMAPINFOHEADER bi = { sizeof bi, w, -h, 1, 32, BI_RGB, 0, 0, 0, 0, 0 };
+  DWORD n = (DWORD)w * (DWORD)h * 4;
+  unsigned char *px = malloc(n);
+  GetDIBits(mdc, bm, 0, (UINT)h, px, (BITMAPINFO *)&bi, DIB_RGB_COLORS);
+  SelectObject(mdc, was); DeleteObject(bm); DeleteDC(mdc); ReleaseDC(W, wdc);
+  WCHAR path[MAX_PATH + 64];
+  int k = swprintf(path, MAX_PATH + 64, L"%ls\\", START);
+  MultiByteToWideChar(CP_UTF8, 0, name, -1, path + k, MAX_PATH + 50 - k);
+  wcscat(path, L".bmp");
+  FILE *f = _wfopen(path, L"wb");
+  if (f) {
+    BITMAPFILEHEADER bf = { 0x4D42, (DWORD)(sizeof bf + sizeof bi) + n, 0, 0, (DWORD)(sizeof bf + sizeof bi) };
+    fwrite(&bf, sizeof bf, 1, f); fwrite(&bi, sizeof bi, 1, f); fwrite(px, 1, n, f); fclose(f);
+    say("shot %s: %dx%d\n", name, w, h);
+  } else say("shot %s: can't write\n", name);
+  free(px);
+}
 static void tapped(const char *t) {
   int done = 0;
+  if (!strncmp(t, "shot ", 5)) { shot(t + 5); return; }
   // "type N text": the Nth input (from 1) typed into, its input handler
   // told.
   if (!strncmp(t, "type ", 5)) {
@@ -1312,6 +1344,7 @@ static LONG WINAPI crashed(EXCEPTION_POINTERS *e) {
 
 int main(void) {
   SetUnhandledExceptionFilter(crashed);
+  GetCurrentDirectoryW(MAX_PATH, START);
   // The check's taps, and where its output goes (a window app has no
   // console of its own), named from where it starts.
   int argc;

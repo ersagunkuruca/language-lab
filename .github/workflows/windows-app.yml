@@ -20,7 +20,7 @@ on:
         default: dice
         required: true
       taps:
-        description: "Buttons to click, by their text, separated by | (also: type N text, resize W [H], hover text, key name, dblclick text, rightclick text)"
+        description: "Buttons to click, by their text, separated by | (also: type N text, resize W [H], hover text, key name, dblclick text, rightclick text, shot NAME)"
         default: "Roll|Throw 100"
         required: false
 
@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open a folder|resize 700"}]') }}
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open a folder|shot wide|resize 700|shot narrow"}]') }}
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -89,9 +89,16 @@ jobs:
           base=$(objdump -p "$exe" | awk '/^ImageBase/ {print $2}')
           for rva in $(sed -n 's/.*rva \([0-9a-f]*\).*/\1/p' err.txt); do addr2line -f -i -p -e "$exe" $(printf '0x%x' $((0x$base + 0x$rva))); done
           powershell -NoProfile -Command "Compress-Archive -Path '$exe' -DestinationPath app.zip" && cp app.zip "$GITHUB_WORKSPACE/" || true
-          # The screen in the log too, for a reader who can't fetch the
-          # artifact (a cloud session's network): base64 between marks.
-          if [ -f "$GITHUB_WORKSPACE/screen.png" ]; then echo "---- screen.png base64"; base64 -w 0 "$GITHUB_WORKSPACE/screen.png" | fold -w 8000; echo; echo "---- end of screen.png"; fi
+          # The window's shots (taps "shot NAME") as PNGs beside the screen,
+          # and in the log too, for a reader who can't fetch the artifact (a
+          # cloud session's network): base64 between marks.
+          for b in *.bmp; do
+            [ -f "$b" ] || continue
+            p="${b%.bmp}.png"
+            powershell -NoProfile -Command "Add-Type -AssemblyName System.Drawing; [System.Drawing.Image]::FromFile('$(pwd -W)\\$b').Save('$(pwd -W)\\$p', [System.Drawing.Imaging.ImageFormat]::Png)" || continue
+            cp "$p" "$GITHUB_WORKSPACE/shot-$p"
+            echo "---- shot $p base64"; base64 -w 0 "$p" | fold -w 8000; echo; echo "---- end of shot"
+          done
           grep -q -- "---- started" out.txt 2>/dev/null || { echo "the page never showed"; exit 1; }
           [ $code = 0 ] || { echo "exit $code"; exit 1; }
       - uses: actions/upload-artifact@v4
@@ -100,5 +107,6 @@ jobs:
           name: ${{ matrix.program }}-windows
           path: |
             screen.png
+            shot-*.png
             app.zip
           retention-days: 7
