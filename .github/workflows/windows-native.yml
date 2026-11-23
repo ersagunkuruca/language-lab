@@ -43,5 +43,5 @@ jobs:
         if: always()
         shell: bash
         env:
-          EXAMPLES: ${{ inputs.examples || 'collatz notebook' }}
+          EXAMPLES: ${{ inputs.examples }}
         run: node .github/macos/native-sweep.ts $EXAMPLES

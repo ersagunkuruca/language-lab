@@ -31,7 +31,7 @@ const read = <T>(path: string, fallback?: T): T => {
 // When ters runs as one bundled file (I272, cli/bundle.ts), installed
 // anywhere without this checkout: that file, whose sources are all inside it.
 export const bundle = import.meta.url.endsWith(".ts") ? undefined : fileURLToPath(import.meta.url);
-export const root = bundle ? dirname(bundle) : new URL("..", import.meta.url).pathname;
+export const root = bundle ? dirname(bundle) : fileURLToPath(new URL("..", import.meta.url));
 // What runs ters again (git's drivers, the MCP's commands): the bundle, or
 // this checkout's cli/ters.ts.
 export const tersScript = bundle ?? join(root, "cli", "ters.ts");
