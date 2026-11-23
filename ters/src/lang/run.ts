@@ -37,7 +37,7 @@ import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
 import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std-ids.ts";
-import { COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
+import { FILE_INFO_V, FILE_KIND_V, INSTANT_V, COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
 import { ArrayView } from "./array-view.ts";
 import { Table } from "./table.ts";
@@ -453,6 +453,9 @@ export interface Measure { calls: ReadonlyMap<Id, string>; counts: Map<string, n
 // text that comes in.
 export const environmentValue = (v: string | null): Value => (v === null ? { tag: NONE, fields: [] } : { tag: SOME, fields: [v.normalize("NFC")] });
 
+// What a world says about a file (L282), and the File info it is.
+export type FileFacts = { kind: "file" | "folder" | "link" | "special"; size: number; modified: number };
+export const fileInfoValue = (x: FileFacts): Data => ({ tag: FILE_INFO_V, fields: [{ tag: FILE_KIND_V[x.kind], fields: [] }, x.size, { tag: INSTANT_V, fields: [x.modified] }] });
 export interface World {
   error(line: string): void;
   // Log's handler when the program has none.
@@ -464,6 +467,9 @@ export interface World {
   appendFile(path: string, text: string): void;
   fileExists(path: string): boolean;
   listFolder(path: string): string[];
+  // A file's kind, size in bytes and modified time in seconds since 1970
+  // (L282), read without following a link.
+  fileInfo?(path: string): FileFacts;
   // A file's bytes as they are, and bytes written (L189c, bytes.ts).
   readBytes?(path: string): Uint8Array;
   writeBytes?(path: string, bytes: Uint8Array): void;
@@ -733,6 +739,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.appendFile]: (p, t) => (world("appendFile")(p as string, t as string), one(unit)),
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
+    [IO.fileInfo]: (p) => one(fileInfoValue(world("fileInfo")!(p as string))),
     [IO.readBytes]: (p) => one(bytesValue(world("readBytes")!(p as string)) as Value),
     [IO.writeBytes]: (p, b) => (world("writeBytes")!(p as string, plainBytes(b)), one(unit)),
     [IO.offerFile]: (n, b) => (world("offerFile")!(n as string, plainBytes(b)), one(unit)),
@@ -806,7 +813,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
   const timers = worldTimers((m) => { throw new Aborted(m); });
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.readBytes, IO.offerFile, IO.askForFile, IO.writeBytes, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.fileInfo, IO.readBytes, IO.offerFile, IO.askForFile, IO.writeBytes, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];

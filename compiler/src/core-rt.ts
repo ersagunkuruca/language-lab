@@ -11,7 +11,7 @@ import { hashset$items, show as showFloat, table$empty, table$entries, table$has
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
 import { hostLocale, hostZone } from "../../ters/src/lang/text.ts";
 import { plainRequest, responseValue } from "../../ters/src/lang/network.ts";
-import { LIST_SHAPE, LIST_SHAPE_BOOLS, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
+import { fileInfoValue, LIST_SHAPE, LIST_SHAPE_BOOLS, META, cellOps, equal, finiteFloat, spendStep, unit, type Data, toList, type Runtime, type Value, type World } from "../../ters/src/lang/run.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { answerByShapes, type HostOp } from "../../ters/src/lang/hosts.ts";
 import { Cells, NoValue, Pending, pathValue } from "../../ters/src/lang/cells.ts";
@@ -787,6 +787,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     // A zone's offset (L188), NaN for a zone the host doesn't know.
     case "zoneOffset": return (z, s) => T.zoneOffset(z as string, s as number)[0] ?? NaN;
     case "listFolder": return (p) => tried(() => toList(w("listFolder")(p as string)));
+    case "fileInfo": return (p) => tried(() => fileInfoValue(w("fileInfo")!(p as string)));
   }
   return () => { throw new Unsupported(`world ${op}`); };
 }
