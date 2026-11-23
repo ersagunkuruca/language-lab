@@ -611,6 +611,12 @@ function showProgram() {
   // Run's worker checks this program while it is read (I320), as it
   // does the first one (started).
   if (!EMBED) { const at = doc.program; setTimeout(() => { const m = defNamed("main"); if (m && doc.program === at && typesOf()) warmRun(m); }, 300); }
+  // What main first calls each function with, in pieces, as for the first
+  // program (started): opening one of its functions after ran it all in
+  // one task (E319k: Spacetime's main and its page's handlers, 141 ms of
+  // opening `rapidity picture`).
+  // Its whole check in the worker first (E319g): once it's back.
+  if (!EMBED) { const at = doc.program, warm = () => { if (doc.program !== at) return; if (checkingWhole === doc.code) return void setTimeout(warm, 1000); const info = typesOf(); if (info) warmCalls(info); }; setTimeout(warm, 1000); }
 }
 
 // ---------------------------------------------------------------- programs and files
@@ -1160,7 +1166,7 @@ const { mainCopies, pixelSeed, readPort, seeded, warmCalls } = seeds({
 
 // Run backwards (editor/backwards.ts, E228k).
 const { LIMIT, backwardsPanel, knownPorts, portText, runBackwards, stopSearch } = backwards({
-  doc: () => doc, ui, pres: () => pres(), render: () => render(), commit, portsOfDef, returnsBool, seeded, pixelSeed, readPort,
+  doc: () => doc, ui, pres: () => pres(), render: () => render(), renderSide: () => renderSide(), commit, portsOfDef, returnsBool, seeded, pixelSeed, readPort,
   traced: (info) => traced(info), kindOf: (info, v) => kindOf(info, v), handledForArgs: (z) => handledForArgs(z), userCode, fnv,
 });
 
@@ -1186,7 +1192,17 @@ function kindLabel(id: Id): string {
 
 // The program's choices for main (E292), for the Choices tab and the
 // badges on the nodes they are about.
-const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, wanted: (last) => ui.panel === "checks" || (!!last.length && ((ids) => last.some((e) => ids.has(e.id)))(new Set(subtree(doc.code, ui.def)))), blocked: () => { const info = typesOf(); if (!info) return "the check"; const e = errorsIn(info), o = holesIn(info); return e ? `${e} type error${e === 1 ? "" : "s"}` : o ? `${o} hole${o === 1 ? "" : "s"}` : null; }, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => render() });
+const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, wanted: (last) => ui.panel === "checks" || (!!last.length && ((ids) => last.some((e) => ids.has(e.id)))(new Set(subtree(doc.code, ui.def)))), blocked: () => { const info = typesOf(); if (!info) return "the check"; const e = errorsIn(info), o = holesIn(info); return e ? `${e} type error${e === 1 ? "" : "s"}` : o ? `${o} hole${o === 1 ? "" : "s"}` : null; }, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => renderChoices() });
+// The choices' badges as the graph and the blocks were last drawn: new
+// choices whose badges change nothing drawn there redraw only the side
+// column, where the Checks tab lists them (E319k: 343 ms for Spacetime's
+// `rapidity picture` drawn whole).
+let drawnMarks = new Map<Id, string>();
+function renderChoices() {
+  const now = choiceMarks(choicesNow());
+  const changed = [...new Set([...now.keys(), ...drawnMarks.keys()])].filter((id) => now.get(id) !== drawnMarks.get(id));
+  (changed.some((id) => document.querySelector(`#app .center [data-id="${CSS.escape(id)}"]`)) ? render : renderSide)();
+}
 const openChoice = (id: Id) => {
   ui.panel = "checks"; ui.choiceAt = id;
   if (onePane()) ui.pane = "side";
@@ -2256,7 +2272,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
 const runHead = (): HTMLElement => h("h2", {}, "Run");
 
 const { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled } = pagePanels({
-  doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
+  doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, renderSide, ui,
   errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, files: () => exampleFiles(),
 });
 
@@ -2590,27 +2606,13 @@ function draw() {
   const app = document.getElementById("app")!;
   const p = pres();
   const namer = new Namer(doc.code, p, ui.def);
-  // Everything that scrolls keeps its place across a redraw, so a click that
-  // only changes the selection leaves the text where it was.
-  const scroll = SCROLLERS.map((q) => [...document.querySelectorAll(q)].map((g) => [g.scrollLeft, g.scrollTop]));
-  const focused = document.activeElement?.id;
-  // What's typed in a field and not yet put in (a new definition's name,
-  // a comment), kept across a redraw that builds the field again from the
-  // same value: a redraw that came on its own soon after the page loaded
-  // emptied the New form's fields (I219: the Nightly's editKeepsPlaces).
-  // A field built from another value now (what was typed was put in, or
-  // something else changed it) isn't touched. The palette's search keeps
-  // its own text (ui.query).
-  const typed = [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#app input[id][type=text], #app textarea[id]")]
-    .filter((e) => e.value !== e.defaultValue).map((e) => [e.id, e.value, e.defaultValue] as const);
-  // A button that had the keyboard keeps it across the redraw, or hands it
-  // to the one standing in for it: Run becomes Stop and back (E231c).
-  const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
+  const restore = keepPlaces();
   const info = typesOf();
   // Its whole check under way in the worker (E319g): drawn when it's back.
   if (!info && checkingWhole === doc.code) { app.replaceChildren(h("p", { class: "status" }, `Checking ${titleOf(doc)}…`)); return; }
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
+  drawnMarks = choiceMarks(choicesNow());
   const later = graphLater && !EMBED;
   graphLater = false;
   if (later) graph = null;
@@ -2627,34 +2629,11 @@ function draw() {
     h("button", { type: "button", class: "t-open", "data-tab": d, title: namer.name(d), "aria-current": d === ui.def ? "true" : "false" }, namer.name(d)),
     ui.tabs.length > 1 ? h("button", { type: "button", class: "t-close", "data-close-tab": d, "aria-label": `Close ${namer.name(d)}` }, "×") : null);
   const textView = ui.text === "blocks"
-    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, blocksOf(info), ...looseBlocks(info))
+    ? h("div", { class: "blocks-wrap", tabindex: "0", "aria-label": "The program: Tab steps through its parts, Enter edits one, Shift+F10 or the Menu key opens its menu" }, ...(later ? [] : [blocksOf(info), ...looseBlocks(info)]))
     : h("pre", { class: "text" }, textPanel(info));
-  const panels: [UI["panel"], string, () => Kid[]][] = [
-    ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
-    ["program", "Program", () => [programPanel()]],
-    // The program's choices under the definition's checks (E310: a tab
-    // of their own made seven, two lines at 1400 px; Ersagun chose this).
-    ["checks", "Checks", () => [typedChecks(namer, info), h("section", { class: "checks-choices" }, head("Choices", { tip: "What the compiler picked for main: how each type is stored, the ways, where the work runs and its order, each among implementations with the same meaning" }), choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null))]],
-    ["files", "Files", () => [filesPanel()]],
-    ["changes", "Changes", () => [changes.changesPanel()]],
-    ["guide", "Guide", () => [guide()]],
-  ];
-  const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
   // The program is a page, shown in Run (pageSection): the side is wider.
   const onPage = !errorsIn(info) && !holesIn(info) && !!pageMain(ownDefs(), info, pres().names);
   const status = h("div", { class: `status${ui.touched.length ? " live" : ""}${ui.refused ? " refused" : ""}`, role: "status", title: ui.note }, ui.note);
-  const restore = () => {
-    for (const [id, value, was] of typed) {
-      const e = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
-      if (e && "defaultValue" in e && e.defaultValue === was && e.value === was) e.value = value;
-    }
-    SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
-    if (focused) document.getElementById(focused)?.focus();
-    else if (act) {
-      const q = (a: string) => document.querySelector<HTMLElement>(`[data-act="${a}"]`);
-      (q(act) ?? q(FOCUS_NEXT[act] ?? ""))?.focus({ preventScroll: true });
-    }
-  };
 
   // Embedded: the definition's graph over its blocks, as the editor shows
   // both, with what's selected (a hole's palette) under them; Run is the
@@ -2714,15 +2693,7 @@ function draw() {
           sameLine(namer),
           h("div", { class: "body" }, textView))),
       h("div", { class: "gutter", "data-gutter": onPage ? "page-w" : "side-w", style: "grid-area: g2", "aria-hidden": "true" }),
-      h("aside", { class: "side" },
-        // A helper's own Run comes first; the page, still running, sits
-        // under it (I76).
-        h("section", { class: "panel" }, runHead(), pictureSection(info),
-          ...(info && pageMain(ownDefs(), info, pres().names) !== ui.def ? [typedRunPanel(namer, info), pageSection(info)] : [pageSection(info), typedRunPanel(namer, info)])),
-        h("section", { class: "panel", "aria-label": shown[1] },
-          h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
-            h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
-          ...shown[2]()))),
+      later ? h("aside", { class: "side" }) : sideColumn(namer, info, p)),
     status,
     // At phone width one pane at a time, picked here (page.html).
     h("nav", { class: "panes", "aria-label": "Panes" }, ...([["nav", "Programs"], ["graph", "Graph"], ["text", "Text"], ["side", "Panels"]] as const).map(([k, label]) =>
@@ -2730,10 +2701,91 @@ function draw() {
   );
   restore();
   changes.markChanges(app);
+  // A big definition opened: the side column, its blocks, then its graph,
+  // each in a task of its own after the rest (E319k: Spacetime's
+  // `rapidity picture` in one task of 428 ms, its blocks 120 of it, the
+  // side column 110).
   if (later) {
-    const code = doc.code, def = ui.def, host = app.querySelector<HTMLElement>(".p-graph .graph-host");
-    setTimeout(() => { const now = typesOf(); if (now === info && doc.code === code && ui.def === def && host?.isConnected && !host.firstChild) { host.append(graphOf(now)); changes.markChanges(host); } }, 0);
+    const code = doc.code, def = ui.def, same = () => typesOf() === info && doc.code === code && ui.def === def;
+    setTimeout(() => { if (same() && !document.querySelector("#app aside.side")?.firstChild) renderSide(); }, 0);
+    const blocks = app.querySelector<HTMLElement>(".p-text .blocks-wrap"), host = app.querySelector<HTMLElement>(".p-graph .graph-host");
+    if (blocks) setTimeout(() => { if (same() && blocks.isConnected && !blocks.firstChild) { blocks.append(blocksOf(info), ...looseBlocks(info)); changes.markChanges(blocks); } }, 0);
+    setTimeout(() => { if (same() && host?.isConnected && !host.firstChild) { host.append(graphOf(info)); changes.markChanges(host); } }, 0);
   }
+}
+
+// The side column: Run, and the tabs under it.
+function sideColumn(namer: Namer, info: T.Info, p: Presentation): HTMLElement {
+  const panels: [UI["panel"], string, () => Kid[]][] = [
+    ["node", ui.mode === "new-def" ? "New" : ui.selected ? "Selected" : "Definition", () => [typedInspector(namer, typedPres(), info), definitionPanel(p)]],
+    ["program", "Program", () => [programPanel()]],
+    // The program's choices under the definition's checks (E310: a tab
+    // of their own made seven, two lines at 1400 px; Ersagun chose this).
+    ["checks", "Checks", () => [typedChecks(namer, info), h("section", { class: "checks-choices" }, head("Choices", { tip: "What the compiler picked for main: how each type is stored, the ways, where the work runs and its order, each among implementations with the same meaning" }), choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null))]],
+    ["files", "Files", () => [filesPanel()]],
+    ["changes", "Changes", () => [changes.changesPanel()]],
+    ["guide", "Guide", () => [guide()]],
+  ];
+  const shown = panels.find(([k]) => k === ui.panel) ?? panels[0];
+  return h("aside", { class: "side" },
+    // A helper's own Run comes first; the page, still running, sits
+    // under it (I76).
+    h("section", { class: "panel" }, runHead(), pictureSection(info),
+      ...(info && pageMain(ownDefs(), info, pres().names) !== ui.def ? [typedRunPanel(namer, info), pageSection(info)] : [pageSection(info), typedRunPanel(namer, info)])),
+    h("section", { class: "panel", "aria-label": shown[1] },
+      h("div", { class: "ins-tabs", role: "tablist" }, ...panels.map(([k, label]) =>
+        h("button", { type: "button", role: "tab", class: k === shown[0] ? "on" : "", "aria-selected": String(k === shown[0]), "data-panel": k }, label))),
+      ...shown[2]()));
+}
+
+// A worker's answer that shows only in the side column (the backwards
+// search's): that column drawn again, the graph and the blocks kept. All
+// of it drawn was 335 ms for Spacetime's `rapidity picture`, its graph 164
+// and the layout for the scroll put back 127 (E319k).
+function renderSide() {
+  const old = document.querySelector<HTMLElement>("#app aside.side"), info = typesOf();
+  if (EMBED || !old || !info) return render();
+  const restore = keepPlaces(), p = pres();
+  T.setDisplayNames(p.names);
+  try {
+    const side = sideColumn(new Namer(doc.code, p, ui.def), info, p);
+    old.replaceWith(side);
+    restore();
+    changes.markChanges(side);
+  } catch { render(); }
+}
+
+// What a redraw keeps: where everything scrolls, what has the keyboard,
+// what's typed and not yet put in. Read before, put back by what it returns.
+function keepPlaces(): () => void {
+  // Everything that scrolls keeps its place across a redraw, so a click that
+  // only changes the selection leaves the text where it was.
+  const scroll = SCROLLERS.map((q) => [...document.querySelectorAll(q)].map((g) => [g.scrollLeft, g.scrollTop]));
+  const focused = document.activeElement?.id;
+  // What's typed in a field and not yet put in (a new definition's name,
+  // a comment), kept across a redraw that builds the field again from the
+  // same value: a redraw that came on its own soon after the page loaded
+  // emptied the New form's fields (I219: the Nightly's editKeepsPlaces).
+  // A field built from another value now (what was typed was put in, or
+  // something else changed it) isn't touched. The palette's search keeps
+  // its own text (ui.query).
+  const typed = [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#app input[id][type=text], #app textarea[id]")]
+    .filter((e) => e.value !== e.defaultValue).map((e) => [e.id, e.value, e.defaultValue] as const);
+  // A button that had the keyboard keeps it across the redraw, or hands it
+  // to the one standing in for it: Run becomes Stop and back (E231c).
+  const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
+  return () => {
+    for (const [id, value, was] of typed) {
+      const e = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
+      if (e && "defaultValue" in e && e.defaultValue === was && e.value === was) e.value = value;
+    }
+    SCROLLERS.forEach((q, k) => document.querySelectorAll(q).forEach((g, i) => { if (scroll[k][i]) [g.scrollLeft, g.scrollTop] = scroll[k][i]; }));
+    if (focused) document.getElementById(focused)?.focus();
+    else if (act) {
+      const q = (a: string) => document.querySelector<HTMLElement>(`[data-act="${a}"]`);
+      (q(act) ?? q(FOCUS_NEXT[act] ?? ""))?.focus({ preventScroll: true });
+    }
+  };
 }
 
 // A press outside the menu closes it, before anything else sees the press.
