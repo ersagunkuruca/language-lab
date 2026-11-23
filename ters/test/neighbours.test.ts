@@ -20,6 +20,7 @@ import { subtree, type Id } from "../src/model.ts";
 import { compiledDefs, emitCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
 import { holdNeighbours } from "../../compiler/src/scalar.ts";
 import { call } from "../mcp/server.ts";
+import { nearLines } from "../cli/choices.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -40,12 +41,16 @@ function program() {
   let seed = 5;
   const rand = (n: number) => (seed = (seed * 16807) % 2147483647) % n;
   def("many", () => show(k.call(lib("neighbours"), k.list(...Array.from({ length: 400 }, () => spot(rand(60) / 2, rand(60) / 2))), k.fn(["s"], (s) => s), k.lit(2.5))));
+  // In four parts, past the grid's 3: on the k-d tree, evaluated and
+  // compiled.
+  const Q = k.type("Pose", [], [["pose", [["a", () => k.tref(NUMBER)], ["b", () => k.tref(NUMBER)], ["c", () => k.tref(NUMBER)], ["d", () => k.tref(NUMBER)]]]]);
+  def("in four parts", () => show(k.call(lib("neighbours"), k.list(...Array.from({ length: 300 }, () => k.call(Q.v.pose, ...[0, 1, 2, 3].map(() => k.lit(rand(8) / 2))))), k.fn(["q"], (q) => q), k.lit(1))));
   const code = base(k.code), names = baseNames(k.names);
   return { code, names, info: infer(code, names, undefined, checkOptions) };
 }
-const NAMES = ["on a line", "in the plane", "none", "many"];
+const NAMES = ["on a line", "in the plane", "none", "many", "in four parts"];
 
-test("neighbours on a line and in the plane, within reach counted with ≤, evaluated and compiled the same, on grids and every pair", () => {
+test("neighbours on a line, in the plane and in four parts, within reach counted with ≤, evaluated and compiled the same, on grids, the k-d tree and every pair", () => {
   const p = program();
   assert.deepEqual(p.info.errors.map((e) => e.message), []);
   const r = makeRunner(p.code, p.info, { print: () => {}, names: p.names });
@@ -56,6 +61,11 @@ test("neighbours on a line and in the plane, within reach counted with ≤, eval
   assert.equal(evaluated[3], pairs.value(at("many")));
   // The compiled program finds them on a grid in its runtime.
   assert.match(emitCoreJs(lowerCore(p.code, p.info, p.names, [at("many")])).js, /R\.rt\("neighbours\.grid"\)/);
+  assert.equal(evaluated[4], pairs.value(at("in four parts")));
+  const four = lowerCore(p.code, p.info, p.names, [at("in four parts")]);
+  assert.match(emitCoreJs(four).js, /, "k-d tree"\)/);
+  // And its choices entry says so.
+  assert.deepEqual(nearLines(four, p.names).map((l) => l.replace(/^\S+ /, "")), ["way: in four parts's neighbours: k-d tree; among every pair, grid, k-d tree; target JavaScript"]);
   // Held (L280g, the choices' way entry): a grid of cells of another
   // size, narrower than reach too, a k-d tree, or every pair; the same lists.
   const call = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as { target?: Id }).target === lib("neighbours") && subtree(p.code, at("many")).includes(n.id))!;

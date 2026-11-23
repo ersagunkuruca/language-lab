@@ -23,7 +23,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
-import { neighbourLists, neighbourListsByTree } from "../../ters/library/near.ts";
+import { neighboursFound } from "../../ters/library/near.ts";
 import type { branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker } from "./branches-rt.ts";
 
 // The builtins a printed program calls, by id (C251b): what std-run.ts
@@ -223,7 +223,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // neighbours (L280g) on a grid (ters/library/near.ts): its places, each
   // asked once in the items' order as the definition's map asks them, a
   // Float64 or a record of them; FAIL, for the definition as compiled,
-  // where the grid can't take them or a budget counts the steps. Lists or
+  // where neither the grid nor the tree can take them or a budget counts the steps. Lists or
   // arrays, as the call's type is. The cells' side where the program's
   // choices hold it, or a k-d tree.
   if (name === "neighbours.grid") return (xs, place, reach, fuel, array, arrays, side) => {
@@ -240,7 +240,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
       if (c.tag !== CONS) throw FAIL;
       take(c.f0 ?? c.fields[0]);
     }
-    const lists = side === "k-d tree" ? neighbourListsByTree(ps, reach) : neighbourLists(ps, reach, typeof side === "number" ? side : reach);
+    const lists = neighboursFound(ps, reach, typeof side === "number" || side === "k-d tree" ? side : undefined);
     if (!lists) throw FAIL;
     const inner = lists.map((l) => (arrays ? arrayOf(l) : toList(l)));
     return array ? arrayOf(inner) : toList(inner as Value[]);

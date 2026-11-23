@@ -7,10 +7,11 @@
 // compiled JavaScript's runtime (compiler/src/core-rt.ts), so it imports
 // nothing.
 //
-// Null for what the grid can't take, where the definition runs: places
-// of no parts, of more than 3, or of different lengths; a reach that
-// isn't positive and finite; places so far out that a cell's number
-// rounds.
+// Null for what the grid can't take: places of no parts, of more than 3,
+// or of different lengths; a reach that isn't positive and finite;
+// places so far out that a cell's number rounds; more cells around each
+// than 15625. `neighboursFound` then asks the k-d tree, which takes any
+// number of parts, and the definition runs where that is null too.
 //
 // Prior art: Bentley, Stanat and Williams, "The complexity of finding
 // fixed-radius near neighbors" (1977); the k-d tree, Bentley,
@@ -61,7 +62,7 @@ export function neighbourLists(ps: readonly (readonly number[])[], reach: number
 export function neighbourListsByTree(ps: readonly (readonly number[])[], reach: number): number[][] | null {
   if (!(reach > 0) || reach === Infinity) return null;
   const n = ps.length, r2 = reach * reach, dims = n ? ps[0].length : 0, far = reach * (1 + 2 ** -20);
-  if ((n && !dims) || dims > 3 || r2 === Infinity || ps.some((p) => p.length !== dims || p.some((x) => !Number.isFinite(x)))) return null;
+  if ((n && !dims) || r2 === Infinity || ps.some((p) => p.length !== dims || p.some((x) => !Number.isFinite(x)))) return null;
   const order = Array.from({ length: n }, (_, i) => i);
   // Each node: its places order[lo..hi), its box, its two halves.
   type Node = { lo: number; hi: number; min: number[]; max: number[]; left?: Node; right?: Node };
@@ -94,4 +95,12 @@ export function neighbourListsByTree(ps: readonly (readonly number[])[], reach: 
     lists.push(found.sort((x, y) => x - y));
   }
   return lists;
+}
+
+// The grid where it takes the places, the tree where it doesn't (more
+// than 3 parts, or cells held so narrow that too many are around each):
+// the evaluator's way and the compiled code's unless the choices hold
+// another.
+export function neighboursFound(ps: readonly (readonly number[])[], reach: number, side?: number | "k-d tree"): number[][] | null {
+  return side === "k-d tree" ? neighbourListsByTree(ps, reach) : neighbourLists(ps, reach, side ?? reach) ?? neighbourListsByTree(ps, reach);
 }
