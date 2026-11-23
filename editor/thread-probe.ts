@@ -36,8 +36,8 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 const LONG_MS = 200;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
-  // Its side column (its frames loaded again) and its graph, each in a
-  // task of about 220 ms.
+  // Five tasks of 80 to 200 ms, one of them (its graph drawn, or the
+  // click's own) sometimes over.
   "opening a large definition": "E319k",
   // Choosing the stored program's lists and Maps left the thread with
   // E319j (2 s on bounce before); what's left is its check over the

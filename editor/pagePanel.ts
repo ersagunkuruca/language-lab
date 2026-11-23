@@ -217,7 +217,7 @@ export function pagePanels(host: PageHost) {
     // leaves the page, and this redraw takes the frame out and puts it back.
     // So the page goes back to the document that outlives renders first: its
     // buttons keep their handlers.
-    if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
+    parkPage();
     page.hushBtn.hidden = !page.now?.hush;
     drawSteps();
     // Put back in the frame once the frame is in the page again.
@@ -267,7 +267,8 @@ export function pagePanels(host: PageHost) {
   function leavePage() {
     if (page.for && page.program && page.program !== doc().program) {
       // A page left for another program goes on, but silent: nothing plays
-      // from a page that isn't shown.
+      // from a page that isn't shown, and its frames wait (html.ts
+      // everyFrame).
       page.now?.hush?.();
       // Out of the frame before the frame goes, so its buttons keep their handlers.
       if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
@@ -749,5 +750,11 @@ export function pagePanels(host: PageHost) {
     ui.note = `Saved this run's log: ${events} event${events === 1 ? "" : "s"} the page's handlers were given and ${answers} answer${answers === 1 ? "" : "s"} of the world, in order.${left}`;
     render();
   }
-  return { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled };
+  // The page put back in the document that outlives renders, before its
+  // frame leaves the page: a redraw that draws the side column a task
+  // later (main.ts, E319k) takes the frame out before pageSection runs.
+  function parkPage() {
+    if (page.root && page.root.ownerDocument !== page.maker) page.maker.body.append(page.maker.adoptNode(page.root));
+  }
+  return { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled, parkPage };
 }

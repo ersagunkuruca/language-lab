@@ -1792,14 +1792,14 @@ function revealDrawn() {
     if (want && g) g.reveal(want === WHOLE ? [g.world] : [...g.world.querySelectorAll("[data-id]")].filter((e) => want(e.getAttribute("data-id")!)));
   });
 }
-function graphOf(info: T.Info): HTMLElement {
+function graphOf(info: T.Info, later = false): HTMLElement {
   const calls = (doc.layout.inline ?? []).filter((c) => c.includes("~") || node(c));
   const p = typedPres();
   view = calls.length ? inlineView(doc.code, p.names, calls) : null;
-  if (!view) return (graph = typedGraph(doc.code, p, info, ui.def, graphHooks(info), viewKey())).el;
+  if (!view) return (graph = typedGraph(doc.code, p, info, ui.def, { ...graphHooks(info), later }, viewKey())).el;
   const v = view;
   const vinfo = T.infer(v.code, v.names);
-  const hooks = graphHooks(info);
+  const hooks = { ...graphHooks(info), later };
   const viewOnly = (id: Id) => (v.from.has(id) && id.includes("~") ? `this is shown inline from ${p.names[v.from.get(id)!] ?? "its definition"}: open it to change it` : null);
   return (graph = typedGraph(v.code, { ...p, names: v.names }, vinfo, ui.def, {
     ...hooks,
@@ -2271,7 +2271,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
 // (E288: an ⓘ here repeated it).
 const runHead = (): HTMLElement => h("h2", {}, "Run");
 
-const { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled } = pagePanels({
+const { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled, parkPage } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, renderSide, ui,
   errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, files: () => exampleFiles(),
 });
@@ -2659,6 +2659,9 @@ function draw() {
     return restore();
   }
 
+  // Its frame leaves with the side column drawn later: the page's
+  // handlers kept first (pagePanel.ts parkPage).
+  if (later) parkPage();
   app.replaceChildren(
     h("header", { class: "bar" },
       h("div", { class: "brand" }, h("strong", {}, "Ters"), h("span", { title: "A program is stored as a tree of nodes, not as text: the graph and the text below are two views of that one tree" }, "the program is the tree")),
@@ -2710,7 +2713,13 @@ function draw() {
     setTimeout(() => { if (same() && !document.querySelector("#app aside.side")?.firstChild) renderSide(); }, 0);
     const blocks = app.querySelector<HTMLElement>(".p-text .blocks-wrap"), host = app.querySelector<HTMLElement>(".p-graph .graph-host");
     if (blocks) setTimeout(() => { if (same() && blocks.isConnected && !blocks.firstChild) { blocks.append(blocksOf(info), ...looseBlocks(info)); changes.markChanges(blocks); } }, 0);
-    setTimeout(() => { if (same() && host?.isConnected && !host.firstChild) { host.append(graphOf(info)); changes.markChanges(host); } }, 0);
+    // Its graph laid out in one, then drawn and put in the page in the
+    // next: nothing to click on in between.
+    setTimeout(() => {
+      if (!same() || !host?.isConnected || host.firstChild) return;
+      const el = graphOf(info, true), g = graph;
+      setTimeout(() => { if (graph === g && same() && host.isConnected && !host.firstChild) { g?.drawNow(); host.append(el); changes.markChanges(host); } }, 0);
+    }, 0);
   }
 }
 

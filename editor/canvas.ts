@@ -232,8 +232,12 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
     if (dx || dy) set({ ...view, x: view.x + dx, y: view.y + dy });
   };
   apply();
-  // First time this graph is shown: fit it readably, once it has a size.
-  if (!view) requestAnimationFrame(() => { if (root.isConnected) fit(true); });
+  // First time this graph is shown: fit it readably, once it has a size
+  // and something drawn (a large definition's is drawn a task after it's
+  // made, E319k).
+  let tries = 0;
+  const first = () => { if (view) return; if (root.isConnected && world.firstChild) return fit(true); if (++tries < 60) requestAnimationFrame(first); };
+  if (!view) requestAnimationFrame(first);
 
   const el = document.createElement("div");
   el.className = "canvas-wrap";

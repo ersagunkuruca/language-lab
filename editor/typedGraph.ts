@@ -68,6 +68,9 @@ const tw = (t: string, px = 7.4) => t.length * px;
 export type MenuTarget = { kind: "hole" | "node" | "binder" | "frame" | "space"; id?: Id };
 
 export interface GraphHooks {
+  // Drawn by drawNow, a task after it's laid out (E319k: a large
+  // definition's layout and drawing were one task of 190 to 260 ms).
+  later?: boolean;
   selected: Id | null;
   select: (id: Id | null) => void;
   open: (id: Id) => void;
@@ -160,6 +163,8 @@ export interface GraphView extends Canvas {
   // Where a node is drawn now, if it is.
   posOf: (id: Id) => Pos | undefined;
   unpickAll: () => void;
+  // Drawn, if it was made `later` and isn't yet.
+  drawNow: () => void;
 }
 
 const HANDLES: Record<Id, Id> = { [S.all]: CHOICE, [S.count]: CHOICE, [S.first]: CHOICE, [S.fuel]: DIVERGE };
@@ -287,8 +292,9 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   // covers: nothing else moves (Ersagun 2026-11-01, replacing I57's
   // spacing out). Tidy puts things apart when wanted.
   drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
-  const draw = (at: Record<Id, Pos>) => canvas.world.replaceChildren(...render(shown(at), hooks, at, picked));
-  draw(hooks.at);
+  let waiting = !!hooks.later;
+  const draw = (at: Record<Id, Pos>) => { waiting = false; canvas.world.replaceChildren(...render(shown(at), hooks, at, picked)); };
+  if (!waiting) draw(hooks.at);
   // A node being resized, drawn at the size so far with its wires: the
   // definition built again with that size, the node and its wires taken
   // from it (Ersagun 2026-11-01: the wires only caught up on release).
@@ -311,6 +317,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     picked: () => [...picked],
     pick: (id) => { if (!picked.delete(id)) picked.add(id); },
     unpickAll: () => picked.clear(),
+    drawNow: () => { if (waiting) draw(hooks.at); },
     frameOf: (id) => scene.items.get(id)?.frame ?? (scene.frames.has(id) ? scene.frames.get(id)!.parent : undefined),
     posOf: (id) => { const it = scene.items.get(id); return it ? hooks.at[id] ?? { x: it.auto.x, y: it.auto.y } : undefined; },
     expand: (ids) => [...expand(scene, ids)],

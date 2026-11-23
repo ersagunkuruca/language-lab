@@ -101,6 +101,10 @@ async function visit(saved: string | null, only?: string) {
           await p.keyboard.press("Escape");
           await p.keyboard.press("Escape");
         }
+        // A program's graph is drawn a task after it opens and fitted in
+        // the frame after (E319k): the empty spot is picked once it's still.
+        await p.locator(".p-graph svg.canvas g.world > *").first().waitFor({ timeout: 5000 }).catch(() => {});
+        await p.waitForTimeout(200);
         const svg = p.locator(".p-graph svg.canvas");
         const bb = await svg.boundingBox();
         if (bb) {
@@ -713,6 +717,9 @@ async function phone() {
   await p.locator(".blocks-wrap .hole").first().tap({ timeout: 2000 }).catch(() => errors.push(`${where}: no hole to tap in the new program`));
   if (!(await p.locator("#f-query").isVisible())) errors.push(`${where}: tapping the new program's hole didn't bring the palette`);
   await p.locator('.panes [data-pane="graph"]').tap();
+  // A program's graph is drawn a task after it opens, fitted and measured
+  // for its map in the frames after (E319k): the map's button settles then.
+  await p.waitForTimeout(300);
   // The map would cover a phone's graph: it starts put away, and Map
   // brings it out.
   if (await p.locator(".p-graph .minimap").isVisible()) errors.push(`${where}: the map covers the graph on a phone`);

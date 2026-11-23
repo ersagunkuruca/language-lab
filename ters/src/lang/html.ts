@@ -228,13 +228,14 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   const foreign = (d as { [FOREIGN_VIEW]?: Node_ })[FOREIGN_VIEW];
   if (foreign) return foreign;
   const steps = m.steps ?? PAGE_STEPS;
-  // `late`: the last update ran past its time, not its steps.
-  let late = false;
+  // `timedOut`: how many times an update was found past its time. A
+  // handler that stops reads it against its count before, since an update
+  // run after it stopped (its cells' flush) can start a budget of its own.
+  let timedOut = 0;
   const budget = <T>(f: () => T): T => {
-    late = false;
     if (!m.within) return withSteps(steps, f);
     const end = performance.now() + m.within;
-    return withSteps(steps, f, () => (late = performance.now() > end));
+    return withSteps(steps, f, () => performance.now() > end && ++timedOut > 0);
   };
   cells.around = (update) => budget(update);
   const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}, made: () => Node_[] = () => [e]) => {
@@ -349,7 +350,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // browser.ts): the next click asks again.
             const event = {};
             const fire = (run: () => unknown) => {
-              const was = cells.event;
+              const was = cells.event, timed = timedOut;
               cells.event = event;
               try {
                 cells.attempt(() => budget(run), (e) => e instanceof Pending && !e.resume);
@@ -371,7 +372,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
                 // Past its time (the editor's preview, E319d): said under the
                 // page, not in the console a frame at a time.
-                else if (err instanceof OutOfSteps && late && m.stopped) m.stopped(err);
+                else if (err instanceof OutOfSteps && timedOut !== timed && m.stopped) m.stopped(err);
                 else if (err instanceof OutOfSteps) { if (!(err as { quiet?: boolean }).quiet) console.error(`${name} handler ${STUCK}`); }
                 else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }
@@ -552,6 +553,11 @@ function everyFrame(e: El, tick: (seconds: number) => void) {
   const step = (ms?: number) => {
     const on = (e as El & { isConnected?: boolean }).isConnected;
     const now = typeof ms === "number" ? ms : null;
+    // In a document nothing shows (the editor's page left for another
+    // program waits there, pagePanel.ts leavePage): no frames till it's
+    // shown again, and the first one then starts the clock afresh. Run on
+    // the editor's thread, a frame there was work nobody saw (E319k).
+    if (on && (e as El & { ownerDocument?: { defaultView?: unknown } }).ownerDocument?.defaultView === null) { last = null; raf(step); return; }
     if (on) {
       seen = true;
       const seconds = last === null || now === null ? 0 : Math.max(0, (now - last) / 1000);

@@ -95,7 +95,10 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const heard = o.log && heardInto(o.log, window, cap);
   const run = () => fns[main]() as Value;
   const sound = o.worklet ? SOUND!.soundPlayer(cells, o.worklet, run, o.recordings, recorded!, latency) : null;
-  const root = mountHtml((sound ? sound.page : run()) as never, { cells, doc: o.doc, call: coreCall, within: o.within, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: heard && ((...a: Parameters<typeof heard>) => { if (!stopped) heard(...a); }) });
+  // Given a time (the editor's preview), that's its bound, not the
+  // interpreter's steps: compiled code takes a million of them in a few
+  // milliseconds (break's frame ran out of them every frame).
+  const root = mountHtml((sound ? sound.page : run()) as never, { cells, doc: o.doc, call: coreCall, within: o.within, ...(o.within ? { steps: Number.MAX_SAFE_INTEGER } : {}), ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: heard && ((...a: Parameters<typeof heard>) => { if (!stopped) heard(...a); }) });
   const kept = cells.kept;
   made = kept;
   cells.kept = null;
