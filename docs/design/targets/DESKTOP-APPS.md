@@ -3,8 +3,8 @@
 Design note, 2026-11-23. Ersagun asked: "If we want to target windows and
 macos apps, is that too much work? Can I make my own file browser with it
 for example?" This note answers both and plans the work as rows C294 to
-C300 and L282 to L284, with a file browser as the driving example. Nothing
-here is built yet.
+C300 and L282 to L284, with a file browser as the driving example.
+Ersagun chose to go, macOS first, then Windows (2026-11-23).
 
 ## Answer
 
