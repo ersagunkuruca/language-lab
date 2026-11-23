@@ -123,6 +123,9 @@ typedef struct tl_n {
 static ters_ui *tl_ui;
 static tl_n *tl_root;
 static double tl_width = 360;
+// The window's height, for vh (0 when the screen doesn't say, as a
+// phone's scroll has no end: 100vh is then 640, a phone's).
+static double tl_height;
 static int tl_dark;
 static char *tl_sheet;
 static size_t tl_sheet_n;
@@ -246,6 +249,10 @@ static double tl_len(const char *p, const char *e, double size, int *ok, const c
   if (u + 2 <= e && !memcmp(u, "px", 2)) u += 2;
   else if (u + 3 <= e && !memcmp(u, "rem", 3)) { r = x * 16; u += 3; }
   else if (u + 2 <= e && !memcmp(u, "em", 2)) { r = x * size; u += 2; }
+  // vh and vw (dvh, svh, lvh the same: a window's bars don't come and go).
+  else if (u + 2 <= e && !memcmp(u, "vh", 2)) { r = x * (tl_height > 0 ? tl_height : 640) / 100; u += 2; }
+  else if (u + 3 <= e && u[1] == 'v' && u[2] == 'h' && (*u == 'd' || *u == 's' || *u == 'l')) { r = x * (tl_height > 0 ? tl_height : 640) / 100; u += 3; }
+  else if (u + 2 <= e && !memcmp(u, "vw", 2)) { r = x * tl_width / 100; u += 2; }
   else if (u < e && *u == '%') { *ok = 2; u++; }
   *ok = *ok == 2 ? 2 : 1;
   if (after) *after = u;
@@ -1439,11 +1446,11 @@ static int ters__ui_pointer(void *view, int kind, double x, double y) {
 static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
 static double tl_sound(void *c, int n, int on, int mic, const char *a, size_t an) { (void)c; return tl_ui->sound ? tl_ui->sound(tl_ui->ctx, n, on, mic, a, an) : 0; }
 static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew, tl_sound, tl_marks };
-// main's page on screen ui, width wide (in the units its texts measure
-// in), dark or not: the root's view.
+// main's page on screen ui, width wide and height high (in the units its
+// texts measure in), dark or not: the root's view.
 static int tl_ask(const char *what, size_t n) { return tl_ui->ask(tl_ui->ctx, what, n); }
-static void *ters__ui_start(ters_ui *ui, double width, int dark) {
-  tl_ui = ui; tl_width = width; tl_dark = dark;
+static void *ters__ui_start(ters_ui *ui, double width, double height, int dark) {
+  tl_ui = ui; tl_width = width; tl_height = height; tl_dark = dark;
   if (ui->ask) ters_asker = tl_ask;
   ters_after = tl_layout;
   ters_moving = tl_moving;
@@ -1452,16 +1459,16 @@ static void *ters__ui_start(ters_ui *ui, double width, int dark) {
   tl_layout();
   return tl_root->view;
 }
-// The screen's width or colour scheme changed.
-static void ters__ui_resize(double width, int dark) {
-  tl_width = width;
+// The window's size or colour scheme changed.
+static void ters__ui_resize(double width, double height, int dark) {
+  tl_width = width; tl_height = height;
   if (dark != tl_dark) { tl_dark = dark; free(tl_sheet); tl_sheet = 0; free(tl_rules); tl_rules = 0; tl_nrules = 0; free(tl_kfs); tl_kfs = 0; tl_nkf = 0; }
   tl_layout();
 }
 // Each way in, under the page's lock (C217).
 int ters_ui_pointer(void *view, int kind, double x, double y) { ters_page_lock(); int r = ters__ui_pointer(view, kind, x, y); ters_page_unlock(); return r; }
-void *ters_ui_start(ters_ui *ui, double width, int dark) { ters_page_lock(); void *r = ters__ui_start(ui, width, dark); ters_page_unlock(); return r; }
-void ters_ui_resize(double width, int dark) { ters_page_lock(); ters__ui_resize(width, dark); ters_page_unlock(); }
+void *ters_ui_start(ters_ui *ui, double width, double height, int dark) { ters_page_lock(); void *r = ters__ui_start(ui, width, height, dark); ters_page_unlock(); return r; }
+void ters_ui_resize(double width, double height, int dark) { ters_page_lock(); ters__ui_resize(width, height, dark); ters_page_unlock(); }
 `;
 
 // A screen for tests (C199d): it keeps each box's place and paint, and
@@ -1473,7 +1480,8 @@ void ters_ui_resize(double width, int dark) { ters_page_lock(); ters__ui_resize(
 // in a picture, and latency:S, a sound's latency in seconds). Texts
 // measure as if each character were half a font size wide, so places
 // that hang on texts are near a browser's, not equal.
-// The first argument may be width:N (360 by default) and dark.
+// The first arguments may be width:N (360 by default), height:N (none by
+// default, so 100vh is 640) and dark.
 export const UI_HEADLESS_C = String.raw`
 typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
@@ -1617,15 +1625,16 @@ int main(int argc, char **argv) {
     0
 #endif
   };
-  double width = 360; int dark = 0, a = 1;
+  double width = 360, height = 0; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
+    else if (!strncmp(argv[a], "height:", 7)) height = atof(argv[a] + 7);
     else if (!strcmp(argv[a], "dark")) dark = 1;
     else break;
   }
   // The clock animations run on is the test's: frames:N:MS moves it.
   tl_fake = 0;
-  uv *root = ters_ui_start(&ui, width, dark);
+  uv *root = ters_ui_start(&ui, width, height, dark);
   if (!root) return 1;
   u_show(root);
   for (; a < argc; a++) {

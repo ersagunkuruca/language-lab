@@ -472,6 +472,29 @@ test("the font shorthand in C: its weight, size and line height (C195)", { skip 
   assert.deepEqual(h.map((x) => Math.round(x * 100) / 100), [16.8, 30, 20], divs.join("\n"));
 });
 
+// A window's height (C298): 100vh is the height the screen gives, and vw
+// the width; with no height given (a phone's scroll), 100vh is 640.
+test("vh and vw in C against the window's size, and 640 high when none is given (C298)", { skip }, () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: [string, string][], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs.map(([n, v]) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v))))), k.list(...kids));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => el("main", [["style", "margin: 0"]], [
+    el("div", [["style", "height: 100vh"]], []),
+    el("div", [["style", "height: 50dvh; width: 25vw"]], []),
+  ])));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  const l = lowerScalar(code, info, names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const exe = compile(emitC(l, { main, page: "ui-headless" }).c);
+  const sizes = (args: string[]) => {
+    const r = spawnSync(exe, args);
+    assert.equal(r.status, 0, r.stderr.toString());
+    return r.stdout.toString().split("\x1e\n")[0].split("\n").map((s) => s.trim()).filter((s) => s.startsWith("div ")).map((s) => s.split(" ").slice(3, 5).map(Number));
+  };
+  assert.deepEqual(sizes(["width:800", "height:600"]), [[768, 600], [200, 300]]);
+  assert.deepEqual(sizes(["width:360"]), [[328, 640], [90, 320]]);
+});
+
 // A page's sound in C (C217): a button that plays a recording through a
 // block function scaling it by a cell's gain, a button writing the gain,
 // and one playing the microphone as it comes, and one with no input

@@ -109,8 +109,8 @@ const PAGE_M = (decl: string, id: string, sound: boolean) => String.raw`// The p
 #include <unistd.h>
 
 ${decl}
-void *ters_ui_start(ters_ui *ui, double width, int dark);
-void ters_ui_resize(double width, int dark);
+void *ters_ui_start(ters_ui *ui, double width, double height, int dark);
+void ters_ui_resize(double width, double height, int dark);
 int ters_ui_pointer(void *view, int kind, double x, double y);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
 int ters_page_clock(void);
@@ -213,7 +213,7 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 @property (nonatomic) BOOL quiet, ticking, paused;
 @property (nonatomic, strong) NSScrollView *scroll;
 @property (nonatomic, strong) TFlip *page;
-@property (nonatomic) double width;
+@property (nonatomic) double width, height;
 @property (nonatomic) int dark;
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSMutableDictionary<NSString *, NSNumber *> *> *moments, *heard;
 @property (nonatomic, strong) NSMutableArray *frameViews;
@@ -460,7 +460,8 @@ static double seconds(void) { return CACurrentMediaTime(); }
   self.window.contentView = self.scroll;
   self.dark = [self isDark];
   self.width = self.scroll.contentSize.width;
-  NSView *root = V(ters_ui_start(&U, self.width, self.dark));
+  self.height = self.scroll.contentSize.height;
+  NSView *root = V(ters_ui_start(&U, self.width, self.height, self.dark));
   if (root) [self.page addSubview:root];
   else { TLabel *l = [TLabel new]; l.said = @"This page has no answer to draw."; [l show]; l.frame = NSMakeRect(8, 8, 400, 24); [self.page addSubview:l]; }
   [self.window center];
@@ -477,13 +478,13 @@ static double seconds(void) { return CACurrentMediaTime(); }
 - (int)isDark { return [NSApp.effectiveAppearance bestMatchFromAppearancesWithNames:@[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]] == NSAppearanceNameDarkAqua; }
 - (void)observeValueForKeyPath:(NSString *)k ofObject:(id)o change:(NSDictionary *)c context:(void *)x { [self resized]; }
 // The window resized or the appearance changed: the page laid out again
-// at the width the window has now.
+// at the size the window has now.
 - (void)resized {
-  double w = self.scroll.contentSize.width;
+  double w = self.scroll.contentSize.width, h = self.scroll.contentSize.height;
   int d = [self isDark];
-  if (fabs(w - self.width) < 0.5 && d == self.dark) return;
-  self.width = w; self.dark = d;
-  ters_ui_resize(w, d);
+  if (fabs(w - self.width) < 0.5 && fabs(h - self.height) < 0.5 && d == self.dark) return;
+  self.width = w; self.height = h; self.dark = d;
+  ters_ui_resize(w, h, d);
   [self tick];
 }
 - (void)windowWillClose:(NSNotification *)n { [NSApp terminate:nil]; }
@@ -586,11 +587,14 @@ static void shown(NSString *when) {
         done = YES;
       }
     }
-    // "resize W": the window's page W points wide.
+    // "resize W" (or "resize W H"): the window's page W points wide (and
+    // H high).
     if ([t hasPrefix:@"resize "]) {
-      double w = [t substringFromIndex:7].doubleValue;
+      NSArray<NSString *> *wh = [[t substringFromIndex:7] componentsSeparatedByString:@" "];
+      double w = wh[0].doubleValue;
       NSRect r = self.window.frame;
       r.size.width += w - self.scroll.contentSize.width;
+      if (wh.count > 1) { double h = wh[1].doubleValue; r.origin.y -= h - self.scroll.contentSize.height; r.size.height += h - self.scroll.contentSize.height; }
       [self.window setFrame:r display:YES];
       [self resized];
       done = YES;
