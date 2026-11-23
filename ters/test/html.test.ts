@@ -176,9 +176,10 @@ test("an event says where the pointer is: from the element's top-left, or 0, 0 w
   const e = mountHtml(page, { cells: new Cells(), doc: fakeDoc(), call: (f, ...a) => (f as (...a: Value[]) => Value)(...a) }) as FakeEl & { getBoundingClientRect?: () => { left: number; top: number } };
   e.getBoundingClientRect = () => ({ left: 100, top: 40 });
   e.fire("pointerdown", { clientX: 130, clientY: 45 } as never);
-  assert.deepEqual(got!.fields.slice(2), [30, 5, 0]);
+  // Then the keys held (C312): none here.
+  assert.deepEqual(got!.fields.slice(2), [30, 5, 0, false, false, false, false]);
   e.fire("keydown", { key: "a" });
-  assert.deepEqual(got!.fields.slice(1), ["a", 0, 0, 0]);
+  assert.deepEqual(got!.fields.slice(1), ["a", 0, 0, 0, false, false, false, false]);
 });
 
 test("a part inside a picture is an SVG group; elsewhere a lab-part", () => {

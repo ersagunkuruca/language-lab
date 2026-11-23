@@ -104,6 +104,7 @@ usage:
     [--measure args…]                   main run with args first, its types' jobs counted (L280d); a page
     [--measure --frames n]              given n frames of a clock at 60 a second (default 120), or with
                                         --replay the events its log holds
+  ters choices <program>                 decisions' old name, kept for scripts that call it
   ters qasm <program> --main f [--bits n] [--unroll n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
                                         its Ints n bits wide (default 8), scratch qubits uncomputed and reused;

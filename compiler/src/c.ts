@@ -1465,7 +1465,7 @@ static void ters_ev_body(void) {
 }
 static int ters_ask(const char *what, size_t n) {
   if (!ters_asker) return 1;
-  if (!ters_ev_in) { if (ters_ev_parked) return 0; int r = ters_asker(what, n); return r < 0 ? 0 : r; }
+  if (!ters_ev_in) { ters_asked = 1; if (ters_ev_parked) return 0; int r = ters_asker(what, n); return r < 0 ? 0 : r; }
   free(ters_ev_what);
   ters_ev_what = malloc(n + 1);
   if (!ters_ev_what) lab_oom();
@@ -1564,8 +1564,35 @@ static int (*ters_moving)(int);
 // What was drawn: an element (its tag, attributes and children), a text,
 // or a part (what it drew). A property keeps what it showed (null: none);
 // an event keeps its handler's number.
-typedef struct ters_attr { int kind; lab_cell *name, *f, *shown; int handler; } ters_attr;
-typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk, nreads; ters_attr *attrs; struct ters_m **kids, *part; void **reads; } ters_m;
+// What one of the page's functions read when it last ran (C300): the
+// cells, and whether it read the clock or asked the person (always: it
+// runs again each time). It runs again only when one of those cells was
+// written since, as html.ts's watchers do.
+typedef struct ters_rd { void **rd; int n, always; } ters_rd;
+typedef struct ters_attr { int kind; lab_cell *name, *f, *shown; int handler; ters_rd r; } ters_attr;
+typedef struct ters_m { int kind, svg; void *view; lab_cell *tag, *f, *shown; int na, nk; ters_attr *attrs; struct ters_m **kids, *part; ters_rd r; } ters_m;
+// Whether a view's function read the clock (ters_no_clock: the program
+// never does), and whether what the page shows did; whether one asked the
+// person outside a handler, so it runs again to see the answer.
+static int ters_no_clock, ters_clock, ters_asked;
+// A function's reads noted while it runs, apart from those of the one
+// that runs it (ters_rd_begin, run, ters_rd_end).
+typedef struct ters_rsave { void **rd; int nrd, crd, rding, clock, asked; } ters_rsave;
+static void ters_rd_begin(ters_rsave *s) {
+  *s = (ters_rsave){ lab_rd, lab_nrd, lab_crd, lab_rding, ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"}, ters_asked };
+  lab_rd = 0; lab_nrd = lab_crd = 0; lab_rding = 1; ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} = 0; ters_asked = 0;
+}
+static void ters_rd_end(ters_rsave *s, ters_rd *r) {
+  free(r->rd); r->rd = lab_rd; r->n = lab_nrd; r->always = ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} || ters_asked;
+  lab_rd = s->rd; lab_nrd = s->nrd; lab_crd = s->crd; lab_rding = s->rding;
+  ${rts.has("world.now") ? "lab_now_read" : "ters_no_clock"} |= s->clock; ters_asked |= s->asked;
+}
+// Whether a cell it read was written since it ran.
+static int ters_stale(const ters_rd *r) {
+  if (r->always) return 1;
+  for (int j = 0; j < r->n; j++) for (int k = 0; k < lab_nwr; k++) if (r->rd[j] == lab_wr[k]) return 1;
+  return 0;
+}
 // Whether what is mounted now is inside an svg element: a part there is an
 // SVG group, as html.ts makes it, not a lab-part.
 static int ters_svg;
@@ -1577,9 +1604,11 @@ static ters_m *ters_root;
 static int ters_same(lab_cell *a, lab_cell *b) { return a && b && LAB_TN(a) == LAB_TN(b) && !memcmp(LAB_TB(a), LAB_TB(b), LAB_TN(a)); }
 // A view's function run: its text, or null with no answer (an abort says
 // why on stderr).
-static lab_cell *ters_view(lab_cell *f) {
+static lab_cell *ters_view(lab_cell *f, ters_rd *rd) {
   lab_dup(f);
+  ters_rsave s; ters_rd_begin(&s);
   lab_cell *r = ${call(VF, "f")};
+  ters_rd_end(&s, rd);
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return 0; }
   return r;
 }
@@ -1594,10 +1623,13 @@ static void ters_mk_text(double *at, lab_cell *t) {
   at[0] = (double)ters_mktn; at[1] = (double)n;
   ters_mktn += n;
 }
-static void ters_paint(ters_m *m, lab_cell *f) {
+static void ters_paint(ters_m *m, ters_attr *a) {
   if (!ters_h->marks) return;
+  lab_cell *f = a->f;
   lab_dup(f);
+  ters_rsave s; ters_rd_begin(&s);
   lab_cell *l = ${call(MF!, "f")};
+  ters_rd_end(&s, &a->r);
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; return; }
   size_t n = 0; ters_mktn = 0;
   for (lab_cell *x = l; x->tag == ${lm!.c}; x = ${field(LM!, lm!.c, lm!.rest, "x")}, n++) {
@@ -1652,7 +1684,7 @@ int ters_sound_count(void) { return ters_nsnd; }
 static int ters_relatency;
 void ters_page_sound_latency(double s) {
   ters_page_lock();
-  ${rts.has("world.mySoundLatency") ? "if (s != lab_sound_latency) { lab_sound_latency = s; ters_relatency = 1; }" : "(void)s;"}
+  ${rts.has("world.mySoundLatency") ? "if (s != lab_sound_latency) { lab_sound_latency = s; lab_wrote(&lab_sound_latency); ters_relatency = 1; }" : "(void)s;"}
   ters_page_unlock();
 }
 // One block: the input as a List Float64 to the block function, and what
@@ -1862,7 +1894,7 @@ static void ters_snd_follow(void) {
 }
 ` : "static void ters_snd_follow(void) {}\n"}
 ` : ""}static void ters_show(ters_m *m, ters_attr *a) {
-  lab_cell *v = ters_view(a->f);
+  lab_cell *v = ters_view(a->f, &a->r);
   int live = (LAB_TN(a->name) == 5 && !memcmp(LAB_TB(a->name), "value", 5)) || (LAB_TN(a->name) == 7 && !memcmp(LAB_TB(a->name), "checked", 7));
   // None: an attribute is taken off; a field's value or tick stays.
   if (!v) { if (a->shown) { if (!live) ters_h->remove_attribute(ters_h->ctx, m->view, (const char *)LAB_TB(a->name), LAB_TN(a->name)); lab_drop(a->shown); a->shown = 0; } return; }
@@ -1872,7 +1904,7 @@ static void ters_snd_follow(void) {
   a->shown = v;
 }
 static void ters_text(ters_m *m) {
-  lab_cell *v = ters_view(m->f);
+  lab_cell *v = ters_view(m->f, &m->r);
   if (!v) v = lab__text_of("", 0);
   if (ters_same(v, m->shown)) { lab_drop(v); return; }
   ters_h->set_text(ters_h->ctx, m->view, (const char *)LAB_TB(v), LAB_TN(v));
@@ -1901,7 +1933,7 @@ static lab_cell *ters_snd_when(lab_cell *as) {
     t->kind = a->tag;
     if (a->tag == ${pr}) { t->name = ${field(A, pr, 0, "a")}; t->f = ${field(A, pr, 1, "a")}; lab_dup(t->name); lab_dup(t->f); ters_show(m, t); }
     else if (a->tag == ${on}) { t->name = ${field(A, on, 0, "a")}; lab_dup(t->name); t->handler = ters_handler(${field(A, on, 1, "a")}); ters_h->listen(ters_h->ctx, m->view, (const char *)LAB_TB(t->name), LAB_TN(t->name), t->handler); }
-    ${paint ? `else if (a->tag == ${pa}) { t->f = ${field(A, pa, 0, "a")}; lab_dup(t->f); ters_paint(m, t->f); }` : ""}
+    ${paint ? `else if (a->tag == ${pa}) { t->f = ${field(A, pa, 0, "a")}; lab_dup(t->f); ters_paint(m, t); }` : ""}
     ${lw >= 0 ? `else if (a->tag == ${lw}) {}` : ""}
     else ${sound ? `if (ters_parts) fputs("a listen inside a part doesn't play: put it where main returns it\\n", stderr);` : `fputs("a page's sound plays only in a browser (ters build-web)\\n", stderr);`}
   }
@@ -1941,7 +1973,8 @@ static void ters_forget(ters_m *m) {
   for (int j = 0; j < m->na; j++) { if (m->attrs[j].name) lab_drop(m->attrs[j].name); if (m->attrs[j].f) lab_drop(m->attrs[j].f); if (m->attrs[j].shown) lab_drop(m->attrs[j].shown); if (m->attrs[j].kind == ${on}) { lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = 0; } }
   for (int j = 0; j < m->nk; j++) ters_forget(m->kids[j]);
   ters_forget(m->part);
-  free(m->reads);
+  for (int j = 0; j < m->na; j++) free(m->attrs[j].r.rd);
+  free(m->r.rd);
   if (m->tag) lab_drop(m->tag);
   if (m->f) lab_drop(m->f);
   if (m->shown) lab_drop(m->shown);
@@ -1974,7 +2007,7 @@ static void ters_lay(ters_m *m, lab_cell *h) {
       lab_cell *a = ${field(LA, la.c, la.head, "x")};
       if (a->tag == ${pr}) { lab_cell *f = ${field(A, pr, 1, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_show(m, &m->attrs[j]); }
       else if (a->tag == ${on}) { lab_cell *f = ${field(A, on, 1, "a")}; lab_dup(f); lab_drop(ters_handlers[m->attrs[j].handler]); ters_handlers[m->attrs[j].handler] = f; }
-      ${paint ? `else if (a->tag == ${pa}) { lab_cell *f = ${field(A, pa, 0, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_paint(m, f); }` : ""}
+      ${paint ? `else if (a->tag == ${pa}) { lab_cell *f = ${field(A, pa, 0, "a")}; lab_dup(f); lab_drop(m->attrs[j].f); m->attrs[j].f = f; ters_paint(m, &m->attrs[j]); }` : ""}
     }
     j = 0;
     for (lab_cell *x = ${field(H, el, 2, "h")}; x->tag == ${lh.c}; x = ${field(LH, lh.c, lh.rest, "x")}, j++) ters_lay(m->kids[j], ${field(LH, lh.c, lh.head, "x")});
@@ -1996,24 +2029,22 @@ static void ters_part(ters_m *m) {
   // Whether a cell it read last time was written since, and what it reads
   // now (its own reads: a part inside notes its own).
   int stale = 0;
-  for (int j = 0; j < m->nreads && !stale; j++) for (int k = 0; k < lab_nwr; k++) if (m->reads[j] == lab_wr[k]) { stale = 1; break; }
-  void **rd = lab_rd; int nrd = lab_nrd, crd = lab_crd, rding = lab_rding;
-  lab_rd = 0; lab_nrd = lab_crd = 0; lab_rding = 1;
+  for (int j = 0; j < m->r.n && !stale; j++) for (int k = 0; k < lab_nwr; k++) if (m->r.rd[j] == lab_wr[k]) { stale = 1; break; }
+  ters_rsave s; ters_rd_begin(&s);
   lab_cell *h = ${call(PF, "m->f")};
-  free(m->reads); m->reads = lab_rd; m->nreads = lab_nrd;
-  lab_rd = rd; lab_nrd = nrd; lab_crd = crd; lab_rding = rding;
+  ters_rd_end(&s, &m->r);
   if (lab_st) { if (lab_st == 2) { fwrite(LAB_TB(lab_reason), 1, LAB_TN(lab_reason), stderr); fputc('\\n', stderr); } lab_st = 0; ters_forget(m->part); m->part = 0; ters_h->clear(ters_h->ctx, m->view); ters_parts--; return; }
   if (m->part && ters_fits(m->part, h)) { ters_lay(m->part, h); if (stale && ters_h->renew) ters_renew(m->part); }
   else { ters_forget(m->part); ters_h->clear(ters_h->ctx, m->view); int was = ters_svg; ters_svg = m->svg; m->part = ters_mount(h); ters_svg = was; ters_h->append(ters_h->ctx, m->view, m->part->view); }
   lab_drop(h);
   ters_parts--;
 }
-// Everything shown, run again.
-static int ters_no_clock, ters_clock;
+// What is shown run again where a cell it read was written (C300), or
+// it reads the clock.
 static void ters_refresh(ters_m *m) {
-  if (m->kind == ${tx}) { ters_text(m); return; }
-  if (m->kind == ${pt}) { ters_part(m); return; }
-  for (int j = 0; j < m->na; j++) if (m->attrs[j].kind == ${pr}) ters_show(m, &m->attrs[j]);${paint ? ` else if (m->attrs[j].kind == ${pa}) ters_paint(m, m->attrs[j].f);` : ""}
+  if (m->kind == ${tx}) { if (ters_stale(&m->r)) ters_text(m); return; }
+  if (m->kind == ${pt}) { if (ters_stale(&m->r)) ters_part(m); else if (m->part) ters_refresh(m->part); return; }
+  for (int j = 0; j < m->na; j++) if (!ters_stale(&m->attrs[j].r)) continue; else if (m->attrs[j].kind == ${pr}) ters_show(m, &m->attrs[j]);${paint ? ` else if (m->attrs[j].kind == ${pa}) ters_paint(m, &m->attrs[j]);` : ""}
   for (int j = 0; j < m->nk; j++) ters_refresh(m->kids[j]);
 }
 ${waits ? "static int ters_ask(const char *what, size_t n);\n" : ""}// main's page on host h: its root's view, or null when main has no answer.
