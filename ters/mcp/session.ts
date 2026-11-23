@@ -124,11 +124,26 @@ export class Session {
   // An id as given: in full, a unique prefix of one of the program's own,
   // or a definition's name (the program's own first, then the library's).
   resolve(ref: string, within?: Id): Id {
+    const hash = /^\s*#/.test(ref);
     const r = ref.trim().replace(/^#/, "").replace(/^‹(.*)›$/, "$1");
     if (this.code.nodes[r]) return r;
-    const hits = [...this.short.keys()].filter((id) => id.startsWith(r));
-    if (r.length >= 3 && hits.length === 1) return hits[0];
-    if (hits.length > 1 && r.length >= 3) throw new Error(`#${r} is ${hits.length} ids: ${hits.slice(0, 5).map((h) => this.id(h)).join(", ")}`);
+    // A name before the start of an id, unless written #id: ids are
+    // random, so a name like "top" is now and then the start of one.
+    const byId = (): Id | undefined => {
+      const hits = [...this.short.keys()].filter((id) => id.startsWith(r));
+      if (r.length >= 3 && hits.length === 1) return hits[0];
+      if (hits.length > 1 && r.length >= 3) throw new Error(`#${r} is ${hits.length} ids: ${hits.slice(0, 5).map((h) => this.id(h)).join(", ")}`);
+    };
+    const id = hash ? byId() : undefined;
+    if (id) return id;
+    const named = this.byName(r, within);
+    if (named) return named;
+    const late = hash ? undefined : byId();
+    if (late) return late;
+    throw new Error(`no id or definition ${ref}`);
+  }
+
+  private byName(r: string, within?: Id): Id | undefined {
     const all = this.allNames;
     const named = this.own.find((d) => this.names[d] === r) ?? this.code.defs.find((d) => all[d] === r);
     if (named) return named;
@@ -142,7 +157,6 @@ export class Session {
       if (local.length === 1) return local[0];
       if (local.length > 1) throw new Error(`${local.length} named ${r}: use the id`);
     }
-    throw new Error(`no id or definition ${ref}`);
   }
 
   // The definition a node belongs to.
