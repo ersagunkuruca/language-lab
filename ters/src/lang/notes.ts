@@ -48,6 +48,7 @@ export const NOTES: Comments = {
   "std.target": "Where a pass draws: the screen, or a texture of a name, width and height that a later pass reads.",
   "std.draw": "One draw of a frame, made by draw: a mesh, its instances and two functions. Its type hides the instances' type, so a pass lists draws of different things.",
   "std.pass": "A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.",
+  "std.texel": "A colour sampled from a texture: red, green, blue and alpha, each from 0 to 1.",
   "std.frame": "What a canvas renders, as its render attribute: passes, drawn in order.",
   "builtin.frame.draw": "draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.",
   "builtin.frame.sampled": "sampled(target, across): the colour at across (two numbers from 0 to 1, from the top left) of a texture an earlier pass of the frame drew.",
