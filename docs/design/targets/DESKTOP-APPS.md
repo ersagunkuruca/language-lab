@@ -64,6 +64,15 @@ in a page, and a list of thousands of rows that stays quick.
   (`CreateFiber`, `SwitchToFiber`; a stack switched by hand breaks
   Windows' unwinding), the console set to UTF-8, and `\r\n` left alone.
   Checked by the native sweep on a hand-run windows-latest job.
+  Built in C296, with MinGW-w64's gcc (`CC` names another, llvm-mingw's
+  clang among them): one `-static` `.exe`, threads by winpthreads,
+  each taking the program's own large stack reserve (`-Wl,--stack`)
+  since a size given to a Windows thread is committed at once. Windows'
+  calls are declared in the runtime, not by windows.h, whose macros and
+  type names a program's names could meet. A link's size is its target's
+  length and a zone's offset comes from Windows' own ICU (icu.dll, 10
+  1903 and later), both as Node reads them. All 82 examples agree with
+  `ters run` on windows-latest.
 - **App.** `ters build-native-app --windows` writes the page C with a
   screen in C over Win32: one window drawn with Direct2D (boxes, rounded
   corners, borders, pictures), texts measured and drawn by DirectWrite,
