@@ -516,8 +516,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
           if (e.fn === "derived") { const t = temp(); pre.push(`${d}const ${t} = ${xs[0]};`); return `${t}.d(${t})`; }
           if (e.fn === "fuel.swap") { const t = temp(); pre.push(`${d}const ${t} = fuel;`, `${d}fuel = ${xs[0]};`); return t; }
           // An array of records as columns (columns.ts, C60): an array per
-          // field, a Float64Array for a Float64.
+          // field, a Float64Array for a Float64, a Float32Array for a
+          // Float32's (C309: already a binary32, so stored exactly).
           {
+            const kind = (a: string, x: LType, i: number) => (ir.arrays[Number(a)].narrow?.[i] ? "Float32Array" : x === "f64" ? "Float64Array" : "Array");
             const m = /^array\.c(new|build|push|copy|front|length|in|get(\d+)|set([\d_]+))\.a(\d+)$/.exec(e.fn);
             if (m) {
               // A copy of an array's columns, to write an item into; or with
@@ -526,19 +528,19 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
                 const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
                 const c = temp(), w = temp(), at = m[1] === "front" ? 1 : 0;
                 pre.push(`${d}const ${c} = ${xs[0]}, ${w} = { n: ${c}.n + ${at} };`);
-                ts.forEach((x, i) => pre.push(`${d}{ const g = new ${x === "f64" ? "Float64Array" : "Array"}(Math.max(8, ${c}.n + 1)); for (let k = 0; k < ${c}.n; k++) g[k + ${at}] = ${c}.c${i}[k]; ${w}.c${i} = g; }`));
+                ts.forEach((x, i) => pre.push(`${d}{ const g = new ${kind(m[4], x, i)}(Math.max(8, ${c}.n + 1)); for (let k = 0; k < ${c}.n; k++) g[k + ${at}] = ${c}.c${i}[k]; ${w}.c${i} = g; }`));
                 return w;
               }
               // An array a loop builds by pushes (G1b2): room for eight,
               // each column twice the size when full.
               if (m[1] === "build" || m[1] === "push") {
                 const ts = ir.arrays[Number(m[4])].leaves ?? (ir.arrays[Number(m[4])].item as RType).fields.map((x) => x.t);
-                if (m[1] === "build") return `{ n: 0, ${ts.map((x, i) => `c${i}: ${x === "f64" ? "new Float64Array" : "new Array"}(8)`).join(", ")} }`;
+                if (m[1] === "build") return `{ n: 0, ${ts.map((x, i) => `c${i}: new ${kind(m[4], x, i)}(8)`).join(", ")} }`;
                 const c = temp();
                 pre.push(`${d}const ${c} = ${xs[0]};`);
                 const vs = ts.map((_, i) => { const v = temp(); pre.push(`${d}const ${v} = ${xs[i + 1]};`); return v; });
                 pre.push(`${d}if (${c}.n === ${c}.c0.length) {`);
-                ts.forEach((x, i) => pre.push(`${d}  { const o = ${c}.c${i}, g = new ${x === "f64" ? "Float64Array" : "Array"}(o.length * 2); for (let k = 0; k < ${c}.n; k++) g[k] = o[k]; ${c}.c${i} = g; }`));
+                ts.forEach((x, i) => pre.push(`${d}  { const o = ${c}.c${i}, g = new ${kind(m[4], x, i)}(o.length * 2); for (let k = 0; k < ${c}.n; k++) g[k] = o[k]; ${c}.c${i} = g; }`));
                 pre.push(`${d}}`);
                 vs.forEach((v, i) => pre.push(`${d}${c}.c${i}[${c}.n] = ${v};`));
                 pre.push(`${d}${c}.n++;`);
@@ -552,7 +554,7 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
                 const t = temp(), r = ir.arrays[Number(m[4])].item as RType;
                 pre.push(`${d}const ${t} = ${xs[0]};`);
                 const ts = ir.arrays[Number(m[4])].leaves ?? r.fields.map((x) => x.t);
-                return `{ n: ${t}, ${ts.map((x, i) => `c${i}: ${x === "f64" ? "new Float64Array" : "new Array"}(${t})`).join(", ")} }`;
+                return `{ n: ${t}, ${ts.map((x, i) => `c${i}: new ${kind(m[4], x, i)}(${t})`).join(", ")} }`;
               }
               const c = temp(), j = temp(), ks = m[3]!.split("_");
               pre.push(`${d}const ${c} = ${xs[0]}, ${j} = ${xs[1]};`);
