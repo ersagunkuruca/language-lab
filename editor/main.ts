@@ -48,7 +48,7 @@ import { parentsOf, selection, warmParents } from "./selection.ts";
 import { filesPanels, fnv, userCode } from "./filesPanel.ts";
 import { changesPanels } from "./changesPanel.ts";
 import { graphMenu as graphMenuOf } from "./graphMenu.ts";
-import { shower } from "./shown.ts";
+import { shower, ShownText } from "./shown.ts";
 import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { pagePanels } from "./pagePanel.ts";
 import { whereRuns } from "./whereRuns.ts";
@@ -69,7 +69,9 @@ import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { loadChecks, shippedFor } from "./checkStore.ts";
+import { addGroups, loadChecks, shippedFor } from "./checkStore.ts";
+import { checkInWorker } from "./checkAsk.ts";
+import { plain, traceInWorker } from "./traceAsk.ts";
 import { testInWorker, type Testing } from "./testAsk.ts";
 import { exampleHere, readExamples } from "./exampleFiles.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
@@ -965,7 +967,29 @@ function typesOf(): T.Info | null {
   T.setProgramPins(pins);
   const hit = typedInfo.get(doc.code);
   if (hit?.pins === pins) return hit.info;
-  try { const info = T.guardedInfo(doc.code, pins) ?? T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
+  try {
+    const names = pres().names, info = T.guardedInfo(doc.code, pins) ?? T.inferNear(doc.code, names) ?? (wholeHere() ? T.infer(doc.code, names) : null);
+    if (!info) { checkWhole(pins); return null; }
+    typedInfo.set(doc.code, { pins, info });
+    return info;
+  } catch { return null; }
+}
+// The whole check of a program of one's own is made in a worker (E319g,
+// checkAsk.ts), once a program: after it, its groups are kept, and the
+// check here finds them. An example's groups were shipped with it (E314),
+// and where there's no worker it's checked here. So is a program of up to
+// WHOLE_HERE nodes of its own: its check takes up to about 80 ms (calc's
+// 957 nodes; spacetime's 6,072 took 300 ms, clinic's 4,874 nearly 800).
+const WHOLE_HERE = 1000;
+const checkedWhole = new Set<Program>();
+let checkingWhole: Code | null = null;
+const wholeHere = () => typeof Worker === "undefined" || checkedWhole.has(doc.program) || !doc.program.startsWith(MINE) || ownNodes(doc.code) <= WHOLE_HERE;
+const ownNodes = (c: Code) => { const b = baseOf(doc).nodes; let n = 0; for (const k of Object.keys(c.nodes)) if (!b[k]) n++; return n; };
+function checkWhole(pins: Pins) {
+  if (checkingWhole === doc.code) return;
+  const at = doc.program, code = (checkingWhole = doc.code);
+  const done = () => { checkedWhole.add(at); if (checkingWhole === code) checkingWhole = null; if (doc.program === at) render(); };
+  void checkInWorker({ code, names: pres().names, pins }).then((groups) => { addGroups(groups); done(); }, done);
 }
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
@@ -1985,6 +2009,7 @@ const shareOver = (info: T.Info, from: Id, slot: Id) =>
 // vector", "even (a rotor or motor)", or its blades (GRADES.md, L43d).
 const algebrasFor = new WeakMap<T.Info, Map<Id, Algebra>>();
 function kindOf(info: T.Info, v: Value): string | null {
+  if ((v as unknown) instanceof ShownText) return (v as unknown as ShownText).kind;
   const d = v as Data;
   if (!d || typeof d !== "object" || !("tag" in d)) return null;
   let as = algebrasFor.get(info);
@@ -2205,7 +2230,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   const bar = tr && !tr.error ? stepBar(info, tr) : null;
   if (bar) box.append(bar);
   // An Html, drawn as the page draws it (I256).
-  if (tr?.result !== undefined && (action || value) && givesHtml(info, ui.def)) box.append(htmlPart(tr.result, namer.name(ui.def)));
+  if (tr?.result !== undefined && (action || value) && givesHtml(info, ui.def) && !((tr.result as unknown) instanceof ShownText)) box.append(htmlPart(tr.result, namer.name(ui.def)));
   else if (tr?.result !== undefined && (action || value)) box.append(h("div", { class: "hint" }, choice ? "First answer: " : "Gives ", valueView(tr.result, doc.code, pres().names, shower(doc.code, info, pres().names))));
   // A hole isn't a failure: it is where the program isn't written yet.
   // Nor is a run on values you didn't give: they're only a starting point.
@@ -2213,6 +2238,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // standard input, which a page hasn't (calc's main reads it, E211).
   if (tr?.error) box.append(tr.error.message === "reached a hole"
     ? h("p", { class: "hint", title: "Values show once the holes on their way are filled" }, "No values · holes on the way")
+    : tr.error.message === WORKING ? h("p", { class: "hint", title: "It runs longer than the graph's first look, so it's run off the editor's thread" }, "Values · working them out…")
     : !givenOf(ui.def) || LIMIT.test(tr.error.message) || /the graph waits|has no standard input/.test(tr.error.message) ? h("p", { class: "hint" }, `No values · ${tr.error.message}`)
     // The evaluator's own depth, not the program's fault (I219: pond's
     // start patches, seeded over every cell): Run main runs it compiled.
@@ -2228,7 +2254,7 @@ const runHead = (): HTMLElement => h("h2", {}, "Run");
 
 const { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
-  errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
+  errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, files: () => exampleFiles(),
 });
 
 // An action's values come from running it, so they're asked for.
@@ -2338,36 +2364,49 @@ function traced(info: T.Info): Trace | null {
   if (!m.has(key)) {
     const params = (defBody(ui.def) as NodeOf<"lambda">).params;
     const args = texts.map((t, i) => readPort(info, params[i], t));
+    const code = doc.code, def = ui.def, map = m;
+    // The worker's values, when they come, for this version of the code.
+    const later = (tr: Trace) => { map.set(key, tr); if (doc.code === code && ui.def === def) render(); };
     m.set(key, args.some((a) => "error" in a) ? { values: new Map(), error: { id: ui.def, message: "a value doesn't read as one" } }
-      : boundedTrace(info, args.map((a) => (a as { value: Value }).value)));
+      : boundedTrace(info, args.map((a) => (a as { value: Value }).value), later));
   }
   return m.get(key)!;
 }
 
-// Values on the wires come from a run on the page's own thread, so one
-// on values nobody gave (main's, say) stops after TRACE_MS: Countdown's
-// solutions, opened with main's numbers, would otherwise hold the page for
-// the whole search (BACKLOG I23). Values you gave, and a definition with
-// no inputs, get longer, GIVEN_MS (E207): one that loops is already kept
-// from running here (the termination check says it might not finish, and
-// that stays so), but one that finishes after minutes held the page, on
-// every version of the code.
-const TRACE_MS = 200, GIVEN_MS = 3000;
-function boundedTrace(info: T.Info, args: Value[]): Trace {
+// Values on the wires come from a run on the editor's thread for QUICK_MS
+// (E319e). One that runs longer is run again in a worker (traceAsk.ts),
+// and the wires fill in when it answers: on values nobody gave (main's,
+// say) for TRACE_MS, as Countdown's solutions, opened with main's
+// numbers, would otherwise search on (BACKLOG I23); on values you gave,
+// and for a definition with no inputs, for GIVEN_MS (E207), and so too for
+// one the check says might not finish. Values the worker can't be sent
+// (a function main passes, say) stop at QUICK_MS.
+const QUICK_MS = 50, TRACE_MS = 200, GIVEN_MS = 3000;
+const QUICK = "the graph's first look";
+function boundedTrace(info: T.Info, args: Value[], later: (tr: Trace) => void): Trace {
   const body = defBody(ui.def), copy = body ? mainCopies.get(doc.code)?.get(body.id) : undefined;
   const given = !!givenOf(ui.def) || !(body as NodeOf<"lambda">).params.length;
-  if (given && info.divergent.has(ui.def)) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
   const ms = given ? GIVEN_MS : TRACE_MS;
-  const slow = () => Object.assign(new OutOfSteps(), { message: `it runs longer than the ${given ? `${ms / 1000} s` : `${ms} ms`} the graph waits; Run main runs it in full` });
-  // Timed from its first step: what the runner makes first (the library's
-  // arithmetic resolved, once a page, arith.ts) isn't the run's (I327:
-  // choiceAction's fraction sum stopped at its first step, 3.4 s in).
-  let end = 0;
-  return trace(doc.code, info, ui.def, args, quietWorld(), () => { const now = performance.now(); if (!end) end = now + ms; else if (now > end) throw slow(); }, !!copy);
+  const says = `it runs longer than the ${given ? `${ms / 1000} s` : `${ms} ms`} the graph waits; Run main runs it in full`;
+  // Where there's no worker (a test's page), all of it here, as before.
+  const here = typeof Worker === "undefined";
+  if (here && given && info.divergent.has(ui.def)) return trace(doc.code, info, ui.def, args, quietWorld(), undefined, !!copy);
+  if (!(given && info.divergent.has(ui.def))) {
+    // Timed from its first step: what the runner makes first (the library's
+    // arithmetic resolved, once a page, arith.ts) isn't the run's (I327:
+    // choiceAction's fraction sum stopped at its first step, 3.4 s in).
+    let end = 0;
+    const tr = trace(doc.code, info, ui.def, args, quietWorld(), () => { const now = performance.now(); if (!end) end = now + (here ? ms : QUICK_MS); else if (now > end) throw Object.assign(new OutOfSteps(), { message: here ? says : QUICK }); }, !!copy);
+    if (tr.error?.message !== QUICK) return tr;
+  }
+  if (!args.every((a) => plain(a))) return { values: new Map(), error: { id: ui.def, message: says } };
+  void traceInWorker({ code: doc.code, names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def: ui.def, args, ms, slow: says, copied: !!copy, title: titleOf(doc) }).done.then(later);
+  return { values: new Map(), error: { id: ui.def, message: WORKING } };
 }
+const WORKING = "working them out";
 
 // Run main (editor/runPanel.ts, E228i).
-const { startRun, stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
+const { startRun, stopRun, endRun, warmRun, runGiven, exampleFiles, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
   doc: () => doc, ui, prog: () => prog(), pres: () => pres(), typesOf: () => typesOf(), titleOf, render: () => render(),
   defNamed, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });
@@ -2565,6 +2604,8 @@ function draw() {
   // to the one standing in for it: Run becomes Stop and back (E231c).
   const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
   const info = typesOf();
+  // Its whole check under way in the worker (E319g): drawn when it's back.
+  if (!info && checkingWhole === doc.code) { app.replaceChildren(h("p", { class: "status" }, `Checking ${titleOf(doc)}…`)); return; }
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
   const later = graphLater && !EMBED;

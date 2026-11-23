@@ -888,6 +888,9 @@ int main(int argc, char *argv[]) {
   // What the page keeps (the world's files, a page's saved values) goes in
   // the app's own folder in Application Support, not beside the app.
   @autoreleasepool {
+    // An app started from the Finder has no LANG: the person's locale
+    // from the system's, for my locale (C315).
+    if (!getenv("LC_ALL") && !getenv("LANG")) setenv("LANG", NSLocale.currentLocale.localeIdentifier.UTF8String, 1);
     NSURL *d = [[NSFileManager.defaultManager URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:nil] URLByAppendingPathComponent:@"${id}"];
     if (d) [NSFileManager.defaultManager createDirectoryAtURL:d withIntermediateDirectories:YES attributes:nil error:nil];
     if (d && chdir(d.fileSystemRepresentation)) perror(d.fileSystemRepresentation);

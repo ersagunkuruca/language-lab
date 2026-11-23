@@ -27,7 +27,7 @@ const GUARDED = [
 
 // "file function": [calls, what bounds them].
 const ON_THE_THREAD: Record<string, [number, string]> = {
-  "typed.ts infer": [3, "the whole check: on open and on a miss in the recent checks it grows with the program (E319g)"],
+  "typed.ts infer": [3, "the whole check: an example's groups shipped, a program of one's own checked in the worker first (checkAsk.ts) unless it has up to 1,000 nodes"],
   "typed.ts inferEdited": [2, "the check of an edit over a recent check: grows with the edit (I304)"],
   "typed.ts planSolve": [1, "one call's plan: grows with the call"],
   "typed.ts solveMode": [1, "one call's mode: grows with the call"],
@@ -35,8 +35,8 @@ const ON_THE_THREAD: Record<string, [number, string]> = {
   "typed.ts representationsIn": [2, "the program's representations, for Choices' rows: grows with the program (E319h)"],
   "typedGraph.ts planSolve": [1, "one call's plan, drawn: grows with the call"],
   "typedGraph.ts solveMode": [1, "one call's mode, drawn: grows with the call"],
-  "main.ts T.infer": [4, "typed.ts infer, over a recent check (edits) or whole (E319g)"],
-  "main.ts trace": [2, "values on wires: 200 ms, 3 s for given values; none for a given divergent definition (E319e)"],
+  "main.ts T.infer": [4, "typed.ts infer, over a recent check (edits), or whole with its groups kept (typesOf, E319g)"],
+  "main.ts trace": [2, "values on wires: QUICK_MS (50 ms); longer, and a divergent definition given values, in the worker (traceAsk.ts); all here only where there is no worker (a test's page)"],
   "main.ts algebrasOf": [1, "kept per check: grows with the program (E319h)"],
   "pagePanel.ts showPage": [1, "the interpreted page: PAGE_STEPS an update, drawWithin for its first drawing"],
   "pagePanel.ts checkedForRun": [1, "Pause on a compiled page: grows with the program (E319j)"],

@@ -62,7 +62,7 @@ export function decode(ws: string[], t: LType): Value {
 // The program built, and a function that makes the calls and gives back
 // each answer, with the cells still live after it.
 export const compile = (c: string) => {
-  const src = join(dir, `p${builds}.c`), exe = join(dir, `p${builds++}`);
+  const src = join(dir, `p${builds}.c`), exe = join(dir, `p${builds++}${process.platform === "win32" ? ".exe" : ""}`);
   writeFileSync(src, c);
   // GCC can't see that a cell freed at count 1 is never a static one (whose count is 0): -Wno-free-nonheap-object.
   execFileSync(cc, [...CFLAGS, "-pthread", "-Wall", "-Werror", "-Wno-unknown-warning-option", "-Wno-unused-function", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-unused-but-set-variable", "-Wno-unused-variable", "-Wno-unknown-pragmas", ...(process.env.NATIVE_CFLAGS ?? "").split(" ").filter(Boolean), "-o", exe, src, "-lm"]);

@@ -137,7 +137,7 @@ static int64_t lab__i64_range_split(double x) {
 }` : ""}`;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>", FILE_INFO_T = "std.file info<>", FILE_KIND_T = "std.file kind<>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>", FILE_INFO_T = "std.file info<>", FILE_KIND_T = "std.file kind<>", LOCALE_T = "std.locale<>";
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
@@ -324,9 +324,47 @@ static void lab__held(void) {
 // at the exit, as compiled JavaScript says it (branches-rt.ts).
 // With how many threads it starts (L280e): cores less one, at most 15,
 // or as many as its choices hold (at most 64); TERS_WORKERS says otherwise.
-const poolC = (held: number | undefined) => `#define LAB_POOL_HELD ${held ?? "sysconf(_SC_NPROCESSORS_ONLN) - 1"}
+const poolC = (held: number | undefined) => `#ifdef _WIN32
+#define LAB_POOL_HELD ${held ?? "pthread_num_processors_np() - 1"}
+#else
+#define LAB_POOL_HELD ${held ?? "sysconf(_SC_NPROCESSORS_ONLN) - 1"}
+#endif
 #define LAB_POOL_MAX ${held === undefined ? 15 : 64}
 ${POOL_C}`;
+// A thread's stack (C296): on Windows the size given to a thread is what
+// it commits at once, so threads take the program's own reserve instead,
+// which ters native sets as large (`-Wl,--stack`).
+const PTHREAD_STACK = `#ifdef _WIN32
+#define LAB_STACK(a, n) ((void)(a), (void)(n), 0)
+#else
+#define LAB_STACK(a, n) pthread_attr_setstacksize(a, n)
+#endif`;
+// Windows (C296): the console in UTF-8, the standard streams' bytes as
+// written (no \\r before \\n), and the arguments as UTF-8 from the wide
+// command line, as Node reads them.
+const WIN_START = `#ifdef _WIN32
+#include <io.h>
+__declspec(dllimport) int __stdcall SetConsoleOutputCP(unsigned);
+__declspec(dllimport) wchar_t *__stdcall GetCommandLineW(void);
+__declspec(dllimport) wchar_t **__stdcall CommandLineToArgvW(const wchar_t *, int *);
+__declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned, unsigned long, const wchar_t *, int, char *, int, const char *, int *);
+static void lab__win_start(int *argc, char ***argv) {
+  SetConsoleOutputCP(65001);
+  _setmode(_fileno(stdin), 0x8000); _setmode(_fileno(stdout), 0x8000); _setmode(_fileno(stderr), 0x8000);
+  int n = 0;
+  wchar_t **w = CommandLineToArgvW(GetCommandLineW(), &n);
+  if (!w) return;
+  char **a = malloc(((size_t)n + 1) * sizeof *a);
+  if (!a) return;
+  for (int k = 0; k < n; k++) {
+    int m = WideCharToMultiByte(65001, 0, w[k], -1, 0, 0, 0, 0);
+    if (!(a[k] = malloc(m > 0 ? (size_t)m : 1))) return;
+    if (m > 0) WideCharToMultiByte(65001, 0, w[k], -1, a[k], m, 0, 0); else a[k][0] = 0;
+  }
+  a[n] = 0;
+  *argc = n; *argv = a;
+}
+#endif`;
 const POOL_C = `static _Thread_local int lab_in_par = 0, lab_on_pool = 0;
 static int64_t lab_par_items = 0;
 static void lab_par_say(void) { fprintf(stderr, "items on threads: %lld\\n", (long long)__atomic_load_n(&lab_par_items, __ATOMIC_RELAXED)); }
@@ -366,7 +404,7 @@ static int lab_pool_ready(void) {
     lab_pool_n = 0;
     if (getenv("TERS_BRANCHES") && !strcmp(getenv("TERS_BRANCHES"), "say")) atexit(lab_par_say);
     pthread_attr_init(&a);
-    pthread_attr_setstacksize(&a, sizeof(void *) == 8 ? (size_t)1 << 28 : (size_t)1 << 24);
+    LAB_STACK(&a, sizeof(void *) == 8 ? (size_t)1 << 28 : (size_t)1 << 24);
     for (long k = 0; k < (n > LAB_POOL_MAX ? LAB_POOL_MAX : n); k++) { pthread_t t; if (pthread_create(&t, &a, lab_pool_loop, 0)) break; pthread_detach(t); lab_pool_n++; }
   }
   return lab_pool_n > 0;
@@ -864,6 +902,8 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       if (ty(info.fields[0].t) !== "lab_cell *" || !isRecord(at) || (info.fields[1].t !== "int" && info.fields[1].t !== "i64")) throw new Error(`File info's fields aren't as file info makes them: ${info.fields.map((x) => ty(x.t)).join(", ")}`);
       return { cons: "", nil: "", type: 0, tag: 0, head: 0, info: { record: sname.get(FILE_INFO_T)!, instant: sname.get(at.key)!, kinds: kind.cases.map((_, i) => cname(kind, i)), size: info.fields[1].t } };
     }
+    // A Locale's struct (C315).
+    if (fn === "world.myLocale") return { cons: "", nil: "", type: 0, tag: 0, head: 0, record: sname.get(LOCALE_T)! };
     const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes" || fn === "world.readBytes" || fn === "world.writeBytes";
     const d = data.get(fn === "world.readLine" || fn === "world.keptLine" || fn === "world.environmentVariable" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : bytes ? LIST_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
     if (bytes) {
@@ -1179,13 +1219,17 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     "// Build with -ffp-contract=off (and -msse2 -mfpmath=sse on 32-bit x86):",
     "// the numbers are then the evaluator's, bit for bit.",
     "#pragma STDC FP_CONTRACT OFF",
+    // MinGW's printf, not the old msvcrt's (three digits of exponent).
+    "#if defined(_WIN32) && !defined(__USE_MINGW_ANSI_STDIO)",
+    "#define __USE_MINGW_ANSI_STDIO 1",
+    "#endif",
     "#include <stddef.h>",
     "#include <stdint.h>",
     "#include <stdio.h>",
     "#include <stdlib.h>",
     "#include <math.h>",
     ...(world ? [WORLD_H] : []),
-    ...(entry || threads ? ["#include <pthread.h>"] : []),
+    ...(entry || threads ? ["#include <pthread.h>", PTHREAD_STACK] : []),
     ...(threads ? ["#include <string.h>", "#include <time.h>", "#include <unistd.h>"] : []),
     ...(math ? [FDLIBM_C] : []),
     ...(cells ? [cellsC(threads)] : []),
@@ -1212,7 +1256,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       `static ${TL}const char *lab_stop_why = 0; static ${TL}size_t lab_stop_n = 0;`,
       // Each stop site's definition (C143b), printed after the reason.
       `static const char *lab_sites[] = { ${[...(lowered.stops ?? []).map((x) => JSON.stringify(x.name ?? "")), "0"].join(", ")} };`,
-      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); int s = (int)i / " + SITES + " - 1; if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else if (s >= 0 && s < " + (lowered.stops?.length ?? 0) + " && lab_sites[s][0]) fprintf(stderr, \"%s (in %s)\\n\", lab_stops[(int)i % " + SITES + "], lab_sites[s]); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
+      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); int s = (int)i / " + SITES + " - 1; if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why ? lab_stop_why : \"\"); else if (s >= 0 && s < " + (lowered.stops?.length ?? 0) + " && lab_sites[s][0]) fprintf(stderr, \"%s (in %s)\\n\", lab_stops[(int)i % " + SITES + "], lab_sites[s]); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
     ...(hostsUsed.size ? ["", HOST_RT, "// hosts/c.c", opts.hosts!.c!, "", ...[...hostsUsed].map(([op, n]) => hostWrapper(opts.hosts!.ops[Object.keys(opts.hosts!.ops).find((k) => opts.hosts!.ops[k].op === op)!], n, hostTypes.get(op)!))] : []),
@@ -2034,12 +2078,16 @@ ${ln ? `  lab_cell *args = &${ln.nil};
   ${code}
   return 0;
 }
+${WIN_START}
 int main(int argc, char **argv) {
   pthread_attr_t a;
   pthread_t t;
+#ifdef _WIN32
+  lab__win_start(&argc, &argv);
+#endif
   lab_argc = argc; lab_argv = argv;
   pthread_attr_init(&a);
-  if (pthread_attr_setstacksize(&a, sizeof(void *) == 8 ? (size_t)1 << 30 : (size_t)1 << 28) || pthread_create(&t, &a, lab_run, 0)) lab_run(0);
+  if (LAB_STACK(&a, sizeof(void *) == 8 ? (size_t)1 << 30 : (size_t)1 << 28) || pthread_create(&t, &a, lab_run, 0)) lab_run(0);
   else pthread_join(t, 0);
   fflush(stdout);
   return lab_code;

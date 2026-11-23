@@ -803,16 +803,67 @@ static double lab_rand_restore(double a, double b, double c, double d) { lab__r[
   // with TERS_LOG=file set, each answer the world gives (its arguments and
   // what came back, or the failure) and each write, as JSON, for
   // \`ters run --replay\` to give the evaluator.
-  "world.log": {
+  // What the world asks of the system (C296). Paths, names and values are
+  // UTF-8 in the program; on Windows they go through the wide (UTF-16)
+  // calls, converted here, since a narrow call reads the code page's
+  // bytes. Windows' own functions are declared here, not by windows.h,
+  // whose macros and type names a program's own names could meet.
+  "world.os": {
     uses: [],
+    c: `#ifdef _WIN32
+#include <wchar.h>
+__declspec(dllimport) int __stdcall MultiByteToWideChar(unsigned, unsigned long, const char *, int, wchar_t *, int);
+__declspec(dllimport) int __stdcall WideCharToMultiByte(unsigned, unsigned long, const wchar_t *, int, char *, int, const char *, int *);
+__declspec(dllimport) unsigned long __stdcall GetLastError(void);
+static wchar_t *lab__wide(const char *s) {
+  int n = MultiByteToWideChar(65001, 0, s, -1, 0, 0);
+  wchar_t *w = malloc((size_t)(n > 0 ? n : 1) * sizeof *w);
+  if (!w) lab_oom();
+  if (n > 0) MultiByteToWideChar(65001, 0, s, -1, w, n); else w[0] = 0;
+  return w;
+}
+static char *lab__narrow(const wchar_t *w) {
+  int n = WideCharToMultiByte(65001, 0, w, -1, 0, 0, 0, 0);
+  char *s = malloc(n > 0 ? (size_t)n : 1);
+  if (!s) lab_oom();
+  if (n > 0) WideCharToMultiByte(65001, 0, w, -1, s, n, 0, 0); else s[0] = 0;
+  return s;
+}
+static FILE *lab__fopen(const char *p, const char *m) {
+  wchar_t *w = lab__wide(p), wm[4] = { 0 };
+  for (int i = 0; i < 3 && m[i]; i++) wm[i] = (wchar_t)m[i];
+  FILE *f = _wfopen(w, wm);
+  free(w);
+  return f;
+}
+// An environment variable's value, UTF-8, kept until the next call.
+static const char *lab__getenv(const char *n) {
+  static char *v;
+  wchar_t *w = lab__wide(n);
+  const wchar_t *x = _wgetenv(w);
+  free(w); free(v); v = x ? lab__narrow(x) : 0;
+  return v;
+}
+// 0 nothing there, 1 a file (or anything but a folder), 2 a folder.
+static int lab__kind(const char *p) { wchar_t *w = lab__wide(p); struct _stat64 st; int bad = _wstat64(w, &st); free(w); return bad ? 0 : (st.st_mode & _S_IFDIR) ? 2 : 1; }
+// A Windows error as errno, as libuv maps the ones a path gives.
+static int lab__errno(unsigned long e) { return e == 2 || e == 3 || e == 123 || e == 161 ? ENOENT : e == 5 || e == 32 ? EACCES : e == 267 ? ENOTDIR : EIO; }
+#else
+#define lab__fopen fopen
+#define lab__getenv getenv
+static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1; }
+#endif`,
+  },
+  "world.log": {
+    uses: ["world.os"],
     c: `static FILE *lab_log;
 static int lab_log_state, lab_log_n, lab_log_open;
 static void lab__log_end(void) { if (lab_log) { fputs("]\\n", lab_log); fclose(lab_log); lab_log = 0; } }
 static int lab__log_on(void) {
   if (!lab_log_state) {
     lab_log_state = 1;
-    const char *to = getenv("TERS_LOG");
-    if (to && *to && (lab_log = fopen(to, "wb"))) { fputc('[', lab_log); atexit(lab__log_end); }
+    const char *to = lab__getenv("TERS_LOG");
+    if (to && *to && (lab_log = lab__fopen(to, "wb"))) { fputc('[', lab_log); atexit(lab__log_end); }
   }
   return lab_log != 0;
 }
@@ -864,9 +915,7 @@ static void lab__log_write(void) { lab__log_raw("],\\"write\\":true}"); lab_log_
   lab_st = 2;
 }
 // A Text as a C string, for the C library's paths.
-static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }
-// 0 nothing there, 1 a file (or anything but a folder), 2 a folder.
-static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1; }`,
+static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }`,
   },
   // The fuel, read, and swapped for another (C137c21).
   "fuel.get": { uses: [], c: "static double lab_fuel_get(void) { return lab_fuel; }" },
@@ -914,10 +963,18 @@ static int32_t lab_world_askPermission(lab_cell *t) { int r = lab_ask ? lab_ask(
   // The seed is an answer L186's log keeps (C172c), so a replay draws
   // the same numbers from it.
   "world.randomSeed": { uses: ["world.log"], c: `#include <time.h>
+#ifdef _WIN32
+// RtlGenRandom, the system's random bytes (advapi32).
+__declspec(dllimport) unsigned char __stdcall SystemFunction036(void *, unsigned long);
+#endif
 static double lab_world_randomSeed(void) {
   uint32_t s = 0;
+#ifdef _WIN32
+  if (!SystemFunction036(&s, sizeof s)) s = 0;
+#else
   FILE *f = fopen("/dev/urandom", "rb");
   if (f) { if (fread(&s, sizeof s, 1, f) != 1) s = 0; fclose(f); }
+#endif
   if (!s) s = (uint32_t)time(NULL) ^ (uint32_t)clock() ^ (uint32_t)(uintptr_t)&s;
   if (lab__log_begin("randomSeed")) { lab__log_answer(); fprintf(lab_log, "%u", (unsigned)s); lab__log_close(); }
   return (double)s;
@@ -927,15 +984,24 @@ static double lab_world_randomSeed(void) {
   // adding at the end, read through a buffer that a line or bytes take
   // from, the reading ended for good once it finds the end. A file's
   // number is its place here, from 1; only the library sees it.
-  "world.kept": { uses: [], c: `#include <fcntl.h>
+  "world.kept": { uses: ["world.os"], c: `#include <fcntl.h>
 #include <unistd.h>
-typedef struct { int fd; long at; uint8_t *rest; size_t n; int ended; } lab_kept_file;
+#ifdef _WIN32
+#include <io.h>
+// Opened by its wide name, unchanged bytes (no \\r added before \\n).
+static int lab__open(const char *p) { wchar_t *w = lab__wide(p); int fd = _wopen(w, _O_RDWR | _O_CREAT | _O_APPEND | _O_BINARY, _S_IREAD | _S_IWRITE); free(w); return fd; }
+static ssize_t lab__pread(int fd, void *b, size_t n, int64_t at) { return _lseeki64(fd, at, SEEK_SET) < 0 ? -1 : _read(fd, b, (unsigned)n); }
+#else
+static int lab__open(const char *p) { return open(p, O_RDWR | O_CREAT | O_APPEND, 0666); }
+#define lab__pread pread
+#endif
+typedef struct { int fd; int64_t at; uint8_t *rest; size_t n; int ended; } lab_kept_file;
 static lab_kept_file lab_kept[1024];
 static int lab_kept_n;
 static lab_kept_file *lab__kept(lab_int f) { int64_t i = LAB_IS_SMALL(f) ? LAB_VAL(f) : 0; return i >= 1 && i <= lab_kept_n && lab_kept[i - 1].fd >= 0 ? &lab_kept[i - 1] : 0; }
 static void lab__kept_more(lab_kept_file *k) {
   uint8_t piece[1 << 16];
-  ssize_t n = pread(k->fd, piece, sizeof piece, k->at);
+  ssize_t n = lab__pread(k->fd, piece, sizeof piece, k->at);
   if (n <= 0) { k->ended = 1; return; }
   k->at += n;
   k->rest = realloc(k->rest, k->n + (size_t)n);
@@ -948,7 +1014,7 @@ static void lab__kept_more(lab_kept_file *k) {
     c: (o) => `static lab_cell *lab_world_keptOpen(lab_cell *path) {
   char *p = lab__cstr(path);
   lab_drop(path);
-  int fd = lab_kept_n < 1024 ? open(p, O_RDWR | O_CREAT | O_APPEND, 0666) : -1;
+  int fd = lab_kept_n < 1024 ? lab__open(p) : -1;
   free(p);
   if (fd < 0) return &${o.nil};
   lab_kept[lab_kept_n++] = (lab_kept_file){ fd, 0, 0, 0, 0 };
@@ -1068,7 +1134,23 @@ static int lab_handlers_give(int e) { (void)e; if (lab_htn) lab_hs[lab_htaken[--
   // moving the stack pointer onto its stack (one instruction per
   // processor) and switched with sigsetjmp and siglongjmp. Apple's too
   // (C294): ucontext is deprecated on macOS, and iOS builds with this.
-  "fibers": { uses: [], c: `#if defined(__ANDROID__) || defined(__APPLE__) || defined(LAB_FIBER_SJLJ)
+  // Windows' own fibers there (C296): a stack switched by hand would break
+  // its unwinding; each thread becomes a fiber the first time it switches.
+  "fibers": { uses: [], c: `#if defined(_WIN32)
+__declspec(dllimport) void *__stdcall CreateFiberEx(size_t, size_t, unsigned long, void (__stdcall *)(void *), void *);
+__declspec(dllimport) void __stdcall SwitchToFiber(void *);
+__declspec(dllimport) void __stdcall DeleteFiber(void *);
+__declspec(dllimport) void *__stdcall ConvertThreadToFiber(void *);
+typedef void *lab__ctx;
+static __thread void *lab__self;
+static void __stdcall lab__cstart(void *f) { ((void (*)(void))f)(); }
+static void lab__cgo(lab__ctx *to) { lab__self = *to; SwitchToFiber(*to); }
+#define LAB_CSWAP(from, to) do { if (!lab__self) lab__self = ConvertThreadToFiber(0); *(from) = lab__self; lab__cgo(to); } while (0)
+#define LAB_CSET(to) lab__cgo(to)
+#define LAB_CMAKE(c, f, stk, n) (*(c) = CreateFiberEx(0, (n), 1, lab__cstart, (void *)(f)), (void)(stk), *(c) ? (void)0 : lab_oom())
+#define LAB_CSTACK 0
+#define LAB_CFREE(c) DeleteFiber(*(c))
+#elif defined(__ANDROID__) || defined(__APPLE__) || defined(LAB_FIBER_SJLJ)
 #include <setjmp.h>
 typedef struct { sigjmp_buf jb; void (*fn)(void); char *top; } lab__ctx;
 static void lab__cgo(lab__ctx *to) {
@@ -1093,12 +1175,16 @@ static void lab__cgo(lab__ctx *to) {
 #define LAB_CSWAP(from, to) do { if (!sigsetjmp((from)->jb, 0)) lab__cgo(to); } while (0)
 #define LAB_CSET(to) lab__cgo(to)
 #define LAB_CMAKE(c, f, stk, n) ((c)->fn = (f), (c)->top = (char *)(((uintptr_t)(stk) + (n)) & ~(uintptr_t)15))
+#define LAB_CSTACK 1
+#define LAB_CFREE(c) ((void)0)
 #else
 #include <ucontext.h>
 typedef ucontext_t lab__ctx;
 #define LAB_CSWAP(from, to) swapcontext(from, to)
 #define LAB_CSET(to) setcontext(to)
 #define LAB_CMAKE(c, f, stk, n) (getcontext(c), (c)->uc_stack.ss_sp = (stk), (c)->uc_stack.ss_size = (n), (c)->uc_link = 0, makecontext(c, f, 0))
+#define LAB_CSTACK 1
+#define LAB_CFREE(c) ((void)0)
 #endif
 typedef struct lab__frame lab__frame;
 typedef struct { lab__ctx ctx; void *stack; } lab__fiber;
@@ -1121,7 +1207,7 @@ static void lab__fbody(void) {
 }
 static void lab__fstart(lab__frame *h, int e, void (*entry)(lab__frame *)) {
   lab__fiber *f = calloc(1, sizeof *f);
-  if (!f || !(f->stack = malloc(LAB_FIBER_STACK))) lab_oom();
+  if (!f || (LAB_CSTACK && !(f->stack = malloc(LAB_FIBER_STACK)))) lab_oom();
   LAB_CMAKE(&f->ctx, lab__fbody, f->stack, LAB_FIBER_STACK);
   h->e = e; h->entry = entry; h->fiber = h->at = f;
   lab__fnew = h;
@@ -1134,7 +1220,7 @@ static int lab__fgo(lab__frame *h) {
   lab__fcur = h->at;
   LAB_CSWAP(&h->driver, &h->at->ctx);
   lab__fcur = prev;
-  if (h->op < 0) { free(h->fiber->stack); free(h->fiber); h->fiber = 0; free(h->off); h->off = 0; }
+  if (h->op < 0) { LAB_CFREE(&h->fiber->ctx); free(h->fiber->stack); free(h->fiber); h->fiber = 0; free(h->off); h->off = 0; }
   return h->op;
 }
 static void lab__fperform(int e, int op) {
@@ -1205,7 +1291,7 @@ static int lab__fpark(double at) {
     c: `static lab_cell *lab_world_readFile(lab_cell *path) {
   if (lab__log_begin("readFile")) lab__log_text(path);
   char *p = lab__cstr(path);
-  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "rb");
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "rb");
   free(p);
   if (!f) { lab__fail(errno, path); return 0; }
   lab_cell *t = lab__nfc(lab__read_all(f));
@@ -1220,7 +1306,7 @@ static int lab__fpark(double at) {
     c: `static void lab__put(lab_cell *path, lab_cell *t, const char *mode) {
   if (lab__log_begin(mode[0] == 'a' ? "appendFile" : "writeFile")) { lab__log_text(path); lab__log_raw(","); lab__log_text(t); lab__log_write(); }
   char *p = lab__cstr(path);
-  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, mode);
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, mode);
   free(p);
   if (!f) { lab__fail(errno, path); lab_drop(t); return; }
   fwrite(LAB_TB(t), 1, LAB_TN(t), f);
@@ -1247,25 +1333,91 @@ static int lab__fpark(double at) {
     c: (o) => {
       const i = o.info!;
       const size = (x: string) => (i.size === "int" ? `LAB_SMALL(${x})` : `(int64_t)(${x})`);
-      return `static ${i.record} lab_world_fileInfo(lab_cell *path) {
+      return `#ifdef _WIN32
+// Windows (C296): the attributes, and a reparse point's tag, as libuv's
+// lstat reads them for Node: a symbolic link, a junction or an app's
+// link is a link, other reparse points (cloud files) what they hold.
+typedef struct { unsigned long attrs, made[2], seen[2], written[2], hi, lo; } lab__wattrs;
+typedef struct { unsigned long attrs, made[2], seen[2], written[2], hi, lo, tag, more; wchar_t name[260], short_name[14]; } lab__wfound;
+__declspec(dllimport) int __stdcall GetFileAttributesExW(const wchar_t *, int, lab__wattrs *);
+__declspec(dllimport) void *__stdcall FindFirstFileW(const wchar_t *, lab__wfound *);
+__declspec(dllimport) int __stdcall FindClose(void *);
+__declspec(dllimport) void *__stdcall CreateFileW(const wchar_t *, unsigned long, unsigned long, void *, unsigned long, unsigned long, void *);
+__declspec(dllimport) int __stdcall DeviceIoControl(void *, unsigned long, void *, unsigned long, void *, unsigned long, unsigned long *, void *);
+__declspec(dllimport) int __stdcall CloseHandle(void *);
+// A link's size: its target's length in UTF-8, as libuv's readlink reads
+// a symbolic link's or a junction's target (\\??\\C:\\… as C:\\…, \\??\\UNC\\… as \\\\…).
+static int64_t lab__link_size(const wchar_t *w) {
+  void *h = CreateFileW(w, 0, 7, 0, 3, 0x02200000, 0);
+  if (h == (void *)(intptr_t)-1) return 0;
+  static unsigned char b[16384];
+  unsigned long got = 0, tag;
+  int ok = DeviceIoControl(h, 0x000900A8, 0, 0, b, sizeof b, &got, 0);
+  CloseHandle(h);
+  if (!ok || got < 16) return 0;
+  uint16_t off, len;
+  uint32_t flags = 0;
+  size_t at;
+  memcpy(&tag, b, 4); memcpy(&off, b + 8, 2); memcpy(&len, b + 10, 2);
+  if (tag == 0xA000000C) { memcpy(&flags, b + 16, 4); at = 20; } else if (tag == 0xA0000003) at = 16; else return 0;
+  if (at + off + len > got) return 0;
+  size_t n = len / 2;
+  wchar_t *t = malloc((n + 3) * sizeof *t);
+  if (!t) lab_oom();
+  memcpy(t + 2, b + at + off, len);
+  t[n + 2] = 0;
+  wchar_t *x = t + 2;
+  if (n >= 8 && !wcsncmp(x, L"\\\\??\\\\UNC\\\\", 8)) { x += 6; x[0] = x[1] = L'\\\\'; }
+  else if (n >= 7 && !wcsncmp(x, L"\\\\??\\\\", 4) && x[5] == L':' && x[6] == L'\\\\') x += 4;
+  else if (!(tag == 0xA000000C && (flags & 1))) { free(t); return 0; }
+  char *u = lab__narrow(x);
+  int64_t r = (int64_t)strlen(u);
+  free(u); free(t);
+  return r;
+}
+#endif
+static ${i.record} lab_world_fileInfo(lab_cell *path) {
   if (lab__log_begin("fileInfo")) lab__log_text(path);
   char *p = lab__cstr(path);
+  int kind;
+  int64_t bytes;
+  double modified;
+#ifdef _WIN32
+  wchar_t *w = lab__wide(p);
+  lab__wattrs a;
+  int ok = GetFileAttributesExW(w, 0, &a);
+  unsigned long e = ok ? 0 : GetLastError();
+  unsigned long tag = 0;
+  if (ok && (a.attrs & 0x400)) { lab__wfound f; void *h = FindFirstFileW(w, &f); if (h != (void *)(intptr_t)-1) { tag = f.tag; FindClose(h); } }
+  int link = tag == 0xA000000C || tag == 0xA0000003 || tag == 0x8000001B;
+  int64_t to = link ? lab__link_size(w) : 0;
+  free(w);
+  free(p);
+  if (!ok) { lab__fail(lab__errno(e), path); return (${i.record}){ &${i.kinds[0]}, ${size("0")}, { 0 } }; }
+  kind = link ? 2 : a.attrs & 0x10 ? 1 : 0;
+  bytes = kind == 0 ? (int64_t)((uint64_t)a.hi << 32 | a.lo) : kind == 2 ? to : 0;
+  // 100 ns from 1601 to seconds and nanoseconds from 1970, as libuv.
+  int64_t t = (int64_t)((uint64_t)a.written[1] << 32 | a.written[0]) - 116444736000000000LL;
+  modified = ((double)(t / 10000000) * 1e3 + (double)(t % 10000000 * 100) / 1e6) / 1000;
+#else
   struct stat st;
   int bad = lstat(p, &st);
   free(p);
   if (bad) { lab__fail(errno, path); return (${i.record}){ &${i.kinds[0]}, ${size("0")}, { 0 } }; }
-  int kind = S_ISREG(st.st_mode) ? 0 : S_ISDIR(st.st_mode) ? 1 : S_ISLNK(st.st_mode) ? 2 : 3;
+  kind = S_ISREG(st.st_mode) ? 0 : S_ISDIR(st.st_mode) ? 1 : S_ISLNK(st.st_mode) ? 2 : 3;
+  bytes = (int64_t)st.st_size;
   // In ms first, then seconds, as Node's mtimeMs / 1000 (world.ts).
 #ifdef __APPLE__
-  double modified = ((double)st.st_mtimespec.tv_sec * 1e3 + st.st_mtimespec.tv_nsec / 1e6) / 1000;
+  modified = ((double)st.st_mtimespec.tv_sec * 1e3 + st.st_mtimespec.tv_nsec / 1e6) / 1000;
 #else
-  double modified = ((double)st.st_mtim.tv_sec * 1e3 + st.st_mtim.tv_nsec / 1e6) / 1000;
+  modified = ((double)st.st_mtim.tv_sec * 1e3 + st.st_mtim.tv_nsec / 1e6) / 1000;
+#endif
 #endif
   static const char *names[] = { "file", "folder", "link", "special" };
-  if (lab_log_open) { lab__log_answer(); fprintf(lab_log, "{\\"kind\\":\\"%s\\",\\"size\\":%lld,\\"modified\\":%.17g}", names[kind], (long long)st.st_size, modified); lab__log_close(); }
+  if (lab_log_open) { lab__log_answer(); fprintf(lab_log, "{\\"kind\\":\\"%s\\",\\"size\\":%lld,\\"modified\\":%.17g}", names[kind], (long long)bytes, modified); lab__log_close(); }
   lab_drop(path);
   lab_cell *kinds[] = { ${i.kinds.map((k) => `&${k}`).join(", ")} };
-  return (${i.record}){ kinds[kind], ${size("st.st_size")}, { modified } };
+  return (${i.record}){ kinds[kind], ${size("bytes")}, { modified } };
 }`;
     },
   },
@@ -1277,7 +1429,7 @@ static int lab__fpark(double at) {
     c: (o) => `static ${o.record} lab_world_readBytes(lab_cell *path) {
   if (lab__log_begin("readBytes")) lab__log_text(path);
   char *p = lab__cstr(path);
-  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "rb");
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "rb");
   free(p);
   if (!f) { lab__fail(errno, path); return (${o.record}){ &${o.nil} }; }
   size_t n = 0, cap = 4096;
@@ -1305,7 +1457,7 @@ static int lab__fpark(double at) {
   lab_drop(b.f0);
   if (lab__log_begin("writeBytes")) { lab__log_text(path); lab__log_raw(","); lab__log_bytes(buf, n); lab__log_write(); }
   char *p = lab__cstr(path);
-  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "wb");
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "wb");
   free(p);
   if (!f) { free(buf); lab__fail(errno, path); return; }
   int ok = fwrite(buf, 1, n, f) == n;
@@ -1321,6 +1473,45 @@ static int lab__fpark(double at) {
   // Hinnant's days from civil, so no tm_gmtoff is needed.
   "world.zoneOffset": { uses: ["world.fail"], c: `#include <time.h>
 #include <math.h>
+#ifdef _WIN32
+// Windows (C296): ICU, which Windows has as icu.dll since 10 1903 and
+// Node's Intl reads, so the offsets are the same; NaN without it.
+__declspec(dllimport) void *__stdcall LoadLibraryW(const wchar_t *);
+__declspec(dllimport) void *__stdcall GetProcAddress(void *, const char *);
+static double lab_world_zoneOffset(lab_cell *zone, double at) {
+  static void *icu;
+  static int tried;
+  if (!tried) { tried = 1; icu = LoadLibraryW(L"icu.dll"); }
+  char *z = lab__cstr(zone); lab_drop(zone);
+  double r = NAN;
+  void *(*open)(const uint16_t *, int32_t, const char *, int, int *) = icu ? (void *(*)(const uint16_t *, int32_t, const char *, int, int *))GetProcAddress(icu, "ucal_open") : 0;
+  int32_t (*canonical)(const uint16_t *, int32_t, uint16_t *, int32_t, int8_t *, int *) = icu ? (int32_t (*)(const uint16_t *, int32_t, uint16_t *, int32_t, int8_t *, int *))GetProcAddress(icu, "ucal_getCanonicalTimeZoneID") : 0;
+  void (*set)(void *, double, int *) = icu ? (void (*)(void *, double, int *))GetProcAddress(icu, "ucal_setMillis") : 0;
+  int32_t (*get)(const void *, int, int *) = icu ? (int32_t (*)(const void *, int, int *))GetProcAddress(icu, "ucal_get") : 0;
+  void (*close)(void *) = icu ? (void (*)(void *))GetProcAddress(icu, "ucal_close") : 0;
+  if (open && canonical && set && get && close && *z && isfinite(at)) {
+    wchar_t *w = lab__wide(z);
+    int32_t n = (int32_t)wcslen(w);
+    uint16_t c[128];
+    int8_t sys = 0;
+    int e = 0;
+    canonical((const uint16_t *)w, n, c, 128, &sys, &e);
+    // A zone ICU doesn't know would be GMT: NaN, as Intl's RangeError.
+    if (e <= 0 && sys) {
+      void *cal = open((const uint16_t *)w, n, "", 1, &e);
+      if (cal && e <= 0) {
+        set(cal, floor(at) * 1000, &e);
+        int32_t base = get(cal, 15, &e), dst = get(cal, 16, &e);
+        if (e <= 0) r = (base + dst) / 1000;
+      }
+      if (cal) close(cal);
+    }
+    free(w);
+  }
+  free(z);
+  return r;
+}
+#else
 static double lab_world_zoneOffset(lab_cell *zone, double at) {
   char *z = lab__cstr(zone); lab_drop(zone);
   double r = NAN;
@@ -1344,7 +1535,137 @@ static double lab_world_zoneOffset(lab_cell *zone, double at) {
   }
   free(z);
   return r;
+}
+#endif` },
+  // The person's time zone (C315), an IANA name as Node's Intl gives it:
+  // TZ, else where /etc/localtime points into zoneinfo (Android: its
+  // property; Windows: ICU's default zone); UTC's other names are UTC.
+  "world.myTimeZone": { uses: ["world.os"], c: `#ifdef _WIN32
+__declspec(dllimport) void *__stdcall LoadLibraryW(const wchar_t *);
+__declspec(dllimport) void *__stdcall GetProcAddress(void *, const char *);
+#else
+#include <unistd.h>
+#endif
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+static lab_cell *lab_world_myTimeZone(void) {
+  char buf[512];
+  const char *tz = 0;
+#ifdef _WIN32
+  void *icu = LoadLibraryW(L"icu.dll");
+  int32_t (*get)(uint16_t *, int32_t, int *) = icu ? (int32_t (*)(uint16_t *, int32_t, int *))GetProcAddress(icu, "ucal_getDefaultTimeZone") : 0;
+  uint16_t z[128];
+  int e = 0;
+  int32_t n = get ? get(z, 127, &e) : 0;
+  if (n > 0 && e <= 0) { z[n] = 0; char *s = lab__narrow((const wchar_t *)z); snprintf(buf, sizeof buf, "%s", s); free(s); tz = buf; }
+#elif defined(__ANDROID__)
+  if (__system_property_get("persist.sys.timezone", buf) > 0) tz = buf;
+#else
+  tz = getenv("TZ");
+  if (tz && *tz == ':') tz++;
+  if (!tz || !*tz) { ssize_t n = readlink("/etc/localtime", buf, sizeof buf - 1); tz = n > 0 ? (buf[n] = 0, buf) : 0; }
+  if (tz) { const char *z = strstr(tz, "zoneinfo/"); tz = z ? z + 9 : *tz == '/' ? 0 : tz; }
+#endif
+  static const char *utc[] = { "Etc/UTC", "Etc/UCT", "Etc/GMT", "Etc/GMT0", "Etc/GMT+0", "Etc/GMT-0", "Etc/Universal", "Etc/Zulu", "Etc/Greenwich", "GMT", "GMT0", "GMT+0", "GMT-0", "UCT", "Universal", "Zulu", "Greenwich" };
+  for (size_t i = 0; tz && i < sizeof utc / sizeof *utc; i++) if (!strcmp(tz, utc[i])) tz = 0;
+  if (!tz || !*tz) tz = "UTC";
+  return lab__text_of(tz, strlen(tz));
 }` },
+  // The person's locale (C315), as Node's Intl names it: LC_ALL, then
+  // LC_MESSAGES, then LANG, without its encoding and modifier and with a
+  // hyphen ("tr_TR.UTF-8" is tr-TR); C, POSIX and none are en-US. Windows:
+  // the user's locale name; Android: its property. A Locale, o.record.
+  "world.myLocale": {
+    uses: ["world.os"],
+    c: (o) => `#ifdef _WIN32
+__declspec(dllimport) int __stdcall GetUserDefaultLocaleName(wchar_t *, int);
+#endif
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+static ${o.record} lab_world_myLocale(void) {
+  char buf[128];
+  const char *v = 0;
+#ifdef _WIN32
+  wchar_t w[85];
+  if (GetUserDefaultLocaleName(w, 85) > 0) { char *s = lab__narrow(w); snprintf(buf, sizeof buf, "%s", s); free(s); v = buf; }
+#elif defined(__ANDROID__)
+  if (__system_property_get("persist.sys.locale", buf) > 0 || __system_property_get("ro.product.locale", buf) > 0) v = buf;
+#else
+  const char *names[] = { "LC_ALL", "LC_MESSAGES", "LANG" };
+  for (int i = 0; i < 3 && (!v || !*v); i++) v = getenv(names[i]);
+#endif
+  char out[128];
+  size_t n = 0;
+  for (; v && v[n] && v[n] != '.' && v[n] != '@' && n < sizeof out - 1; n++) out[n] = v[n] == '_' ? '-' : v[n];
+  out[n] = 0;
+  if (!n || !strcmp(out, "C") || !strcmp(out, "POSIX")) { strcpy(out, "en-US"); n = 5; }
+  return (${o.record}){ lab__text_of(out, n) };
+}`,
+  },
+  // A file or folder to the platform's own app (C315, L283), as world.ts:
+  // \`open\` on a Mac, xdg-open elsewhere (TERS_OPEN_OUTSIDE names
+  // another), waited for, or Windows' ShellExecute; a phone has none here.
+  // Logged as a write; fails as reading a file does when nothing is there.
+  "world.openOutside": {
+    uses: ["world.fail"],
+    c: `#ifdef _WIN32
+__declspec(dllimport) void *__stdcall ShellExecuteW(void *, const wchar_t *, const wchar_t *, const wchar_t *, const wchar_t *, int);
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+#include <spawn.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+extern char **environ;
+#endif
+static void lab_world_openOutside(lab_cell *path) {
+  if (lab__log_begin("openOutside")) { lab__log_text(path); lab__log_write(); }
+  char *p = lab__cstr(path), how[96];
+  const char *why = 0;
+  if (!lab__kind(p)) { int e = errno; free(p); lab__fail(e, path); return; }
+#ifdef _WIN32
+  wchar_t *w = lab__wide(p);
+  intptr_t r = (intptr_t)ShellExecuteW(0, L"open", w, 0, 0, 1);
+  free(w);
+  if (r <= 32) { snprintf(how, sizeof how, "ShellExecute answered %d", (int)r); why = how; }
+#elif defined(__ANDROID__) || (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+  why = "this platform has no opener here";
+#else
+  const char *cmd = getenv("TERS_OPEN_OUTSIDE");
+#ifdef __APPLE__
+  if (!cmd || !*cmd) cmd = "open";
+#else
+  if (!cmd || !*cmd) cmd = "xdg-open";
+#endif
+  char *argv[] = { (char *)cmd, p, 0 };
+  posix_spawn_file_actions_t fa;
+  posix_spawn_file_actions_init(&fa);
+  for (int fd = 0; fd < 3; fd++) posix_spawn_file_actions_addopen(&fa, fd, "/dev/null", fd ? O_WRONLY : O_RDONLY, 0);
+  pid_t pid;
+  int st = 0, e = posix_spawnp(&pid, cmd, &fa, 0, argv, environ);
+  posix_spawn_file_actions_destroy(&fa);
+  if (e) { snprintf(how, sizeof how, "spawnSync %.40s %s", cmd, e == ENOENT ? "ENOENT" : strerror(e)); why = how; }
+  else if (waitpid(pid, &st, 0) < 0 || !WIFEXITED(st) || WEXITSTATUS(st)) {
+    if (WIFEXITED(st)) snprintf(how, sizeof how, "%.40s ended with %d", cmd, WEXITSTATUS(st)); else snprintf(how, sizeof how, "%.40s ended with null", cmd);
+    why = how;
+  }
+#endif
+  if (why) {
+    char *s = malloc(strlen(p) + strlen(why) + 32);
+    if (!s) lab_oom();
+    int k = sprintf(s, "could not open %s outside: %s", p, why);
+    lab_drop(lab_reason);
+    lab_reason = lab__text_of(s, (size_t)k);
+    free(s);
+    lab_st = 2;
+  }
+  free(p);
+  lab_drop(path);
+}`,
+  },
   // An environment variable (L253): getenv's value, NFC, or none.
   "world.environmentVariable": {
     uses: ["world.fail", "world.nfc", "world.log"],
@@ -1352,7 +1673,7 @@ static double lab_world_zoneOffset(lab_cell *zone, double at) {
   int L = lab__log_begin("environmentVariable");
   if (L) lab__log_text(name);
   char *n = lab__cstr(name);
-  const char *v = getenv(n);
+  const char *v = lab__getenv(n);
   free(n);
   lab_drop(name);
   if (!v) { if (L) { lab__log_answer(); lab__log_raw("null"); lab__log_close(); } return &${o.nil}; }
@@ -1390,18 +1711,36 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
   if (lab__log_begin("listFolder")) lab__log_text(path);
   char *p = lab__cstr(path);
   int kind = lab__kind(p);
+#ifdef _WIN32
+  // By its wide name, each name back to UTF-8 (C296).
+  wchar_t *w = lab__wide(p);
+  _WDIR *dir = kind == 1 ? (errno = ENOTDIR, (_WDIR *)0) : _wopendir(w);
+  free(w);
+#else
   DIR *dir = kind == 1 ? (errno = ENOTDIR, (DIR *)0) : opendir(p);
+#endif
   free(p);
   if (!dir) { lab__fail(errno, path); return 0; }
   size_t n = 0, cap = 16;
   lab_cell **xs = malloc(cap * sizeof *xs);
   if (!xs) lab_oom();
+#ifdef _WIN32
+  for (struct _wdirent *e; (e = _wreaddir(dir));) {
+    if (!wcscmp(e->d_name, L".") || !wcscmp(e->d_name, L"..")) continue;
+    if (n == cap) { xs = realloc(xs, (cap *= 2) * sizeof *xs); if (!xs) lab_oom(); }
+    char *name = lab__narrow(e->d_name);
+    xs[n++] = lab__text_of(name, strlen(name));
+    free(name);
+  }
+  _wclosedir(dir);
+#else
   for (struct dirent *e; (e = readdir(dir));) {
     if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
     if (n == cap) { xs = realloc(xs, (cap *= 2) * sizeof *xs); if (!xs) lab_oom(); }
     xs[n++] = lab__text_of(e->d_name, strlen(e->d_name));
   }
   closedir(dir);
+#endif
   qsort(xs, n, sizeof *xs, lab__js_order);
   for (size_t k = 0; k < n; k++) xs[k] = lab__nfc(xs[k]);
   if (lab_log_open) { lab__log_answer(); lab__log_raw("["); for (size_t k = 0; k < n; k++) { if (k) lab__log_raw(","); lab__log_text(xs[k]); } lab__log_raw("]"); lab__log_close(); }
@@ -1416,7 +1755,9 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
 
 export const RT_C = new Set(Object.keys(FNS));
 // What the world needs from POSIX, before any header.
-export const POSIX = "#define _POSIX_C_SOURCE 200809L";
+// On Apple, strict POSIX hides stat's st_mtimespec and sysconf's
+// _SC_NPROCESSORS_ONLN, so Darwin's own names come too (C316).
+export const POSIX = "#define _POSIX_C_SOURCE 200809L\n#ifdef __APPLE__\n#define _DARWIN_C_SOURCE\n#endif";
 export const WORLD_H = "#include <errno.h>\n#include <sys/stat.h>\n#include <dirent.h>";
 export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // The C names the runtime defines besides `lab_` + a function's, which a

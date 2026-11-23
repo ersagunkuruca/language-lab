@@ -18,7 +18,7 @@ import type { Saved } from "../ters/src/lang/tests.ts";
 import { formatUnit, infer as unitInfer } from "../ters/src/units.ts";
 import type * as T from "./typed.ts";
 import { h, head } from "./dom.ts";
-import { shower } from "./shown.ts";
+import { shower, ShownText } from "./shown.ts";
 import { givesHtml, htmlPart } from "./htmlPart.ts";
 import { declaresUnits } from "./selectedParts.ts";
 import { newWorker } from "./runViews.ts";
@@ -276,7 +276,7 @@ export function backwards(host: BackHost) {
       // Left free: every value fits (the angle of the origin).
       const any = !!r.answers[0]?.free.includes(p) && shown !== undefined && /^_\d+$/.test(shown);
       // An Html is drawn below as the page draws it, not printed (I256).
-      const part = p === "out" && !on && shown !== undefined && forwards && givesHtml(info, ui.def) ? traced(info)?.result : undefined;
+      const part = p === "out" && !on && shown !== undefined && forwards && givesHtml(info, ui.def) ? ((r) => ((r as unknown) instanceof ShownText ? undefined : r))(traced(info)?.result) : undefined;
       const input = on
         ? h("input", { id, type: "text", value: portText(info, p), autocomplete: "off", spellcheck: "false", "aria-label": `${label}, the value given` }) as HTMLInputElement
         : h("output", { class: shown === undefined ? "none" : "", title: any ? "Any value fits here" : "" }, shown === undefined ? "?" : any ? "any" : part !== undefined ? "an Html, drawn below" : nice(shown));

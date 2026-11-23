@@ -84,7 +84,13 @@ export function runPanel(host: RunHost) {
     const m = manifest.programs.find((p) => p.program === doc().program && p.editor !== false);
     if (!m?.run || doc().title || ui.def !== defNamed("main")) return null;
     const typed = ui.args?.[doc().program];
-    return { args: m.run.args && (typed !== undefined ? words(typed) : m.run.args), files: m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {} };
+    return { args: m.run.args && (typed !== undefined ? words(typed) : m.run.args), files: exampleFiles() };
+  }
+  // The files shipped beside an example as it is (a running page's too,
+  // E321): none for a program of one's own.
+  function exampleFiles(): Record<string, string> {
+    const m = manifest.programs.find((p) => p.program === doc().program && p.editor !== false);
+    return m && !doc().title && m.folders?.[0] ? FILES(m.folders[0]).data ?? {} : {};
   }
   // The files a run sees (E274): the example's own, and what runs wrote
   // or you changed, kept in this browser under the program's title (as
@@ -221,6 +227,6 @@ export function runPanel(host: RunHost) {
 
   // Ends a run without a word: opening another program.
   const endRun = () => { running?.terminate(); running = null; };
-  return { startRun, stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile };
+  return { startRun, stopRun, endRun, warmRun, runGiven, exampleFiles, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile };
 }
 

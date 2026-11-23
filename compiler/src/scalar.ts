@@ -1385,7 +1385,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     // lowered as its arithmetic, so no answer isn't seen here yet (L125c2,
     // L125c3); a Choice of the program's own (fail, one of) is refused
     // where it's used.
-    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
+    const effs = all.filter((e) => !BUDGETED.includes(e) && !(partial && partialEff(e)) && !(opts.data && (e === CONSOLE || e === FILES || e === RANDOM)) && !(opts.host && (PAGE_EFFECTS.has(e) || tailEffs.has(e) || e === KEPT_FILES)) && !(opts.releases && e === LOG_EFFECT) && !(opts.cells && (e === CELLS || e === UPDATE || PAGE_EFFECTS.has(e))) && !(opts.handlers && (tailOwn.has(e) || e === KEPT_FILES || e === SETTINGS || (!opts.host && (e === WAIT || e === AWAIT || e === TIME || (laterEffs.has(e) && !roots.includes(def)))))) && !(opts.hosted?.has(e) && tailEffs.has(e)) && !(e === CHOICE && !opts.data && !opts.shader));
     // Its effects before its types, as profiles.ts tells them (I309): a
     // definition that prints is refused for that, which says more than
     // the Unit it gives.
@@ -1970,6 +1970,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
           return { k: "world", op: "fileInfo", aborts: true, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
+        }
+        // A file to the platform's app (C315, L283), and the person's
+        // locale and time zone, in C and WebAssembly too.
+        if (opts.handlers && target === IO.openOutside) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: "openOutside", aborts: true, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
+        }
+        if (opts.handlers && (target === MY_LOCALE_OP || target === MY_ZONE_OP)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: target === MY_LOCALE_OP ? "myLocale" : "myTimeZone", aborts: false, args: [], t };
         }
         if (opts.handlers && (target === IO.readBytes || target === IO.writeBytes)) {
           const t = stype(zonk(id));

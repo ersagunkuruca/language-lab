@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319g, E319e, E319f, E319h, E319i, E319j (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319f, E319h, E319i, E319j, E319k (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -70,15 +70,13 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E321 | A page's files in the editor (L284): Run's files given to a running page as its stored files, folders by their paths' parts ("notes/a.txt"), so a page such as `folders` (C299) runs on a sample folder; and a page asking for "files" answered there with that folder, not the browser's picker | Ersagun 2026-11-23 (DESKTOP-APPS.md) | P2 | S | |
 
 ### Speed of editing
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319e | Values on wires: the trace on the thread at about 50 ms, longer ones (given values included) in the worker, the wires filled when it answers; the divergent case given a budget too. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319f | Seeds' `resolvedFor` and `warmCalls` in the worker (calc's resolving 0.6 s on the thread). | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
-| E319g | The whole check (on open, and on a miss in the recent checks) in the worker: the program drawn at once, its types when they come. Edits keep the incremental check on the thread, bounded by the edit. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | L | open |
+| E319k | Opening a large program draws it in one task: after its check (E319g), constructions' first drawing is about 500 ms (the page's first run 120 ms, garbage collection 100, the changes' hashes 50, the graph's layout and blocks 100). Split it: the open definition first, the rest a frame at a time. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 | E319h | What grows with the open definition (backwards.ts `analyze`, `unitInfer`, algebras, the changes diff, graph layout) measured on the largest examples: past 16 ms each moves to the worker or is kept per version. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 | E319i | Builtins that make data from a number (`range`, and any like it) take a step per item from a page's budget, so a page's update is bounded by its time even when one call makes a million items: after E319d the probe's "a page's view" (`sum(range(1000000))` in a view) still shows 210 to 230 ms tasks, that call's allocation and its collection. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319j | Pause on a compiled page: `checkedForRun` (the program checked and its representations chosen for running, bounce about 2 s the first time) in the worker, as the page's compile is, then the interpreted page built from what it sends. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
@@ -170,10 +168,8 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C296 | `ters native` on Windows: llvm-mingw clang, the pool's threads over Win32, files through the wide calls with UTF-8 at the edge, Win32 fibers (CreateFiber), a UTF-8 console; the native sweep on a hand-run windows-latest job | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
 | C297 | Windows app: `ters build-native-app --windows`, a screen in C over Win32 (Direct2D boxes and pictures, DirectWrite texts, EDIT inputs, frames at the display's rate, dark mode), an `.exe` from clang alone, a hand-run "Windows app" workflow; sound by WASAPI as its own part. Example: dice, then folders | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
 | C312 | Keys with Ctrl, Cmd, Shift or Alt: the page's event carries which are held (html.ts's handler, the C page's ters_page_event, each screen), so a page can tell Ctrl+F from F; found by C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
-| C299 | `folders`, an original file browser page: folders pane, files with size and time sorted by column, typing filters, arrows and Enter, a text file's first lines beside the list, open outside. In the editor on a sample folder, then as a macOS and a Windows app. Needs L282 to L284, C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 | C300 | Long lists in a C page: folders at 10,000 rows measured first; past 16 ms a key, rerun only the views that read a changed cell and lay out only what moved (C199b reruns every view, C199d lays out the whole page) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
