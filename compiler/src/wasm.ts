@@ -389,13 +389,15 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (STACK.test(name)) return stackRt(name);
     if (TABLE_RT.test(name)) { const f = tableRt(name, lowered.tables); return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f; }
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
+    // Bytes, the module's own record (C291).
+    if (/^wasi\.(read|write)Bytes(\.raw)?$/.test(name)) { const b = lowered.records.find((r) => r.key === BYTES_T); if (!b) throw new Error(`${name}: the module has no Bytes`); return { ...runtime(name), name, types: { Bytes: b } }; }
     const f = runtime(name);
     return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f;
   };
   const need = (name: string) => {
     if (rtNames.includes(name)) return;
     if (name.startsWith("wasi_")) { if (!wasiImports.includes(name)) wasiImports.push(name); return; }
-    if (/^Text(List|Option)\./.test(name)) return;
+    if (/^(Text(List|Option)|Int(List|Option)|Bytes)\./.test(name)) return;
     rtNames.push(name);
     rt(name).uses.forEach(need);
   };
@@ -1323,6 +1325,19 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     readFile: (p: unknown) => tried(() => make(w("readFile")(text(p)))),
     writeFile: (p: unknown, t: unknown) => unit(() => w("writeFile")(text(p), text(t))),
     appendFile: (p: unknown, t: unknown) => unit(() => w("appendFile")(text(p), text(t))),
+    // A file's bytes as they are (C291b): Bytes made and read by the
+    // module's helpers, as keptBytes makes them.
+    readBytes: (p: unknown) => tried(() => {
+      const ex = exports(), b = w("readBytes")!(text(p));
+      let l = ex["IntList.nil"]();
+      for (let i = b.length - 1; i >= 0; i--) l = ex["IntList.cons"](toInt(ex, BigInt(b[i])), l);
+      return ex["Bytes.make"](l);
+    }),
+    writeBytes: (p: unknown, b: unknown) => unit(() => {
+      const ex = exports(), nil = ex["IntList.case"](ex["IntList.nil"]()), out: number[] = [];
+      for (let l = ex["Bytes.items"](b); ex["IntList.case"](l) !== nil; l = ex["IntList.cons.tail"](l)) out.push(Number(fromInt(ex, ex["IntList.cons.head"](l))));
+      w("writeBytes")!(text(p), Uint8Array.from(out));
+    }),
     fileExists: (p: unknown) => (w("fileExists")(text(p)) ? 1 : 0),
     // An environment variable (L253), as run.ts answers it.
     environmentVariable: (n: unknown) => { const v = rt.world?.environmentVariable?.(text(n)) ?? null, ex = exports(); return v === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(v.normalize("NFC"))); },
