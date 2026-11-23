@@ -23,7 +23,7 @@ test("a Mac app is the page's C on AppKit's views, a resizable window, built by 
   assert.doesNotMatch(screen, /AVAudioSession/);
   assert.match(screen, /#import <AppKit\/AppKit.h>/);
   assert.match(screen, /NSWindowStyleMaskResizable/);
-  assert.match(screen, /ters_ui_resize\(w, d\)/);
+  assert.match(screen, /ters_ui_resize\(w, h, d\)/);
   assert.match(screen, /- \(BOOL\)isFlipped \{ return YES; \}/);
   // An .app's layout, for the Mac, no iOS SDK.
   assert.match(build, /apple-macos11\.0/);
