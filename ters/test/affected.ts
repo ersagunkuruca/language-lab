@@ -48,7 +48,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { availableParallelism } from "node:os";
-import { printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
+import { limitFor, printMap, readMap, recordOne, type TestMap } from "./test-map.ts";
 import { changeFrom, cover, haveCommit, reached, reachedTests, type Change } from "./select.ts";
 import { intervalDays, isDue, streakAfter } from "./schedule.ts";
 import { bisect } from "./bisect.ts";
@@ -298,8 +298,8 @@ if (recordTo) {
   const one = async (): Promise<void> => {
     const t = todo.shift();
     if (!t) return;
-    const { entry, output } = await recordOne(top, t, at, env, !(t in bundles));
     const prev = before?.tests[t];
+    const { entry, output } = await recordOne(top, t, at, env, !(t in bundles), limitFor(prev?.seconds));
     const edited = !!prev && prev.at !== at && (!haveCommit(top, prev.at) || git("diff", "--name-only", prev.at, at, "--", t) !== "");
     entry.streak = streakAfter(prev, entry.passed, edited);
     parts.tests[t] = entry;

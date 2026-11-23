@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fromRanges, recordOne, toRanges } from "./test-map.ts";
+import { fromRanges, limitFor, recordOne, toRanges } from "./test-map.ts";
 
 test("ranges read back as the lines written", () => {
   assert.equal(toRanges([7, 1, 2, 3, 9, 10]), "1-3,7,9-10");
@@ -84,4 +84,13 @@ test("a file that never ends is stopped, with what it started, and fails", async
   } finally {
     rmSync(top, { recursive: true, force: true });
   }
+});
+
+// A file is stopped at 480 s, or at twice its last time up to 12 minutes:
+// a sound file near 480 s passed it on a loaded runner (11-23).
+test("a file's time limit is 480 s, or twice its last time up to 720 s", () => {
+  assert.equal(limitFor(undefined), 480);
+  assert.equal(limitFor(30), 480);
+  assert.equal(limitFor(293.3), 587);
+  assert.equal(limitFor(480), 720);
 });

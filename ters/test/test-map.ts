@@ -121,6 +121,11 @@ export function readRecording(top: string, coverage: string, reads: string): Pic
 // The longest a file may run while recorded: the slowest pass in about
 // 6.5 minutes (resolve-once.test), and a share has 20.
 export const LIMIT_SECONDS = 480;
+// A file that took long before may take twice its last time, up to 12
+// minutes: a stop is for a file that hangs, and a loaded runner made two
+// sound ones (c-threads, 293 s the run before; core-js) pass 480 s on 11-23.
+export const LONGEST_SECONDS = 720;
+export const limitFor = (lastSeconds?: number): number => Math.min(LONGEST_SECONDS, Math.max(LIMIT_SECONDS, Math.ceil(2 * (lastSeconds ?? 0))));
 
 // Runs one test file (a path from the top) in its package with coverage and
 // the reads recorder on, and gives its entry, with what the run printed
