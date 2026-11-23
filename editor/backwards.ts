@@ -32,6 +32,8 @@ export interface BackHost {
   ui: UI;
   pres(): Presentation;
   render(): void;
+  // Only the side column, where the answers show.
+  renderSide(): void;
   commit(next: Partial<Doc>, touched: string[], note: string): void;
   portsOfDef(d: Id): Id[];
   returnsBool(info: T.Info, d: Id): boolean;
@@ -49,7 +51,7 @@ export interface BackHost {
 }
 
 export function backwards(host: BackHost) {
-  const { doc, ui, pres, render, commit, portsOfDef, returnsBool, seeded, pixelSeed, readPort, traced, kindOf, handledForArgs } = host;
+  const { doc, ui, pres, render, renderSide, commit, portsOfDef, returnsBool, seeded, pixelSeed, readPort, traced, kindOf, handledForArgs } = host;
   const fmt = (x: number) => (Number.isInteger(x) ? String(x) : String(Math.round(x * 1e6) / 1e6));
   // Known ports: as chosen in layout.json, else the usual direction.
   function knownPorts(info: T.Info): Id[] {
@@ -191,7 +193,19 @@ export function backwards(host: BackHost) {
     searching?.terminate();
     searchingKey = key;
     const w = (searching = newWorker());
-    const done = (r: Found) => { w.terminate(); if (searching !== w) return; searching = null; searchingKey = ""; backwardsCache.set(key, { ...r, cut: false, stopped: r.cut, plan }); render(); };
+    // The graph shows the inputs the first answer solved for on its wires
+    // (traceInputs): while they're the same, only the side column is drawn
+    // again (E319k).
+    const first = (b?: Found) => JSON.stringify(Object.entries(b?.answers[0]?.values ?? {}).filter(([p]) => p !== "out" && !(p in values)));
+    const done = (r: Found) => {
+      w.terminate();
+      if (searching !== w) return;
+      searching = null;
+      searchingKey = "";
+      const same = first(backwardsCache.get(key)) === first(r);
+      backwardsCache.set(key, { ...r, cut: false, stopped: r.cut, plan });
+      (same ? renderSide : render)();
+    };
     w.onmessage = (e: MessageEvent<Found>) => done(e.data);
     w.onerror = (e) => { e.preventDefault(); done({ answers: backwardsCache.get(key)?.answers ?? [], more: false, error: e.message || "the search failed" }); };
     try {

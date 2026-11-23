@@ -52,6 +52,8 @@ export interface PageHost {
   ownDefs(): Id[];
   typesOf(): T.Info | null;
   render(): void;
+  // Only the side column, where the page shows (E319k).
+  renderSide(): void;
   ui: UI;
   errorsIn(info: T.Info): number;
   holesIn(info: T.Info): number;
@@ -66,7 +68,7 @@ export interface PageHost {
 }
 
 export function pagePanels(host: PageHost) {
-  const { doc, prog, pres, ownDefs, typesOf, render, ui, errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins } = host;
+  const { doc, prog, pres, ownDefs, typesOf, render, renderSide, ui, errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins } = host;
   // The program's definition groups as the build checked them (E314).
   const shippedOf = () => { const k = shippedFor(doc().program); return k ? { shipped: k } : {}; };
   // The prebuilt index read now, so opening a shipped page knows at once
@@ -409,8 +411,10 @@ export function pagePanels(host: PageHost) {
     page.status.title = "", page.status.textContent = why;
     renderSoon();
   }
-  // After this render, when called while one draws (startPage is).
-  const renderSoon = () => setTimeout(() => render(), 0);
+  // After this render, when called while one draws (startPage is): the
+  // page shows only in the side column, so only that is drawn again
+  // (E319k: Spacetime's rapidity picture drawn whole was 228 ms).
+  const renderSoon = () => setTimeout(() => renderSide(), 0);
   // A stop said under the page: why, and where when the compiled page
   // knows (C143: its stops carry the node and its definition), as Run's
   // panel offers for main (C143f).

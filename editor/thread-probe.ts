@@ -36,7 +36,8 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 const LONG_MS = 200;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
-  // Its graph's drawing and layout, and its blocks, in one task.
+  // Its side column (its frames loaded again) and its graph, each in a
+  // task of about 220 ms.
   "opening a large definition": "E319k",
   // Choosing the stored program's lists and Maps left the thread with
   // E319j (2 s on bounce before); what's left is its check over the
@@ -140,7 +141,8 @@ function longList(): Place {
 }
 
 // Spacetime's largest definition opened: its graph and blocks were drawn
-// in one task (251 ms, E319h measured).
+// in one task (251 ms, E319h measured), and drawn again with each worker's
+// answer (445, 438 and 339 ms tasks before E319k's second step).
 function bigDef(): Place {
   return { name: "opening a large definition", file: exampleFile("spacetime", "Big definition", () => {}), open: (q) => openDef(q, "rapidity picture") };
 }
