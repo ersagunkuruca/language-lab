@@ -92,7 +92,7 @@ test("R11 §2 compiling a main that prints one text types only the library bodie
 // The words that say which job it is (a definition's name, how the
 // schedule reads it) are for a person: the kept flock-page.choices went
 // stale on 11-22 only because the words for its schedules changed.
-test("R12 §3 a choice whose pick is the same but whose words changed isn't stale", { todo: "staleChoices compares whole lines" }, () => {
+test("R12 §3 a choice whose pick is the same but whose words changed isn't stale", () => {
   const was = "0uqile74d3s0huvbq4fs2gv2e9 schedule: flock over over flat map's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript";
   const now = "0uqile74d3s0huvbq4fs2gv2e9 schedule: flown's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript";
   assert.deepEqual(staleChoices([was], [now]), []);

@@ -410,3 +410,13 @@ test("routes's Set measured as adds and removes, its items read once: stored as 
     assert.match(bad.stderr, /a measured entry names a job Set doesn't have/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// R12 §3: the one choices file kept in the repo is today's, and an
+// entry reworded (the definition its job is in renamed, or found by
+// another path) isn't stale while its pick, facts, choices and target
+// are the same.
+test("flock-page's kept choices are what ters check picks now", () => {
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL("../cli/ters.ts", import.meta.url)), "check", join(root, "flock-page")], { encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(r.stdout.split("\n").filter((l) => /^(stale|new) /.test(l)), []);
+});
