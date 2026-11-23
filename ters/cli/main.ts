@@ -899,8 +899,7 @@ switch (command) {
       mic: nodesOfKindIn(p.code.nodes, "ref").some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
       files: Object.fromEntries(recordings(p.code).filter((f) => statSync(path).isDirectory() && existsSync(join(path, f))).map((f) => [f, new Uint8Array(readFileSync(join(path, f)))])),
     } : undefined;
-    if (macos && sound) process.stderr.write("ters: the Mac app plays no sound yet (C295 leaves it for a later step)\n");
-    for (const [file, x] of Object.entries(macos ? macosAppFolder(p.title, c) : ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {
+    for (const [file, x] of Object.entries(macos ? macosAppFolder(p.title, c, sound) : ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }

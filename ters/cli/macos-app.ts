@@ -7,17 +7,38 @@
 // build.sh on a Mac with Xcode's command line tools, an `.app` from clang
 // alone; the "macOS app" workflow is its check.
 
-import { nativeAppId } from "./native-app.ts";
-import { tersUiDecl } from "./ios-app.ts";
+import { nativeAppId, type AppSound } from "./native-app.ts";
+import { SOUND_M, tersUiDecl } from "./ios-app.ts";
 
+// iOS's sound (ios-app.ts SOUND_M) on a Mac, which has no audio session:
+// the engine at its output's rate, latency from its nodes, the microphone
+// asked for through AVCaptureDevice. Each piece replaced must be there.
+function macSound(): string {
+  let s = SOUND_M;
+  const swap = (a: string | RegExp, b: string) => { const was = s; s = s.replace(a, b); if (s === was) throw new Error(`macos-app.ts: iOS's sound has no ${a}`); };
+  swap(/  AVAudioSession \*a = AVAudioSession\.sharedInstance;\n  NSError \*e = nil;\n  if \(!\[a setCategory:[^\n]*\n/, "");
+  swap(/  AVAudioSession \*a = AVAudioSession\.sharedInstance;\n  double d = [^\n]*\n/, "  double d = SE.outputNode.presentationLatency + (s_mic >= 0 ? SE.inputNode.presentationLatency : 0);\n");
+  swap("AVAudioSessionRecordPermission p = AVAudioSession.sharedInstance.recordPermission;", "AVAuthorizationStatus p = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeAudio];");
+  swap("p == AVAudioSessionRecordPermissionGranted", "p == AVAuthorizationStatusAuthorized");
+  swap("p == AVAudioSessionRecordPermissionDenied", "p == AVAuthorizationStatusDenied || p == AVAuthorizationStatusRestricted");
+  swap("allow it in Settings, then tap again\"); return; }", "allow it in System Settings, then click again\"); return; }");
+  swap("[AVAudioSession.sharedInstance requestRecordPermission:^(BOOL yes) {", "[AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL yes) {");
+  swap("double rate = AVAudioSession.sharedInstance.sampleRate;", "double rate = [SE.outputNode outputFormatForBus:0].sampleRate;");
+  swap("this phone has no microphone", "this Mac has no microphone");
+  return s;
+}
+
+const MIC = "  <key>NSMicrophoneUsageDescription</key><string>This page listens to it.</string>\n";
 const ASKABLE = ["NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationWhenInUseUsageDescription", "NSLocationUsageDescription"].map((k) => `  <key>${k}</key><string>This page asks for it.</string>\n`).join("");
 
-export function macosAppFolder(title: string, c: string): Record<string, string> {
+export function macosAppFolder(title: string, c: string, sound?: AppSound): Record<string, string | Uint8Array> {
   const id = nativeAppId(title);
   const app = `${title.replace(/["$`\\/]/g, "")}.app`;
   return {
     "page.c": c,
-    "Screen.m": PAGE_M(tersUiDecl(c), id),
+    "Screen.m": PAGE_M(tersUiDecl(c), id, !!sound),
+    // The recordings the page plays (C217), copied into the app by build.sh.
+    ...Object.fromEntries(Object.entries(sound?.files ?? {}).map(([a, b]) => [`recordings/${a}`, b])),
     "Info.plist": `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -33,7 +54,7 @@ export function macosAppFolder(title: string, c: string): Record<string, string>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-${c.includes("lab_world_askPermission(") ? ASKABLE : ""}</dict>
+${c.includes("lab_world_askPermission(") ? ASKABLE : sound?.mic ? MIC : ""}</dict>
 </plist>
 `,
     "build.sh": `#!/bin/sh
@@ -52,6 +73,7 @@ xcrun clang -target "$TARGET" -c page.c -o build/page.o -O2 -ffp-contract=off -f
 xcrun clang -target "$TARGET" -c Screen.m -o build/screen.o -O2 -fobjc-arc
 xcrun clang -target "$TARGET" build/page.o build/screen.o -o "$APP/Contents/MacOS/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework AppKit -framework QuartzCore -framework CoreGraphics -framework CoreVideo -framework AVFoundation -framework CoreLocation -framework UserNotifications -lm
 cp Info.plist "$APP/Contents/"
+if [ -d recordings ]; then mkdir -p "$APP/Contents/Resources" && cp -R recordings/. "$APP/Contents/Resources/"; fi
 codesign --force --sign - "$APP"
 echo "$APP"
 `,
@@ -74,7 +96,7 @@ const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 // PAGE_M, which this follows). Views are flipped, so y grows down as in
 // the layout, and layer-backed, for paint, corners, borders and shapes.
 // Places and sizes are in points, which are the page's px.
-const PAGE_M = (decl: string, id: string) => String.raw`// The page: made and laid out in C (page.c) and drawn with AppKit's views,
+const PAGE_M = (decl: string, id: string, sound: boolean) => String.raw`// The page: made and laid out in C (page.c) and drawn with AppKit's views,
 // which C asks for through ters_ui.
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
@@ -405,8 +427,8 @@ static int u_ask(void *c, const char *s, size_t n) {
   }
   return 0;
 }
-// Sound (C217) comes in a later step: a page that plays has none here.
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, 0 };
+${sound ? macSound() : ""}
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"} };
 
 // The display's frames (CVDisplayLink, on its own thread), each handed to
 // the main thread once the one before is done.
