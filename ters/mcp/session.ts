@@ -32,7 +32,7 @@ import { equal, mainProblem, pageProblem, runProgram, runMain, showerFor, withSt
 import { nodeWorld } from "../src/lang/world.ts";
 import { runTests, savedFrom } from "../src/lang/tests.ts";
 import * as T from "../../editor/typed.ts";
-import { onTodaysIds, S, SIGS, std, TRUE } from "../src/lang/std.ts";
+import { onTodaysIds, S, SIGS, TRUE } from "../src/lang/std.ts";
 import { printSaved, readJsonFile } from "../src/saved.ts";
 import { setDisplayNames } from "../../editor/typed.ts";
 import { addField, addParameter, addWay, deleteDefinition, nameClash, newDefinition, setWay, type Shape } from "../src/lang/toplevel.ts";
@@ -422,7 +422,7 @@ export class Session {
       const want = as?.trim() ? typesIn(as) : [];
       const fits = r.choices.filter((_, i) => { const has = typesIn(labels[i]); return want.every((w) => has.includes(w)); });
       const exact = fits.filter((c) => typesIn(c.label.replace(/^as /, "")).join() === want.join());
-      const pick = want.length ? (exact.length === 1 ? exact[0] : fits.length === 1 ? fits[0] : undefined) : r.choices[this.byFieldsRead(code, names, labels.map(typesIn)) ?? this.programsOwn(code, names, labels.map(typesIn)) ?? -1];
+      const pick = want.length ? (exact.length === 1 ? exact[0] : fits.length === 1 ? fits[0] : undefined) : r.choices[this.byFieldsRead(code, names, labels.map(typesIn)) ?? -1];
       if (pick?.edit.ok) return pick.edit;
       return { ok: false, reason: `${t.trim()} reads ${labels.map((l) => `as ${l}`).join(" or ")}: a field or a function more than one type has, on a value whose type nothing settles yet. Give \`as\` (${labels.map((l) => JSON.stringify(l.replace(/^an?\s+/i, ""))).join(" or ")}), or settle the type first` };
     }
@@ -482,17 +482,6 @@ export class Session {
       cur = this.fill(cur.code, cur.names, slots[i], g.text, def, as);
     }
     return cur;
-  }
-
-  // Of a field the program's own type has and std's or a module's types
-  // have too, the program's (std's Placed has a position, as a program's
-  // Body does): a library type's field read on a value nothing has
-  // settled is the program's own, as a vertex function's Placed is
-  // settled by draw. Two of the program's own still ask (E186).
-  private programsOwn(code: Code, names: Names, types: string[][]): number | undefined {
-    const all = baseNames(names), lib = new Set([...std.defs, ...LIBRARY.code.defs]);
-    const own = types.map((ts) => ts.every((t) => code.defs.some((d) => !lib.has(d) && (all[d] ?? "").toLowerCase() === t)));
-    return own.filter(Boolean).length === 1 ? own.indexOf(true) : undefined;
   }
 
   // A field's reading asked of a value nothing has settled, settled by the
