@@ -1,0 +1,45 @@
+# Every example as `ters native` builds it on Windows (C296,
+# docs/design/targets/DESKTOP-APPS.md): MinGW-w64's gcc, which the runner
+# has, Win32 fibers, wide paths, a UTF-8 console. Each prints what
+# `ters run` prints (.github/macos/native-sweep.ts). Run by hand only: a
+# Windows minute costs two of Linux's.
+name: Windows native
+
+on:
+  workflow_dispatch:
+    inputs:
+      examples:
+        description: "Examples to sweep, separated by spaces (empty: all)"
+        default: ""
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  sweep:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - run: gcc --version
+      # The C world's files by their wide names, beside the evaluator's.
+      - name: Files in C
+        shell: bash
+        env:
+          CC: gcc
+          NATIVE_CFLAGS: -static
+        run: node --test compiler/test/c-file-info.test.ts compiler/test/bytes-files.test.ts
+      - name: Every example, native beside ters run
+        if: always()
+        shell: bash
+        env:
+          EXAMPLES: ${{ inputs.examples }}
+        run: node .github/macos/native-sweep.ts $EXAMPLES

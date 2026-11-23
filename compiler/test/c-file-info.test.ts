@@ -1,6 +1,7 @@
 // A file's info in C (C310): lstat's kind, size and time last changed, as
 // the evaluator with Node's world answers file info (L282), a link told as
 // a link; a missing file aborts with the reason; the log is JavaScript's.
+// A name beyond ASCII too, which Windows takes by its wide calls (C296).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -34,7 +35,7 @@ function program() {
       k.match(md, [{ variant: INSTANT_V, names: ["s"], body: ([s]) => k.call(S.print, k.call(S.show, s)) }])) },
   ]);
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.seq(show("a.txt"), show("dir"), show("ln"), show("nope"), k.int(0))));
+  k.define(main, k.thunk(() => k.seq(show("a.txt"), show("dir"), show("ln"), show("şüé.txt"), show("nope"), k.int(0))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   return { code, names, info, main };
@@ -47,6 +48,7 @@ test("file info in C answers as the evaluator does: a file, a folder, a link, an
   const exe = compile(emitC(l, { main: p.main }).c);
   const dir = mkdtempSync(join(tmpdir(), "file-info-"));
   writeFileSync(join(dir, "a.txt"), "hello");
+  writeFileSync(join(dir, "şüé.txt"), "hi");
   mkdirSync(join(dir, "dir"));
   symlinkSync("a.txt", join(dir, "ln"));
   const r = spawnSync(exe, [], { cwd: dir, env: { ...process.env, TERS_LOG: join(dir, "log.json") } });
@@ -58,12 +60,12 @@ test("file info in C answers as the evaluator does: a file, a folder, a link, an
     runProgram(p.code, p.info, p.main, [], { print: (x) => printed.push(x), names: p.names, world: nodeWorld() });
   } finally { process.chdir(cwd); }
   assert.equal(r.stdout.toString(), printed.map((x) => `${x}\n`).join(""));
-  assert.match(printed.join("\n"), /^a\.txt file 5\n[\d.]+\ndir folder \d+\n[\d.]+\nln link 5\n/);
+  assert.match(printed.join("\n"), /^a\.txt file 5\n[\d.]+\ndir folder \d+\n[\d.]+\nln link 5\n[\d.]+\nşüé\.txt file 2\n/);
   assert.notEqual(r.status, 0);
   assert.match(r.stderr.toString(), /no such file or folder: nope/);
   // Logged as JavaScript logs it.
   const log = JSON.parse(readFileSync(join(dir, "log.json"), "utf8")) as { op: string; args: unknown[]; answer?: { kind: string; size: number; modified: number }; threw?: string }[];
-  assert.deepEqual(log.map((x) => [x.op, x.args[0], x.answer?.kind ?? x.threw]), [["fileInfo", "a.txt", "file"], ["fileInfo", "dir", "folder"], ["fileInfo", "ln", "link"], ["fileInfo", "nope", "no such file or folder: nope"]]);
+  assert.deepEqual(log.map((x) => [x.op, x.args[0], x.answer?.kind ?? x.threw]), [["fileInfo", "a.txt", "file"], ["fileInfo", "dir", "folder"], ["fileInfo", "ln", "link"], ["fileInfo", "şüé.txt", "file"], ["fileInfo", "nope", "no such file or folder: nope"]]);
   assert.equal(log[0].answer!.size, 5);
 });
 
@@ -71,6 +73,7 @@ test("file info in C answers as the evaluator does: a file, a folder, a link, an
 function folder(p: ReturnType<typeof program>) {
   const dir = mkdtempSync(join(tmpdir(), "file-info-wasm-"));
   writeFileSync(join(dir, "a.txt"), "hello");
+  writeFileSync(join(dir, "şüé.txt"), "hi");
   mkdirSync(join(dir, "dir"));
   symlinkSync("a.txt", join(dir, "ln"));
   const printed: string[] = [], cwd = process.cwd();
