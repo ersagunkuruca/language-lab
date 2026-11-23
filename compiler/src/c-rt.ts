@@ -989,7 +989,14 @@ static double lab_world_now(void) {
   // a native app's screen sets it once a sound plays
   // (ters_page_sound_latency).
   "world.mySoundLatency": { uses: [], c: `static double lab_sound_latency;
-static double lab_world_mySoundLatency(void) { return lab_sound_latency; }` },
+// A page notes it read like a cell's (c.ts READS_C), so what read it runs
+// again when the screen measures it.
+static double lab_world_mySoundLatency(void) {
+#ifdef LAB_KEEP_FORMULAS
+  lab_touch(&lab_sound_latency);
+#endif
+  return lab_sound_latency;
+}` },
   "world.sleep": { uses: ["world.log"], c: `#include <time.h>
 static double lab_world_sleep(double ms) {
   if (lab__log_begin("wait")) { fprintf(lab_log, "%.17g", ms); lab__log_write(); }

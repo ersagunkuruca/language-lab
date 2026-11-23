@@ -127,7 +127,18 @@ typedef struct tl_n {
   // out from is the same: the hash of that (sig), of the style (cs_h), and
   // of what selectors see of it and the boxes round it (chain).
   tl_css cs; uint64_t sig, cs_h, chain;
+  // How far right and down it and the absolutely placed boxes in it
+  // reach, against the box it is placed in (tl_reaches).
+  double rr[2];
+  // What changed since its style was last worked out (TL_DIRTY: what
+  // selectors see of it, TL_RENEW: drawn again, TL_KIDS: its children),
+  // and whether anything did below it (tl_dirty).
+  int dirt, below;
 } tl_n;
+#define TL_DIRTY 1
+#define TL_RENEW 2
+#define TL_KIDS 4
+static void tl_dirty(tl_n *e, int how) { e->dirt |= how; for (tl_n *a = e->parent; a && !a->below; a = a->parent) a->below = 1; }
 
 static ters_ui *tl_ui;
 static tl_n *tl_root;
@@ -149,7 +160,7 @@ static double tl_ms(void) { if (tl_fake >= 0) return tl_fake; struct timespec t;
 
 // Whether e is a picture: an svg, or a canvas (G2), whose marks are its
 // shapes.
-static int tl_pic(tl_n *e) { return e->tag && (!strcmp(e->tag, "svg") || !strcmp(e->tag, "canvas")); }
+static int tl_pic(tl_n *e) { return e->tag && ((e->tag[0] == 's' && !strcmp(e->tag, "svg")) || (e->tag[0] == 'c' && !strcmp(e->tag, "canvas"))); }
 static char *tl_dup(const char *s, size_t n) { char *r = malloc(n + 1); memcpy(r, s, n); r[n] = 0; return r; }
 static void *tl_element(void *c, const char *tag, size_t n) {
   (void)c;
@@ -167,9 +178,10 @@ static void *tl_text(void *c, const char *s, size_t n) {
   e->view = tl_ui->text(tl_ui->ctx, s, n);
   return e;
 }
-static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
+static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; if (e->parent) tl_dirty(e->parent, TL_DIRTY); tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
 static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const char *v, size_t vn) {
   (void)c; tl_n *e = x;
+  tl_dirty(e, TL_DIRTY);
   if (kn == 9 && !memcmp(k, "autofocus", 9) && tl_ui->focus) tl_ui->focus(tl_ui->ctx, e->view);
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = tl_dup(v, vn); }
@@ -184,6 +196,7 @@ static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const c
 static const char *tl_attr(tl_n *e, const char *k) { for (int j = 0; j < e->na; j++) if (!strcmp(e->ak[j], k)) return e->av[j]; return 0; }
 static void tl_remove_attribute(void *c, void *x, const char *k, size_t kn) {
   (void)c; tl_n *e = x;
+  tl_dirty(e, TL_DIRTY);
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = 0; }
   for (int j = 0; j < e->na; j++) if (strlen(e->ak[j]) == kn && !memcmp(e->ak[j], k, kn)) { free(e->ak[j]); free(e->av[j]); e->ak[j] = e->ak[e->na - 1]; e->av[j] = e->av[e->na - 1]; e->na--; break; }
@@ -193,9 +206,10 @@ static void tl_append(void *c, void *p, void *k) {
   if (e->nk == e->ck) { e->ck = e->ck ? 2 * e->ck : 4; e->kids = realloc(e->kids, sizeof *e->kids * (size_t)e->ck); }
   e->kids[e->nk++] = x;
   x->parent = e;
+  tl_dirty(e, TL_DIRTY | TL_KIDS);
   tl_ui->append(tl_ui->ctx, e->view, x->view);
 }
-static void tl_clear(void *c, void *p) { (void)c; tl_n *e = p; for (int j = 0; j < e->nk; j++) if (e->kids[j]->parent == e) e->kids[j]->parent = 0; e->nk = 0; tl_ui->clear(tl_ui->ctx, e->view); }
+static void tl_clear(void *c, void *p) { (void)c; tl_n *e = p; for (int j = 0; j < e->nk; j++) if (e->kids[j]->parent == e) e->kids[j]->parent = 0; e->nk = 0; tl_dirty(e, TL_DIRTY | TL_KIDS); tl_ui->clear(tl_ui->ctx, e->view); }
 static void tl_listen(void *c, void *x, const char *ev, size_t n, int h) {
   (void)c; tl_n *e = x;
   // Pointer events in a picture are found here, by what's drawn where
@@ -710,28 +724,40 @@ static uint64_t tl_salt, tl_salt_sheet;
 // each box round it (tag, id, classes, style, :hover, :empty,
 // :first-child, :last-child). place is 1 for its parent's first element,
 // 2 for the last.
-static void tl_style_at(tl_n *e, const tl_css *up, int root, uint64_t up_h, uint64_t up_chain, int place) {
+static int tl_all;
+static void tl_style_at(tl_n *e, const tl_css *up, int root, uint64_t up_h, uint64_t up_chain, int place, int check) {
   if (!e->tag) return;
-  int empty = !(e->s && *e->s);
-  for (int j = 0; j < e->nk && empty; j++) if (e->kids[j]->tag || (e->kids[j]->s && *e->kids[j]->s)) empty = 0;
-  uint64_t ch = tl_h(up_chain, &place, sizeof place);
-  ch = tl_hs(tl_hs(tl_hs(tl_hs(ch, e->tag), e->id), e->cls), e->style);
-  ch = tl_h(tl_h(ch, &e->hover, sizeof e->hover), &empty, sizeof empty);
-  e->chain = ch;
-  uint64_t sig = tl_h(tl_h(tl_h(ch, &tl_salt, sizeof tl_salt), &up_h, sizeof up_h), &root, sizeof root);
-  for (int j = 0; j < e->na; j++) sig = tl_hs(tl_hs(sig, e->ak[j]), e->av[j]);
-  if (sig != e->sig || !e->sig) {
-    tl_style_of(e, up, root);
-    e->cs = e->c;
-    e->cs_h = tl_h(14695981039346656037ull, &e->cs, sizeof e->cs);
-    e->sig = sig;
+  // Only where something changed (C300): e itself when it or its parent
+  // did (check), its children when e's style or what selectors see of it
+  // changed, or they did, or something below them.
+  int changed = 0;
+  if (check || (e->dirt & TL_DIRTY) || !e->sig) {
+    int empty = !(e->s && *e->s);
+    for (int j = 0; j < e->nk && empty; j++) if (e->kids[j]->tag || (e->kids[j]->s && *e->kids[j]->s)) empty = 0;
+    uint64_t ch = tl_h(up_chain, &place, sizeof place);
+    ch = tl_hs(tl_hs(tl_hs(tl_hs(ch, e->tag), e->id), e->cls), e->style);
+    ch = tl_h(tl_h(ch, &e->hover, sizeof e->hover), &empty, sizeof empty);
+    uint64_t sig = tl_h(tl_h(tl_h(ch, &tl_salt, sizeof tl_salt), &up_h, sizeof up_h), &root, sizeof root);
+    for (int j = 0; j < e->na; j++) sig = tl_hs(tl_hs(sig, e->ak[j]), e->av[j]);
+    if (ch != e->chain) { e->chain = ch; changed = 1; }
+    if (sig != e->sig || !e->sig) {
+      uint64_t was = e->cs_h;
+      tl_style_of(e, up, root);
+      e->cs = e->c;
+      e->cs_h = tl_h(14695981039346656037ull, &e->cs, sizeof e->cs);
+      e->sig = sig;
+      if (e->cs_h != was) changed = 1;
+    }
   }
-  e->c = e->cs;
   // An animation starts when its name is new on the box, as in a browser.
   if (strcmp(e->c.anim, e->an)) { strcpy(e->an, e->c.anim); e->a0 = tl_ms(); e->aend = 0; e->ax = e->ay = 0; e->as = e->ao = 1; }
-  int first = -1, last = -1;
-  for (int j = 0; j < e->nk; j++) if (e->kids[j]->tag) { if (first < 0) first = j; last = j; }
-  for (int j = 0; j < e->nk; j++) tl_style_at(e->kids[j], &e->c, 0, e->cs_h, ch, (j == first) | (j == last) << 1);
+  int kids = changed || tl_all || (e->dirt & TL_KIDS);
+  if (kids || e->below) {
+    int first = -1, last = -1;
+    for (int j = 0; j < e->nk; j++) if (e->kids[j]->tag) { if (first < 0) first = j; last = j; }
+    for (int j = 0; j < e->nk; j++) tl_style_at(e->kids[j], &e->cs, 0, e->cs_h, e->chain, (j == first) | (j == last) << 1, kids);
+  }
+  e->dirt = 0; e->below = 0;
 }
 static void tl_style_of(tl_n *e, const tl_css *up, int root) {
   tl_defaults(&e->c, e->tag, up);
@@ -960,6 +986,9 @@ static double tl_flow(tl_n *e, double w) {
 // main with no padding starts at main's top, its margin outside main.
 static void tl_collapse(tl_n *e) {
   if (!e->tag) return;
+  // Its margins as its style gives them, before they collapse again
+  // (its style is kept between layouts, C300).
+  e->c.mar[0] = e->cs.mar[0]; e->c.mar[2] = e->cs.mar[2];
   for (int j = 0; j < e->nk; j++) tl_collapse(e->kids[j]);
   // A flex or grid item holds its children's margins (a formatting context of its own).
   if (e->c.display != TL_BLOCK || e->c.pos == 2 || (e->parent && e->parent->tag && (e->parent->c.display == TL_FLEX || e->parent->c.display == TL_GRID))) return;
@@ -1232,14 +1261,21 @@ static void tl_picture(tl_n *e) {
 }
 static void tl_hide(tl_n *e) { tl_place(e, 0, 0, 0, 0, 0); for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); }
 // How far right and down the absolutely placed boxes in k reach (k too),
-// against the box k is placed in (ox, oy there).
-static void tl_reach(tl_n *k, double ox, double oy, double *rx, double *ry) {
+// against the box k is placed in: each box's, once, from its children's
+// (C300; -1e300, none).
+static void tl_reaches(tl_n *k) {
+  k->rr[0] = k->rr[1] = -1e300;
   if (!k->tag || k->c.display == TL_NONE) return;
-  if (k->c.display == TL_CONTENTS) { for (int j = 0; j < k->nk; j++) tl_reach(k->kids[j], ox, oy, rx, ry); return; }
-  double x = ox + k->x, y = oy + k->y;
-  if (k->c.pos == 2 && x + k->w > *rx) *rx = x + k->w;
-  if (k->c.pos == 2 && y + k->h > *ry) *ry = y + k->h;
-  if (!tl_pic(k)) for (int j = 0; j < k->nk; j++) tl_reach(k->kids[j], x, y, rx, ry);
+  int contents = k->c.display == TL_CONTENTS;
+  double x = contents ? 0 : k->x, y = contents ? 0 : k->y;
+  if (!contents && k->c.pos == 2) { k->rr[0] = x + k->w; k->rr[1] = y + k->h; }
+  if (!contents && tl_pic(k)) return;
+  for (int j = 0; j < k->nk; j++) {
+    tl_n *c = k->kids[j];
+    tl_reaches(c);
+    if (c->rr[0] + x > k->rr[0]) k->rr[0] = c->rr[0] + x;
+    if (c->rr[1] + y > k->rr[1]) k->rr[1] = c->rr[1] + y;
+  }
 }
 // Each box to the screen: its place against its parent's view.
 static void tl_show(tl_n *e, double dx, double dy, int shown) {
@@ -1266,7 +1302,7 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   // bounds, and a browser finds an absolutely placed box under a finger
   // wherever its parents are (tumble's tiles, in a div 0 high).
   double rw = e->w, rh = e->h;
-  if (!e->c.bg && !e->c.bw && !tl_pic(e)) for (int j = 0; j < e->nk; j++) tl_reach(e->kids[j], 0, 0, &rw, &rh);
+  if (!e->c.bg && !e->c.bw && !tl_pic(e)) for (int j = 0; j < e->nk; j++) { if (e->kids[j]->rr[0] > rw) rw = e->kids[j]->rr[0]; if (e->kids[j]->rr[1] > rh) rh = e->kids[j]->rr[1]; }
   double ax = 0, ay = 0, as = 1, ao = 1;
   if (e->an[0] && !e->aend && e->as > 0) ax = e->ax, ay = e->ay, as = e->as, ao = e->ao;
   if (as != 1) { ax += (1 - as) * e->w / 2; ay += (1 - as) * e->h / 2; rw *= as; rh *= as; }
@@ -1319,8 +1355,9 @@ static void tl_layout(void) {
   tl_n html; memset(&html, 0, sizeof html); html.tag = "html"; html.c = none;
   for (int i = 0; i < tl_nrules; i++) if (!strcmp(tl_rules[i].tag, ":root") || !strcmp(tl_rules[i].tag, "html")) tl_decls(&html.c, tl_rules[i].decl, tl_rules[i].end);
   tl_style_of(&body, &html.c, 0);
-  tl_salt = tl_h(tl_h(tl_h(tl_h(tl_salt_sheet, &tl_width, sizeof tl_width), &tl_height, sizeof tl_height), &tl_dark, sizeof tl_dark), &body.c, sizeof body.c);
-  tl_style_at(tl_root, &body.c, 0, 0, 0, 0);
+  uint64_t salt = tl_h(tl_h(tl_h(tl_h(tl_salt_sheet, &tl_width, sizeof tl_width), &tl_height, sizeof tl_height), &tl_dark, sizeof tl_dark), &body.c, sizeof body.c);
+  tl_all = salt != tl_salt; tl_salt = salt;
+  tl_style_at(tl_root, &body.c, 0, 0, 0, 0, tl_all);
   // The root's own margins too (a page's main with margin: 24px), and its
   // top margin collapsed with body's where body has no padding or border
   // between them, as CSS does.
@@ -1334,6 +1371,7 @@ static void tl_layout(void) {
   // An animation that started in this layout is shown where it starts,
   // not for a frame where it ends (Ersagun saw pieces flicker there).
   { int none = 0; tl_step(tl_root, tl_ms(), 0, &none, -1); }
+  tl_reaches(tl_root);
   tl_show(tl_root, 0, 0, 1);
   uint32_t bg = body.c.bg ? body.c.bg : html.c.bg ? html.c.bg : (tl_dark ? 0xFF121212u : 0xFFFFFFFFu);
   tl_ui->page(tl_ui->ctx, tl_width, tl_root->y + tl_root->h + tl_root->c.mar[2] + body.c.mar[2] + body.c.pad[2], bg);
@@ -1460,6 +1498,7 @@ static int tl_moving(int step) {
   if (!step) return tl_running(tl_root);
   tl_n *ended[256]; int n = 0;
   tl_step(tl_root, tl_ms(), ended, &n, 256);
+  tl_reaches(tl_root);
   tl_show(tl_root, 0, 0, 1);
   // Their handlers, found before any runs (a handler may draw them again).
   int hs[256], m = 0;
@@ -1517,13 +1556,13 @@ static void ters__ui_hover(void *view) {
   for (int i = nw; i-- > 0;) {
     int still = 0; for (int k = 0; k < nn; k++) if (now[k] == was[i]) still = 1;
     if (still) continue;
-    was[i]->hover = 0; changed = 1;
+    was[i]->hover = 0; changed = 1; tl_dirty(was[i], TL_DIRTY);
     for (int j = 0; j < was[i]->np && m < 64; j++) if (!strcmp(was[i]->pev[j], "pointerleave")) hs[m++] = was[i]->ph[j];
   }
   // Entered, outermost first (now runs from e out).
   for (int i = nn; i-- > 0;) {
     if (now[i]->hover) continue;
-    now[i]->hover = 1; changed = 1;
+    now[i]->hover = 1; changed = 1; tl_dirty(now[i], TL_DIRTY);
     for (int j = 0; j < now[i]->np && m < 64; j++) if (!strcmp(now[i]->pev[j], "pointerenter")) hs[m++] = now[i]->ph[j];
   }
   if (changed && tl_hover_rules()) tl_layout();
@@ -1531,7 +1570,7 @@ static void ters__ui_hover(void *view) {
 }
 // An element a part drew again: its animation starts again (as a
 // browser's new element's would) when it next has one.
-static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
+static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; tl_dirty(x, TL_RENEW); }
 static double tl_sound(void *c, int n, int on, int mic, const char *a, size_t an) { (void)c; return tl_ui->sound ? tl_ui->sound(tl_ui->ctx, n, on, mic, a, an) : 0; }
 static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew, tl_sound, tl_marks };
 // main's page on screen ui, width wide and height high (in the units its
