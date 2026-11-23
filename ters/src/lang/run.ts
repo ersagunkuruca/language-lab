@@ -290,6 +290,8 @@ export const PAGE_STEPS = 1_000_000;
 let page: Fuel | null = null;
 // The evaluator's machine steps, counted to ask a page's deadline (I310).
 let machineTicks = 0;
+// The direct search's calls, counted for the same (I310).
+let searchTicks = 0;
 // How many it has taken so far: work, for a caller weighing a run (C255).
 export const evaluatorTicks = (): number => machineTicks;
 // Compiled code's count of deep calls (compiler/src/runtime.js, $rec):
@@ -1192,6 +1194,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
   // The values of a call, each given to k in the order the machine finds them.
   const callSearch = (f: Value, args: Value[], k: K): boolean => {
+    // A page's deadline here too: a search through definitions that end
+    // spends no step and runs no machine (Countdown's view, 0.5 s before
+    // its first ask; Check main 11-23 saw 2.4 s).
+    if ((++searchTicks & 1023) === 0 && page?.over?.()) throw new OutOfSteps();
     const c = closureOf(f);
     const l = c && lamOf(c);
     if (l && !l.only) {

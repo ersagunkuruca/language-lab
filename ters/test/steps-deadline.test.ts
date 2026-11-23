@@ -40,6 +40,10 @@ test("a view whose search spends no step still stops at the deadline", async () 
   while (!part && todo.length) { const d = todo.shift()!; if (d.tag === HTML_V.part) part = d; else if (d.tag === HTML_V.element) todo.push(...items(d.fields[2])); }
   assert.ok(part, "the page has a view");
   const t = performance.now();
-  assert.throws(() => withSteps(1e12, () => evaluatorCall(part.fields[0] as never), () => performance.now() > t + 50), OutOfSteps);
+  let asked = 0;
+  assert.throws(() => withSteps(1e12, () => evaluatorCall(part.fields[0] as never), () => (asked++, performance.now() > t + 50)), OutOfSteps);
   assert.ok(performance.now() - t < 2000, `${Math.round(performance.now() - t)} ms`);
+  // Asked as it goes, not first after half a second of search (the direct
+  // search's calls ask it too): past 50 ms on the first ask, it was once.
+  assert.ok(asked > 1, `asked ${asked} times`);
 });
