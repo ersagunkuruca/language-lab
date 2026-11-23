@@ -1,4 +1,4 @@
-# The compiler's choices for main (L280a): picked again whenever their facts change.
+# The compiler's decisions for main (L280a): picked again whenever their facts change.
 0lmbt8micglnnq8rom9dq40f46 schedule: limited's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
 4nbba9h3bbfqa02bof3genj60r schedule: steered's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript
 5k1q649q192fta3rtvmhh1vm4e schedule: swept's first of a search: answers in the fair order, its choices interleaved; among fair order; target JavaScript

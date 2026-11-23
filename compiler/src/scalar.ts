@@ -633,7 +633,7 @@ export { reachedFrom, reachedWithShows };
 // by the node its placement entry is about (a map's function, a fold's
 // item arm, a search, a together, a call halved), for JavaScript's
 // workers and for C's threads apart. Set by the command line before it
-// lowers (cli/main.ts), from `<program>.choices`.
+// lowers (cli/main.ts), from `<program>.decisions`.
 let onMain: { js: ReadonlySet<Id>; c: ReadonlySet<Id> } = { js: new Set(), c: new Set() };
 export function keepOnMainThread(js: Iterable<Id>, c: Iterable<Id>) { onMain = { js: new Set(js), c: new Set(c) }; }
 // And the ones held on worker threads (L280h): a command-line program's

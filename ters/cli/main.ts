@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, oldChoicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -54,7 +54,7 @@ import { append, logFile, readLog as readLineageLog, readLogFile, signingKey } f
 // (I193: Node reading the compiler's sources was a third of a check).
 // A check of a program with its choices beside it lowers it too, for the
 // placements' entries (L280a, L280h).
-const checksChoices = process.argv[2] === "check" && !!process.argv[3] && existsSync(choicesPath(process.argv[3]));
+const checksChoices = process.argv[2] === "check" && !!process.argv[3] && (existsSync(choicesPath(process.argv[3])) || existsSync(oldChoicesPath(process.argv[3])));
 const compiles = checksChoices || !["check", "hosts", "publish", "broken", "fetch", "diff", "merge", "git-diff", "git-setup"].includes(process.argv[2] ?? "");
 const { pageDocument } = compiles ? await import("../src/lang/page.ts") : ({} as typeof import("../src/lang/page.ts"));
 const { CFLAGS, emitC } = compiles ? await import("../../compiler/src/c.ts") : ({} as typeof import("../../compiler/src/c.ts"));
@@ -95,9 +95,9 @@ usage:
                                         as WebAssembly and C are
   ters native <program> [-o out]         compile to a native program through C, with $CC (default cc)
   ters wasi <program> [-o out.wasm]      compile to a WASI command: WebAssembly with GC (wasmtime, Node's WASI)
-  ters check <program>                   type-check, and list the definitions and their types; with <program>.choices
+  ters check <program>                   type-check, and list the definitions and their types; with <program>.decisions
                                         beside it, its entries the compiler would now pick otherwise (stale) or adds (new)
-  ters choices <program> [--main name]   write the compiler's choices for main to <program>.choices (L280a)
+  ters decisions <program> [--main name] write the compiler's decisions for main to <program>.decisions (L280a)
                                         (an entry with "held" before it is kept, and every compile stores
                                         its type so, where that keeps the meaning: L280c)
     [--measure args…]                   main run with args first, its types' jobs counted (L280d); a page
@@ -321,7 +321,7 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // `page`: main gives Html, mounted rather than printed (C199c).
 // The ids its passes make drawn the same way each build (model.ts
 // idsSeeded), so a place C's threads run (threadLines) is about the same
-// node in `ters check`, `ters choices` and `ters native`, and a held
+// node in `ters check`, `ters decisions` and `ters native`, and a held
 // one is found again.
 function nativeLowered(main: Id, wasm = false, page = false, from: Program = p) {
   return idsSeeded(`native ${main} ${wasm} ${page}`, () => nativeLoweredNow(main, wasm, page, from));
@@ -673,7 +673,8 @@ function answeredHere(q: Program): Program {
 // The rows a person held in the program's choices (L280c): every compile
 // stores those types so.
 const choicesFile = choicesPath(path);
-const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choicesFile, "utf8")) : [];
+const readFrom = existsSync(choicesFile) ? choicesFile : existsSync(oldChoicesPath(path)) ? oldChoicesPath(path) : null;
+const writtenChoices = readFrom ? readChoices(readFileSync(readFrom, "utf8")) : [];
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
@@ -681,7 +682,7 @@ const onMainThread = async (h: HeldPlaces) => { const s = await import("../../co
 if (holdsPlaces) await onMainThread(placesHeld);
 const answered = answeredHere(load(path)), measuredHere = (() => { try { return measuredOf(answered, writtenChoices); } catch (e) { fail((e as Error).message); } })();
 const loaded = { ...answered, ...(heldHere.size ? { held: heldHere } : {}), ...(measuredHere.size ? { measured: measuredHere } : {}) };
-const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
+const main = command === "run" || command === "compile" || command === "decisions" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
 // lowering is most of a run, and the same program lowers the same way.
 const runKeyed = command === "run" && main && defined < 0 && !heldHere.size && !holdsPlaces && !staticPage && evalAt < 0 && !hosts && !valueMain(loaded.info, main) ? runKey(loaded.code, loaded.names, loaded.options, main) : "";
@@ -969,7 +970,8 @@ switch (command) {
     if (o >= 0) writeFileSync(rest[o + 1] ?? fail("-o needs a file"), q); else process.stdout.write(q);
     break;
   }
-  case "choices": {
+  // `choices` is its name before 2026-11-23.
+  case "decisions": case "choices": {
     // With --measure (L280d), main run as written with the arguments
     // after it, its types' jobs counted; else the measured entries kept.
     const m = rest.indexOf("--measure");
@@ -1037,7 +1039,7 @@ switch (command) {
     // said (L280c, rule 3), and kept.
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
-      // A page's main as `ters choices` reads it (entry): no C places.
+      // A page's main as `ters decisions` reads it (entry): no C places.
       if (!pageProblem(p.info, start, p.names)) staticPage = true;
       for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...scheduleLines(now, start), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
       if (heldHere.size || holdsPlaces) {

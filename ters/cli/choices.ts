@@ -1,7 +1,7 @@
 // The program's choices, kept beside it (L280a, CHOICES-2026-11-20.md):
 // what the compiler picked for main, one entry per line sorted by the
 // stable id it is about (a type, an implementation, a solve), each with
-// the facts the pick read. `ters choices` writes `<program>.choices`;
+// the facts the pick read. `ters decisions` writes `<program>.decisions`;
 // `ters check` says which entries are stale (the facts or the pick came
 // out otherwise) and which are new. Representations, ways, mode plans
 // placements and schedules for now, on JavaScript's target; the code never selects
@@ -23,7 +23,11 @@ import { planSolve } from "../src/lang/solve.ts";
 import { determinism, solveMode } from "../src/lang/modes.ts";
 import { answerKeys } from "../src/lang/ports.ts";
 
-export const choicesPath = (program: string) => `${program.replace(/[/\\]+$/, "")}.choices`;
+// The program's decisions beside it, `<program>.decisions`, named
+// `<program>.choices` until 2026-11-23 (the Choice effect has the name),
+// which `ters` still reads when that is all there is.
+export const choicesPath = (program: string) => `${program.replace(/[/\\]+$/, "")}.decisions`;
+export const oldChoicesPath = (program: string) => `${program.replace(/[/\\]+$/, "")}.choices`;
 
 // A job as a person reads it: the definition or case it names, `carried`
 // or `head of` before it where the row costs that apart, a case's field
@@ -302,7 +306,7 @@ export function searchLines(given: Program, main: Id, target = "JavaScript"): st
 }
 
 export function choicesText(main: string, lines: readonly string[]): string {
-  return [`# The compiler's choices for ${main} (L280a): picked again whenever their facts change.`, ...lines].join("\n") + "\n";
+  return [`# The compiler's decisions for ${main} (L280a): picked again whenever their facts change.`, ...lines].join("\n") + "\n";
 }
 
 // A held entry (L280c, rule 3): a person wrote `held` before it, and the
@@ -377,7 +381,7 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
       continue;
     }
     if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation, a placement or a way of neighbours can be held yet: ${l}`);
-    if (!m) throw new Error(`a held choice isn't read: ${l}`);
+    if (!m) throw new Error(`a held decision isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
   return out;
@@ -449,7 +453,7 @@ function meaningOf(line: string): string {
 // definitions call its jobs in a run (its constructors and the functions
 // its rows implement), and the largest value of it those calls gave, in
 // items (its cases with parts: a list's cells, a tree's nodes). Written
-// by `ters choices --measure`, kept as written until measured again
+// by `ters decisions --measure`, kept as written until measured again
 // (CHOICES rule 4: measurements are committed).
 export interface Measuring { measure: Measure; lines: (args: readonly string[], said?: string) => string[] }
 export function measuring(given: Program, main: Id, picks: readonly Pick[]): Measuring {
