@@ -64,6 +64,10 @@ export interface Mount {
   ran?: (el: Node_, node: CellNode) => void;
   // The step budget of each update (run.ts, withSteps).
   steps?: number;
+  // And its time, in ms (E319d): the editor's preview runs a page on the
+  // editor's thread, so an update that runs past it stops as one out of
+  // steps does. A page in a tab of its own has none.
+  within?: number;
   // What plays an element's sound (audio-page.ts), when the page can.
   // A sound's listen, and the cell it plays while when the element has a
   // `listening while` too (I336).
@@ -224,7 +228,12 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   const foreign = (d as { [FOREIGN_VIEW]?: Node_ })[FOREIGN_VIEW];
   if (foreign) return foreign;
   const steps = m.steps ?? PAGE_STEPS;
-  cells.around = (update) => withSteps(steps, update);
+  const budget = <T>(f: () => T): T => {
+    if (!m.within) return withSteps(steps, f);
+    const end = performance.now() + m.within;
+    return withSteps(steps, f, () => performance.now() > end);
+  };
+  cells.around = (update) => budget(update);
   const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}, made: () => Node_[] = () => [e]) => {
     let first = true;
     const node: CellNode = cells.watch(() => {
@@ -232,7 +241,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       // runs again when that lands (it read the cell that says so). One
       // that ran out of steps says so; it runs again when a cell it read
       // before stopping changes.
-      try { withSteps(steps, run); } catch (e) {
+      try { budget(run); } catch (e) {
         if (e instanceof OutOfSteps) { stuck(); return; }
         if (!(e instanceof Pending)) throw e;
         return;
@@ -340,7 +349,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
               const was = cells.event;
               cells.event = event;
               try {
-                cells.attempt(() => withSteps(steps, run), (e) => e instanceof Pending && !e.resume);
+                cells.attempt(() => budget(run), (e) => e instanceof Pending && !e.resume);
               } catch (err) {
                 // A wait (C40) can't be asked again from the start (its
                 // timer would start again), so a run that can't go on from

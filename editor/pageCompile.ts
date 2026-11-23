@@ -6,7 +6,7 @@
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
-import { corePageScript, lowerCore } from "../compiler/src/core-js.ts";
+import { corePageScript, lowerCore, stepEverywhere } from "../compiler/src/core-js.ts";
 import { hasSound, savedScripts, type SavedScripts } from "../ters/src/lang/page.ts";
 import { setDisplayNames, setProgramPins } from "./typed.ts";
 import { checkedForRun } from "./coreMain.ts";
@@ -22,7 +22,9 @@ export type CompiledPage = { program: string; core: true; saved: SavedScripts; s
 export function compilePageProgram(code: Code, names: Names, pins: Pins, main: Id, held: [Id, string][] = []): CompiledPage {
   const { ir, names: shown } = lowered(code, names, pins, main, held);
   const saved = savedScripts(ir, shown[main], hasSound(code));
-  return { program: corePageScript(ir, shown[main], "$core", ""), core: true, saved, ...(saved.sound !== undefined ? { sound: saved.sound } : {}) };
+  // The preview's script steps everywhere, so its page's budget bounds it on
+  // the editor's thread (E319d); Open in a tab's (`saved`) doesn't.
+  return { program: stepEverywhere(() => corePageScript(ir, shown[main], "$core", "")), core: true, saved, ...(saved.sound !== undefined ? { sound: saved.sound } : {}) };
 }
 // The page as saved alone, with its audio thread's script if it has sound.
 export function compileSavedPage(code: Code, names: Names, pins: Pins, main: Id, held: [Id, string][] = []): SavedScripts {

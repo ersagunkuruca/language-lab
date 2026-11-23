@@ -64,6 +64,9 @@ typedef struct ters_ui {
   // The rate it plays at, or 0 when it can't (ters_sound_say says why);
   // its audio thread then asks ters_sound_play for samples. May be null.
   double (*sound)(void *ctx, int n, int on, int mic, const char *address, size_t an);
+  // The focus to box v (an input with autofocus, as a browser gives it
+  // one once it is on the page: C298). May be null.
+  void (*focus)(void *ctx, void *v);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -163,6 +166,7 @@ static void *tl_text(void *c, const char *s, size_t n) {
 static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
 static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const char *v, size_t vn) {
   (void)c; tl_n *e = x;
+  if (kn == 9 && !memcmp(k, "autofocus", 9) && tl_ui->focus) tl_ui->focus(tl_ui->ctx, e->view);
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = tl_dup(v, vn); }
   else if (kn == 5 && !memcmp(k, "value", 5)) tl_ui->set_value(tl_ui->ctx, e->view, v, vn);
@@ -1543,7 +1547,9 @@ static void u_listen(void *c, void *x, const char *ev, size_t n, int h) {
   v->ev = realloc(v->ev, sizeof *v->ev * (size_t)(v->ne + 1)); v->eh = realloc(v->eh, sizeof *v->eh * (size_t)(v->ne + 1));
   v->ev[v->ne] = tl_dup(ev, n); v->eh[v->ne++] = h;
 }
-static void u_gone(void *c, void *x) { (void)c; uv *v = x; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
+// The box with the focus (autofocus).
+static uv *u_focused;
+static void u_gone(void *c, void *x) { (void)c; uv *v = x; if (u_focused == v) u_focused = 0; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
 static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv *v = x; free(v->ops); v->ops = malloc(sizeof *ops * (n + 1)); memcpy(v->ops, ops, sizeof *ops * n); v->nops = n; }
 static void u_clip(void *c, void *x, int on) { (void)c; ((uv *)x)->clip = on; }
 static void u_scroll(void *c, void *x, double inside) { (void)c; ((uv *)x)->inside = inside; }
@@ -1569,6 +1575,7 @@ static void u_measure(void *c, const char *s, size_t n, double size, int bold, d
   *w = most; *lines = k;
 }
 static double u_pw, u_ph; static uint32_t u_pbg;
+static void u_focus(void *c, void *v) { (void)c; u_focused = v; }
 static void u_page(void *c, double w, double h, uint32_t bg) { (void)c; u_pw = w; u_ph = h; u_pbg = bg; }
 // Each box and text shown, at its place on the page.
 static void u_print(uv *v, double dx, double dy, int depth) {
@@ -1583,6 +1590,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && (v->side[0] || v->side[1] || v->side[2] || v->side[3])) printf(" sides %g %g %g %g %08X", v->side[0], v->side[1], v->side[2], v->side[3], v->sidec);
   if (v->tag && v->nout) { printf(" outline"); for (int i = 0; i < v->nout; i++) printf(" %g,%g", v->out[2 * i], v->out[2 * i + 1]); }
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
+  if (v == u_focused) printf(" focus");
   putchar('\n');
   // A picture's shapes, one a line: the box round its points on the page
   // (a curve's control points too), and its paint.
@@ -1667,10 +1675,11 @@ static void *u_play(void *x) {
 int main(int argc, char **argv) {
   static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask,
 #ifdef TERS_BLOCK
-    u_sound
+    u_sound,
 #else
-    0
+    0,
 #endif
+    u_focus
   };
   double width = 360, height = 0; int dark = 0, a = 1;
   for (; a < argc; a++) {

@@ -103,6 +103,9 @@ export interface PageOptions {
   // while the evaluator draws (Countdown's solve, 6.6 s). Later updates
   // have no limit, except a frame's:
   drawWithin?: number;
+  // How long each update after it may take, in ms (html.ts `within`,
+  // E319d): past it the part stops as one out of steps does.
+  within?: number;
   // How long a frame may take, in ms: past it the page stops and
   // `tooSlow` is called, so the editor waits for the compiled page
   // instead (flock drew its first frame in time, then took 8 to 10 s a
@@ -203,7 +206,7 @@ export function showPage(o: PageOptions): Preview {
   try {
     sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world, latency) : null;
     const value = sound ? sound.page : run();
-    root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && ((h) => (...a: Parameters<typeof h>) => { if (!stepping) h(...a); })(heardInto(o.log, window)), live: () => !stepping });
+    root = mountHtml(value, { cells, doc: o.doc, call: evaluatorCall, within: o.within, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: o.log && ((h) => (...a: Parameters<typeof h>) => { if (!stepping) h(...a); })(heardInto(o.log, window)), live: () => !stepping });
   } catch (e) {
     if (!late) throw e;
   }

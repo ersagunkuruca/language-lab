@@ -21,6 +21,11 @@ import { B } from "../ters/src/prelude.ts";
 import { CHECK_OP, INT_OPS } from "../ters/src/lang/std.ts";
 import { toFile } from "../ters/src/files.ts";
 import type { Id } from "../ters/src/model.ts";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Session } from "../ters/mcp/session.ts";
+import { loadProgram } from "../ters/src/lang/load.ts";
 
 const { chromium } = playwright;
 const url = process.argv[2] ?? new URL("../index.html", import.meta.url).href;
@@ -32,6 +37,10 @@ const LONG_MS = 200;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
   "values on a wire": "E319e",
+  // Bounded since E319d (each update 50 ms of the page's own steps); what's
+  // left is range's million items, made in one builtin call that takes no
+  // steps, and their collection.
+  "a page's view": "E319i",
 };
 
 // `then`: what the place shows once its work is done, off the thread or not.
@@ -57,6 +66,23 @@ function slowTest(): Place {
     then: async (p) => (await p.locator(".run .status-line", { hasText: "Passed" }).first().waitFor({ timeout: 120000 }).then(() => null, async () => `the test didn't pass: ${(await p.locator(".run").first().innerText()).slice(0, 200)}`)) };
 }
 
+// The dice page with a view that sums a million numbers: the editor's
+// preview runs a page's views and handlers on the editor's thread, where
+// compiled code that ends took no steps from the page's budget (238 and
+// 720 ms tasks before E319d).
+function slowPage(): Place {
+  const dir = mkdtempSync(join(tmpdir(), "probe-page-"));
+  try {
+    cpSync(new URL("../ters/examples/dice", import.meta.url).pathname, dir, { recursive: true });
+    const s = new Session(dir);
+    s.replace("main", "read(said) ++ show(sum(range(1000000)))", "read(said)");
+    s.save();
+    const p = loadProgram(dir);
+    const file = toFile({ title: "Slow page", typed: true, code: p.code, names: p.pres.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, signatures: p.pins }, base(new Lang().code));
+    return { name: "a page's view", file, open: (q) => openDef(q, "main") };
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
 function slowFib(k: Lang): Id {
   const fib = k.def("fib");
   k.define(fib, k.fn(["n"], (n) => k.if(k.equal(n, k.lit(0)), n, k.if(k.equal(n, k.lit(1)), n, k.call(B.add, k.call(fib, k.call(B.sub, n, k.lit(1))), k.call(fib, k.call(B.sub, n, k.lit(2))))))));
@@ -75,7 +101,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest()]) {
+for (const place of [wireValues(), slowTest(), slowPage()]) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };

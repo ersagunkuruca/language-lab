@@ -24,11 +24,11 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319d, E319c, E319g, E319e, E319f, E319h (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319c, E319g, E319e, E319f, E319h, E319i, E319j (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| L Language and library | "Speed up the interpreter on real programs" | L281k, L281l (round 2: flock interpreted) |
+| L Language and library | "Speed up the interpreter on real programs" | no open row (round 2 stopped 2026-11-23, Ersagun: fix the failed compile instead, E320) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -77,11 +77,12 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E319c | A picture's lowering, its Float32 check, its comparison points and its CPU drawing (an OffscreenCanvas) in the worker. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
-| E319d | The compiled page bounded: its handlers and frame callbacks under a time budget as the interpreted page's are (or the page in a worker, its elements sent over; measure both, then choose); Pause's `checkedForRun` in the worker. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
 | E319e | Values on wires: the trace on the thread at about 50 ms, longer ones (given values included) in the worker, the wires filled when it answers; the divergent case given a budget too. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319f | Seeds' `resolvedFor` and `warmCalls` in the worker (calc's resolving 0.6 s on the thread). | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319g | The whole check (on open, and on a miss in the recent checks) in the worker: the program drawn at once, its types when they come. Edits keep the incremental check on the thread, bounded by the edit. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | L | open |
 | E319h | What grows with the open definition (backwards.ts `analyze`, `unitInfer`, algebras, the changes diff, graph layout) measured on the largest examples: past 16 ms each moves to the worker or is kept per version. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
+| E319i | Builtins that make data from a number (`range`, and any like it) take a step per item from a page's budget, so a page's update is bounded by its time even when one call makes a million items: after E319d the probe's "a page's view" (`sum(range(1000000))` in a view) still shows 210 to 230 ms tasks, that call's allocation and its collection. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
+| E319j | Pause on a compiled page: `checkedForRun` (the program checked and its representations chosen for running, bounce about 2 s the first time) in the worker, as the page's compile is, then the interpreted page built from what it sends. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
@@ -114,7 +115,6 @@ New targets and speed rank below every language item (Ersagun,
 | C306 | Matrix products natively at NumPy's speed: blocked for the cache, vectorised, on the pool's threads. NumPy runs mnist's Adam pass over 60,000 digits in 0.69 s, `ters native` in 15.6 s, the ideal JS in 4.6 s. After C302 and C303 (DG8) | GAPS.md round 22 (mnist) | 2026-11-23 |
 | C307 | `contracted` and maps of Float32 on WebGPU in a page, raced against PyTorch on Apple's MPS with compiler/gaps/mnist-python/mnist_torch.py --device mps --float32. L286 is built (the numbers module's Float32, DG1) | GAPS.md round 22 (mnist) | 2026-11-23 |
 | C309 | Float32 (L286) stored as binary32 on every target: C `float`, wasm `f32`, a Float32Array for an array of them. Today it is a one-field record of a Float64, each step rounded with `(double)(float)`, `f32.demote_f64 f64.promote_f32` or `Math.fround`, so it computes right but takes a Float64's room and conversions | L286 | 2026-11-23 |
-| C310 | `file info(path)` (L282) in C and WASI: lstat (Windows' wide stat) and `path_filestat_get`, the File info record made in each runtime and logged as the JavaScript world logs it (`{"kind", "size", "modified"}`), so a native or WASI run replays. The evaluator, compiled JavaScript and a page's stored files have it; scalar.ts lists it as JavaScript's only (HOST_WORLD) | L282 | 2026-11-23 |
 | C311 | `open outside(path)` (L283) in C (posix_spawnp of open or xdg-open, ShellExecuteW on Windows), on Android (an ACTION_VIEW intent through a FileProvider) and in WASI (no way out: it aborts with the reason). The evaluator, compiled JavaScript and pages have it; scalar.ts lists it as JavaScript's only (HOST_WORLD) | L283 | 2026-11-23 |
 | C313 | A page asking for "files" (L284) on a phone and on Windows: Android's folder picker (ACTION_OPEN_DOCUMENT_TREE, the page's files then read through its tree URI), iOS's document picker for a folder (a security-scoped URL), yes in a Windows app as in a Mac one. Today Android and iOS answer no and the page keeps the app's own files | L284 | 2026-11-23 |
 | C293 | `neighbours` on a grid in C and WebAssembly at the hand grid's speed. Step 1 (#PR): compiler/gaps/flock at 5,000 birds (100 ticks) natively 2.9 s one thread and 1.4 s on threads, against 1.4 s and 0.55 s on its own grid before C292 and 0.45 s for the ideal C; wasi 5.1 s (6.0 s before). Left: every Int big-capable (positions, cell keys: 300 million `lab_int_dup` in 30 ticks), and merging each bird's 27 runs conses onto arrays that are often copied | Compiler lane 2026-11-23 (C292) | 2026-11-23 |
@@ -138,8 +138,6 @@ Flock's page, interpreted in node, ticked twice a frame: 7.2 s a frame before L2
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L281k | A name is found by walking its scope, one cell per binder (run.ts `bind`): deep bodies walk far for each read. Each lambda's binders could sit in one frame, found by place | flock interpreted 2026-11-22 | P2 | M | |
-| L281l | A `match` finds its arm in a Map by the tag each time, and binds each part as a cell of its own; garbage collection is about a fifth of flock's frame | flock interpreted 2026-11-22 | P2 | M | |
 
 ### Instrument app ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 
@@ -175,7 +173,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 |---|---|---|---|---|---|
 | C296 | `ters native` on Windows: llvm-mingw clang, the pool's threads over Win32, files through the wide calls with UTF-8 at the edge, Win32 fibers (CreateFiber), a UTF-8 console; the native sweep on a hand-run windows-latest job | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
 | C297 | Windows app: `ters build-native-app --windows`, a screen in C over Win32 (Direct2D boxes and pictures, DirectWrite texts, EDIT inputs, frames at the display's rate, dark mode), an `.exe` from clang alone, a hand-run "Windows app" workflow; sound by WASAPI as its own part. Example: dice, then folders | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
-| C298 | A desktop's input in the C page and both screens: the window's height, `:hover` and pointerenter/leave, the wheel scrolling the box under the pointer, keys beyond Enter with Tab focus, dblclick and contextmenu | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
+| C312 | Keys with Ctrl, Cmd, Shift or Alt: the page's event carries which are held (html.ts's handler, the C page's ters_page_event, each screen), so a page can tell Ctrl+F from F; found by C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 | C299 | `folders`, an original file browser page: folders pane, files with size and time sorted by column, typing filters, arrows and Enter, a text file's first lines beside the list, open outside. In the editor on a sample folder, then as a macOS and a Windows app. Needs L282 to L284, C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 | C300 | Long lists in a C page: folders at 10,000 rows measured first; past 16 ms a key, rerun only the views that read a changed cell and lay out only what moved (C199b reruns every view, C199d lays out the whole page) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 

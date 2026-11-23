@@ -30,8 +30,12 @@ const LOG_WINDOW = { seconds: 10, keep: 30 };
 // A scenario that is about the interpreted page itself (page-handover.test)
 // sets `tersDrawWithin` on the window for a longer wait: on a slow machine
 // dice takes longer than that to draw the first time.
-const DRAW_WITHIN = 500;
+const DRAW_WITHIN = 100;
 const drawWithin = () => (globalThis as { tersDrawWithin?: number }).tersDrawWithin ?? DRAW_WITHIN;
+// How long one update of the page may take on the editor's thread, in ms
+// (E319d, html.ts `within`), compiled or interpreted: past it, the part
+// stops as one out of steps does. Open in a tab has no such limit.
+const UPDATE_MS = 50;
 
 export interface PageHost {
   doc(): Doc;
@@ -244,7 +248,7 @@ export function pagePanels(host: PageHost) {
   // runs it (`run`, I255).
   function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>, run?: RunCode, drawWithin?: number): Preview {
     return showPage({
-      drawWithin,
+      drawWithin, within: UPDATE_MS,
       // A frame as long as a first drawing may take stops it too, and the
       // compiled page, under way, is waited for (frameSlow).
       ...(drawWithin !== undefined ? { frameWithin: drawWithin, tooSlow: frameSlow } : {}),
@@ -329,10 +333,18 @@ export function pagePanels(host: PageHost) {
     // A compile here under way swaps in when it ends (compileHere).
     if (page.started && page.for === prog() && inFlight?.code !== prog()) compilePage(page.started.main, true);
   }
-  // It didn't compile: the page starts interpreted, handed what it can.
-  function notDeferred(): boolean {
+  // It didn't compile: the last version's compiled page goes on, as the
+  // interpreted page would run it many times slower (E320); the next edit
+  // that compiles takes over from it. One with no compiled page before it
+  // starts interpreted, handed what it can.
+  function notDeferred(why = ""): boolean {
     if (!page.deferred || !page.started) return false;
     page.deferred = false;
+    if (page.now && compiledNow.has(page.now)) {
+      page.status.textContent = "Last version · couldn't compile";
+      page.status.title = why ? `This edit couldn't be compiled: ${why}` : "This edit couldn't be compiled";
+      return true;
+    }
     const { info, main } = page.started;
     page.now?.stop();
     startPage(info, main, page.handFrom);
@@ -531,7 +543,7 @@ export function pagePanels(host: PageHost) {
       settle();
       if (page.for !== code) return;
       if ("program" in m) swapCompiled(code, m);
-      else if (notDeferred()) return;
+      else if (notDeferred(m.error)) return;
       else if (page.now) page.status.title = "", page.status.textContent = "Interpreted · couldn't compile", page.status.title = m.error;
       else interpretAnyway(`Interpreted, slowly: the page couldn't be compiled (${m.error}).`);
     };
@@ -563,7 +575,7 @@ export function pagePanels(host: PageHost) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
+      const o = { doc: page.maker, store: localStorage, within: UPDATE_MS, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
       const runtime = pageRuntime(corePageRuntimes(), made.program);
       // A page with sound: its audio thread's script after the worklet's
       // runtime (page.ts coreWorkletFile), its recordings under apps/ (E285).
@@ -580,7 +592,7 @@ export function pagePanels(host: PageHost) {
     } catch (e) {
       m?.stop();
       compiledPages.set(code, null);
-      if (notDeferred()) return;
+      if (notDeferred(e instanceof Error ? e.message : String(e))) return;
       if (!page.now) return interpretAnyway(`Interpreted, slowly: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`);
       sayStopped("Interpreted: the compiled page stopped", e);
       return;

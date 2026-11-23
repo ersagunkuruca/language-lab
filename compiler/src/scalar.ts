@@ -1965,6 +1965,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // A file's bytes, read and written, in C and WebAssembly (C291):
         // the world's, as JavaScript's HOST_WORLD; failing as reading a
         // file does. Their inputs' types, for WebAssembly's imports.
+        // A file's info (C310), in C and WebAssembly too: a File info record.
+        if (opts.handlers && target === IO.fileInfo) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: "fileInfo", aborts: true, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
+        }
         if (opts.handlers && (target === IO.readBytes || target === IO.writeBytes)) {
           const t = stype(zonk(id));
           if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
