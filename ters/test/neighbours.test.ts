@@ -57,13 +57,13 @@ test("neighbours on a line and in the plane, within reach counted with ≤, eval
   // The compiled program finds them on a grid in its runtime.
   assert.match(emitCoreJs(lowerCore(p.code, p.info, p.names, [at("many")])).js, /R\.rt\("neighbours\.grid"\)/);
   // Held (L280g, the choices' way entry): a grid of cells of another
-  // size, narrower than reach too, or every pair; the same lists.
+  // size, narrower than reach too, a k-d tree, or every pair; the same lists.
   const call = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as { target?: Id }).target === lib("neighbours") && subtree(p.code, at("many")).includes(n.id))!;
-  for (const way of [1, 4, "every pair"] as const) {
+  for (const way of [1, 4, "every pair", "k-d tree"] as const) {
     holdNeighbours([[call.id, way]]);
     try {
       const js = emitCoreJs(lowerCore(p.code, p.info, p.names, [at("many")])).js;
-      if (way === "every pair") assert.doesNotMatch(js, /neighbours\.grid/); else assert.match(js, new RegExp(`, ${way}\\)`));
+      if (way === "every pair") assert.doesNotMatch(js, /neighbours\.grid/); else assert.match(js, way === "k-d tree" ? /, "k-d tree"\)/ : new RegExp(`, ${way}\\)`));
       assert.equal((compiledDefs(p.code, p.info, p.names, ["many"]).many as () => Value)(), evaluated[3]);
     } finally { holdNeighbours([]); }
   }

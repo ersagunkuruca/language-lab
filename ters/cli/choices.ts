@@ -219,19 +219,20 @@ function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target
 
 // Each call of neighbours main reaches (L280g, NEARBY-2026-11-22.md), as
 // compiled JavaScript finds them: on a grid of cells reach on a side,
-// or among every pair, as held (`grid of 5 cells`, L280e's parameter).
-const NEAR = /^(\S+) way: .*'s neighbours: (every pair|grid of (reach|[^ ;]+) cells); among every pair, grid; target (.+)$/;
+// among every pair, or by a k-d tree, as held (`grid of 5 cells`, L280e's
+// parameter).
+const NEAR = /^(\S+) way: .*'s neighbours: (every pair|grid of (reach|[^ ;]+) cells|k-d tree); among every pair, grid, k-d tree; target (.+)$/;
 export function nearLines(ir: Lowered & { nearSites?: Id[] }, names: Names): string[] {
   if (!ir.nearSites?.length) return [];
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
-  return [...new Set(ir.nearSites.map((at) => `${at} way: ${nameOf(defOf(at))}'s neighbours: grid of reach cells; among every pair, grid; target JavaScript`))];
+  return [...new Set(ir.nearSites.map((at) => `${at} way: ${nameOf(defOf(at))}'s neighbours: grid of reach cells; among every pair, grid, k-d tree; target JavaScript`))];
 }
 // The ways held, by the call: every pair, or a grid of cells this wide.
-const nearHeld = (l: string): [Id, "every pair" | number] | null => {
+const nearHeld = (l: string): [Id, "every pair" | "k-d tree" | number] | null => {
   const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null;
-  return m && m[3] !== "reach" ? [m[1], m[2] === "every pair" ? "every pair" : Number(m[3])] : null;
+  return m && m[3] !== "reach" ? [m[1], m[2] === "every pair" || m[2] === "k-d tree" ? m[2] : Number(m[3])] : null;
 };
 
 // C's (`ters native`): each call its threads run (c.ts `par:`, scalar.ts
@@ -320,7 +321,7 @@ const CHUNKED = "; in chunks of ";
 // page's, by the node; C's runs a thread, or its chunks' items.
 // And the workers or threads a program starts, by the target (`pool`).
 // And how each call of neighbours is held to find them (`near`, L280g).
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | number][] }
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][] }
 export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
   const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
