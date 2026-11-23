@@ -649,10 +649,10 @@ export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterab
 let pool: ReadonlyMap<string, number> = new Map();
 export const poolHeld = (target: "JavaScript" | "JavaScript page" | "C"): number | undefined => pool.get(target);
 // The way each call of neighbours is held to (L280g, the choices' `way`
-// entries), by its node: every pair compared, or a grid of cells this
-// many metres (the reach's units) on a side.
-let nearHeld: ReadonlyMap<Id, "every pair" | number> = new Map();
-export const holdNeighbours = (ways: Iterable<[Id, "every pair" | number]>) => { nearHeld = new Map(ways); };
+// entries), by its node: every pair compared, a grid of cells this
+// many metres (the reach's units) on a side, or a k-d tree.
+let nearHeld: ReadonlyMap<Id, "every pair" | "k-d tree" | number> = new Map();
+export const holdNeighbours = (ways: Iterable<[Id, "every pair" | "k-d tree" | number]>) => { nearHeld = new Map(ways); };
 const runsOf = (at: Id): SExpr[] => { const n = onWorkers.runs.get(at); return n ? [{ k: "num", v: n }] : []; };
 const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = runsOf(at); return on || n.length ? [{ k: "text", v: on ?? "" }, ...n] : []; };
 // map.worth's say, true where its site is held anywhere off the main thread.
@@ -1750,7 +1750,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
             let plain: SExpr;
             try { plain = expr(id, env, f, false); } finally { given.delete(n.id); }
             const arrays: SExpr[] = [{ k: "bool", v: isArray(t) }, { k: "bool", v: isArray(t) && isArray(t.item) }];
-            const grid: SExpr = { k: "rt", fn: "neighbours.grid", args: [local(xs), place, local(r), { k: "rt", fn: "fuel.get", args: [] }, ...arrays, ...(typeof way === "number" ? [{ k: "num" as const, v: way }] : [])] };
+            const grid: SExpr = { k: "rt", fn: "neighbours.grid", args: [local(xs), place, local(r), { k: "rt", fn: "fuel.get", args: [] }, ...arrays, ...(typeof way === "number" ? [{ k: "num" as const, v: way }] : way === "k-d tree" ? [{ k: "text" as const, v: way }] : [])] };
             return { k: "let", i: xs, value: expr(n.args[0], env, f, false), body: { k: "let", i: r, value: expr(n.args[2], env, f, false), body: { k: "attempt", body: grid, res, ok: local(res), otherwise: plain, t } } };
           }
         }

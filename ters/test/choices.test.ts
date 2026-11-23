@@ -422,16 +422,17 @@ test("flock-page's kept choices are what ters check picks now", () => {
 });
 
 // L280g: each call of neighbours main reaches is a way entry, found on a
-// grid of cells reach on a side; held, on every pair or a grid of cells
+// grid of cells reach on a side; held, on every pair, a k-d tree or a grid of cells
 // some other size, and said when the compiler would pick otherwise.
-test("a call of neighbours is a way entry, held to every pair or to a grid's cell size", () => {
+test("a call of neighbours is a way entry, held to every pair, a k-d tree or a grid's cell size", () => {
   const kept = readChoices(readFileSync(join(root, "flock-page.choices"), "utf8"));
   const way = kept.find((l) => / way: ticked's neighbours: /.test(l))!;
-  assert.match(way, /^\S+ way: ticked's neighbours: grid of reach cells; among every pair, grid; target JavaScript$/);
+  assert.match(way, /^\S+ way: ticked's neighbours: grid of reach cells; among every pair, grid, k-d tree; target JavaScript$/);
   const id = way.split(" ")[0];
   const held = (pick: string) => `held ${way.replace("grid of reach cells", pick)}`;
   assert.deepEqual(heldPlaces([held("grid of 5 cells")]).near, [[id, 5]]);
   assert.deepEqual(heldPlaces([held("every pair")]).near, [[id, "every pair"]]);
+  assert.deepEqual(heldPlaces([held("k-d tree")]).near, [[id, "k-d tree"]]);
   assert.deepEqual(heldPlaces([held("grid of reach cells")]).near, []);
   assert.throws(() => heldOf([held("grid of -2 cells")]), /positive number/);
   assert.deepEqual(heldWarnings([held("every pair")], [way]), [`held   ${id}: neighbours by every pair, where the compiler would find them on a grid of reach cells`]);
