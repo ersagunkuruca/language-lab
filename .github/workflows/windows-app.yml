@@ -89,6 +89,9 @@ jobs:
           base=$(objdump -p "$exe" | awk '/^ImageBase/ {print $2}')
           for rva in $(sed -n 's/.*rva \([0-9a-f]*\).*/\1/p' err.txt); do addr2line -f -i -p -e "$exe" $(printf '0x%x' $((0x$base + 0x$rva))); done
           powershell -NoProfile -Command "Compress-Archive -Path '$exe' -DestinationPath app.zip" && cp app.zip "$GITHUB_WORKSPACE/" || true
+          # The screen in the log too, for a reader who can't fetch the
+          # artifact (a cloud session's network): base64 between marks.
+          if [ -f "$GITHUB_WORKSPACE/screen.png" ]; then echo "---- screen.png base64"; base64 -w 0 "$GITHUB_WORKSPACE/screen.png" | fold -w 8000; echo; echo "---- end of screen.png"; fi
           grep -q -- "---- started" out.txt 2>/dev/null || { echo "the page never showed"; exit 1; }
           [ $code = 0 ] || { echo "exit $code"; exit 1; }
       - uses: actions/upload-artifact@v4

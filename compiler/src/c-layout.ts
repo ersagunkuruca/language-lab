@@ -69,15 +69,25 @@ typedef struct ters_ui {
   void (*focus)(void *ctx, void *v);
 } ters_ui;
 
-enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
-typedef struct { int kind; double a, b; } tl_track; // 0 px a, 1 fr a, 2 auto, 3 minmax(a px, b px)
+// A table's parts (C319): the table, a group of rows (thead, tbody,
+// tfoot), a row and a cell.
+enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE, TL_TABLE, TL_ROWS, TL_ROW, TL_CELL };
+// A grid's column: 0 a px, 1 a fr at least b px (minmax(b, a fr)), 2 auto,
+// 3 minmax(a px, b px).
+typedef struct { int kind; double a, b; } tl_track;
 typedef struct {
   int display, row, wrap, pos, align, bold, ncols, border_box, set_w, set_h, set_left, set_top, set_maxw, auto_ml, auto_mr;
   double gap_r, gap_c, pad[4], mar[4], radius, bw, w, h, maxw, left, top, size, line, aspect, wpct;
   uint32_t bg, color, bc;
   // A picture's paint, which its shapes inherit.
   uint32_t fill, stroke; double sw, fop, sop, dash[2]; int join, pe; // pe: pointer-events, 0 visiblePainted, 1 stroke, 2 fill, 3 all, 4 none
-  tl_track cols[8];
+  tl_track cols[12];
+  // repeat(auto-fit or auto-fill, track): as many of rep as fit (C319),
+  // 1 auto-fit (empty ones dropped), 2 auto-fill.
+  int rep_auto; tl_track rep;
+  // white-space: nowrap (inherited); a table's border-spacing, 0 when its
+  // borders collapse.
+  int nowrap; double bspace;
   // An animation: its keyframes' name, duration and delay in ms.
   char anim[32]; double adur, adelay;
   int clip;
@@ -142,7 +152,7 @@ typedef struct tl_n {
   // animation (an_kids, below it); relaid when this layout placed its
   // children again (laid out at another width, or display: contents
   // opened up by the box round it).
-  int lay, lay_sub, l_done, c_done, r_done, an_sub, an_kids, s_me, relaid;
+  int lay, lay_sub, l_done, c_done, r_done, an_sub, an_kids, s_me, relaid, l_basis;
   double l_avail, l_w, l_h, l_inside, cm[2], ki[2];
 } tl_n;
 #define TL_DIRTY 1
@@ -158,6 +168,9 @@ typedef struct tl_n {
 // Whether a text or the boxes' children changed since the last layout, so
 // the style sheets are gathered again (C300).
 static int tl_texts_changed = 1;
+// The sheet read again at the next layout (a window gone dark, or as wide
+// as a media query's width says otherwise), and whether it has any.
+static int tl_reread, tl_media_w;
 static void tl_dirty(tl_n *e, int how) { e->dirt |= how; for (tl_n *a = e->parent; a && !a->below; a = a->parent) a->below = 1; }
 
 static ters_ui *tl_ui;
@@ -278,8 +291,32 @@ static uint32_t tl_colour(const char *p, const char *e) {
   if (n >= 5 && !memcmp(p, "black", 5)) return 0xFF000000u;
   if (n >= 11 && !memcmp(p, "transparent", 11)) return 0;
   if (n >= 4 && !memcmp(p, "none", 4)) return 0;
-  // color-mix(in srgb, a N%, b): a.
-  if (n >= 10 && !memcmp(p, "color-mix(", 10)) { const char *q = memchr(p, ',', n); if (q) return tl_colour(q + 1, e); }
+  // color-mix(in srgb, a N%, b): N% of a and the rest of b, channel by
+  // channel, their alphas too (C319); b's share when a has none given.
+  if (n >= 10 && !memcmp(p, "color-mix(", 10)) {
+    const char *q = memchr(p, ',', n); if (!q) return 1;
+    const char *parts[2] = { q + 1, 0 }, *ends[2] = { 0, 0 }; int depth = 0;
+    for (const char *z = q + 1; z < e; z++) {
+      if (*z == '(') depth++;
+      else if (*z == ')') { if (!depth) { if (parts[1]) ends[1] = z; else ends[0] = z; break; } depth--; }
+      else if (*z == ',' && !depth && !parts[1]) { ends[0] = z; parts[1] = z + 1; }
+    }
+    if (!parts[1] || !ends[1]) return 1;
+    double pc[2] = { -1, -1 };
+    for (int k = 0; k < 2; k++) {
+      // Its percentage: a number with % after the colour.
+      for (const char *z = ends[k] - 1; z > parts[k]; z--) if (*z == '%') { const char *b = z; while (b > parts[k] && ((b[-1] >= '0' && b[-1] <= '9') || b[-1] == '.')) b--; if (b > parts[k] && b[-1] == ' ') { pc[k] = strtod(b, 0); ends[k] = b; } break; }
+    }
+    uint32_t a = tl_colour(parts[0], ends[0]), b = tl_colour(parts[1], ends[1]);
+    if (a == 1 || b == 1) return a == 1 ? b : a;
+    double t = pc[0] >= 0 ? pc[0] / 100 : pc[1] >= 0 ? 1 - pc[1] / 100 : 0.5;
+    // Premultiplied, as CSS mixes.
+    double aa = (a >> 24) / 255.0 * t, ba = (b >> 24) / 255.0 * (1 - t), al = aa + ba;
+    if (al <= 0) return 0;
+    uint32_t out = (uint32_t)(al * 255 + 0.5) << 24;
+    for (int sh = 0; sh < 24; sh += 8) out |= (uint32_t)((((a >> sh) & 255) * aa + ((b >> sh) & 255) * ba) / al + 0.5) << sh;
+    return out;
+  }
   return 1;
 }
 // A length at p, in px; em against size. Sets *ok to 0 when it isn't one.
@@ -410,11 +447,21 @@ static void tl_parse(const char *p, const char *e, int *order) {
       // @media (prefers-color-scheme: dark) { … }: its rules when dark.
       const char *o = memchr(p, '{', (size_t)(e - p));
       if (!o) return;
-      int dark = 0, light = 0;
-      for (const char *q = p; q + 4 < o; q++) { if (!memcmp(q, "dark", 4)) dark = 1; if (!memcmp(q, "light", 5)) light = 1; }
+      // And (max-width: N) or (min-width: N), against the window (C319),
+      // which then reads the sheet again when its width changes.
+      int dark = 0, light = 0, holds = 1, scheme = 0;
+      for (const char *q = p; q + 4 < o; q++) { if (!memcmp(q, "dark", 4)) dark = 1; if (q + 5 <= o && !memcmp(q, "light", 5)) light = 1; }
+      scheme = dark || light;
+      for (const char *q = p; q + 10 < o; q++) {
+        int mx = !memcmp(q, "max-width:", 10), mn = q + 10 < o && !memcmp(q, "min-width:", 10);
+        if (!mx && !mn) continue;
+        int ok = 1; double x = tl_len(q + 10, o, 16, &ok, 0);
+        tl_media_w = 1;
+        if (ok == 1 && (mx ? tl_width > x : tl_width < x)) holds = 0;
+      }
       int depth = 1; const char *c = o + 1;
       while (c < e && depth) { if (*c == '{') depth++; else if (*c == '}') depth--; c++; }
-      if ((dark && tl_dark) || (light && !tl_dark)) tl_parse(o + 1, c - 1, order);
+      if (holds && (!scheme || (dark && tl_dark) || (light && !tl_dark))) tl_parse(o + 1, c - 1, order);
       p = c;
       continue;
     }
@@ -521,6 +568,31 @@ static char *tl_resolve(const char *v, const char *e) {
   return out;
 }
 
+// A grid's track at *p, *p moved past it: a length, Nfr, auto,
+// min-content or max-content (as auto), or minmax(min, max) (C319).
+static tl_track tl_track_at(const char **pp, const char *e, double size) {
+  const char *p = tl_ws(*pp, e);
+  tl_track t = { 2, 0, 0 };
+  if (e - p >= 7 && !memcmp(p, "minmax(", 7)) {
+    const char *a; int o2 = 1; double lo = tl_len(p + 7, e, size, &o2, &a);
+    if (!o2) lo = 0;
+    a = tl_ws(a, e);
+    while (a < e && *a != ',' && *a != ')') a++;
+    if (a < e && *a == ',') a++;
+    a = tl_ws(a, e);
+    char *z; double x = strtod(a, &z);
+    if (z > a && z < e && *z == 'f') t.kind = 1, t.a = x, t.b = lo;
+    else { int o3 = 1; double hi = tl_len(a, e, size, &o3, 0); t.kind = o3 == 1 ? 3 : 2; t.a = lo; t.b = hi; }
+    p = memchr(p, ')', (size_t)(e - p)); p = p ? p + 1 : e;
+  } else {
+    char *z; double x = strtod(p, &z);
+    if (z > p && z < e && *z == 'f') { t.kind = 1; t.a = x; p = z + 2; }
+    else if (z > p) { int o2 = 1; const char *a; t.a = tl_len(p, e, size, &o2, &a); t.kind = o2 == 1 ? 0 : 2; p = a > p ? a : p + 1; }
+    while (p < e && *p != ' ' && *p != ')') p++;
+  }
+  *pp = p;
+  return t;
+}
 // One declaration into c.
 static void tl_box4(double *to, const char *v, const char *e, double size, int *auto_l, int *auto_r) {
   double x[4]; int n = 0, au[4] = { 0 };
@@ -540,7 +612,7 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
 #define TL_IS(s) (kn == sizeof s - 1 && !memcmp(k, s, kn))
 #define TL_V(s) ((size_t)(e - v) >= sizeof s - 1 && !memcmp(v, s, sizeof s - 1))
   int ok = 1;
-  if (TL_IS("display")) c->display = TL_V("none") ? TL_NONE : TL_V("flex") || TL_V("inline-flex") ? TL_FLEX : TL_V("grid") ? TL_GRID : TL_V("contents") ? TL_CONTENTS : TL_V("inline") ? TL_INLINE : TL_BLOCK, c->row = c->display == TL_FLEX ? 1 : c->row;
+  if (TL_IS("display")) c->display = TL_V("none") ? TL_NONE : TL_V("flex") || TL_V("inline-flex") ? TL_FLEX : TL_V("grid") ? TL_GRID : TL_V("contents") ? TL_CONTENTS : TL_V("table-row-group") || TL_V("table-header-group") || TL_V("table-footer-group") ? TL_ROWS : TL_V("table-row") ? TL_ROW : TL_V("table-cell") ? TL_CELL : TL_V("table") ? TL_TABLE : TL_V("inline") ? TL_INLINE : TL_BLOCK, c->row = c->display == TL_FLEX ? 1 : c->row;
   else if (TL_IS("flex-direction")) c->row = !TL_V("column");
   else if (TL_IS("flex-wrap")) c->wrap = TL_V("wrap");
   else if (TL_IS("align-items")) c->items = TL_V("center") ? 2 : TL_V("flex-start") || TL_V("start") ? 1 : TL_V("flex-end") || TL_V("end") ? 3 : 0;
@@ -565,8 +637,12 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
   else if (TL_IS("margin")) tl_box4(c->mar, v, e, c->size, &c->auto_ml, &c->auto_mr);
   else if (TL_IS("padding-top")) c->pad[0] = tl_len(v, e, c->size, &ok, 0);
   else if (TL_IS("padding-bottom")) c->pad[2] = tl_len(v, e, c->size, &ok, 0);
+  else if (TL_IS("padding-left")) c->pad[3] = tl_len(v, e, c->size, &ok, 0);
+  else if (TL_IS("padding-right")) c->pad[1] = tl_len(v, e, c->size, &ok, 0);
   else if (TL_IS("margin-top")) c->mar[0] = tl_len(v, e, c->size, &ok, 0);
   else if (TL_IS("margin-bottom")) c->mar[2] = tl_len(v, e, c->size, &ok, 0);
+  else if (TL_IS("margin-left")) { c->auto_ml = TL_V("auto"); c->mar[3] = c->auto_ml ? 0 : tl_len(v, e, c->size, &ok, 0); }
+  else if (TL_IS("margin-right")) { c->auto_mr = TL_V("auto"); c->mar[1] = c->auto_mr ? 0 : tl_len(v, e, c->size, &ok, 0); }
   else if (TL_IS("background") || TL_IS("background-color")) { uint32_t x = tl_colour(v, e); if (x != 1) c->bg = x; }
   else if (TL_IS("color")) { uint32_t x = tl_colour(v, e); if (x != 1) c->color = x; }
   else if (TL_IS("border-radius")) c->radius = tl_len(v, e, c->size, &ok, 0);
@@ -670,24 +746,30 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
     else { const char *a; double x = tl_len(v, e, c->size, &ok, &a); a = tl_ws(a, e); if (a < e && *a == ',') a++; int o2 = 1; double y = tl_len(a, e, c->size, &o2, 0); if (ok == 1) { c->dash[0] = x; c->dash[1] = o2 == 1 ? y : x; } }
   }
   else if (TL_IS("grid-template-columns")) {
-    c->ncols = 0;
-    for (const char *p = v; (p = tl_ws(p, e)) < e && c->ncols < 8;) {
-      tl_track t = { 2, 0, 0 };
-      if (e - p >= 7 && !memcmp(p, "minmax(", 7)) {
-        const char *a; int o2 = 1; t.a = tl_len(p + 7, e, c->size, &o2, &a);
-        a = tl_ws(a, e); if (a < e && *a == ',') a++;
-        int o3 = 1; t.b = tl_len(a, e, c->size, &o3, &a);
-        t.kind = 3;
-        p = memchr(p, ')', (size_t)(e - p)); p = p ? p + 1 : e;
-      } else if (e - p >= 4 && !memcmp(p, "auto", 4)) { p += 4; }
-      else {
-        char *z; double x = strtod(p, &z);
-        if (z < e && *z == 'f') { t.kind = 1; t.a = x; p = z + 2; }
-        else { int o2 = 1; const char *a; t.a = tl_len(p, e, c->size, &o2, &a); t.kind = 0; p = a > p ? a : p + 1; while (p < e && *p != ' ') p++; }
+    // Tracks, and repeat(N or auto-fit or auto-fill, tracks) (C319).
+    c->ncols = 0; c->rep_auto = 0;
+    for (const char *p = v; (p = tl_ws(p, e)) < e && c->ncols < 12;) {
+      if (e - p >= 7 && !memcmp(p, "repeat(", 7)) {
+        const char *q = tl_ws(p + 7, e), *comma = memchr(q, ',', (size_t)(e - q));
+        if (!comma) break;
+        int times = 0, au = !memcmp(q, "auto-fit", 8) ? 1 : !memcmp(q, "auto-fill", 9) ? 2 : 0;
+        if (!au) times = atoi(q);
+        // Its tracks end at the bracket closing repeat's.
+        const char *r = comma + 1, *z = r; int depth = 1;
+        while (z < e && depth) { if (*z == '(') depth++; else if (*z == ')') depth--; if (depth) z++; }
+        tl_track ts[12]; int nt = 0;
+        for (const char *w = r; (w = tl_ws(w, z)) < z && nt < 12;) ts[nt++] = tl_track_at(&w, z, c->size);
+        if (au && nt) { c->rep_auto = au; c->rep = ts[0]; c->ncols = 0; }
+        else for (int k = 0; k < times; k++) for (int i = 0; i < nt && c->ncols < 12; i++) c->cols[c->ncols++] = ts[i];
+        p = z < e ? z + 1 : e;
+        continue;
       }
-      c->cols[c->ncols++] = t;
+      c->cols[c->ncols++] = tl_track_at(&p, e, c->size);
     }
   }
+  else if (TL_IS("white-space")) c->nowrap = TL_V("nowrap") || (TL_V("pre") && !TL_V("pre-wrap") && !TL_V("pre-line"));
+  else if (TL_IS("border-collapse")) c->bspace = TL_V("collapse") ? 0 : c->bspace;
+  else if (TL_IS("border-spacing")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->bspace = x; }
 #undef TL_IS
 #undef TL_V
 }
@@ -719,6 +801,13 @@ static void tl_defaults(tl_css *c, const char *t, const tl_css *up) {
   c->bold = up ? up->bold : 0; c->align = up ? up->align : 0; c->line = up ? up->line : 1.2;
   c->up_size = c->size; c->up_line = c->line; c->up_bold = c->bold;
   c->display = tl_inline(t) ? TL_INLINE : TL_BLOCK;
+  c->nowrap = up ? up->nowrap : 0;
+  // A table's parts (C319): th bold and centred, cells 1px in, 2px between.
+  if (!strcmp(t, "table")) c->display = TL_TABLE, c->bspace = 2;
+  if (!strcmp(t, "thead") || !strcmp(t, "tbody") || !strcmp(t, "tfoot")) c->display = TL_ROWS;
+  if (!strcmp(t, "tr")) c->display = TL_ROW;
+  if (!strcmp(t, "td") || !strcmp(t, "th")) { c->display = TL_CELL; c->pad[0] = c->pad[1] = c->pad[2] = c->pad[3] = 1; }
+  if (!strcmp(t, "th")) c->bold = 1, c->align = 1;
   // SVG's paint is inherited: black fill, no stroke, 1 wide.
   if (up) { c->fill = up->fill; c->stroke = up->stroke; c->sw = up->sw; c->fop = up->fop; c->sop = up->sop; c->dash[0] = up->dash[0]; c->dash[1] = up->dash[1]; c->join = up->join; c->pe = up->pe; }
   else { c->fill = 0xFF000000u; c->sw = 1; c->fop = c->sop = 1; }
@@ -805,6 +894,8 @@ static void tl_style_of(tl_n *e, const tl_css *up, int root) {
 // font or width changed (a line that fit fits in any wider width).
 static void tl_measure(tl_n *k, double width, double *w, int *lines) {
   double size = k->parent ? k->parent->c.size : 16; int bold = k->parent ? k->parent->c.bold : 0;
+  // white-space: nowrap, one line however wide (C319).
+  if (k->parent && k->parent->c.nowrap) width = 1e9;
   if (k->measured && k->m_size == size && k->m_bold == bold && (k->m_width == width || (k->m_lines == 1 && k->m_w <= width && k->m_w <= k->m_width))) { *w = k->m_w; *lines = k->m_lines; return; }
   tl_ui->measure(tl_ui->ctx, k->s, strlen(k->s), size, bold, width, w, lines);
   k->measured = 1; k->m_size = size; k->m_bold = bold; k->m_width = width; k->m_w = *w; k->m_lines = *lines;
@@ -843,9 +934,12 @@ static double tl_outer_w(tl_n *k) { return k->w + (k->tag ? k->c.mar[1] + k->c.m
 static double tl_outer_h(tl_n *k) { return k->h + (k->tag ? k->c.mar[0] + k->c.mar[2] : 0); }
 // The width k takes when nothing presses it: laid out in avail, then as
 // narrow as its content.
+static int tl_basis_wins;
+static double tl_table_fit(tl_n *t);
 static double tl_fit(tl_n *k, double avail) {
   if (!k->tag) { double w; int lines; tl_measure(k, avail, &w, &lines); return w; }
   if (k->c.set_w) return tl_border_w(&k->c) + k->c.mar[1] + k->c.mar[3];
+  if (k->c.display == TL_TABLE) { double w = tl_table_fit(k) + k->c.mar[1] + k->c.mar[3]; return w < avail ? w : avail; }
   // A picture with no width set is 300 wide, as a browser's.
   if (tl_pic(k)) { double w = 300 + k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3]; return w < avail ? w : avail; }
   tl_n *it[256]; int n = tl_items(k, it, 256, 0);
@@ -863,6 +957,64 @@ static double tl_fit(tl_n *k, double avail) {
   if (line > inner) inner = line;
   double w = inner + edge;
   return w < avail ? w : avail;
+}
+// The narrowest k can be (CSS's min-content width): a text as wide as its
+// longest word, a box as its widest child (C319).
+static double tl_min(tl_n *k) {
+  if (!k->tag) { double w; int lines; tl_measure(k, 0.01, &w, &lines); return w; }
+  if (k->c.display == TL_NONE || k->c.pos == 2) return 0;
+  double edge = k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3];
+  if (k->c.set_w) return tl_border_w(&k->c) + k->c.mar[1] + k->c.mar[3];
+  if (tl_pic(k)) return edge;
+  if (k->c.nowrap) return tl_fit(k, 1e9);
+  tl_n *it[256]; int n = tl_items(k, it, 256, 0);
+  double most = 0, row = 0;
+  int flexrow = k->c.display == TL_FLEX && k->c.row && !k->c.wrap;
+  for (int j = 0; j < n; j++) { double m = tl_min(it[j]); if (m > most) most = m; row += m; }
+  return (flexrow ? row : most) + edge;
+}
+// A table's rows (C319): those in its row groups and its own, in order.
+static int tl_rows(tl_n *t, tl_n **rows, int cap) {
+  tl_n *it[256]; int n = tl_items(t, it, 256, 0), m = 0;
+  for (int j = 0; j < n && m < cap; j++) {
+    tl_n *k = it[j];
+    if (!k->tag || k->c.display == TL_NONE) continue;
+    if (k->c.display == TL_ROWS) { tl_n *r[256]; int nr = tl_items(k, r, 256, 0); for (int i = 0; i < nr && m < cap; i++) if (r[i]->tag && r[i]->c.display != TL_NONE) rows[m++] = r[i]; }
+    else rows[m++] = k;
+  }
+  return m;
+}
+// A row's cells.
+static int tl_cells(tl_n *r, tl_n **cells, int cap) {
+  tl_n *it[64]; int n = tl_items(r, it, 64, 0), m = 0;
+  for (int j = 0; j < n && m < cap; j++) if (it[j]->tag && it[j]->c.display != TL_NONE && it[j]->c.pos != 2) cells[m++] = it[j];
+  return m;
+}
+// Each column's narrowest and widest (min- and max-content) widths; the
+// number of columns.
+#define TL_MAXCOLS 32
+static int tl_columns(tl_n *t, double *lo, double *hi) {
+  tl_n *rows[4096]; int nr = tl_rows(t, rows, 4096), nc = 0;
+  for (int i = 0; i < TL_MAXCOLS; i++) lo[i] = hi[i] = 0;
+  for (int r = 0; r < nr; r++) {
+    tl_n *cells[TL_MAXCOLS]; int n = tl_cells(rows[r], cells, TL_MAXCOLS);
+    if (n > nc) nc = n;
+    for (int i = 0; i < n; i++) {
+      double a = tl_min(cells[i]), b = tl_fit(cells[i], 1e9);
+      if (cells[i]->c.set_w) a = b = tl_border_w(&cells[i]->c);
+      if (b < a) b = a;
+      if (a > lo[i]) lo[i] = a;
+      if (b > hi[i]) hi[i] = b;
+    }
+  }
+  return nc;
+}
+// A table's width when nothing presses it: its columns at their widest.
+static double tl_table_fit(tl_n *t) {
+  double lo[TL_MAXCOLS], hi[TL_MAXCOLS]; int nc = tl_columns(t, lo, hi);
+  double w = t->c.bspace * (nc + 1) + t->c.pad[1] + t->c.pad[3] + 2 * t->c.bw;
+  for (int i = 0; i < nc; i++) w += hi[i];
+  return w;
 }
 static void tl_text_lay(tl_n *k, double avail) {
   double w; int lines = 1;
@@ -890,6 +1042,8 @@ static double tl_flow(tl_n *e, double w) {
         if (k->tag && (k->c.display == TL_NONE || k->c.pos == 2)) continue;
         double mar = k->tag ? k->c.mar[1] + k->c.mar[3] : 0;
         double edge = k->tag ? k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw : 0;
+        // A flex-basis sets the width, over a width set (C319).
+        if (k->tag && k->c.set_basis) tl_basis_wins = 1;
         tl_lay(k, k->tag && k->c.set_basis ? (k->c.border_box ? k->c.basis : k->c.basis + edge) : tl_fit(k, w) - mar);
         double kw = tl_outer_w(k);
         if (m && c->wrap && used + c->gap_c + kw > w + 0.01) break;
@@ -899,12 +1053,12 @@ static double tl_flow(tl_n *e, double w) {
       // Shrunk by their widths (flex-shrink 1), the fixed ones and texts
       // aside.
       double room = w - used, shrink = 0;
-      for (int i = 0; i < m; i++) { tl_n *k = it[ln[i]]; if (k->tag && !k->c.set_w && !k->c.fixed) shrink += k->w; }
+      for (int i = 0; i < m; i++) { tl_n *k = it[ln[i]]; if (k->tag && (!k->c.set_w || k->c.set_basis) && !k->c.fixed) shrink += k->w; }
       for (int i = 0; i < m; i++) {
         tl_n *k = it[ln[i]];
-        if (!k->tag || k->c.set_w) continue;
-        if (room > 0.01 && grow > 0 && k->c.grow > 0) tl_lay(k, k->w + room * k->c.grow / grow);
-        else if (room < -0.01 && shrink > 0 && !k->c.fixed) { double x = k->w + room * k->w / shrink; tl_lay(k, x > 0 ? x : 0); }
+        if (!k->tag || (k->c.set_w && !k->c.set_basis)) continue;
+        if (room > 0.01 && grow > 0 && k->c.grow > 0) { tl_basis_wins = k->c.set_basis; tl_lay(k, k->w + room * k->c.grow / grow); }
+        else if (room < -0.01 && shrink > 0 && !k->c.fixed) { double x = k->w + room * k->w / shrink; tl_basis_wins = k->c.set_basis; tl_lay(k, x > 0 ? x : 0); }
       }
       double x = 0, lineh = 0;
       for (int i = 0; i < m; i++) if (tl_outer_h(it[ln[i]]) > lineh) lineh = tl_outer_h(it[ln[i]]);
@@ -938,30 +1092,94 @@ static double tl_flow(tl_n *e, double w) {
     }
     return y;
   }
-  if (c->display == TL_GRID && c->ncols > 0) {
-    int nc = c->ncols, m = 0;
+  if (c->display == TL_GRID && (c->ncols > 0 || c->rep_auto)) {
+    int m = 0;
     tl_n *cells[256];
     for (int j = 0; j < n; j++) if (tl_blank(it[j])) it[j]->w = it[j]->h = 0; else if (!(it[j]->tag && (it[j]->c.display == TL_NONE || it[j]->c.pos == 2))) cells[m++] = it[j];
-    double cw[8] = { 0 }, fixed = 0, fr = 0;
+    // repeat(auto-fit, minmax(a, 1fr)): as many columns as fit at their
+    // least (C319); auto-fit no more than there are items.
+    tl_track cols[12]; int nc = c->ncols;
+    memcpy(cols, c->cols, sizeof cols);
+    if (c->rep_auto) {
+      tl_track t = c->rep;
+      double least = t.kind == 0 ? t.a : t.kind == 1 ? t.b : t.kind == 3 ? t.a : 0;
+      nc = least > 0 ? (int)((w + c->gap_c) / (least + c->gap_c)) : 1;
+      if (nc < 1) nc = 1;
+      if (nc > 12) nc = 12;
+      if (c->rep_auto == 1 && m > 0 && nc > m) nc = m;
+      for (int i = 0; i < nc; i++) cols[i] = t;
+    }
+    double cw[12] = { 0 }, fixed = 0, fr = 0;
     for (int i = 0; i < nc; i++) {
-      tl_track t = c->cols[i];
+      tl_track t = cols[i];
       if (t.kind == 0) cw[i] = t.a;
       else if (t.kind == 2) for (int j = i; j < m; j += nc) { double f = tl_fit(cells[j], w); if (f > cw[i]) cw[i] = f; }
-      if (t.kind == 1) fr += t.a; else fixed += cw[i];
+      if (t.kind == 1) fr += t.a; else if (t.kind != 3) fixed += cw[i];
     }
     double gaps = c->gap_c * (nc - 1), left = w - fixed - gaps;
-    for (int i = 0; i < nc; i++) if (c->cols[i].kind == 3) { double x = left < c->cols[i].b ? left : c->cols[i].b; if (x < c->cols[i].a) x = c->cols[i].a; cw[i] = x; left -= x; }
-    for (int i = 0; i < nc; i++) if (c->cols[i].kind == 1) cw[i] = fr > 0 && left > 0 ? left * c->cols[i].a / fr : 0;
+    for (int i = 0; i < nc; i++) if (cols[i].kind == 3) { double x = left < cols[i].b ? left : cols[i].b; if (x < cols[i].a) x = cols[i].a; cw[i] = x; left -= x; }
+    // Fractions share what is left, each at least its least (minmax(b, a fr)).
+    for (int i = 0; i < nc; i++) if (cols[i].kind == 1) cw[i] = fr > 0 && left > 0 ? left * cols[i].a / fr : 0;
+    for (int pass = 0; pass < nc; pass++) {
+      double held = 0, hfr = 0; int any = 0;
+      for (int i = 0; i < nc; i++) if (cols[i].kind == 1) { if (cw[i] < cols[i].b - 0.001) any = 1; if (cw[i] <= cols[i].b + 0.001) held += cols[i].b; else hfr += cols[i].a; }
+      if (!any) break;
+      double rest = left - held;
+      for (int i = 0; i < nc; i++) if (cols[i].kind == 1) cw[i] = cw[i] <= cols[i].b + 0.001 ? cols[i].b : hfr > 0 && rest > 0 ? rest * cols[i].a / hfr : 0;
+    }
     for (int r = 0; r * nc < m; r++) {
       double rh = 0, x = 0;
-      for (int i = 0; i < nc && r * nc + i < m; i++) { tl_n *k = cells[r * nc + i]; tl_lay(k, cw[i]); if (tl_outer_h(k) > rh) rh = tl_outer_h(k); }
+      for (int i = 0; i < nc && r * nc + i < m; i++) { tl_n *k = cells[r * nc + i]; tl_lay(k, k->tag ? cw[i] - k->c.mar[1] - k->c.mar[3] : cw[i]); if (tl_outer_h(k) > rh) rh = tl_outer_h(k); }
       for (int i = 0; i < nc && r * nc + i < m; i++) {
         tl_n *k = cells[r * nc + i];
-        // align-items: center, which grids of rows like these use.
-        k->x = ox + x + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + (rh - tl_outer_h(k)) / 2 + (k->tag ? k->c.mar[0] : 0);
+        // align-items: stretch (a grid's normal), start, center or end (C319).
+        double oh = tl_outer_h(k), dy = c->items == 2 ? (rh - oh) / 2 : c->items == 3 ? rh - oh : 0;
+        if (!c->items && k->tag && !k->c.set_h && !k->c.set_maxh && !tl_pic(k) && k->c.aspect <= 0) k->h = rh - k->c.mar[0] - k->c.mar[2];
+        k->x = ox + x + (k->tag ? k->c.mar[3] : 0); k->y = oy + y + dy + (k->tag ? k->c.mar[0] : 0);
         x += cw[i] + c->gap_c;
       }
       y += rh + (r * nc + nc < m ? c->gap_r : 0);
+    }
+    return y;
+  }
+  if (c->display == TL_TABLE) {
+    // A table (C319): each column as wide as its widest cell when they
+    // fit, the room left shared by how wide they are; when they don't,
+    // each at least its narrowest, the rest shared by how much more each
+    // wants. Rows one under another, as high as their highest cell, each
+    // cell as high as its row; groups of rows round theirs.
+    double lo[TL_MAXCOLS], hi[TL_MAXCOLS], cw[TL_MAXCOLS];
+    int nc = tl_columns(e, lo, hi);
+    double sp = c->bspace, room = w - sp * (nc + 1), slo = 0, shi = 0;
+    for (int i = 0; i < nc; i++) slo += lo[i], shi += hi[i];
+    for (int i = 0; i < nc; i++) {
+      if (shi <= room) cw[i] = shi > 0 ? hi[i] + (room - shi) * hi[i] / shi : room / nc;
+      else if (slo >= room) cw[i] = lo[i];
+      else cw[i] = lo[i] + (hi[i] - lo[i]) * (room - slo) / (shi - slo);
+    }
+    double tw = sp * (nc + 1); for (int i = 0; i < nc; i++) tw += cw[i];
+    y = sp;
+    tl_n *in[256]; int ni = tl_items(e, in, 256, 0);
+    for (int j = 0; j < ni; j++) {
+      tl_n *g = in[j];
+      if (!g->tag || g->c.display == TL_NONE) { if (!g->tag) g->w = g->h = 0; continue; }
+      int group = g->c.display == TL_ROWS;
+      tl_n *rows[4096]; int nr = 0;
+      if (group) { tl_n *r[256]; int k = tl_items(g, r, 256, 0); for (int i = 0; i < k && nr < 4096; i++) if (r[i]->tag && r[i]->c.display != TL_NONE) rows[nr++] = r[i]; else if (!r[i]->tag) r[i]->w = r[i]->h = 0; }
+      else rows[nr++] = g;
+      double gy = y;
+      for (int r = 0; r < nr; r++) {
+        tl_n *row = rows[r], *cells[TL_MAXCOLS];
+        int n2 = tl_cells(row, cells, TL_MAXCOLS);
+        double rh = 0, x = sp;
+        for (int i = 0; i < n2; i++) { tl_lay(cells[i], cw[i]); if (cells[i]->h > rh) rh = cells[i]->h; }
+        for (int i = 0; i < n2; i++) { cells[i]->h = rh; cells[i]->x = x; cells[i]->y = 0; x += cw[i] + sp; }
+        tl_n *t2[64]; int nt = tl_items(row, t2, 64, 0);
+        for (int i = 0; i < nt; i++) if (!t2[i]->tag) t2[i]->w = t2[i]->h = 0;
+        row->x = group ? 0 : ox; row->y = group ? y - gy : oy + y; row->w = tw; row->h = rh; row->relaid = 1;
+        y += rh + sp;
+      }
+      if (group) { g->x = ox; g->y = oy + gy; g->w = tw; g->h = nr ? y - sp - gy : 0; g->relaid = 1; }
     }
     return y;
   }
@@ -1042,21 +1260,26 @@ static void tl_collapse_at(tl_n *e) {
   }
 }
 // e laid out avail wide (its border box, margins outside).
-static void tl_lay_at(tl_n *e, double avail);
+static void tl_lay_at(tl_n *e, double avail, int basis);
 // A box nothing in changed, laid out as wide as before, is as it was
-// (C300c): its size, and its children where they were.
+// (C300c): its size, and its children where they were. tl_basis_wins:
+// e is a flex item whose flex-basis is its width, whatever width it has
+// set (C319), for this call only.
 static void tl_lay(tl_n *e, double avail) {
+  int basis = tl_basis_wins; tl_basis_wins = 0;
   if (!e->tag) { tl_text_lay(e, avail); return; }
-  if (TL_KEEP && e->l_done && !e->lay_sub && !(e->parent && e->parent->lay) && avail == e->l_avail) { e->w = e->l_w; e->h = e->l_h; e->inside = e->l_inside; return; }
-  tl_lay_at(e, avail); e->relaid = 1;
+  if (TL_KEEP && e->l_done && !e->lay_sub && !(e->parent && e->parent->lay) && avail == e->l_avail && basis == e->l_basis) { e->w = e->l_w; e->h = e->l_h; e->inside = e->l_inside; return; }
+  tl_lay_at(e, avail, basis); e->relaid = 1; e->l_basis = basis;
   e->l_done = 1; e->l_avail = avail; e->l_w = e->w; e->l_h = e->h; e->l_inside = e->inside;
 }
-static void tl_lay_at(tl_n *e, double avail) {
+static void tl_lay_at(tl_n *e, double avail, int basis) {
   tl_css *c = &e->c;
   double edge = c->pad[1] + c->pad[3] + 2 * c->bw;
   // A width in % of the box it is in (avail, its margins aside): its
-  // content box's, or its border box's with border-box sizing.
-  double w = c->set_w ? tl_border_w(c) : c->wpct > 0 ? avail * c->wpct / 100 + (c->border_box ? 0 : edge) : avail;
+  // content box's, or its border box's with border-box sizing. A table
+  // with none is as wide as its columns want, up to avail (C319).
+  double w = c->set_w && !basis ? tl_border_w(c) : c->wpct > 0 ? avail * c->wpct / 100 + (c->border_box ? 0 : edge) : avail;
+  if (c->display == TL_TABLE && !c->set_w && c->wpct <= 0) { double f = tl_table_fit(e); if (f < w) w = f; }
   double mw = c->border_box ? c->maxw : c->maxw + edge;
   if (c->set_maxw && w > mw) w = mw;
   if (w < 0) w = 0;
@@ -1064,7 +1287,10 @@ static void tl_lay_at(tl_n *e, double avail) {
   int pic = tl_pic(e);
   // A picture's shapes aren't boxes; with no height set it is as high as
   // its viewBox is for its width (150 without one).
-  double h = (pic ? (tl_viewbox(e, vb) ? (w - edge) * vb[3] / vb[2] : 150) : tl_flow(e, w - edge)) + c->pad[0] + c->pad[2] + 2 * c->bw;
+  double h = (pic ? (tl_viewbox(e, vb) ? (w - edge) * vb[3] / vb[2] : 150) : tl_flow(e, w - edge));
+  // A field to type in is a line high inside, empty or not (C319).
+  if (!pic && (!strcmp(e->tag, "input") || !strcmp(e->tag, "select")) && h < tl_line(c)) h = tl_line(c);
+  h += c->pad[0] + c->pad[2] + 2 * c->bw;
   if (!c->set_h && c->aspect > 0) h = c->border_box ? w / c->aspect : (w - edge) / c->aspect + c->pad[0] + c->pad[2] + 2 * c->bw;
   e->inside = h;
   if (c->set_h) h = tl_border_h(c);
@@ -1399,12 +1625,14 @@ static void tl_layout(void) {
   // again when they differ (or first).
   static int read;
   char *sheet = 0; size_t n = 0;
-  if (tl_texts_changed || !read) tl_sheets(tl_root, &sheet, &n);
+  // Read again too when the window's dark or width (in a media query) changed.
+  int again = tl_reread; tl_reread = 0;
+  if (tl_texts_changed || !read || again) tl_sheets(tl_root, &sheet, &n);
   else n = tl_sheet_n, sheet = tl_sheet;
   tl_texts_changed = 0;
   if (sheet == tl_sheet && read) {}
-  else if (!read || n != tl_sheet_n || (n && memcmp(sheet, tl_sheet, n))) {
-    read = 1;
+  else if (again || !read || n != tl_sheet_n || (n && memcmp(sheet, tl_sheet, n))) {
+    read = 1; tl_media_w = 0;
     free(tl_sheet); tl_sheet = sheet; tl_sheet_n = n;
     tl_salt_sheet++;
     free(tl_rules); tl_rules = 0; tl_nrules = 0;
@@ -1655,8 +1883,9 @@ static void *ters__ui_start(ters_ui *ui, double width, double height, int dark) 
 }
 // The window's size or colour scheme changed.
 static void ters__ui_resize(double width, double height, int dark) {
+  if (tl_media_w && width != tl_width) tl_reread = 1;
   tl_width = width; tl_height = height;
-  if (dark != tl_dark) { tl_dark = dark; free(tl_sheet); tl_sheet = 0; free(tl_rules); tl_rules = 0; tl_nrules = 0; free(tl_kfs); tl_kfs = 0; tl_nkf = 0; }
+  if (dark != tl_dark) { tl_dark = dark; tl_reread = 1; }
   tl_layout();
 }
 // Each way in, under the page's lock (C217).
