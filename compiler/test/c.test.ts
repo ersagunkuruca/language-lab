@@ -449,7 +449,8 @@ test("a record given whole to a function reading only some of its fields is give
   // The school moved out of the pond, which is then gone (C220).
   assert.match(body, /(l\d+) = p0\.f0;[^]*lab_replaced_in_pool_b\(\1,/);
   assert.doesNotMatch(body, /Pond_drop\(p0\)/);
-  assert.match(body, /\(\(Pond\)\{ \(\(Pool\)\{ \(\(lab_cell \*\)0\)/);
+  // The empty school: a pool as it means, an empty Map and its counter (L280f).
+  assert.match(body, /\(\(Pond\)\{ \(\(Pool\)\{ \(\(Map\)\{ \(\(lab_cell \*\)0\) \}\), LAB_SMALL\(0\) \}\)/);
 });
 
 // Round 13 P5: a table only read is lent, as an array is: pond's `food
@@ -460,7 +461,8 @@ test("a table a function only reads is lent, and read without its count changed 
   const p = load("../../compiler/gaps/pond"), main = p.named("main");
   // The floor as ters native has it: a hash table.
   const t = withLibraryRepresentations(p.code, p.info, p.pres.names, main, p.own.defs, [], { tables: true });
-  assert.deepEqual(t.chosen, ["Map as hash table"]);
+  // Its school's pool in slots with it, and their lists as arrays (L280f).
+  assert.deepEqual(t.chosen, ["Pool as slots", "Pool key as slots", "Map as hash table", "List as array of List"]);
   const info = infer(t.code, t.names, undefined, { ...checkOptions, insiders: [...checkOptions.insiders!, ...t.insiders] });
   const { c } = emitC(lowerScalar(t.code, info, t.names, [main], { data: true }), { main });
   const at = c.indexOf("\nstatic double lab_food_at_b(lab_cell * p0, lab_int p1) {"), body = c.slice(at, c.indexOf("\n}\n", at));
@@ -715,16 +717,17 @@ test("show of an array, in C (I156)", { skip }, async () => {
   sameAndFreed(build(lowered), inputs.map((xs): [number, Value[]] => [i, xs]), (_, xs) => first(r.call(r.value(g), ...xs))!, () => "g");
 });
 
-// C58l: std's Pool lent to `pool item`, which only reads its items and
-// generations: swarm-pool's lookups neither copy the pool in nor give it
+// C58l: std's Pool, in slots, lent to `pool item`, which only reads its
+// items and numbers: swarm-pool's lookups neither copy the pool in nor give it
 // back, and it says what the evaluator says.
 test("a record whose array fields a function only reads is lent to it (C58l: swarm-pool's pool item)", { skip }, () => {
   const out = mkdtempSync(join(tmpdir(), "c-pool-")), ters = join(import.meta.dirname, "../../ters/cli/ters.ts"), at = join(import.meta.dirname, "../../ters/examples/swarm-pool");
   const built = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "native", at, "-o", join(out, "swarm")]);
   assert.equal(built.status, 0, built.stderr.toString());
   const c = readFileSync(join(out, "swarm.c"), "utf8");
-  assert.match(c, /lab_pool_item_b\(p0, /);
-  assert.doesNotMatch(c, /lab_pool_item_b\(Pool_dup\(/);
+  // Its pool in slots (L280f): the slots' item.
+  assert.match(c, /lab_pool_slots_item_b\(p0, /);
+  assert.doesNotMatch(c, /lab_pool_slots_item_b\(Pool_slots_dup\(/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", "--evaluator", at, "20", "10"]).stdout.toString();
   assert.match(evaluator, /motes after 20 ticks/);
   assert.equal(spawnSync(join(out, "swarm"), ["20", "10"]).stdout.toString(), evaluator);

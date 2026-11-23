@@ -1,7 +1,8 @@
 // Pool (C58, KEYED-COLLECTIONS.md): a collection that gives out its own
-// keys. A removed item's slot is reused by the next one added (its free
-// list), and a key kept from before finds nothing, not the new item (the
-// slot's generation went up). Evaluated and compiled give the same.
+// keys. It means a Map of numbered items and the next number (L280f), so
+// a key kept from before finds nothing; compiled as slots, a removed
+// item's slot is reused by the next one added. Evaluated and compiled
+// give the same.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -66,14 +67,14 @@ test("a pool gives out keys, reuses a removed item's slot, and an old key finds 
       k.call(L("pool size"), k.call(L("removed from pool"), p4, kb)),
     ];
   });
-  const want = ['"b"', "none", "pool key(1, 1)", '"d"', "none", "[pool key(0, 0), pool key(1, 1), pool key(2, 0)]", "3", '"A"', "2"];
+  const want = ['"b"', "none", "pool key(3)", '"d"', "none", "[pool key(0), pool key(2), pool key(3)]", "3", '"A"', "2"];
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
 
 // A game's systems over its entities (G1a, ENTITIES.md): every item
 // changed with its key kept, and those failing a test removed, their keys
-// finding nothing and their slots given to the next items added.
+// finding nothing; the next items added come after the rest.
 test("a pool's items updated keep their keys; those not kept are removed and their slots reused", () => {
   const [ran, compiled] = both((k) => {
     const add = (p: Id, x: number) => k.call(L("added to pool"), p, k.int(x));
@@ -96,14 +97,14 @@ test("a pool's items updated keep their keys; those not kept are removed and the
       k.call(L("pool keys"), again),
     ];
   });
-  const want = ["[2, 4, 6]", "4", "[1, 3]", "2", "none", "1", "pool key(1, 1)", "[1, 9, 3]", "[pool key(0, 0), pool key(1, 1), pool key(2, 0)]"];
+  const want = ["[2, 4, 6]", "4", "[1, 3]", "2", "none", "1", "pool key(3)", "[1, 3, 9]", "[pool key(0), pool key(2), pool key(3)]"];
   assert.deepEqual(ran, want);
   assert.deepEqual(compiled, want);
 });
 
-// swarm on a Pool (C58d): the pool's lists are the program's own
-// (own-holders.ts), so the chooser stores every list as an array, pool and
-// all; compiled it prints what the evaluator does.
+// swarm on a Pool (C58d): the pool is kept as slots (L280f), whose lists
+// are the program's own (own-holders.ts), so the chooser stores every list
+// as an array, pool and all; compiled it prints what the evaluator does.
 test("swarm on a Pool stores its lists as arrays and runs as evaluated", async () => {
   const { loadProgram } = await import("../src/lang/load.ts");
   const { represented } = await import("../cli/represented.ts");
@@ -115,7 +116,7 @@ test("swarm on a Pool stores its lists as arrays and runs as evaluated", async (
   const pr = loadProgram(dir);
   const p = { code: pr.code, info: infer(pr.code, pr.pres.names, undefined, pr.options), names: pr.pres.names };
   const stored = represented({ title: "swarm-pool", ...p, own: pr.own.defs, reps: [], options: pr.options }, pr.named("main"), true);
-  assert.deepEqual((stored as { chosen?: string[] }).chosen, ["List as array of List"]);
+  assert.deepEqual((stored as { chosen?: string[] }).chosen, ["Pool as slots", "Pool key as slots", "List as array of List"]);
   const lab = join(import.meta.dirname, "../cli/ters.ts"), out = join(mkdtempSync(join(tmpdir(), "pool-")), "swarm.mjs");
   const ran = spawnSync(process.execPath, [lab, "run", dir, "40", "20"], { encoding: "utf8" });
   assert.equal(ran.stdout, "708 motes after 40 ticks, 800 made\n");

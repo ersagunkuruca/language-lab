@@ -28,6 +28,7 @@ import { equal, makeRunner, showValue, type Value } from "./run.ts";
 import { Table } from "./table.ts";
 import { smallValues } from "./tests.ts";
 import type { Type } from "./types.ts";
+import { TOGETHER } from "./together.ts";
 
 export interface LawFailure { inputs: string[]; what: string }
 export interface LawResult { rep: string; job: string; cases: number; failures: LawFailure[] }
@@ -59,6 +60,28 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
     // A representation changed in place (a hash table) may change what
     // its job is given: each use gets a copy, as one holder would.
     const given = (x: Value): Value => (rep.oneHolder && x instanceof Table ? new Table(new Map(x.m)) as unknown as Value : x);
+    // A type stored together with T (together.ts: a pool's keys): its
+    // values given at R made by its own way's constructors, and those R
+    // gives back, wherever they are in the answer, read through its
+    // meaning.
+    const together = (TOGETHER[rep.of] ?? []).flatMap((c) => reps.filter((x) => x.of === c && x.name === rep.name && x.meaning));
+    const byTag = new Map<Id, Representation>();
+    for (const c of together) for (const v of variantsOf(code, c.type)) byTag.set(v, c);
+    const isTogether = (t: Type) => t.t === "con" && together.some((c) => c.of === t.id);
+    const readBack = (v: Value): Value => {
+      if (!byTag.size) return v;
+      if (Array.isArray(v)) return v.map(readBack) as unknown as Value;
+      const d = v as { tag?: Id; fields?: Value[] };
+      if (d && typeof d === "object" && typeof d.tag === "string" && Array.isArray(d.fields)) {
+        const c = byTag.get(d.tag);
+        return c ? call(c.meaning!, [v]) : ({ ...d, fields: d.fields.map(readBack) } as Value);
+      }
+      return v;
+    };
+    const plainAt = (t: Type) => plain(t)?.map((v) => {
+      const d = v as { tag: Id; fields: Value[] }, c = isTogether(t) ? together.find((x) => x.of === (t as { id: Id }).id) : undefined;
+      return { t: v, r: c?.impl[d.tag] ? call(c.impl[d.tag], d.fields) : v, text: show(v) };
+    }) ?? null;
 
     // The pool: T values built by T's jobs that give one, at T and at R.
     const pool: { t: Value; r: Value; text: string }[] = [];
@@ -66,7 +89,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
     for (let round = 0; round < 5 && pool.length < POOL; round++) {
       const before = [...pool];
       for (const j of builders) {
-        const choices = j.t.params.map((p) => (isT(p) ? (before.length ? before : null) : plain(p)?.map((v) => ({ t: v, r: v, text: show(v) })) ?? null));
+        const choices = j.t.params.map((p) => (isT(p) ? (before.length ? before : null) : plainAt(p)));
         if (choices.some((c) => !c || !c.length)) continue;
         for (const args of product(choices as { t: Value; r: Value; text: string }[][], 6)) {
           if (pool.length >= POOL) break;
@@ -81,7 +104,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
 
     for (const j of jobs) {
       const res: LawResult = { rep: rep.name, job: names[j.k] ?? j.k, cases: 0, failures: [] };
-      const choices = j.t.params.map((p) => (isT(p) ? pool : plain(p)?.map((v) => ({ t: v, r: v, text: show(v) })) ?? null));
+      const choices = j.t.params.map((p) => (isT(p) ? pool : plainAt(p)));
       if (choices.some((c) => !c || !c.length)) continue;
       for (const args of product(choices as { t: Value; r: Value; text: string }[][], CASES)) {
         let want: Value;
@@ -90,7 +113,7 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
         const inputs = args.map((a) => a.text);
         try {
           const got0 = call(j.at, args.map((a) => given(a.r)));
-          const got = isT(j.t.ret) ? meaning(got0) : got0;
+          const got = isT(j.t.ret) ? meaning(got0) : readBack(got0);
           if (!equal(got, want)) res.failures.push({ inputs, what: `at ${rep.name} gives ${show(got)}, ${names[rep.of] ?? rep.of}'s own ${show(want)}` });
         } catch (e) {
           res.failures.push({ inputs, what: `at ${rep.name} stops: ${(e as Error).message}` });
@@ -144,6 +167,12 @@ export function representationLaws(code: Code, info: Info, names: Names, reps: R
     const i = Number(d.tag.slice(9));
     return `case ${i + 1}(${(d.fields ?? []).map(showCase).join(", ")})`;
   }
+}
+
+// A type's constructors.
+function variantsOf(code: Code, type: Id): Id[] {
+  const b = (code.nodes[type] as NodeOf<"def"> | undefined)?.body, n = b ? code.nodes[b] : undefined;
+  return n?.kind === "typedef" ? n.variants : [];
 }
 
 // A constructor's type: its fields to its type.

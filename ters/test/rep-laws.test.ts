@@ -50,6 +50,8 @@ test("the library's Map and Set trees, array of List and tree of List agree thro
   assert.deepEqual(jobs("array of List"), ["nil", "cons", "length", "append", "added at end", "item at", "replace at", "drop", "take", "match", "fold"]);
   assert.deepEqual(jobs("tree of List"), ["nil", "cons", "length", "append", "added at end", "item at", "replace at", "drop", "take", "match", "fold"]);
   assert.ok(jobs("weight-balanced tree").includes("put") && jobs("weight-balanced tree").includes("set union"));
+  // A pool's slots, its keys given and read back as slotted keys (L280f).
+  for (const job of ["next key", "pool item", "removed from pool", "pool keys"]) assert.ok(jobs("slots").includes(job), job);
 });
 
 // match and fold (L108d2): given cases that report what they get, the

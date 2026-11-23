@@ -18,6 +18,8 @@ test("pond-page's reads wait on the places they use, the fish's among them (C259
   const main = p.own.defs.find((d) => p.pres.names[d] === "main")!;
   const js = emitCoreJs(lowerCore(p.code, info, p.pres.names, [main])).js;
   const followed = js.match(/R\.rt\("readPaths:[^"]*"/g) ?? [];
-  assert.ok(followed.length >= 3, `${followed.length} reads followed`);
+  // The pond's own read uses every field of it, so it is a plain read: it
+  // waited on all nine before L280f, the same places.
+  assert.ok(followed.length >= 2, `${followed.length} reads followed`);
   assert.ok(followed.some((r) => r.includes("*/")), followed.join("\n"));
 });

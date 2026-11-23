@@ -14,6 +14,7 @@ import { LIBRARY } from "../src/lang/library.ts";
 import { S } from "../src/lang/std.ts";
 import { CARRIED, FOLD_OF_ITEMS, HEAD, looped, matchJob, uses, type Measured, type Representation } from "../src/lang/represent.ts";
 import { storedRows, type Pick } from "../src/lang/library-reps.ts";
+import { COMPANIONS } from "../src/lang/together.ts";
 import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
 import { reachedImplementing } from "../src/lang/reached.ts";
@@ -48,7 +49,9 @@ export function choiceLines(given: Program, main: Id, picks: readonly Pick[], ta
     const own = stored.filter((r) => r.of === of);
     return own.length ? own : LIBRARY.reps.filter((r) => r.of === of);
   };
-  const lines = picks.map((p) => {
+  // A type stored with another (a pool's key, together.ts) has no entry
+  // of its own: it goes the way its pool's entry says.
+  const lines = picks.filter((p) => !COMPANIONS.has(p.of)).map((p) => {
     const rows = rowsOf(p.of);
     const spec = rows.find((r) => r.canonical) ?? rows[0];
     const ordered = spec ? [spec, ...rows.filter((r) => r !== spec)] : rows;

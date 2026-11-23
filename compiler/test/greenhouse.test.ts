@@ -48,7 +48,8 @@ test("greenhouse native: the pool's update, its map calling the function its cal
   const out = join(dir, "threads");
   ran(process.execPath, [lab, "native", folder, "-o", out]);
   const c = ran("cat", [`${out}.c`]);
-  const update = /static Pool lab_updated_in_pool\([^)]*\) \{[^]*?\n}\n/.exec(c)![0];
+  // Its pool in slots (L280f): the slots' update.
+  const update = /static Pool_slots lab_pool_slots_updated\([^)]*\) \{[^]*?\n}\n/.exec(c)![0];
   assert.match(update, /lab_par_map_\d+\(/);
 });
 

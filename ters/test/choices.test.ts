@@ -38,9 +38,10 @@ test("numbers' Nat is an int, with the jobs main uses on it, those in a loop mar
   assert.match(lines[0], /^\S+ representation: Nat as int; among binary, unary, int; jobs .*succ \(in a loop\).*; target JavaScript$/);
 });
 
-test("greenhouse-page's Set is a hash table; the same each time", () => {
+// Its pool in slots (L280f), its keys with it, so they have no entry.
+test("greenhouse-page's Set is a hash table, its pool in slots; the same each time", () => {
   const lines = reps(choices("greenhouse-page"));
-  assert.deepEqual(lines.map((l) => l.split(";")[0]), ["std.set representation: Set as hash table"]);
+  assert.deepEqual(lines.map((l) => l.split(";")[0]), ["std.pool representation: Pool as slots", "std.set representation: Set as hash table"]);
   assert.deepEqual(reps(choices("greenhouse-page")), lines);
 });
 
@@ -49,8 +50,10 @@ test("a check says which entries are stale and which are new", () => {
   const text = choicesText("main", now);
   assert.deepEqual(readChoices(text), now);
   assert.deepEqual(staleChoices(readChoices(text), now), []);
-  const held = now[0].replace("as hash table", "as weight-balanced tree");
-  assert.deepEqual(staleChoices([held], now), [`stale  ${held}`, `new    ${now[0]}`]);
+  const set = now.find((l) => l.startsWith("std.set "))!;
+  const held = set.replace("as hash table", "as weight-balanced tree");
+  // The pool's entry (L280f) is as it was.
+  assert.deepEqual(staleChoices(now.map((l) => (l === set ? held : l)), now), [`stale  ${held}`, `new    ${set}`]);
 });
 
 test("a program's choices are beside it", () => {
@@ -63,12 +66,14 @@ test("a program's choices are beside it", () => {
 // says when it would pick another; writing the choices again keeps it.
 test("a held entry is stored as it says, kept, and said where the compiler would pick another", () => {
   const now = reps(choices("greenhouse-page"));
-  const held = `held ${now[0].replace("as hash table", "as weight-balanced tree")}`;
+  const held = `held ${now.find((l) => l.startsWith("std.set "))!.replace("as hash table", "as weight-balanced tree")}`;
   assert.deepEqual([...heldOf([held])], [["std.set", "weight-balanced tree"]]);
   const stored = reps(choices("greenhouse-page", heldOf([held])));
-  assert.match(stored[0], /^std\.set representation: Set as weight-balanced tree;/);
-  assert.deepEqual(heldAndPicked([held], stored), [held]);
-  assert.deepEqual(staleChoices([held], stored), []);
+  assert.match(stored.find((l) => l.startsWith("std.set "))!, /^std\.set representation: Set as weight-balanced tree;/);
+  // With the pool's entry (L280f), picked as it was.
+  const pool = stored.filter((l) => !l.startsWith("std.set "));
+  assert.deepEqual(heldAndPicked([held, ...pool], stored), [...pool, held]);
+  assert.deepEqual(staleChoices([held, ...pool], stored), []);
   assert.deepEqual(heldWarnings([held], now), ["held   std.set: weight-balanced tree, where the compiler would pick hash table"]);
   assert.deepEqual(heldWarnings([held], stored), []);
 });

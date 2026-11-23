@@ -1,8 +1,9 @@
 // pond (bigger-program round 13) by hand, data-oriented, as
-// compiler/gaps/pond.ideal.js: the fish as columns by slot with a
-// generation a slot and a free list, the floor's food one array by cell.
-// Each tick's plans are made from the pond as it was (on threads with
-// -DTHREADS), then carried out in slot order. The same answers to the bit.
+// compiler/gaps/pond.ideal.js: the fish as columns by slot with the
+// number of the fish in each and a free list, the floor's food one array
+// by cell. Each tick's plans are made from the pond as it was (on threads
+// with -DTHREADS), then carried out in the order the fish were added (a
+// pool's items in key order, L280f). The same answers to the bit.
 //   cc -O2 -ffp-contract=off pond.ideal.c -lm [-DTHREADS -pthread]; ./a.out [ticks] [fish]
 #include <math.h>
 #include <stdio.h>
@@ -23,26 +24,37 @@ static double around(double d) { return d > SIDE * 0.5 ? d - SIDE : d < 0.0 - SI
 static int cell_of(double c) { return (int)floor(wrapped(c)); }
 static int wcell(int c) { return (c + N) % N; }
 
-static int64_t cap = 0, slots = 0, size = 0, nfree = 0;
-static double *x, *y, *hx, *hy, *en; static int32_t *age, *ls, *lg, *gen, *freel; static int64_t *seed; static uint8_t *live;
+static int64_t cap = 0, slots = 0, size = 0, nfree = 0, next = 0;
+static double *x, *y, *hx, *hy, *en; static int32_t *age, *ls, *lg, *num, *freel; static int64_t *seed; static uint8_t *live;
 // The plans, as columns.
 static int32_t *Ps, *Pg, *Pa, *Pls, *Plg, *Pcell; static double *Px, *Py, *Phx, *Phy, *Pe; static int64_t *Pseed;
 static int64_t *order, norder;
 #define GROW(p) p = realloc(p, cap * sizeof *p)
 static void grow(void) {
   cap = cap ? cap * 2 : 1024;
-  GROW(x); GROW(y); GROW(hx); GROW(hy); GROW(en); GROW(age); GROW(ls); GROW(lg); GROW(gen); GROW(freel); GROW(seed); GROW(live);
+  GROW(x); GROW(y); GROW(hx); GROW(hy); GROW(en); GROW(age); GROW(ls); GROW(lg); GROW(num); GROW(freel); GROW(seed); GROW(live);
   GROW(Ps); GROW(Pg); GROW(Pa); GROW(Pls); GROW(Plg); GROW(Pcell); GROW(Px); GROW(Py); GROW(Phx); GROW(Phy); GROW(Pe); GROW(Pseed); GROW(order);
 }
 static int64_t next_slot(void) { return nfree ? freel[nfree - 1] : slots; }
-static int32_t next_gen(void) { return nfree ? gen[freel[nfree - 1]] : 0; }
+static int32_t next_number(void) { return (int32_t)next; }
+// The slots in the order their fish were added, with each one's number:
+// the removed ones dropped as it is walked.
+static int64_t *ord_s, nord = 0, ord_cap = 0; static int32_t *ord_n;
+static int64_t walk(void) {
+  int64_t j = 0;
+  for (int64_t i = 0; i < nord; i++) if (live[ord_s[i]] && num[ord_s[i]] == ord_n[i]) { ord_s[j] = ord_s[i]; ord_n[j] = ord_n[i]; j++; }
+  return nord = j;
+}
 static void add(double px, double py, double phx, double phy, double pe, int32_t pa, int32_t pls, int32_t plg, int64_t ps) {
   int64_t s;
-  if (nfree) s = freel[--nfree]; else { if (slots == cap) grow(); s = slots++; gen[s] = 0; }
+  if (nfree) s = freel[--nfree]; else { if (slots == cap) grow(); s = slots++; }
+  num[s] = (int32_t)next++;
+  if (nord == ord_cap) { ord_cap = ord_cap ? ord_cap * 2 : 1024; ord_s = realloc(ord_s, ord_cap * sizeof *ord_s); ord_n = realloc(ord_n, ord_cap * sizeof *ord_n); }
+  ord_s[nord] = s; ord_n[nord] = num[s]; nord++;
   x[s] = px; y[s] = py; hx[s] = phx; hy[s] = phy; en[s] = pe; age[s] = pa; ls[s] = pls; lg[s] = plg; seed[s] = ps; live[s] = 1; size++;
 }
-static int found(int64_t s, int32_t g) { return s >= 0 && s < slots && gen[s] == g && live[s]; }
-static void removed(int64_t s, int32_t g) { if (!found(s, g)) return; live[s] = 0; gen[s]++; freel[nfree++] = (int32_t)s; size--; }
+static int found(int64_t s, int32_t g) { return s >= 0 && s < slots && num[s] == g && live[s]; }
+static void removed(int64_t s, int32_t g) { if (!found(s, g)) return; live[s] = 0; freel[nfree++] = (int32_t)s; size--; }
 static double food[CELLS];
 static double scent(double px, double py) {
   int cx = cell_of(px), cy = cell_of(py);
@@ -56,7 +68,7 @@ static double scent(double px, double py) {
 }
 static void plan(int64_t lo, int64_t hi) {
   for (int64_t i = lo; i < hi; i++) {
-    int64_t s = order[i]; int32_t me = gen[s];
+    int64_t s = order[i]; int32_t me = num[s];
     double lx = x[s], ly = y[s];
     int self = ls[s] == s && lg[s] == me;
     if (!self && found(ls[s], lg[s])) { lx = x[ls[s]]; ly = y[ls[s]]; }
@@ -93,7 +105,7 @@ int main(int argc, char **argv) {
   for (int k = 0; k < CELLS; k++) food[k] = 0.2 + 0.6 * chance(rnd((int64_t)k * 7919 + 13));
   { int64_t s = 12345; int32_t lastS = 0, lastG = 0;
     for (int64_t n = stock; n > 0; n--) {
-      int32_t ks = (int32_t)next_slot(), kg = next_gen(); int lead = chance(s) < 0.3;
+      int32_t ks = (int32_t)next_slot(), kg = next_number(); int lead = chance(s) < 0.3;
       add(SIDE * chance(s), SIDE * chance(rnd(s)), 1.0, 0.0, 1.0, (int32_t)floor(chance(rnd(rnd(s))) * 50.0), lead ? ks : lastS, lead ? kg : lastG, rnd(rnd(rnd(s))));
       s = rnd(rnd(rnd(s))); lastS = ks; lastG = kg;
     } }
@@ -104,7 +116,7 @@ int main(int argc, char **argv) {
   double *es = 0, *cs = 0;
   for (int64_t t = 0; t < ticks; t++) {
     norder = 0;
-    for (int64_t s = 0; s < slots; s++) if (live[s]) order[norder++] = s;
+    norder = walk(); memcpy(order, ord_s, norder * sizeof *order);
 #ifdef THREADS
     pthread_t th[T]; for (int64_t i = 1; i < T; i++) pthread_create(&th[i], 0, run, (void *)i); run(0); for (int i = 1; i < T; i++) pthread_join(th[i], 0);
 #else
@@ -129,10 +141,10 @@ int main(int argc, char **argv) {
       int32_t ts = hts[id], tg = htg[id];
       if (!found(ts, tg)) {
         ts = 0; tg = 0; double bd = 1000000.0;
-        for (int64_t s = 0; s < slots; s++) {
-          if (!live[s]) continue;
+        for (int64_t i = 0, n = walk(); i < n; i++) {
+          int64_t s = ord_s[i];
           double ox = around(x[s] - hsx[id]), oy = around(y[s] - hsy[id]), d = sqrt(ox * ox + oy * oy);
-          if (d < bd) { bd = d; ts = (int32_t)s; tg = gen[s]; }
+          if (d < bd) { bd = d; ts = (int32_t)s; tg = num[s]; }
         }
       }
       int f = found(ts, tg); double gx = f ? x[ts] : 0.0, gy = f ? y[ts] : 0.0;
@@ -150,10 +162,10 @@ int main(int argc, char **argv) {
     if (tick % EVERY == 0) {
       es = realloc(es, cap * sizeof *es); cs = realloc(cs, cap * sizeof *cs);
       int64_t m = 0, following = 0, elders = 0;
-      for (int64_t s = 0; s < slots; s++) {
-        if (!live[s]) continue;
+      for (int64_t i = 0, n = walk(); i < n; i++) {
+        int64_t s = ord_s[i];
         es[m] = en[s]; cs[m] = x[s] + 2.0 * y[s]; m++;
-        if (!(ls[s] == s && lg[s] == gen[s])) following++;
+        if (!(ls[s] == s && lg[s] == num[s])) following++;
         if (age[s] > 100) elders++;
       }
       double mean = m ? sum_back(es, m) / (double)m : 0.0;
@@ -163,8 +175,8 @@ int main(int argc, char **argv) {
     }
   }
   int64_t outside = 0, spent = 0, over = 0, old = 0;
-  for (int64_t s = 0; s < slots; s++) {
-    if (!live[s]) continue;
+  for (int64_t i = 0, n = walk(); i < n; i++) {
+    int64_t s = ord_s[i];
     if (!(x[s] >= 0.0 && x[s] < SIDE && y[s] >= 0.0 && y[s] < SIDE)) outside++;
     if (en[s] <= 0.0) spent++;
     if (age[s] > OLD_AGE) old++;

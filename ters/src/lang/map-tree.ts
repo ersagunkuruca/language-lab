@@ -25,8 +25,9 @@ import type { Names } from "../presentation.ts";
 import { Lang } from "./dsl.ts";
 import { CARRIED, FOLD_OF_ITEMS, LADDER, representationsIn, type Representation } from "./represent.ts";
 import { infer } from "./infer.ts";
-import { COMPARE, CONS, COST, JOBS, HASH_SET_OPS, TABLE_OPS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, ORDER_V, PAIR_V, S, SET_TYPE, SET_V, SHOW_ANY, TRUE } from "./std.ts";
+import { COMPARE, CONS, COST, JOBS, HASH_SET_OPS, TABLE_OPS, REPRESENTATION_V, FALSE, INT_OPS, MAP, MAP_V, NIL, NONE, ORDER_V, PAIR_V, POOL, POOL_KEY, POOL_KEY_V, POOL_V, S, SET_TYPE, SET_V, SHOW_ANY, SOME, TRUE } from "./std.ts";
 import { HASH_SET, INT, TABLE } from "./types.ts";
+import { LIST, OPTIONAL } from "./std.ts";
 
 // `representations`: the five definitions, the tree and the sorted list
 // for Map, then for Set, then Map's hash table (C63b) and Set's (C63d).
@@ -322,6 +323,158 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
     show: def("hash set show", ["set"], (t) => k.call(SHOW_ANY, k.call(hMeaning, t))),
   };
 
+  // ---- Pool (L280f, POOL-CHOICE-2026-11-23.md): its items in slots, a
+  // free list of slots, and each slot the number of the item it holds, so
+  // a key is the item's number and its slot (`slotted key`), and finds the
+  // item in one step. The number plays a generation's part: a key whose
+  // slot holds another number finds nothing. Its meaning drops the slot,
+  // which is only a hint: a key whose slot doesn't hold its number (one
+  // made from a number alone) is looked for along the order.
+  //
+  // The lists hold the newest slot first, so a new slot is a push at the
+  // front and slot i is at position slots - 1 - i: as arrays, each add,
+  // read and change is one step. `order` and `numbers in order` are the
+  // slots and numbers of the items in the order they were added, newest
+  // first, so the keys and items come out in number order, the meaning's;
+  // a removed item stays in them (`stale`) until there are more of those
+  // than items, when they are dropped.
+  const K = k.type("Slotted key", [], [["slotted key", [["number", () => k.tref(INT)], ["slot", () => k.tref(INT)]]]]);
+  defs.push(K.def);
+  const SK = (n: Id, slot: Id) => k.call(K.v["slotted key"], n, slot);
+  const skOf = (key: Id, f: (n: Id, slot: Id) => Id) => k.match(key, [{ variant: K.v["slotted key"], names: ["number", "slot"], body: ([n, slot]) => f(n, slot) }]);
+  const ints = () => k.tref(LIST, k.tref(INT));
+  const P = k.type("Pool slots", ["a"], [["slots", [
+    ["items", (_, [a]) => k.tref(LIST, k.tref(OPTIONAL, k.tref(a)))], ["numbers", ints], ["free", ints], ["size", () => k.tref(INT)], ["slots", () => k.tref(INT)],
+    ["next", () => k.tref(INT)], ["order", () => k.tref(LIST, k.tref(K.def))], ["stale", () => k.tref(INT)],
+  ]]]);
+  defs.push(P.def);
+  type Eight = [Id, Id, Id, Id, Id, Id, Id, Id];
+  const S8 = (...xs: Eight) => k.call(P.v.slots, ...xs);
+  const slotsOf = (p: Id, f: (...xs: Eight) => Id) => k.match(p, [{ variant: P.v.slots, names: ["items", "numbers", "free", "size", "slots", "next", "order", "stale"], body: (xs) => f(...(xs as Eight)) }]);
+  const sub1 = (n: Id) => k.call(INT_OPS.sub, n, k.int(1)), add1 = (n: Id) => i.add(n, k.int(1));
+  const placeOf = (slots: Id, slot: Id) => sub1(k.call(INT_OPS.sub, slots, slot));
+  const itemAt = (xs: Id, at: Id, d: Id) => k.call(prelude("item at"), xs, at, d), replaceAt = (xs: Id, at: Id, x: Id) => k.call(prelude("replace at"), xs, at, x);
+  const some = (o: Id, yes: (x: Id) => Id, no: () => Id) => k.match(o, [{ variant: NONE, names: [], body: no }, { variant: SOME, names: ["item"], body: ([x]) => yes(x) }]);
+  const emptySlots = k.def("empty pool slots");
+  k.define(emptySlots, S8(k.x(NIL), k.x(NIL), k.x(NIL), k.int(0), k.int(0), k.int(0), k.x(NIL), k.int(0)));
+  defs.push(emptySlots);
+  // Whether slot holds the item numbered n.
+  // A removed item's slot holds the number -1, which no item has.
+  const holds = def("pool slots holds", ["pool", "slot", "number"], (p, slot, n) => slotsOf(p, (_items, nums, _f, _n, slots) =>
+    k.if(i.less(slot, k.int(0)), k.x(FALSE), k.if(i.less(slot, slots), k.equal(itemAt(nums, placeOf(slots, slot), k.int(-1)), n), k.x(FALSE)))));
+  // The slot numbered n was put in, found in the order by halves: the
+  // order is newest first, so its numbers fall. -1 when none was.
+  // Only a key whose slot doesn't hold its item looks: one made from a
+  // number, or one of another pool's, or one whose item was removed.
+  const halves = rec("pool slots halves");
+  k.define(halves, k.fn(["order", "number", "from", "to"], (os, n, lo, hi) => k.if(i.less(lo, hi),
+    k.let("middle", k.call(INT_OPS.shiftDown, i.add(lo, hi), k.int(1)), (mid) => skOf(itemAt(os, mid, SK(k.int(-1), k.int(-1))), (m, slot) =>
+      k.if(k.equal(m, n), slot, k.if(i.less(n, m), k.call(halves, os, n, add1(mid), hi), k.call(halves, os, n, lo, mid))))),
+    k.int(-1))));
+  const along = def("pool slots along", ["order", "number"], (os, n) => k.call(halves, os, n, k.int(0), k.call(prelude("length"), os)));
+  // A key's slot while it holds the key's item, else -1.
+  const slotOf = def("pool slots slot of", ["pool", "key"], (p, key) => skOf(key, (n, hint) => k.if(k.call(holds, p, hint, n), hint,
+    slotsOf(p, (_i, _n, _f, _s, _sl, _nx, os) => k.let("found", k.call(along, os, n), (at) => k.if(k.call(holds, p, at, n), at, k.int(-1)))))));
+  // The item numbered n put in, in a free slot when there is one.
+  const putS = def("pool slots put", ["pool", "number", "item"], (p, n, x) => slotsOf(p, (items, nums, free, size, slots, _next, os, stale) => k.match(free, [
+    { variant: NIL, names: [], body: () => S8(k.call(CONS, k.call(SOME, x), items), k.call(CONS, n, nums), k.x(NIL), add1(size), add1(slots), add1(n), k.call(CONS, SK(n, slots), os), stale) },
+    { variant: CONS, names: ["slot", "rest"], body: ([slot, rest]) => S8(replaceAt(items, placeOf(slots, slot), k.call(SOME, x)), replaceAt(nums, placeOf(slots, slot), n), rest, add1(size), slots, add1(n), k.call(CONS, SK(n, slot), os), stale) },
+  ])));
+  const nextKeyS = def("pool slots next key", ["pool"], (p) => slotsOf(p, (_i, _n, free, _s, slots, next) => SK(next, k.match(free, [
+    { variant: NIL, names: [], body: () => slots },
+    { variant: CONS, names: ["slot", "rest"], body: ([slot]) => slot },
+  ]))));
+  const addedS = def("pool slots added", ["pool", "item"], (p, x) => slotsOf(p, (_i, _n, _f, _s, _sl, next) => k.call(putS, p, next, x)));
+  const itemS = def("pool slots item", ["pool", "key"], (p, key) => k.let("slot", k.call(slotOf, p, key), (slot) => k.if(i.less(slot, k.int(0)), k.call(S.fail),
+    slotsOf(p, (items, _n, _f, _s, slots) => some(itemAt(items, placeOf(slots, slot), k.x(NONE)), (x) => x, () => k.call(S.fail))))));
+  const replacedS = def("pool slots replaced", ["pool", "key", "item"], (p, key, x) => k.let("slot", k.call(slotOf, p, key), (slot) => k.if(i.less(slot, k.int(0)), p,
+    slotsOf(p, (items, nums, free, size, slots, next, os, stale) => S8(replaceAt(items, placeOf(slots, slot), k.call(SOME, x)), nums, free, size, slots, next, os, stale)))));
+  // The order without its removed items, once they outnumber the rest.
+  const keptOrder = rec("pool slots kept order");
+  k.define(keptOrder, k.fn(["pool", "order"], (p, os) => k.match(os, [
+    { variant: NIL, names: [], body: () => k.x(NIL) },
+    { variant: CONS, names: ["key", "rest"], body: ([key, rest]) => k.let("kept", k.call(keptOrder, p, rest), (ks) =>
+      skOf(key, (n, slot) => k.if(k.call(holds, p, slot, n), k.call(CONS, key, ks), ks))) },
+  ])));
+  const compacted = def("pool slots compacted", ["pool"], (p) => slotsOf(p, (items, nums, free, size, slots, next, os, stale) => k.if(i.less(size, stale),
+    S8(items, nums, free, size, slots, next, k.call(keptOrder, p, os), k.int(0)), p)));
+  const removedS = def("pool slots removed", ["pool", "key"], (p, key) => k.let("slot", k.call(slotOf, p, key), (slot) => k.if(i.less(slot, k.int(0)), p,
+    slotsOf(p, (items, nums, free, size, slots, next, os, stale) => k.call(compacted, S8(replaceAt(items, placeOf(slots, slot), k.x(NONE)), replaceAt(nums, placeOf(slots, slot), k.int(-1)), k.call(CONS, slot, free), sub1(size), slots, next, os, add1(stale)))))));
+  const sizeS = def("pool slots size", ["pool"], (p) => slotsOf(p, (_i, _n, _f, size) => size));
+  // Walked newest first, each item still there put in front of those
+  // after it: oldest first. Each slot in the order is one the pool has
+  // made, so its item is there if its number is still the one put in it.
+  const walked = (name: string, each: (slot: Id, n: Id, x: Id) => Id) => {
+    const w = rec(`${name} from`);
+    // Each way on a call of its own, as a list's walk is written, which
+    // an array's runs from its far end pushing (cons-loops.ts).
+    k.define(w, k.fn(["items", "numbers", "slots", "order", "after"], (items, nums, slots, os, after) => k.match(os, [
+      { variant: NIL, names: [], body: () => after },
+      { variant: CONS, names: ["key", "rest"], body: ([key, rest]) => skOf(key, (n, slot) => k.let("place", placeOf(slots, slot), (at) => {
+        const on = (next: Id) => k.call(w, items, nums, slots, rest, next);
+        return k.if(k.equal(itemAt(nums, at, k.int(-1)), n), some(itemAt(items, at, k.x(NONE)), (x) => on(k.call(CONS, each(slot, n, x), after)), () => on(after)), on(after));
+      })) },
+    ])));
+    return def(name, ["pool"], (p) => slotsOf(p, (items, nums, _f, _s, slots, _nx, os) => k.call(w, items, nums, slots, os, k.x(NIL))));
+  };
+  const keysS = walked("pool slots keys", (slot, n) => SK(n, slot));
+  const itemsS = walked("pool slots items", (_slot, _n, x) => x);
+  const pairsS = walked("pool slots pairs", (_slot, n, x) => k.call(PAIR_V, n, x));
+  const keyedS = walked("pool slots keyed items", (slot, n, x) => k.call(PAIR_V, SK(n, slot), x));
+  const updatedS = def("pool slots updated", ["pool", "f"], (p, f) => slotsOf(p, (items, nums, free, size, slots, next, os, stale) =>
+    S8(k.call(prelude("map"), items, k.fn(["slot"], (o) => some(o, (x) => k.call(SOME, k.call(f, x)), () => k.x(NONE)))), nums, free, size, slots, next, os, stale)));
+  const keptFrom = rec("pool slots kept from");
+  k.define(keptFrom, k.fn(["keyed", "test", "pool"], (ks, test, p) => k.match(ks, [
+    { variant: NIL, names: [], body: () => p },
+    { variant: CONS, names: ["keyed", "rest"], body: ([e, rest]) => pair(e, (key, x) => k.call(keptFrom, rest, test, k.if(k.call(test, x), p, k.call(removedS, p, key))), ["key", "item"]) },
+  ])));
+  const keptS = def("pool slots kept", ["pool", "test"], (p, test) => k.call(keptFrom, k.call(keyedS, p), test, p));
+  const slotsMeaning = def("pool slots meaning", ["pool"], (p) => slotsOf(p, (_i, _n, _f, _s, _sl, next) => k.call(POOL_V, k.call(prelude("as map"), k.call(pairsS, p)), next)));
+  // Its items put in by number, then its next number.
+  const putEntries = rec("pool slots put entries");
+  k.define(putEntries, k.fn(["entries", "pool"], (es, p) => k.match(es, [
+    { variant: NIL, names: [], body: () => p },
+    { variant: CONS, names: ["entry", "rest"], body: ([e, rest]) => pair(e, (n, x) => k.call(putEntries, rest, k.call(putS, p, n, x)), ["number", "item"]) },
+  ])));
+  const slotsOfEntries = def("pool slots of entries", ["entries", "next"], (m, next) => slotsOf(k.call(putEntries, k.call(prelude("entries of"), m), k.x(emptySlots)),
+    (items, nums, free, size, slots, _nx, os, stale) => S8(items, nums, free, size, slots, next, os, stale)));
+  const matchSlots = def("match pool slots", ["pool", "pool of"], (p, f) => k.match(k.call(slotsMeaning, p), [{ variant: POOL_V, names: ["entries", "next"], body: ([es, next]) => k.call(f, es, next) }]));
+  const slotsImpl: Record<Id, Id> = {
+    [POOL_V]: slotsOfEntries,
+    match: matchSlots,
+    fold: matchSlots,
+    [prelude("empty pool")]: emptySlots,
+    [prelude("next key")]: nextKeyS,
+    [prelude("added to pool")]: addedS,
+    [prelude("pool item")]: itemS,
+    [prelude("replaced in pool")]: replacedS,
+    [prelude("removed from pool")]: removedS,
+    [prelude("pool size")]: sizeS,
+    [prelude("pool keys")]: keysS,
+    [prelude("pool items")]: itemsS,
+    [prelude("updated in pool")]: updatedS,
+    [prelude("kept in pool")]: keptS,
+  };
+  const slotsBy = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(slotsMeaning, a), k.call(slotsMeaning, b)));
+  const slotsByType = {
+    equal: slotsBy((a, b) => k.call(S.equal, a, b), "pool slots equal"),
+    compare: slotsBy((a, b) => k.call(COMPARE, a, b), "pool slots compare"),
+    show: def("pool slots show", ["pool"], (p) => k.call(SHOW_ANY, k.call(slotsMeaning, p))),
+  };
+  // A slotted key means its number.
+  const keyMeaning = def("slotted key meaning", ["key"], (key) => skOf(key, (n) => k.call(POOL_KEY_V, n)));
+  const keyBy = (f: (a: Id, b: Id) => Id, name: string) => def(name, ["a", "b"], (a, b) => f(k.call(keyMeaning, a), k.call(keyMeaning, b)));
+  const keyImpl: Record<Id, Id> = {
+    [POOL_KEY_V]: def("slotted key of number", ["number"], (n) => SK(n, k.int(-1))),
+    match: def("match slotted key", ["key", "pool key of"], (key, f) => skOf(key, (n) => k.call(f, n))),
+  };
+  keyImpl.fold = keyImpl.match;
+  const keyByType = {
+    equal: keyBy((a, b) => k.call(S.equal, a, b), "slotted key equal"),
+    compare: keyBy((a, b) => k.call(COMPARE, a, b), "slotted key compare"),
+    show: def("slotted key show", ["key"], (key) => k.call(SHOW_ANY, k.call(keyMeaning, key))),
+  };
+  const poolJobs = ["next key", "added to pool", "pool item", "replaced in pool", "removed from pool", "pool size", "pool keys", "pool items", "updated in pool", "kept in pool"];
   const job = (n: string) => (n === "match" || n === "fold" ? n : prelude(n));
   const at = (ns: string[], cost: string) => Object.fromEntries(ns.map((n) => [job(n), cost]));
   const mapLog = ["put", "update at", "value at", "remove key", "has key", "smallest key", "largest key"], mapLin = ["keys of", "values of", "entries of", "match", "fold"];
@@ -343,6 +496,16 @@ export function buildTrees(k: Lang, prelude: (name: string) => Id): Trees {
       cost: { ...at(["put", "update at", "value at", "remove key", "has key", "empty map", "map size"], "1"), ...at([...mapLin, "smallest key", "largest key", "as map", "merge maps"], "n log n"), [MAP_V]: "n", space: "n" } },
     { name: "hash table", of: SET_TYPE, type: HASH_SET, meaning: hMeaning, canonical: false, impl: hImpl, byType: hByType, oneHolder: true,
       cost: { ...at(["add item", "remove item", "has item", "empty set", "set size"], "1"), ...at(["set union", "as set"], "n"), ...at([...setLin, "smallest item", "largest item", "set intersection", "set difference"], "n log n"), [SET_V]: "n", space: "n" } },
+
+    // After those, so their rows keep their places (L280f): the pool as
+    // its meaning (a map and a counter) and in slots, and its key as a
+    // number and as a number and a slot, chosen with the pool's slots.
+    { name: "map and counter", of: POOL, type: POOL, meaning: null, canonical: true, impl: {},
+      cost: { ...at(["next key", "pool size"], "1"), ...at(["added to pool", "pool item", "replaced in pool", "removed from pool"], "log n"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool", "match", "fold"], "n log n"), ...at(["empty pool"], "1"), [POOL_V]: "1", space: "n" } },
+    { name: "slots", of: POOL, type: P.def, meaning: slotsMeaning, canonical: false, impl: slotsImpl, byType: slotsByType,
+      cost: { ...at(poolJobs, "1"), ...at(["pool keys", "pool items", "updated in pool", "kept in pool"], "n"), ...at(["match", "fold"], "n log n"), ...at(["empty pool"], "1"), [POOL_V]: "n", space: "n" } },
+    { name: "number", of: POOL_KEY, type: POOL_KEY, meaning: null, canonical: true, impl: {}, cost: { [POOL_KEY_V]: "1", match: "1", fold: "1", space: "1" } },
+    { name: "slots", of: POOL_KEY, type: K.def, meaning: keyMeaning, canonical: false, impl: keyImpl, byType: keyByType, cost: { [POOL_KEY_V]: "1", match: "1", fold: "1", space: "1" } },
   ];
   return { representations: rows.map(written), defs };
 

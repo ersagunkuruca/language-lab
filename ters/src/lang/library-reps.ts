@@ -28,6 +28,8 @@ import { listGroups } from "./rep-groups.ts";
 import { consOnto, type ConsOnto } from "./cons-onto.ts";
 import { splitLists } from "./rep-split.ts";
 import { carriedChoice } from "./carried-reps.ts";
+import { COMPANIONS, TOGETHER } from "./together.ts";
+import { ownLibraryHolders } from "./own-holders.ts";
 import { keptMap } from "../kept.ts";
 import { ARRAY_OPS, COMPARE, CONS, LIST, MAP, MAP_V, NIL, PAIR_V, S, SET, SET_TYPE, SHOW_ANY, SIGS } from "./std.ts";
 import { INT, STRING, Subst, type Type } from "./types.ts";
@@ -129,10 +131,14 @@ export function withLibraryRepresentations(code: Code, info: Info, names: Names,
       // the program's own (C93).
       if (r.reps.some((x) => x.of === LIST) || asked.some((x) => x.of === LIST)) return { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked, picks: r.picks };
       const insiders = [...(info.options?.insiders ?? []), ...r.insiders];
-      const lists = withLibraryRepresentations(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, [...asked, ...r.reps], options);
+      // A chosen row's own type that holds lists (a pool's slots) made the
+      // program's own, so its lists are stored as the program's are.
+      const held = r.reps.some((x) => TOGETHER[x.of]) ? ownLibraryHolders(r.code, { ...checked, options: { ...checked.options, insiders } }, r.names, main, defs, r.reps.map((x) => x.type)) : null;
+      const next = held ? { code: held.code, info: held.info, names: held.names, defs: held.own } : { code: r.code, info: { ...checked, options: { ...checked.options, insiders } }, names: r.names, defs };
+      const lists = withLibraryRepresentations(next.code, next.info, next.names, main, next.defs, [...asked, ...r.reps], options);
       return lists.chosen.length
         ? { ...lists, chosen: [...r.chosen, ...lists.chosen], insiders: [...r.insiders, ...lists.insiders], picks: [...(r.picks ?? []), ...(lists.picks ?? [])] }
-        : { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked, picks: r.picks };
+        : held ? { code: held.code, names: held.names, chosen: r.chosen, insiders: r.insiders, info: held.info, picks: r.picks } : { code: r.code, names: r.names, chosen: r.chosen, insiders: r.insiders, info: checked, picks: r.picks };
     }
     const list = r.reps.find((x) => x.of === LIST);
     // A hash table that doesn't check gives way to the tree, not to the
@@ -235,7 +241,16 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     const has = (t: Type): boolean => { t = info.subst.zonk(t); return t.t === "con" && (t.id === ty || t.args.some(has)); };
     return defs.some((d) => subtree(code, d).some((id) => { const t0 = info.typeOf.get(id); if (!t0) return false; const t = info.subst.zonk(t0); return t.t === "con" && holders.has(t.id) && !!t.args[0] && has(t.args[0]); }));
   };
-  if (!replayed) types: for (const ty of new Set(LIBRARY.reps.filter((r) => r.byType).map((r) => r.of))) {
+  // A row and the rows of the types stored with it, by the same name
+  // (together.ts: a pool's slots and its keys').
+  const pick = (row: Representation) => { chosen.push(row, ...(TOGETHER[row.of] ?? []).flatMap((c) => LIBRARY.reps.filter((r) => r.of === c && r.name === row.name))); };
+  // What a row chosen already does in its meaning's place: a pool in
+  // slots never runs the pool's Map, so the Map's jobs aren't counted
+  // through it. The types stored together (a pool) go first, so the
+  // types their meanings use are chosen for what is left.
+  const replaced = () => chosen.flatMap((r) => (r.canonical ? [] : Object.keys(r.impl)));
+  const byType = [...new Set(LIBRARY.reps.filter((r) => r.byType && !COMPANIONS.has(r.of)).map((r) => r.of))];
+  if (!replayed) types: for (const ty of [...byType.filter((t) => TOGETHER[t]), ...byType.filter((t) => !TOGETHER[t])]) {
     const spec = LIBRARY.reps.find((r) => r.of === ty && r.canonical)!;
     const hold = options.held?.get(ty);
     const refuse = (why: string): never => { throw new Error(`${names[ty] ?? LIBRARY.names[ty] ?? ty} can't be held as ${hold} here: ${why}`); };
@@ -269,7 +284,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       // Held: that row, where the chooser could have picked it (L280c).
       const row = rows.find((r) => r.name === hold) ?? refuse(LIBRARY.reps.find((r) => r.of === ty && r.name === hold)?.oneHolder ? "a map or set here has more than one holder, so a put in place could be seen"
         : ty === LIST && hold === "tree of List" ? "it runs something on lists backwards, which the chooser leaves as written" : "the chooser can't pick it here");
-      if (!uses(code, main, [spec, row]).length) refuse(`main doesn't use it`);
+      if (!uses(code, main, [spec, row], false, replaced()).length) refuse(`main doesn't use it`);
       // A whole program's lists held (array or tree): alone, as the
       // chooser's are (in a round of their own, after the types chosen
       // with them here), and only where every list the program reaches can
@@ -283,14 +298,14 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
         if (runsBackwards()) refuse("it runs something on lists backwards, which the chooser leaves as written");
         if (keyed(info, defs, code, ty) || generic(info, defs, code, row)) refuse("its values cross where it can't be converted");
         if (!listBoundary(withTrees(code, [row]), info, defs, row, asked)) refuse("some list the program reaches can't be one; a split can be held instead");
-        chosen.push(row);
+        pick(row);
         continue;
       }
       if (keyed(info, defs, code, ty) || generic(info, defs, code, row) || !plainBoundary(code, defs, row)) refuse("its values cross where it can't be converted");
-      chosen.push(row);
+      pick(row);
       continue;
     }
-    if (!rows.length || !uses(code, main, [spec, ...rows]).length) continue;
+    if (!rows.length || !uses(code, main, [spec, ...rows], false, replaced()).length) continue;
     // What an edge does with its own lists (Bytes' `byte at`, by position)
     // is no job of theirs: the edge keeps them as written.
     const edges = ty === LIST ? (() => { const { edge } = listEdges(code, info, new Set(defs), new Set(asked.map((r) => r.of))); return code.defs.filter((d) => edge(d)); })() : [];
@@ -300,7 +315,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
     // append onto what a loop carries is the array's own, C234).
     const left = [...rows];
     for (;;) {
-      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...edges], options.measured?.get(ty)).rep;
+      const tree = choose(code, main, [spec, ...left], options.sound && ty === LIST ? (r) => r.name === "array of List" : undefined, [...asked.flatMap((r) => Object.keys(r.impl)), ...replaced(), ...edges], options.measured?.get(ty)).rep;
       if (tree === spec || keyed(info, defs, code, ty) || generic(info, defs, code, tree)) continue types;
       // Lists as trees for the whole, where parts of it would have arrays
       // (machine's step loop): those parts as arrays, the rest as written,
@@ -328,7 +343,7 @@ function choiceOf(code: Code, info: Info, names: Names, main: Id, defs: Id[], as
       }
       if (tree.of === LIST && chosen.length) continue types;
       if (tree.of !== LIST && !plainBoundary(code, defs, tree)) continue types;
-      chosen.push(tree);
+      pick(tree);
       break;
     }
   }

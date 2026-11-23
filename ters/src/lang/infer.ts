@@ -30,6 +30,7 @@ import { answerKeys } from "./ports.ts";
 import { laterOps } from "./later-ops.ts";
 import { INT_CASES } from "./int-cases-ids.ts";
 import { packingOf, packingProblem, packs } from "./packing.ts";
+import { TOGETHER } from "./together.ts";
 import { LITERAL, OPTIONAL, FILE_OPS, KEPT_FILES, JSON_OPS, RELEASE_V, ARITH, ARITH_FIELD, BOOL, CELL_OPS, EMBEDDING, EMBEDDING_V, LIST, DIVISION, FIELDS, JOBS, S, SET, SIGS, SMART, TRUE, TUPLE_MAX } from "./std.ts";
 import { tupleType } from "./std-values.ts";
 import { countedCalls } from "./counting.ts";
@@ -2378,8 +2379,12 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (j.t !== "con" || j.args.length !== 2) continue;
     const t = s.zonk(j.args[0]), r = j.args[1];
     if (t.t !== "con") continue;
+    // A type stored with t's (a pool's key, chosen with its slots, L280f)
+    // may be stored its own way too: whatever type that job gives for it.
+    const along = new Map((TOGETHER[t.id] ?? []).map((c) => [c, s.fresh()] as const));
     const at = (x: Type): Type => {
       x = s.zonk(x);
+      if (x.t === "con" && along.has(x.id) && !x.args.length) return along.get(x.id)!;
       if (x.t === "con") return x.id === t.id ? r : { ...x, args: x.args.map(at) };
       if (x.t === "fn") return { ...x, params: x.params.map(at), ret: at(x.ret) };
       return x;
