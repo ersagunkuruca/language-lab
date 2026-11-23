@@ -206,8 +206,12 @@ change the steps below.
    - **Float32 maps.** A function that rounds each step with `round to
      Float32` (std `float32`) computes on f64 what f32 computes, for + − ×
      ÷ and √ (double rounding is harmless for these, since 53 ≥ 2·24 + 2).
-     Such programs are rare now; they are the ones a Float32 type would
-     make ordinary.
+     The Float32 type (L286, numbers module) is written that way: each of
+     its steps is the Float64's rounded once, so a map of Float32s made of
+     + − × ÷, √ and comparisons is one a GPU computes exactly. Its sin,
+     exp and the rest are the Float64 functions rounded, which WGSL's
+     don't match. WGSL may also fuse `a·b + c` (NUMBERS.md), which C307
+     has to rule out, or measure, before a sum of products goes there.
    - **Shaders,** which already have their own written meaning (Float32,
      platform maths). They are written for the GPU, so nothing is chosen.
    A Float64 map stays on the CPU's cores, however much it would gain.
@@ -333,8 +337,8 @@ What this leaves, in order:
     most a handler gets is about fib 27, 10 to 30 ms on the CPU (Node,
     compiled, measured). Warm workers would save a few ms of that, the
     first press would pay their start, so it isn't built.
-- A Float32 type, if Ersagun wants float maps on the GPU: a language
-  question, so a row of its own, not part of C61.
+- A Float32 type, for float maps on the GPU: built as L286 (Ersagun chose
+  it 2026-11-23); putting its maps there is C307.
 
 ## Steps
 
