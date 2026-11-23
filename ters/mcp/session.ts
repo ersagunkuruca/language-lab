@@ -844,9 +844,15 @@ export class Session {
       if (!arm) throw new Error(`no case ${kase}: ${m.arms.map((a) => this.name((this.code.nodes[a] as NodeOf<"arm">).variant)).join(", ")}`);
       target = arm.body;
     }
+    // An arm (an if's then or else line, a case of a match) is replaced by
+    // what follows it, its body: put in the arm's place, an expression
+    // left a match with an arm of no case, and the check crashed (mnist's
+    // else line given an if).
+    let t = text.trim();
+    const arm = this.code.nodes[target];
+    if (arm?.kind === "arm") { target = arm.body; t = t.replace(/^(then|else)\s+/, ""); }
     const def = this.defOf(target);
     if (!def || target === def) throw new Error("replace a part of a definition, not the definition");
-    const t = text.trim();
     return this.apply(def, () => {
       const info = editorInfo(this.code, this.names);
       // A hole is filled as it is (I304: making it a hole again checked

@@ -641,3 +641,29 @@ test("abs of an open input is generic (I342)", async () => {
   assert.match(text("eval", { text: "sizes([-2.5])" }), /^= \[2\.5\] :/);
 });
 
+
+test("an else line replaced is its body replaced; a type shows only its own variables' interfaces (I351)", async () => {
+  const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "squash");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  text("define", { name: "squash", kind: "function", params: ["x"] });
+  text("replace", { at: "squash", find: "□", text: "if x > 20 then 1 else if x < -20 then -1 else x" });
+  // The view's `else …` line is the if's arm: given an expression, it was
+  // put in the arm's place, and the check crashed reading a case of nothing.
+  const arm = /^(\w+) +else if/m.exec(text("view", { at: "squash" }))![1];
+  text("replace", { at: arm, text: "else if x < -20 then -1 else 1 − 2 · first(divide(1, exp(2 · x) + 1), else 0)" });
+  assert.match(text("view", { at: "squash" }), /else 1 − 2 · first\(divide\(1, exp\(2 · x\) \+ 1\), else 0\)/);
+  // Generic callers' uses of Division were shown on squash's own type,
+  // one "b's Division" each (mnist's had more than twenty).
+  for (const name of ["twice", "thrice", "half"]) {
+    text("define", { name, kind: "function", params: ["y"] });
+    text("replace", { at: name, find: "□", text: "squash(y) + squash(y + y)" });
+  }
+  const shown = text("view", { at: "squash" });
+  assert.match(shown, /squash#\w+ : \(a\) -\[a's Ordered, a's Division\]-> a where/);
+  assert.doesNotMatch(shown, /b's Division/);
+});
