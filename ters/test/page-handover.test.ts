@@ -50,6 +50,12 @@ test("dice goes compiled with its rolls, and on compiled after a pause and a ste
     const button = (label: RegExp) => [...e.doc.querySelectorAll(".page-steps button")].find((b) => label.test(b.textContent ?? "")) as HTMLElement;
     button(/^Pause$/).click();
     assert.match(status(), /^Rolls: 4\b/);
+    // The program as the compiled page stores it, made by the worker
+    // (runCodeAsk.ts, E319j), then the interpreted page built from it.
+    const r = await until(() => e.workers.find((x) => x.asked.some((a) => !!a && typeof a === "object" && "runCode" in a)), "the stored program's ask");
+    for (const m of await inWorker(r.asked.find((a) => !!a && typeof a === "object" && "runCode" in a))) r.onmessage?.({ data: m });
+    await until(() => button(/Back/), "the paused page");
+    assert.match(status(), /^Rolls: 4\b/);
     button(/Back/).click();
     assert.match(status(), /^Rolls: 3\b/);
     button(/^Go on from here$/).click();
