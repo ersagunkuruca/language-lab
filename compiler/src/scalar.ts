@@ -5222,8 +5222,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     return fns.get(key)!;
   };
   // A cell's box (C199a): its one field gives the cell's value.
+  // Its function is a plain one (C314): what a cell gives is one value,
+  // even where another function of its type has several answers or waits
+  // (fnOf's several type, whose closures take a rest and give a status).
   function cellBox(a: LType): RType {
-    const ft = fnOf([], a), key = `cell:${ft.key}`;
+    const plain = `fn()>${keyOf(a)}!`;
+    if (!fns.has(plain)) fns.set(plain, { key: plain, params: [], result: a, partial: true });
+    const ft = fns.get(plain)!, key = `cell:${ft.key}`;
     if (!records.has(key)) records.set(key, { key, name: "Cell", def: key, variant: key, fields: [{ name: "value", t: ft }], mutable: true });
     return records.get(key)!;
   }
