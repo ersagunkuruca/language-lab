@@ -305,8 +305,12 @@ static void fire(int handler, NSString *value, NSString *key, double x, double y
 @property (nonatomic) double sideWidths0, sideWidths1, sideWidths2, sideWidths3;
 @property (nonatomic) double inside;
 @property (nonatomic) CGFloat panFrom;
+// display: contents (placed shown 2): no box of its own, so a touch on
+// none of its views goes to what is below it.
+@property (nonatomic) BOOL contents;
 @end
 @implementation TBox
+- (UIView *)hitTest:(CGPoint)p withEvent:(UIEvent *)e { UIView *v = [super hitTest:p withEvent:e]; return v == self && self.contents ? nil : v; }
 - (void)layoutSubviews {
   [super layoutSubviews];
   if (!self.sideLayers) return;
@@ -440,6 +444,7 @@ static void u_place(void *c, void *v, double x, double y, double w, double h, in
   UIView *a = V(v);
   if (!a) return;
   a.hidden = !shown;
+  if ([a isKindOfClass:[TBox class]]) ((TBox *)a).contents = shown == 2;
   CGRect b = a.bounds;
   a.center = CGPointMake(x + w / 2, y + h / 2);
   a.bounds = CGRectMake(b.origin.x, b.origin.y, w, h);

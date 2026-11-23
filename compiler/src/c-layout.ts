@@ -1347,9 +1347,11 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   int me = shown && e->c.display != TL_NONE;
   if (e->c.display == TL_CONTENTS) {
     // No box: a view as big as its parent's, at its top left, and its
-    // children placed as they were laid out, against the parent.
+    // children placed as they were laid out, against the parent; shown 2,
+    // so a click on no child of it goes to what is below it, as a
+    // browser's would (a pointer finds no box of its own).
     int kept = tl_kept(e, me);
-    tl_place(e, 0, 0, e->parent ? e->parent->w : tl_width, e->parent ? e->parent->h : 0, me);
+    tl_place(e, 0, 0, e->parent ? e->parent->w : tl_width, e->parent ? e->parent->h : 0, me ? 2 : 0);
     tl_paint(e, 0, 0, 0, 0);
     if (!kept) for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
     return;

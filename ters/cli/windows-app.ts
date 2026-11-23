@@ -18,7 +18,7 @@ export function windowsAppFolder(title: string, c: string): Record<string, strin
   // Built as the command line's native programs are (main.ts "native"),
   // with Windows' own drawing and text; -mwindows, a window and no console.
   const flags = `-std=c99 -O2 -ffp-contract=off -fwrapv -w -pthread -static -Wl,--stack,0x40000000 -mwindows`;
-  const libs = "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lm";
+  const libs = "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -luuid -lm";
   return {
     "page.c": c,
     "screen.c": SCREEN_C(tersUiDecl(c), id, title),
@@ -69,6 +69,7 @@ const SCREEN_C = (decl: string, id: string, title: string) => String.raw`// The 
 #include <windows.h>
 #include <windowsx.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
@@ -90,6 +91,7 @@ void ters_page_held(int held);
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
+void ters_page_files(const char *dir);
 
 #define TITLE ${cString(title)}
 #define APP_ID ${cString(id)}
@@ -420,8 +422,39 @@ static void u_outline(void *c, void *v, const double *xy, size_t n) {
 // has the person's files, and the camera and microphone as the person's
 // privacy settings give them to all desktop apps, with no dialog of its
 // own: yes. Windows has no dialog for the rest: no.
+// The page's files (L284, C318): a folder the person picks in Windows'
+// own folder picker, opened once the handler that asked waits (-1 now,
+// their answer by ters_page_permission), or --ters-folder's for a check.
+#define WM_PICK (WM_APP + 2)
+static WCHAR *FOLDER;
+static void picked(const WCHAR *dir) { char *u = narrow(dir, (int)wcslen(dir)); ters_page_files(u); free(u); }
+static int pickFolder(void) {
+  int yes = 0;
+  HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  IFileOpenDialog *d = NULL;
+  if (SUCCEEDED(CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog, (void **)&d))) {
+    FILEOPENDIALOGOPTIONS o = 0;
+    IFileOpenDialog_GetOptions(d, &o);
+    IFileOpenDialog_SetOptions(d, o | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+    IShellItem *it = NULL;
+    PWSTR path = NULL;
+    if (SUCCEEDED(IFileOpenDialog_Show(d, W)) && SUCCEEDED(IFileOpenDialog_GetResult(d, &it))) {
+      if (SUCCEEDED(IShellItem_GetDisplayName(it, SIGDN_FILESYSPATH, &path))) { picked(path); CoTaskMemFree(path); yes = 1; }
+      IShellItem_Release(it);
+    }
+    IFileOpenDialog_Release(d);
+  }
+  if (SUCCEEDED(co)) CoUninitialize();
+  say("files: %s\n", yes ? "a folder picked" : "none picked");
+  return yes;
+}
 static int u_ask(void *c, const char *s, size_t n) {
-  if ((n == 5 && !memcmp(s, "files", 5)) || (n == 6 && !memcmp(s, "camera", 6)) || (n == 10 && !memcmp(s, "microphone", 10))) return 1;
+  if (n == 5 && !memcmp(s, "files", 5)) {
+    if (FOLDER) { picked(FOLDER); say("files: %s\n", "--ters-folder"); return 1; }
+    PostMessageW(W, WM_PICK, 0, 0);
+    return -1;
+  }
+  if ((n == 6 && !memcmp(s, "camera", 6)) || (n == 10 && !memcmp(s, "microphone", 10))) return 1;
   say("ask %.*s: Windows has no dialog for it\n", (int)n, s);
   return 0;
 }
@@ -432,7 +465,9 @@ static void held(void) {
   int c = GetKeyState(VK_CONTROL) < 0, s = GetKeyState(VK_SHIFT) < 0, a = GetKeyState(VK_MENU) < 0, m = GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0;
   ters_page_held(c | s << 1 | a << 2 | m << 3);
 }
+static int FIRED;
 static void fire(int h, const char *value, const char *key, double x, double y, double seconds) {
+  FIRED++;
   held();
   ters_page_event(h, value, strlen(value), key, strlen(key), x, y, seconds);
   tick();
@@ -881,7 +916,8 @@ static Node *hit(Node *n, double x, double y) {
   double lx = x - n->x, ly = y - n->y;
   if (lx < 0 || ly < 0 || lx >= n->w || ly >= n->h) return NULL;
   for (int i = n->nk - 1; i >= 0; i--) { Node *k = hit(n->kids[i], lx, ly + n->scrolled); if (k) return k; }
-  return n;
+  // A box of display: contents (shown 2) has none of its own to be found.
+  return n->shown == 2 ? NULL : n;
 }
 static void pagePoint(LPARAM l, double *x, double *y) { *x = GET_X_LPARAM(l) / SCALE; *y = GET_Y_LPARAM(l) / SCALE + SCROLLY; }
 // The pointer over v: the page told of the box round it (a text's box,
@@ -1066,6 +1102,8 @@ static void shown(const char *when) {
 }
 static char **TAPS;
 static int NTAPS, TAP;
+// A tap whose click reached no view hearing it: the check fails (exit 3).
+static int MISSED;
 #define TAP_TIMER 7
 // Each tap's step: 0 started, 1 the tap, 2 what it showed, 3 quit.
 static int STEP;
@@ -1121,9 +1159,21 @@ static void tapped(const char *t) {
       done = 1;
     }
   }
+  // Else a click on the view listening for clicks that reads t: the
+  // mouse's own, at its middle, so it finds that view as a person's would.
   if (!done) {
     Node *v = showing(t, 1);
-    if (v) { fire(v->heard[E_CLICK] - 1, "", "", 0, 0, 0); done = 1; }
+    if (v) {
+      double x, y;
+      origin(v, &x, &y);
+      x += v->w / 2; y += v->h / 2 - SCROLLY;
+      LPARAM at = MAKELPARAM((int)lround(x * SCALE), (int)lround(y * SCALE));
+      int was = FIRED;
+      SendMessageW(W, WM_LBUTTONDOWN, MK_LBUTTON, at);
+      SendMessageW(W, WM_LBUTTONUP, 0, at);
+      if (FIRED == was) { say("tap %s: the click at %.0f,%.0f found no view hearing it\n", t, x, y); MISSED = 1; }
+      done = 1;
+    }
   }
   // "key name": a key pressed and let go (Enter, Tab, ArrowDown, a letter
   // …), where the focus is, and where the focus is after.
@@ -1188,6 +1238,7 @@ static LRESULT CALLBACK windowed(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_SETTINGCHANGE: if (l && !wcscmp((const WCHAR *)l, L"ImmersiveColorSet")) { CW = -1; resized(); } return 0;
     case WM_GETMINMAXINFO: { MINMAXINFO *mm = (MINMAXINFO *)l; mm->ptMinTrackSize.x = (LONG)(240 * SCALE); mm->ptMinTrackSize.y = (LONG)(160 * SCALE); return 0; }
     case WM_FRAME: frame(); return 0;
+    case WM_PICK: { int yes = pickFolder(); held(); ters_page_permission(yes); tick(); return 0; }
     case WM_TIMER: if (w == TAP_TIMER) tapStep(); return 0;
     case WM_ACTIVATEAPP:
       if (!w) { PAUSED = 1; moment(E_PAUSE); }
@@ -1268,6 +1319,7 @@ int main(void) {
   for (int i = 1; i + 1 < argc; i++) {
     char *a = narrow(argv[i + 1], (int)wcslen(argv[i + 1]));
     if (!wcscmp(argv[i], L"--ters-out")) { if (!_wfreopen(argv[i + 1], L"w", stdout)) fprintf(stderr, "can't write %s\n", a); }
+    else if (!wcscmp(argv[i], L"--ters-folder")) { FOLDER = malloc(sizeof *FOLDER * (wcslen(argv[i + 1]) + 1)); wcscpy(FOLDER, argv[i + 1]); }
     else if (!wcscmp(argv[i], L"--ters-taps")) {
       for (char *t = strtok(a, "|"); t; t = strtok(NULL, "|")) if (*t) { TAPS = realloc(TAPS, sizeof *TAPS * (NTAPS + 1)); TAPS[NTAPS++] = strdup(t); }
       STEP = -1;
@@ -1355,6 +1407,6 @@ int main(void) {
   if (STEP < 0) tapNext(1000, 0);
   MSG msg;
   while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
-  return 0;
+  return MISSED ? 3 : 0;
 }
 `;
