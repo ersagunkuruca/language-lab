@@ -253,7 +253,11 @@ and Schmitt, "Combinators for bidirectional tree transformations", TOPLAS
   document and compare the HTML after each event.
 - **Browser world** (`src/lang/browser.ts`): the `World` for a page. Files
   are `localStorage` under a prefix named after the program, so two apps
-  on one origin don't share files by accident.
+  on one origin don't share files by accident; a path's parts name its
+  folders. A page that asks for "files" (L284) gets a folder the person
+  picks (`showDirectoryPicker`, Chromium), and its files are that
+  folder's from then on: a read waits for the folder as a fetch does, a
+  write lands once the handler is kept.
 - **`ters build-web`** (cli/ters.ts): compiles the program, bundles it with
   the runtime, the mount and the browser world by esbuild (already a dev
   dependency, as for `ters compile`), and writes one HTML file. There is

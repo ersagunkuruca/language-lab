@@ -99,3 +99,25 @@ test("open outside hands the path to the opener, evaluated and compiled; a missi
     if (was === undefined) delete process.env.TERS_OPEN_OUTSIDE; else process.env.TERS_OPEN_OUTSIDE = was;
   }
 });
+
+// Files in a page (L284): the store's paths name folders, so a folder
+// lists its own names, files' and folders', as a disk's does.
+test("a page's stored files are in folders: listed, told about and there", () => {
+  const m = new Map<string, string>();
+  const store = { getItem: (key: string) => m.get(key) ?? null, setItem: (key: string, v: string) => void m.set(key, v), removeItem: (key: string) => void m.delete(key), get length() { return m.size; }, key: (i: number) => [...m.keys()][i] ?? null };
+  const w = browserWorld(store, "t");
+  w.writeFile("top.txt", "a");
+  w.writeFile("notes/b.txt", "bb");
+  w.writeFile("./notes/old/c.txt", "ccc");
+  assert.deepEqual(w.listFolder(""), ["notes", "top.txt"]);
+  assert.deepEqual(w.listFolder("."), ["notes", "top.txt"]);
+  assert.deepEqual(w.listFolder("notes"), ["b.txt", "old"]);
+  assert.deepEqual(w.listFolder("notes/old/"), ["c.txt"]);
+  assert.equal(w.readFile("notes/old/c.txt"), "ccc");
+  assert.equal(w.fileInfo!("notes").kind, "folder");
+  assert.deepEqual({ ...w.fileInfo!("notes/b.txt"), modified: 0 }, { kind: "file", size: 2, modified: 0 });
+  assert.ok(w.fileExists("notes/old") && w.fileExists("top.txt") && !w.fileExists("note"));
+  assert.throws(() => w.listFolder("top.txt"), /not a folder/);
+  assert.throws(() => w.listFolder("gone"), /no such folder/);
+  assert.throws(() => w.fileInfo!("gone"), /no such file/);
+});

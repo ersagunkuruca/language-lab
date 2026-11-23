@@ -10,7 +10,7 @@ import type { PlainRequest, PlainResponse } from "./network.ts";
 import type { Code, Id } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import type { Info } from "./infer.ts";
-import { browserWorld, type Store } from "./browser.ts";
+import { browserWorld, type PickedFolder, type Store } from "./browser.ts";
 import { carried, Cells, handOver, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
@@ -64,6 +64,9 @@ export interface PageOptions {
   // download and the browser's picker).
   offer?: (name: string, bytes: Uint8Array) => void;
   choose?: (kinds: string) => Promise<Uint8Array>;
+  // The folder the person picks when the page asks for files (L284; a
+  // test's, by default the browser's picker).
+  pick?: () => Promise<PickedFolder | null>;
   // And for send request (L191b).
   send?: (request: PlainRequest) => Promise<PlainResponse>;
   // How the page waits (a test's; by default setTimeout): C40.
@@ -152,7 +155,7 @@ export function showPage(o: PageOptions): Preview {
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells || (o.log && o.window)) cells.kept = [];
   const latency = cells.own(0, "sound latency");
-  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, ...(o.time ? { time: o.time } : {}), fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose, latency });
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, ...(o.time ? { time: o.time } : {}), fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose, pick: o.pick, latency });
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser, undefined, undefined, () => cells.inView()) : browser;
   // While the page is stepped through its log (I239c), the world answers
   // from the log and nothing new is logged: `asking` is which world.

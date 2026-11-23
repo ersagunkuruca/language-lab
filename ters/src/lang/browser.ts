@@ -3,7 +3,8 @@
 // means. Printing goes to the browser console. Files are localStorage
 // entries under a prefix named after the program, so two apps on one site
 // don't share files by accident, and a list that saves itself with
-// `write file` keeps it across visits. A page has no standard input.
+// `write file` keeps it across visits. A path's parts name its folders.
+// A page has no standard input.
 //
 // The clock is a cell (cells.ts) that the browser writes on every
 // animation frame, once something has read it. `now()` reads that cell, so
@@ -33,7 +34,7 @@
 import { Pending, type Cells } from "./cells.ts";
 import { worldRandom } from "./random.ts";
 import { base64Of, bytesOfBase64, requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
-import type { Value, World } from "./run.ts";
+import type { FileFacts, Value, World } from "./run.ts";
 
 // What's used of localStorage (Storage), so tests can pass a map.
 export interface Store {
@@ -65,7 +66,74 @@ export interface Clock {
   // The platform's sound latency in seconds, a cell of the runtime's own
   // (C260): what a sound playing reports writes it.
   latency?: Value;
+  // A test's person picking a folder when the page asks for files (L284),
+  // null when they pick none; by default the browser's folder picker.
+  pick?(): Promise<PickedFolder | null>;
 }
+
+// The operations on files, which go to the page's stored files or, once
+// the person picked a folder (L284), to it.
+const FILE_OPS = ["readFile", "writeFile", "appendFile", "readBytes", "writeBytes", "fileExists", "openOutside", "fileInfo", "listFolder"] as const;
+
+// A folder the person picked (L284), by a path's parts inside it. Each
+// fails as a disk does: no such file, not a folder.
+export interface PickedFolder {
+  list(parts: string[]): Promise<string[]>;
+  info(parts: string[]): Promise<FileFacts>;
+  read(parts: string[]): Promise<Uint8Array>;
+  write(parts: string[], bytes: Uint8Array): Promise<void>;
+}
+
+// The File System Access API's folder (Chromium's showDirectoryPicker), as
+// little of it as is used. A folder there has no modified time: 0.
+interface FsEntry { kind: "file" | "directory"; name: string }
+interface FsFile extends FsEntry { kind: "file"; getFile(): Promise<{ size: number; lastModified: number; arrayBuffer(): Promise<ArrayBuffer> }>; createWritable(): Promise<{ write(b: BlobPart): Promise<void>; close(): Promise<void> }> }
+interface FsFolder extends FsEntry { kind: "directory"; getDirectoryHandle(name: string): Promise<FsFolder>; getFileHandle(name: string, o?: { create?: boolean }): Promise<FsFile>; keys(): AsyncIterable<string>; requestPermission?(o: { mode: string }): Promise<string> }
+export function handleFolder(top: FsFolder): PickedFolder {
+  const where = (parts: string[]) => parts.join("/") || ".";
+  const folder = async (parts: string[]) => {
+    let f = top;
+    for (const p of parts) {
+      try { f = await f.getDirectoryHandle(p); } catch (e) { throw new Error(`${(e as Error).name === "TypeMismatchError" ? "not a folder" : "no such folder"}: ${where(parts)}`); }
+    }
+    return f;
+  };
+  const entry = async (parts: string[]): Promise<FsFile | FsFolder> => {
+    if (!parts.length) return top;
+    const f = await folder(parts.slice(0, -1)), name = parts[parts.length - 1];
+    try { return await f.getFileHandle(name); } catch { /* a folder, or nothing */ }
+    try { return await f.getDirectoryHandle(name); } catch { throw new Error(`no such file: ${where(parts)}`); }
+  };
+  return {
+    list: async (parts) => { const out: string[] = []; for await (const n of (await folder(parts)).keys()) out.push(n); return out.sort(); },
+    info: async (parts) => {
+      const e = await entry(parts);
+      if (e.kind === "directory") return { kind: "folder", size: 0, modified: 0 };
+      const f = await e.getFile();
+      return { kind: "file", size: f.size, modified: f.lastModified / 1000 };
+    },
+    read: async (parts) => {
+      const e = await entry(parts);
+      if (e.kind === "directory") throw new Error(`a folder, not a file: ${where(parts)}`);
+      return new Uint8Array(await (await e.getFile()).arrayBuffer());
+    },
+    // Writing asks the browser for leave to change the folder, once.
+    write: async (parts, bytes) => {
+      if (top.requestPermission && (await top.requestPermission({ mode: "readwrite" })) !== "granted") throw new Error(`writing to the folder wasn't allowed: ${where(parts)}`);
+      const w = await (await (await folder(parts.slice(0, -1))).getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
+      await w.write(bytes as BlobPart);
+      await w.close();
+    },
+  };
+}
+
+// The browser's folder picker: opened now, while the click that asked is
+// still going; none picked, or a browser without one, is no folder.
+const browserPick = async (): Promise<PickedFolder | null> => {
+  const g = globalThis as unknown as { showDirectoryPicker?: () => Promise<FsFolder> };
+  if (!g.showDirectoryPicker) return null;
+  try { return handleFolder(await g.showDirectoryPicker()); } catch { return null; }
+};
 
 // A file the person keeps (L271): a download of it, by its name.
 const browserOffer = (name: string, bytes: Uint8Array): void => {
@@ -179,8 +247,22 @@ export function browserWorld(store: Store, program: string, console_ = console, 
   // file on disk does: a text as its UTF-8, bytes decoded as UTF-8 with
   // U+FFFD where they aren't.
   const BYTES = "\u0000";
+  // The store has no folders of its own: a path's parts are its folders
+  // (L284), so "notes/a.txt" is a.txt in the folder notes, and "./a",
+  // "a" and "/a" are one file.
+  const norm = (path: string) => path.split("/").filter((p) => p !== "" && p !== ".").join("/");
+  // The stored files' paths, without the prefix.
+  const paths = () => {
+    const out: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i);
+      if (k?.startsWith(prefix)) out.push(k.slice(prefix.length));
+    }
+    return out;
+  };
+  const inside = (folder: string) => { const f = norm(folder); return paths().filter((p) => !f || p.startsWith(`${f}/`)); };
   const kept = (path: string) => {
-    const v = store.getItem(prefix + path);
+    const v = store.getItem(prefix + norm(path));
     if (v === null) throw new Error(`no such file: ${path}`);
     return v;
   };
@@ -199,35 +281,95 @@ export function browserWorld(store: Store, program: string, console_ = console, 
       store.setItem(k, v);
     }
   };
+  const openBytes = (path: string, bytes: Uint8Array) => {
+    const w = globalThis as { open?: (url: string, target: string) => unknown; URL?: { createObjectURL?: (b: Blob) => string } };
+    if (typeof w.open !== "function" || !w.URL?.createObjectURL) throw new Error(`there's no browser here to open ${path} in`);
+    later(() => void w.open!(w.URL!.createObjectURL!(new Blob([bytes as BlobPart])), "_blank"));
+  };
+  type FileOps = Required<Pick<World, (typeof FILE_OPS)[number]>>;
+  const stored: FileOps = {
+    readFile: read,
+    writeFile: (path, text) => put(prefix + norm(path), asKept(text)),
+    appendFile: (path, text) => put(prefix + norm(path), asKept((store.getItem(prefix + norm(path)) === null ? "" : read(path)) + text)),
+    readBytes,
+    writeBytes: (path, bytes) => put(prefix + norm(path), BYTES + base64Of(bytes)),
+    // A folder is there while a file is in it.
+    fileExists: (path) => norm(path) === "" || store.getItem(prefix + norm(path)) !== null || inside(path).length > 0,
+    // A stored file opened in a new tab, as the browser shows its kind
+    // (L283): what it holds, as a blob.
+    openOutside: (path) => openBytes(path, readBytes(path)),
+    // A stored file is a plain file, and a folder one that has files in
+    // it, modified when the latest of them was; the store has no links.
+    fileInfo: (path) => {
+      const modified = (p: string) => Number(store.getItem(`modified ${prefix}${p}`) ?? 0);
+      if (store.getItem(prefix + norm(path)) !== null) return { kind: "file", size: readBytes(path).length, modified: modified(norm(path)) };
+      const under = inside(path);
+      if (!under.length && norm(path) !== "") throw new Error(`no such file: ${path}`);
+      return { kind: "folder", size: 0, modified: Math.max(0, ...under.map(modified)) };
+    },
+    // The names in a folder, its files' and its folders', as a disk's
+    // folder lists them; "" and "." are the top.
+    listFolder: (path) => {
+      const f = norm(path);
+      if (f && store.getItem(prefix + f) !== null) throw new Error(`not a folder: ${path}`);
+      const under = inside(path);
+      if (f && !under.length) throw new Error(`no such folder: ${path}`);
+      return [...new Set(under.map((p) => p.slice(f ? f.length + 1 : 0).split("/")[0]))].sort();
+    },
+  };
+  // The person's files (L284): once they picked a folder when the page
+  // asked for "files", the file operations are on that folder, each asked
+  // of it as a fetch is: the handler waits for the answer, remembered for
+  // its event. What a handler writes is kept here until the folder has
+  // it, so a read after it, in this event or a later one, finds it; the
+  // folder is written once the handler is kept, and a write that fails
+  // then is logged as an error.
+  let picked: PickedFolder | null = null;
+  const writing = new Map<string, { bytes: Uint8Array; at: number }>();
+  const partsOf = (path: string) => {
+    const out: string[] = [];
+    for (const p of norm(path).split("/")) {
+      if (p === "..") { if (!out.length) throw new Error(`outside the folder: ${path}`); out.pop(); } else if (p) out.push(p);
+    }
+    return out;
+  };
+  const askFolder = <T>(what: string, path: string, f: (folder: PickedFolder, parts: string[]) => Promise<T>): T => {
+    const parts = partsOf(path), folder = picked!;
+    return ask(`folder ${what} ${parts.join("/")}`, () => f(folder, parts), (e) => e, path) as T;
+  };
+  const pending = (path: string) => writing.get(partsOf(path).join("/"));
+  const folderBytes = (path: string) => pending(path)?.bytes ?? askFolder("read", path, (f, p) => f.read(p));
+  const folderExists = (path: string) => !!pending(path) || askFolder("exists", path, (f, p) => f.info(p).then(() => true, () => false));
+  const folderWrite = (path: string, bytes: Uint8Array) => {
+    const parts = partsOf(path), key = parts.join("/"), folder = picked!, was = writing.get(key), w = { bytes, at: (clock?.time ?? Date.now)() / 1000 };
+    if (!parts.length) throw new Error(`a folder, not a file: ${path}`);
+    writing.set(key, w);
+    clock?.cells.undo(() => (was ? writing.set(key, was) : writing.delete(key)));
+    const done = () => { if (writing.get(key) === w) writing.delete(key); };
+    later(() => void folder.write(parts, bytes).then(done, (e) => { done(); console_.error(`could not write ${path}: ${(e as Error).message}`); }));
+  };
+  const utf8 = (text: string) => new TextEncoder().encode(text);
+  const inFolder: FileOps = {
+    readFile: (path) => new TextDecoder().decode(folderBytes(path)),
+    writeFile: (path, text) => folderWrite(path, utf8(text)),
+    appendFile: (path, text) => { const was = folderExists(path) ? folderBytes(path) : new Uint8Array(); const more = utf8(text), both = new Uint8Array(was.length + more.length); both.set(was); both.set(more, was.length); folderWrite(path, both); },
+    readBytes: folderBytes,
+    writeBytes: folderWrite,
+    fileExists: folderExists,
+    openOutside: (path) => openBytes(path, folderBytes(path)),
+    fileInfo: (path) => { const w = pending(path); return w ? { kind: "file", size: w.bytes.length, modified: w.at } : askFolder("info", path, (f, p) => f.info(p)); },
+    listFolder: (path) => {
+      const f = partsOf(path).join("/"), listed = askFolder("list", path, (d, p) => d.list(p));
+      const written = [...writing.keys()].filter((k) => !f || k.startsWith(`${f}/`)).map((k) => k.slice(f ? f.length + 1 : 0).split("/")[0]);
+      return [...new Set([...listed, ...written])].sort();
+    },
+  };
   return {
     error: (line) => later(() => console_.error(line)),
     log: (line) => later(() => console_.log(line)),
     input: none,
     readLine: none,
-    readFile: read,
-    writeFile: (path, text) => put(prefix + path, asKept(text)),
-    appendFile: (path, text) => put(prefix + path, asKept((store.getItem(prefix + path) === null ? "" : read(path)) + text)),
-    readBytes,
-    writeBytes: (path, bytes) => put(prefix + path, BYTES + base64Of(bytes)),
-    fileExists: (path) => store.getItem(prefix + path) !== null,
-    // A stored file opened in a new tab, as the browser shows its kind
-    // (L283): what it holds, as a blob.
-    openOutside: (path) => {
-      const bytes = readBytes(path), w = globalThis as { open?: (url: string, target: string) => unknown; URL?: { createObjectURL?: (b: Blob) => string } };
-      if (typeof w.open !== "function" || !w.URL?.createObjectURL) throw new Error(`there's no browser here to open ${path} in`);
-      later(() => void w.open!(w.URL!.createObjectURL!(new Blob([bytes as BlobPart])), "_blank"));
-    },
-    // Every stored file is a plain file: the store has no folders or links.
-    fileInfo: (path) => ({ kind: "file", size: readBytes(path).length, modified: Number(store.getItem(`modified ${prefix}${path}`) ?? 0) }),
-    // Every file, as paths: the store has no folders.
-    listFolder: () => {
-      const out: string[] = [];
-      for (let i = 0; i < store.length; i++) {
-        const k = store.key(i);
-        if (k?.startsWith(prefix)) out.push(k.slice(prefix.length));
-      }
-      return out.sort();
-    },
+    ...(Object.fromEntries(FILE_OPS.map((op) => [op, (...a: never[]) => ((picked ? inFolder : stored)[op] as (...a: never[]) => unknown)(...a)])) as FileOps),
     random: worldRandom,
     now: () => {
       if (!clock) return Date.now();
@@ -249,7 +391,10 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     // Any request (L191b), answered as fetch text is: the page goes on
     // when the response lands, and one event sends each request once.
     // Asked once per event, as a fetch is: the handler goes on with the answer.
-    askPermission: (what) => ask(`permission ${what}`, () => (clock?.permission ?? browserPermission)(what), (e) => `could not ask for ${what}: ${e}`, what) as boolean,
+    // "files" (L284) is a folder the person picks, which the page's files
+    // are from then on; none picked, or a browser without the picker,
+    // is no, and the files stay the stored ones.
+    askPermission: (what) => ask(`permission ${what}`, () => (what === "files" ? (clock?.pick ?? browserPick)().then((f) => { if (f) { picked = f; writing.clear(); } return !!f; }) : (clock?.permission ?? browserPermission)(what)), (e) => `could not ask for ${what}: ${e}`, what) as boolean,
     // Read as a cell, so a view showing it is drawn again when a sound reports it.
     soundLatency: () => (clock?.latency ? (clock.cells.read(clock.latency) as number) : 0),
     // Offered once the handler is kept, so a retried handler offers it once.

@@ -117,6 +117,14 @@ What it needs from the language and targets:
   `showDirectoryPicker`, Chromium only); in the editor a sample folder.
   The page asks for files as it asks for the microphone, and a target that
   can't give them says so at build time.
+  Built: `ask permission("files")`. In a browser it opens the folder
+  picker and the page's files are the picked folder's from then on (a
+  read waits for the folder as a fetch does; a write lands once the
+  handler is kept); none picked is no, and the files stay the stored
+  ones, which have folders by their paths' parts. A Mac app and a command
+  line answer yes: a C page's handlers read the disk already. Every target
+  gives some files, so none refuses at build time. Left: the editor's
+  sample folder (E321), phones and Windows (C313).
 - **C300. Long lists.** A folder of 10,000 files is 10,000 rows. A C page
   runs every view again after each event (C199b) and lays out the whole
   page again (C199d). Measured first on `folders` with 10,000 rows; if a
