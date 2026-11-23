@@ -142,7 +142,7 @@ if (checksRead) {
   void checksRead.then(() => { self.onmessage = onAsk; for (const e of asked.splice(0)) onAsk(e); });
 } else self.onmessage = onAsk;
 
-// The placements held in Choices (E292, L280h), set for the lowering of
+// The placements held in Decisions (E292, L280h), set for the lowering of
 // the ask (scalar.ts keeps them for the next): main's work kept on the
 // main thread, or a command-line program's shared out always; and how
 // many workers main starts (L280e), on whichever target it is lowered

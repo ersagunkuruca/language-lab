@@ -689,7 +689,7 @@ export function pagePanels(host: PageHost) {
   // makes it too, by the site's build for a shipped example, or else by a
   // worker now. Filling it in takes no time.
   let savedPages = new WeakMap<Code, SavedScripts>();
-  // A type held or let go in Choices (E292): the same code compiles
+  // A type held or let go in Decisions (E292): the same code compiles
   // otherwise, so what was compiled is forgotten.
   const forgetCompiled = () => { compiledPages = new WeakMap(); savedPages = new WeakMap(); };
   // The site's build compiled the shipped examples with nothing held.

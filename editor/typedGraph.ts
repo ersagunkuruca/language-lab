@@ -1386,8 +1386,8 @@ function commentMark(w: number, text: string, n = 1): SVGElement {
   o.append(s("title", {}, text));
   return o;
 }
-// A fork on a box's top right corner, saying the compiler made a choice
-// about it (E292); what it chose on hover, its row in Choices on a click.
+// A fork on a box's top right corner, saying the compiler made a decision
+// about it (E292); what it decided on hover, its row in Decisions on a click.
 function choiceMark(id: Id, x: number, y: number, text: string): SVGElement {
   const o = s("g", { class: "choice-mark", "data-choice": id, transform: `translate(${x} ${y})` });
   o.append(s("rect", { x: 0, y: 0, width: 15, height: 13, rx: 3 }), s("path", { class: "choice-fork", d: "M2.5 6.5 H6 L11.5 3 M6 6.5 L11.5 10" }));

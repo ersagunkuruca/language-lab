@@ -1,4 +1,4 @@
-// The Choices tab (E292): the program's choices for main as `ters choices`
+// The Decisions section (E292): the program's decisions for main as `ters decisions`
 // writes them (L280a, CHOICES-2026-11-20.md), under the four kinds:
 // Representation, Algorithm, Placement and Schedule. Each entry is its
 // pick among the implementations of the same meaning, auto (the
@@ -31,7 +31,7 @@ export interface Choice {
 }
 
 const LINE = /^(\S+) (representation|way|mode plan|place|schedule): (.*)$/;
-// An entry as `ters choices` writes it (cli/choices.ts), or null.
+// An entry as `ters decisions` writes it (cli/choices.ts), or null.
 export function parseChoice(line: string): Choice | null {
   const held = line.startsWith("held "), m = LINE.exec(held ? line.slice(5) : line);
   if (!m) return null;
@@ -144,14 +144,14 @@ export function choiceMarks(c: Choices | null): Map<Id, string> {
 // it.
 export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HTMLElement {
   const box = h("div", { class: "choices" });
-  if (!c) { box.append(h("p", { class: "empty", title: "The compiler's choices are made for main" }, "No main")); return box; }
+  if (!c) { box.append(h("p", { class: "empty", title: "The compiler's decisions are made for main" }, "No main")); return box; }
   if (c.blocked) { box.append(h("p", { class: "status-line warn", title: "The compiler chooses once the program checks; Checks lists what's wrong" }, `Waits on ${c.blocked}`)); return box; }
-  if (c.failed && !c.entries.length) { box.append(h("p", { class: "status-line warn", title: "The worker working them out failed" }, "No choices")); return box; }
+  if (c.failed && !c.entries.length) { box.append(h("p", { class: "status-line warn", title: "The worker working them out failed" }, "No decisions")); return box; }
   if (!c.entries.length) { box.append(h("p", { class: "empty" }, c.working ? "Working out…" : "None")); return box; }
   if (c.working) box.append(h("p", { class: "hint" }, "Updating…"));
   // What is held can't be (a run is refused the same): said first, the
   // compiler's own picks below, each with its row to hold another.
-  if (c.refused) box.append(h("p", { class: "status-line bad", role: "alert", title: c.refused }, "Held choice refused · ", h("span", { class: "hint" }, c.refused)));
+  if (c.refused) box.append(h("p", { class: "status-line bad", role: "alert", title: c.refused }, "Held decision refused · ", h("span", { class: "hint" }, c.refused)));
   const up = parentLookup(code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   for (const [title, kinds] of SECTIONS) {
