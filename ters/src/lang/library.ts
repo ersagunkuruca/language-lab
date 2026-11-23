@@ -50,6 +50,9 @@ export const FIXED_V = numbersNode("variant", "fixed"), FIXED_TYPE = numbersNode
 export const RATIO_V = numbersNode("variant", "ratio"), RATIONAL_TYPE = numbersNode("def", "Rational");
 // Its case is private (L207f4): a program makes a fraction this way.
 SMART[RATIO_V] = "fraction or as fraction";
+// Float32 (L286): a value is made by as float32 or a literal, which round.
+export const FLOAT32_V = numbersNode("variant", "float32"), FLOAT32_TYPE = numbersNode("def", "Float32");
+SMART[FLOAT32_V] = "as float32";
 // std's Nat (L249): zero | succ(pred: Nat), stored as an Int by default.
 export const NAT_TYPE = numbersNode("def", "Nat"), NAT_V = { zero: numbersNode("variant", "zero"), succ: numbersNode("variant", "succ") } as const;
 WHOLE_LITERALS.add(NAT_TYPE);

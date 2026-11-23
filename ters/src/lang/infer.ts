@@ -744,6 +744,9 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (id.startsWith(`${RIGID}numbers.`)) return [{ t: "con", id: NUMBER, args: [] }];
     const td = typedefOf(id);
     if (!td || td.effect || td.variants.length !== 1 || packingOf(code, id)) return null;
+    // A private case's parts aren't the program's to change (Float32's
+    // value, L286), so it isn't a record of Float64s for parts-wise maps.
+    if ((code.nodes[td.variants[0]] as NodeOf<"variant">).private) return null;
     const params = new Map(td.params.map((p, i) => [p, args[i] ?? s.fresh()] as const));
     return (code.nodes[td.variants[0]] as NodeOf<"variant">).fields.map((f) => typeExpr((code.nodes[f] as NodeOf<"field">).type, params));
   };
