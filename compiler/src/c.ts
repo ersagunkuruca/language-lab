@@ -324,11 +324,12 @@ static void lab__held(void) {
 // at the exit, as compiled JavaScript says it (branches-rt.ts).
 // With how many threads it starts (L280e): cores less one, at most 15,
 // or as many as its choices hold (at most 64); TERS_WORKERS says otherwise.
-const poolC = (held: number | undefined) => `#ifdef _WIN32
-#define LAB_POOL_HELD ${held ?? "pthread_num_processors_np() - 1"}
+// A held count is the same on every system.
+const poolC = (held: number | undefined) => `${held !== undefined ? `#define LAB_POOL_HELD ${held}` : `#ifdef _WIN32
+#define LAB_POOL_HELD (pthread_num_processors_np() - 1)
 #else
-#define LAB_POOL_HELD ${held ?? "sysconf(_SC_NPROCESSORS_ONLN) - 1"}
-#endif
+#define LAB_POOL_HELD (sysconf(_SC_NPROCESSORS_ONLN) - 1)
+#endif`}
 #define LAB_POOL_MAX ${held === undefined ? 15 : 64}
 ${POOL_C}`;
 // A thread's stack (C296): on Windows the size given to a thread is what
