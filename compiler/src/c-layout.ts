@@ -134,8 +134,25 @@ typedef struct tl_n {
   // selectors see of it, TL_RENEW: drawn again, TL_KIDS: its children),
   // and whether anything did below it (tl_dirty).
   int dirt, below;
+  // Laid out again (C300c): lay when its style, children or text changed
+  // since the last layout, lay_sub when it or any box below it did; what
+  // the last layout gave it (l_done, for l_avail: its size and inside),
+  // its top and bottom margins as its children collapse them (cm), how far its
+  // children reach (ki); an_sub when it or a box below it has an
+  // animation (an_kids, below it); relaid when this layout placed its
+  // children again (laid out at another width, or display: contents
+  // opened up by the box round it).
+  int lay, lay_sub, l_done, c_done, r_done, an_sub, an_kids, s_me, relaid;
+  double l_avail, l_w, l_h, l_inside, cm[2], ki[2];
 } tl_n;
 #define TL_DIRTY 1
+// Built with TL_FRESH, every layout walks every box, as before C300c
+// (c-page-folders.test.ts checks the two agree).
+#ifdef TL_FRESH
+#define TL_KEEP 0
+#else
+#define TL_KEEP 1
+#endif
 #define TL_RENEW 2
 #define TL_KIDS 4
 // Whether a text or the boxes' children changed since the last layout, so
@@ -728,8 +745,8 @@ static uint64_t tl_salt, tl_salt_sheet;
 // :first-child, :last-child). place is 1 for its parent's first element,
 // 2 for the last.
 static int tl_all;
-static void tl_style_at(tl_n *e, const tl_css *up, int root, uint64_t up_h, uint64_t up_chain, int place, int check) {
-  if (!e->tag) return;
+static int tl_style_at(tl_n *e, const tl_css *up, int root, uint64_t up_h, uint64_t up_chain, int place, int check) {
+  if (!e->tag) return 0;
   // Only where something changed (C300): e itself when it or its parent
   // did (check), its children when e's style or what selectors see of it
   // changed, or they did, or something below them.
@@ -755,12 +772,18 @@ static void tl_style_at(tl_n *e, const tl_css *up, int root, uint64_t up_h, uint
   // An animation starts when its name is new on the box, as in a browser.
   if (strcmp(e->c.anim, e->an)) { strcpy(e->an, e->c.anim); e->a0 = tl_ms(); e->aend = 0; e->ax = e->ay = 0; e->as = e->ao = 1; }
   int kids = changed || tl_all || (e->dirt & TL_KIDS);
+  e->lay = changed || tl_all || e->dirt;
+  int sub = e->lay;
   if (kids || e->below) {
-    int first = -1, last = -1;
+    int first = -1, last = -1, an = 0;
     for (int j = 0; j < e->nk; j++) if (e->kids[j]->tag) { if (first < 0) first = j; last = j; }
-    for (int j = 0; j < e->nk; j++) tl_style_at(e->kids[j], &e->cs, 0, e->cs_h, e->chain, (j == first) | (j == last) << 1, kids);
+    for (int j = 0; j < e->nk; j++) { sub |= tl_style_at(e->kids[j], &e->cs, 0, e->cs_h, e->chain, (j == first) | (j == last) << 1, kids); an |= e->kids[j]->an_sub; }
+    e->an_kids = an;
   }
+  e->an_sub = e->an[0] || e->an_kids;
   e->dirt = 0; e->below = 0;
+  e->lay_sub = sub;
+  return sub;
 }
 static void tl_style_of(tl_n *e, const tl_css *up, int root) {
   tl_defaults(&e->c, e->tag, up);
@@ -806,7 +829,7 @@ static int tl_blank(tl_n *k) { if (k->tag) return 0; for (const char *p = k->s; 
 static int tl_items(tl_n *e, tl_n **out, int cap, int n) {
   for (int j = 0; j < e->nk && n < cap; j++) {
     tl_n *k = e->kids[j];
-    if (k->tag && k->c.display == TL_CONTENTS) { k->x = k->y = 0; k->w = k->h = 0; n = tl_items(k, out, cap, n); }
+    if (k->tag && k->c.display == TL_CONTENTS) { k->x = k->y = 0; k->w = k->h = 0; k->relaid = 1; n = tl_items(k, out, cap, n); }
     else out[n++] = k;
   }
   return n;
@@ -987,12 +1010,20 @@ static double tl_flow(tl_n *e, double w) {
 // collapse through it where nothing (padding, a border, a set height)
 // stands between them, as CSS's margin collapsing does: a page's h1 in a
 // main with no padding starts at main's top, its margin outside main.
-static void tl_collapse(tl_n *e) {
+static void tl_collapse_at(tl_n *e);
+// force: e's parent's style changed, which e's collapsing reads. A box
+// nothing changed in keeps what its children gave it (C300c).
+static void tl_collapse(tl_n *e, int force) {
   if (!e->tag) return;
+  if (TL_KEEP && !force && !e->lay_sub && e->c_done) { e->c.mar[0] = e->cm[0]; e->c.mar[2] = e->cm[1]; return; }
+  tl_collapse_at(e);
+  e->cm[0] = e->c.mar[0]; e->cm[1] = e->c.mar[2]; e->c_done = 1;
+}
+static void tl_collapse_at(tl_n *e) {
   // Its margins as its style gives them, before they collapse again
   // (its style is kept between layouts, C300).
   e->c.mar[0] = e->cs.mar[0]; e->c.mar[2] = e->cs.mar[2];
-  for (int j = 0; j < e->nk; j++) tl_collapse(e->kids[j]);
+  for (int j = 0; j < e->nk; j++) tl_collapse(e->kids[j], e->lay);
   // A flex or grid item holds its children's margins (a formatting context of its own).
   if (e->c.display != TL_BLOCK || e->c.pos == 2 || (e->parent && e->parent->tag && (e->parent->c.display == TL_FLEX || e->parent->c.display == TL_GRID))) return;
   for (int end = 0; end < 2; end++) {
@@ -1011,8 +1042,16 @@ static void tl_collapse(tl_n *e) {
   }
 }
 // e laid out avail wide (its border box, margins outside).
+static void tl_lay_at(tl_n *e, double avail);
+// A box nothing in changed, laid out as wide as before, is as it was
+// (C300c): its size, and its children where they were.
 static void tl_lay(tl_n *e, double avail) {
   if (!e->tag) { tl_text_lay(e, avail); return; }
+  if (TL_KEEP && e->l_done && !e->lay_sub && !(e->parent && e->parent->lay) && avail == e->l_avail) { e->w = e->l_w; e->h = e->l_h; e->inside = e->l_inside; return; }
+  tl_lay_at(e, avail); e->relaid = 1;
+  e->l_done = 1; e->l_avail = avail; e->l_w = e->w; e->l_h = e->h; e->l_inside = e->inside;
+}
+static void tl_lay_at(tl_n *e, double avail) {
   tl_css *c = &e->c;
   double edge = c->pad[1] + c->pad[3] + 2 * c->bw;
   // A width in % of the box it is in (avail, its margins aside): its
@@ -1262,10 +1301,12 @@ static void tl_picture(tl_n *e) {
   free(e->drawn); e->drawn = d.o ? d.o : malloc(sizeof(double)); e->ndrawn = d.n;
   if (tl_ui->draw) tl_ui->draw(tl_ui->ctx, e->view, e->drawn, e->ndrawn);
 }
-static void tl_hide(tl_n *e) { tl_place(e, 0, 0, 0, 0, 0); for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); }
+static void tl_hide(tl_n *e) { e->lay = e->lay_sub = e->relaid = 0; tl_place(e, 0, 0, 0, 0, 0); for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); }
 // How far right and down the absolutely placed boxes in k reach (k too),
 // against the box k is placed in: each box's, once, from its children's
 // (C300; -1e300, none).
+// Its children's, kept in ki, worked out again only where something
+// below changed or moved (C300c).
 static void tl_reaches(tl_n *k) {
   k->rr[0] = k->rr[1] = -1e300;
   if (!k->tag || k->c.display == TL_NONE) return;
@@ -1273,14 +1314,26 @@ static void tl_reaches(tl_n *k) {
   double x = contents ? 0 : k->x, y = contents ? 0 : k->y;
   if (!contents && k->c.pos == 2) { k->rr[0] = x + k->w; k->rr[1] = y + k->h; }
   if (!contents && tl_pic(k)) return;
-  for (int j = 0; j < k->nk; j++) {
-    tl_n *c = k->kids[j];
-    tl_reaches(c);
-    if (c->rr[0] + x > k->rr[0]) k->rr[0] = c->rr[0] + x;
-    if (c->rr[1] + y > k->rr[1]) k->rr[1] = c->rr[1] + y;
+  if (!TL_KEEP || k->lay_sub || k->an_sub || k->relaid || !k->r_done) {
+    k->r_done = 1;
+    k->ki[0] = k->ki[1] = -1e300;
+    for (int j = 0; j < k->nk; j++) {
+      tl_n *c = k->kids[j];
+      tl_reaches(c);
+      if (c->rr[0] > k->ki[0]) k->ki[0] = c->rr[0];
+      if (c->rr[1] > k->ki[1]) k->ki[1] = c->rr[1];
+    }
   }
+  if (k->ki[0] + x > k->rr[0]) k->rr[0] = k->ki[0] + x;
+  if (k->ki[1] + y > k->rr[1]) k->rr[1] = k->ki[1] + y;
 }
-// Each box to the screen: its place against its parent's view.
+// Each box to the screen: its place against its parent's view. Below a
+// box nothing in changed, moved or animates, as it was shown (C300c).
+static int tl_kept(tl_n *e, int me) {
+  int kept = TL_KEEP && !e->lay_sub && !e->an_sub && !e->relaid && (e->sent & 1) && e->s_me == me;
+  e->s_me = me; e->lay = e->lay_sub = e->relaid = 0;
+  return kept;
+}
 static void tl_show(tl_n *e, double dx, double dy, int shown) {
   if (!e->tag) {
     static tl_css none;
@@ -1295,15 +1348,17 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   if (e->c.display == TL_CONTENTS) {
     // No box: a view as big as its parent's, at its top left, and its
     // children placed as they were laid out, against the parent.
+    int kept = tl_kept(e, me);
     tl_place(e, 0, 0, e->parent ? e->parent->w : tl_width, e->parent ? e->parent->h : 0, me);
     tl_paint(e, 0, 0, 0, 0);
-    for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
+    if (!kept) for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
     return;
   }
   // A box that paints nothing is told it is as big as the absolutely
   // placed boxes inside it reach: a phone only gives a touch to a view inside its parent's
   // bounds, and a browser finds an absolutely placed box under a finger
   // wherever its parents are (tumble's tiles, in a div 0 high).
+  int kept = tl_kept(e, me);
   double rw = e->w, rh = e->h;
   if (!e->c.bg && !e->c.bw && !tl_pic(e)) for (int j = 0; j < e->nk; j++) { if (e->kids[j]->rr[0] > rw) rw = e->kids[j]->rr[0]; if (e->kids[j]->rr[1] > rh) rh = e->kids[j]->rr[1]; }
   double ax = 0, ay = 0, as = 1, ao = 1;
@@ -1326,7 +1381,7 @@ static void tl_show(tl_n *e, double dx, double dy, int shown) {
   }
   if (tl_ui->scroll && e->c.clip == 2 && (!(e->sent & 16) || e->sent_inside != e->inside)) { e->sent |= 16; e->sent_inside = e->inside; tl_ui->scroll(tl_ui->ctx, e->view, e->inside); }
   if (tl_pic(e)) { for (int j = 0; j < e->nk; j++) tl_hide(e->kids[j]); if (me) tl_picture(e); return; }
-  for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
+  if (!kept) for (int j = 0; j < e->nk; j++) tl_show(e->kids[j], 0, 0, me);
 }
 // The style sheets: the texts of the page's style elements.
 static void tl_sheets(tl_n *e, char **out, size_t *n) {
@@ -1371,7 +1426,7 @@ static void tl_layout(void) {
   // The root's own margins too (a page's main with margin: 24px), and its
   // top margin collapsed with body's where body has no padding or border
   // between them, as CSS does.
-  tl_collapse(tl_root);
+  tl_collapse(tl_root, 1);
   int am = tl_root->c.auto_ml && tl_root->c.auto_mr;
   tl_lay(tl_root, tl_width - body.c.mar[1] - body.c.mar[3] - body.c.pad[1] - body.c.pad[3] - (am ? 0 : tl_root->c.mar[1] + tl_root->c.mar[3]));
   double mx = body.c.mar[3] + body.c.pad[3] + tl_root->c.mar[3];
@@ -1476,7 +1531,7 @@ static void tl_frame_of(tl_n *el, const char *d, const char *de, double *x, doub
 // Each running animation moved on to now; the boxes whose ended into out
 // (most < 0: none end, only where each is now is worked out).
 static int tl_step(tl_n *e, double now, tl_n **out, int *nout, int most) {
-  if (!e->tag || e->c.display == TL_NONE) return 0;
+  if (!e->tag || e->c.display == TL_NONE || (TL_KEEP && !e->an_sub)) return 0;
   int any = 0;
   tl_kf *k = e->an[0] && !e->aend ? tl_kf_of(e->an) : 0;
   if (k) {
@@ -1498,7 +1553,7 @@ static int tl_step(tl_n *e, double now, tl_n **out, int *nout, int most) {
 // step 0: whether an animation is running. Otherwise each moves on to
 // now and is shown, and the ends are told. Whether any still runs.
 static int tl_running(tl_n *e) {
-  if (!e->tag || e->c.display == TL_NONE) return 0;
+  if (!e->tag || e->c.display == TL_NONE || (TL_KEEP && !e->an_sub)) return 0;
   if (e->an[0] && !e->aend && tl_kf_of(e->an)) return 1;
   for (int j = 0; j < e->nk; j++) if (tl_running(e->kids[j])) return 1;
   return 0;
