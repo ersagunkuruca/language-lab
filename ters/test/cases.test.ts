@@ -127,3 +127,36 @@ test("the cases module's collated orders text as the host does in Turkish, Spani
   }
   assert.deepEqual(wrong, []);
 });
+
+// A collation key (L288): one text's key before another's, as lists of
+// numbers, exactly when the cases module's collated puts the text first,
+// in the root order and a tailored one.
+test("a text's collation key orders as collated does", () => {
+  const k = new Lang(LIBRARY.code);
+  const code = base(k.code), names = baseNames(k.names);
+  const r = makeRunner(code, infer(code, names, undefined, checkOptions), { print: () => {} });
+  const f = r.value(cases("table collated")), key = r.value(cases("table collation key"));
+  const SIGN = { "std.order.before": -1, "std.order.same": 0, "std.order.after": 1 } as Record<string, number>;
+  const ints = (v: Value): number[] => {
+    if (Array.isArray(v)) return v.map(Number);
+    const out: number[] = [];
+    for (let x = v as { tag?: string; fields?: Value[] }; x?.fields?.length === 2; x = x.fields[1] as typeof x) out.push(Number(x.fields[0]));
+    return out;
+  };
+  const cmp = (a: number[], b: number[]) => { for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return Math.sign(a[i] - b[i]); return Math.sign(a.length - b.length); };
+  const pool = [..."aeiosAEIOSßæøçğıİöşüÇĞ1-. ÀÉÎÕÜāαβάйиЙ각가̧̀́̈"];
+  let seed = 3;
+  const rnd = (n: number) => (seed = (seed * 1103515245 + 12345) % 2147483648) % n;
+  const texts = ["", "a", "A", "á", "ab", "a b", "ss", "ß", ...Array.from({ length: 120 }, () => Array.from({ length: 1 + rnd(4) }, () => pool[rnd(pool.length)]).join("").normalize("NFC"))];
+  const wrong: string[] = [];
+  for (const tag of ["und", "tr"]) {
+    const locale = { tag: LOCALE_V, fields: [tag] }, keys = texts.map((t) => ints([...r.call(key, t, locale)][0] as Value));
+    assert.ok(keys.every((k) => k.filter((w) => w === 0).length === 2), "two levels' ends in each key");
+    for (let i = 0; i < texts.length; i++) for (const j of [i + 1, i + 3, i + 11]) {
+      const x = texts[i], y = texts[j % texts.length];
+      const want = SIGN[([...r.call(f, x, y, locale)][0] as { tag: string }).tag], got = cmp(keys[i], keys[j % texts.length]);
+      if (got !== want) wrong.push(`${tag} ${JSON.stringify(x)} ${JSON.stringify(y)}: collated ${want}, keys ${got}`);
+    }
+  }
+  assert.deepEqual(wrong, []);
+});

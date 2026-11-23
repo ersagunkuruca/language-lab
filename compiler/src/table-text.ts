@@ -13,9 +13,12 @@ import { infer, type Info } from "../../ters/src/lang/infer.ts";
 import { reachedFrom, reachedWithShows } from "./scalar.ts";
 import { nodesOfKindIn, nodeValues, withNodes } from "../../ters/src/model.ts";
 
+// And `sort collated`, sorted by keys worked out once (L288): its
+// compares on the table were most of folders' opening.
+const SORT_COLLATED = LIBRARY.modules[0].exports.find((d) => LIBRARY.names[d] === "sort collated")!;
 const BY_TABLE: Record<Id, string> = {
   [TEXT_OPS.uppercase]: "table uppercase", [TEXT_OPS.lowercase]: "table lowercase", [TEXT_OPS.graphemes]: "table graphemes",
-  [TEXT_OPS.collate]: "table collated",
+  [TEXT_OPS.collate]: "table collated", [SORT_COLLATED]: "table sort collated",
 };
 const tables = (): Record<Id, Id> => Object.fromEntries(Object.entries(BY_TABLE).map(([op, name]) =>
   [op, CASES.exports.find((d) => LIBRARY.names[d] === name)!]));

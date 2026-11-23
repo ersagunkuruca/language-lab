@@ -32,11 +32,12 @@ import savedCollation from "../../library/collation.json" with { type: "json" };
 import { HANGUL, TAILORED, type SavedCollation } from "./collation-tables.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { CONS, FALSE, INT_OPS, LIST, LOCALE_V, NIL, NONE, ORDER_V, S, SOME, std, TEXT_OPS, TRUE } from "./std.ts";
+import { CONS, FALSE, INT_OPS, LIST, LOCALE_V, NIL, NONE, ORDER_V, PAIR_V, S, SOME, std, TEXT_OPS, TRUE } from "./std.ts";
 import { INT, STRING } from "./types.ts";
 
-export function buildCases(): Module {
-  const k = new Lang();
+export function buildCases(pre: Module): Module {
+  const k = new Lang(merge(prelude, std, pre.code));
+  const lib = (name: string) => { const d = pre.code.defs.find((x) => pre.names[x] === name); if (!d) throw new Error(`cases: no ${name}`); return d; };
   const tables = caseTables();
   const defs: Id[] = [];
   // `me` is the definition being written, for one that calls itself.
@@ -360,16 +361,34 @@ export function buildCases(): Module {
       orSame(k.call(compareWeights, k.call(secondaries, x), k.call(secondaries, y)), () =>
         k.call(compareWeights, k.call(tertiaries, x), k.call(tertiaries, y)))))) }]));
 
-  const offered = [upper, lower, graphemes, collated];
+  // A text's collation key (L288): each level's weights one up, after a 0,
+  // so a key before another is a text collated before it, the levels in
+  // turn and a shorter level first, as `collated` compares them. Worked out
+  // once a text and compared as numbers, as ICU's sort keys and the UCA's
+  // (UTS #10, 7.3) are.
+  const oneUp = def("collation weights one up", ["weights", "after"], (ws, after) => list(ws, () => after, (w, rest) => k.call(CONS, add(w, k.int(1)), k.call(me, rest, after))));
+  const collationKey = def("table collation key", ["text", "locale"], (t, l) => k.match(k.call(tailoringOf, k.call(language, l), k.x(tailorings)), [{ variant: tailoringV, names: ["language", "records", "elements"], body: ([, recs, els]) =>
+    k.let("x", k.call(canonical, k.call(textElements, k.call(codes, t), recs, els), k.list()), (x) =>
+      k.call(oneUp, k.call(primaries, x), k.call(CONS, k.int(0), k.call(oneUp, k.call(secondaries, x), k.call(CONS, k.int(0), k.call(oneUp, k.call(tertiaries, x), k.list())))))) }]));
+  // `sort collated` where there is no host to ask: each item's key worked
+  // out once, beside it, and the items sorted by their keys.
+  const pairOf = (e: Id, f: (a: Id, b: Id) => Id) => k.match(e, [{ variant: PAIR_V, names: ["key", "item"], body: ([a, b]) => f(a, b) }]);
+  const sortCollated = def("table sort collated", ["list", "name", "locale"], (xs, name, l) => k.call(lib("map"),
+    k.call(lib("sort by"), k.call(lib("map"), xs, k.fn(["item"], (x) => k.call(PAIR_V, k.call(collationKey, k.call(name, x), l), x))), k.fn(["keyed"], (e) => pairOf(e, (key) => key))),
+    k.fn(["keyed"], (e) => pairOf(e, (_, x) => x))));
+
+  const offered = [upper, lower, graphemes, collated, collationKey, sortCollated];
   const comments: Record<Id, string> = {
     [upper]: "The text in capitals as `uppercase` gives it, written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.",
     [graphemes]: "The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.",
     [lower]: "The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.",
+    [collationKey]: "A text's place in the locale's order as numbers, as `collated` gives it: one key is before another (compare) when collated puts its text first. Each level's weights one up, after a 0, as the Unicode Collation Algorithm's sort keys are. `sort collated` sorts by it where there is no host to ask.",
+    [sortCollated]: "The list sorted as `sort collated` does, each item's collation key worked out once and the items sorted by their keys, for a target with no host to ask (WebAssembly, C): there, each compare of `collated` worked its texts' weights out again.",
     [collated]: "Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, offered, merge(prelude, std));
+  const p = publish(merge(prelude, std, pre.code, k.code), k.names, offered, merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the cases module can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("cases", p.code, p.names, offered.map(at), p.pins, notes, []);
+  return makeModule("cases", p.code, p.names, offered.map(at), { ...pre.pins, ...p.pins }, notes, []);
 }

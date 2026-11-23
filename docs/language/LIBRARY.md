@@ -244,6 +244,7 @@ Text is a string of characters (Unicode code points). Positions count from 0. Te
 - **spaced** : `(Text) -> Text`. The text with a space either side: spaced("+") is " + ". Run backwards (inverse) it reads the text with any spaces around it, or none.
 - **optional parens** : `(Bool, Text) -> Text`. The text in parentheses when needed, else as it is. Run backwards it reads the text bare (when not needed) or in parentheses, any number of matched pairs, so a printer that leaves out the ones it needn't print still reads them.
 - **collated** : `(Locale) -> (Text, Text) -> Order`. People's order for text in a language (the Unicode Collation Algorithm with that language's rules): Turkish puts ç after c and ğ after g, German ä with a. Give it to sort with. It never changes compare or <, which stay code-point order.
+- **sort collated** : `(List a, (a) -[e]-> Text, Locale) -[e]-> List a`. The list sorted by each item's name in the locale's order, as sort with(list, (a, b) => collate(name(a), name(b), locale)) sorts it: sort collated(files, (f) => f.name, my locale()). Items with the same name keep their order. On C and WebAssembly each name's weights are worked out once.
 
 ## Lists and pairs
 
@@ -764,6 +765,8 @@ uppercase and lowercase are each host's own (its Unicode version, its locale dat
 - **table lowercase** : `(Text, Locale) -> Text` (cases module). The text in small letters as `lowercase` gives it (final sigma included), written in Ters over the Unicode case tables, so a target with no host to ask (WebAssembly, C) gives the same.
 - **table graphemes** : `(Text) -> List Text` (cases module). The text's grapheme clusters, the characters a reader sees, as `graphemes` gives them, written in Ters over the Unicode grapheme tables (UAX #29), so a target with no host to ask (WebAssembly, C) gives the same.
 - **table collated** : `(Text, Text, Locale) -[Diverge]-> Order` (cases module). Which of two texts comes first in the locale's order, as `collate` gives it, written in Ters over the Unicode Collation Algorithm's tables, so a target with no host to ask (WebAssembly, C) gives the same: the root order, with the locale's own letters where its language has a tailoring the tables hold (Turkish, Spanish, Polish, Swedish and others; L214e5b2).
+- **table collation key** : `(Text, Locale) -[Diverge]-> List Int` (cases module). A text's place in the locale's order as numbers, as `collated` gives it: one key is before another (compare) when collated puts its text first. Each level's weights one up, after a 0, as the Unicode Collation Algorithm's sort keys are. `sort collated` sorts by it where there is no host to ask.
+- **table sort collated** : `(List a, (a) -[Diverge, e]-> Text, Locale) -[Diverge, e]-> List a` (cases module). The list sorted as `sort collated` does, each item's collation key worked out once and the items sorted by their keys, for a target with no host to ask (WebAssembly, C): there, each compare of `collated` worked its texts' weights out again.
 
 ## Signals
 
