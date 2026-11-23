@@ -5,7 +5,7 @@ import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { nodesOfKindIn, merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
+import { idsSeeded, nodesOfKindIn, merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { conflictMarkersAt, markersMessage, parseSaved, printSaved, ProgramFileError } from "../src/saved.ts";
@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -314,7 +314,14 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // arrays from its counts. In C a map whose function only computes shares
 // its items out on threads (L101, c.ts `par:map`).
 // `page`: main gives Html, mounted rather than printed (C199c).
+// The ids its passes make drawn the same way each build (model.ts
+// idsSeeded), so a place C's threads run (threadLines) is about the same
+// node in `ters check`, `ters choices` and `ters native`, and a held
+// one is found again.
 function nativeLowered(main: Id, wasm = false, page = false, from: Program = p) {
+  return idsSeeded(`native ${main} ${wasm} ${page}`, () => nativeLoweredNow(main, wasm, page, from));
+}
+function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program) {
   const q00 = withInverses(from.code, from.info, from.names);
   // An operation with an effect given as a value, the lambda calling it (C235).
   const q01 = withOperationLambdas(q00.code, q00.info, q00.names);
@@ -665,7 +672,7 @@ const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choice
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
-const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); };
+const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); s.holdNeighbours(h.near); };
 if (holdsPlaces) await onMainThread(placesHeld);
 const answered = answeredHere(load(path)), measuredHere = (() => { try { return measuredOf(answered, writtenChoices); } catch (e) { fail((e as Error).message); } })();
 const loaded = { ...answered, ...(heldHere.size ? { held: heldHere } : {}), ...(measuredHere.size ? { measured: measuredHere } : {}) };
@@ -690,7 +697,7 @@ async function places(q: { code: Code; info: Info; names: Names }, root: Id): Pr
   const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts");
   let ir: ReturnType<typeof lower>;
   try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
-  return placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names, undefined, root);
+  return [...placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names, undefined, root), ...nearLines(ir, q.names)];
 }
 // And where a command-line program's work runs in C (`ters native`): on
 // its threads, the program stored as C stores it.

@@ -15,13 +15,16 @@
 // Prior art: Bentley, Stanat and Williams, "The complexity of finding
 // fixed-radius near neighbors" (1977). CREDITS.md.
 
-export function neighbourLists(ps: readonly (readonly number[])[], reach: number): number[][] | null {
-  if (!(reach > 0) || reach === Infinity) return null;
-  const n = ps.length, r2 = reach * reach, dims = n ? ps[0].length : 0;
-  if ((n && !dims) || dims > 3 || r2 === Infinity || ps.some((p) => p.length !== dims)) return null;
-  // Cells a little wider than reach, so two places within reach are in
-  // cells next to each other however the division rounds.
-  const cell = reach * (1 + 2 ** -20), keys: number[][] = [], grid = new Map<string, number[]>();
+// `side`: the cells' side where the program's choices hold it (L280e,
+// `grid of 5 cells`), reach where they don't. Cells narrower than reach
+// are looked through as many rings out as reach takes.
+export function neighbourLists(ps: readonly (readonly number[])[], reach: number, side = reach): number[][] | null {
+  if (!(reach > 0) || reach === Infinity || !(side > 0) || side === Infinity) return null;
+  const n = ps.length, r2 = reach * reach, dims = n ? ps[0].length : 0, rings = Math.max(1, Math.ceil(reach / side));
+  if ((n && !dims) || dims > 3 || r2 === Infinity || (2 * rings + 1) ** dims > 15625 || ps.some((p) => p.length !== dims)) return null;
+  // Cells a little wider than their side, so two places within reach are
+  // that many rings apart at most however the division rounds.
+  const cell = side * (1 + 2 ** -20), keys: number[][] = [], grid = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
     const k = ps[i].map((x) => Math.floor(x / cell));
     if (k.some((c) => !Number.isFinite(c) || Math.abs(c) > 2 ** 30)) return null;
@@ -37,7 +40,8 @@ export function neighbourLists(ps: readonly (readonly number[])[], reach: number
     return !(r2 < s);
   };
   let around: number[][] = [[]];
-  for (let p = 0; p < dims; p++) around = around.flatMap((o) => [-1, 0, 1].map((c) => [...o, c]));
+  const ring = Array.from({ length: 2 * rings + 1 }, (_, i) => i - rings);
+  for (let p = 0; p < dims; p++) around = around.flatMap((o) => ring.map((c) => [...o, c]));
   const lists: number[][] = [];
   for (let i = 0; i < n; i++) {
     const found: number[] = [];
