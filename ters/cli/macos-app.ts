@@ -125,6 +125,16 @@ static NSFont *fontOf(double size, int bold) { return [NSFont systemFontOfSize:s
 @class TPage;
 static TPage *P;
 static void fire(int handler, NSString *value, NSString *key, double x, double y, double seconds);
+static BOOL bubble(NSString *event, NSView *from, NSString *value, NSString *key, NSEvent *e);
+static BOOL keyed(NSView *v);
+static NSString *keyName(NSEvent *e);
+static NSView *focused(NSWindow *w);
+// Keys by the Mac's key codes, named as a browser names them.
+static const struct { unsigned short code; const char *name; } KEYS[] = {
+  { 36, "Enter" }, { 76, "Enter" }, { 48, "Tab" }, { 51, "Backspace" }, { 117, "Delete" }, { 53, "Escape" }, { 49, " " },
+  { 123, "ArrowLeft" }, { 124, "ArrowRight" }, { 125, "ArrowDown" }, { 126, "ArrowUp" },
+  { 115, "Home" }, { 119, "End" }, { 116, "PageUp" }, { 121, "PageDown" },
+};
 static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWindow fromView:nil]; }
 
 // Flipped and layer-backed: y down from the top left, as the layout's.
@@ -163,7 +173,18 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
   for (NSString *n in names) { NSNumber *h = self.pointers[n]; if (h) fire(h.intValue, @"", @"", p.x, p.y, 0); }
   return YES;
 }
-- (void)mouseDown:(NSEvent *)e { if (![self point:@[ @"pointerdown" ] event:e]) [super mouseDown:e]; }
+// A box that hears keys takes them when clicked (as a browser's with a
+// tabindex) and is in the window's Tab order (C298).
+- (BOOL)acceptsFirstResponder { return keyed(self); }
+- (BOOL)canBecomeKeyView { return keyed(self); }
+- (void)mouseDown:(NSEvent *)e {
+  if (keyed(self)) [self.window makeFirstResponder:self];
+  // The second click of a double click: dblclick, from here out.
+  if (e.clickCount == 2) bubble(@"dblclick", self, @"", @"", e);
+  if (![self point:@[ @"pointerdown" ] event:e]) [super mouseDown:e];
+}
+// A right click (or a control click): contextmenu, from here out.
+- (void)rightMouseDown:(NSEvent *)e { if (!bubble(@"contextmenu", self, @"", @"", e)) [super rightMouseDown:e]; }
 - (void)mouseDragged:(NSEvent *)e { if (![self point:@[ @"pointermove" ] event:e]) [super mouseDragged:e]; }
 - (void)mouseUp:(NSEvent *)e { if (![self point:@[ @"pointerup" ] event:e]) [super mouseUp:e]; }
 - (void)scrollWheel:(NSEvent *)e {
@@ -214,6 +235,9 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 // the box the pointer was last over.
 @property (nonatomic, strong) NSMapTable<NSView *, NSNumber *> *ids;
 @property (nonatomic) int next, over;
+@property (nonatomic, weak) NSView *focusNext;
+// How many of a key's down and up the page heard (the runner's clicks).
+@property (nonatomic) int keysHeard;
 @property (nonatomic) BOOL quiet, ticking, paused;
 @property (nonatomic, strong) NSScrollView *scroll;
 @property (nonatomic, strong) TFlip *page;
@@ -227,6 +251,8 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 - (void)frames:(NSView *)v handler:(int)h;
 - (void)check:(NSArray<NSString *> *)taps;
 - (void)over:(NSView *)v;
+- (NSNumber *)handler:(NSString *)event of:(NSView *)v;
+- (NSEvent *)key:(NSEvent *)e;
 @end
 
 // The page: the pointer moving over it tells the page which box it is over
@@ -268,7 +294,6 @@ static void *u_box(void *c, const char *tag, size_t n) {
   if ([t isEqualToString:@"input"]) {
     NSTextField *f = [NSTextField new];
     f.delegate = P; f.bezeled = YES; f.bezelStyle = NSTextFieldRoundedBezel; f.usesSingleLineMode = YES;
-    f.target = P; f.action = @selector(entered:);
     return put(f);
   }
   if ([t isEqualToString:@"textarea"]) { NSTextView *f = [NSTextView new]; f.delegate = P; f.drawsBackground = NO; f.richText = NO; f.textContainerInset = NSZeroSize; return put(f); }
@@ -288,12 +313,20 @@ static void u_set_text(void *c, void *v, const char *s, size_t n) { NSView *x = 
 static void u_set_value(void *c, void *v, const char *s, size_t n) {
   NSView *x = V(v); NSString *t = str(s, n);
   P.quiet = YES;
-  if ([x isKindOfClass:[NSTextField class]] && ![((NSTextField *)x).stringValue isEqualToString:t]) ((NSTextField *)x).stringValue = t;
+  if ([x isKindOfClass:[NSTextField class]] && ![((NSTextField *)x).stringValue isEqualToString:t]) {
+    NSTextField *f = (NSTextField *)x;
+    f.stringValue = t;
+    // One being typed in shows it too (its field editor would put back
+    // what it had when editing ends), the caret at the end.
+    NSText *ed = f.currentEditor;
+    if (ed && ed.delegate == (id)f && ![ed.string isEqualToString:t]) { ed.string = t; ed.selectedRange = NSMakeRange(t.length, 0); }
+  }
   if ([x isKindOfClass:[NSTextView class]] && ![((NSTextView *)x).string isEqualToString:t]) ((NSTextView *)x).string = t;
   P.quiet = NO;
 }
 static void u_append(void *c, void *p, void *k) { NSView *a = V(p), *b = V(k); if (a && b) [a addSubview:b]; }
 static void u_clear(void *c, void *v) { for (NSView *k in [V(v).subviews copy]) [k removeFromSuperview]; }
+static void u_focus(void *c, void *v) { P.focusNext = V(v); }
 static void u_gone(void *c, void *v) { NSNumber *n = @((int)(intptr_t)v); [P.views removeObjectForKey:n]; [P.moments removeObjectForKey:n]; [P.heard removeObjectForKey:n]; }
 static void u_place(void *c, void *v, double x, double y, double w, double h, int shown) {
   NSView *a = V(v);
@@ -449,7 +482,7 @@ static int u_ask(void *c, const char *s, size_t n) {
   return 0;
 }
 ${sound ? macSound() : ""}
-static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"} };
+static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask, ${sound ? "u_sound" : "0"}, u_focus };
 
 // The display's frames (CVDisplayLink, on its own thread), each handed to
 // the main thread once the one before is done.
@@ -471,6 +504,10 @@ static double seconds(void) { return CACurrentMediaTime(); }
   self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 900, 700) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   self.window.title = NSBundle.mainBundle.infoDictionary[@"CFBundleName"] ?: @"page";
   self.window.delegate = self;
+  // Tab moves through the inputs and the boxes that hear keys, in the
+  // page's order.
+  self.window.autorecalculatesKeyViewLoop = YES;
+  [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyDown | NSEventMaskKeyUp handler:^NSEvent *(NSEvent *e) { return [P key:e]; }];
   self.window.releasedWhenClosed = NO;
   self.window.contentMinSize = NSMakeSize(240, 160);
   self.scroll = [[NSScrollView alloc] initWithFrame:self.window.contentView.bounds];
@@ -523,6 +560,8 @@ static double seconds(void) { return CACurrentMediaTime(); }
 // While what the page shows reads the clock, or a view hears each frame,
 // the display's frames run.
 - (void)tick {
+  // The focus an autofocus input asked for, once it's in the window.
+  if (self.focusNext.window) { [self.window makeFirstResponder:self.focusNext]; self.focusNext = nil; }
   if (self.ticking || (!ters_page_clock() && !self.frameViews.count)) return;
   self.ticking = YES;
   CVDisplayLinkStart(LINK);
@@ -553,7 +592,6 @@ static double seconds(void) { return CACurrentMediaTime(); }
 - (void)clicked:(NSClickGestureRecognizer *)g { NSNumber *h = [self handler:@"click" of:g.view]; if (h) { printf("event %d\n", h.intValue); fire(h.intValue, @"", @"", 0, 0, 0); } }
 - (void)controlTextDidChange:(NSNotification *)n { if (self.quiet) return; NSTextField *f = n.object; NSNumber *h = [self handler:@"input" of:f]; if (h) fire(h.intValue, f.stringValue ?: @"", @"", 0, 0, 0); }
 - (void)textDidChange:(NSNotification *)n { if (self.quiet) return; NSTextView *t = n.object; NSNumber *h = [self handler:@"input" of:t]; if (h) fire(h.intValue, t.string ?: @"", @"", 0, 0, 0); }
-- (void)entered:(NSTextField *)f { NSNumber *h = [self handler:@"keydown" of:f]; if (h) fire(h.intValue, f.stringValue ?: @"", @"Enter", 0, 0, 0); }
 
 // For a check without a person (the "macOS app" workflow): -ters-taps
 // "Roll|Throw 100" clicks, a second apart, each view listening for clicks
@@ -654,6 +692,36 @@ static void shown(NSString *when) {
       fire(h.intValue, @"", @"", 0, 0, 0);
       done = YES;
     }
+    // "key name": a key pressed and let go (Enter, Tab, ArrowDown, a
+    // letter …), where the focus is, and where the focus is after.
+    if ([t hasPrefix:@"key "]) {
+      NSString *name = [t substringFromIndex:4];
+      unsigned short code = 0;
+      for (int i = 0; i < (int)(sizeof KEYS / sizeof *KEYS); i++) if ([name isEqualToString:@(KEYS[i].name)]) code = KEYS[i].code;
+      NSString *chars = code == 36 ? @"\r" : code == 48 ? @"\t" : code == 53 ? @"\x1b" : code == 49 ? @" " : code ? @"" : name;
+      NSView *f0 = focused(self.window);
+      NSString *before = f0 ? textsOf(f0) : @"";
+      NSString *editing = [f0 isKindOfClass:[NSTextField class]] ? ((NSTextField *)f0).currentEditor.string : nil;
+      self.keysHeard = 0;
+      for (int up = 0; up < 2; up++) {
+        NSEvent *e = [NSEvent keyEventWithType:up ? NSEventTypeKeyUp : NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:self.window.windowNumber context:nil characters:chars charactersIgnoringModifiers:chars isARepeat:NO keyCode:code];
+        if ((e = [self key:e])) [self.window sendEvent:e];
+      }
+      NSView *f = focused(self.window);
+      printf("key %s: from \"%s\"%s%s, heard %d, focus on %s\n", name.UTF8String, before.UTF8String, editing ? " editing " : "", editing ? editing.UTF8String : "", self.keysHeard, f ? [NSString stringWithFormat:@"%@ \"%@\"", f.className, textsOf(f)].UTF8String : "none");
+      done = YES;
+    }
+    // "dblclick text", "rightclick text": on the box showing text.
+    if ([t hasPrefix:@"dblclick "] || [t hasPrefix:@"rightclick "]) {
+      BOOL dbl = [t hasPrefix:@"dblclick "];
+      NSString *what = [t substringFromIndex:dbl ? 9 : 11];
+      for (NSNumber *k in [self.views.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
+        NSView *v = self.views[k];
+        if (done || [v isKindOfClass:[TLabel class]] || ![textsOf(v) isEqualToString:what]) continue;
+        printf("%s %s: %s\n", dbl ? "dblclick" : "contextmenu", what.UTF8String, bubble(dbl ? @"dblclick" : @"contextmenu", v, @"", @"", nil) ? "heard" : "not heard");
+        done = YES;
+      }
+    }
     if (!done) printf("tap %s: no such view\n", t.UTF8String);
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
       shown([NSString stringWithFormat:@"after tapping %@", t]);
@@ -661,7 +729,56 @@ static void shown(NSString *when) {
     });
   });
 }
+// A key down or up in the window (C298): keydown or keyup heard by the
+// view with the focus and each box round it, as a browser's bubble, with
+// the key's name as a browser names it and, from an input, what's in it.
+// The platform does what it does with the key after, except where the
+// page heard an arrow, space or a page key on a box not for typing (a
+// game's, html.ts's rule), and Enter in a one-line input, which end there.
+- (NSEvent *)key:(NSEvent *)e {
+  if (e.window != self.window) return e;
+  NSView *v = focused(self.window);
+  if (!v) return e;
+  NSString *name = keyName(e);
+  BOOL typing = [v isKindOfClass:[NSTextField class]] || [v isKindOfClass:[NSTextView class]];
+  NSString *value = [v isKindOfClass:[NSTextField class]] ? ((NSTextField *)v).stringValue : [v isKindOfClass:[NSTextView class]] ? ((NSTextView *)v).string : @"";
+  BOOL heard = bubble(e.type == NSEventTypeKeyDown ? @"keydown" : @"keyup", v, value ?: @"", name, nil);
+  if (heard) self.keysHeard++;
+  // Enter in a one-line input changes nothing in it, as in a browser (the
+  // field editor would end editing, or put a newline in for what's chosen).
+  if ([name isEqualToString:@"Enter"] && [v isKindOfClass:[NSTextField class]]) return nil;
+  if (!heard || e.type != NSEventTypeKeyDown) return e;
+  if (typing) return e;
+  return [@[ @"ArrowUp", @"ArrowDown", @"ArrowLeft", @"ArrowRight", @" ", @"PageUp", @"PageDown", @"Home", @"End" ] containsObject:name] ? nil : e;
+}
 @end
+
+static NSString *keyName(NSEvent *e) {
+  for (int i = 0; i < (int)(sizeof KEYS / sizeof *KEYS); i++) if (KEYS[i].code == e.keyCode) return @(KEYS[i].name);
+  NSString *c = e.modifierFlags & (NSEventModifierFlagCommand | NSEventModifierFlagControl) ? e.charactersIgnoringModifiers : e.characters;
+  return c ?: @"";
+}
+// The view with the focus: an input while it's typed in (its field
+// editor's), else the box.
+static NSView *focused(NSWindow *w) {
+  NSResponder *r = w.firstResponder;
+  if ([r isKindOfClass:[NSTextView class]] && ((NSTextView *)r).isFieldEditor && [((NSTextView *)r).delegate isKindOfClass:[NSTextField class]]) return (NSView *)((NSTextView *)r).delegate;
+  return [r isKindOfClass:[NSView class]] ? (NSView *)r : nil;
+}
+// event's handlers on from and each view round it, innermost first (at
+// e's point in each, when there is one). Whether any heard it.
+static BOOL bubble(NSString *event, NSView *from, NSString *value, NSString *key, NSEvent *e) {
+  BOOL any = NO;
+  for (NSView *a = from; a; a = a.superview) {
+    NSNumber *h = [P handler:event of:a];
+    if (!h) continue;
+    NSPoint p = e ? at(a, e) : NSZeroPoint;
+    fire(h.intValue, value, key, p.x, p.y, 0);
+    any = YES;
+  }
+  return any;
+}
+static BOOL keyed(NSView *v) { return [P handler:@"keydown" of:v] || [P handler:@"keyup" of:v]; }
 
 @implementation TPicture
 - (void)finger:(int)kind event:(NSEvent *)e { NSPoint p = at(self, e); ters_ui_pointer((void *)(intptr_t)self.num, kind, p.x, p.y); [P tick]; }
