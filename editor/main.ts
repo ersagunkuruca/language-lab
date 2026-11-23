@@ -64,12 +64,13 @@ import { problemOf } from "../ters/src/lang/problems.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
 import { pictureEntries } from "./picture.ts";
-import { runTests, savedFrom, type Saved } from "../ters/src/lang/tests.ts";
+import type { Saved } from "../ters/src/lang/tests.ts";
 import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src/lang/grades.ts";
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { loadChecks } from "./checkStore.ts";
+import { loadChecks, shippedFor } from "./checkStore.ts";
+import { testInWorker, type Testing } from "./testAsk.ts";
 import { exampleHere, readExamples } from "./exampleFiles.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
 // One window per graph: the program and the definition shown.
@@ -681,24 +682,33 @@ const ownCode = (): Code => { const c = prog(), b = baseOf(doc); return { nodes:
 // The program onto its modules' newest versions, as ters upgrade does
 // (L111): kept only if it still checks and its tests pass; every version
 // it had goes into its store.
+// Checked and tested in a worker (testAsk.ts, E319b): the tests run the
+// program's own code, which has no bound on the editor's thread.
+let upgrading: Testing | null = null;
 function upgradeModules() {
-  const ms = fileModules(doc);
-  const r = upgradeFile(ownCode(), doc, doc.names.short, (o) => {
-    const code = { nodes: withNodes(doc.code.nodes, o.nodes), defs: doc.code.defs };
-    const names = layer<Names>(pres().names, doc.names.short);
-    const info = T.infer(code, names);
-    if (info.errors.length) return `${info.errors.length} error${info.errors.length === 1 ? "" : "s"} after it (${info.errors[0].message})`;
-    // Its tests and accepted answers, as Run's test does (runViews.ts).
-    const saved = savedFrom(Object.fromEntries(Object.entries(doc.examples ?? {}).map(([d, v]) => [d, (v as unknown[]).filter((x) => !(x && typeof x === "object" && "main" in (x as object)))])) as Record<Id, string[] | Saved[]>);
-    const failed = runTests(code, info, names, o.defs, saved).filter((t) => t.error || t.failures.length);
-    return failed.length ? `${failed.map((t) => t.name).join(", ")} fail${failed.length === 1 ? "s" : ""} after it` : null;
-  });
+  if (upgrading) return;
+  const ms = fileModules(doc), at = doc, was = doc.code;
+  const r = upgradeFile(ownCode(), doc, doc.names.short, () => null);
   if (!r.ok) { ui.note = `Not upgraded: ${r.reason}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
-  const said = r.moved.map((m) => `${pres().names[m.to] ?? m.to} to version ${versionOf(ms, m.to)} (${m.uses} use${m.uses === 1 ? "" : "s"})`).join(", ");
-  const kept = r.refused.map((x) => ` ${pres().names[x.from] ?? x.from} stays: ${x.reason}.`).join("");
-  const renamed = r.renamed.length ? ` Its author renamed ${r.renamed.map((x) => `${x.from} to ${x.to}`).join(", ")}; your names are kept.` : "";
-  commit({ code: { nodes: withNodes(doc.code.nodes, r.own.nodes), defs: doc.code.defs }, names: { ...doc.names, short: r.names }, store: r.store }, nodeIds(r.own.nodes),
-    `Upgraded: moved ${said}. It checks and its tests pass; every version it had is in its store, saved with it.${kept}${renamed}`);
+  const code = { nodes: withNodes(doc.code.nodes, r.own.nodes), defs: doc.code.defs };
+  const layered = layer<Names>(pres().names, doc.names.short), names: Names = {};
+  for (const k in layered) names[k] = layered[k];
+  const t = (upgrading = testInWorker({ code, names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, defs: r.own.defs, examples: (doc.examples ?? {}) as Record<Id, unknown[]>, title: titleOf(doc), shipped: shippedFor(doc.program) }));
+  ui.note = "Upgrading: checking and testing it…"; ui.refused = false; ui.touched = []; render();
+  void t.done.then((says) => {
+    upgrading = null;
+    if (doc !== at || doc.code !== was) { ui.note = "Not upgraded: the program changed while it was tested. Nothing changed."; ui.refused = true; ui.touched = []; return render(); }
+    const failed = "results" in says ? says.results.filter((x) => x.error || x.failures.length) : [];
+    const wrong = "errors" in says ? `${says.errors} error${says.errors === 1 ? "" : "s"} after it (${says.first})`
+      : "error" in says ? (says.error === "stopped" ? "you stopped it" : says.error)
+      : failed.length ? `${failed.map((x) => x.name).join(", ")} fail${failed.length === 1 ? "s" : ""} after it` : null;
+    if (wrong) { ui.note = `Not upgraded: ${wrong}. Nothing changed.`; ui.refused = true; ui.touched = []; return render(); }
+    const said = r.moved.map((m) => `${pres().names[m.to] ?? m.to} to version ${versionOf(ms, m.to)} (${m.uses} use${m.uses === 1 ? "" : "s"})`).join(", ");
+    const kept = r.refused.map((x) => ` ${pres().names[x.from] ?? x.from} stays: ${x.reason}.`).join("");
+    const renamed = r.renamed.length ? ` Its author renamed ${r.renamed.map((x) => `${x.from} to ${x.to}`).join(", ")}; your names are kept.` : "";
+    commit({ code, names: { ...doc.names, short: r.names }, store: r.store }, nodeIds(r.own.nodes),
+      `Upgraded: moved ${said}. It checks and its tests pass; every version it had is in its store, saved with it.${kept}${renamed}`);
+  });
 }
 
 function deleteProgram() {
@@ -2130,7 +2140,7 @@ function typedRunPanel(namer: Namer, info: T.Info): HTMLElement {
   // A test (its row has Check) runs as ters test runs it: on its saved
   // inputs, then on small values, and a failing expect shows here with the
   // inputs it failed on (T7d).
-  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(info, box, { code: prog(), names: pres().names, def: ui.def, examples: doc.examples ?? {}, world: quietWorld() });
+  if (z?.t === "fn" && z.eff.effs.includes(CHECK) && !errorsIn(info) && !holesIn(info)) return lawPanel(box, { code: prog(), names: pres().names, pins: heldPins?.all ?? doc.signatures ?? NO_PINS, def: ui.def, examples: doc.examples ?? {}, title: titleOf(doc), shipped: shippedFor(doc.program), render: () => render() });
   // An action that performs an effect nothing answers yet runs only inside
   // a handler: say where, instead of a Run that can only fail.
   const needs = action ? needsHandling(z).filter((e) => e !== CHOICE) : [];

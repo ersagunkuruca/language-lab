@@ -32,6 +32,8 @@ import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
 import { addShipped, loadChecks } from "./checkStore.ts";
 import { choicesFor } from "./choicesFor.ts";
+import type { TestAsk, TestSays } from "./testAsk.ts";
+import { runTests, savedFrom, type Saved } from "../ters/src/lang/tests.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
 // code or built with the site (E245c), so the run needs no checking or
@@ -82,7 +84,7 @@ let lastWhere: Code | null = null;
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
+const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `ters run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -125,7 +127,7 @@ function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, 
 // started (I203), its whole check and its bodies, though the page had
 // kept them.
 const checksRead = loadChecks();
-const asked: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>[] = [];
+const asked: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk>[] = [];
 if (checksRead) {
   self.onmessage = (e) => { asked.push(e); };
   void checksRead.then(() => { self.onmessage = answer; for (const e of asked.splice(0)) answer(e); });
@@ -143,7 +145,7 @@ function placed(held: [Id, string][] = []): [Id, string][] {
   return held.filter(([, r]) => !isPlace(r));
 }
 
-function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk>) {
+function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk>) {
   answers = null; paused = false;
   // The program's groups as the build checked them (E314), from the page.
   if ("shipped" in e.data && e.data.shipped) addShipped(e.data.shipped);
@@ -162,6 +164,22 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
       setDisplayNames(names);
       setProgramPins(pins);
       return post(choicesFor(receivedCode(e.data.code), names, main, held));
+    } catch (err) {
+      return post({ error: (err as Error).message });
+    }
+  }
+  // A program's tests (testAsk.ts, E319b), as ters test runs them.
+  if ("tests" in e.data) {
+    const { names, pins, defs, examples, title, files } = e.data;
+    try {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      const code = receivedCode(e.data.code), info = infer(code, names);
+      if (info.errors.length) return post({ errors: info.errors.length, first: info.errors[0].message });
+      const kept = new Map(files);
+      const store: Store = { getItem: (k) => kept.get(k) ?? null, setItem: (k, v) => { kept.set(k, v); }, get length() { return kept.size; }, key: (i) => [...kept.keys()][i] ?? null };
+      const quiet = { log: () => {}, error: () => {} } as unknown as Console;
+      return post({ results: runTests(code, info, names, defs, savedFrom(examples as Record<Id, string[] | Saved[]>), { world: browserWorld(store, title, quiet) }) });
     } catch (err) {
       return post({ error: (err as Error).message });
     }
