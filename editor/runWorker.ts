@@ -30,10 +30,11 @@ import { received, searchBackwards, type BackAsk, type Found } from "./backSearc
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
 import { receivedCode, type SentCode } from "./runCode.ts";
-import { addShipped, loadChecks } from "./checkStore.ts";
+import { addShipped, groupsSince, keptKeys, loadChecks } from "./checkStore.ts";
 import { choicesFor } from "./choicesFor.ts";
 import type { TestAsk, TestSays } from "./testAsk.ts";
 import type { PictureAsk, PictureSays } from "./pictureAsk.ts";
+import type { CheckAsk, CheckSays } from "./checkAsk.ts";
 import { buildPicture } from "./picture.ts";
 import { colourOf, paintRows, type PaintAsk } from "./pictureDraw.ts";
 import { runTests, savedFrom, type Saved } from "../ters/src/lang/tests.ts";
@@ -87,7 +88,7 @@ let lastWhere: Code | null = null;
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays | PictureSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
+const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays | PictureSays | CheckSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `ters run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -160,7 +161,7 @@ function paint(m: PaintAsk) {
   void painting?.then((c) => { const got = paintRows(c.colourAt, m.rows); (self as unknown as Worker).postMessage(got, [got.data.buffer]); }).catch(failed);
 }
 
-type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk;
+type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk | CheckAsk;
 function onAsk(e: MessageEvent<Ask | PaintAsk>) {
   if ("paint" in e.data || "rows" in e.data) paint(e.data); else answer(e as MessageEvent<Ask>);
 }
@@ -199,6 +200,19 @@ function answer(e: MessageEvent<Ask>) {
       const store: Store = { getItem: (k) => kept.get(k) ?? null, setItem: (k, v) => { kept.set(k, v); }, get length() { return kept.size; }, key: (i) => [...kept.keys()][i] ?? null };
       const quiet = { log: () => {}, error: () => {} } as unknown as Console;
       return post({ results: runTests(code, info, names, defs, savedFrom(examples as Record<Id, string[] | Saved[]>), { world: browserWorld(store, title, quiet) }) });
+    } catch (err) {
+      return post({ error: (err as Error).message });
+    }
+  }
+  // A program's whole check, its groups sent back (checkAsk.ts, E319g).
+  if ("wholeCheck" in e.data) {
+    const { names, pins } = e.data;
+    try {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      const before = keptKeys();
+      infer(receivedCode(e.data.code), names);
+      return post({ groups: groupsSince(before) });
     } catch (err) {
       return post({ error: (err as Error).message });
     }

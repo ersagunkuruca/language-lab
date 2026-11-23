@@ -69,7 +69,8 @@ import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src
 import { pageMain } from "../ters/src/lang/page.ts";
 import { browserWorld } from "../ters/src/lang/browser.ts";
 import { LIBRARY } from "../ters/src/lang/library.ts";
-import { loadChecks, shippedFor } from "./checkStore.ts";
+import { addGroups, loadChecks, shippedFor } from "./checkStore.ts";
+import { checkInWorker } from "./checkAsk.ts";
 import { testInWorker, type Testing } from "./testAsk.ts";
 import { exampleHere, readExamples } from "./exampleFiles.ts";
 import { join, looseOf, newLoose, split, type Drafts } from "./drafts.ts";
@@ -965,7 +966,29 @@ function typesOf(): T.Info | null {
   T.setProgramPins(pins);
   const hit = typedInfo.get(doc.code);
   if (hit?.pins === pins) return hit.info;
-  try { const info = T.guardedInfo(doc.code, pins) ?? T.infer(doc.code, pres().names); typedInfo.set(doc.code, { pins, info }); return info; } catch { return null; }
+  try {
+    const names = pres().names, info = T.guardedInfo(doc.code, pins) ?? T.inferNear(doc.code, names) ?? (wholeHere() ? T.infer(doc.code, names) : null);
+    if (!info) { checkWhole(pins); return null; }
+    typedInfo.set(doc.code, { pins, info });
+    return info;
+  } catch { return null; }
+}
+// The whole check of a program of one's own is made in a worker (E319g,
+// checkAsk.ts), once a program: after it, its groups are kept, and the
+// check here finds them. An example's groups were shipped with it (E314),
+// and where there's no worker it's checked here. So is a program of up to
+// WHOLE_HERE nodes of its own: its check takes up to about 80 ms (calc's
+// 957 nodes; spacetime's 6,072 took 300 ms, clinic's 4,874 nearly 800).
+const WHOLE_HERE = 1000;
+const checkedWhole = new Set<Program>();
+let checkingWhole: Code | null = null;
+const wholeHere = () => typeof Worker === "undefined" || checkedWhole.has(doc.program) || !doc.program.startsWith(MINE) || ownNodes(doc.code) <= WHOLE_HERE;
+const ownNodes = (c: Code) => { const b = baseOf(doc).nodes; let n = 0; for (const k of Object.keys(c.nodes)) if (!b[k]) n++; return n; };
+function checkWhole(pins: Pins) {
+  if (checkingWhole === doc.code) return;
+  const at = doc.program, code = (checkingWhole = doc.code);
+  const done = () => { checkedWhole.add(at); if (checkingWhole === code) checkingWhole = null; if (doc.program === at) render(); };
+  void checkInWorker({ code, names: pres().names, pins }).then((groups) => { addGroups(groups); done(); }, done);
 }
 const defBody = (d: Id) => { const n = node(d); return n?.kind === "def" && n.body ? node(n.body) : null; };
 
@@ -2565,6 +2588,8 @@ function draw() {
   // to the one standing in for it: Run becomes Stop and back (E231c).
   const act = (document.activeElement as HTMLElement | null)?.dataset?.act;
   const info = typesOf();
+  // Its whole check under way in the worker (E319g): drawn when it's back.
+  if (!info && checkingWhole === doc.code) { app.replaceChildren(h("p", { class: "status" }, `Checking ${titleOf(doc)}…`)); return; }
   if (!info) { app.replaceChildren(h("p", { class: "status refused" }, "This program can't be type-checked. Undo, or Reset to the example.")); return; }
   T.setDisplayNames(p.names);
   const later = graphLater && !EMBED;
