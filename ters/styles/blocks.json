@@ -12,6 +12,7 @@
     "builtin.int.mul": { "glyph": "·", "fixity": "infix", "prec": 7, "assoc": "both" },
     "builtin.arith.mul": { "glyph": "·", "fixity": "infix", "prec": 7, "assoc": "left" },
     "builtin.div":    { "glyph": "/", "fixity": "infix", "prec": 7, "assoc": "left" },
+    "std.division.division.divide": { "glyph": "/", "fixity": "infix", "prec": 7, "assoc": "left" },
     "builtin.pow":    { "glyph": "^", "fixity": "infix", "prec": 8, "assoc": "right" },
     "builtin.int.power": { "glyph": "^", "fixity": "infix", "prec": 8, "assoc": "right" },
     "builtin.neg":    { "glyph": "−", "fixity": "prefix", "prec": 9 },
