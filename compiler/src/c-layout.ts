@@ -123,6 +123,10 @@ typedef struct tl_n {
   // whether it ended, and what it does to the box now (moved by ax, ay,
   // scaled by as round its middle, opacity ao).
   char an[32]; double a0, ax, ay, as, ao; int aend;
+  // Its style as the sheet gives it (C300), kept while what it was worked
+  // out from is the same: the hash of that (sig), of the style (cs_h), and
+  // of what selectors see of it and the boxes round it (chain).
+  tl_css cs; uint64_t sig, cs_h, chain;
 } tl_n;
 
 static ters_ui *tl_ui;
@@ -692,8 +696,44 @@ static void tl_defaults(tl_css *c, const char *t, const tl_css *up) {
   if (!strcmp(t, "button")) { c->pad[0] = c->pad[2] = 1; c->pad[1] = c->pad[3] = 6; c->bw = 2; c->bc = 0xFF767676u; c->bg = tl_dark ? 0xFF3B3B3Bu : 0xFFEFEFEFu; c->size = 13.33; c->align = 1; }
   if (!strcmp(t, "input")) { c->pad[0] = c->pad[2] = 1; c->pad[1] = c->pad[3] = 2; c->bw = 2; c->bc = 0xFF767676u; c->set_w = 1; c->w = 150; c->size = 13.33; }
 }
-static void tl_style(tl_n *e, const tl_css *up, int root) {
+static void tl_style_of(tl_n *e, const tl_css *up, int root);
+// FNV-1a, for the hashes a style is kept by.
+static uint64_t tl_h(uint64_t h, const void *p, size_t n) { const unsigned char *b = p; for (size_t i = 0; i < n; i++) { h ^= b[i]; h *= 1099511628211ull; } return h; }
+static uint64_t tl_hs(uint64_t h, const char *s) { return s ? tl_h(h, s, strlen(s) + 1) : tl_h(h, "", 1) * 31; }
+// What every style is worked out against: the sheet, the window's size
+// (vw, vh) and its light or dark.
+static uint64_t tl_salt, tl_salt_sheet;
+// e's style: its tag's defaults under up (its parent's), then its paint
+// attributes, the sheet's rules that match it and its style attribute.
+// Kept from the layout before when nothing it was worked out from changed
+// (C300): the salt, up, e's attributes and what selectors see of e and
+// each box round it (tag, id, classes, style, :hover, :empty,
+// :first-child, :last-child). place is 1 for its parent's first element,
+// 2 for the last.
+static void tl_style_at(tl_n *e, const tl_css *up, int root, uint64_t up_h, uint64_t up_chain, int place) {
   if (!e->tag) return;
+  int empty = !(e->s && *e->s);
+  for (int j = 0; j < e->nk && empty; j++) if (e->kids[j]->tag || (e->kids[j]->s && *e->kids[j]->s)) empty = 0;
+  uint64_t ch = tl_h(up_chain, &place, sizeof place);
+  ch = tl_hs(tl_hs(tl_hs(tl_hs(ch, e->tag), e->id), e->cls), e->style);
+  ch = tl_h(tl_h(ch, &e->hover, sizeof e->hover), &empty, sizeof empty);
+  e->chain = ch;
+  uint64_t sig = tl_h(tl_h(tl_h(ch, &tl_salt, sizeof tl_salt), &up_h, sizeof up_h), &root, sizeof root);
+  for (int j = 0; j < e->na; j++) sig = tl_hs(tl_hs(sig, e->ak[j]), e->av[j]);
+  if (sig != e->sig || !e->sig) {
+    tl_style_of(e, up, root);
+    e->cs = e->c;
+    e->cs_h = tl_h(14695981039346656037ull, &e->cs, sizeof e->cs);
+    e->sig = sig;
+  }
+  e->c = e->cs;
+  // An animation starts when its name is new on the box, as in a browser.
+  if (strcmp(e->c.anim, e->an)) { strcpy(e->an, e->c.anim); e->a0 = tl_ms(); e->aend = 0; e->ax = e->ay = 0; e->as = e->ao = 1; }
+  int first = -1, last = -1;
+  for (int j = 0; j < e->nk; j++) if (e->kids[j]->tag) { if (first < 0) first = j; last = j; }
+  for (int j = 0; j < e->nk; j++) tl_style_at(e->kids[j], &e->c, 0, e->cs_h, ch, (j == first) | (j == last) << 1);
+}
+static void tl_style_of(tl_n *e, const tl_css *up, int root) {
   tl_defaults(&e->c, e->tag, up);
   // A shape's paint attributes (fill="…"), under the sheet's rules.
   static const char *paints[] = { "fill", "stroke", "stroke-width", "fill-opacity", "stroke-opacity", "stroke-linejoin", "stroke-dasharray" };
@@ -706,9 +746,6 @@ static void tl_style(tl_n *e, const tl_css *up, int root) {
   if (e->style) { tl_vars_of = e; tl_decls(&e->c, e->style, e->style + strlen(e->style)); tl_vars_of = 0; }
   // A border on one side takes room as padding does (inside the box).
   for (int i = 0; i < 4; i++) e->c.pad[i] += e->c.side[i];
-  // An animation starts when its name is new on the box, as in a browser.
-  if (strcmp(e->c.anim, e->an)) { strcpy(e->an, e->c.anim); e->a0 = tl_ms(); e->aend = 0; e->ax = e->ay = 0; e->as = e->ao = 1; }
-  for (int j = 0; j < e->nk; j++) tl_style(e->kids[j], &e->c, 0);
 }
 
 // ---- Layout. Each box's x, y are against its parent's box.
@@ -1266,6 +1303,7 @@ static void tl_layout(void) {
   tl_sheets(tl_root, &sheet, &n);
   if (!tl_sheet || n != tl_sheet_n || memcmp(sheet, tl_sheet, n)) {
     free(tl_sheet); tl_sheet = sheet; tl_sheet_n = n;
+    tl_salt_sheet++;
     free(tl_rules); tl_rules = 0; tl_nrules = 0;
     free(tl_kfs); tl_kfs = 0; tl_nkf = 0;
     // The page's base sheet first, as a page from build-web has it
@@ -1280,8 +1318,9 @@ static void tl_layout(void) {
   tl_css none; tl_defaults(&none, "html", 0);
   tl_n html; memset(&html, 0, sizeof html); html.tag = "html"; html.c = none;
   for (int i = 0; i < tl_nrules; i++) if (!strcmp(tl_rules[i].tag, ":root") || !strcmp(tl_rules[i].tag, "html")) tl_decls(&html.c, tl_rules[i].decl, tl_rules[i].end);
-  tl_style(&body, &html.c, 0);
-  tl_style(tl_root, &body.c, 0);
+  tl_style_of(&body, &html.c, 0);
+  tl_salt = tl_h(tl_h(tl_h(tl_h(tl_salt_sheet, &tl_width, sizeof tl_width), &tl_height, sizeof tl_height), &tl_dark, sizeof tl_dark), &body.c, sizeof body.c);
+  tl_style_at(tl_root, &body.c, 0, 0, 0, 0);
   // The root's own margins too (a page's main with margin: 24px), and its
   // top margin collapsed with body's where body has no padding or border
   // between them, as CSS does.
