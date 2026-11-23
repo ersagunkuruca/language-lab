@@ -20,7 +20,6 @@
 // then the fields, one C struct per case. A case with no fields is one
 // static cell whose count is 0, which means it is never counted or freed.
 import { TICKET_V } from "../../ters/src/lang/std.ts";
-import { FLOAT32_TYPE } from "../../ters/src/lang/library.ts";
 // Values are owned: whoever holds one gives it on (to a call, a field, a
 // let) or drops it, so a function owns its inputs. Each use of a local is
 // the last one or a `dup`, and a local that one branch doesn't use is
@@ -73,7 +72,7 @@ import { hostCName as hostName, type Shape } from "../../ters/src/lang/hosts.ts"
 const UOPS: Partial<Record<Op, string>> = { uadd: "+", usub: "-", umul: "*", uand: "&", uor: "|", uxor: "^" };
 const U64OPS: Partial<Record<Op, string>> = { u64add: "+", u64sub: "-", u64mul: "*", u64and: "&", u64or: "|", u64xor: "^" };
 import { SITES, STOPS } from "./stops.ts";
-import { fails, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, poolHeld, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { fails, isFloat32, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, OPS, poolHeld, type AType, type TType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
@@ -1137,7 +1136,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // A Float32 (L286, C309) is held as binary32: its one Float64, rounded
   // to a binary32 at every step, is a float exactly, so it is written to
   // the float and read back as the same double.
-  const binary32 = (r: RType) => !r.mutable && r.def === FLOAT32_TYPE && r.fields.length === 1 && r.fields[0].t === "f64";
+  const binary32 = (r: RType): boolean => isFloat32(r);
   for (const a of arrays.values()) {
     const r = a.item;
     if (!isRecord(r) || r.mutable || binary32(r) || !r.fields.length || !r.fields.every((x) => ["double", "lab_int", "lab_cell *"].includes(ty(x.t)))) continue;

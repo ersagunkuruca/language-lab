@@ -1,6 +1,7 @@
-// Float32 stored as binary32 in C (C309): the Float32 record's struct
-// holds a `float`, an array of them four bytes a slot, and the program
-// prints what the evaluator prints.
+// Float32 stored as binary32 (C309): in C the Float32 record's struct
+// holds a `float`, an array of them four bytes a slot; in JavaScript an
+// array of them kept as columns is a Float32Array (sparks). The program prints what
+// the evaluator prints.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,17 +9,21 @@ import { spawnSync } from "node:child_process";
 import { Lang } from "../../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../../ters/src/lang/load.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
-import { runMain } from "../../ters/src/lang/run.ts";
+import { runMain, runProgram } from "../../ters/src/lang/run.ts";
 import { LIBRARY } from "../../ters/src/lang/library.ts";
 import { ARITH, ARRAY_OPS, CONS, DIVIDE, INT_OPS, NIL, S, SHOW_ANY } from "../../ters/src/lang/std.ts";
 import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
 import { compile, skip } from "./c-harness.ts";
+import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
+import { load } from "../src/program.ts";
+import { represented } from "../../ters/cli/represented.ts";
+import { representationsIn } from "../../ters/src/lang/represent.ts";
 
 const lib = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name && (LIBRARY.code.nodes[d] as { body?: Id }).body !== undefined)!;
 
-export function float32Program() {
+function float32Program() {
   const k = new Lang(LIBRARY.code);
   const f32 = (x: Id) => k.call(lib("as float32"), x);
   const ok = (e: Id, or: Id) => k.call(S.first, k.thunk(() => e), k.thunk(() => or));
@@ -56,4 +61,19 @@ test("C keeps a Float32 as a float, an array of them four bytes a slot, as the e
   const r = spawnSync(compile(c), []);
   assert.equal(r.status, 0, r.stderr.toString());
   assert.deepEqual(r.stdout.toString().split("\n").filter((x) => x), want);
+});
+
+// sparks (ters/examples/sparks): its list of sparks stored as columns, as
+// drift's motes are, each a Float32Array.
+test("JavaScript keeps sparks' Float32s as Float32Arrays, as the evaluator computes (C309)", () => {
+  const p = load("sparks"), main = p.named("main");
+  const r = represented({ title: "sparks", code: p.code, own: p.own.defs, names: p.pres.names, info: p.info, reps: representationsIn(p.code, p.info, p.pres.names, p.own.defs), options: p.options }, main, true);
+  const ir = lowerCore(r.code, r.info, r.names, [main]);
+  const js = printed(ir).js;
+  assert.match(js, /c0: new Float32Array/, "the sparks are columns of binary32s");
+  assert.doesNotMatch(js, /Float64Array/);
+  const out: string[] = [], want: string[] = [];
+  runCoreMain(ir, "main", ["300"], { print: (s) => out.push(s) });
+  runProgram(r.code, r.info, main, ["300"], { print: (s) => want.push(s), names: r.names });
+  assert.deepEqual(out, want);
 });

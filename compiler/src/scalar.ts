@@ -80,7 +80,7 @@ import { shareFoldItems } from "./fold-items.ts";
 import { finiteChecks } from "./finite-checks.ts";
 import { envSet } from "./zero-parts.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { LIBRARY } from "../../ters/src/lang/library.ts";
+import { FLOAT32_TYPE, LIBRARY } from "../../ters/src/lang/library.ts";
 import { SITES, STOPS } from "./stops.ts";
 import { fieldIndex, fieldPath } from "../../ters/src/lang/records.ts";
 import { expandDerivatives, recordVariant } from "../../ters/src/lang/derive.ts";
@@ -241,7 +241,7 @@ export type WType = "int" | "text" | "host";
 // when a job takes or gives one.
 // `leaves`: kept as a column per leaf field of its records, each of
 // this type (columns.ts `whole`, on JavaScript).
-export interface AType { key: string; name: string; item: LType; index: number; list: DType | null; leaves?: LType[] }
+export interface AType { key: string; name: string; item: LType; index: number; list: DType | null; leaves?: LType[]; narrow?: boolean[] }
 // std's Table (C63h): Map as a hash table, in C only, for Int and Text
 // keys (c.ts `tableC`); in C, keys that are data too (`dataKeys`, C243). `index`: its place in CoreIR.tables, which its
 // runtime functions are named by (`table.put.t0`); `entries`: each List
@@ -266,6 +266,9 @@ export function keyList(t: TType, d: DType): boolean {
 }
 export const isData = (t: LType): t is DType => typeof t === "object" && "cases" in t;
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
+// A Float32 (L286): its one Float64, rounded to a binary32 at every step,
+// so a target may hold it in 32 bits (C309).
+export const isFloat32 = (t: LType): t is RType => isRecord(t) && !t.mutable && t.def === FLOAT32_TYPE && t.fields.length === 1 && t.fields[0].t === "f64";
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
 // A closure's own struct: the function type it has and what it captured.
 export interface Shape { t: FType; caps: LType[] }

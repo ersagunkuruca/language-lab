@@ -1,0 +1,5 @@
+{"67458qll7kr80ine6995a68c9v": "Prints the sum of the sparks' heights after a hundred steps; the argument is how many sparks (1000 when there is none).",
+"i8f09oli087se3d3b26rd217da": "The i-th spark, thrown out from the middle on a spiral.",
+"liqejvvnd11p9tu1rhi3802em7": "A spark from a firework: where it is and how fast it goes, in metres and metres a step, as a graphics card keeps them (binary32).",
+"pr6p53f7dsa0dph9lmalk8a3bi": "A spark a step later: moved by its speed, slowed by the air and pulled down.",
+"qj7pphkf8namc3chomqs41af7p": "The sparks k steps later."}

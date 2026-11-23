@@ -27,7 +27,7 @@
 // the columns apart again where it only reads its fields (escape
 // analysis). An array captured by a closure given to a call stays columns.
 
-import { kids, mapKids, type AType, type CoreIR, type DType, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
+import { isFloat32, kids, mapKids, type AType, type CoreIR, type DType, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 
 type Local = Extract<SExpr, { k: "local" }>;
 const loc = (i: number): Local => ({ k: "local", i });
@@ -134,7 +134,9 @@ const found = (e: SExpr, p: (e: SExpr) => boolean): boolean => p(e) || kids(e).s
 // them: a moth's `velocity: Optional Vec`) is a column of whether it is
 // that case (`opt`, its index `some`), then that value's leaves, by a
 // path through it of −1.
-export type Leaf = { path: number[]; t: LType; opt?: DType; some?: number };
+// `narrow`: a Float32's value, a column of binary32s where the target has
+// them (C309).
+export type Leaf = { path: number[]; t: LType; opt?: DType; some?: number; narrow?: true };
 const PLAIN_LEAF = new Set<LType>(["f64", "int", "i32"]);
 export function optionalOf(t: LType): { d: DType; some: number; v: LType } | null {
   if (!isData(t) || t.cases.length !== 2) return null;
@@ -145,11 +147,12 @@ export function optionalOf(t: LType): { d: DType; some: number; v: LType } | nul
   return plain ? { d: t, some, v } : null;
 }
 export function leavesOf(r: RType, deep: boolean, at: number[] = []): Leaf[] {
+  const narrow = isFloat32(r) ? { narrow: true as const } : {};
   return r.fields.flatMap((x, k): Leaf[] => {
     if (deep && isRecord(x.t) && !x.t.mutable && x.t.fields.length) return leavesOf(x.t, deep, [...at, k]);
     const o = deep ? optionalOf(x.t) : null;
-    if (o) return [{ path: [...at, k], t: "i32", opt: o.d, some: o.some }, ...(isRecord(o.v) ? o.v.fields.map((y, m) => ({ path: [...at, k, -1, m], t: y.t })) : [{ path: [...at, k, -1], t: o.v }])];
-    return [{ path: [...at, k], t: x.t }];
+    if (o) return [{ path: [...at, k], t: "i32", opt: o.d, some: o.some }, ...(isRecord(o.v) ? o.v.fields.map((y, m) => ({ path: [...at, k, -1, m], t: y.t, ...(isFloat32(o.v) ? { narrow: true as const } : {}) })) : [{ path: [...at, k, -1], t: o.v }])];
+    return [{ path: [...at, k], t: x.t, ...narrow }];
   });
 }
 // A case of one record and a case of none (`Optional Thing`), and the
@@ -464,6 +467,7 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
   }
   ir.funcs.splice(0, ir.funcs.length, ...funcs);
   if (whole) a.leaves = leaves.map((l) => l.t);
+  if (leaves.some((l) => l.narrow)) a.narrow = leaves.map((l) => !!l.narrow);
   return true;
 }
 
