@@ -175,6 +175,8 @@ all of these.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| L282 | A field the program's own type has and a library type has too (std's Placed `position`, Event `x` `y`, Request `url` `body`), read on a value nothing settles, is the program's in the checker and the editor's typed fill, not only the MCP (#3124 settled the MCP); a test reads a field of each of std's field names on a program that has one | [REVIEW-2026-11-23](docs/reports/reviews/REVIEW-2026-11-23.md) §2 | P2 | M | Language lane |
+| L283 | A choice is stale when its id, kind, pick, what it was picked among or its target changes, not its words (staleChoices compares whole lines: flock-page.choices went stale when a schedule's wording changed); the kept choices file checked by a test. Todo test R12 §3 (compiler/test/known-holes.test.ts) | [REVIEW-2026-11-23](docs/reports/reviews/REVIEW-2026-11-23.md) §3 | P3 | S | Language lane |
 
 ### Ersagun's current asks
 
@@ -289,6 +291,7 @@ docs/process/TESTING.md. T7 is in lane L.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| T17 | Main's red rule made mechanical (P10): a PR's checks fail while Check main's last finished run on main has been red for more than an hour, unless the PR names a failing file in its title (a lane's own fix merges); and Check main runs again every file that failed in its previous run, whatever the push touched, so a red file stays red until it passes (R12 §1: red most of 11-18 to 11-23, 15 of 200 runs green, through P10) | [REVIEW-2026-11-23](docs/reports/reviews/REVIEW-2026-11-23.md) §1 | P1 | M | Compiler lane takes it once main is green |
 
 ## Coordinator and process
 
