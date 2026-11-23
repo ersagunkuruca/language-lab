@@ -656,7 +656,7 @@ test("an else line replaced is its body replaced; a type shows only its own vari
   // put in the arm's place, and the check crashed reading a case of nothing.
   const arm = /^(\w+) +else if/m.exec(text("view", { at: "squash" }))![1];
   text("replace", { at: arm, text: "else if x < -20 then -1 else 1 − 2 · first(divide(1, exp(2 · x) + 1), else 0)" });
-  assert.match(text("view", { at: "squash" }), /else 1 − 2 · first\(divide\(1, exp\(2 · x\) \+ 1\), else 0\)/);
+  assert.match(text("view", { at: "squash" }), /else 1 − 2 · first\(1 \/ \(exp\(2 · x\) \+ 1\), else 0\)/);
   // Generic callers' uses of Division were shown on squash's own type,
   // one "b's Division" each (mnist's had more than twenty).
   for (const name of ["twice", "thrice", "half"]) {
@@ -666,4 +666,20 @@ test("an else line replaced is its body replaced; a type shows only its own vari
   const shown = text("view", { at: "squash" });
   assert.match(shown, /squash#\w+ : \(a\) -\[a's Ordered, a's Division\]-> a where/);
   assert.doesNotMatch(shown, /b's Division/);
+});
+
+test("a type defined with its own parameters, named in its fields (I352)", async () => {
+  const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "numbers");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), '{"nodes":{},"defs":[]}');
+  text("open", { path: dir });
+  // mnist's: "no type named a" before, so each generic definition took
+  // lift and level as inputs of its own.
+  assert.match(text("define", { name: "Numbers", kind: "type", params: ["a"], first: "numbers(lift: (Float64) -> a, level: (a) -> Float64)" }), /type Numbers#\w+ a#\w+/);
+  text("define", { name: "levelled", kind: "function", params: ["ns", "x"] });
+  assert.match(text("replace", { at: "levelled", find: "□", text: "match ns\n  numbers(l, v) → v(x) + 1.0" }), /levelled#\w+ : \(Numbers a, a\) -> Float64/);
+  assert.match(text("eval", { text: "levelled(numbers((v) => v, (v) => v), 2.0)" }), /= 3 : Float64/);
 });

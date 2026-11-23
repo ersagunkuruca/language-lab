@@ -118,7 +118,8 @@ const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1
 export type Shape =
   | { kind: "function"; params: string[] }
   | { kind: "value" }
-  | { kind: "type"; firstCase: string }
+  // A type's own parameters by name (`Numbers a`: I352), none when not given.
+  | { kind: "type"; firstCase: string; params?: string[] }
   // An effect is declared like a data type whose cases are its operations
   // (model.ts): the first one takes nothing and answers nothing until said.
   | { kind: "effect"; firstOperation: string }
@@ -153,7 +154,9 @@ export function newDefinition(code: Code, names: Names, rawName: string, shape: 
     const first = trim(effect ? shape.firstOperation : shape.firstCase) || name.toLowerCase();
     const variant = add({ kind: "variant", fields: [] });
     nn[variant] = first;
-    body = add({ kind: "typedef", params: [], variants: [variant], ...(effect ? { effect: true as const } : {}) });
+    const own = shape.kind === "type" ? (shape.params ?? []).map(trim).filter((p) => p) : [];
+    const params = own.map((p) => { const b = add({ kind: "binder" }); nn[b] = p; return b; });
+    body = add({ kind: "typedef", params, variants: [variant], ...(effect ? { effect: true as const } : {}) });
     select = variant;
   }
   const def = add({ kind: "def", body });

@@ -108,7 +108,7 @@ export const TOOLS: Tool[] = [
   {
     name: "define",
     description: "New definition: a hole body (function, value); first case (type), ball(n: Int) or box(it: a) where a has Show; operation (interface, effect), at: (a) -> Int",
-    inputSchema: obj({ name: str("name"), kind: { type: "string", enum: ["function", "value", "type", "effect", "interface"] }, params: { type: "array", items: { type: "string" }, description: "function inputs" }, first: str("first case or operation") }, ["name", "kind"]),
+    inputSchema: obj({ name: str("name"), kind: { type: "string", enum: ["function", "value", "type", "effect", "interface"] }, params: { type: "array", items: { type: "string" }, description: "function inputs, or a type's own type parameters" }, first: str("first case or operation") }, ["name", "kind"]),
     call: (a) => program().define(String(a.name), String(a.kind), (a.params as string[]) ?? [], String(a.first ?? "")),
   },
   {

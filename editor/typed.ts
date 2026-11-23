@@ -715,7 +715,7 @@ function narrow(code: Code, info: Info, top: Typed): Typed {
     // nothing there (E178).
     const byName = (i: number) => use.every((op) => { if (caseOf(op)) return false; const f = typeOfOp(op); const p = f && f.params.length === args.length ? info.subst.resolve(f.params[i]) : null; return p?.t === "fn" && p.params.length === 0; });
     const passed = args.map((a, i): Typed => (!("params" in a.t) && byName(i) ? { params: [], body: a.t } : a.t));
-    return { t: { op: use[0], args: passed, ...(use.length > 1 ? { alts: use } : {}) }, heads };
+    return { t: { op: use[0], args: passed, ...(use.length > 1 ? { alts: use } : {}), ...(t.glyph ? { glyph: true as const } : {}) }, heads };
   };
   return go(top).t;
 }
@@ -792,11 +792,12 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // (The Int one takes its twin's place, so Float64's stays before
   // another type's: show(1.5) is Float64's show, not Algebraic's, I248.)
   const twinned = (op: Id) => !generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."));
-  // The one ÷ of every number type (Division's divide) after Float64's /,
-  // as a way to read / where Float64's doesn't fit (Rational, Fixed,
-  // Float32: I354): first, it would read an open a / b at a type of its
-  // own, and lose the units Float64's carries.
-  const later = (op: Id) => +(op === DIVIDE);
+  // Typed as /, the one ÷ of every number type (Division's divide) after
+  // Float64's, as a way to read / where Float64's doesn't fit (Rational,
+  // Fixed, Float32: I354): first, it would read an open a / b at a type of
+  // its own, and lose the units Float64's carries. Typed as divide(a, b)
+  // it stays first, the generic one.
+  const later = (op: Id) => +(!!t.glyph && op === DIVIDE);
   const ranked = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op), f: later(op) })).sort((a, b) => a.f - b.f || a.lib - b.lib || a.x - b.x || a.n - b.n || a.k - b.k).map((x) => x.op);
   const alts = ranked.flatMap((op) => twinned(op) ? [op.replace(/^builtin\./, "builtin.int."), op] : op.startsWith("builtin.int.") && t.alts!.includes(op.replace(/^builtin\.int\./, "builtin.")) && twinned(op.replace(/^builtin\.int\./, "builtin.")) ? [] : [op]);
   // When every meaning settles an open input, each at a type of its own
@@ -951,7 +952,7 @@ function readings(t: Typed): Typed[] {
 // time · time, gives that many (L128b, the text L128c prints): the parts
 // written out are its tuple. A relation, (s, d) → a, b = condition, has
 // its results among its inputs and the condition as its body (L225e).
-type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id> } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] };
+type Typed = { value: Value; float?: true; unit?: Unit } | { ref: Id } | { hole: true } | { let: { id: Id; name: string }; be: Typed; rest: Typed } | { op: Id; args: Typed[]; alts?: Id[]; guess?: Record<Id, Id>; glyph?: true } | { params: { id: Id; name: string }[]; body: Typed; results?: { id: Id; name: string }[] } | { cond: Typed; then: Typed; else: Typed } | { apply: Typed; args: Typed[] };
 // The operators are read from the notation itself (styles/blocks.json),
 // loosest first: each glyph is every function drawn with it, and the first
 // that type-checks is the one meant. The generic arithmetic comes first, so
@@ -1175,7 +1176,7 @@ function reading(text: string, code: Code, names: Names, scope: Map<string, Id>)
       if (!left || OPS.flat().some(([sym]) => left.endsWith(sym) && (!/^\p{L}/u.test(sym) || left.length === sym.length || !/[\p{L}\p{N}_'.′]/u.test(left[left.length - sym.length - 1])))) continue;
       const a = typedOut(left, code, names, scope), b = typedOut(t.slice(i + 1), code, names, scope);
       const alts = op[1].filter((id) => code.nodes[id]);
-      if (!("error" in a) && !("error" in b) && alts.length) return UNEQUAL.includes(op[0]) ? { op: S.not, args: [{ op: alts[0], args: [a, b], alts }] } : { op: alts[0], args: [a, b], alts };
+      if (!("error" in a) && !("error" in b) && alts.length) return UNEQUAL.includes(op[0]) ? { op: S.not, args: [{ op: alts[0], args: [a, b], alts }] } : { op: alts[0], args: [a, b], alts, glyph: true };
       // What's wrong in an operand says more than a position in the whole.
       inner ??= [a, b].find((x): x is { error: string } => "error" in x && !/ at \d+$/.test(x.error));
     }
