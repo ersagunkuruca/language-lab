@@ -138,6 +138,9 @@ typedef struct tl_n {
 #define TL_DIRTY 1
 #define TL_RENEW 2
 #define TL_KIDS 4
+// Whether a text or the boxes' children changed since the last layout, so
+// the style sheets are gathered again (C300).
+static int tl_texts_changed = 1;
 static void tl_dirty(tl_n *e, int how) { e->dirt |= how; for (tl_n *a = e->parent; a && !a->below; a = a->parent) a->below = 1; }
 
 static ters_ui *tl_ui;
@@ -178,7 +181,7 @@ static void *tl_text(void *c, const char *s, size_t n) {
   e->view = tl_ui->text(tl_ui->ctx, s, n);
   return e;
 }
-static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; if (e->parent) tl_dirty(e->parent, TL_DIRTY); tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
+static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; tl_texts_changed = 1; if (e->parent) tl_dirty(e->parent, TL_DIRTY); tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
 static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const char *v, size_t vn) {
   (void)c; tl_n *e = x;
   tl_dirty(e, TL_DIRTY);
@@ -206,10 +209,10 @@ static void tl_append(void *c, void *p, void *k) {
   if (e->nk == e->ck) { e->ck = e->ck ? 2 * e->ck : 4; e->kids = realloc(e->kids, sizeof *e->kids * (size_t)e->ck); }
   e->kids[e->nk++] = x;
   x->parent = e;
-  tl_dirty(e, TL_DIRTY | TL_KIDS);
+  tl_dirty(e, TL_DIRTY | TL_KIDS); tl_texts_changed = 1;
   tl_ui->append(tl_ui->ctx, e->view, x->view);
 }
-static void tl_clear(void *c, void *p) { (void)c; tl_n *e = p; for (int j = 0; j < e->nk; j++) if (e->kids[j]->parent == e) e->kids[j]->parent = 0; e->nk = 0; tl_dirty(e, TL_DIRTY | TL_KIDS); tl_ui->clear(tl_ui->ctx, e->view); }
+static void tl_clear(void *c, void *p) { (void)c; tl_n *e = p; for (int j = 0; j < e->nk; j++) if (e->kids[j]->parent == e) e->kids[j]->parent = 0; e->nk = 0; tl_dirty(e, TL_DIRTY | TL_KIDS); tl_texts_changed = 1; tl_ui->clear(tl_ui->ctx, e->view); }
 static void tl_listen(void *c, void *x, const char *ev, size_t n, int h) {
   (void)c; tl_n *e = x;
   // Pointer events in a picture are found here, by what's drawn where
@@ -1335,9 +1338,16 @@ static void tl_sheets(tl_n *e, char **out, size_t *n) {
 static int tl_step(tl_n *e, double now, tl_n **out, int *nout, int most);
 static void tl_layout(void) {
   if (!tl_root) return;
+  // The sheets gathered again when a text or the boxes changed, and read
+  // again when they differ (or first).
+  static int read;
   char *sheet = 0; size_t n = 0;
-  tl_sheets(tl_root, &sheet, &n);
-  if (!tl_sheet || n != tl_sheet_n || memcmp(sheet, tl_sheet, n)) {
+  if (tl_texts_changed || !read) tl_sheets(tl_root, &sheet, &n);
+  else n = tl_sheet_n, sheet = tl_sheet;
+  tl_texts_changed = 0;
+  if (sheet == tl_sheet && read) {}
+  else if (!read || n != tl_sheet_n || (n && memcmp(sheet, tl_sheet, n))) {
+    read = 1;
     free(tl_sheet); tl_sheet = sheet; tl_sheet_n = n;
     tl_salt_sheet++;
     free(tl_rules); tl_rules = 0; tl_nrules = 0;
