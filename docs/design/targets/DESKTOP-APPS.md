@@ -107,6 +107,9 @@ head, filtered by typing, moved through with the arrow keys. Enter or a
 double click opens a folder, or a file in its own app. A text file shows
 its first lines beside the list. Writes (rename, move to the bin) are a
 later step, each asked before it's done.
+Built in C299; its handlers needed the person's time zone and locale
+and open outside in C (C315). In an app it starts in the app's own
+folder; Up and a typed path go anywhere.
 
 What it needs from the language and targets:
 
