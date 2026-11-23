@@ -152,6 +152,7 @@ export const BUILTIN_INPUTS: typeof Std.BUILTIN_INPUTS = {
   "builtin.io.appendFile": 2,
   "builtin.io.fileExists": 1,
   "builtin.io.listFolder": 1,
+  "builtin.io.fileInfo": 1,
   "builtin.io.readBytes": 1,
   "builtin.io.writeBytes": 2,
   "builtin.io.offerFile": 2,
@@ -522,6 +523,15 @@ export const FIELDS: typeof Std.FIELDS = {
   "listed": "builtin.fields.listed"
 };
 export const FILES_TYPE: typeof Std.FILES_TYPE = "effect.files";
+export const FILE_INFO: typeof Std.FILE_INFO = "std.file info";
+export const FILE_INFO_V: typeof Std.FILE_INFO_V = "std.file info.file facts";
+export const FILE_KIND: typeof Std.FILE_KIND = "std.file kind";
+export const FILE_KIND_V: typeof Std.FILE_KIND_V = {
+  "file": "std.file kind.plain file",
+  "folder": "std.file kind.folder",
+  "link": "std.file kind.link",
+  "special": "std.file kind.special"
+};
 export const FILE_OPS: typeof Std.FILE_OPS = {
   "open": "std.kept files.open file",
   "line": "std.kept files.file line",
@@ -607,6 +617,7 @@ export const IO: typeof Std.IO = {
   "appendFile": "builtin.io.appendFile",
   "fileExists": "builtin.io.fileExists",
   "listFolder": "builtin.io.listFolder",
+  "fileInfo": "builtin.io.fileInfo",
   "readBytes": "builtin.io.readBytes",
   "writeBytes": "builtin.io.writeBytes",
   "offerFile": "builtin.io.offerFile",
@@ -940,6 +951,7 @@ export const WORLD_OPS: typeof Std.WORLD_OPS = {
   "builtin.io.writeBytes": "effect.files.write bytes",
   "builtin.io.offerFile": "effect.files.offer file",
   "builtin.io.askForFile": "effect.files.ask for file",
+  "builtin.io.fileInfo": "effect.files.file info",
   "builtin.io.fetchText": "effect.network.fetch text",
   "builtin.io.startFetch": "effect.network.start fetch",
   "builtin.io.sendRequest": "effect.network.send request"
@@ -1145,6 +1157,7 @@ export const stdNames: typeof Std.stdNames = {
   "builtin.io.appendFile": "add to file",
   "builtin.io.fileExists": "file exists",
   "builtin.io.listFolder": "list folder",
+  "builtin.io.fileInfo": "file info",
   "builtin.io.readBytes": "read bytes",
   "builtin.io.writeBytes": "write bytes",
   "builtin.io.offerFile": "offer file",
@@ -1195,6 +1208,8 @@ export const stdNames: typeof Std.stdNames = {
   "effect.files.offer file": "offer file",
   "effect.files.ask for file.kinds": "kinds",
   "effect.files.ask for file": "ask for file",
+  "effect.files.file info.path": "path",
+  "effect.files.file info": "file info",
   "effect.files": "Files",
   "effect.network.fetch text.url": "url",
   "effect.network.fetch text": "fetch text",
@@ -1683,6 +1698,16 @@ export const stdNames: typeof Std.stdNames = {
   "std.texel": "Texel",
   "builtin.frame.draw": "draw",
   "builtin.frame.sampled": "sampled",
+  "std.file kind.plain file": "plain file",
+  "std.file kind.folder": "folder",
+  "std.file kind.link": "link",
+  "std.file kind.special": "special",
+  "std.file kind": "File kind",
+  "std.file info.file facts.kind": "kind",
+  "std.file info.file facts.size": "size",
+  "std.file info.file facts.modified": "modified",
+  "std.file info.file facts": "file facts",
+  "std.file info": "File info",
   "builtin.sqrt": "sqrt",
   "builtin.pow": "power"
 };

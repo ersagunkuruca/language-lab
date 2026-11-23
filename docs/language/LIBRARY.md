@@ -653,6 +653,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **add to file** : `(Text, Text) -[Files, Abort]-> Unit`. Adds text to the end of a file.
 - **file exists** : `(Text) -[Files]-> Bool`. Whether there's a file at this path.
 - **list folder** : `(Text) -[Files, Abort]-> List Text`. The names of the files in a folder.
+- **file info** : `(Text) -[Files, Abort]-> File info`. A file's kind, size in bytes and modified time, as File info: file info("notes.txt").size. A link is told as a link, not as what it points at. A file that isn't there aborts with the reason, as read file does.
 - **read bytes** : `(Text) -[Files, Abort]-> Bytes`. A file's bytes as they are, with no decoding: for images, sound and binary formats. text of utf8(read bytes(path)) reads it as text. Aborts if the file can't be read.
 - **write bytes** : `(Text, Bytes) -[Files, Abort]-> Unit`. Writes bytes to a file as they are, replacing what was there: write bytes("out.bin", bytes of([0, 255])). Aborts if the file can't be written.
 - **offer file** : `(Text, Bytes) -[Files, Abort]-> Unit`. Hands bytes to the person as a file to keep, under a name: offer file("take.wav", bytes). On a page a download, in an app the share sheet, on the command line a file in the folder it runs in. Aborts if it can't be handed over.
@@ -663,6 +664,8 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **supports** : `(() -> a) -> Bool`. Whether everything the function would do is answered where the program runs: std's own effects, ones the program handles, and its own effects that this platform's host file answers. The function isn't run. Each target answers it when it builds, so the branch it rules out isn't compiled (FOREIGN.md, L234).
 - **Request** (type). A request over the network: request(method: "POST", url: …, headers: [tuple("content-type", "text/plain")], body: utf8 of("…")). Its body is Bytes, as HTTP sends it: utf8 of writes a text there. send request(r) sends it and gives its Response.
 - **Response** (type). What came back from send request: response(status, headers, body), whatever the status (a 404 is a response, not an Abort). Its body is Bytes: text of utf8 reads a text from it.
+- **File info** (type). What file info tells of a file: file facts(kind, size, modified), its File kind, its size in bytes and the Instant it was last changed.
+- **File kind** (type). What a file is: a plain file, a folder, a link (the link itself, not what it points at), or special (a device, pipe or socket).
 
 ## Waiting for several things: Await
 

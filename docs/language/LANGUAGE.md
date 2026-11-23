@@ -912,7 +912,7 @@ The effects:
 |---|---|---|
 | `Choice` | `one of(list)`, `fail()`, `value of(optional)` | `first(action, fallback)`, `all(action)`, `count(action)`, `optional(action)` |
 | `Console` | `print(text)`, `print error(text)`, `read line()`, `read input()` | a match; at the top, the runtime |
-| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder`, `read bytes`, `write bytes`, `offer file`, `ask for file` | a match; at the top, the runtime |
+| `Files` | `read file`, `write file`, `add to file`, `file exists`, `list folder`, `read bytes`, `write bytes`, `offer file`, `ask for file`, `file info` | a match; at the top, the runtime |
 | `Network` | `fetch text(url)`, `start fetch(url)`, `send request(request)` | a match; at the top, the runtime |
 | `Open file` | `next line()`, `write line(text)` | `with open file(path, body)` only (L213c) |
 | `Abort` | `abort(reason)` | a match with an `abort(reason)` case; at the top, the run ends (exit code 1) |
