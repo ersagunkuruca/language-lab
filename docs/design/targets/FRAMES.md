@@ -199,14 +199,19 @@ kept beside the sites (`gpuDraws(ir).refused`).
 ## Depth, passes and post effects (G10)
 
 `depth: true` gives the pass a depth buffer, cleared to the far plane, and
-the draws test against it. A pass `into` a `texture(…)` draws off screen.
-A later pass's fragment reads it with `sampled(t, across)`, where `t` is
-the same `Target` value captured by the function. Capturing it is what
-makes it a binding, and the runtime orders passes so that a texture is
-written before it is read (a frame that reads before writing is refused
-with a reason). A post effect is a pass drawing one full-screen quad.
-Bloom is a pass into "glow", a blur pass reading "glow", and a pass
-reading both.
+the draws test against it. A pass `into` a `texture(…)` draws off screen,
+at the texture's own size. A later pass's fragment reads it with
+`sampled(t, across) : Texel`, where `t` is the same `Target` value captured
+by the function, and `across` is a record of two Float64s from 0 to 1, from
+the top left. A `Texel` is std's red, green, blue and alpha. It reads
+between the four nearest texels and keeps to the edges, as a GPU's linear
+sampler with clamp-to-edge does. Capturing the target is what makes it a
+binding. Passes run in the order written, and a fragment that reads a
+texture no earlier pass of the frame drew is refused, with the texture's
+name. (The first draft had the runtime reorder passes; written order is
+simpler to read, and a frame that needs another order says so by its list.)
+A post effect is a pass drawing one full-screen quad. Bloom is a pass into
+"glow", a blur pass reading "glow", and a pass reading both.
 
 ## Textures and meshes as data (G11)
 

@@ -800,7 +800,7 @@ A Sound is its rate and each channel's samples. wav of writes one as a WAV file'
 
 ## Frames
 
-What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the screen or a texture, cleared to a CSS colour, with or without a depth buffer. A draw is a mesh, its instances, a vertex function that places each corner for each instance, and a fragment function that gives the colour; both are pure, as a shader is. A page's canvas with a render attribute draws the frame its cell holds.
+What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the screen or a texture, cleared to a CSS colour, with or without a depth buffer. A draw is a mesh, its instances, a vertex function that places each corner for each instance, and a fragment function that gives the colour; both are pure, as a shader is. A pass into a texture draws it for a later pass's fragment to read with sampled. A page's canvas with a render attribute draws the frame its cell holds.
 
 - **Mesh** (type). A mesh: its corners (each a record of Float64s, like a Vec3) and its triangles, three corner numbers each.
 - **Placed** (type). A corner as a vertex function places it: its position on the screen, and what it carries to the fragment function between corners.
@@ -808,7 +808,9 @@ What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the scre
 - **Draw** (type). One draw of a frame, made by draw: a mesh, its instances and two functions. Its type hides the instances' type, so a pass lists draws of different things.
 - **Pass** (type). A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.
 - **Frame** (type). What a canvas renders, as its render attribute: passes, drawn in order.
+- **Texel** (type).
 - **draw** : `(Mesh a, List b, (b, a) -> Placed c d, (d) -> e) -> Draw`. draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.
+- **sampled** : `(Target, a) -> Texel`. sampled(target, across): the colour at across (two numbers from 0 to 1, from the top left) of a texture an earlier pass of the frame drew.
 
 ## Points, colours and slopes
 

@@ -31,6 +31,7 @@ function program(build: (k: Lang, t: Types) => { main: Id }) {
     cy: (c) => k.call(corner.f["corner2.y"], c),
     point: (x, y, z) => k.call(point.v.point4, x, y, z, k.lit(1)),
     colour: (r, g, b) => k.call(colour.v.colour, r, g, b),
+    corner2: (x, y) => k.call(corner.v.corner2, x, y),
     // Two triangles over the square from (−1, −1) to (1, 1).
     square: () => k.call(FRAME_V.mesh, k.list(t.corner(-1, -1), t.corner(1, -1), t.corner(1, 1), t.corner(-1, 1)), k.list(...[0, 1, 2, 0, 2, 3].map((i) => k.int(i)))),
     pass: (clear, depth, ...draws) => k.call(FRAME_V.pass, k.x(FRAME_V.screen), k.lit(clear), depth ? k.true : k.false, k.list(...draws)),
@@ -43,7 +44,7 @@ function program(build: (k: Lang, t: Types) => { main: Id }) {
 }
 interface Types {
   corner: (x: number, y: number) => Id; cx: (c: Id) => Id; cy: (c: Id) => Id;
-  point: (x: Id, y: Id, z: Id) => Id; colour: (r: Id, g: Id, b: Id) => Id;
+  point: (x: Id, y: Id, z: Id) => Id; colour: (r: Id, g: Id, b: Id) => Id; corner2: (x: Id, y: Id) => Id;
   square: () => Id; pass: (clear: string, depth: boolean, ...draws: Id[]) => Id;
 }
 const px = (img: Image, x: number, y: number) => [...img.rgba.slice((y * img.width + x) * 4, (y * img.width + x) * 4 + 4)];
@@ -116,6 +117,36 @@ test("draws of different instance types go in one list, and a fragment must give
     return { main };
   });
   assert.ok(bad.info.errors.some((e) => /Float64/.test(e.message)), bad.info.errors.map((e) => e.message).join("; "));
+});
+
+// G10: a pass into a texture, and a later pass's fragment reading it.
+// The texture is 2 by 1: red, then green where the square shifted right
+// by 1 covers its right half. The screen, 4 by 2, is one square whose
+// fragment samples the texture across, at its height's middle: kept to
+// the edge at the ends, a mix between.
+const sampling = (order: "written" | "read first") => program((k, t) => {
+  const glow = () => k.call(FRAME_V.texture, k.lit("glow"), k.int(2), k.int(1));
+  const shifted = k.fn(["shift", "c"], (s, c) => k.call(FRAME_V.placed, t.point(k.call(B.add, t.cx(c), s), t.cy(c), k.lit(0.5)), k.lit(0)));
+  const into = k.call(FRAME_V.pass, glow(), k.lit("#ff0000"), k.false, k.list(k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(1)), shifted, k.fn(["_"], () => t.colour(k.lit(0), k.lit(1), k.lit(0))))));
+  const across = k.fn(["_", "c"], (_, c) => k.call(FRAME_V.placed, t.point(t.cx(c), t.cy(c), k.lit(0.5)), k.call(B.add, k.call(B.mul, t.cx(c), k.lit(0.5)), k.lit(0.5))));
+  const read = k.fn(["u"], (u) => k.call(FRAME_OPS.sampled, glow(), t.corner2(u, k.lit(0.5))));
+  const onto = t.pass("#000", false, k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(0)), across, read));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.call(FRAME_V.frame, order === "written" ? k.list(into, onto) : k.list(onto, into))));
+  return { main };
+});
+test("a pass draws into a texture and a later pass samples it, between texels and kept to its edges", () => {
+  const { info, frame } = sampling("written");
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const img = rasterize(frame(), 4, 2, evaluatorCall);
+  assert.deepEqual(px(img, 0, 0), [255, 0, 0, 255]);
+  assert.deepEqual(px(img, 1, 1), [191, 64, 0, 255]);
+  assert.deepEqual(px(img, 2, 0), [64, 191, 0, 255]);
+  assert.deepEqual(px(img, 3, 1), [0, 255, 0, 255]);
+});
+test("a texture read before a pass of the frame draws it is refused with its name", () => {
+  const { frame } = sampling("read first");
+  assert.throws(() => rasterize(frame(), 4, 2, evaluatorCall), /"glow" is read before a pass of this frame draws it/);
 });
 
 test("CSS colours as a clear colour", () => {

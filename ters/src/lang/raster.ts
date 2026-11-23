@@ -10,13 +10,14 @@
 // with WebGPU's conventions, so the two draw the same frame.
 //
 // Kept simple on purpose: a triangle with a corner behind the eye (w ≤ 0)
-// isn't drawn rather than clipped, and a pass into a texture waits for G10.
+// isn't drawn rather than clipped.
 // A corner or a pixel with no answer (a fragment's Choice that gave none)
 // is left out, as a shader's `discard` leaves one out.
 
 import { fromList, type Data, type Value } from "./run.ts";
 import { NoValue } from "./cells.ts";
 import { FRAME_V, TRUE } from "./std-ids.ts";
+import { withTextures, type Texture } from "./frame-textures.ts";
 
 export interface Image { width: number; height: number; rgba: Uint8ClampedArray }
 
@@ -74,25 +75,30 @@ const answer = (call: Call, f: Value, ...xs: Value[]): Value | undefined => {
   try { return call(f, ...xs); } catch (e) { if (e instanceof NoValue || (e instanceof Error && e.message === "no value")) return undefined; throw e; }
 };
 
-// Every screen pass of the frame drawn in order into one image.
+// The frame's passes drawn in order: each into the screen's image or into
+// a texture of its own size, which a later pass's fragment reads with
+// `sampled` (frame-textures.ts, G10).
 export function rasterize(frame: Value, width: number, height: number, call: Call): Image {
+  const screen = { width, height, colour: new Float64Array(width * height * 4) };
+  const textures = new Map<string, Texture>();
+  withTextures(textures, () => {
+    for (const pass of items(part(frame, 0))) {
+      const into = part(pass, 0) as Data;
+      const t = into.tag === FRAME_V.texture ? { width: Math.max(1, Number(part(into, 1))), height: Math.max(1, Number(part(into, 2))) } : null;
+      const target = t ? { ...t, colour: new Float64Array(t.width * t.height * 4) } : screen;
+      const [r, g, b, a] = cssColour(String(part(pass, 1)));
+      for (let p = 0; p < target.width * target.height; p++) target.colour.set([r, g, b, a], p * 4);
+      const tested = (part(pass, 2) as Data).tag === TRUE || (part(pass, 2) as unknown) === true;
+      const depth = tested ? new Float64Array(target.width * target.height).fill(1) : null;
+      for (const d of items(part(pass, 3))) drawOne(d as Data, target.width, target.height, call, target.colour, depth);
+      // Kept as a texture is stored: each part from 0 to 1.
+      if (t) { for (let i = 0; i < target.colour.length; i++) target.colour[i] = Math.min(1, Math.max(0, target.colour[i])); textures.set(String(part(into, 0)), target); }
+    }
+  });
   const rgba = new Uint8ClampedArray(width * height * 4);
-  const colour = new Float64Array(width * height * 4);
-  const depth = new Float64Array(width * height);
-  for (const pass of items(part(frame, 0))) {
-    if ((part(pass, 0) as Data).tag !== FRAME_V.screen) { warnOnce("a pass into a texture isn't drawn yet (G10): only the screen's passes are"); continue; }
-    const [r, g, b, a] = cssColour(String(part(pass, 1)));
-    for (let p = 0; p < width * height; p++) colour.set([r, g, b, a], p * 4);
-    depth.fill(1);
-    const tested = (part(pass, 2) as Data).tag === TRUE || (part(pass, 2) as unknown) === true;
-    for (const d of items(part(pass, 3))) drawOne(d as Data, width, height, call, colour, tested ? depth : null);
-  }
-  for (let i = 0; i < colour.length; i++) rgba[i] = Math.round(Math.min(1, Math.max(0, colour[i])) * 255);
+  for (let i = 0; i < screen.colour.length; i++) rgba[i] = Math.round(Math.min(1, Math.max(0, screen.colour[i])) * 255);
   return { width, height, rgba };
 }
-
-let warned = false;
-const warnOnce = (why: string) => { if (!warned) { warned = true; console.warn(why); } };
 
 interface Placed { x: number; y: number; z: number; w: number; carried: Value; leaves: number[] }
 

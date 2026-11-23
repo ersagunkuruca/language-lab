@@ -218,6 +218,7 @@ export const TARGETS: Record<Id, Target> = {
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },
   [S.listOf]: { js: "impl", scalar: DATA },
   [FRAME_OPS.draw]: { js: "impl", scalar: DATA },
+  [FRAME_OPS.sampled]: { js: "impl", scalar: DATA },
   [TEXT_OPS.normalized]: { js: "impl", scalar: DATA },
   [TEXT_OPS.graphemes]: { js: "impl", scalar: DATA },
   [TEXT_OPS.graphemeCount]: { js: "impl", scalar: DATA },

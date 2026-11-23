@@ -294,7 +294,8 @@ export const BUILTIN_INPUTS: typeof Std.BUILTIN_INPUTS = {
   "builtin.set": 3,
   "builtin.json.of": 1,
   "builtin.json.from": 1,
-  "builtin.frame.draw": 4
+  "builtin.frame.draw": 4,
+  "builtin.frame.sampled": 2
 };
 export const BYTES: typeof Std.BYTES = "std.bytes";
 export const BYTES_V: typeof Std.BYTES_V = "std.bytes.bytes";
@@ -491,7 +492,8 @@ export const COMPUTE_ONLY: typeof Std.COMPUTE_ONLY = [
   "builtin.set",
   "builtin.json.of",
   "builtin.json.from",
-  "builtin.frame.draw"
+  "builtin.frame.draw",
+  "builtin.frame.sampled"
 ];
 export const CONS: typeof Std.CONS = "std.list.cons";
 export const CONSOLE_TYPE: typeof Std.CONSOLE_TYPE = "effect.console";
@@ -531,7 +533,8 @@ export const FILE_OPS: typeof Std.FILE_OPS = {
 export const FIRST: typeof Std.FIRST = "std.tuple2.tuple.first";
 export const FRAME: typeof Std.FRAME = "std.frame";
 export const FRAME_OPS: typeof Std.FRAME_OPS = {
-  "draw": "builtin.frame.draw"
+  "draw": "builtin.frame.draw",
+  "sampled": "builtin.frame.sampled"
 };
 export const FRAME_V: typeof Std.FRAME_V = {
   "mesh": "std.mesh.mesh",
@@ -540,7 +543,9 @@ export const FRAME_V: typeof Std.FRAME_V = {
   "texture": "std.target.texture",
   "pass": "std.pass.pass",
   "frame": "std.frame.frame",
-  "draw": "builtin.frame.draw"
+  "draw": "builtin.frame.draw",
+  "texel": "std.texel.texel",
+  "sampled": "builtin.frame.sampled"
 };
 export const FROM_FRACTION: typeof Std.FROM_FRACTION = "std.literal.literal.from fraction";
 export const HANDLER_ROW: typeof Std.HANDLER_ROW = "std.row.handler";
@@ -846,6 +851,7 @@ export const TABLE_OPS: typeof Std.TABLE_OPS = {
 export const TARGET: typeof Std.TARGET = "std.target";
 export const TENSOR: typeof Std.TENSOR = "std.tensor";
 export const TENSOR_V: typeof Std.TENSOR_V = "std.tensor.tensor";
+export const TEXEL: typeof Std.TEXEL = "std.texel";
 export const TEXT_OPS: typeof Std.TEXT_OPS = {
   "length": "builtin.text.length",
   "slice": "builtin.text.slice",
@@ -1669,7 +1675,14 @@ export const stdNames: typeof Std.stdNames = {
   "std.frame.frame.passes": "passes",
   "std.frame.frame": "frame",
   "std.frame": "Frame",
+  "std.texel.texel.red": "red",
+  "std.texel.texel.green": "green",
+  "std.texel.texel.blue": "blue",
+  "std.texel.texel.alpha": "alpha",
+  "std.texel.texel": "texel",
+  "std.texel": "Texel",
   "builtin.frame.draw": "draw",
+  "builtin.frame.sampled": "sampled",
   "builtin.sqrt": "sqrt",
   "builtin.pow": "power"
 };
