@@ -14,7 +14,7 @@ import { trace } from "../ters/src/lang/trace.ts";
 import { parseValue } from "../ters/src/lang/values.ts";
 import { evaluatorCall } from "../ters/src/lang/html.ts";
 import type * as T from "./typed.ts";
-import { pictureEntries } from "./picture.ts";
+import { pictureEntries } from "./pictureDraw.ts";
 import type { Doc, UI } from "./main.ts";
 
 export interface SeedHost {

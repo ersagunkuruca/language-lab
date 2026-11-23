@@ -63,7 +63,7 @@ import { holeWithUnit } from "../ters/src/lang/unit-types.ts";
 import { problemOf } from "../ters/src/lang/problems.ts";
 import { inlinable, inlineView, type InlineView } from "./inline.ts";
 import * as Top from "../ters/src/lang/toplevel.ts";
-import { pictureEntries } from "./picture.ts";
+import { pictureEntries } from "./pictureDraw.ts";
 import type { Saved } from "../ters/src/lang/tests.ts";
 import { algebrasOf, describeMask, maskOfValue, type Algebra } from "../ters/src/lang/grades.ts";
 import { pageMain } from "../ters/src/lang/page.ts";

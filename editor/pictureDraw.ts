@@ -11,6 +11,8 @@
 // Only types from the compiler: the page that draws pictures built ahead
 // carries no compiler and no library (they are megabytes).
 import type { Module } from "../compiler/src/wasm.ts";
+import type { Id } from "../ters/src/model.ts";
+import type { Names } from "../ters/src/presentation.ts";
 
 // A picture's module, started as compiler/src/wasm.ts instantiate does for
 // one: Math from the host. A picture talks to no world (it has no effects),
@@ -28,6 +30,16 @@ async function instantiate(m: { bytes: Uint8Array; floats?: Module["floats"] }):
     out[name] = partial ? (...xs) => { const r = f(...xs) as [number, number]; if (r[1] === 0) fin(r[0]); return r; } : (...xs) => fin(f(...xs) as number);
   }
   return out;
+}
+
+// The definitions a picture is made of, by name: colour, or red, green and
+// blue. Null when the program has neither.
+export function pictureEntries(defs: Id[], names: Names): Record<string, Id> | null {
+  const named = (name: string) => defs.find((d) => names[d] === name);
+  const colour = named("colour");
+  if (colour) return { colour };
+  const rgb = ["red", "green", "blue"].map(named);
+  return rgb.every(Boolean) ? { red: rgb[0]!, green: rgb[1]!, blue: rgb[2]! } : null;
 }
 
 export interface Picture {

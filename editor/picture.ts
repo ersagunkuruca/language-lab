@@ -13,7 +13,8 @@
 // (compiler/src/js-scalar.ts).
 //
 // shaders.html (editor/shaders.ts) and the editor's Run panel both draw
-// through here.
+// what this makes: the site's build makes it for each shipped picture,
+// and the Run worker (pictureAsk.ts) for an edited one (E319c).
 
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Names } from "../ters/src/presentation.ts";
@@ -27,31 +28,9 @@ import { emitWgsl } from "../compiler/src/wgsl.ts";
 import { envSet, zeroParts } from "../compiler/src/zero-parts.ts";
 import { emitWasm } from "../compiler/src/wasm.ts";
 import { emitJs } from "../compiler/src/js-scalar.ts";
-import { checkOrder, drawDrawable, pause, POINTS, wasmBytes, type Built, type CpuProgram, type Drawable, type Picture } from "./pictureDraw.ts";
-export { pause, type Picture } from "./pictureDraw.ts";
+import { checkOrder, pause, POINTS, wasmBytes, type Built, type CpuProgram, type Drawable } from "./pictureDraw.ts";
+export { pause, pictureEntries, type Picture } from "./pictureDraw.ts";
 
-// The definitions a picture is made of, by name: colour, or red, green and
-// blue. Null when the program has neither.
-export function pictureEntries(defs: Id[], names: Names): Record<string, Id> | null {
-  const named = (name: string) => defs.find((d) => names[d] === name);
-  const colour = named("colour");
-  if (colour) return { colour };
-  const rgb = ["red", "green", "blue"].map(named);
-  return rgb.every(Boolean) ? { red: rgb[0]!, green: rgb[1]!, blue: rgb[2]! } : null;
-}
-
-export interface PictureOptions {
-  code: Code;
-  info: Info;
-  names: Names;
-  entries: Record<string, Id>;
-  canvas: HTMLCanvasElement;
-  status: HTMLElement;
-  // Where to say how the GPU compares with the evaluator; no check without.
-  check?: HTMLElement;
-  // A fixed time instead of the clock (for screenshots and tests).
-  still?: number | null;
-}
 
 const first = (xs: Iterable<Value>) => { for (const x of xs) return x; };
 
@@ -86,11 +65,6 @@ export function lowerPicture(code: Code, info: Info, names: Names, entries: Reco
 }
 type Side = { code: Code; info: Info; names: Names } | null;
 const float32 = new WeakMap<Code, Map<string, { info: Info; names: string; out: Side }>>();
-
-// Throws, with the compiler's reason, when the entries can't be drawn.
-export async function drawPicture(o: PictureOptions): Promise<Picture> {
-  return drawDrawable(await prepare(o.code, o.info, o.names, o.entries), o);
-}
 
 // The picture compiled once, ahead (shaders.html, from editor/build.ts):
 // the evaluator's answers at every check point and the CPU's program made

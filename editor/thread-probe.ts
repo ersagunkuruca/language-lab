@@ -38,7 +38,7 @@ const LONG_MS = 200;
 const KNOWN: Record<string, string> = {
   "values on a wire": "E319e",
   // Bounded since E319d (each update 50 ms of the page's own steps); what's
-  // left is range's million items, made in one builtin call that takes no
+  // left is range's three million items, made in one builtin call that takes no
   // steps, and their collection.
   "a page's view": "E319i",
 };
@@ -66,20 +66,33 @@ function slowTest(): Place {
     then: async (p) => (await p.locator(".run .status-line", { hasText: "Passed" }).first().waitFor({ timeout: 120000 }).then(() => null, async () => `the test didn't pass: ${(await p.locator(".run").first().innerText()).slice(0, 200)}`)) };
 }
 
-// The dice page with a view that sums a million numbers: the editor's
+// The dice page with a view that sums three million numbers: the editor's
 // preview runs a page's views and handlers on the editor's thread, where
-// compiled code that ends took no steps from the page's budget (238 and
+// compiled code that ends took no steps from the page's budget (at a million, 238 and
 // 720 ms tasks before E319d).
 function slowPage(): Place {
-  const dir = mkdtempSync(join(tmpdir(), "probe-page-"));
+  return { name: "a page's view", file: exampleFile("dice", "Slow page", (s) => s.replace("main", "read(said) ++ show(sum(range(3000000)))", "read(said)")), open: (q) => openDef(q, "main") };
+}
+
+// The ray marcher, edited so it isn't the shipped one: the editor lowered
+// it to WGSL, WebAssembly and JavaScript and checked its Float32 copy on
+// its own thread (E319c), and without a GPU draws it there a slice of rows
+// a frame.
+function picture(): Place {
+  return { name: "a picture", file: exampleFile("raymarch", "Slow picture", (s) => s.replace("colour", "rgb(1, 0, 0.9)", "rgb(1, 0, 1)")), open: (q) => openDef(q, "colour"),
+    then: async (q) => { const said = await q.locator(".pic-status").first().innerText(); return /Can't|Drawing…/.test(said) || await q.locator("canvas.picture").first().isHidden() ? `the picture didn't draw: ${said}` : null; } };
+}
+
+// An example copied and changed, as the file the editor opens.
+function exampleFile(example: string, title: string, change: (s: Session) => void): string {
+  const dir = mkdtempSync(join(tmpdir(), "probe-"));
   try {
-    cpSync(new URL("../ters/examples/dice", import.meta.url).pathname, dir, { recursive: true });
+    cpSync(new URL(`../ters/examples/${example}`, import.meta.url).pathname, dir, { recursive: true });
     const s = new Session(dir);
-    s.replace("main", "read(said) ++ show(sum(range(1000000)))", "read(said)");
+    change(s);
     s.save();
     const p = loadProgram(dir);
-    const file = toFile({ title: "Slow page", typed: true, code: p.code, names: p.pres.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, signatures: p.pins }, base(new Lang().code));
-    return { name: "a page's view", file, open: (q) => openDef(q, "main") };
+    return toFile({ title, typed: true, code: p.code, names: p.pres.names, descriptive: {}, comments: {}, layout: { known: {} }, examples: {}, signatures: p.pins }, base(new Lang().code));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
@@ -101,7 +114,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest(), slowPage()]) {
+for (const place of [wireValues(), slowTest(), slowPage(), picture()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };

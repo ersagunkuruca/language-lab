@@ -33,6 +33,8 @@ import { receivedCode, type SentCode } from "./runCode.ts";
 import { addShipped, loadChecks } from "./checkStore.ts";
 import { choicesFor } from "./choicesFor.ts";
 import type { TestAsk, TestSays } from "./testAsk.ts";
+import type { PictureAsk, PictureSays } from "./pictureAsk.ts";
+import { buildPicture } from "./picture.ts";
 import { runTests, savedFrom, type Saved } from "../ters/src/lang/tests.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
@@ -84,7 +86,7 @@ let lastWhere: Code | null = null;
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
+const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays | PictureSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `ters run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -145,7 +147,7 @@ function placed(held: [Id, string][] = []): [Id, string][] {
   return held.filter(([, r]) => !isPlace(r));
 }
 
-function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk>) {
+function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk>) {
   answers = null; paused = false;
   // The program's groups as the build checked them (E314), from the page.
   if ("shipped" in e.data && e.data.shipped) addShipped(e.data.shipped);
@@ -183,6 +185,17 @@ function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereA
     } catch (err) {
       return post({ error: (err as Error).message });
     }
+  }
+  // A picture lowered and its CPU program made (pictureAsk.ts, E319c).
+  if ("picture" in e.data) {
+    const { names, pins, entries } = e.data;
+    void (async (): Promise<PictureSays> => {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      const code = receivedCode(e.data.code), info = infer(code, names);
+      return { built: await buildPicture(code, info, names, entries, false) };
+    })().then(post, (err) => post({ error: (err as Error).message }));
+    return;
   }
   if ("whereRuns" in e.data) {
     const { names, pins, only } = e.data;
