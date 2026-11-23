@@ -154,8 +154,12 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 @property (nonatomic, strong) NSArray<CALayer *> *sideLayers;
 @property (nonatomic) double sideWidths0, sideWidths1, sideWidths2, sideWidths3;
 @property (nonatomic) double inside;
+// display: contents (placed shown 2): no box of its own, so a click on
+// none of its views goes to what is below it.
+@property (nonatomic) BOOL contents;
 @end
 @implementation TBox
+- (NSView *)hitTest:(NSPoint)p { NSView *v = [super hitTest:p]; return v == self && self.contents ? nil : v; }
 - (void)layout {
   [super layout];
   if (!self.sideLayers) return;
@@ -339,6 +343,7 @@ static void u_place(void *c, void *v, double x, double y, double w, double h, in
   NSView *a = V(v);
   if (!a) return;
   a.hidden = !shown;
+  if ([a isKindOfClass:[TBox class]]) ((TBox *)a).contents = shown == 2;
   NSPoint o = a.bounds.origin;
   a.frame = NSMakeRect(x, y, w, h);
   [a setBoundsOrigin:o];

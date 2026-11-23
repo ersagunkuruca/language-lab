@@ -432,7 +432,9 @@ static void held(void) {
   int c = GetKeyState(VK_CONTROL) < 0, s = GetKeyState(VK_SHIFT) < 0, a = GetKeyState(VK_MENU) < 0, m = GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0;
   ters_page_held(c | s << 1 | a << 2 | m << 3);
 }
+static int FIRED;
 static void fire(int h, const char *value, const char *key, double x, double y, double seconds) {
+  FIRED++;
   held();
   ters_page_event(h, value, strlen(value), key, strlen(key), x, y, seconds);
   tick();
@@ -881,7 +883,8 @@ static Node *hit(Node *n, double x, double y) {
   double lx = x - n->x, ly = y - n->y;
   if (lx < 0 || ly < 0 || lx >= n->w || ly >= n->h) return NULL;
   for (int i = n->nk - 1; i >= 0; i--) { Node *k = hit(n->kids[i], lx, ly + n->scrolled); if (k) return k; }
-  return n;
+  // A box of display: contents (shown 2) has none of its own to be found.
+  return n->shown == 2 ? NULL : n;
 }
 static void pagePoint(LPARAM l, double *x, double *y) { *x = GET_X_LPARAM(l) / SCALE; *y = GET_Y_LPARAM(l) / SCALE + SCROLLY; }
 // The pointer over v: the page told of the box round it (a text's box,
@@ -1066,6 +1069,8 @@ static void shown(const char *when) {
 }
 static char **TAPS;
 static int NTAPS, TAP;
+// A tap whose click reached no view hearing it: the check fails (exit 3).
+static int MISSED;
 #define TAP_TIMER 7
 // Each tap's step: 0 started, 1 the tap, 2 what it showed, 3 quit.
 static int STEP;
@@ -1121,9 +1126,21 @@ static void tapped(const char *t) {
       done = 1;
     }
   }
+  // Else a click on the view listening for clicks that reads t: the
+  // mouse's own, at its middle, so it finds that view as a person's would.
   if (!done) {
     Node *v = showing(t, 1);
-    if (v) { fire(v->heard[E_CLICK] - 1, "", "", 0, 0, 0); done = 1; }
+    if (v) {
+      double x, y;
+      origin(v, &x, &y);
+      x += v->w / 2; y += v->h / 2 - SCROLLY;
+      LPARAM at = MAKELPARAM((int)lround(x * SCALE), (int)lround(y * SCALE));
+      int was = FIRED;
+      SendMessageW(W, WM_LBUTTONDOWN, MK_LBUTTON, at);
+      SendMessageW(W, WM_LBUTTONUP, 0, at);
+      if (FIRED == was) { say("tap %s: the click at %.0f,%.0f found no view hearing it\n", t, x, y); MISSED = 1; }
+      done = 1;
+    }
   }
   // "key name": a key pressed and let go (Enter, Tab, ArrowDown, a letter
   // …), where the focus is, and where the focus is after.
@@ -1355,6 +1372,6 @@ int main(void) {
   if (STEP < 0) tapNext(1000, 0);
   MSG msg;
   while (GetMessageW(&msg, NULL, 0, 0) > 0) { TranslateMessage(&msg); DispatchMessageW(&msg); }
-  return 0;
+  return MISSED ? 3 : 0;
 }
 `;

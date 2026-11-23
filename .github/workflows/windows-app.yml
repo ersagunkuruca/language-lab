@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - ters/cli/windows-app.ts
+      - compiler/src/c-layout.ts
       - .github/workflows/windows-app.yml
   workflow_dispatch:
     inputs:
@@ -28,6 +29,13 @@ permissions:
 
 jobs:
   app:
+    # A pull request checks dice and folders, each tap a mouse click at
+    # the view's middle (a click finding no view fails it); a run by hand,
+    # the program and taps asked for.
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open a folder|resize 700"}]') }}
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -43,7 +51,7 @@ jobs:
         working-directory: ters
         shell: bash
         env:
-          PROGRAM: ${{ inputs.program || 'dice' }}
+          PROGRAM: ${{ matrix.program }}
         run: node cli/ters.ts build-native-app "examples/$PROGRAM" --windows -o "$RUNNER_TEMP/app"
       - name: The app
         shell: bash
@@ -54,7 +62,7 @@ jobs:
       - name: Started, clicked
         shell: bash
         env:
-          TAPS: ${{ inputs.taps || 'Roll|resize 420|Throw 100' }}
+          TAPS: ${{ matrix.taps }}
         run: |
           cd "$RUNNER_TEMP/app"
           exe=$(ls *.exe)
@@ -84,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ${{ inputs.program || 'dice' }}-windows
+          name: ${{ matrix.program }}-windows
           path: |
             screen.png
             app.zip
