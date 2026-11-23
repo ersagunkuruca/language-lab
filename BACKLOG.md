@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319h, E319i, E319j, E319k (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319i, E319j, E319k (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -75,8 +75,7 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319k | Opening a large program draws it in one task: after its check (E319g), constructions' first drawing is about 500 ms (the page's first run 120 ms, garbage collection 100, the changes' hashes 50, the graph's layout and blocks 100). Split it: the open definition first, the rest a frame at a time. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
-| E319h | What grows with the open definition (backwards.ts `analyze`, `unitInfer`, algebras, the changes diff, graph layout) measured on the largest examples: past 16 ms each moves to the worker or is kept per version. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
+| E319k | Drawing a large program or definition in one task: after its check (E319g), constructions' first drawing is about 500 ms (the page's first run 120 ms, garbage collection 100, the changes' hashes 50, the graph's layout and blocks 100); opening a definition is up to 251 ms (spacetime's rapidity picture: the graph's drawing and layout up to 363 ms inclusive with getBoundingClientRect and getBBox, the blocks 159, the backwards panel 124). Split it: the open definition first, the rest a frame at a time; the graph's layout measured once, not per node. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 | E319i | Builtins that make data from a number (`range`, and any like it) take a step per item from a page's budget, so a page's update is bounded by its time even when one call makes a million items: after E319d the probe's "a page's view" (`sum(range(1000000))` in a view) still shows 210 to 230 ms tasks, that call's allocation and its collection. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319j | Pause on a compiled page: `checkedForRun` (the program checked and its representations chosen for running, bounce about 2 s the first time) in the worker, as the page's compile is, then the interpreted page built from what it sends. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 
