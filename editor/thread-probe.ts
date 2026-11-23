@@ -36,7 +36,6 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 const LONG_MS = 200;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
-  "values on a wire": "E319e",
   // The check left the thread with E319g (a 617 ms task opening spacetime
   // before); what's left is the first drawing of a large program: its
   // page's first run, the graph's layout, the blocks.
@@ -47,13 +46,15 @@ const KNOWN: Record<string, string> = {
 // `opening`: what's measured is the file's opening itself.
 type Place = { name: string; file: string; open: (p: Page) => Promise<void>; then?: (p: Page) => Promise<string | null>; opening?: true };
 
-// A definition with no inputs that takes seconds: Show values runs it on
-// the editor's thread (main.ts boundedTrace, GIVEN_MS: a 3 s freeze).
+// A definition with no inputs that takes seconds: Show values ran it on
+// the editor's thread (main.ts boundedTrace, GIVEN_MS: a 3 s freeze); now
+// QUICK_MS there and the rest in the worker (E319e).
 function wireValues(): Place {
   const k = new Lang();
   const fib = slowFib(k), slow = k.def("slow");
   k.define(slow, k.call(fib, k.lit(30)));
-  return { name: "values on a wire", file: fileOf("Slow wires", k), open: async (p) => { await openDef(p, "slow"); await p.getByText("Show values", { exact: true }).first().click(); } };
+  return { name: "values on a wire", file: fileOf("Slow wires", k), open: async (p) => { await openDef(p, "slow"); await p.getByText("Show values", { exact: true }).first().click(); },
+    then: async (p) => ((await p.getByText("Gives 832040", { exact: false }).count()) ? null : `the worker didn't give fib(30): ${(await p.locator(".hint").allInnerTexts()).join(" | ").slice(0, 300)}`) };
 }
 
 // A test whose every case takes seconds: Run's Test ran it on the
