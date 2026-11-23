@@ -1,4 +1,4 @@
-// The program's choices beside it (L280a, cli/choices.ts): an entry per
+// The program's decisions beside it (L280a, cli/choices.ts): an entry per
 // pick, sorted by the type's id, with the facts the pick read; a check
 // says which written entries the compiler would now pick otherwise.
 
@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadProgram } from "../src/lang/load.ts";
@@ -57,8 +57,8 @@ test("a check says which entries are stale and which are new", () => {
 });
 
 test("a program's choices are beside it", () => {
-  assert.equal(choicesPath("examples/pond/"), "examples/pond.choices");
-  assert.equal(choicesPath("ledger.ters"), "ledger.ters.choices");
+  assert.equal(choicesPath("examples/pond/"), "examples/pond.decisions");
+  assert.equal(choicesPath("ledger.ters"), "ledger.ters.decisions");
 });
 
 // Held entries (L280c): a person writes `held` before an entry, and the
@@ -202,7 +202,7 @@ test("collatz's keep and fold run on C's threads when slow, as written by ters c
     cpSync(root + "collatz", at, { recursive: true });
     const r = spawnSync(process.execPath, [fileURLToPath(new URL("../cli/ters.ts", import.meta.url)), "choices", at], { encoding: "utf8" });
     assert.equal(r.status, 0, r.stderr);
-    const c = readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.endsWith("target C")).map((l) => l.replace(/^\S+ /, "")).sort();
+    const c = readFileSync(`${at}.decisions`, "utf8").split("\n").filter((l) => l.endsWith("target C")).map((l) => l.replace(/^\S+ /, "")).sort();
     assert.deepEqual(c, [
       "place: main's keep: threads when slow; among main thread, threads; in 8 runs a thread; target C",
       "place: main's threads: cores less one, at most 15; among 0 to 64; target C",
@@ -255,14 +255,17 @@ test("collatz's keep held on the main thread runs there, said by a check, the sa
   try {
     cpSync(root + "collatz", at, { recursive: true });
     const plain = run("run", at);
-    run("choices", at);
-    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
-    writeFileSync(`${at}.choices`, text);
+    run("decisions", at);
+    const text = readFileSync(`${at}.decisions`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
+    writeFileSync(`${at}.decisions`, text);
     const js = text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; in 32 runs; target JavaScript/)![1];
     assert.deepEqual(heldPlaces(readChoices(text)), { js: [js], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; in 8 runs a thread; target C/)![1]], workers: [], threads: [], page: [], runs: [[js, 32]], cRuns: [[text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; in 8 runs a thread; target C/)![1], 8]], pool: [], near: [] });
     assert.equal(run("run", at), plain);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
     assert.deepEqual(said.map((l) => l.replace(/^held   \S+ /, "")).sort(), ["(C): main thread, where the compiler would run it on threads when slow", "(JavaScript): main thread, where the compiler would run it on worker threads when slow"]);
+    // Kept as `<program>.choices`, the name before 2026-11-23, it is read the same.
+    renameSync(`${at}.decisions`, `${at}.choices`);
+    assert.deepEqual(run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new ")), said);
     assert.throws(() => heldOf([text.split("\n").find((l) => l.startsWith("held "))!.replace(": main thread;", ": GPU;")]), /a placement is held on one of what it is among/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -276,9 +279,9 @@ test("collatz's keep held on worker threads and C's threads is shared from the s
   try {
     cpSync(root + "collatz", at, { recursive: true });
     const plain = run("run", at);
-    run("choices", at);
-    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": $1threads;")}` : l).join("\n");
-    writeFileSync(`${at}.choices`, text);
+    run("decisions", at);
+    const text = readFileSync(`${at}.decisions`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": $1threads;")}` : l).join("\n");
+    writeFileSync(`${at}.decisions`, text);
     const id = text.match(/held (\S+) place: main's keep: worker threads; among main thread, worker threads; in 32 runs; target JavaScript/)![1];
     assert.match(text, new RegExp(`held ${id} place: main's keep: threads; among main thread, threads; in 8 runs a thread; target C`));
     assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id], page: [], runs: [[id, 32]], cRuns: [[id, 8]], pool: [], near: [] });
@@ -301,9 +304,9 @@ test("collatz's keep held in 8 runs is cut so, said by a check, the same answers
   try {
     cpSync(root + "collatz", at, { recursive: true });
     const plain = run("run", at);
-    run("choices", at);
-    const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: .*target JavaScript$/.test(l) ? `held ${l.replace("; in 32 runs;", "; in 8 runs;")}` : / place: main's keep: .*target C$/.test(l) ? `held ${l.replace("; in 8 runs a thread;", "; in 2 runs a thread;")}` : l).join("\n");
-    writeFileSync(`${at}.choices`, text);
+    run("decisions", at);
+    const text = readFileSync(`${at}.decisions`, "utf8").split("\n").map((l) => / place: main's keep: .*target JavaScript$/.test(l) ? `held ${l.replace("; in 32 runs;", "; in 8 runs;")}` : / place: main's keep: .*target C$/.test(l) ? `held ${l.replace("; in 8 runs a thread;", "; in 2 runs a thread;")}` : l).join("\n");
+    writeFileSync(`${at}.decisions`, text);
     const id = text.match(/held (\S+) place: main's keep: worker threads when slow; among main thread, worker threads; in 8 runs; target JavaScript/)![1];
     assert.match(text, new RegExp(`held ${id} place: main's keep: threads when slow; among main thread, threads; in 2 runs a thread; target C`));
     assert.deepEqual([heldPlaces(readChoices(text)).runs, heldPlaces(readChoices(text)).cRuns], [[[id, 8]], [[id, 2]]]);
@@ -329,12 +332,12 @@ test("tally's counting folds held in chunks of 1000 items: made so in C, said by
   const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
   try {
     cpSync(root + "tally", at, { recursive: true });
-    run("choices", at);
+    run("decisions", at);
     const chunked = / place: main's fold counting into a map: threads when slow; among main thread, threads; in chunks of 16384 items; target C$/;
-    const lines = readFileSync(`${at}.choices`, "utf8").split("\n"), ids = lines.filter((l) => chunked.test(l)).map((l) => l.split(" ")[0]);
+    const lines = readFileSync(`${at}.decisions`, "utf8").split("\n"), ids = lines.filter((l) => chunked.test(l)).map((l) => l.split(" ")[0]);
     assert.ok(ids.length, lines.join("\n"));
     const text = lines.map((l) => chunked.test(l) ? `held ${l.replace("chunks of 16384", "chunks of 1000")}` : l).join("\n");
-    writeFileSync(`${at}.choices`, text);
+    writeFileSync(`${at}.decisions`, text);
     assert.deepEqual(heldPlaces(readChoices(text)).cRuns, ids.map((id) => [id, 1000]));
     spawnSync(process.execPath, [ters, "native", at], { encoding: "utf8", cwd: dir });
     assert.match(readFileSync(join(dir, "tally.c"), "utf8"), /\(lab_par_runs = 1000, lab_par_chunks_\d+\(/);
@@ -353,13 +356,13 @@ test("collatz's workers held at 1 and its threads at 2: started so, said by a ch
   try {
     cpSync(root + "collatz", at, { recursive: true });
     const plain = run("run", at);
-    run("choices", at);
-    const lines = readFileSync(`${at}.choices`, "utf8").split("\n");
+    run("decisions", at);
+    const lines = readFileSync(`${at}.decisions`, "utf8").split("\n");
     const js = lines.find((l) => l.endsWith(`place: main's worker threads: cores less one, at most ${POOL.JavaScript}; among 0 to 64; target JavaScript`)), c = lines.find((l) => l.endsWith(`place: main's threads: cores less one, at most ${POOL.C}; among 0 to 64; target C`));
     assert.ok(js && c, lines.join("\n"));
     const id = js.split(" ")[0];
     const text = lines.map((l) => l === js ? `held ${l.replace(/cores less one, at most \d+/, "1")}` : l === c ? `held ${l.replace(/cores less one, at most \d+/, "2")}` : l).join("\n");
-    writeFileSync(`${at}.choices`, text);
+    writeFileSync(`${at}.decisions`, text);
     assert.deepEqual(heldPlaces(readChoices(text)).pool.sort(), [["C", 2], ["JavaScript", 1]]);
     assert.equal(run("run", at), plain);
     run("compile", at);
@@ -384,13 +387,13 @@ test("tally measured with 3000 words: its Map's update at counted, 505 entries a
   const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
   try {
     cpSync(root + "tally", at, { recursive: true });
-    run("choices", at, "--measure", "3000");
+    run("decisions", at, "--measure", "3000");
     // Its main's calls too, made in an action (the evaluator's machine),
     // and its folds over a List.
     const lines = ["std.list measured: List: fold of items 2 times, map 2 times, take 1 time; up to 3000 items; from a run with 3000", "std.map measured: Map: entries of 1 time, map size 1 time, update at 4500 times, values of 1 time; up to 505 items; from a run with 3000"];
-    assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
-    run("choices", at);
-    assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
+    assert.deepEqual(readFileSync(`${at}.decisions`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
+    run("decisions", at);
+    assert.deepEqual(readFileSync(`${at}.decisions`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
     assert.deepEqual(run("check", at).split("\n").filter((l) => /^(stale|new|held) /.test(l)), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -401,13 +404,13 @@ test("tally measured with 3000 words: its Map's update at counted, 505 entries a
 test("pages measured: flock-page's frames and dice's logged clicks, its List counted", () => {
   const dir = mkdtempSync(join(tmpdir(), "choices-")), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
   const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
-  const measured = (at: string) => readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: "));
+  const measured = (at: string) => readFileSync(`${at}.decisions`, "utf8").split("\n").filter((l) => l.includes(" measured: "));
   try {
     const flock = join(dir, "flock-page");
     cpSync(root + "flock-page", flock, { recursive: true });
-    run("choices", flock, "--measure", "--frames", "4");
+    run("decisions", flock, "--measure", "--frames", "4");
     assert.deepEqual(measured(flock), ["std.list measured: List: append 12 times, cons 4 times, item at 24288 times, length 4 times, map 2 times, match 26288 times; up to 4001 items; from a run with 4 frames", "std.set measured: Set: has item 8 times; from a run with 4 frames"]);
-    assert.match(readFileSync(`${flock}.choices`, "utf8"), /\nstd\.list representation: List as array of List from /);
+    assert.match(readFileSync(`${flock}.decisions`, "utf8"), /\nstd\.list representation: List as array of List from /);
     assert.deepEqual(run("check", flock).split("\n").filter((l) => /^(stale|new) /.test(l)), []);
     const dice = join(dir, "dice"), p = loadProgram(root + "dice"), info = infer(p.code, p.pres.names, undefined, p.options), log: LogEntry[] = [];
     cpSync(root + "dice", dice, { recursive: true });
@@ -415,7 +418,7 @@ test("pages measured: flock-page's frames and dice's logged clicks, its List cou
     const page = showPage({ code: p.code, info, names: p.pres.names, main: pageMain(p.own.defs, info, p.pres.names)!, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store, log });
     for (let i = 0; i < 3; i++) (page.root as FakeEl).find("hundred").fire("click");
     writeFileSync(join(dir, "dice.log.json"), logText(log));
-    run("choices", dice, "--replay", join(dir, "dice.log.json"), "--measure");
+    run("decisions", dice, "--replay", join(dir, "dice.log.json"), "--measure");
     assert.deepEqual(measured(dice), ["std.list measured: List: cons 368 times, map 11 times, match 84 times; up to 100 items; from a run with the events of its log"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -429,15 +432,15 @@ test("routes's Set measured as adds and removes, its items read once: stored as 
   try {
     cpSync(root + "routes", at, { recursive: true });
     const roads = join(at, "roads.txt"), plain = run("run", at, roads);
-    run("choices", at);
-    const set = () => readFileSync(`${at}.choices`, "utf8").split("\n").find((l) => l.startsWith("std.set representation: "))?.split(";")[0];
+    run("decisions", at);
+    const set = () => readFileSync(`${at}.decisions`, "utf8").split("\n").find((l) => l.startsWith("std.set representation: "))?.split(";")[0];
     assert.equal(set(), "std.set representation: Set as weight-balanced tree");
-    writeFileSync(`${at}.choices`, readFileSync(`${at}.choices`, "utf8") + "std.set measured: Set: add item 145000 times, items of 1 time, remove item 99000 times; up to 5000 items; from a run with big.txt\n");
-    run("choices", at);
+    writeFileSync(`${at}.decisions`, readFileSync(`${at}.decisions`, "utf8") + "std.set measured: Set: add item 145000 times, items of 1 time, remove item 99000 times; up to 5000 items; from a run with big.txt\n");
+    run("decisions", at);
     assert.equal(set(), "std.set representation: Set as hash table");
     assert.equal(run("run", at, roads), plain);
     // A job the type hasn't: refused, saying which entry.
-    writeFileSync(`${at}.choices`, readFileSync(`${at}.choices`, "utf8").replace("items of 1 time", "items off 1 time"));
+    writeFileSync(`${at}.decisions`, readFileSync(`${at}.decisions`, "utf8").replace("items of 1 time", "items off 1 time"));
     const bad = spawnSync(process.execPath, [ters, "check", at], { encoding: "utf8", cwd: dir });
     assert.notEqual(bad.status, 0);
     assert.match(bad.stderr, /a measured entry names a job Set doesn't have/);
@@ -458,7 +461,7 @@ test("flock-page's kept choices are what ters check picks now", () => {
 // grid of cells reach on a side; held, on every pair, a k-d tree or a grid of cells
 // some other size, and said when the compiler would pick otherwise.
 test("a call of neighbours is a way entry, held to every pair, a k-d tree or a grid's cell size", () => {
-  const kept = readChoices(readFileSync(join(root, "flock-page.choices"), "utf8"));
+  const kept = readChoices(readFileSync(join(root, "flock-page.decisions"), "utf8"));
   const way = kept.find((l) => / way: ticked's neighbours: /.test(l))!;
   assert.match(way, /^\S+ way: ticked's neighbours: grid of reach cells; among every pair, grid, k-d tree; target JavaScript$/);
   const id = way.split(" ")[0];
