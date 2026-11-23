@@ -14,6 +14,7 @@ import { nearByPlaces, nearOnGrid } from "../src/lang/near-grid.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
+import { expandArrayGradients, gradientOverArray } from "../src/lang/pullback.ts";
 
 // `held`: the rows a person held in the program's choices (L280c), by the
 // type's id.
@@ -43,7 +44,11 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   // A match on an Int's cases written out on Int first (int-cases.ts,
   // L249b): what it gives is a Nat, stored as the chooser picks.
   const cased = usesIntCases(p00.code) ? intCases(p00.code, p00.info, p00.names) : null;
-  const p0 = cased ? { ...p00, ...cased } : p00;
+  const p01 = cased ? { ...p00, ...cased } : p00;
+  // gradient(f) over an array, of a function written there, made ahead as
+  // the code of its pullback (pullback.ts, L285), the program's own.
+  const grads = expandArrayGradients(p01.code, p01.names, (call) => gradientOverArray(p01.code, p01.info, call));
+  const p0 = grads.expanded.length ? { ...p01, code: grads.code, names: grads.names, own: [...p01.own, ...grads.code.defs.filter((d) => !p01.code.defs.includes(d))], info: infer(grads.code, grads.names, undefined, p01.info.options) } : p01;
   const reached = reachedFrom(p0, main);
   // A library type holding lists (std's Pool) the program's own, so its
   // lists are stored as the program's are (own-holders.ts, C58d).

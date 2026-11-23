@@ -1752,6 +1752,15 @@ export function infer(code: Code, names: Names = {}, reuse?: { from: Info; only:
     if (f.t !== "fn" || f.params.length !== 1) return null;
     const r = f.params[0];
     if (r.t !== "con") return null;
+    // Over an array of Float64s, in one pass back (pullback.ts, L285): its
+    // slopes are an array too, and may fail where a slope can't be read.
+    if (r.id === ARRAY) {
+      try { s.unify(r.args[0], num); } catch { return null; }
+      const e = s.freshRow();
+      const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: r, eff: { effs: [CHOICE], tail: e.tail } }, eff: s.freshRow() };
+      info.typeOf.set(n.fn, t);
+      return t;
+    }
     if (r.id === NUMBER ? !hasSmoothDerivative(code, n.args[0]) : !hasSmoothGradient(code, n.args[0], recordVariant(code, r.id) ?? "")) return null;
     const e = s.freshRow();
     const t: Type = { t: "fn", params: [{ t: "fn", params: [r], ret: num, eff: e }], ret: { t: "fn", params: [r], ret: r, eff: e }, eff: s.freshRow() };

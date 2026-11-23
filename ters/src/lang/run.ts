@@ -26,7 +26,8 @@ import { impl, preludeNames } from "../prelude.ts";
 import { PRELUDE_DEFS } from "./prelude-ids.ts";
 import { readByDescent } from "./descent.ts";
 import type { Info } from "./infer.ts";
-import { derivativeLambda, gradientLambda } from "./derive.ts";
+import { derivativeLambda, gradientLambda, NotDifferentiable } from "./derive.ts";
+import { arrayGradientLambda } from "./pullback.ts";
 import { fieldShapes, shapeOf, spread, type Shape } from "./nested.ts";
 import { resolveArithmetic } from "./arith.ts";
 import { worldTimers } from "./timers.ts";
@@ -805,7 +806,12 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       const env = fromMap("env" in m ? m.env : new Map());
       writable();
       return one(function* (p: Value) {
-        const lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : gradientLambda(code, m, (p as Data).tag);
+        // At an array, in one pass back (pullback.ts, L285); where a slope
+        // can't be read there, there is none.
+        let lambda: Id;
+        try {
+          lambda = typeof p === "number" || !("lambda" in m) ? derivativeLambda(code, m) : p instanceof ArrayView ? arrayGradientLambda(code, m.lambda, (id) => info.copyOf?.get(id) ?? id) : gradientLambda(code, m, (p as Data).tag);
+        } catch (e) { if (e instanceof NotDifferentiable) return; throw e; }
         for (const g of run((machine) => machine.eval(lambda, env))) yield* (g as Fn)(p);
       } as Fn);
     },
