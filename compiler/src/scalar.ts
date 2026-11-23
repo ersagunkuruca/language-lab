@@ -186,6 +186,8 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
 const HOST_WORLD: Record<Id, { op: string; aborts: boolean }> = {
   [IO.readBytes]: { op: "readBytes", aborts: true }, [IO.writeBytes]: { op: "writeBytes", aborts: true }, [IO.offerFile]: { op: "offerFile", aborts: true }, [IO.askForFile]: { op: "askForFile", aborts: true }, [IO.fetchText]: { op: "fetchText", aborts: true },
   [IO.sendRequest]: { op: "sendRequest", aborts: true },
+  // A file's info (L282), a File info record: JavaScript's for now.
+  [IO.fileInfo]: { op: "fileInfo", aborts: true },
   // A fetch as a ticket (L150, C182): ready when the body comes.
   [IO.startFetch]: { op: "startFetch", aborts: true },
 };

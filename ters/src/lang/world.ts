@@ -8,7 +8,7 @@
 
 import { base64Of, bytesOfBase64, requestKey, type PlainRequest, type PlainResponse } from "./network.ts";
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, lstatSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { worldRandom } from "./random.ts";
@@ -127,6 +127,12 @@ export function nodeWorld(): World {
     fileExists: (path) => existsSync(path),
     environmentVariable: (name) => process.env[name] ?? null,
     listFolder: (path) => { try { return readdirSync(path).sort(); } catch (e) { return plain(e, path); } },
+    fileInfo: (path) => {
+      try {
+        const s = lstatSync(path);
+        return { kind: s.isFile() ? "file" : s.isDirectory() ? "folder" : s.isSymbolicLink() ? "link" : "special", size: s.size, modified: s.mtimeMs / 1000 };
+      } catch (e) { return plain(e, path); }
+    },
     readBytes: (path) => { try { return new Uint8Array(readFileSync(path)); } catch (e) { return plain(e, path); } },
     writeBytes: (path, bytes) => { try { writeFileSync(path, bytes); } catch (e) { plain(e, path); } },
     // The person's file (L271): written in the folder this runs in, under
@@ -216,7 +222,7 @@ export function allowedOnly(world: World, allow: string[]): World {
   const hosts = allow.filter((a) => a.startsWith("fetch=")).map((a) => a.slice(6));
   const refuse = (what: string) => () => { throw new Error(`${what} isn't allowed: ters run was given --allow ${allow.join(",") || "nothing"}`); };
   const out: World = { ...world };
-  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "readBytes", "writeBytes", "openFile", "offerFile", "askForFile"] as const) out[k] = refuse("Files") as never;
+  if (!files) for (const k of ["readFile", "writeFile", "appendFile", "fileExists", "listFolder", "fileInfo", "readBytes", "writeBytes", "openFile", "offerFile", "askForFile"] as const) out[k] = refuse("Files") as never;
   if (!environment) out.environmentVariable = refuse("Environment") as never;
   if (!network) {
     const ok = (url: string) => { try { return hosts.includes(new URL(url).host); } catch { return false; } };

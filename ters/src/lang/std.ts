@@ -519,6 +519,9 @@ export const IO = {
   appendFile: world("io.appendFile", "add to file", [str, str], unit, [FILES, ABORT]),
   fileExists: world("io.fileExists", "file exists", [str], bool, [FILES]),
   listFolder: world("io.listFolder", "list folder", [str], list(str), [FILES, ABORT]),
+  // A file's kind, size and modified time (L282); a missing one aborts
+  // with the reason, as read file does.
+  fileInfo: world("io.fileInfo", "file info", [str], { t: "con", id: "std.file info", args: [] }, [FILES, ABORT]),
   // A file's bytes as they are, and bytes written as they are (L189c,
   // bytes.ts): no UTF-8 decoding or NFC, for images, sound and binary
   // formats.
@@ -610,6 +613,8 @@ export const FILES_TYPE = typedef(FILES, "Files", [], [
   // ids above don't move.
   ["offer file", [["name", () => fixedTref(`${FILES}.offer file.name.type`, STRING)], ["bytes", () => fixedTref(`${FILES}.offer file.bytes.type`, "std.bytes")]], () => fixedTref(`${FILES}.offer file.returns`, UNIT)],
   ["ask for file", [["kinds", () => fixedTref(`${FILES}.ask for file.kinds.type`, STRING)]], () => fixedTref(`${FILES}.ask for file.returns`, "std.bytes")],
+  // A file's info (L282): after the rest, so their ids don't move.
+  ["file info", [["path", () => fixedTref(`${FILES}.file info.path.type`, STRING)]], () => fixedTref(`${FILES}.file info.returns`, "std.file info")],
 ], true);
 
 // start fetch's types are nodes with ids of their own, so the numbered
@@ -625,7 +630,7 @@ export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
 // Each builtin that acts on the world, by the operation it performs.
 export const WORLD_OPS: Record<Id, Id> = {
   [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
-  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`, [IO.offerFile]: `${FILES}.offer file`, [IO.askForFile]: `${FILES}.ask for file`,
+  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`, [IO.offerFile]: `${FILES}.offer file`, [IO.askForFile]: `${FILES}.ask for file`, [IO.fileInfo]: `${FILES}.file info`,
   [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`, [IO.sendRequest]: `${NETWORK}.send request`,
 };
 for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;
@@ -1445,6 +1450,17 @@ export const FRAME_OPS = {
   // edges, as a GPU's linear sampler does.
   sampled: builtin("frame.sampled", "sampled", (s) => fn([{ t: "con", id: TARGET, args: [] }, s.fresh(false, true)], { t: "con", id: TEXEL, args: [] }, s.freshRow())),
 };
+// A file's kind and info (L282, DESKTOP-APPS.md): what `file info(path)`
+// gives, read with lstat, so a link is a link and not what it points at.
+// Its size is in bytes, its modified time an Instant. Last, so the ids
+// above don't move.
+const fiTref = (at: string, target: Id) => fixedTref(`std.file info.t.${at}`, target);
+export const FILE_KIND = typedef("std.file kind", "File kind", [], [["plain file", []], ["folder", []], ["link", []], ["special", []]]);
+export const FILE_KIND_V = { file: "std.file kind.plain file", folder: "std.file kind.folder", link: "std.file kind.link", special: "std.file kind.special" } as const;
+export const FILE_INFO = typedef("std.file info", "File info", [], [
+  ["file facts", [["kind", () => fiTref("kind", FILE_KIND)], ["size", () => fiTref("size", INT)], ["modified", () => fiTref("modified", INSTANT)]]],
+]);
+export const FILE_INFO_V = "std.file info.file facts";
 // Ids that were renamed, as a saved program may still use them: std's Pair
 // is Tuple2 (L139).
 export const RENAMED_IDS: Record<Id, Id> = {
@@ -1477,7 +1493,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
   return x;
 }
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL, FILE_KIND, FILE_INFO] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number
 // of inputs, and the builtins that only compute (their row has at most
