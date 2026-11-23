@@ -75,9 +75,11 @@ function direction({ out, ins, fixed }) {
     // Its arity is its inputs' count (prelude.ts reads eval.length).
     // With a total held at 0, the direction is −x itself, IEEE negation:
     // 0 − 0 is +0 where negate gives −0.
+    // The ports are put in one object kept for the direction, not a new
+    // one per call: the interpreter's + and − ran through here (L281j).
     eval: ins.length === 1
-      ? (out === 'b' && fixed.total === 0 ? (x) => -x : (x) => SOLVE[out].eval({ ...fixed, [ins[0]]: x }))
-      : (x, y) => SOLVE[out].eval({ ...fixed, [ins[0]]: x, [ins[1]]: y }),
+      ? (out === 'b' && fixed.total === 0 ? (x) => -x : (() => { const at = { ...fixed }, solve = SOLVE[out].eval; return (x) => { at[ins[0]] = x; return solve(at); }; })())
+      : (() => { const at = { ...fixed }, solve = SOLVE[out].eval; return (x, y) => { at[ins[0]] = x; at[ins[1]] = y; return solve(at); }; })(),
     // Input i, given the result y and the other inputs: the balance solved for its port.
     inv: ins.map((p, i) => (y, args) => [branch(minus(SOLVE[p].expr(ports(args.map((x, j) => (j === i ? undefined : x)), y))))]),
     d: ins.map((p) => () => num(-BALANCE[p] / BALANCE[out])),
