@@ -228,10 +228,13 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
   const foreign = (d as { [FOREIGN_VIEW]?: Node_ })[FOREIGN_VIEW];
   if (foreign) return foreign;
   const steps = m.steps ?? PAGE_STEPS;
+  // `late`: the last update ran past its time, not its steps.
+  let late = false;
   const budget = <T>(f: () => T): T => {
+    late = false;
     if (!m.within) return withSteps(steps, f);
     const end = performance.now() + m.within;
-    return withSteps(steps, f, () => performance.now() > end);
+    return withSteps(steps, f, () => (late = performance.now() > end));
   };
   cells.around = (update) => budget(update);
   const watch = (e: Node_, label: string, run: () => void, stuck: () => void = () => {}, made: () => Node_[] = () => [e]) => {
@@ -366,6 +369,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                   });
                 } else if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
+                // Past its time (the editor's preview, E319d): said under the
+                // page, not in the console a frame at a time.
+                else if (err instanceof OutOfSteps && late && m.stopped) m.stopped(err);
                 else if (err instanceof OutOfSteps) { if (!(err as { quiet?: boolean }).quiet) console.error(`${name} handler ${STUCK}`); }
                 else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }

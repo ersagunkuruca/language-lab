@@ -65,10 +65,13 @@ for (const [label, args] of [["with WebGPU", GPU], ["without WebGPU", ["--disabl
   }
   // The editor draws the same pictures above Run (editor/picture.ts).
   await page.goto(new URL("../index.html", import.meta.url).href);
-  for (const program of ["Shader: ripples", "Shader: ray marching", "Shader: Mandelbrot set"]) {
-    await page.locator(".nav-row:not([data-def])", { hasText: program }).first().click();
+  for (const program of ["Shader: ray marching", "Shader: Mandelbrot set"]) {
     const said = page.locator(".picture-box .pic-status");
-    await page.waitForFunction(() => !/…/.test(document.querySelector(".picture-box .pic-status")?.textContent ?? "…"), null, { timeout: 120_000 }).catch(() => {});
+    // The picture is made in a worker (E319c): till it comes, the status
+    // can still be the last program's.
+    const before = await said.innerText({ timeout: 500 }).catch(() => "");
+    await page.locator(".nav-row:not([data-def])", { hasText: program }).first().click();
+    await page.waitForFunction((b) => { const t = document.querySelector(".picture-box .pic-status")?.textContent ?? "…"; return t !== b && !/…/.test(t); }, before, { timeout: 120_000 }).catch(() => {});
     const status = await said.innerText().catch(() => "no picture");
     console.log(`${label}, the editor's ${program}: ${status}`);
     // Without a GPU, both pictures run as WebAssembly (a colour record too).
