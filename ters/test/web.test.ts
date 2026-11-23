@@ -65,7 +65,7 @@ test("the browser world keeps files in localStorage, one prefix per program", ()
   w.writeFile("list.txt", "milk\n");
   w.appendFile("list.txt", "eggs\n");
   assert.equal(w.readFile("list.txt"), "milk\neggs\n");
-  assert.deepEqual([...store.m.keys()], ["lab:todo:list.txt"]);
+  assert.deepEqual([...store.m.keys()], ["lab:todo:list.txt", "modified lab:todo:list.txt"]);
   assert.deepEqual(browserWorld(store, "other").listFolder(""), []);
   assert.deepEqual(w.listFolder(""), ["list.txt"]);
   assert.throws(() => w.readFile("missing"), /no such file: missing/);

@@ -453,6 +453,9 @@ static TWhere *W;
 @end
 static int u_ask(void *c, const char *s, size_t n) {
   NSString *what = str(s, n);
+  // The person's files (L284): an app outside the sandbox has the disk,
+  // and the Mac asks by itself for Documents, Desktop and Downloads.
+  if ([what isEqualToString:@"files"]) return 1;
   if ([what isEqualToString:@"camera"] || [what isEqualToString:@"microphone"]) {
     AVMediaType t = [what isEqualToString:@"camera"] ? AVMediaTypeVideo : AVMediaTypeAudio;
     AVAuthorizationStatus a = [AVCaptureDevice authorizationStatusForMediaType:t];

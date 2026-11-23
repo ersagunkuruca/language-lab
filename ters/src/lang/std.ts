@@ -1363,8 +1363,10 @@ export const MY_LOCALE_OP = "std.settings.my locale", MY_ZONE_OP = "std.settings
 // Asking for a permission (L236): the platform asks the person (a
 // browser's prompt, Android's permission dialog) and answers whether it was
 // given. `what` is one meaning on every platform: "camera", "microphone",
-// "location" or "notifications"; one a platform doesn't know is no. A
-// command line has no such dialog and answers yes. A page's handler may ask
+// "location", "notifications" or "files" (L284: the person's own files,
+// which in a browser is a folder they pick, the page's files from then
+// on); one a platform doesn't know is no. A command line has no such
+// dialog and answers yes. A page's handler may ask
 // (PAGE_HANDLER): it waits for the answer as for a fetch.
 // Its types by fixed ids, so no other std id moves (a library's hashes
 // hang on them).
