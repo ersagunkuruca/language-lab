@@ -5168,3 +5168,157 @@ the rest the FFT's lists.
 
 Nothing reaches 10%. What is left is the FFT as the library writes it
 (C278: arrays slower; round 20: fused maps slower). Closed as measured.
+
+## Round 22: mnist, a network learning digits, raced against Python (2026-11-23)
+
+Ersagun asked (2026-11-23): "Can we do ML, on the GPU? We have matrices
+and tensors, we have differentiation. Why not race against python
+solutions for those? An MNIST demo should be fine for now. Maybe we can
+add two different optimization modes to it. One with SGD with Adam, and
+one with second derivatives and Newton."
+
+`compiler/gaps/mnist` is that demo, a program of another kind than any
+round before: dense numbers, tens of millions of multiply-adds a step.
+A network of 784 pixels, 32 tanh units and 10 digits (25,450 parameters)
+learns MNIST's handwritten digits (LeCun, Cortes and Burges; the data is
+fetched, never kept here) and is then tested:
+
+- **adam**: 100 digits a batch, the gradient by backpropagation, a step
+  of Adam (Kingma and Ba, 2015) with its usual settings;
+- **newton**: 1000 digits a batch, a damped Newton step: conjugate
+  gradients on the exact Hessian plus λI, 10 directions at most, stopped
+  at negative curvature, λ by Levenberg-Marquardt (Hessian-free, as
+  Martens did it in 2010). The Hessian times a direction is the same
+  backward pass run on dual numbers, the parameters moved along the
+  direction by ε (forward over backward, Pearlmutter 1994). The network's
+  code is generic over its number type for that: Float64 for the
+  gradient, Dual for the curvature.
+
+Written through the MCP (driver in project files gaps-round22/): 59
+definitions. The ideal is `mnist.ideal.js`: Float64Arrays in loops, the
+backward pass and the R-operator written out. The Python is in
+`mnist-python/`: NumPy (backpropagation and R-operator by hand, every
+layer one matrix product) and PyTorch (its own differentiation:
+`torch.func.grad`, and `jvp` of it for the Hessian, as the Ters program
+does with duals). Starting weights, batches, Adam and Newton are the same
+in all of them, and every way prints the same losses, λ and test count
+(test/mnist.test.ts holds the core IR, the ideal, `ters wasi` and `ters
+native` to it on made-up digits).
+
+Times on this container (4 cores, no GPU), one run each, processes with
+their start-up; for the Python, its time after its imports in brackets:
+
+| mnist | adam 1000 | adam 10000 | adam 60000 | newton 1000 ×3 | newton 10000 |
+|---|---|---|---|---|---|
+| core IR | 2.43 s (16x) | 20.6 s (18x) | 97.8 s (21x) | 173 s (37x) | 471 s (35x) |
+| `ters native` | 0.43 s (2.9x) | 3.57 s (3.0x) | 15.6 s (3.4x) | 12.9 s (2.7x) | 31.7 s (2.4x) |
+| `ters wasi` | 1.86 s (12x) | 17.4 s (15x) | fails (DG6) | 109 s (23x) | 290 s (22x) |
+| ideal JS | 0.15 s | 1.18 s | 4.64 s | 4.70 s | 13.3 s |
+| NumPy | 0.12 s (17 ms) | 0.29 s (0.18 s) | 0.69 s (0.60 s) | 0.24 s (0.14 s) | 0.45 s (0.36 s) |
+| PyTorch, CPU, Float64 | 2.47 s (0.74 s) | 3.09 s (1.05 s) | 3.99 s (1.84 s) | 2.81 s (1.00 s) | 3.49 s (1.49 s) |
+| PyTorch, CPU, Float32 | 2.86 s (0.84 s) | 2.63 s (0.80 s) | 4.20 s (2.05 s) | 3.00 s (0.92 s) | 2.89 s (1.02 s) |
+
+What they all print: after one pass of Adam over the 60,000 digits, mean
+loss 0.5532 and 9,218 of the 10,000 test digits right (92.18%); after
+Newton's ten steps over 10,000 digits, loss 1.0230 and 8,227 right
+(82.27%); after its three passes over 1,000, 721 of 1,000. The
+evaluator: one Adam step on 100 digits, 3.0 s with loading and checking.
+
+So the race: at 60,000 digits NumPy is 22x faster than `ters native`
+and 141x faster than the core IR. PyTorch on the CPU loses to NumPy here,
+its per-call overhead larger than a batch of 100's work. On a GPU it
+would win both; there is no GPU here, so that race is for a machine with
+one (the command is in mnist/README.md). Ters has no way onto a GPU for
+this program yet (DG1).
+
+### The gaps, ranked
+
+**DG1. Nothing here can reach a GPU.** Ters reaches the GPU in three
+ways, none this program's: shaders (pictures and frames), a page's
+`draw`, and a page handler's `map`, `keep` or fold of Ints or Bools on
+WebGPU (gpu-maps.ts, C61d′). A command-line program has no GPU target,
+and a Float64 map never leaves the CPU, by rule: WGSL has no f64, and
+WHERE-IT-RUNS.md won't let a place the compiler picks change an answer.
+That note names the way out: a Float32 type, whose maps a GPU computes
+exactly as its meaning says. That is a language question; Ersagun
+chose it on 2026-11-23 (L286). After it, `contracted` and maps of Float32 on WebGPU, on a page
+first, raced against PyTorch on Apple's MPS.
+
+**DG2. Tensors can't carry the program.** A batch of 100 digits times
+the hidden layer, `contracted(x, w, [(1, 0)])` of a 100 × 784 and a 784
+× 32 tensor (2.5 million multiply-adds), takes 259 s compiled; 10 digits
+take 10.1 s, so it grows faster than the work. The same product on
+arrays takes 0.13 s. `contracted` is TENSORS-2026-11-03.md's meaning: an
+index as a list, each item found by walking the items list (`item at`,
+n steps), the indices of the shape built as lists of lists. A Tensor
+stored as one array with its shape, and `contracted` lowered to the loop
+nest it means (a matrix product for one pair of axes), would let the
+program say `contracted` where it now says `table of` and `dot`. The
+program is written on arrays for this reason.
+
+**DG3. `gradient` is forward mode, so the backward pass is written by
+hand.** `gradient` takes a function of a record of Float64s and runs it
+once per part (derive.ts, Wengert 1964). This loss has 25,450 inputs in
+an array, which `gradient` doesn't take; if it did, a step would be
+25,450 forward passes, each about a third of an Adam step's 0.24 s in the
+core IR: about half an hour a step (an estimate from those two numbers,
+not run), where backpropagation takes one pass back. So `loss and gradient` is backpropagation in Ters, by hand. What
+does work: running that hand-written pass on dual numbers gives the exact
+Hessian times a vector, which Newton needs. A reverse-mode `gradient`
+(Linnainmaa 1970, Speelpenning 1980; JAX's `grad`) for functions of
+arrays and tensors would make both modes the language's own
+differentiation, the way the PyTorch version is PyTorch's.
+
+**DG4. The core IR's inner loop does four things the ideal doesn't.**
+`dot` is 51% of an Adam pass single-threaded, `hidden of`'s cell maker
+17%. Each round of `dot`: a step counted for the budget (`R2.step()`;
+the checker doesn't see `n` going down to 0 end it), the three Int sums
+through the big-capable `int.add` and `int.sub` (positions not known to
+be small), `n ≤ 0` as a call (`dot`'s count is left generic, "b is a
+Number with <", though every call gives an Int), and each item read
+checking it is an `ArrayView`, its version and its bounds, from a JS
+Array of boxed numbers rather than a Float64Array. Workers buy nothing:
+with them a fifth of the time is `encode`, the parameters and pixels
+sent item by item for each map. 16x to 21x the ideal; native 3x.
+
+**DG5. Duals in an array are records, read once a field.** In the Newton
+mode the network runs on `Array Dual`: each item a two-field record, each
+multiply-add allocating one, and `dot`'s body reads the same item from the
+array again for each field (three reads where one would do). Newton is
+35x the ideal in the core IR and 22x in WASI, where Adam is 16x to 21x.
+Natively it is 2.4x, about what Adam is: C's records of two doubles cost
+little.
+
+**DG6. `ters wasi` can't read MNIST's training images.** `read bytes`
+conses a list of Ints, one cell a byte, then makes the Bytes from it: at
+47 MB V8 stops with "requested new array is too large", and with Node's
+default stack it crashes (segmentation fault) first. 10,000 digits (7.8
+MB) read fine. A file's bytes read into one byte array would do.
+
+**DG7. Writing it: four things the language or the MCP made harder.**
+- `/` is Float64's alone; at any number it is `divide`, and
+  `first(divide(…), else 0)` in a generic definition keeps Choice in its
+  type and leaves `a's Division` effects with unbound type variables:
+  `squash` (tanh) got more than twenty. The program passes `recip` and
+  `ln` in as functions instead.
+- The MCP can't make a type with its own parameter:
+  `numbers(lift: (Float64) -> a, …)` is refused, "no type named a" (the
+  `define` path has no way to add type parameters). So `lift`, `level`,
+  `recip` and `ln` are four inputs of every generic definition.
+- A field read `s.params` where two record types have `params` (Adam's
+  and Newton's state) takes the first type and refuses the other; Newton's
+  field is `weights` for that.
+- No number to fixed places (`fixed` is written in the program), no
+  power operator.
+
+**DG8. NumPy's matrix products.** Even the ideal JS is 6.7x NumPy at
+60,000 digits: NumPy's products are BLAS, blocked for the cache, SIMD
+and on every core. After DG2 and DG4, the remaining distance is that
+kernel: natively, a product blocked and vectorised on the pool's threads.
+
+### Proposed order
+
+DG2 first (Tensor on one array, `contracted` as loops), with the program
+moved onto tensors, then DG4 (what any array loop pays), then DG3 with
+the language lane, DG1 once Ersagun has answered the Float32 question,
+then DG5, DG6 and DG7's small rows, and DG8 last.
