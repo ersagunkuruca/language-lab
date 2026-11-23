@@ -2024,6 +2024,43 @@ export function splitOn(code: Code, names: Names, info: Info, expr: Id, on: Id, 
   return guardTyped(info, next, nn, expr, `Split on ${names[on] ?? "it"}: one case per ${display[type] ?? names[type] ?? "variant"}, each a copy to change.`);
 }
 
+// A value written as a match on values reads it (L164c): "set", 3, −1,
+// 0.5. Null for anything else.
+export function valueLiteral(text: string): { value: string | number; whole: boolean } | null {
+  const t = text.trim();
+  if (/^"(?:[^"\\]|\\.)*"$/.test(t)) { try { return { value: nfc(JSON.parse(t) as string), whole: false }; } catch { return null; } }
+  const n = t.replace(/^[−-]/, "-");
+  if (/^-?\d+$/.test(n)) return { value: Number(n), whole: true };
+  if (/^-?\d*\.\d+(e[+-]?\d+)?$|^-?\d+e[+-]?\d+$/i.test(n)) return { value: Number(n), whole: false };
+  return null;
+}
+
+// Split on a value by the values written (L164c): one case per value,
+// each a copy of the part, and the otherwise one too, as a split on a
+// type's cases does; the MCP's split and its text `match op "+" → …`.
+export function splitOnValues(code: Code, names: Names, info: Info, expr: Id, on: Id, values: string[]): TEdit {
+  if (!values.length) return { ok: false, reason: "a match on values needs a value to match" };
+  const read = values.map((v) => ({ text: v.trim(), lit: valueLiteral(v) }));
+  const bad = read.find((r) => !r.lit);
+  if (bad) return { ok: false, reason: `a case of a match on values is a literal ("set", 3, 0.5), not ${bad.text}` };
+  const seen = new Set<string>();
+  for (const r of read) { const k = JSON.stringify(r.lit!.value); if (seen.has(k)) return { ok: false, reason: `the value ${r.text} is written twice` }; seen.add(k); }
+  const t = info.typeOf.get(on), r = t ? info.subst.resolve(t) : undefined;
+  const of = r?.t === "con" ? r.id : undefined;
+  const nodes = copyNodes(code.nodes);
+  const nn = { ...names };
+  const mk = (d: NodeData): Id => { const id = freshId(); nodes[id] = { id, ...d } as Node; return id; };
+  const arms = read.map(({ lit }) => {
+    const v = lit!.value;
+    const value = mk(typeof v === "string" ? { kind: "lit", value: v } : lit!.whole && of !== NUMBER ? { kind: "lit", value: v, of: INT } : { kind: "lit", value: v, of: NUMBER });
+    return mk({ kind: "arm", variant: value, value, binds: [], results: [], body: copyTree(code, nodes, nn, expr) });
+  });
+  const otherwise = copyTree(code, nodes, nn, expr);
+  const scrutinee = mk({ kind: "ref", target: on });
+  const next = replace({ nodes, defs: code.defs }, expr, () => ({ kind: "match", scrutinee, arms, otherwise }));
+  return guardTyped(info, next, nn, expr, `Split on ${names[on] ?? "it"} by value: one case per value written, then otherwise, each a copy to change.`);
+}
+
 // Nested patterns (PATTERNS.md "Editing"). Match deeper: a field in a
 // row's pattern opens into its type's cases, each row starting as a copy
 // of the row's body. Split on it, from the field.

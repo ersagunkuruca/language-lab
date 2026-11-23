@@ -683,3 +683,28 @@ test("a type defined with its own parameters, named in its fields (I352)", async
   assert.match(text("replace", { at: "levelled", find: "□", text: "match ns\n  numbers(l, v) → v(x) + 1.0" }), /levelled#\w+ : \(Numbers a, a\) -> Float64/);
   assert.match(text("eval", { text: "levelled(numbers((v) => v, (v) => v), 2.0)" }), /= 3 : Float64/);
 });
+
+// A match on values (L164c) written as the view prints it, split by the
+// values given, and a case replaced by its value.
+test("a match on values is written as text, split by values, and its cases replaced by value", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "op of", kind: "function", params: ["op", "a", "b"] });
+  text("replace", { at: "op of", find: "□", text: 'match op\n  "+" → a + b\n  "->" → 0\n  otherwise → a · b' });
+  assert.equal(text("eval", { text: '(op of("+", 2, 3), op of("->", 2, 3), op of("*", 2, 3))' }), "= (5, 0, 6) : (a, b, c) where a, b, c are Numbers");
+  const twice = call("replace", { at: "op of", find: "a · b", text: 'match op\n  "x" → 1\n  "x" → 2\n  otherwise → 3' });
+  assert.equal(twice.error, true);
+  assert.match(twice.text, /written twice/);
+  text("define", { name: "kind", kind: "function", params: ["k"] });
+  text("replace", { at: "kind", find: "□", text: '"some"' });
+  const split = text("split", { at: "kind", find: '"some"', on: "k", values: ["0", "1"] });
+  const m = /^\+ (\w+)\s+match k$/m.exec(split)![1];
+  text("replace", { at: m, case: "0", text: '"none"' });
+  text("replace", { at: m, case: "1", text: '"one"' });
+  assert.match(text("eval", { text: "(kind(0), kind(1), kind(7))" }), /^= \("none", "one", "some"\)/);
+  assert.match(call("replace", { at: m, case: "5", text: '"x"' }).text, /no case 5: 0, 1/);
+});
