@@ -145,6 +145,18 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 
+### Desktop apps ([DESKTOP-APPS](docs/design/targets/DESKTOP-APPS.md); Ersagun 2026-11-23 10:08 TRT: go, macOS first, then Windows)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| C294 | `ters native` on macOS: setjmp fibers (LAB_FIBER_SJLJ) the default on Apple, as ucontext is deprecated there; the native sweep on a hand-run macOS job | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | S | |
+| C295 | macOS app: `ters build-native-app --macos`, the page C with a Screen.m over AppKit (flipped NSViews, NSTextFields, Core Graphics, CVDisplayLink, AVAudioEngine), a resizable window, build.sh making a `.app` with clang, a hand-run "macOS app" workflow clicking by text. Example: dice, then folders (C299) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
+| C296 | `ters native` on Windows: llvm-mingw clang, the pool's threads over Win32, files through the wide calls with UTF-8 at the edge, Win32 fibers (CreateFiber), a UTF-8 console; the native sweep on a hand-run windows-latest job | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
+| C297 | Windows app: `ters build-native-app --windows`, a screen in C over Win32 (Direct2D boxes and pictures, DirectWrite texts, EDIT inputs, frames at the display's rate, dark mode), an `.exe` from clang alone, a hand-run "Windows app" workflow; sound by WASAPI as its own part. Example: dice, then folders | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
+| C298 | A desktop's input in the C page and both screens: the window's height, `:hover` and pointerenter/leave, the wheel scrolling the box under the pointer, keys beyond Enter with Tab focus, dblclick and contextmenu | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
+| C299 | `folders`, an original file browser page: folders pane, files with size and time sorted by column, typing filters, arrows and Enter, a text file's first lines beside the list, open outside. In the editor on a sample folder, then as a macOS and a Windows app. Needs L282 to L284, C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
+| C300 | Long lists in a C page: folders at 10,000 rows measured first; past 16 ms a key, rerun only the views that read a changed cell and lay out only what moved (C199b reruns every view, C199d lays out the whole page) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
+
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 
 | id | item | source | pri | size | status |
@@ -206,6 +218,14 @@ Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L271c | Keeping a recording, minutes of it: the sounds module (L271b, DONE) writes and reads WAV in the language, but slowly. Measured 11-21 compiled to JS: a minute of stereo at 16 bits written in 15.6 s with the tone made (11.5 MB), ten seconds written at 16 and 32 bits and read back in 7.0 s, a minute read back out of memory at 8 GB; garbage collection is 40 to 47% of it, then range, lists made into arrays and worker messages. Wanted: a few minutes saved in a second. Needs `array of(map(range(n), f))` and `bytes of(append(header, map(range(n), f)))` fused into filling a buffer by position, and the read's `map(range(frames), …)` into a Float64Array; in an app, offer file as the share sheet and ask for file as the system's picker (c.ts) | Ersagun 2026-11-17 | P3 | M |  |
+
+### Desktop apps ([DESKTOP-APPS](docs/design/targets/DESKTOP-APPS.md); Ersagun 2026-11-23 10:08 TRT: go, macOS first, then Windows)
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L282 | `file info(path)`: kind (file, folder, link), size and modified time, failing with the reason as read file does; evaluator, C, WASI (path_filestat_get), the browser's stored files, a run's log | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | S | |
+| L283 | `open outside(path)`: a file or folder to the platform's own app (open, ShellExecuteW, xdg-open, an Android intent); logged, and named by `--allow` | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | S | |
+| L284 | Files in a page: the disk in an app; in a browser the stored files or a picked folder (showDirectoryPicker, Chromium); a sample folder in the editor; asked for as the microphone is, refused at build time where a target can't | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 
 ### Numbers (NUMBERS.md)
 
