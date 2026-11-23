@@ -33,7 +33,18 @@ export function ownEffects(code: Code, info: Info, body: Id, given?: Given): Set
   const out = new Set<Id>();
   const binders = new Set<Id>();
   for (const id of subtree(code, body)) { const n = code.nodes[id]; if (n?.kind === "lambda") n.params.forEach((p) => binders.add(p)); }
-  const effsOf = (t: Type | undefined) => { if (t?.t === "fn") t.eff.effs.forEach((e) => out.add(e)); };
+  // What a search written in place in first, all or count chooses is
+  // theirs to answer (first(lookup(m, k), n), C293): no Choice of the
+  // action's.
+  const searched = new Set<Id>();
+  for (const id of subtree(code, body)) {
+    const n = code.nodes[id];
+    if (!isCall(n) || !n.args.length) continue;
+    const f = code.nodes[n.fn], s = code.nodes[n.args[0]];
+    if (f?.kind === "ref" && (f.target === S.first || f.target === S.all || f.target === S.count) && s?.kind === "lambda" && !s.params.length) subtree(code, s.id).forEach((x) => searched.add(x));
+  }
+  let at: Id = body;
+  const effsOf = (t: Type | undefined) => { if (t?.t === "fn") t.eff.effs.forEach((e) => { if (e !== CHOICE || !searched.has(at)) out.add(e); }); };
   // The refs called, each a given function's call where `given` knows it.
   const called = new Set<Id>();
   for (const id of subtree(code, body)) {
@@ -55,6 +66,7 @@ export function ownEffects(code: Code, info: Info, body: Id, given?: Given): Set
       if (!target || target.kind === "binder" || target.kind === "lambda") return null;
     }
     if (n?.kind !== "ref" || called.has(n.id)) continue;
+    at = n.id;
     const target = code.nodes[n.target];
     if (!target) continue;
     // A function from outside the action, given to something it calls
