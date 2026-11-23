@@ -5240,8 +5240,8 @@ WebGPU (gpu-maps.ts, C61d′). A command-line program has no GPU target,
 and a Float64 map never leaves the CPU, by rule: WGSL has no f64, and
 WHERE-IT-RUNS.md won't let a place the compiler picks change an answer.
 That note names the way out: a Float32 type, whose maps a GPU computes
-exactly as its meaning says. That is a language question, put to
-Ersagun. After it, `contracted` and maps of Float32 on WebGPU, on a page
+exactly as its meaning says. That is a language question; Ersagun
+chose it on 2026-11-23 (L286). After it, `contracted` and maps of Float32 on WebGPU, on a page
 first, raced against PyTorch on Apple's MPS.
 
 **DG2. Tensors can't carry the program.** A batch of 100 digits times
