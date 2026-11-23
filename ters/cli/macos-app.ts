@@ -236,6 +236,8 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 @property (nonatomic, strong) NSMapTable<NSView *, NSNumber *> *ids;
 @property (nonatomic) int next, over;
 @property (nonatomic, weak) NSView *focusNext;
+// How many of a key's down and up the page heard (the runner's clicks).
+@property (nonatomic) int keysHeard;
 @property (nonatomic) BOOL quiet, ticking, paused;
 @property (nonatomic, strong) NSScrollView *scroll;
 @property (nonatomic, strong) TFlip *page;
@@ -697,12 +699,16 @@ static void shown(NSString *when) {
       unsigned short code = 0;
       for (int i = 0; i < (int)(sizeof KEYS / sizeof *KEYS); i++) if ([name isEqualToString:@(KEYS[i].name)]) code = KEYS[i].code;
       NSString *chars = code == 36 ? @"\r" : code == 48 ? @"\t" : code == 53 ? @"\x1b" : code == 49 ? @" " : code ? @"" : name;
+      NSView *f0 = focused(self.window);
+      NSString *before = f0 ? textsOf(f0) : @"";
+      NSString *editing = [f0 isKindOfClass:[NSTextField class]] ? ((NSTextField *)f0).currentEditor.string : nil;
+      self.keysHeard = 0;
       for (int up = 0; up < 2; up++) {
         NSEvent *e = [NSEvent keyEventWithType:up ? NSEventTypeKeyUp : NSEventTypeKeyDown location:NSZeroPoint modifierFlags:0 timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:self.window.windowNumber context:nil characters:chars charactersIgnoringModifiers:chars isARepeat:NO keyCode:code];
         if ((e = [self key:e])) [self.window sendEvent:e];
       }
       NSView *f = focused(self.window);
-      printf("key %s: focus on %s\n", name.UTF8String, f ? [NSString stringWithFormat:@"%@ \"%@\"", f.className, textsOf(f)].UTF8String : "none");
+      printf("key %s: from \"%s\"%s%s, heard %d, focus on %s\n", name.UTF8String, before.UTF8String, editing ? " editing " : "", editing ? editing.UTF8String : "", self.keysHeard, f ? [NSString stringWithFormat:@"%@ \"%@\"", f.className, textsOf(f)].UTF8String : "none");
       done = YES;
     }
     // "dblclick text", "rightclick text": on the box showing text.
@@ -737,6 +743,7 @@ static void shown(NSString *when) {
   BOOL typing = [v isKindOfClass:[NSTextField class]] || [v isKindOfClass:[NSTextView class]];
   NSString *value = [v isKindOfClass:[NSTextField class]] ? ((NSTextField *)v).stringValue : [v isKindOfClass:[NSTextView class]] ? ((NSTextView *)v).string : @"";
   BOOL heard = bubble(e.type == NSEventTypeKeyDown ? @"keydown" : @"keyup", v, value ?: @"", name, nil);
+  if (heard) self.keysHeard++;
   if (!heard || e.type != NSEventTypeKeyDown) return e;
   if (typing) return [name isEqualToString:@"Enter"] && [v isKindOfClass:[NSTextField class]] ? nil : e;
   return [@[ @"ArrowUp", @"ArrowDown", @"ArrowLeft", @"ArrowRight", @" ", @"PageUp", @"PageDown", @"Home", @"End" ] containsObject:name] ? nil : e;
