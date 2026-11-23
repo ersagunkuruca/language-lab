@@ -88,3 +88,13 @@ test("the flock's loop over its neighbours reads their columns and makes no bird
     assert.ok(!has(f.body, (e) => e.k === "call" && ir.funcs[e.fn].name === "array item at"), "no call making one");
   }
 });
+
+// A copy of the columns to replace one item, in a function a loop calls
+// at any depth, is the whole array again each time: swarm-pool's motes put
+// in the pool's free slots, thousands a tick, took 92 s at 2,000 ticks of
+// 50 a tick, 0.6 s as rows replaced with a version note.
+test("a replace a loop reaches makes no copy of the columns", () => {
+  const { ir } = compiled("swarm-pool");
+  const copies = ir.funcs.filter((f) => { let c = false; const w = (e: SExpr) => { if (e.k === "rt" && /^array\.ccopy\./.test(e.fn)) c = true; kids(e).forEach(w); }; w(f.body); return c; });
+  assert.deepEqual(copies.map((f) => f.name), []);
+});

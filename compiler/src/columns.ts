@@ -62,6 +62,14 @@ function foldOf(ir: CoreIR, g: number): Fold | null {
 }
 
 const callsItself = (e: SExpr, g: number): boolean => (e.k === "call" && e.fn === g) || kids(e).some((x) => callsItself(x, g));
+// The functions a function that calls itself calls, at any depth.
+const calls = (e: SExpr, out: Set<number>): Set<number> => { if (e.k === "call") out.add(e.fn); kids(e).forEach((x) => calls(x, out)); return out; };
+function loopsReach(funcs: CoreIR["funcs"]): Set<number> {
+  const out = new Set<number>(), callees = funcs.map((g) => calls(g.body, new Set()));
+  const go = (i: number) => { for (const j of callees[i]) if (!out.has(j)) { out.add(j); go(j); } };
+  funcs.forEach((_, i) => { if (callees[i].has(i)) go(i); });
+  return out;
+}
 
 // The functions run from the roots: calls and closures' code.
 function reached(ir: CoreIR, roots: number[]): Set<number> {
@@ -201,6 +209,7 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
     return x.k === "if" && x.cond.k === "rt" && x.cond.fn === "map.worth" && (arrayOf(x.cond.args[0]) || isArray(x.t, a)) ? x.else : x;
   };
   let fnNow: SFunc = funcs[0];
+  let inLoops: Set<number> | undefined;
   const arrayOf = (e: SExpr | undefined): boolean =>
     !!e && ((e.k === "local" && isArray(fnNow.locals[e.i], a)) || (e.k === "call" && isArray(funcs[e.fn].result, a)) || (e.k === "rt" && ofA(e.fn) && !e.fn.startsWith("array.get") && !e.fn.startsWith("array.length")) || (e.k === "let" && arrayOf(e.body)));
   for (const i of live) { fnNow = funcs[i]; funcs[i].body = inTurn(funcs[i].body); }
@@ -290,7 +299,12 @@ function stored(ir: CoreIR, a: AType, r: RType | DType, roots: number[], whole: 
             // front in its room or replace it with a version note (crew's
             // list of tasks as an array, built from the back: 2,000 tasks
             // 1.19 s, 0.24 s as rows).
-            if (copied && !(fold && fold.put === e) && !pushes.has(e) && callsItself(f.body, i)) return bad();
+            // Nor a replace in one a loop calls, at any depth (swarm-pool: a mote put in a free
+            // slot of the pool, each of the thousands made a tick a copy of
+            // every column, 92 s against 1.5 s as rows with version notes).
+            // A put in front grows the array, as greenhouse's pool when no
+            // slot is free, and keeps its copy (rows there cost 12 -> 14 s).
+            if (copied && !(fold && fold.put === e) && !pushes.has(e) && (callsItself(f.body, i) || m[1].startsWith("replace") && (inLoops ??= loopsReach(funcs)).has(i))) return bad();
             if (/^(push|replace)/.test(m[1]) && !(fold && fold.put === e) && !pushes.has(e) && !copied) return bad();
             if (m[1] === "empty" && !grow && ![...entries.values()].some((x) => x.call.args[2] === e || x.call.args[0] === e)) return bad();
             for (const x of e.args) walk(x, e);
