@@ -118,6 +118,7 @@ void ters_page_held(int held);
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
+void ters_page_files(const char *dir);
 
 static NSColor *colour(uint32_t c) { return [NSColor colorWithSRGBRed:((c >> 16) & 255) / 255.0 green:((c >> 8) & 255) / 255.0 blue:(c & 255) / 255.0 alpha:(c >> 24) / 255.0]; }
 static NSString *str(const char *s, size_t n) { return [[NSString alloc] initWithBytes:s length:n encoding:NSUTF8StringEncoding] ?: @""; }
@@ -465,9 +466,22 @@ static TWhere *W;
 @end
 static int u_ask(void *c, const char *s, size_t n) {
   NSString *what = str(s, n);
-  // The person's files (L284): an app outside the sandbox has the disk,
-  // and the Mac asks by itself for Documents, Desktop and Downloads.
-  if ([what isEqualToString:@"files"]) return 1;
+  // The person's files (L284, C318): a folder they pick in the Mac's own
+  // open panel, opened once the handler that asked waits, or
+  // -ters-folder's for a check.
+  if ([what isEqualToString:@"files"]) {
+    NSString *f = [NSUserDefaults.standardUserDefaults stringForKey:@"ters-folder"];
+    if (f.length) { ters_page_files(f.fileSystemRepresentation); return 1; }
+    printf("ask files\n");
+    dispatch_async(dispatch_get_main_queue(), ^{
+      NSOpenPanel *o = [NSOpenPanel openPanel];
+      o.canChooseFiles = NO; o.canChooseDirectories = YES; o.canCreateDirectories = YES; o.allowsMultipleSelection = NO;
+      BOOL yes = [o runModal] == NSModalResponseOK && o.URL;
+      if (yes) ters_page_files(o.URL.fileSystemRepresentation);
+      answered(what, yes);
+    });
+    return -1;
+  }
   if ([what isEqualToString:@"camera"] || [what isEqualToString:@"microphone"]) {
     AVMediaType t = [what isEqualToString:@"camera"] ? AVMediaTypeVideo : AVMediaTypeAudio;
     AVAuthorizationStatus a = [AVCaptureDevice authorizationStatusForMediaType:t];

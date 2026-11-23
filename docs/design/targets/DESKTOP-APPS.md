@@ -133,10 +133,10 @@ What it needs from the language and targets:
   picker and the page's files are the picked folder's from then on (a
   read waits for the folder as a fetch does; a write lands once the
   handler is kept); none picked is no, and the files stay the stored
-  ones, which have folders by their paths' parts. A Mac app and a command
-  line answer yes: a C page's handlers read the disk already, and so does
-  a Windows app. A phone asks for a folder in its own picker (C313): on
-  iOS the folder's URL, on Android its tree, read through the app's Java.
+  ones, which have folders by their paths' parts. A command line answers
+  yes: its files are where it runs. A Mac or Windows app asks for a folder
+  in the system's own picker (C318), a phone in its own (C313): on iOS the
+  folder's URL, on Android its tree, read through the app's Java.
   Every target gives some files, so none refuses at build time. Left: the
   editor's sample folder (E321).
 - **C300. Long lists.** A folder of 10,000 files is 10,000 rows. A C page

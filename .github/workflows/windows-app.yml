@@ -74,7 +74,8 @@ jobs:
           [System.Drawing.Graphics]::FromImage($i).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
           $i.Save($to)
           PS
-          TERS_LOG=world.json ./"$exe" --ters-out out.txt --ters-taps "$TAPS" 2> err.txt &
+          # The page's files, when it asks: this folder, as if picked.
+          TERS_LOG=world.json ./"$exe" --ters-out out.txt --ters-folder "$(pwd -W)" --ters-taps "$TAPS" 2> err.txt &
           pid=$!
           sleep 4
           powershell -NoProfile -ExecutionPolicy Bypass -File screen.ps1 "$GITHUB_WORKSPACE\\screen.png" || true
@@ -84,7 +85,7 @@ jobs:
           code=0; wait $pid || code=$?
           echo "---- the app's output"; cat out.txt || true
           echo "---- its errors"; cat err.txt || true
-          echo "---- what it asked the world"; head -c 4000 world.json || true; echo
+          echo "---- what it asked the world"; head -c 4000 "$(cygpath "$APPDATA")"/*/world.json 2>/dev/null || true; echo
           base=$(objdump -p "$exe" | awk '/^ImageBase/ {print $2}')
           for rva in $(sed -n 's/.*rva \([0-9a-f]*\).*/\1/p' err.txt); do addr2line -f -i -p -e "$exe" $(printf '0x%x' $((0x$base + 0x$rva))); done
           powershell -NoProfile -Command "Compress-Archive -Path '$exe' -DestinationPath app.zip" && cp app.zip "$GITHUB_WORKSPACE/" || true

@@ -953,7 +953,22 @@ static void lab__log_write(void) { lab__log_raw("],\\"write\\":true}"); lab_log_
   lab_st = 2;
 }
 // A Text as a C string, for the C library's paths.
-static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }`,
+static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }
+// The page's files (L284): on a desktop, once the person picked a folder
+// (C318), a path that isn't absolute is in it (ters_page_files); the
+// app's own folder keeps what the page keeps.
+#define LAB_FILES_AT 1
+static char *lab_files_at;
+static char *lab__path(lab_cell *t) {
+  char *s = lab__cstr(t);
+  if (!lab_files_at || s[0] == '/' || s[0] == 92 || (s[0] && s[1] == ':')) return s;
+  size_t a = strlen(lab_files_at), b = strlen(s);
+  char *r = malloc(a + b + 2);
+  if (!r) lab_oom();
+  memcpy(r, lab_files_at, a); r[a] = '/'; memcpy(r + a + 1, s, b + 1);
+  free(s);
+  return r;
+}`,
   },
   // A formula kept (C300): its number, whether what it gave still holds
   // (no cell it read written since: the page's write epochs, c.ts
@@ -1114,7 +1129,7 @@ static void lab__kept_more(lab_kept_file *k) {
   "world.keptOpen": {
     uses: ["world.kept", "world.fail"],
     c: (o) => `static lab_cell *lab_world_keptOpen(lab_cell *path) {
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   lab_drop(path);
   int fd = lab_kept_n < 1024 ? lab__open(p) : -1;
   free(p);
@@ -1392,7 +1407,7 @@ static int lab__fpark(double at) {
     uses: ["world.fail", "world.readAll", "world.nfc"],
     c: `static lab_cell *lab_world_readFile(lab_cell *path) {
   if (lab__log_begin("readFile")) lab__log_text(path);
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "rb");
   free(p);
   if (!f) { lab__fail(errno, path); return 0; }
@@ -1407,7 +1422,7 @@ static int lab__fpark(double at) {
     uses: ["world.fail"],
     c: `static void lab__put(lab_cell *path, lab_cell *t, const char *mode) {
   if (lab__log_begin(mode[0] == 'a' ? "appendFile" : "writeFile")) { lab__log_text(path); lab__log_raw(","); lab__log_text(t); lab__log_write(); }
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, mode);
   free(p);
   if (!f) { lab__fail(errno, path); lab_drop(t); return; }
@@ -1480,7 +1495,7 @@ static int64_t lab__link_size(const wchar_t *w) {
 #endif
 static ${i.record} lab_world_fileInfo(lab_cell *path) {
   if (lab__log_begin("fileInfo")) lab__log_text(path);
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   int kind;
   int64_t bytes;
   double modified;
@@ -1543,7 +1558,7 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
     uses: ["world.fail", "world.logBytes"],
     c: (o) => `static ${o.record} lab_world_readBytes(lab_cell *path) {
   if (lab__log_begin("readBytes")) lab__log_text(path);
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "rb");
   free(p);
   if (!f) { lab__fail(errno, path); return (${o.record}){ &${o.nil} }; }
@@ -1571,7 +1586,7 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
   lab_drop(b.f0);
   if (lab__log_begin("writeBytes")) { lab__log_text(path); lab__log_raw(","); lab__log_bytes(buf, n); lab__log_write(); }
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : lab__fopen(p, "wb");
   free(p);
   if (!f) { free(buf); lab__fail(errno, path); return; }
@@ -1745,7 +1760,7 @@ extern char **environ;
 #endif
 static void lab_world_openOutside(lab_cell *path) {
   if (lab__log_begin("openOutside")) { lab__log_text(path); lab__log_write(); }
-  char *p = lab__cstr(path), how[256];
+  char *p = lab__path(path), how[256];
   const char *why = 0;
   if (!lab__kind(p)) { int e = errno; free(p); lab__fail(e, path); return; }
 #ifdef _WIN32
@@ -1809,7 +1824,7 @@ static void lab_world_openOutside(lab_cell *path) {
   return (lab_cell *)r;
 }`,
   },
-  "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { int L = lab__log_begin("fileExists"); if (L) lab__log_text(path); char *p = lab__cstr(path); int r = lab__kind(p) != 0; free(p); if (L) { lab__log_answer(); lab__log_raw(r ? "true" : "false"); lab__log_close(); } lab_drop(path); return r; }` },
+  "world.fileExists": { uses: ["world.fail"], c: `static int32_t lab_world_fileExists(lab_cell *path) { int L = lab__log_begin("fileExists"); if (L) lab__log_text(path); char *p = lab__path(path); int r = lab__kind(p) != 0; free(p); if (L) { lab__log_answer(); lab__log_raw(r ? "true" : "false"); lab__log_close(); } lab_drop(path); return r; }` },
   // A folder's names, sorted as JavaScript sorts texts: by UTF-16 units,
   // so a character past U+FFFF comes before U+E000 to U+FFFF.
   "world.listFolder": {
@@ -1835,7 +1850,7 @@ static int lab__js_order(const void *x, const void *y) {
 }
 static lab_cell *lab_world_listFolder(lab_cell *path) {
   if (lab__log_begin("listFolder")) lab__log_text(path);
-  char *p = lab__cstr(path);
+  char *p = lab__path(path);
   int kind = lab__kind(p);
   size_t n = 0, cap = 16;
   lab_cell **xs;

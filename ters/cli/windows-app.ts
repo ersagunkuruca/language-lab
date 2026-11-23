@@ -18,7 +18,7 @@ export function windowsAppFolder(title: string, c: string): Record<string, strin
   // Built as the command line's native programs are (main.ts "native"),
   // with Windows' own drawing and text; -mwindows, a window and no console.
   const flags = `-std=c99 -O2 -ffp-contract=off -fwrapv -w -pthread -static -Wl,--stack,0x40000000 -mwindows`;
-  const libs = "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lm";
+  const libs = "-ld2d1 -ldwrite -ldwmapi -lgdi32 -lole32 -luuid -lm";
   return {
     "page.c": c,
     "screen.c": SCREEN_C(tersUiDecl(c), id, title),
@@ -69,6 +69,7 @@ const SCREEN_C = (decl: string, id: string, title: string) => String.raw`// The 
 #include <windows.h>
 #include <windowsx.h>
 #include <shlobj.h>
+#include <shobjidl.h>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
@@ -90,6 +91,7 @@ void ters_page_held(int held);
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
+void ters_page_files(const char *dir);
 
 #define TITLE ${cString(title)}
 #define APP_ID ${cString(id)}
@@ -420,8 +422,39 @@ static void u_outline(void *c, void *v, const double *xy, size_t n) {
 // has the person's files, and the camera and microphone as the person's
 // privacy settings give them to all desktop apps, with no dialog of its
 // own: yes. Windows has no dialog for the rest: no.
+// The page's files (L284, C318): a folder the person picks in Windows'
+// own folder picker, opened once the handler that asked waits (-1 now,
+// their answer by ters_page_permission), or --ters-folder's for a check.
+#define WM_PICK (WM_APP + 2)
+static WCHAR *FOLDER;
+static void picked(const WCHAR *dir) { char *u = narrow(dir, (int)wcslen(dir)); ters_page_files(u); free(u); }
+static int pickFolder(void) {
+  int yes = 0;
+  HRESULT co = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+  IFileOpenDialog *d = NULL;
+  if (SUCCEEDED(CoCreateInstance(&CLSID_FileOpenDialog, NULL, CLSCTX_INPROC_SERVER, &IID_IFileOpenDialog, (void **)&d))) {
+    FILEOPENDIALOGOPTIONS o = 0;
+    IFileOpenDialog_GetOptions(d, &o);
+    IFileOpenDialog_SetOptions(d, o | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST);
+    IShellItem *it = NULL;
+    PWSTR path = NULL;
+    if (SUCCEEDED(IFileOpenDialog_Show(d, W)) && SUCCEEDED(IFileOpenDialog_GetResult(d, &it))) {
+      if (SUCCEEDED(IShellItem_GetDisplayName(it, SIGDN_FILESYSPATH, &path))) { picked(path); CoTaskMemFree(path); yes = 1; }
+      IShellItem_Release(it);
+    }
+    IFileOpenDialog_Release(d);
+  }
+  if (SUCCEEDED(co)) CoUninitialize();
+  say("files: %s\n", yes ? "a folder picked" : "none picked");
+  return yes;
+}
 static int u_ask(void *c, const char *s, size_t n) {
-  if ((n == 5 && !memcmp(s, "files", 5)) || (n == 6 && !memcmp(s, "camera", 6)) || (n == 10 && !memcmp(s, "microphone", 10))) return 1;
+  if (n == 5 && !memcmp(s, "files", 5)) {
+    if (FOLDER) { picked(FOLDER); say("files: %s\n", "--ters-folder"); return 1; }
+    PostMessageW(W, WM_PICK, 0, 0);
+    return -1;
+  }
+  if ((n == 6 && !memcmp(s, "camera", 6)) || (n == 10 && !memcmp(s, "microphone", 10))) return 1;
   say("ask %.*s: Windows has no dialog for it\n", (int)n, s);
   return 0;
 }
@@ -1205,6 +1238,7 @@ static LRESULT CALLBACK windowed(HWND h, UINT m, WPARAM w, LPARAM l) {
     case WM_SETTINGCHANGE: if (l && !wcscmp((const WCHAR *)l, L"ImmersiveColorSet")) { CW = -1; resized(); } return 0;
     case WM_GETMINMAXINFO: { MINMAXINFO *mm = (MINMAXINFO *)l; mm->ptMinTrackSize.x = (LONG)(240 * SCALE); mm->ptMinTrackSize.y = (LONG)(160 * SCALE); return 0; }
     case WM_FRAME: frame(); return 0;
+    case WM_PICK: { int yes = pickFolder(); held(); ters_page_permission(yes); tick(); return 0; }
     case WM_TIMER: if (w == TAP_TIMER) tapStep(); return 0;
     case WM_ACTIVATEAPP:
       if (!w) { PAUSED = 1; moment(E_PAUSE); }
@@ -1285,6 +1319,7 @@ int main(void) {
   for (int i = 1; i + 1 < argc; i++) {
     char *a = narrow(argv[i + 1], (int)wcslen(argv[i + 1]));
     if (!wcscmp(argv[i], L"--ters-out")) { if (!_wfreopen(argv[i + 1], L"w", stdout)) fprintf(stderr, "can't write %s\n", a); }
+    else if (!wcscmp(argv[i], L"--ters-folder")) { FOLDER = malloc(sizeof *FOLDER * (wcslen(argv[i + 1]) + 1)); wcscpy(FOLDER, argv[i + 1]); }
     else if (!wcscmp(argv[i], L"--ters-taps")) {
       for (char *t = strtok(a, "|"); t; t = strtok(NULL, "|")) if (*t) { TAPS = realloc(TAPS, sizeof *TAPS * (NTAPS + 1)); TAPS[NTAPS++] = strdup(t); }
       STEP = -1;

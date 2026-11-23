@@ -1575,6 +1575,9 @@ void ters_page_held(int held);
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
+// The folder the person picked for the page's files (L284, C318), on a
+// desktop: a path that isn't absolute is in it from now on.
+void ters_page_files(const char *dir);
 static ters_host *ters_h;
 // Run after the page changed (c-layout.ts lays it out again).
 static void (*ters_after)(void);
@@ -2145,6 +2148,17 @@ void ters_page_held(int held) { ters_page_lock(); ters_held = held; ters_page_un
 int ters_page_clock(void) { ters_page_lock(); int r = ters__page_clock(); ters_page_unlock(); return r; }
 int ters_page_frame(void) { ters_page_lock(); int r = ters__page_frame(); ters_page_unlock(); return r; }
 int ters_page_permission(int yes) { ters_page_lock(); int r = ters__page_permission(yes); ters_page_unlock(); return r; }
+void ters_page_files(const char *dir) {
+#ifdef LAB_FILES_AT
+  size_t n = strlen(dir) + 1;
+  char *at = malloc(n);
+  if (!at) lab_oom();
+  memcpy(at, dir, n);
+  ters_page_lock(); free(lab_files_at); lab_files_at = at; ters_page_unlock();
+#else
+  (void)dir;
+#endif
+}
 ${mode === "headless" ? HEADLESS_C : mode === "ui" ? LAYOUT_C : mode === "ui-headless" ? LAYOUT_C + UI_HEADLESS_C : ""}`;
   }
 
