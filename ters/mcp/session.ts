@@ -988,7 +988,7 @@ export class Session {
     const kase = kind === "type" ? readCase(first) : null;
     const op = kind === "interface" ? /^([^:]*?)\s*(?::\s*(.*))?$/s.exec(first.trim())! : null;
     const firstName = kase ? kase.name : op ? op[1] : first;
-    const shape: Shape = kind === "function" ? { kind, params } : kind === "value" ? { kind } : kind === "type" ? { kind, firstCase: firstName } : kind === "effect" ? { kind, firstOperation: first } : kind === "interface" ? { kind, firstOperation: firstName } : (() => { throw new Error("kind: function, value, type, effect or interface"); })();
+    const shape: Shape = kind === "function" ? { kind, params } : kind === "value" ? { kind } : kind === "type" ? { kind, firstCase: firstName, params } : kind === "effect" ? { kind, firstOperation: first } : kind === "interface" ? { kind, firstOperation: firstName } : (() => { throw new Error("kind: function, value, type, effect or interface"); })();
     return this.apply(null, () => {
       const r = newDefinition(this.code, this.names, name, shape);
       if (!r.ok) return r;
