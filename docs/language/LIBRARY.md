@@ -274,6 +274,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **drop** : `(List a, Int) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
 - **zipped** : `(List a, List b) -> List (a, b)`. The two lists' items side by side, as tuples, as long as the shorter: zipped([1, 2, 3], ["a", "b"]) is [(1, "a"), (2, "b")].
 - **numbered** : `(List a) -> List (Int, a)`. Each item with its position, counting from 0: numbered(["a", "b"]) is [(0, "a"), (1, "b")].
+- **neighbours** : `(List a, (a) -[e]-> b, Float64) -[e]-> List (List Int)`. Each item's neighbours: the positions of the other items whose places are within reach of its own, smallest first. Places are points (any record of Float64s). Every pair is compared as written; the compiler may find them by a grid or a tree instead, which give the same lists.
 - **copies** : `(Int, a) -> List a`. A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)
 - **all pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether every item passes the test; true for an empty list. Stops at the first that doesn't.
 - **any pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether some item passes the test; false for an empty list. Stops at the first that does.
