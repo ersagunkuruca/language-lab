@@ -6,7 +6,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { WASI } from "node:wasi";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Lang } from "../../ters/src/lang/dsl.ts";
@@ -17,17 +18,18 @@ import { nodeWorld } from "../../ters/src/lang/world.ts";
 import { ABORT_OP, IO, LOCALE_V, MY_LOCALE_OP, MY_ZONE_OP, S } from "../../ters/src/lang/std.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm } from "../src/wasm.ts";
 import { compile, skip } from "./c-harness.ts";
 
-function program() {
+function program(settings = true) {
   const k = new Lang();
   const opened = (p: string) => k.handle(k.seq(k.call(IO.openOutside, k.lit(p)), k.call(S.print, k.lit(`opened ${p}`))),
     [{ variant: ABORT_OP, names: ["why"], body: ([why]) => k.call(S.print, why) }]);
   const main = k.def("main");
-  k.define(main, k.thunk(() => k.seq(
+  k.define(main, k.thunk(() => settings ? k.seq(
     k.call(S.print, k.call(MY_ZONE_OP)),
     k.call(S.print, k.match(k.call(MY_LOCALE_OP), [{ variant: LOCALE_V, names: ["tag"], body: ([t]) => t }])),
-    opened("a.txt"), opened("nope"), k.int(0))));
+    opened("a.txt"), opened("nope"), k.int(0)) : k.seq(opened("a.txt"), opened("nope"), k.int(0))));
   const code = base(k.code), names = { ...baseNames(), ...k.names }, info = infer(code, names);
   assert.deepEqual(info.errors.map((e) => e.message), []);
   return { code, names, info, main };
@@ -71,4 +73,20 @@ test("my time zone and my locale in C are Node's Intl's under the same environme
   chmodSync(failing, 0o755);
   const f = spawnSync(exe, [], { cwd: dir, env: { PATH, TERS_OPEN_OUTSIDE: failing } }).stdout.toString().split("\n");
   assert.equal(f[2], `could not open a.txt outside: ${failing} ended with 3`);
+});
+
+// A WASI command has no way out to the platform's apps (C311): open
+// outside fails with the reason, and a missing file's as C's.
+test("open outside in a WASI command fails with the reason, a missing file's as C's (C311)", () => {
+  const p = program(false);
+  const l = lowerScalar(p.code, p.info, p.names, [p.main], { data: true, releases: true, handlers: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const m = emitWasm(l, { wasi: true, main: p.main });
+  const dir = mkdtempSync(join(tmpdir(), "settings-wasi-")), out = join(dir, "out.txt");
+  writeFileSync(join(dir, "a.txt"), "hello");
+  const fd = openSync(out, "w");
+  const w = new WASI({ version: "preview1", args: ["p"], preopens: { ".": dir }, stdout: fd, stderr: fd, returnOnExit: true });
+  w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  closeSync(fd);
+  assert.deepEqual(readFileSync(out, "utf8").split("\n").slice(0, 2), ["a WASI command can't open a.txt in another app: it has no way out to one", "no such file or folder: nope"]);
 });

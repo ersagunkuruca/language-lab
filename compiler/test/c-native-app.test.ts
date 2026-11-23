@@ -277,3 +277,17 @@ test("a native app's handler asks the activity for a permission and waits for it
   assert.match(shown[1], /"asking"/);
   assert.match(shown[2], /"microphone: yes"/);
 });
+
+// A page that opens files in other apps (C311): its app gives them through
+// its own read-only provider, and its C asks MainActivity's openOutside.
+test("an Android app whose page opens files outside has a provider for them and asks MainActivity (C311)", () => {
+  const files = nativeAppFolder("folders", "static void lab_world_openOutside(lab_cell *path) {}");
+  const dir = PACKAGE.replace(/\./g, "/");
+  assert.match(String(files["app/src/main/AndroidManifest.xml"]), /<provider android:name="\.Files" android:authorities="[^"]+\.files" android:exported="false" android:grantUriPermissions="true" \/>/);
+  assert.match(String(files[`app/src/main/java/${dir}/Files.java`]), /ParcelFileDescriptor\.MODE_READ_ONLY/);
+  assert.match(String(files[`app/src/main/java/${dir}/MainActivity.java`]), /String openOutside\(String path\)/);
+  assert.match(String(files["app/src/main/cpp/page.c"]), /lab_opener = j_open;/);
+  const plain = nativeAppFolder("dice", "");
+  assert.equal(plain[`app/src/main/java/${dir}/Files.java`], undefined);
+  assert.doesNotMatch(String(plain["app/src/main/AndroidManifest.xml"]), /provider/);
+});

@@ -1661,7 +1661,8 @@ static ${o.record} lab_world_myLocale(void) {
   },
   // A file or folder to the platform's own app (C315, L283), as world.ts:
   // \`open\` on a Mac, xdg-open elsewhere (TERS_OPEN_OUTSIDE names
-  // another), waited for, or Windows' ShellExecute; a phone has none here.
+  // another), waited for, Windows' ShellExecute, or an Android app's
+  // opener (C311); an iPhone has none here.
   // Logged as a write; fails as reading a file does when nothing is there.
   "world.openOutside": {
     uses: ["world.fail"],
@@ -1669,6 +1670,12 @@ static ${o.record} lab_world_myLocale(void) {
 __declspec(dllimport) void *__stdcall ShellExecuteW(void *, const wchar_t *, const wchar_t *, const wchar_t *, const wchar_t *, int);
 #elif defined(__APPLE__)
 #include <TargetConditionals.h>
+#endif
+#ifdef __ANDROID__
+// The app's opener (C311, native-app.ts j_open): why the file didn't open,
+// malloc'd, or null when it did.
+#define LAB_OPENER 1
+static char *(*lab_opener)(const char *path);
 #endif
 #if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
 #include <spawn.h>
@@ -1678,7 +1685,7 @@ extern char **environ;
 #endif
 static void lab_world_openOutside(lab_cell *path) {
   if (lab__log_begin("openOutside")) { lab__log_text(path); lab__log_write(); }
-  char *p = lab__cstr(path), how[96];
+  char *p = lab__cstr(path), how[256];
   const char *why = 0;
   if (!lab__kind(p)) { int e = errno; free(p); lab__fail(e, path); return; }
 #ifdef _WIN32
@@ -1686,7 +1693,11 @@ static void lab_world_openOutside(lab_cell *path) {
   intptr_t r = (intptr_t)ShellExecuteW(0, L"open", w, 0, 0, 1);
   free(w);
   if (r <= 32) { snprintf(how, sizeof how, "ShellExecute answered %d", (int)r); why = how; }
-#elif defined(__ANDROID__) || (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+#elif defined(__ANDROID__)
+  char *said = lab_opener ? lab_opener(p) : 0;
+  if (!lab_opener) why = "this platform has no opener here";
+  else if (said) { snprintf(how, sizeof how, "%s", said); free(said); why = how; }
+#elif defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
   why = "this platform has no opener here";
 #else
   const char *cmd = getenv("TERS_OPEN_OUTSIDE");

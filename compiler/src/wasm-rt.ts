@@ -9315,6 +9315,28 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       call $TextOption.some
       i32.const 0`,
   },
+  // A file to the platform's app (C311, L283): a WASI command has no way
+  // out to one, so it fails with the reason (no such file first, as C's).
+  "wasi.openOutside": {
+    params: [["path", "text"]], result: "i32", locals: [], uses: ["wasi.kind", "wasi.fail", "text.concat"],
+    body: `
+      local.get $path
+      call $wasi.kind
+      i32.eqz
+      if i32
+        i32.const ${E.NOENT}
+        local.get $path
+        call $wasi.fail
+      else
+        ${lit("a WASI command can't open ")}
+        local.get $path
+        call $text.concat
+        ${lit(" in another app: it has no way out to one")}
+        call $text.concat
+        global.set $reason
+        i32.const 2
+      end`,
+  },
   "wasi.writeFile": {
     params: [["path", "text"], ["t", "text"]], result: "i32", locals: [["fd", "i32"], ["e", "i32"]], uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.write", "wasi_fd_close"],
     body: `
