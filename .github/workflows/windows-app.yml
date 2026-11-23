@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open a folder|shot wide|resize 700|shot narrow"}]') }}
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && format('[{{"program":{0},"taps":{1}}}]', toJSON(inputs.program), toJSON(inputs.taps || 'Roll|resize 420|Throw 100')) || '[{"program":"dice","taps":"Roll|resize 420|Throw 100"},{"program":"folders","taps":"Open folder|shot wide|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|key ArrowDown|shot chosen|resize 700|shot narrow"}]') }}
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
