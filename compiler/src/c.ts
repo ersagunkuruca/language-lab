@@ -76,6 +76,9 @@ import { fails, keyList, listSteps, isArray, isTable, isData, isFn, isRecord, ki
 
 // What a C compiler needs to keep the evaluator's numbers. -fwrapv: fdlibm
 // shifts signed ints past their top bit (pow's test for an odd exponent).
+// The most nodes a lending function calling nothing of the program's has
+// to be marked inline (C317).
+const SMALL_LEAF = 40;
 export const CFLAGS = ["-std=c99", "-O2", "-ffp-contract=off", "-fwrapv"];
 
 // and, or: both sides, as WebAssembly's i32.and (a side may hold cells
@@ -1028,9 +1031,14 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // file calls one (a page's host calls the ters_page_ ones, main is
   // main), so cc puts one called from one place where it is called and
   // drops what nothing calls.
+  // A small lending one calling nothing of the program's is put where it's
+  // called (C317): swarm-pool's `holds`, a pool lookup's check, is a few
+  // reads, which cc at -O2 left a call saving and restoring six registers.
+  const leaf = new Map<number, boolean>();
+  const small = (i: number) => leaf.get(i) ?? leaf.set(i, ((es) => es.length <= SMALL_LEAF && !es.some((e) => e.k === "call" || e.k === "apply"))(walk(funcs[i].body))).get(i)!;
   const header = (i: number, lending = false) => {
     const f = funcs[i];
-    return `static ${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
+    return `static ${lending && small(i) ? "inline " : ""}${ty(f.result)} ${lending ? bnames.get(i) : names.get(i)}(${f.params.map((t, j) => `${ty(t)} p${j}`).join(", ") || "void"})`;
   };
   const fuel = kept.some((i) => funcs[i].spends || walk(funcs[i].body).some((e) => e.k === "budget"));
   const math = opts.math === "fdlibm" && kept.some((i) => walk(funcs[i].body).some((e) => e.k === "op" && e.op in FDLIBM));
@@ -4463,7 +4471,7 @@ static lab_cell *lab__copy_a${i}(${B} *src, uint32_t s, uint32_t n, int small) {
   return x;
 }`);
     // Item k, or no answer past the end, the array lent (C58l).
-    if (has("atb")) out.push(`static ${T} lab_array_atb_a${i}(lab_cell *a, lab_int k) {
+    if (has("atb")) out.push(`static inline ${T} lab_array_atb_a${i}(lab_cell *a, lab_int k) {
   ${V} *v = (${V} *)a;
   if (!LAB_IS_SMALL(k) || LAB_VAL(k) < 0 || LAB_VAL(k) >= (int64_t)v->n) { lab_int_drop(k); lab_st = 1; return ${zero(a.item)}; }
   return ${cp(rd(`((${B} *)v->b)`, "v->s + LAB_VAL(k)"))};
