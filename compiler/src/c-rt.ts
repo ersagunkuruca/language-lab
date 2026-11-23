@@ -917,6 +917,54 @@ static void lab__log_write(void) { lab__log_raw("],\\"write\\":true}"); lab_log_
 // A Text as a C string, for the C library's paths.
 static char *lab__cstr(lab_cell *t) { char *s = malloc((size_t)LAB_TN(t) + 1); if (!s) lab_oom(); memcpy(s, LAB_TB(t), LAB_TN(t)); s[LAB_TN(t)] = 0; return s; }`,
   },
+  // A formula kept (C300): its number, whether what it gave still holds
+  // (no cell it read written since: the page's write epochs, c.ts
+  // READS_C), and its reads noted while it runs, then told to whatever
+  // reads it. Outside a page nothing notes writes, so it always runs.
+  "formula.new": { uses: ["formula.kept"], c: "static int32_t lab_formula_new(void) { if (lab_nkp == lab_ckp) { lab_ckp = lab_ckp ? 2 * lab_ckp : 16; lab_kp = realloc(lab_kp, sizeof *lab_kp * (size_t)lab_ckp); if (!lab_kp) lab_oom(); } lab_kp[lab_nkp] = (lab_kept){ 0, 0, 0, 0 }; return lab_nkp++; }" },
+  "formula.fresh": { uses: ["formula.kept"], c: `static int32_t lab_formula_fresh(int32_t id) {
+#ifdef LAB_KEEP_FORMULAS
+  lab_kept *k = &lab_kp[id];
+  if (!k->ok) return 0;
+  for (int j = 0; j < k->nrd; j++) if (lab__eget(k->rd[j]) > k->at) return 0;
+  for (int j = 0; j < k->nrd; j++) lab_touch(k->rd[j]);
+  return 1;
+#else
+  (void)id; return 0;
+#endif
+}` },
+  "formula.begin": { uses: ["formula.kept"], c: `static int32_t lab_formula_begin(int32_t id) {
+#ifdef LAB_KEEP_FORMULAS
+  if (lab_nks == lab_cks) { lab_cks = lab_cks ? 2 * lab_cks : 8; lab_ks = realloc(lab_ks, sizeof *lab_ks * (size_t)lab_cks); if (!lab_ks) lab_oom(); }
+  lab_ks[lab_nks++] = (lab_rdsave){ lab_rd, lab_nrd, lab_crd, lab_rding };
+  lab_rd = 0; lab_nrd = lab_crd = 0; lab_rding = 1;
+  lab_kp[id].ok = 0;
+  lab_kp[id].at = lab_epoch;
+#else
+  (void)id;
+#endif
+  return 0;
+}` },
+  "formula.end": { uses: ["formula.kept"], c: `static int32_t lab_formula_end(int32_t id) {
+#ifdef LAB_KEEP_FORMULAS
+  lab_kept *k = &lab_kp[id];
+  free(k->rd); k->rd = lab_rd; k->nrd = lab_nrd; k->ok = 1;
+  lab_rdsave o = lab_ks[--lab_nks];
+  lab_rd = o.rd; lab_nrd = o.nrd; lab_crd = o.crd; lab_rding = o.rding;
+  for (int j = 0; j < k->nrd; j++) lab_touch(k->rd[j]);
+#else
+  (void)id;
+#endif
+  return 0;
+}` },
+  "formula.kept": { uses: [], c: `typedef struct { void **rd; int nrd, ok; uint64_t at; } lab_kept;
+static lab_kept *lab_kp;
+static int lab_nkp, lab_ckp;
+#ifdef LAB_KEEP_FORMULAS
+typedef struct { void **rd; int nrd, crd, rding; } lab_rdsave;
+static lab_rdsave *lab_ks;
+static int lab_nks, lab_cks;
+#endif` },
   // The fuel, read, and swapped for another (C137c21).
   "fuel.get": { uses: [], c: "static double lab_fuel_get(void) { return lab_fuel; }" },
   "fuel.swap": { uses: [], c: "static double lab_fuel_swap(double x) { double t = lab_fuel; lab_fuel = x; return t; }" },

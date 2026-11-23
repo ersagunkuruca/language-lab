@@ -710,3 +710,33 @@ test("a page's sound in stereo in C plays its pair of blocks on two channels (C2
   assert.match(lines[4], /^played 1: 0\.250000 0\.250000 0\.250000 0\.250000 /);
   assert.equal(lines[5], "right 1: -0.125000 -0.125000 -0.125000 -0.125000");
 });
+
+// A page's formulas kept in C until a cell they read is written (C300):
+// one over another, shown before and after the inner one's cell is
+// written, the outer one's own, and nothing; a kept text dropped when it
+// is worked out again.
+test("a page's formulas over formulas, kept between writes in C, show what html.ts shows (C300)", { skip }, async () => {
+  const { ARITH, CELL_OPS, S, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const read = (c: Id) => k.call(CELL_OPS.read, c);
+  const button = (id: string, f: () => Id) => el("button", [prop("id", id), k.call(HTML_V.on, k.lit("click"), k.fn(["e"], f))], []);
+  const shown = (id: string, f: () => Id) => el("span", [prop("id", id)], [k.call(HTML_V.text, k.thunk(f))]);
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("a", k.call(CELL_OPS.cell, k.lit(1)), (a) => k.let("b", k.call(CELL_OPS.cell, k.lit("x")), (b) =>
+    k.let("f", k.call(CELL_OPS.formula, k.thunk(() => k.call(ARITH.mul, read(a), k.lit(2)))), (f) =>
+      k.let("g", k.call(CELL_OPS.formula, k.thunk(() => k.call(S.concat, read(b), k.call(SHOW_ANY, read(f))))), (g) => el("div", [], [
+        button("a", () => k.call(CELL_OPS.write, a, k.call(ARITH.add, read(f), k.lit(1)))),
+        button("b", () => k.call(CELL_OPS.write, b, k.call(S.concat, read(b), k.lit("y")))),
+        button("none", () => k.unitValue),
+        shown("f", () => k.call(SHOW_ANY, read(f))),
+        k.call(HTML_V.part, k.thunk(() => shown("g", () => read(g)))),
+      ])))))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const p = both(code, info, names, main, ["click:none", "click:a", "click:none", "click:b", "click:b", "click:a", "click:none"]);
+  assert.deepEqual(p.evaluator.map((h) => [...h.matchAll(/<span id="[fg]">([^<]*)</g)].map((m) => m[1]).join(" ")),
+    ["2 x2", "2 x2", "6 x6", "6 x6", "6 xy6", "6 xyy6", "14 xyy14", "14 xyy14"]);
+  assert.deepEqual(p.c, p.evaluator);
+});
