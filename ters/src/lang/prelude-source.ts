@@ -9,7 +9,7 @@ import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
 import { library } from "./programs.ts";
-import { LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, SHOW_ANY, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, POOL_V, POOL_KEY_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
+import { ARRAY_OPS, LITERAL_V, FILE_OPS, NEXT_LINE_OP, WRITE_LINE_OP, NEXT_BYTES_OP, ADD_BYTES_OP, ZONE_OPS, ABORT_OP, ARITH, CELL_OPS, COMPARE, CONS, FALSE, INT_OPS, MAP_V, NIL, NONE, ORDER_V, OUTCOME_V, PAIR_V, S, SET_V, SOME, TEXT_OPS, TIMES_V, ALGEBRA_V, TRIG_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_ASIN, TRIG_ACOS, TRUE, TICKET_V, AWAIT_OP, START_TIMER_OP, NOW_OP, WAIT_OP, BRANCH_V, ARITHMETIC_V, TRIG_OPS, ORDERED_V, DIVISION_V, SHOWN_V, SHOW_ANY, BITS_V, WORD_SIZES, WORD_V, EXTENDED_V, ALGEBRAIC_OPS, REAL_OPS, CHECK_OP, RANDOM_OP, QUEUE_V, PRIORITY_QUEUE_V, POOL_V, POOL_KEY_V, TENSOR_V, BYTES_V, JSON_V, DATE_V, TIME_OF_DAY_V, INSTANT_V, EMBEDDING_V, STATE_OPS, PIPE_OPS, std } from "./std.ts";
 
 export function buildPrelude(): Module {
   const k = new Lang();
@@ -919,14 +919,17 @@ export function buildPrelude(): Module {
   // what this does. Places are any record of Float64s (a point in 2D, 3D).
   const neighbours = k.def("neighbours");
   const second = (pair: Id, body: (i: Id, x: Id) => Id) => k.match(pair, [{ variant: PAIR_V, names: ["position", "place"], body: ([i, x]) => body(i, x) }]);
+  // Every pair compared, given the places numbered: the definition's own,
+  // and the grid's for what it can't take (`neighbours on a grid`, C292).
+  const everyPair = (ps: Id, r: Id) =>
+    k.let("reach squared", k.call(B.mul, r, r), (r2) =>
+      k.call(map, ps, k.fn(["here"], (here) => second(here, (i, a) =>
+        k.call(map, k.call(keep, ps, k.fn(["there"], (there) => second(there, (j, b) =>
+          k.and(k.call(S.not, k.equal(i, j)), k.let("apart", k.call(S.zipParts, B.sub, a, b), (d) =>
+            k.call(S.not, k.call(S.less, r2, k.call(S.total, k.call(S.zipParts, B.mul, d, d))))))))),
+        k.fn(["neighbour"], (n) => second(n, (j) => j)))))));
   k.define(neighbours, k.fn(["items", "place", "reach"], (xs, place, r) =>
-    k.let("placed", k.call(numbered, k.call(map, xs, place)), (ps) =>
-      k.let("reach squared", k.call(B.mul, r, r), (r2) =>
-        k.call(map, ps, k.fn(["here"], (here) => second(here, (i, a) =>
-          k.call(map, k.call(keep, ps, k.fn(["there"], (there) => second(there, (j, b) =>
-            k.and(k.call(S.not, k.equal(i, j)), k.let("apart", k.call(S.zipParts, B.sub, a, b), (d) =>
-              k.call(S.not, k.call(S.less, r2, k.call(S.total, k.call(S.zipParts, B.mul, d, d))))))))),
-          k.fn(["neighbour"], (n) => second(n, (j) => j))))))))));
+    k.let("placed", k.call(numbered, k.call(map, xs, place)), (ps) => everyPair(ps, r))));
   const copies = k.def("copies");
   // Made onto the empty list a copy at a time, one list built (C270: a
   // looper's tapes are copies of 0 minutes long; mapped over a range, the
@@ -1178,6 +1181,68 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["pair", "rest"], results: [null, "entries"], body: ([pr], [, es]) => entry(pr, (key, v) => k.call(putEntry, es!, key, v)) },
   ]));
   const asMap = def("as map", ["pairs"], (ps) => k.call(MAP_V, k.call(pairsAsEntries, ps)));
+
+  // neighbours on a grid (C292, L280g): what C and WebAssembly run for
+  // `neighbours`, written once here so every target compiles the same
+  // code. Each place once, in the items' order; a cell a little wider than
+  // reach per place, by its unit parts, so two places within reach are in
+  // cells next to each other however the division rounds; the cells as
+  // Int keys in a Map; each place compared with those in the 3, 9 or 27
+  // cells around its own by the definition's own sum and ≤, and each list
+  // sorted, so the lists are the definition's (ters/library/near.ts does
+  // the same in the evaluator and compiled JavaScript). What the grid
+  // can't take, every pair as the definition does: places of more than 3
+  // parts, a reach that isn't positive, a cell more than 65535 from 0.
+  const first = (x: Id, otherwise: Id) => k.call(S.first, k.thunk(() => x), k.thunk(() => otherwise));
+  const gridKey = k.def("grid key");
+  k.define(gridKey, k.fn(["cells", "offsets", "key"], (cs, os, acc) => k.match(cs, [
+    { variant: NIL, names: [], body: () => acc },
+    { variant: CONS, names: ["cell", "cells rest"], body: ([c, cr]) => k.match(os, [
+      { variant: NIL, names: [], body: () => acc },
+      { variant: CONS, names: ["offset", "offsets rest"], body: ([o, or]) => k.call(gridKey, cr, or,
+        k.call(INT_OPS.add, k.call(INT_OPS.add, k.call(INT_OPS.add, k.call(INT_OPS.mul, acc, k.int(131072)), c), o), k.int(65536))) },
+    ]) },
+  ])));
+  const gridCells = def("grid cells", ["place", "units", "cell"], (p, us, cell) =>
+    k.call(map, us, k.fn(["unit"], (u) => k.call(wholeOf, k.call(dividedOr, k.call(S.total, k.call(S.zipParts, B.mul, u, p)), cell, k.lit(0))))));
+  const gridAround = k.def("grid around");
+  k.define(gridAround, k.fn(["units"], (us) => k.match(us, [
+    { variant: NIL, names: [], body: () => k.call(CONS, k.x(NIL), k.x(NIL)) },
+    { variant: CONS, names: ["unit", "units rest"], body: ([, rest]) => k.call(flatMap, k.call(gridAround, rest),
+      k.fn(["offsets"], (o) => k.call(map, k.list(k.int(-1), k.int(0), k.int(1)), k.fn(["offset"], (c) => k.call(CONS, c, o))))) },
+  ])));
+  const gridFiled = k.def("grid filed");
+  k.define(gridFiled, k.fn(["grid", "keys", "position"], (g, keys, i) => k.match(keys, [
+    { variant: NIL, names: [], body: () => g },
+    { variant: CONS, names: ["key", "keys rest"], body: ([key, rest]) => k.call(gridFiled,
+      k.call(put, g, key, k.call(CONS, i, first(k.call(lookup, g, key), k.x(NIL)))), rest, k.call(INT_OPS.add, i, k.int(1))) },
+  ])));
+  const inGrid = (x: Id) => k.and(k.call(S.not, k.call(INT_OPS.less, x, k.int(-65535))), k.call(INT_OPS.less, x, k.int(65535)));
+  const gridFits = def("grid fits", ["reach", "units", "cells"], (r, us, cs) => k.and(
+    k.call(S.less, k.lit(0), r),
+    k.call(S.not, k.call(INT_OPS.less, k.int(3), k.call(length, us))),
+    k.call(allPass, cs, k.fn(["cells of one"], (c) => k.call(allPass, c, k.fn(["cell"], inGrid))))));
+  const gridClose = def("grid close", ["reach squared", "a", "b"], (r2, a, b) =>
+    k.let("apart", k.call(S.zipParts, B.sub, a, b), (d) => k.call(S.not, k.call(S.less, r2, k.call(S.total, k.call(S.zipParts, B.mul, d, d))))));
+  const gridFound = def("grid found", ["places", "first place", "units", "cells", "reach"], (placed, p0, us, cs, r) =>
+    k.let("grid", k.call(gridFiled, k.x(emptyMap), k.call(map, cs, k.fn(["cells of one"], (c) => k.call(gridKey, c, k.call(map, us, k.fn(["unit"], () => k.int(0))), k.int(0)))), k.int(0)), (g) =>
+      k.let("around", k.call(gridAround, us), (offs) =>
+        k.let("reach squared", k.call(B.mul, r, r), (r2) =>
+          k.call(map, k.call(numbered, cs), k.fn(["here"], (here) => second(here, (i, c) =>
+            k.let("at", first(k.call(ARRAY_OPS.at, placed, i), p0), (a) =>
+              k.call(sort, k.call(keep,
+                k.call(flatMap, offs, k.fn(["offsets"], (o) => first(k.call(lookup, g, k.call(gridKey, c, o, k.int(0))), k.x(NIL)))),
+                k.fn(["there"], (j) => k.and(k.call(S.not, k.equal(j, i)), k.call(gridClose, r2, a, first(k.call(ARRAY_OPS.at, placed, j), p0))))))))))))));
+  const everyPairOf = def("neighbours by every pair", ["places", "reach"], (ps0, r) => k.let("placed", k.call(numbered, ps0), (ps) => everyPair(ps, r)));
+  const onGrid = def("neighbours on a grid", ["items", "place", "reach"], (xs, place, r) =>
+    k.let("places", k.call(map, xs, place), (ps) => k.match(ps, [
+      { variant: NIL, names: [], body: () => k.x(NIL) },
+      { variant: CONS, names: ["first place", "more"], body: ([p0]) =>
+        k.let("units", k.call(S.unitParts, p0), (us) =>
+          k.let("cells", k.call(map, ps, k.fn(["p"], (p) => k.call(gridCells, p, us, k.call(B.mul, r, k.lit(1 + 2 ** -20))))), (cs) =>
+            k.if(k.call(gridFits, r, us, cs), k.call(gridFound, k.call(ARRAY_OPS.of, ps), p0, us, cs, r), k.call(everyPairOf, ps, r)))) },
+    ])));
+  const gridHelpers = [gridKey, gridCells, gridAround, gridFiled, gridFits, gridClose, gridFound, everyPairOf];
   const entries = def("entries of", ["map"], (m) => entriesOf(m, (es) => es));
   const keys = def("keys of", ["map"], (m) => entriesOf(m, (es) => k.call(map, es, k.fn(["entry"], (e) => entry(e, (key) => key)))));
   const values = def("values of", ["map"], (m) => entriesOf(m, (es) => k.call(map, es, k.fn(["entry"], (e) => entry(e, (_, v) => v)))));
@@ -2539,6 +2604,8 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(mapHelpers.map((d) => [d, "A helper of the map and set operations: a walk down the sorted list. Not offered."])),
     [mergeSorted]: "Two sorted lists as one. A helper of sort, not offered.",
     [addRun]: "A helper of sort: a sorted run added to the slots of runs, like adding 1 to a binary number. Not offered.",
+    ...Object.fromEntries(gridHelpers.map((d) => [d, "A helper of neighbours on a grid (C292). Not offered."])),
+    [onGrid]: "neighbours as C and WebAssembly find them (C292): the places on a grid of cells a little wider than reach, each compared with those in the cells around its own, so the lists are neighbours' own. Not offered: the compiler calls it for neighbours.",
     [neighbours]: "Each item's neighbours: the positions of the other items whose places are within reach of its own, smallest first. Places are points (any record of Float64s). Every pair is compared as written; the compiler may find them by a grid or a tree instead, which give the same lists.",
     [near]: "Whether two Float64s agree to the precision floats carry: within 1e-9 of each other, relative to their size. equal is exact, so √2 · √2 isn't equal to 2, but it is near it.",
     [tableProduct]: "a · b in an algebra given by its multiplication table: each line says what two basis elements multiply to, as times(i, i, −1). Complex numbers, dual numbers and quaternions are each one table (ALGEBRA-TABLES.md).",
@@ -2578,9 +2645,9 @@ export function buildPrelude(): Module {
     ...Object.fromEntries(awaitHelpers.map((d) => [d, simulatedHelpers.includes(d) ? "A helper of simulated. Not offered in the palette." : "A helper of together and race. Not offered in the palette."])),
     [applied]: "A helper of inverse: f(x), as a definition solve can name. Not offered in the palette.",
   };
-  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...laws], merge(prelude, std));
+  const p = publish(merge(prelude, std, k.code), k.names, [...offered, onto, addedAtEnd, applied, ...awaitHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, onGrid, ...gridHelpers, ...laws], merge(prelude, std));
   if (!p.ok) throw new Error(`the prelude can't be published: ${p.reason}`);
   const at = (d: Id) => p.rename.get(d)!;
   const notes = Object.fromEntries(Object.entries(comments).map(([d, c]) => [at(d), c]));
-  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
+  return makeModule("prelude", p.code, p.names, offered.map(at), p.pins, notes, [addedAtEnd, ...awaitHelpers, ...numberOnly, ...perTypeShows, ...textOnly, numberedFrom, positionFrom, ...divisions, ...showns, ...bitses, intShiftUp, ...wordHelpers, mergeSorted, addRun, mergeByKey, addRunByKey, ...mapHelpers, growRounds, stepSize, roundsNeeded, settledRounds, settlingRounds, ...matrixHelpers, pipeOf, onGrid, ...gridHelpers, ...arithmetics, trigF, cosBySin, sinByCos, polarBy, sinByPolar, cosByPolar, polarF, unpolarF, asinBy, acosBy, asinF, acosF, ...laws].map(at));
 }
