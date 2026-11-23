@@ -39,11 +39,6 @@ const KNOWN: Record<string, string> = {
   // Five tasks of 80 to 200 ms, one of them (its graph drawn, or the
   // click's own) sometimes over.
   "opening a large definition": "E319k",
-  // Choosing the stored program's lists and Maps left the thread with
-  // E319j (2 s on bounce before); what's left is its check over the
-  // groups the worker sent (360 ms) and the interpreted page's start at the
-  // log's last event (390 ms, its arithmetic resolved 150).
-  "pausing a compiled page": "E319j",
 };
 
 // `then`: what the place shows once its work is done, off the thread or not.

@@ -522,8 +522,11 @@ export function pagePanels(host: PageHost) {
     const code = page.for ?? prog();
     page.status.title = "", page.status.textContent = "Pausing…";
     stepsBox.replaceChildren();
-    // The page built in a task of its own, after the check's.
-    void runCode(code, started.main).then((run) => new Promise<RunCode>((ok) => setTimeout(() => ok(run)))).then((run) => {
+    // The page built in a task of its own, after the check's, and its
+    // arithmetic resolved in one between (E319j: 185 ms of bounce's 313 ms
+    // start), as a program's page is when it opens.
+    const after = <T>(f: () => T) => new Promise<T>((ok) => setTimeout(() => ok(f())));
+    void runCode(code, started.main).then((run) => after(() => { if (page.now === now && !resolvedKnown(run.code, run.info)) resolvedFor(run.code, run.info, run.names); return run; })).then((run) => after(() => run)).then((run) => {
       if (page.now !== now) return;
       pausedAt(started, from, run);
     }, (e) => { if (page.now === now) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); } });
