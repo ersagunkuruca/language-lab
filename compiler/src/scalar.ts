@@ -2029,6 +2029,22 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const head = lt.cases[c].fields.find((x) => x.t !== lt)!.t;
           return { k: "list", t: lt, c, items: args(), item: f.locals.push(head) - 1, acc: f.locals.push(lt) - 1 };
         }
+        // A record of Float64s' unit parts, one record per field (L230): the
+        // list written out at its type, as arith.ts writes it where the type
+        // is known there. Its input is a value of the type, used for that.
+        if (opts.data && target === S.unitParts && n.args.length === 1) {
+          const lt = stype(zonk(id)), x = stype(zonk(n.args[0]));
+          const c = lt && isData(lt) ? lt.cases.findIndex((y) => y.variant === CONS) : -1;
+          if (!lt || !isData(lt) || c < 0 || !x) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const width = x === "f64" ? 1 : isRecord(x) && x.fields.every((y) => y.t === "f64") ? x.fields.length : isData(x) && x.cases.length === 1 && x.cases[0].fields.every((y) => y.t === "f64") ? x.cases[0].fields.length : 0;
+          if (!width) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const unit = (i: number): SExpr => {
+            const parts = Array.from({ length: width }, (_, j): SExpr => ({ k: "num", v: i === j ? 1 : 0 }));
+            return x === "f64" ? parts[0] : isRecord(x) ? { k: "make", t: x, args: parts } : { k: "new", t: x as DType, c: 0, args: parts };
+          };
+          const head = lt.cases[c].fields.find((y) => y.t !== lt)!.t;
+          return { k: "list", t: lt, c, items: Array.from({ length: width }, (_, i) => unit(i)), item: f.locals.push(head) - 1, acc: f.locals.push(lt) - 1 };
+        }
         if (opts.records && t?.kind === "field" && n.args.length === 1) {
           const r = stype(zonk(n.args[0]));
           if (r && isData(r)) {
