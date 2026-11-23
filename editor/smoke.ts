@@ -344,7 +344,8 @@ async function stepOrder() {
   const before = await count();
   await p.locator(".p-graph svg.canvas > g.world [data-edge]").nth(3).click({ force: true });
   if (!(await p.locator(".status[role=status]").innerText()).startsWith("Put a dot")) errors.push(`${where}: a click on a wire of Eight queens' main put no dot on it`);
-  else if (before < 4 || (await count()) !== before) errors.push(`${where}: Eight queens' main numbers ${before} steps, and ${await count()} with a dot on a wire`);
+  // A dot's let is numbered as a step too (graph one drawing, 11-14).
+  else if (before < 4 || (await count()) < before) errors.push(`${where}: Eight queens' main numbers ${before} steps, and ${await count()} with a dot on a wire`);
   await p.locator('button[data-act="undo"]').first().click();
   // count's action taken off its input lies loose where it was, and wires
   // back in by its frame's end (I286).
@@ -393,7 +394,9 @@ async function stepOrder() {
   // Its click adds the step and opens the palette on the new hole, which
   // checks every candidate against physics' main: give it time.
   await p.locator('.ctx-menu [data-menu="step-before"]').click({ timeout: 10000 }).catch(async () => errors.push(`${where}: a print's menu has no Add step before: ${await p.locator(".ctx-menu").innerText({ timeout: 500 }).catch(() => "no menu")}`));
-  const lines = (await p.locator(".p-text .body").innerText()).split("\n").map((l) => l.trim());
+  // The first line of main's body, after its comment and signature.
+  const all = (await p.locator(".p-text .body").innerText()).split("\n").map((l) => l.trim());
+  const lines = all.slice(Math.max(0, all.findIndex((l) => l.startsWith("main() =")) - 1));
   if (!lines[2]?.startsWith("□") || lines[2].includes("‹•")) errors.push(`${where}: a step added before the first reads ${lines.slice(0, 4).join(" / ")}`);
   await p.close();
 }
@@ -406,7 +409,7 @@ async function patternRows() {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
-  await p.locator('[data-set="program"]', { hasText: /Countdown/ }).first().click();
+  await p.locator('[data-set="program"]', { hasText: /countdown/i }).first().click();
   await p.locator("[data-def]", { hasText: /^results$/ }).first().click();
   const ports = async () => p.locator(".p-graph .portl").allTextContents();
   if (!(await ports()).includes("[head, second, ..others]")) errors.push(`${where}: results' match has ports ${(await ports()).join(" ")}`);
@@ -426,7 +429,9 @@ async function patternRows() {
   const t0 = Date.now();
   await p.locator("[data-def]", { hasText: /^solutions$/ }).first().click();
   if (Date.now() - t0 > 5000) errors.push(`${where}: opening solutions took ${Date.now() - t0} ms`);
-  if (!(await p.locator(".side").innerText()).includes("the graph waits")) errors.push(`${where}: solutions doesn't say its values stopped`);
+  // The search goes on in the worker (E319e) while the panel says so, and
+  // says where it stopped if it runs past what the graph waits.
+  if (!/the graph waits|working them out/.test(await p.locator(".side").innerText())) errors.push(`${where}: solutions doesn't say its values stopped or are being worked out`);
   // results gives a Found: its answer reads as one, never NaN (I32).
   await p.locator("[data-def]", { hasText: /^results$/ }).first().click();
   const found = await p.locator(".port-row output").first().innerText().catch(() => "");
@@ -451,14 +456,17 @@ async function firstSteps() {
   p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
   await p.goto(page);
   await p.locator("[data-def]", { hasText: /^main$/ }).first().click();
-  await p.locator(".p-graph svg.canvas > g.world text.stepn").first().waitFor({ state: "attached" });
+  // The steps are the inputs of one "in order" node, numbered.
+  await p.locator(".p-graph svg.canvas rect.cn.order").first().waitFor({ state: "attached" });
   await p.waitForTimeout(300);
   const [seen, all] = await p.evaluate(() => {
     const cv = document.querySelector(".p-graph svg.canvas")!.getBoundingClientRect();
-    const ns = [...document.querySelectorAll(".p-graph svg.canvas > g.world text.stepn")].map((t) => t.getBoundingClientRect());
+    const ns = [...document.querySelector(".p-graph svg.canvas rect.cn.order")!.parentElement!.querySelectorAll("text.portl")].map((t) => t.getBoundingClientRect());
     return [ns.filter((q) => q.left >= cv.left && q.right <= cv.right && q.top >= cv.top && q.bottom <= cv.bottom).length, ns.length];
   });
-  if (seen < Math.min(all, 6)) errors.push(`${where}: ${seen} of ${all} numbered steps in the first view`);
+  // Each input sits beside its step's drawing, so fewer fit than when
+  // they were a column of their own: the first four.
+  if (seen < Math.min(all, 4)) errors.push(`${where}: ${seen} of ${all} numbered steps in the first view`);
   await p.close();
 }
 
@@ -797,37 +805,45 @@ async function pagePreview() {
   // The page has the base look (page.ts PAGE_BASE), not the browser's serif.
   const font = await f.locator("body").evaluate((e) => getComputedStyle(e).fontFamily);
   if (!font.includes("system-ui")) errors.push(`${where}: the page is in the browser's default font (${font})`);
+  // Compiled, as the page mostly runs: interpreted, Roll 100 can take
+  // longer than an update may on the editor's thread (E319d), and stops.
+  await p.locator("iframe.page[data-compiled]").waitFor({ state: "attached", timeout: 60000 }).catch(() => errors.push(`${where}: dice wasn't compiled in a minute`));
   await f.locator("#hundred").click();
   const status = () => f.locator("#status").innerText({ timeout: 2000 }).catch(() => "(no status)");
-  if (!(await status()).startsWith("Rolls: 100;")) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
+  // The page can be made again after a click (compiled in a worker, a
+  // program's page started after its drawing, E319k): what it says is
+  // waited for, a few seconds at most.
+  const says = async (want: string) => { for (const end = Date.now() + 5000; Date.now() < end; await p.waitForTimeout(100)) if ((await status()).startsWith(want)) return true; return false; };
+  if (!(await says("Rolls: 100;"))) errors.push(`${where}: after Roll 100 the page says ${await status()}`);
   await p.locator("[data-def]").nth(1).click();
-  if (!(await status()).startsWith("Rolls: 100;")) errors.push(`${where}: the editor redrew and the page says ${await status()}`);
+  if (!(await says("Rolls: 100;"))) errors.push(`${where}: the editor redrew and the page says ${await status()}`);
   // Its buttons still work after the redraw, and back on main.
   await f.locator("#roll").click();
-  if (!(await status()).startsWith("Rolls: 101;")) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
+  if (!(await says("Rolls: 101;"))) errors.push(`${where}: Roll after opening another definition: the page says ${await status()}`);
   // The status bar says what was done on the page.
   if (!(await p.locator(".status[role=status]").innerText()).includes("Clicked “Roll”")) errors.push(`${where}: the status bar says nothing of the click on Roll`);
   await p.locator("[data-def]", { hasText: /^main$/ }).click();
   // The page is main's run: no Run main that would print its insides.
   if (await p.locator('[data-act="t-run"]').count()) errors.push(`${where}: a page's main offers Run main`);
   await f.locator("#roll").click();
-  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
+  if (!(await says("Rolls: 102;"))) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
   // Another program and back: the page is as it was, and still answers.
   await p.locator('[data-set="program"][data-value="calculus-text"]').click();
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
-  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: after another program and back the page says ${await status()}`);
+  if (!(await says("Rolls: 102;"))) errors.push(`${where}: after another program and back the page says ${await status()}`);
   await f.locator("#roll").click();
-  if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after another program and back: the page says ${await status()}`);
+  if (!(await says("Rolls: 103;"))) errors.push(`${where}: Roll after another program and back: the page says ${await status()}`);
   // Paused, a step back, and on again: the compiled page (the site's
   // prebuilt one) takes over from the step with its rolls (I253).
   await p.locator(".page-steps button", { hasText: /^Pause$/ }).click();
-  await p.locator(".page-steps button", { hasText: "Back" }).click({ timeout: 2000 }).catch(() => errors.push(`${where}: Pause offered no step back`));
-  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: a step back from 103 rolls shows ${await status()}`);
+  // Pause on a compiled page waits for a worker (runCodeAsk.ts, E319j).
+  await p.locator(".page-steps button", { hasText: "Back" }).click({ timeout: 30000 }).catch(() => errors.push(`${where}: Pause offered no step back`));
+  if (!(await says("Rolls: 102;"))) errors.push(`${where}: a step back from 103 rolls shows ${await status()}`);
   await p.locator(".page-steps button", { hasText: "Go on from here" }).click({ timeout: 2000 }).catch(() => {});
   await p.waitForTimeout(200);
-  if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: going on from 102 rolls shows ${await status()}`);
+  if (!(await says("Rolls: 102;"))) errors.push(`${where}: going on from 102 rolls shows ${await status()}`);
   await f.locator("#roll").click();
-  if (!(await status()).startsWith("Rolls: 103;")) errors.push(`${where}: Roll after going on: the page says ${await status()}`);
+  if (!(await says("Rolls: 103;"))) errors.push(`${where}: Roll after going on: the page says ${await status()}`);
   // A helper giving an Html is drawn in Run, not printed (I256).
   await p.locator("[data-def]", { hasText: /^bars$/ }).first().click();
   if (!(await p.locator(".run output").allInnerTexts()).includes("an Html, drawn below") || !(await p.locator("iframe.html-part").count())) errors.push(`${where}: bars's Html isn't drawn in Run`);
@@ -874,9 +890,18 @@ async function pageEditCompiles() {
   for (const [program, def] of [["Page: pond", "main"], ["Page: flock", "birds on page"]]) {
     where = `edited page: ${program} / ${def}`;
     await p.locator('[data-set="program"]', { hasText: program }).first().click();
-    await p.locator("[data-def]", { hasText: new RegExp(`^${def}$`) }).first().evaluate((e) => (e as HTMLElement).click());
+    // An opened program draws again soon after (its page and graph in
+    // tasks of their own, E319k): the row is clicked once it's the one shown.
+    for (let i = 0; i < 50; i++) {
+      if (await p.locator("[data-def]", { hasText: new RegExp(`^${def}$`) }).first().evaluate((e) => e.isConnected && ((e as HTMLElement).click(), true))) break;
+      await p.waitForTimeout(100);
+    }
     // The first number shown, in Blocks or the graph.
-    const lit = await p.locator(".x[data-id]").evaluateAll((els) => { const e = els.find((e) => !e.querySelector("[data-id]") && /^\d+(\.\d+)?$/.test(e.textContent!.trim()) && (e as HTMLElement).offsetParent); e?.setAttribute("data-smoke-lit", ""); return !!e; });
+    let lit = false;
+    for (let i = 0; i < 50 && !lit; i++) {
+      lit = await p.locator(".x[data-id]").evaluateAll((els) => { const e = els.find((e) => !e.querySelector("[data-id]") && /^\d+(\.\d+)?$/.test(e.textContent!.trim()) && (e as HTMLElement).offsetParent); e?.setAttribute("data-smoke-lit", ""); return !!e; });
+      if (!lit) await p.waitForTimeout(100);
+    }
     if (!lit) { errors.push(`${where}: no number to edit`); continue; }
     await p.locator("[data-smoke-lit]").first().click();
     const field = p.locator("#f-lit");

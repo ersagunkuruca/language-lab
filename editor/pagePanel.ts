@@ -38,8 +38,12 @@ const DRAW_WITHIN = 100;
 const drawWithin = () => (globalThis as { tersDrawWithin?: number }).tersDrawWithin ?? DRAW_WITHIN;
 // How long one update of the page may take on the editor's thread, in ms
 // (E319d, html.ts `within`), compiled or interpreted: past it, the part
-// stops as one out of steps does. Open in a tab has no such limit.
-const UPDATE_MS = 50;
+// stops as one out of steps does, and a handler says so under the page.
+// Open in a tab has no such limit. Under the thread probe's 200 ms with
+// room for the collection after (150 gave 244 and 301 ms tasks), and
+// over what most frames take (at 50, flock's and moths' interpreted
+// frames stopped every frame on a slow machine).
+const UPDATE_MS = 100;
 
 export interface PageHost {
   doc(): Doc;
@@ -296,6 +300,7 @@ export function pagePanels(host: PageHost) {
   }
   // `handFrom`: the cells of the page an edit replaced (E279a).
   function startPage(info: T.Info, main: Id, handFrom: Cells["kept"] | null = null) {
+    delete page.frame.dataset.compiled;
     page.now?.stop();
     page.now = null;
     page.root = null;
@@ -520,6 +525,7 @@ export function pagePanels(host: PageHost) {
   }
   function pausedAt(started: NonNullable<typeof page.started>, from: NonNullable<ReturnType<NonNullable<Preview["stepFrom"]>>>, run: RunCode) {
     const old = page.root;
+    delete page.frame.dataset.compiled;
     try { page.now = interpreted(started.info, started.main, from, run); }
     catch (e) { sayStopped("Couldn't pause the page", e); page.now = null; page.root = null; page.for = null; render(); return; }
     page.root = page.now.root as unknown as globalThis.Node;
@@ -660,6 +666,8 @@ export function pagePanels(host: PageHost) {
     page.deferred = false;
     page.now = { root: m.root, cells: null as never, kept: m.kept, stop: m.stop, hush: m.hush, window: undefined, stepFrom: mounted.window && (() => ({ firsts: mounted.kept.map((k) => k.first), snapshots: mounted.window!.snapshots })) };
     compiledNow.add(page.now);
+    // Which page runs, for a test to wait for.
+    page.frame.dataset.compiled = "";
     page.root = m.root as unknown as globalThis.Node;
     if (old?.parentNode) (old as ChildNode).replaceWith(page.root);
     // Nothing shown before (one too slow interpreted): put in the frame.
