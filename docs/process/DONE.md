@@ -1510,7 +1510,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| L266af (part) | A tuple given for several inputs was looked for by asking the check of every node of the program (spread.ts), library bodies' included, each lowering and each choice: now only of calls. machine's recompile after an edit 1.3 s -> about 1.2 s (ters/bench/edits.ts) | #PR |
+| L266af (part) | A tuple given for several inputs was looked for by asking the check of every node of the program (spread.ts), library bodies' included, each lowering and each choice: now only of calls. machine's recompile after an edit 1.3 s -> about 1.2 s (ters/bench/edits.ts) | #3212 |
 | I352 | The MCP couldn't define a type with its own parameter: `numbers(lift: (Float64) -> a, …)` was refused "no type named a", so mnist gave every generic definition `lift` and `level` as inputs of its own. `define` of a type takes its parameters in `params` now (toplevel.ts Shape), and its fields name them. Test in mcp.test | #3209 |
 | I351 (part) | A type shown with the interfaces of variables it doesn't name: mnist's squash with `divide` showed thirteen generic callers' "b's Division" through rows linked to its own (types.ts showType). Also the MCP's replace of an `else` line, the if's arm, put an expression in the arm's place and the check crashed; it replaces the arm's body now. The Choice leak stays in I351. Test in mcp.test | #3207 |
 | I353 (closed) | A field read where two record types have the field (`s.params`, Adam's and Newton's) took the first type: not reproduced 2026-11-23 through the MCP. Another field read (`s.params + s.h`), a pinned type, or a list's items in a lambda settle it, and where nothing does the MCP asks for `as` (I187, mcp.test) | |
