@@ -88,6 +88,9 @@ typedef struct {
   // white-space: nowrap (inherited); a table's border-spacing, 0 when its
   // borders collapse.
   int nowrap; double bspace;
+  // word-break: break-all or overflow-wrap: anywhere (inherited): a word
+  // may break anywhere, so its narrowest is a letter's.
+  int breakall;
   // An animation: its keyframes' name, duration and delay in ms.
   char anim[32]; double adur, adelay;
   int clip;
@@ -770,6 +773,8 @@ static void tl_decl(tl_css *c, const char *k, size_t kn, const char *v, const ch
     }
   }
   else if (TL_IS("white-space")) c->nowrap = TL_V("nowrap") || (TL_V("pre") && !TL_V("pre-wrap") && !TL_V("pre-line"));
+  else if (TL_IS("word-break")) c->breakall = TL_V("break-all");
+  else if (TL_IS("overflow-wrap") || TL_IS("word-wrap")) c->breakall = TL_V("anywhere");
   else if (TL_IS("border-collapse")) c->bspace = TL_V("collapse") ? 0 : c->bspace;
   else if (TL_IS("border-spacing")) { double x = tl_len(v, e, c->size, &ok, 0); if (ok == 1) c->bspace = x; }
 #undef TL_IS
@@ -804,6 +809,7 @@ static void tl_defaults(tl_css *c, const char *t, const tl_css *up) {
   c->up_size = c->size; c->up_line = c->line; c->up_bold = c->bold;
   c->display = tl_inline(t) ? TL_INLINE : TL_BLOCK;
   c->nowrap = up ? up->nowrap : 0;
+  c->breakall = up ? up->breakall : 0;
   // A table's parts (C319): th bold and centred, cells 1px in, 2px between.
   if (!strcmp(t, "table")) c->display = TL_TABLE, c->bspace = 2;
   if (!strcmp(t, "thead") || !strcmp(t, "tbody") || !strcmp(t, "tfoot")) c->display = TL_ROWS;
@@ -968,6 +974,7 @@ static double tl_min(tl_n *k) {
     // width narrower than a word breaks inside it (DirectWrite does).
     double size = k->parent ? k->parent->c.size : 16; int bold = k->parent ? k->parent->c.bold : 0;
     if (k->parent && k->parent->c.nowrap) { double w; int lines; tl_measure(k, 1e9, &w, &lines); return w; }
+    if (k->parent && k->parent->c.breakall) { double w; int lines; tl_ui->measure(tl_ui->ctx, k->s, strlen(k->s), size, bold, 0.01, &w, &lines); return w; }
     if (k->lo_ok && k->lo_size == size && k->lo_bold == bold) return k->lo_w;
     double most = 0;
     for (const char *p = k->s; *p;) {
