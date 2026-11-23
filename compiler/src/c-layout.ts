@@ -124,6 +124,8 @@ typedef struct tl_n {
   // text's last measure.
   double sent_place[5], sent_paint[4], sent_font[5], m_size, m_width, m_w;
   int sent, m_bold, m_lines, measured, sent_clip;
+  // A text's longest word's width (tl_min), and the font it was measured in.
+  double lo_w, lo_size; int lo_bold, lo_ok;
   // Whether the pointer is over it or a box inside it (:hover, C298).
   int hover;
   // How high what's inside it is (its height as nothing held it), and what
@@ -211,7 +213,7 @@ static void *tl_text(void *c, const char *s, size_t n) {
   e->view = tl_ui->text(tl_ui->ctx, s, n);
   return e;
 }
-static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; tl_texts_changed = 1; if (e->parent) tl_dirty(e->parent, TL_DIRTY); tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
+static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; e->lo_ok = 0; tl_texts_changed = 1; if (e->parent) tl_dirty(e->parent, TL_DIRTY); tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
 static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const char *v, size_t vn) {
   (void)c; tl_n *e = x;
   tl_dirty(e, TL_DIRTY);
@@ -961,7 +963,22 @@ static double tl_fit(tl_n *k, double avail) {
 // The narrowest k can be (CSS's min-content width): a text as wide as its
 // longest word, a box as its widest child (C319).
 static double tl_min(tl_n *k) {
-  if (!k->tag) { double w; int lines; tl_measure(k, 0.01, &w, &lines); return w; }
+  if (!k->tag) {
+    // Each word measured on its own, one line: a platform's measure at a
+    // width narrower than a word breaks inside it (DirectWrite does).
+    double size = k->parent ? k->parent->c.size : 16; int bold = k->parent ? k->parent->c.bold : 0;
+    if (k->parent && k->parent->c.nowrap) { double w; int lines; tl_measure(k, 1e9, &w, &lines); return w; }
+    if (k->lo_ok && k->lo_size == size && k->lo_bold == bold) return k->lo_w;
+    double most = 0;
+    for (const char *p = k->s; *p;) {
+      while (*p == ' ' || *p == '\n' || *p == '\t') p++;
+      const char *q = p; while (*q && *q != ' ' && *q != '\n' && *q != '\t') q++;
+      if (q > p) { double w; int lines; tl_ui->measure(tl_ui->ctx, p, (size_t)(q - p), size, bold, 1e9, &w, &lines); if (w > most) most = w; }
+      p = q;
+    }
+    k->lo_ok = 1; k->lo_size = size; k->lo_bold = bold; k->lo_w = most;
+    return most;
+  }
   if (k->c.display == TL_NONE || k->c.pos == 2) return 0;
   double edge = k->c.pad[1] + k->c.pad[3] + 2 * k->c.bw + k->c.mar[1] + k->c.mar[3];
   if (k->c.set_w) return tl_border_w(&k->c) + k->c.mar[1] + k->c.mar[3];
