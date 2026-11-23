@@ -354,17 +354,17 @@ A map is kept sorted by key in compare's order, so two maps with the same entrie
 - **grow** : `(Set a, Set a, (a) -[e]-> List a) -[e]-> Set a`. The least set holding start and closed under more: with an item, the items more gives of it, as long as universe has them. grow(nodes, as set([a]), (x) ↦ neighbours of x) is the nodes reached from a. It ends within set size(universe) rounds, so it can't run forever (Kleene's and Knaster and Tarski's least fixed point, on a finite set).
 - **settled** : `(List Float64, (List Float64) -[Choice, e]-> List Float64, Float64) -[Choice, e]-> List Float64`. A list x with step(x) within tolerance of x (the sum of its parts' differences), reached by running step from start. It reads the rate q at which steps shrink off its first rounds (half way from the largest it sees to 1), counts the rounds it needs from q (Banach's bound), and stops once the step size d has d · q / (1 − q) ≤ tolerance. No answer when the steps don't shrink, or a later step shrinks by less than q, so it never runs forever. q is an estimate, so the answer is near a fixed point but not certainly within tolerance of it, and no answer may mean no fixed point or only a step slower than q. When a step's rate is known, as PageRank's damping is, settled by is given it, and its answer is within tolerance of the true fixed point.
 - **settled by** : `(List Float64, (List Float64) -[Choice, e]-> List Float64, Float64, Float64) -[Choice, e]-> List Float64`. settled with the rate given: each step is at most rate times the one before (0 ≤ rate < 1). No answer when a step breaks that.
-- **Pool** (type). A collection that gives out its own keys: an item added gets a key, and the key finds it until it is removed. A removed item's slot is used again, but an old key finds nothing rather than the new item (generational keys, as game engines keep their entities).
-- **Pool key** (type). A key a pool gave out: its slot and the slot's generation when it was given.
+- **Pool** (type). A collection that gives out its own keys: an item added gets a key, and the key finds it until it is removed. It means a Map of numbered items and the next number, so a key is never given out twice and an old key finds nothing. The compiler may keep it in slots used again, each holding its item's number (as game engines keep their entities); its choices say which.
+- **Pool key** (type). A key a pool gave out: the number of the item it was given for.
 - **empty pool** : `Pool a`. A pool with nothing in it. added to pool puts an item in and next key, asked just before, is the key it gets.
-- **next key** : `(Pool a) -> Pool key`. The key the next item added to the pool will get: a free slot's, of its next generation, or a new slot's.
-- **added to pool** : `(Pool a, a) -> Pool a`. The pool with the item put in, in a free slot when there is one; next key, asked just before, is its key.
-- **pool item** : `(Pool a, Pool key) -[Choice]-> a`. The item a key was given for; no answer when it was removed, even if its slot holds another item now.
+- **next key** : `(Pool a) -> Pool key`. The key the next item added to the pool will get: one no item has had before.
+- **added to pool** : `(Pool a, a) -> Pool a`. The pool with the item put in; next key, asked just before, is its key.
+- **pool item** : `(Pool a, Pool key) -[Choice]-> a`. The item a key was given for; no answer when it was removed.
 - **replaced in pool** : `(Pool a, Pool key, a) -> Pool a`. The pool with the item under the key replaced, the key still finding it; the pool as it is when the key finds nothing.
-- **removed from pool** : `(Pool a, Pool key) -> Pool a`. The pool without the item under the key. Its slot is free again, and the key and every copy of it find nothing from now on.
-- **pool size** : `(Pool a) -> Int`. How many items the pool holds. Kept, not counted.
-- **pool keys** : `(Pool a) -> List Pool key`. The keys of the pool's items, in the order of their slots.
-- **pool items** : `(Pool a) -> List a`. The pool's items, in the order of their slots.
+- **removed from pool** : `(Pool a, Pool key) -> Pool a`. The pool without the item under the key. The key and every copy of it find nothing from now on.
+- **pool size** : `(Pool a) -> Int`. How many items the pool holds.
+- **pool keys** : `(Pool a) -> List Pool key`. The keys of the pool's items, in the order the items were added.
+- **pool items** : `(Pool a) -> List a`. The pool's items, in the order they were added.
 - **updated in pool** : `(Pool a, (a) -[e]-> b) -[e]-> Pool b`. The pool with each item changed by f; every item keeps its key.
 - **kept in pool** : `(Pool a, (a) -[e]-> Bool) -[e]-> Pool a`. The pool with only the items that pass the test; the others are removed, and their keys find nothing.
 

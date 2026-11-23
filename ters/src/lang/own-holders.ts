@@ -12,7 +12,8 @@
 // copies. The copies are the program's own, so the chooser changes them
 // with the rest, and the library's stay as they are. Only plain data
 // types the library writes in the language and nothing else knows by id
-// (HOLDERS: Pool, Queue). Html, Attribute, Algebra and the rest are known
+// (HOLDERS: Pool, Queue; and a representation's own type holding lists,
+// a pool's slots, once it is chosen: library-reps.ts). Html, Attribute, Algebra and the rest are known
 // to the compiler and the page runtime by their ids, and a type a builtin
 // makes or takes is built by its runtime as the original, so they stay.
 
@@ -42,7 +43,8 @@ function namedByBuiltins(): Set<Id> {
 
 export interface Owned { code: Code; names: Names; own: Id[]; info: Info; copied: string[] }
 
-export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id, own: Id[]): Owned | null {
+export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id, own: Id[], more: Iterable<Id> = []): Owned | null {
+  const holders = new Set([...HOLDERS, ...more]);
   const mine = new Set(own);
   const isTypedef = (d: Id) => code.nodes[(code.nodes[d] as NodeOf<"def"> | undefined)?.body ?? ""]?.kind === "typedef";
   // Each definition walked once, not once for every own definition that
@@ -67,7 +69,7 @@ export function ownLibraryHolders(code: Code, info: Info, names: Names, main: Id
     memo.set(id, r);
     return r;
   };
-  const types = [...reached].filter((d) => HOLDERS.has(d) && !mine.has(d) && isTypedef(d) && d !== LIST && !stored.has(d) && !byBuiltins.has(d) && holdsList(d)
+  const types = [...reached].filter((d) => holders.has(d) && !mine.has(d) && isTypedef(d) && d !== LIST && !stored.has(d) && !byBuiltins.has(d) && holdsList(d)
     && (() => { const td = code.nodes[(code.nodes[d] as NodeOf<"def">).body!] as NodeOf<"typedef">; return !td.effect && !td.interface; })());
   if (!types.length) return null;
   // Every id inside a copied type, and the library definitions that name

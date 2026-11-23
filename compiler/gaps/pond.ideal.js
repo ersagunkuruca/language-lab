@@ -1,10 +1,11 @@
 // pond (bigger-program round 13), written by hand as a data-oriented
 // JavaScript developer would: the fish as columns of typed arrays, a free
-// list of slots with a generation each (so a key is a slot and a
-// generation, as std's Pool gives them), the floor's food one
+// list of slots, each holding its fish's number (so a key is a number and
+// a slot, as std's Pool stored in slots gives them), the floor's food one
 // Float64Array by cell, the herons a few small arrays. Each tick every
 // fish's plan is made from the pond as it was, into columns of their own,
-// then the plans are carried out in slot order, as the program does. The
+// then the plans are carried out in the order the fish were added, as the
+// program does (a pool's items in key order, L280f). The
 // same arithmetic in the same order, so the same answers to the bit.
 //   node compiler/gaps/pond.ideal.js [ticks] [fish]
 const ticks = Number(process.argv[2] ?? 300), stock = Number(process.argv[3] ?? 400);
@@ -24,26 +25,36 @@ const wcell = (c) => (c + N) % N;
 const WEIGHT = [];
 for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) WEIGHT.push(1.0 / (1 + dx * dx + dy * dy));
 
-// The school: columns by slot, a generation a slot, a free list (newest first).
-let cap = 1024, slots = 0, size = 0;
+// The school: columns by slot, the number of the fish in each, a free list
+// (newest first), and the slots in the order their fish were added.
+let cap = 1024, slots = 0, size = 0, next = 0, order = [], numbers = [];
 let x = new Float64Array(cap), y = new Float64Array(cap), hx = new Float64Array(cap), hy = new Float64Array(cap), en = new Float64Array(cap);
-let age = new Int32Array(cap), ls = new Int32Array(cap), lg = new Int32Array(cap), seed = new Float64Array(cap), gen = new Int32Array(cap), live = new Uint8Array(cap);
+let age = new Int32Array(cap), ls = new Int32Array(cap), lg = new Int32Array(cap), seed = new Float64Array(cap), num = new Int32Array(cap), live = new Uint8Array(cap);
 const free = [];
 const grow = () => {
   cap *= 2;
   const f = (a, T) => { const b = new T(cap); b.set(a); return b; };
   x = f(x, Float64Array); y = f(y, Float64Array); hx = f(hx, Float64Array); hy = f(hy, Float64Array); en = f(en, Float64Array);
-  age = f(age, Int32Array); ls = f(ls, Int32Array); lg = f(lg, Int32Array); seed = f(seed, Float64Array); gen = f(gen, Int32Array); live = f(live, Uint8Array);
+  age = f(age, Int32Array); ls = f(ls, Int32Array); lg = f(lg, Int32Array); seed = f(seed, Float64Array); num = f(num, Int32Array); live = f(live, Uint8Array);
 };
 const nextSlot = () => (free.length ? free[free.length - 1] : slots);
-const nextGen = () => (free.length ? gen[free[free.length - 1]] : 0);
+const nextNumber = () => next;
 const add = (px, py, phx, phy, pe, pa, pls, plg, ps) => {
   let s;
-  if (free.length) s = free.pop(); else { if (slots === cap) grow(); s = slots++; gen[s] = 0; }
+  if (free.length) s = free.pop(); else { if (slots === cap) grow(); s = slots++; }
+  num[s] = next++; order.push(s); numbers.push(num[s]);
   x[s] = px; y[s] = py; hx[s] = phx; hy[s] = phy; en[s] = pe; age[s] = pa; ls[s] = pls; lg[s] = plg; seed[s] = ps; live[s] = 1; size++;
 };
-const found = (s, g) => s >= 0 && s < slots && gen[s] === g && live[s] === 1;
-const remove = (s, g) => { if (!found(s, g)) return; live[s] = 0; gen[s]++; free.push(s); size--; };
+const found = (s, g) => s >= 0 && s < slots && num[s] === g && live[s] === 1;
+const remove = (s, g) => { if (!found(s, g)) return; live[s] = 0; free.push(s); size--; };
+// The slots of the living fish in the order they were added, the removed
+// ones dropped from the order as it is walked.
+const walk = () => {
+  let j = 0;
+  for (let i = 0; i < order.length; i++) if (found(order[i], numbers[i])) { order[j] = order[i]; numbers[j] = numbers[i]; j++; }
+  order.length = j; numbers.length = j;
+  return order.slice();
+};
 
 const food = new Float64Array(CELLS);
 for (let k = 0; k < CELLS; k++) food[k] = 0.2 + 0.6 * chance(random(k * 7919 + 13));
@@ -52,7 +63,7 @@ for (let k = 0; k < CELLS; k++) food[k] = 0.2 + 0.6 * chance(random(k * 7919 + 1
 {
   let s = 12345, lastS = 0, lastG = 0;
   for (let n = stock; n > 0; n--) {
-    const ks = nextSlot(), kg = nextGen();
+    const ks = nextSlot(), kg = nextNumber();
     const lead = chance(s) < 0.3;
     add(SIDE * chance(s), SIDE * chance(random(s)), 1.0, 0.0, 1.0, Math.floor(chance(random(random(s))) * 50.0), lead ? ks : lastS, lead ? kg : lastG, random(random(random(s))));
     s = random(random(random(s)));
@@ -89,9 +100,8 @@ const sumBack = (xs) => { let a = 0; for (let i = xs.length - 1; i >= 0; i--) a 
 for (let t = 0; t < ticks; t++) {
   if (P.s.length < cap) for (const k of Object.keys(P)) { const T = P[k].constructor; P[k] = new T(cap); }
   pc = 0;
-  for (let s = 0; s < slots; s++) {
-    if (!live[s]) continue;
-    const me = gen[s];
+  for (const s of walk()) {
+    const me = num[s];
     // Toward its leader, while that one lives.
     let lx = x[s], ly = y[s];
     const self = ls[s] === s && lg[s] === me;
@@ -133,10 +143,9 @@ for (let t = 0; t < ticks; t++) {
     if (!found(ts, tg)) {
       ts = 0; tg = 0;
       let bd = 1000000.0;
-      for (let s = 0; s < slots; s++) {
-        if (!live[s]) continue;
+      for (const s of walk()) {
         const ox = around(x[s] - hsx[id]), oy = around(y[s] - hsy[id]), d = Math.sqrt(ox * ox + oy * oy);
-        if (d < bd) { bd = d; ts = s; tg = gen[s]; }
+        if (d < bd) { bd = d; ts = s; tg = num[s]; }
       }
     }
     const gx = found(ts, tg) ? x[ts] : 0.0, gy = found(ts, tg) ? y[ts] : 0.0;
@@ -154,10 +163,9 @@ for (let t = 0; t < ticks; t++) {
   if (tick % EVERY === 0) {
     const es = [], cs = [];
     let following = 0, elders = 0;
-    for (let s = 0; s < slots; s++) {
-      if (!live[s]) continue;
+    for (const s of walk()) {
       es.push(en[s]); cs.push(x[s] + 2.0 * y[s]);
-      if (!(ls[s] === s && lg[s] === gen[s])) following++;
+      if (!(ls[s] === s && lg[s] === num[s])) following++;
       if (age[s] > 100) elders++;
     }
     const mean = es.length ? sumBack(es) / es.length : 0.0;
@@ -165,8 +173,7 @@ for (let t = 0; t < ticks; t++) {
   }
 }
 let outside = 0, spent = 0, over = 0, old = 0;
-for (let s = 0; s < slots; s++) {
-  if (!live[s]) continue;
+for (const s of walk()) {
   if (!(x[s] >= 0.0 && x[s] < SIDE && y[s] >= 0.0 && y[s] < SIDE)) outside++;
   if (en[s] <= 0.0) spent++;
   if (age[s] > OLD_AGE) old++;

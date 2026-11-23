@@ -1383,18 +1383,22 @@ export const ENV_OP = "std.environment.environment variable";
 tn += 10;
 export const EMBEDDING_MAP = "std.embedding.embedding.map";
 // A pool (C58, KEYED-COLLECTIONS.md): a collection that gives out its own
-// keys. Its items sit in slots by position, with each slot's generation;
-// a removed item's slot goes on the free list for the next one added, and
-// its generation goes up, so a key kept from before finds nothing rather
-// than the new item (generational indices, as ECS engines and Rust's
+// keys. Its meaning (L280f, POOL-CHOICE-2026-11-23.md): the items by key
+// in a map, and the number the next one gets, so a key is never given out
+// twice and one kept after its item was removed finds nothing. The
+// compiler stores it as that, or in slots with a free list, each key
+// carrying its slot (generational indices, as ECS engines and Rust's
 // slotmap keep them). After everything above, so their ids don't move.
 export const POOL = typedef("std.pool", "Pool", ["a"], [
-  ["pool", [["items", ([a]) => tref(LIST, tref(OPTIONAL, tref(a)))], ["generations", () => tref(LIST, tref(INT))], ["free", () => tref(LIST, tref(INT))], ["size", () => tref(INT)], ["slots", () => tref(INT)]]],
+  ["pool", [["entries", ([a]) => tref(MAP, tref(INT), tref(a))], ["next", () => tref(INT)]]],
 ]);
 export const POOL_V = "std.pool.pool";
 export const POOL_KEY = typedef("std.pool key", "Pool key", [], [
-  ["pool key", [["slot", () => tref(INT)], ["generation", () => tref(INT)]]],
+  ["pool key", [["number", () => tref(INT)]]],
 ]);
+// The pool's meaning since L280f: as many trefs as it had, so the ids
+// after it don't move.
+tn += 6;
 export const POOL_KEY_V = "std.pool key.pool key";
 // What a canvas paints (BACKLOG G2, paint above): a disk, a rectangle, a
 // segment of a line and some writing, in the canvas's own units (its

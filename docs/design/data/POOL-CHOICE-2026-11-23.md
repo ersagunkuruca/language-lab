@@ -84,3 +84,35 @@ they exist.
    Map and counter, slots; …`, which can be held.
 4. Time swarm-pool, pond-page and compiler/gaps/pond each way, on every
    target.
+
+## Built (L280f)
+
+The meaning is in prelude-source.ts (the pool section) and the slots way
+in map-tree.ts, as `Pool slots` with `Slotted key` beside it (together.ts
+names the two as one choice). As built, the slots way differs from the
+plan above in three places.
+
+- It keeps the order the items were put in: a list of slotted keys,
+  newest first, so `pool keys` and `pool items` walk it in n and need no
+  sort. A removed item stays in the order until the removed outnumber
+  the rest; then the order is compacted.
+- A key whose slot no longer holds its number (removed, or a key of
+  another pool) finds its slot in the order by halves, since the order's
+  numbers fall. The meaning lets such a key name an item another way, so
+  the slot alone can't say it's gone.
+- The library picks the pool's way before Map's, so the meaning's own
+  Map doesn't make Map's choice for the program (library-reps.ts).
+
+Measured against the pool before L280f (seconds, the same machine and
+hour):
+
+| program | target | slots way | before |
+|---|---|---|---|
+| swarm-pool | JavaScript | 1.1 to 1.3 | 0.85 |
+| swarm-pool | native | 0.46 | 0.30 |
+| swarm-pool | WASI | 1.04 | 0.75 |
+| greenhouse | JavaScript | 3.3 | 3.9 |
+| greenhouse | native | 0.94 | 0.99 |
+
+swarm-pool is slower because it looks up many stale keys, each by
+halves (L280j).

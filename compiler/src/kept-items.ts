@@ -162,6 +162,26 @@ function chooser(c: SFunc, ci: number): { value: SExpr; x: number } | null {
 // with out′ the array it built, or one item put in front of it, and its
 // other inputs as they were. JavaScript (positions are Float64s).
 const QUIET = new Set(["if", "let", "case", "field", "get", "local", "num", "int", "bool", "op", "make", "new"]);
+// A function that only reads: quiet kinds, an array's items and length,
+// arithmetic, and calls of functions that only read; a read past the
+// end tried, giving another value instead (`item at`'s).
+const READ_RT = /^(array\.(get|at|length)\.a\d+|int\.[a-zA-Z]+|f64\.[a-zA-Z]+)$/;
+const quietMemo = new WeakMap<CoreIR, Map<number, boolean>>();
+function quiet(ir: CoreIR, g: number, seen: Set<number>): boolean {
+  let memo = quietMemo.get(ir);
+  if (!memo) quietMemo.set(ir, (memo = new Map()));
+  if (memo.has(g)) return memo.get(g)!;
+  if (seen.has(g)) return false;
+  seen.add(g);
+  const f = ir.funcs[g];
+  const ok = !f.multi && !f.inner && (function check(e: SExpr): boolean {
+    if (e.k === "call") return !e.cps && (e.fn === g || quiet(ir, e.fn, seen)) && e.args.every(check);
+    if (e.k === "rt") return READ_RT.test(e.fn) && e.args.every(check);
+    return (QUIET.has(e.k) || e.k === "attempt") && kids(e).every(check);
+  })(f.body);
+  memo.set(g, ok);
+  return ok;
+}
 export function pushedInOrder(ir: CoreIR): number {
   let made = 0;
   ir.funcs.forEach((f, fi) => {
@@ -179,6 +199,9 @@ export function pushedInOrder(ir: CoreIR): number {
     const out = b.else.i, n = (len as Extract<SExpr, { k: "rt" }>).fn.split(".").pop()!;
     let ok = true, fronts = 0;
     const PUT = /^array\.pushFront\.a\d+$/;
+    // A call that only reads, and not by i (a pool's slots read at an
+    // item's slot, L280f), can't tell the order either.
+    const readsOnly = (g: number): boolean => quiet(ir, g, new Set([fi]));
     const look = (e: SExpr): void => {
       if (!ok) return;
       if (e.k === "call" && e.fn === fi && !e.cps) {
@@ -194,9 +217,12 @@ export function pushedInOrder(ir: CoreIR): number {
         });
         return;
       }
+      if (e.k === "call" && e.fn !== fi && !e.cps && readsOnly(e.fn) && !e.args.some((x) => reads(x, out) || reads(x, a.i) || reads(x, i))) { e.args.forEach(look); return; }
       if (e.k === "rt") {
         // The item at i read, and nothing else of the array.
         if (/^array\.get\.a\d+$/.test(e.fn) && isLocal(e.args[0], a.i) && isLocal(e.args[1], i)) return;
+        // Arithmetic, and other arrays read.
+        if (READ_RT.test(e.fn) && !e.args.some((x) => reads(x, out) || reads(x, a.i) || reads(x, i))) { e.args.forEach(look); return; }
         ok = false; return;
       }
       if (isLocal(e, out) || isLocal(e, a.i) || isLocal(e, i)) { ok = false; return; }
