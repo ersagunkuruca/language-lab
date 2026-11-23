@@ -12,8 +12,9 @@ import { h } from "./dom.ts";
 import { corePageRuntimes, coreWorkletRuntimes, hasCoreRuntime, loadSolving, newWorker } from "./runViews.ts";
 import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { sendCode } from "./runCode.ts";
-import { drawPicture, pictureEntries, type Picture } from "./picture.ts";
-import { drawDrawable, drawableOf, type Built } from "./pictureDraw.ts";
+import { pictureEntries } from "./pictureDraw.ts";
+import { pictureInWorker, type Making } from "./pictureAsk.ts";
+import { drawDrawable, drawableOf, type Built, type Picture } from "./pictureDraw.ts";
 import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltHas, prebuiltIndex, prebuiltKey } from "./prebuilt.ts";
 import type { CompiledPage } from "./pageCompile.ts";
@@ -66,26 +67,29 @@ export function pagePanels(host: PageHost) {
   // picture (editor/picture.ts): drawn live on the GPU above Run, and drawn
   // again after every edit. When the compiler can't take it to the GPU, its
   // reason shows instead. The canvas outlives renders, so the drawing goes on.
-  const pic = { canvas: h("canvas", { class: "picture", role: "img", "aria-label": "The program's picture, drawn live" }) as HTMLCanvasElement, status: h("p", { class: "hint pic-status", role: "status" }), for: null as Code | null, now: null as Picture | null };
+  const pic = { canvas: h("canvas", { class: "picture", role: "img", "aria-label": "The program's picture, drawn live" }) as HTMLCanvasElement, status: h("p", { class: "hint pic-status", role: "status" }), for: null as Code | null, now: null as Picture | null, making: null as Making | null };
   const picNote = h("div", {});
   const picBox = h("div", { class: "picture-box" }, picNote, pic.canvas, pic.status);
   function pictureSection(info: T.Info | null): HTMLElement | null {
     const entries = pictureEntries(ownDefs(), pres().names);
-    if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.for = null; return null; }
+    if (!entries || !info) { pic.now?.stop(); pic.now = null; pic.making?.stop(); pic.making = null; pic.for = null; return null; }
     picNote.replaceChildren(noteView(noteOf(doc())) ?? "");
     if (pic.for !== prog()) {
       const code = pic.for = prog();
       pic.now?.stop();
       pic.now = null;
+      pic.making?.stop();
+      pic.making = null;
       pic.canvas.hidden = false;
       pic.status.textContent = "Drawing…";
       const shown = (e: unknown) => { pic.canvas.hidden = true; pic.status.textContent = `Can't draw the picture: ${e instanceof Error ? e.message : String(e)}.`; };
       if (errorsIn(info)) shown(new Error("the program has errors; fix them first"));
       // As shipped, the picture was compiled when the site was built
       // (prebuilt.ts, E245): drawn from that, with no compiling here.
+      // Otherwise it's compiled in a worker (pictureAsk.ts, E319c).
       else prebuilt<Built>(prebuiltKey("picture", code, entries, pins()))
-        .then((built) => (pic.for !== code ? Promise.reject(new Error("redrawn")) : built ? drawDrawable(drawableOf(built), { canvas: pic.canvas, status: pic.status })
-          : drawPicture({ code, info, names: pres().names, entries, canvas: pic.canvas, status: pic.status })))
+        .then((built) => pic.for !== code ? Promise.reject(new Error("redrawn")) : built ?? (pic.making = pictureInWorker({ ...shippedOf(), code, names: pres().names, pins: pins(), entries })).done)
+        .then((built) => (pic.for !== code ? Promise.reject(new Error("redrawn")) : drawDrawable(drawableOf(built), { canvas: pic.canvas, status: pic.status })))
         .then((p) => { if (pic.for === code) pic.now = p; else p.stop(); },
           (e) => { if (pic.for === code) shown(holesIn(info) ? new Error("the program has holes; fill them first") : e); });
     }
