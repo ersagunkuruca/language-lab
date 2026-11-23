@@ -40,6 +40,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| E319d | The page preview bounded on the editor's thread: the compiled preview's script takes a step in every function and loop round (core-js.ts `stepEverywhere`, the preview only; Open in a tab doesn't), and each update of the page, compiled or interpreted, stops past 50 ms (html.ts `within`) as one out of steps does; an interpreted first drawing waits for the compiled page after 100 ms, not 500. The probe's `sum(range(1000000))` view: 238 and 720 ms tasks before, 210 to 230 after (the rest is E319i) | #3176 |
 | E319b | Tests run in the worker (testAsk.ts): Run's Test shows Testing… with Stop and draws the result when it answers; Upgrade modules checks and tests the upgraded program there, then commits. The probe's "a test" place: a 3,240 ms freeze before, no long task after | #3160 |
 | E319a | The editor's thread guarded (EDITOR-THREAD-2026-11-23): editor-thread.test.ts lists every call from the editor's bundle into the evaluator, checker or compiler with its bound (a new one fails), and editor/thread-probe.ts records the editor's long tasks in places that run slow code (over 200 ms fails; places not yet fixed listed with their row) | #3152, #3156 |
 | E318 | A field the program's own type and a library type share reads as the program's: editor/typed.ts's typed fill takes the one reading whose types are all the program's own, with no choices; mcp/session.ts's `programsOwn` (#3124) removed (REVIEW-2026-11-23 §2) | #3143 |

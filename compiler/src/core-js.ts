@@ -717,7 +717,10 @@ export function emitCoreJs(ir: CoreIR, only?: Set<number>): { js: string; names:
     // fuel` (whose fuel is Infinity), and not again in a piece of the
     // search (I291: countdown's `results`, whose rests took a step each,
     // 3.47M page steps where the evaluator takes 442k).
-    const step = ir.info.divergent.has(f.def) && !f.piece ? [fuel ? "if (fuel === Infinity) R.step();" : "R.step();"] : [];
+    // In the editor's preview every function takes one (stepEverywhere,
+    // E319d): there a page runs on the editor's thread, and its budget
+    // must reach work that ends but takes seconds.
+    const step = (everyStep || ir.info.divergent.has(f.def)) && !f.piece ? [fuel ? "if (fuel === Infinity) R.step();" : "R.step();"] : [];
     const spend = (d: string) => [...(f.spends ? [`${d}if (--fuel < 0) throw R.OUT;`] : []), ...step.map((x) => d + x)];
     const params = f.params.map((_, j) => local(j));
     const body = loops ? ["  for (;;) {", ...spend("    "), ...block(f.body, "return", "    "), "  }"] : [...spend("  "), ...block(f.body, "return", "  ")];
@@ -1382,6 +1385,18 @@ const wrapped = (from: string, lines: string[]) => (from.startsWith("$") ? ["(()
 // none (moduleTags): its stops name their definition only, and its own
 // cases are numbers where no audio thread runs main again beside it. The
 // editor's preview keeps them, for Show where it stopped (C143g).
+// Every function and every round of a loop takes a step from a page's
+// budget while f prints (E319d): the editor's preview, whose page runs on
+// the editor's thread and must stop when its budget runs out. A page in a
+// tab, and every other target, steps only where a definition may not
+// finish (C179).
+let everyStep = false;
+export function stepEverywhere<T>(f: () => T): T {
+  const was = everyStep;
+  everyStep = true;
+  try { return f(); } finally { everyStep = was; }
+}
+
 export function corePageScript(ir: CoreIR, name: string, page: string, title: string, worklet?: string, hosts?: Hosts, bare = false): string {
   const fi = ir.funcs.findIndex((g) => g.name === name && !g.inner && !g.budgeted);
   if (fi < 0 || ir.funcs[fi].params.length) throw new Error(`${name}: not compiled, or not a page's main`);

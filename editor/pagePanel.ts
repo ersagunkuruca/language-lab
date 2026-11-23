@@ -30,8 +30,12 @@ const LOG_WINDOW = { seconds: 10, keep: 30 };
 // A scenario that is about the interpreted page itself (page-handover.test)
 // sets `tersDrawWithin` on the window for a longer wait: on a slow machine
 // dice takes longer than that to draw the first time.
-const DRAW_WITHIN = 500;
+const DRAW_WITHIN = 100;
 const drawWithin = () => (globalThis as { tersDrawWithin?: number }).tersDrawWithin ?? DRAW_WITHIN;
+// How long one update of the page may take on the editor's thread, in ms
+// (E319d, html.ts `within`), compiled or interpreted: past it, the part
+// stops as one out of steps does. Open in a tab has no such limit.
+const UPDATE_MS = 50;
 
 export interface PageHost {
   doc(): Doc;
@@ -244,7 +248,7 @@ export function pagePanels(host: PageHost) {
   // runs it (`run`, I255).
   function interpreted(info: T.Info, main: Id, stepFrom?: ReturnType<NonNullable<Preview["stepFrom"]>>, run?: RunCode, drawWithin?: number): Preview {
     return showPage({
-      drawWithin,
+      drawWithin, within: UPDATE_MS,
       // A frame as long as a first drawing may take stops it too, and the
       // compiled page, under way, is waited for (frameSlow).
       ...(drawWithin !== undefined ? { frameWithin: drawWithin, tooSlow: frameSlow } : {}),
@@ -563,7 +567,7 @@ export function pagePanels(host: PageHost) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
+      const o = { doc: page.maker, store: localStorage, within: UPDATE_MS, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
       const runtime = pageRuntime(corePageRuntimes(), made.program);
       // A page with sound: its audio thread's script after the worklet's
       // runtime (page.ts coreWorkletFile), its recordings under apps/ (E285).

@@ -71,7 +71,7 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
 // the order they were made (as handOver carries them) and the
 // generator's state, so the interpreted page can be built at a snapshot
 // and stepped from there (page.ts showPage `stepFrom`).
-export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean; worklet?: string; recordings?: string }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void } {
+export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean; worklet?: string; recordings?: string; within?: number }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void } {
   let stopped = false;
   const cells = new Cells(equal);
   // A page with sound (E285): `worklet` its audio thread's script, as
@@ -95,7 +95,7 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const heard = o.log && heardInto(o.log, window, cap);
   const run = () => fns[main]() as Value;
   const sound = o.worklet ? SOUND!.soundPlayer(cells, o.worklet, run, o.recordings, recorded!, latency) : null;
-  const root = mountHtml((sound ? sound.page : run()) as never, { cells, doc: o.doc, call: coreCall, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: heard && ((...a: Parameters<typeof heard>) => { if (!stopped) heard(...a); }) });
+  const root = mountHtml((sound ? sound.page : run()) as never, { cells, doc: o.doc, call: coreCall, within: o.within, ran: o.ran, listen: sound?.listen, stopped: o.stopped, heard: heard && ((...a: Parameters<typeof heard>) => { if (!stopped) heard(...a); }) });
   const kept = cells.kept;
   made = kept;
   cells.kept = null;
