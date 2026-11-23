@@ -333,10 +333,18 @@ export function pagePanels(host: PageHost) {
     // A compile here under way swaps in when it ends (compileHere).
     if (page.started && page.for === prog() && inFlight?.code !== prog()) compilePage(page.started.main, true);
   }
-  // It didn't compile: the page starts interpreted, handed what it can.
-  function notDeferred(): boolean {
+  // It didn't compile: the last version's compiled page goes on, as the
+  // interpreted page would run it many times slower (E320); the next edit
+  // that compiles takes over from it. One with no compiled page before it
+  // starts interpreted, handed what it can.
+  function notDeferred(why = ""): boolean {
     if (!page.deferred || !page.started) return false;
     page.deferred = false;
+    if (page.now && compiledNow.has(page.now)) {
+      page.status.textContent = "Last version · couldn't compile";
+      page.status.title = why ? `This edit couldn't be compiled: ${why}` : "This edit couldn't be compiled";
+      return true;
+    }
     const { info, main } = page.started;
     page.now?.stop();
     startPage(info, main, page.handFrom);
@@ -535,7 +543,7 @@ export function pagePanels(host: PageHost) {
       settle();
       if (page.for !== code) return;
       if ("program" in m) swapCompiled(code, m);
-      else if (notDeferred()) return;
+      else if (notDeferred(m.error)) return;
       else if (page.now) page.status.title = "", page.status.textContent = "Interpreted · couldn't compile", page.status.title = m.error;
       else interpretAnyway(`Interpreted, slowly: the page couldn't be compiled (${m.error}).`);
     };
@@ -584,7 +592,7 @@ export function pagePanels(host: PageHost) {
     } catch (e) {
       m?.stop();
       compiledPages.set(code, null);
-      if (notDeferred()) return;
+      if (notDeferred(e instanceof Error ? e.message : String(e))) return;
       if (!page.now) return interpretAnyway(`Interpreted, slowly: the compiled page stopped (${e instanceof Error ? e.message : String(e)}).`);
       sayStopped("Interpreted: the compiled page stopped", e);
       return;

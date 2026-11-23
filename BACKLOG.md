@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E320, E319c, E319g, E319e, E319f, E319h, E319i, E319j (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319c, E319g, E319e, E319f, E319h, E319i, E319j (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -62,7 +62,6 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E320 | After an edit whose compile fails, the page keeps running its last compiled version, saying the edit isn't running yet, instead of the interpreted page (flock ran interpreted at 0.5 fps, now about 3 fps after L281i/j, still about 10x compiled). The interpreted page stays for a program that never compiled. Also find why flock's edit failed to compile (a compiler row if it is the compiler's) | Ersagun 2026-11-23 (stop the interpreter round, fix the failed compile instead) | P1 | M | |
 | E316 | A node's comment in the graph readable at a glance, without overlapping anything (Ersagun 2026-11-22 on E306's speech mark: "Not ideal but an improvement. We can go back to this later"). The other two ways he was offered: the comment as the node's top line, which layout and Tidy count, cut with the rest on hover; or a note beside the node, joined by a line, with room Tidy keeps. His pick when it's taken up | Ersagun 11-22 | P3 | M | |
 
 ### Trying a program where it runs ([RUN-INPUTS-2026-11-17](docs/reports/RUN-INPUTS-2026-11-17.md))
