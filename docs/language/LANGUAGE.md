@@ -374,7 +374,9 @@ slopes along each item, worked out in one run forward and one pass back
 `docs/design/numbers/REVERSE-GRADIENT-2026-11-23.md`), so a loss of
 25,000 parameters costs about one run of it, not 25,000. Each read of the
 array on the way gives back a (position, slope), the pairs join as a
-`Slopes` tree, and `slopes at` adds them into an array of zeros at the end.
+`Slopes` tree, and `slopes into`, a definition written with the gradient,
+adds them into an array of zeros at the end, so every target runs it as
+it runs the program.
 It goes back through lets, arithmetic, `if` and `match`, `sum` and
 `array of` of a `map` over a list that doesn't move, definitions, and a
 definition calling itself. Over an array its result keeps the `Choice`.

@@ -38,10 +38,10 @@ import { computedForward } from "./directions.ts";
 import { discharge } from "./ledger.ts";
 import * as Alg from "./algebraic.ts";
 import { hostLocale, hostZone } from "./text.ts";
-import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT, SLOPES_V } from "./std-ids.ts";
+import { ASK_PERMISSION_OP, PERMISSIONS, ENV_OP, ENVIRONMENT } from "./std-ids.ts";
 import { FILE_INFO_V, FILE_KIND_V, INSTANT_V, COMPUTE_ONLY, FILE_OPS, KEPT_FILES, LOCALE_V, MY_LOCALE_OP, MY_LATENCY_OP, MY_ZONE_OP, RELEASE_V, SETTINGS, WORLD_OPS, EXTENDED_V, ALGEBRAIC_V, ARRAY_TAG, ABORT, ABORT_OP, CELL_OPS, COMPARE, CONS, FALSE, HTML, IO, LOG, LOG_OP, CHECK_OP, NIL, NONE, NOW_OP, ORDER_V, RANDOM, RANDOM_OP, S, SET, SHOW_ANY, ORDERED, CASE_NAME, SOME, stdNames, TIME, TRUE, UNIT_V, WAIT, WAIT_OP, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V } from "./std-ids.ts";
 import { tupleVariant } from "./std-values.ts";
-import { ArrayView, arrayOf } from "./array-view.ts";
+import { ArrayView } from "./array-view.ts";
 import { Table } from "./table.ts";
 import { floatText, shownImplementations, implementationsOf } from "./std-values.ts";
 import { STD_IMPL, STD_MANY } from "./std-impl.ts";
@@ -732,16 +732,6 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     // A record of Float64s, part by part. Float64 is a record of one part.
     [S.mapParts]: (f, r) => one(typeof r === "number" ? only(f as Fn, r) : { tag: (r as Data).tag, fields: (r as Data).fields.map((x) => only(f as Fn, x)) }),
     [S.zipParts]: (f, a, b) => one(typeof a === "number" ? only(f as Fn, a, b) : { tag: (a as Data).tag, fields: (a as Data).fields.map((x, i) => only(f as Fn, x, (b as Data).fields[i])) }),
-    // n zeros with each slope of the tree added in at its position (L285).
-    [S.slopesAt]: (n, bag) => {
-      const out = new Array<number>(Math.max(0, Number(n))).fill(0);
-      for (const todo = [bag as Data]; todo.length; ) {
-        const t = todo.pop()!;
-        if (t.tag === SLOPES_V.both) todo.push(t.fields[1] as Data, t.fields[0] as Data);
-        else if (t.tag === SLOPES_V.one) { const i = Number(t.fields[0]); if (i >= 0 && i < out.length) out[i] += t.fields[1] as number; }
-      }
-      return one(arrayOf(out) as unknown as Value);
-    },
     [S.unitParts]: (r) => one(typeof r === "number" ? toList([1]) : toList((r as Data).fields.map((_, i) => ({ tag: (r as Data).tag, fields: (r as Data).fields.map((__, j) => (i === j ? 1 : 0)) })))),
     [S.total]: (r) => one(typeof r === "number" ? r : ((r as Data).fields as number[]).reduce((x, y) => x + y)),
     [S.print]: (s) => (rt.print(s as string), one(unit)),

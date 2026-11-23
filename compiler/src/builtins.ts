@@ -84,7 +84,6 @@ export const TARGETS: Record<Id, Target> = {
   [S.zipParts]: { js: op(([f, a, b]) => `$zipParts(${f}, ${a}, ${b})`), scalar: written("parts(): one op per field") },
   [S.total]: { js: op(([r]) => `$total(${r})`), scalar: written("parts(): the fields added") },
   [S.unitParts]: { js: op(([r]) => `$unitParts(${r})`), scalar: DATA },
-  [S.slopesAt]: { js: written("core-rt.ts slopes.at, from the core IR's RT table"), scalar: DATA },
   [S.concat]: { js: op(([a, b]) => `(${a} + ${b})`), scalar: DATA },
   [S.show]: { js: op(([a]) => `$show(${a})`), scalar: DATA },
   [S.range]: { js: op(([a]) => `$range(${a})`), scalar: DATA },

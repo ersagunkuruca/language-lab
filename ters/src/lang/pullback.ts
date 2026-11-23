@@ -7,7 +7,7 @@
 //
 // `gradient(f)` of f : (Array Float64) -> Float64 becomes
 //
-//     (p) ↦ slopes at(array length(p), <p's slopes>)
+//     (p) ↦ slopes into(n zeros, <p's slopes>), n = array length(p)
 //
 // where <p's slopes> is what going back through f's body from its result
 // (seeded with 1) gives p. Going back through an expression is written in
@@ -19,7 +19,7 @@
 //
 // A slope of a Float64 is a Float64. A slope of an array is a bag, a
 // Slopes: a tree of (position, slope)s, one for each read of the array,
-// which `slopes at` adds into an array of zeros once at the end (JAX's
+// which `slopes into` adds into an array of zeros once at the end (JAX's
 // transpose of a gather, a scatter-add; Futhark's reduce-by-index for
 // reverse mode over arrays, Schenck et al. 2022). Two bags join in one
 // step, `both slopes`, so the way back stays linear.
@@ -54,7 +54,7 @@ const OPS: Record<Id, string> = {
   ...Object.fromEntries(Object.entries(TRIG_OPS).filter(([op]) => op in impl).map(([op, id]) => [id, op])),
   [DIVIDE]: "div",
 };
-const ARRAY_AT = "builtin.array.at", ARRAY_OF = "builtin.array.of", ARRAY_LENGTH = "builtin.array.length";
+const ARRAY_AT = "builtin.array.at", ARRAY_REPLACE_AT = "builtin.array.replaceAt", ARRAY_OF = "builtin.array.of", ARRAY_LENGTH = "builtin.array.length";
 const lib = (name: string): Id => {
   const d = LIBRARY.code.defs.find((x) => LIBRARY.names[x] === name);
   if (!d) throw new Error(`pullback.ts: no library definition named ${name}`);
@@ -517,7 +517,28 @@ export function pullbacker(code: Code, names: Names = {}, origin: (id: Id) => Id
   }
 
   // An array of n zeros with each (position, slope) of the bag added in.
-  const slopesAt = (n: () => Id, bag: () => Id): Id => call(S.slopesAt, n(), bag());
+  // Written as a definition of the program, made once, so every target
+  // runs it as it runs the program's own: each slope added in place into
+  // an array of n zeros, which has one holder.
+  let into: Id | null = null;
+  function slopesInto(): Id {
+    if (into) return into;
+    into = add({ kind: "def", body: null });
+    defs.push(into);
+    names[into] = "slopes into";
+    const acc = binder(), t = binder(), i = binder(), s = binder(), l = binder(), r = binder(), v = binder();
+    const arms = [
+      add({ kind: "arm", variant: SLOPES_V.none, binds: [], results: [], body: ref(acc) }),
+      add({ kind: "arm", variant: SLOPES_V.one, binds: [i, s], results: [null, null], body: letIn([v], [call(ARRAY_AT, ref(acc), ref(i))], call(ARRAY_REPLACE_AT, ref(acc), ref(i), call("builtin.add", ref(v), ref(s)))) }),
+      add({ kind: "arm", variant: SLOPES_V.both, binds: [l, r], results: [null, null], body: call(into, call(into, ref(acc), ref(l)), ref(r)) }),
+    ];
+    (nodes[into] as { body: Id | null }).body = add({ kind: "lambda", params: [acc, t], body: add({ kind: "match", scrutinee: ref(t), arms, otherwise: null }) });
+    return into;
+  }
+  const slopesAt = (n: () => Id, bag: () => Id): Id => {
+    const k = binder();
+    return call(slopesInto(), call(ARRAY_OF, call(lib("map"), call("builtin.int.range", n()), add({ kind: "lambda", params: [k], body: num(0) }))), bag());
+  };
 
   // gradient(f) of f : (Array Float64) -> Float64, as a lambda.
   function gradient(lamId: Id): Id {

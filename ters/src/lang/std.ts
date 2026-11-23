@@ -470,7 +470,6 @@ export const S = {
   unitParts: builtin("unitParts", "unit parts", (s) => { const r = s.fresh(false, true); return fn([r], list(r), s.freshRow()); }),
   // A gradient's slopes along an array (pullback.ts, L285): n zeros, with
   // each (position, slope) of the list added in. JAX's scatter-add.
-  slopesAt: builtin("slopesAt", "slopes at", () => fn([int, { t: "con", id: "std.slopes", args: [] }], arrayOf_(num), { effs: [], tail: null })),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.
@@ -1477,7 +1476,7 @@ export const FILE_INFO = typedef("std.file info", "File info", [], [
 export const FILE_INFO_V = "std.file info.file facts";
 // The slopes reverse-mode `gradient` gathers for an array (L285,
 // REVERSE-GRADIENT): a tree of (position, slope)s, so two join in one
-// step, added into an array by `slopes at`. Last, so the ids above don't
+// step, added into an array by `slopes into` (pullback.ts). Last, so the ids above don't
 // move.
 const slTref = (at: string, target: Id) => fixedTref(`std.slopes.t.${at}`, target);
 export const SLOPES = typedef("std.slopes", "Slopes", [], [
