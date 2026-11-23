@@ -22,7 +22,7 @@ import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
-import { std, ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX } from "../ters/src/lang/std.ts";
+import { std, ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, DIVIDE, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX } from "../ters/src/lang/std.ts";
 import { tuplePart, tupleVariant } from "../ters/src/lang/std-values.ts";
 import { INT, NUMBER, STRING, schemeArith, shownIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { parseUnit, type Unit } from "../ters/src/units.ts";
@@ -792,7 +792,12 @@ function leaveOpen(info: Info, t: Typed): Typed {
   // (The Int one takes its twin's place, so Float64's stays before
   // another type's: show(1.5) is Float64's show, not Algebraic's, I248.)
   const twinned = (op: Id) => !generic && /^builtin\.(?!int\.)/.test(op) && t.alts!.includes(op.replace(/^builtin\./, "builtin.int."));
-  const ranked = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op) })).sort((a, b) => a.lib - b.lib || a.x - b.x || a.n - b.n || a.k - b.k).map((x) => x.op);
+  // The one ÷ of every number type (Division's divide) after Float64's /,
+  // as a way to read / where Float64's doesn't fit (Rational, Fixed,
+  // Float32: I354): first, it would read an open a / b at a type of its
+  // own, and lose the units Float64's carries.
+  const later = (op: Id) => +(op === DIVIDE);
+  const ranked = t.alts.map((op, k) => ({ op, k, n: settles(op), x: exotic(op), lib: +fromLibrary(op), f: later(op) })).sort((a, b) => a.f - b.f || a.lib - b.lib || a.x - b.x || a.n - b.n || a.k - b.k).map((x) => x.op);
   const alts = ranked.flatMap((op) => twinned(op) ? [op.replace(/^builtin\./, "builtin.int."), op] : op.startsWith("builtin.int.") && t.alts!.includes(op.replace(/^builtin\.int\./, "builtin.")) && twinned(op.replace(/^builtin\.int\./, "builtin.")) ? [] : [op]);
   // When every meaning settles an open input, each at a type of its own
   // (length of a List or of a Text, I218 M10), which is meant is a guess:

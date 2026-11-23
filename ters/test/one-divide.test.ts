@@ -72,3 +72,14 @@ test("divide's type says Division; Int has none", () => {
   const int = check((k) => { const u = k.def("use"); k.define(u, k.fn(["n"], (n) => k.call(DIVIDE, k.call(INT_OPS.add, n, k.int(2)), k.int(3)))); });
   assert.deepEqual(int.info.errors.map((e) => e.message), ["Int has no divide: use quotient and remainder, or turn it into a Float64 (as float64) or a fraction (as fraction) first"]);
 });
+
+// I354: a / b typed reads Float64's / first, and the one ÷ where Float64's
+// doesn't fit (Float32 here; Rational and Fixed alike), with its Choice.
+test("/ typed at Float32 reads Division's divide, and at Float64 stays Float64's", async () => {
+  const { Session } = await import("../mcp/session.ts");
+  const { join } = await import("node:path");
+  const s = new Session(join(import.meta.dirname, "..", "examples", "fibonacci"));
+  assert.match(s.eval("first(as float32(1.5) / as float32(0.5), else as float32(0))"), /= 3 : Float32/);
+  assert.match(s.eval("(x) => x / 2.0"), /\(Float64\) -> Float64/);
+  assert.throws(() => s.eval("as float32(1.5) / as float32(0.5)"), /Choice/);
+});
