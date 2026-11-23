@@ -8,7 +8,9 @@ import { freshId, parentLookup, scanningOnLayer, mapIds, subtree, type Code, typ
 import type { Info } from "./infer.ts";
 import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 
-export type Pat = { v: Id } | { con: Id; args: Pat[] } | { any: true };
+// `lit`: a value a match on values (L164c) takes, `text` how it reads:
+// a field matched on by value inside a case, cons("-", rest).
+export type Pat = { v: Id } | { con: Id; args: Pat[] } | { lit: Id; text: string } | { any: true };
 // `at` is the node a row stands for: its leaf case, or the inner match
 // whose otherwise it is.
 export interface Row { pat: Pat; binds: Id[]; body: Id; at: Id }
@@ -27,6 +29,11 @@ function plainMatch(code: Code, info: Info | null, m: NodeOf<"match">): boolean 
 
 const put = (p: Pat, b: Id, q: Pat): Pat => ("v" in p ? (p.v === b ? q : p) : "con" in p ? { con: p.con, args: p.args.map((a) => put(a, b, q)) } : p);
 
+function litPat(code: Code, id: Id): Pat {
+  const n = code.nodes[id] as NodeOf<"lit">;
+  return { lit: id, text: typeof n.value === "string" && n.of === undefined ? JSON.stringify(n.value) : String(n.value) };
+}
+
 // The rows of a match's cases (its own otherwise not included).
 export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Row[] {
   const deeper = (binds: Id[], body: Id): NodeOf<"match"> | undefined => {
@@ -44,7 +51,7 @@ export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Ro
     return [
       ...inner.arms.flatMap((a) => {
         const arm = code.nodes[a] as NodeOf<"arm">;
-        return rows(put(pat, b, { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) }), [...rest, ...arm.binds], arm.body, a);
+        return rows(put(pat, b, arm.value ? litPat(code, arm.value) : { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) }), [...rest, ...arm.binds], arm.body, a);
       }),
       ...(inner.otherwise ? rows(put(pat, b, { any: true }), rest, inner.otherwise, inner.id) : []),
     ];
@@ -89,11 +96,13 @@ export function sharedOtherwise(code: Code, all: Row[], otherwise?: Id): { rows:
 // A list of two or more, or one that ends, reads as a list: [a, b],
 // [a, b, ..rest]. Made of whatever the view draws names, cases and
 // punctuation as: text here, selectable pieces in the blocks (render.ts).
-export function patternWith<T>(p: Pat, name: (id: Id) => T, con: (id: Id) => T, punct: (s: string) => T): T[] {
+// A value, "-", is `lit`'s, or else its text.
+export function patternWith<T>(p: Pat, name: (id: Id) => T, con: (id: Id) => T, punct: (s: string) => T, lit?: (id: Id) => T[]): T[] {
   const commas = (ks: T[][]) => ks.flatMap((k, i) => (i ? [punct(", "), ...k] : k));
   const parts = (q: Pat): T[] => {
     if ("v" in q) return [name(q.v)];
     if ("any" in q) return [punct("_")];
+    if ("lit" in q) return lit ? lit(q.lit) : [punct(q.text)];
     const items: Pat[] = [];
     let end: Pat = q;
     while ("con" in end && end.con === CONS) { items.push(end.args[0]); end = end.args[1]; }

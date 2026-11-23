@@ -86,7 +86,7 @@ Uses of a name show the name alone: it is bound once, with its id, in sight.
 | `eval(text)` | the value of an expression, with its type |
 | `replace(at, text, find?, case?)` | a part becomes an expression written as `view` prints it, or as the keyboard writes it (GUIDE.md, "Text you can type": `=` for equality, `*` for `·`, `‹two words›` for a name with spaces, steps on lines); `□` makes a hole; `case` picks one case of a match |
 | `step(at, name, value)` | a step `name = value` just before the step a part is in: at a hole after `a = …`, after `a`, so steps are added top-down, each naming the ones before; at a definition, first in its body |
-| `split(at, on, find?)` | a part becomes a match on a variable, one case per variant |
+| `split(at, on, find?, as?, values?)` | a part becomes a match on a variable, one case per variant, or with `values` (`"+"`, `3`) one case per value and otherwise |
 | `rename(at, name)`, `comment(at, text)` | side tables only; uses follow the id |
 | `define(name, kind, params?)`, `add_input(at, name)`, `remove(at)` | definitions |
 | `pin(at, off?)` | a definition's type held as it is now (signatures.ts), so edits inside keep it and a body can rely on its inputs' types; a folder keeps pins in signatures.json, which `ters` reads too (L173c) |

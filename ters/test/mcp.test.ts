@@ -708,3 +708,25 @@ test("a match on values is written as text, split by values, and its cases repla
   assert.match(text("eval", { text: "(kind(0), kind(1), kind(7))" }), /^= \("none", "one", "some"\)/);
   assert.match(call("replace", { at: m, case: "5", text: '"x"' }).text, /no case 5: 0, 1/);
 });
+
+// Patterns inside patterns (L290b): a value or case on a field reads as
+// the nested matches it stands for, and the view prints them back as
+// rows of patterns, the value in its place.
+test("a value or a case inside a pattern is written as nested matches and read back as rows", async () => {
+  const { cpSync, mkdtempSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-mcp-")), "pond");
+  cpSync("../compiler/gaps/pond", dir, { recursive: true });
+  text("open", { path: dir });
+  text("define", { name: "sign", kind: "function", params: ["cs"] });
+  const sign = text("replace", { at: "sign", find: "□", text: 'match cs\n  nil → 0\n  cons("-", rest) → 1\n  otherwise → 2' });
+  assert.match(sign, /cons\("-", rest#\w+\) → 1/);
+  assert.match(sign, /cons\(_, rest#\w+\) → 2/);
+  text("define", { name: "arrow", kind: "function", params: ["cs"] });
+  text("replace", { at: "arrow", find: "□", text: 'match cs\n  ["-", ">", ..rest] → 1\n  ["-", ..rest] → 2\n  otherwise → 3' });
+  text("define", { name: "deep", kind: "function", params: ["cs"] });
+  text("replace", { at: "deep", find: "□", text: 'match cs\n  cons(0, cons(y, _)) → y\n  [x] → x · 10\n  otherwise → -1' });
+  assert.equal(text("eval", { text: '(sign(["-"]), sign(["x"]), sign([]), arrow(["-", ">"]), arrow(["-", "x"]), arrow([]))' }), "= (1, 2, 0, 1, 2, 3) : (a, b, c, d, e, f) where a, b, c, d, e, f are Numbers");
+  assert.match(text("eval", { text: "(deep([0, 7]), deep([4]), deep([0]), deep([4, 5]))" }), /^= \(7, 40, 0, -1\)/);
+});
