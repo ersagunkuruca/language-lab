@@ -21,7 +21,7 @@
 // entry, `pkey` an entry's key where it isn't the table's (an empty map
 // nothing is put in), in RtFn.types.
 
-import { isData, isRecord, keyList, mapKids, type CoreIR, type DType, type LType, type RType, type SExpr, type TType } from "./scalar.ts";
+import { isData, isFloat32, isRecord, keyList, mapKids, type CoreIR, type DType, type LType, type RType, type SExpr, type TType } from "./scalar.ts";
 import type { RtFn, VT } from "./wasm-rt.ts";
 
 export const TABLE_RT = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?(?:\.a(\d+))?$/;
@@ -55,6 +55,8 @@ function leaves(t: LType, types: Record<string, LType>, datas: DType[], steps: s
   const r = t as RType;
   let name = Object.keys(types).find((n) => types[n] === r);
   if (!name) { name = `k${Object.keys(types).length}`; types[name] = r; }
+  // A Float32's value is held as an f32 (wasm.ts, C309).
+  if (isFloat32(r)) return [["f64", [...steps, `struct.get $${name} 0`, "f64.promote_f32"]]];
   return r.fields.flatMap((f, j) => leaves(f.t, types, datas, [...steps, `struct.get $${name} ${j}`]));
 }
 // The data types a key reaches, in the order its parts are met.
