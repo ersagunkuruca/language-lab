@@ -461,8 +461,6 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
     const blockers: string[][] = cols.map(() => []);
     for (const u of units) for (let k = 1; k < spanOf(u); k++) blockers[rank.get(u)! + k]?.push(u);
     const y = new Map<string, number>();
-    // Where each unit plugs in, kept for the columns a frame spans.
-    const plugs = new Map<string, [number, number]>();
     cols.forEach((col, r) => {
       const want = (u: string) => {
         const es = outs.get(u)!.filter((e) => y.has(e.to));
@@ -483,33 +481,50 @@ export function arrange(nodes: TNode[], frames: TFrame[], wires: TWire[], chains
       const ps = new Map(col.map((u) => [u, plug(u)]));
       const byPlug = (a: string, b: string) => ps.get(a)![0] - ps.get(b)![0] || ps.get(a)![1] - ps.get(b)![1] || ws.get(a)! - ws.get(b)! || order.get(a)! - order.get(b)!;
       const sorted = keepOrder(r ? [...col].sort(byPlug) : [...col]);
-      for (const u of col) plugs.set(u, ps.get(u)!);
       let bottom = -Infinity;
       const inWay = blockers[r].filter((b) => y.has(b)).sort((a, b) => y.get(a)! - y.get(b)!);
-      const walls = inWay.map((b) => [y.get(b)!, y.get(b)! + size.get(b)!.h]);
+      // Down by d: frame b and what's under it in the columns it spans
+      // that are placed, so what goes before it in this column fits above.
+      const pushDown = (b: string, d: number) => {
+        const top = y.get(b)!, from = rank.get(b)!;
+        for (const u of units) {
+          const k = rank.get(u)!;
+          if (y.has(u) && k < r && k + spanOf(u) - 1 >= from && y.get(u)! >= top) y.set(u, y.get(u)! + d);
+        }
+      };
+      let walls: number[][] = [];
       const clear = (t: number, h: number) => { for (const [a, b] of walls) if (t < b + gap && t + h + gap > a) t = b + gap; return t; };
       const stack = (us: string[]) => { for (const u of us) { const t = clear(r ? Math.max(ws.get(u)!, bottom + gap) : (bottom === -Infinity ? 0 : bottom + gap), size.get(u)!.h); y.set(u, t); bottom = t + size.get(u)!.h; } };
       // A frame spanning this column keeps its place in the column's order
       // (Ersagun 2026-11-22: "keep the order of nodes taking multi column
-      // frames into account"): what plugs in above where the frame plugs
-      // in goes above it, the rest below.
-      const before = (b: string) => (u: string) => { const p = ps.get(u)!, q = plugs.get(b)!; return p[0] < q[0] || (p[0] === q[0] && (p[1] < q[1] || (p[1] === q[1] && ws.get(u)! < y.get(b)!))); };
+      // frames into account"): what plugs in above the frame's middle goes
+      // above it, the rest below. Where the frame is, not where it plugs
+      // in: a frame stacked under a tall column (a call of 30 inputs) plugs
+      // in high but stands low, and what plugged in under its plug went
+      // below it, far from what it feeds (Ersagun 2026-11-23: looper's main).
+      const before = (b: string) => (u: string) => { const p = ps.get(u)!; return p[0] + p[1] < y.get(b)! + size.get(b)!.h / 2; };
       let rest = sorted;
       for (const b of inWay) {
-        const k = rest.findIndex((u) => !before(b)(u));
-        const above = k < 0 ? rest : rest.slice(0, k);
+        const above = rest.filter(before(b));
         if (above.length) {
-          // Stacked as they want, then lifted to clear the frame's top,
-          // where there's room for them between it and what's above.
-          let t = bottom, tops: number[] = [];
-          for (const u of above) { const top = Math.max(ws.get(u)!, t + gap); tops.push(top); t = top + size.get(u)!.h; }
-          const lift = Math.max(0, t + gap - y.get(b)!);
-          if (tops[0] - lift < bottom + gap) break;
-          above.forEach((u, i) => y.set(u, tops[i] - lift));
-          rest = rest.slice(above.length);
+          // As near as each wants, in order (least squares, as the columns
+          // are centred below), then those nearest the frame go up as far
+          // as needed to clear its top; when the first would reach what's
+          // above, the frame goes down instead. Never past the frame: one
+          // that didn't fit put all the rest below it, far from what they
+          // feed (Ersagun 2026-11-23: looper's main).
+          let t = bottom;
+          const want = nearestInOrder(above.map((u) => ({ want: ws.get(u)!, h: size.get(u)!.h })), gap)
+            .map((top, i) => { top = Math.max(top, t + gap); t = top + size.get(above[i])!.h; return top; });
+          const fit = () => { let limit = y.get(b)! - gap; const tops: number[] = []; for (let i = above.length - 1; i >= 0; i--) { tops[i] = Math.min(want[i], limit - size.get(above[i])!.h); limit = tops[i] - gap; } return tops; };
+          let tops = fit();
+          if (tops[0] < bottom + gap) { pushDown(b, bottom + gap - tops[0]); tops = fit(); }
+          above.forEach((u, i) => y.set(u, tops[i]));
+          rest = rest.filter((u) => !above.includes(u));
         }
         bottom = Math.max(bottom, y.get(b)! + size.get(b)!.h);
       }
+      walls = inWay.map((b) => [y.get(b)!, y.get(b)! + size.get(b)!.h]).sort((a, b) => a[0] - b[0]);
       stack(rest);
       // Pushed down to make room: move the column back up, half way.
       if (r && !walls.length) { const d = sorted.reduce((s, u) => s + y.get(u)! - ws.get(u)!, 0) / sorted.length; for (const u of sorted) y.set(u, y.get(u)! - d / 2); }
