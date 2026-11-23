@@ -216,7 +216,7 @@ static void fire(int handler, const char *value, const char *key, double x, doub
 static void place(void);
 
 static void *put(Node *n) {
-  if (NV == CV) { CV = CV ? 2 * CV : 256; V = realloc(V, sizeof *V * CV); }
+  if (NV >= CV) { CV = CV ? 2 * CV : 256; V = realloc(V, sizeof *V * CV); }
   n->num = NV;
   n->shown = 1;
   V[NV] = n;
