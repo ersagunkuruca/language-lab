@@ -1,5 +1,5 @@
-// Every example as `ters native` builds it, run beside `ters run` (C294,
-// DESKTOP-APPS.md): for the hand-run "macOS native" workflow, and runnable
+// Every example as `ters native` builds it, run beside `ters run` (C294, C296,
+// DESKTOP-APPS.md): for the hand-run "macOS native" and "Windows native" workflows, and runnable
 // anywhere with a C compiler (`node .github/macos/native-sweep.ts [names…]`).
 // Each prints what the evaluator prints and exits the same, or the sweep
 // fails. A page prints nothing natively by design, so its build alone is
@@ -27,7 +27,7 @@ const given = process.argv.slice(2);
 const names = given.length ? given : readdirSync(examples, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
 const bad: string[] = [];
 for (const name of names) {
-  const ex = join(examples, name), xs = args[name] ?? [], bin = join(dir, name);
+  const ex = join(examples, name), xs = args[name] ?? [], bin = join(dir, process.platform === "win32" ? `${name}.exe` : name);
   const ran = run(process.execPath, [lab, "run", ex, ...xs], 120);
   const made = run(process.execPath, [lab, "native", ex, "-o", bin], 300);
   let how: string;

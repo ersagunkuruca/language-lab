@@ -823,7 +823,11 @@ switch (command) {
     let c: string;
     try { c = emitC(lowered, { main: root, hosts }).c; } catch (e) { fail((e as Error).message); }
     writeFileSync(`${out}.c`, c);
-    const cc = process.env.CC ?? "cc", flags = [...CFLAGS, "-pthread", "-o", out, `${out}.c`, "-lm"];
+    // On Windows (C296) MinGW-w64's gcc or llvm-mingw's: one .exe with
+    // nothing beside it (-static), threads that reserve a large stack as
+    // they do elsewhere (c.ts PTHREAD_STACK).
+    const win = process.platform === "win32";
+    const cc = process.env.CC ?? (win ? "gcc" : "cc"), flags = [...CFLAGS, "-pthread", ...(win ? ["-static", "-Wl,--stack,0x40000000"] : []), "-o", out, `${out}.c`, "-lm"];
     try { execFileSync(cc, flags, { stdio: "inherit" }); } catch {
       fail(`wrote ${out}.c, but ${cc} didn't build it; build it with: cc ${flags.join(" ")}`);
     }
