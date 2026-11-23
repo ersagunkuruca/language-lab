@@ -46,7 +46,7 @@ const ON_THE_THREAD: Record<string, [number, string]> = {
   "coreMain.ts planSolve": [1, "one call's plan"],
   "seeds.ts trace": [1, "main's seed values: withSteps"],
   "seeds.ts withSteps": [2, "the seeds' step budget"],
-  "seeds.ts resolvedFor": [2, "the library's arithmetic resolved: grows with what the program reaches (E319f)"],
+  "seeds.ts resolvedFor": [2, "the program's own arithmetic resolved over the library's kept resolving, once a version: 80 to 160 ms for the largest examples (E319f, measured)"],
   "seeds.ts evaluatorCall": [1, "a seed value's function called once, inside the seeds' withSteps"],
   "htmlPart.ts mountHtml": [1, "an HTML value drawn: mountHtml's update budget, no live handlers"],
   "selectedParts.ts infer": [1, "units of the open definition: grows with it (E319h)"],
