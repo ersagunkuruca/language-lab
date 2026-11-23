@@ -70,7 +70,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E321 | A page's files in the editor (L284): Run's files given to a running page as its stored files, folders by their paths' parts ("notes/a.txt"), so a page such as `folders` (C299) runs on a sample folder; and a page asking for "files" answered there with that folder, not the browser's picker | Ersagun 2026-11-23 (DESKTOP-APPS.md) | P2 | S | |
 
 ### Speed of editing
 
