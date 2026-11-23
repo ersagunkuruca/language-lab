@@ -2228,7 +2228,7 @@ const runHead = (): HTMLElement => h("h2", {}, "Run");
 
 const { page, pageSection, pictureSection, savePage, saveLog, forgetCompiled } = pagePanels({
   doc: () => doc, prog: () => prog(), pres: () => pres(), ownDefs: () => ownDefs(), typesOf, render, ui,
-  errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
+  errorsIn, holesIn, noteOf, noteView, titleOf, slug, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, files: () => exampleFiles(),
 });
 
 // An action's values come from running it, so they're asked for.
@@ -2367,7 +2367,7 @@ function boundedTrace(info: T.Info, args: Value[]): Trace {
 }
 
 // Run main (editor/runPanel.ts, E228i).
-const { startRun, stopRun, endRun, warmRun, runGiven, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
+const { startRun, stopRun, endRun, warmRun, runGiven, exampleFiles, permissionsAsked, permissionsPanel, runTyped, readsInput, stdinBox, argsBox, filesBox, resetFile } = runPanel({
   doc: () => doc, ui, prog: () => prog(), pres: () => pres(), typesOf: () => typesOf(), titleOf, render: () => render(),
   defNamed, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS,
 });

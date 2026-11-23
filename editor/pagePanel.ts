@@ -14,6 +14,7 @@ import type { CompileAsk, CompileSays } from "./runWorker.ts";
 import { sendCode } from "./runCode.ts";
 import { pictureEntries } from "./pictureDraw.ts";
 import { pictureInWorker, type Making } from "./pictureAsk.ts";
+import { pageStore, storedFolder } from "./pageFiles.ts";
 import { drawDrawable, drawableOf, type Built, type Picture } from "./pictureDraw.ts";
 import type { Cells } from "../ters/src/lang/cells.ts";
 import { prebuilt, prebuiltHas, prebuiltIndex, prebuiltKey } from "./prebuilt.ts";
@@ -54,6 +55,8 @@ export interface PageHost {
   slug(s: string): string;
   // The signatures the page is compiled with: those held, or the program's.
   pins(): Pins;
+  // The example's own files, as Run gives them (runPanel.ts exampleFiles).
+  files(): Record<string, string>;
 }
 
 export function pagePanels(host: PageHost) {
@@ -143,6 +146,12 @@ export function pagePanels(host: PageHost) {
       h("button", { class: "btn", type: "button", "data-act": "page-tab", title: "The page compiled to JavaScript, in a tab of its own" }, "Open in a tab"),
       h("button", { class: "btn", type: "button", "data-act": "page-save", title: "The page compiled to JavaScript as one HTML file that runs anywhere, like ters build-web" }, "Save page"),
       h("button", { class: "btn", type: "button", "data-act": "page-log", title: "This run's log as a JSON file: every event the page's handlers were given and every answer of the world, in order" }, "Save run log")));
+  // The page's files: Run's (pageFiles.ts, E321), and when it asks for
+  // "files", those as its folder.
+  const pageFiles = () => {
+    const title = titleOf(doc()), store = pageStore(localStorage, title, host.files());
+    return { store, pick: () => Promise.resolve(storedFolder(store, title)) };
+  };
   // The program version a page will run for once the edit has drawn.
   let pageSoon: Code | null = null;
   function pageSection(info: T.Info | null): HTMLElement | null {
@@ -258,7 +267,7 @@ export function pagePanels(host: PageHost) {
       ...(drawWithin !== undefined ? { frameWithin: drawWithin, tooSlow: frameSlow } : {}),
       log: page.log, window: LOG_WINDOW, stepFrom,
       code: run?.code ?? prog(), info: run?.info ?? info, names: run?.names ?? pres().names, main, program: titleOf(doc()),
-      doc: page.maker as unknown as PageDoc, store: localStorage, worklet: coreWorkletRuntimes(), recordings: "apps/",
+      doc: page.maker as unknown as PageDoc, ...pageFiles(), worklet: coreWorkletRuntimes(), recordings: "apps/",
       frame: (f) => requestAnimationFrame(f), ran: flashRan, keepCells: true, stopped: (e) => sayStopped("A handler stopped", e),
       handFrom: stepFrom ? undefined : page.handFrom ?? undefined,
     });
@@ -579,7 +588,7 @@ export function pagePanels(host: PageHost) {
     type Core = { mountCorePage(...a: unknown[]): Mounted };
     let m;
     try {
-      const o = { doc: page.maker, store: localStorage, within: UPDATE_MS, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
+      const o = { doc: page.maker, ...pageFiles(), within: UPDATE_MS, frame: (f: () => void) => requestAnimationFrame(f), ran: flashRan, stopped: (e: unknown) => sayStopped("A handler of the compiled page stopped", e), log: page.log, window: LOG_WINDOW, handFrom: (page.deferred ? page.handFrom : page.now?.kept ?? page.handFrom) ?? undefined, handWhole: page.deferred || !page.now?.kept };
       const runtime = pageRuntime(corePageRuntimes(), made.program);
       // A page with sound: its audio thread's script after the worklet's
       // runtime (page.ts coreWorkletFile), its recordings under apps/ (E285).

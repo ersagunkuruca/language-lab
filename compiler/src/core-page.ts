@@ -5,7 +5,7 @@
 
 import { equal, type Value } from "../../ters/src/lang/run.ts";
 import { Cells, handOver, nodeOf } from "../../ters/src/lang/cells.ts";
-import { browserWorld, pageStorage, type Store } from "../../ters/src/lang/browser.ts";
+import { browserWorld, pageStorage, type PickedFolder, type Store } from "../../ters/src/lang/browser.ts";
 import { mountHtml, type Doc, type Node_ } from "../../ters/src/lang/html.ts";
 import type { recordingWorld, soundPlayer } from "../../ters/src/lang/audio-page.ts";
 import { branchWorkerOfPage, coreCall, coreRuntime, type HostOps, type TableSpec } from "./core-rt.ts";
@@ -71,7 +71,7 @@ export function startCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
 // the order they were made (as handOver carries them) and the
 // generator's state, so the interpreted page can be built at a snapshot
 // and stepped from there (page.ts showPage `stepFrom`).
-export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean; worklet?: string; recordings?: string; within?: number }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void } {
+export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: ReturnType<typeof coreRuntime>) => Defs, main: string, program: string, code: Code | undefined, o: { doc: Doc; store: Store; frame: (f: () => void) => void; ran?: (el: Node_) => void; stopped?: (e: unknown) => void; log?: LogEntry[]; window?: { seconds: number; keep: number; clock?: () => number }; handFrom?: NonNullable<Cells["kept"]>; handWhole?: boolean; worklet?: string; recordings?: string; within?: number; pick?: () => Promise<PickedFolder | null> }): { root: Node_; cells: Cells; kept: NonNullable<Cells["kept"]>; window?: LogWindow<PlacedSnapshot>; handed: number; stop(): void; hush?: () => void } {
   let stopped = false;
   const cells = new Cells(equal);
   // A page with sound (E285): `worklet` its audio thread's script, as
@@ -79,7 +79,7 @@ export function mountCorePage(tables: TableSpec[], worlds: string[], defs: (R: R
   const latency = o.worklet ? cells.own(0, "sound latency") : undefined;
   // The run's log (C172e), as page.ts showPage keeps it: as a window, or
   // capped (I239d).
-  const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, ...(latency ? { latency } : {}) });
+  const browser = browserWorld(o.store, program, console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, ...(latency ? { latency } : {}), ...(o.pick ? { pick: o.pick } : {}) });
   const cap = o.window ? undefined : budget();
   const logging = o.log ? logged(browser, o.log, { seeded: true, budget: cap, quiet: () => stopped, inView: () => cells.inView() }) : null;
   if (o.worklet && !SOUND) throw new Error("this page has a sound but was made without what plays it");
