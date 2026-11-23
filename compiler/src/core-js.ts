@@ -55,6 +55,7 @@ import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
+import type { Type } from "../../ters/src/lang/types.ts";
 import { runtime } from "./wasm-rt.ts";
 import { siteOf, STOPS } from "./stops.ts";
 import { BRANCH_NAMES, BRANCH_WORLDS, branches } from "./core-branches.ts";
@@ -1280,7 +1281,17 @@ export function solverCode(ir: CoreIR, js: string): Code {
   // implementations (show and compare of a value find them by its type).
   const owner = ownerOfTypeParts(ir.code);
   const add = (id: string | undefined) => { if (id && nodes[id] !== undefined && !seen.has(id)) { seen.add(id); todo.push(id); } };
-  for (const d of ir.info.implementations?.values() ?? []) add(d);
+  // An implementation only once its type is reached: the types it is at
+  // whose definitions are nodes (a builtin's Float64 or Text is none) are
+  // all seen. spacetime's solve shows a Float64, so Float32's show and its
+  // digits (1,000 nodes) stay behind.
+  const impls = [...(ir.info.implementations ?? [])].map(([key, d]) => {
+    const at = key.slice(key.indexOf("|") + 1), cons: string[] = [];
+    if (at.startsWith("@")) cons.push(at.slice(1));
+    else { const walkT = (t: Type): void => { if (t.t === "con") { cons.push(t.id); t.args.forEach(walkT); } else if (t.t === "fn") { t.params.forEach(walkT); walkT(t.ret); } }; walkT(JSON.parse(at) as Type); }
+    return { d, cons: cons.filter((c) => nodes[c] !== undefined) };
+  });
+  const reachedImpls = () => { for (const x of impls) if (!seen.has(x.d) && x.cons.every((c) => seen.has(c))) add(x.d); };
   // A derivative's rules name the builtins they differentiate by id
   // (builtin.pow), not through a node, so it gets them all.
   // And the library's it writes into a derivative (pairs of a value and
@@ -1295,6 +1306,7 @@ export function solverCode(ir: CoreIR, js: string): Code {
     while (todo.length) walk(nodes[todo.pop()!]);
     for (const id of [...seen]) add(owner.get(id));
     for (const d of ir.code.defs) if (seen.has((nodes[d] as { body?: string } | undefined)?.body ?? "")) add(d);
+    reachedImpls();
   }
   return { nodes: Object.fromEntries([...seen].map((k) => [k, nodes[k]])) as Code["nodes"], defs: ir.code.defs.filter((d) => seen.has(d)) };
 }

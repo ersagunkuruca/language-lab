@@ -113,8 +113,13 @@ test("calculus's derivatives are carried by its functions: no node table (I245)"
 test("a solve is given only the lambdas of closures of a type it takes (C167e)", () => {
   const p = load("spacetime"), main = p.named("main");
   const ir = lowerCore(p.code, p.info, p.pres.names, [main]);
+  // Its solve is written out now (I238), so nothing reaches the solver;
+  // and an implementation goes with it only once its type is reached, so
+  // no Shown of a type spacetime never makes (Float32's digits, 1,000
+  // nodes) is shipped for show to find.
+  assert.equal(usesSolver(ir), false);
   const n = Object.keys(solverCode(ir, emitCoreJs(ir).js).nodes).length;
-  assert.ok(n > 0 && n < 500, `${n} nodes`);
+  assert.ok(n < 500, `${n} nodes`);
 });
 
 // A builtin that is one JavaScript operator is printed as it, not called
