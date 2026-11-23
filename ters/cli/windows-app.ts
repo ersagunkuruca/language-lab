@@ -1261,6 +1261,19 @@ static LONG WINAPI crashed(EXCEPTION_POINTERS *e) {
 
 int main(void) {
   SetUnhandledExceptionFilter(crashed);
+  // The check's taps, and where its output goes (a window app has no
+  // console of its own), named from where it starts.
+  int argc;
+  WCHAR **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  for (int i = 1; i + 1 < argc; i++) {
+    char *a = narrow(argv[i + 1], (int)wcslen(argv[i + 1]));
+    if (!wcscmp(argv[i], L"--ters-out")) { if (!_wfreopen(argv[i + 1], L"w", stdout)) fprintf(stderr, "can't write %s\n", a); }
+    else if (!wcscmp(argv[i], L"--ters-taps")) {
+      for (char *t = strtok(a, "|"); t; t = strtok(NULL, "|")) if (*t) { TAPS = realloc(TAPS, sizeof *TAPS * (NTAPS + 1)); TAPS[NTAPS++] = strdup(t); }
+      STEP = -1;
+    }
+    free(a);
+  }
   // What the page keeps (the world's files, a page's saved values) goes in
   // the app's own folder in %APPDATA%, not beside the app.
   WCHAR dir[MAX_PATH + 64];
@@ -1279,19 +1292,6 @@ int main(void) {
     snprintf(e, sizeof e, "LANG=%s", l);
     _putenv(e);
     free(l);
-  }
-  // The check's taps, and where its output goes (a window app has no
-  // console of its own).
-  int argc;
-  WCHAR **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-  for (int i = 1; i + 1 < argc; i++) {
-    char *a = narrow(argv[i + 1], (int)wcslen(argv[i + 1]));
-    if (!wcscmp(argv[i], L"--ters-out")) { if (!_wfreopen(argv[i + 1], L"w", stdout)) fprintf(stderr, "can't write %s\n", a); }
-    else if (!wcscmp(argv[i], L"--ters-taps")) {
-      for (char *t = strtok(a, "|"); t; t = strtok(NULL, "|")) if (*t) { TAPS = realloc(TAPS, sizeof *TAPS * (NTAPS + 1)); TAPS[NTAPS++] = strdup(t); }
-      STEP = -1;
-    }
-    free(a);
   }
   // Sharp on each display, at its own scale.
   HMODULE u = GetModuleHandleW(L"user32.dll");
