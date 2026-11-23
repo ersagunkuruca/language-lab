@@ -114,7 +114,7 @@ test("backwards' solves have their mode plans: equations or relational, with the
   assert.match(of("missing addend"), /solve of add for input 2 from input 1, answer: equations; exactly one answer; target JavaScript$/);
   assert.match(of("who was greeted"), /solve of greet for name from answer: relational, goals "hello, ", join text\(…\); at most one answer, ends; target JavaScript$/);
   assert.deepEqual(choices("backwards").filter((l) => / mode plan: /.test(l)), lines);
-  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation or a placement can be held yet/);
+  assert.throws(() => heldOf([`held ${of("missing addend")}`]), /only a type's representation, a placement or a way of neighbours can be held yet/);
 });
 
 // Placements (L280a): where each map a page's handler sends away may run,
@@ -251,7 +251,7 @@ test("collatz's keep held on the main thread runs there, said by a check, the sa
     const text = readFileSync(`${at}.choices`, "utf8").split("\n").map((l) => / place: main's keep: /.test(l) ? `held ${l.replace(/: (worker )?threads when slow;/, ": main thread;")}` : l).join("\n");
     writeFileSync(`${at}.choices`, text);
     const js = text.match(/held (\S+) place: main's keep: main thread; among main thread, worker threads; in 32 runs; target JavaScript/)![1];
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [js], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; in 8 runs a thread; target C/)![1]], workers: [], threads: [], page: [], runs: [[js, 32]], cRuns: [[text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; in 8 runs a thread; target C/)![1], 8]], pool: [] });
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [js], c: [text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; in 8 runs a thread; target C/)![1]], workers: [], threads: [], page: [], runs: [[js, 32]], cRuns: [[text.match(/held (\S+) place: main's keep: main thread; among main thread, threads; in 8 runs a thread; target C/)![1], 8]], pool: [], near: [] });
     assert.equal(run("run", at), plain);
     const said = run("check", at).split("\n").filter((l) => l.startsWith("held ") || l.startsWith("stale") || l.startsWith("new "));
     assert.deepEqual(said.map((l) => l.replace(/^held   \S+ /, "")).sort(), ["(C): main thread, where the compiler would run it on threads when slow", "(JavaScript): main thread, where the compiler would run it on worker threads when slow"]);
@@ -273,7 +273,7 @@ test("collatz's keep held on worker threads and C's threads is shared from the s
     writeFileSync(`${at}.choices`, text);
     const id = text.match(/held (\S+) place: main's keep: worker threads; among main thread, worker threads; in 32 runs; target JavaScript/)![1];
     assert.match(text, new RegExp(`held ${id} place: main's keep: threads; among main thread, threads; in 8 runs a thread; target C`));
-    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id], page: [], runs: [[id, 32]], cRuns: [[id, 8]], pool: [] });
+    assert.deepEqual(heldPlaces(readChoices(text)), { js: [], c: [], workers: [id], threads: [id], page: [], runs: [[id, 32]], cRuns: [[id, 8]], pool: [], near: [] });
     assert.equal(run("run", at), plain);
     run("compile", at);
     assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, Infinity, 0, true, 32\);/);
@@ -419,4 +419,23 @@ test("flock-page's kept choices are what ters check picks now", () => {
   const r = spawnSync(process.execPath, [fileURLToPath(new URL("../cli/ters.ts", import.meta.url)), "check", join(root, "flock-page")], { encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(r.stdout.split("\n").filter((l) => /^(stale|new) /.test(l)), []);
+});
+
+// L280g: each call of neighbours main reaches is a way entry, found on a
+// grid of cells reach on a side; held, on every pair or a grid of cells
+// some other size, and said when the compiler would pick otherwise.
+test("a call of neighbours is a way entry, held to every pair or to a grid's cell size", () => {
+  const kept = readChoices(readFileSync(join(root, "flock-page.choices"), "utf8"));
+  const way = kept.find((l) => / way: ticked's neighbours: /.test(l))!;
+  assert.match(way, /^\S+ way: ticked's neighbours: grid of reach cells; among every pair, grid; target JavaScript$/);
+  const id = way.split(" ")[0];
+  const held = (pick: string) => `held ${way.replace("grid of reach cells", pick)}`;
+  assert.deepEqual(heldPlaces([held("grid of 5 cells")]).near, [[id, 5]]);
+  assert.deepEqual(heldPlaces([held("every pair")]).near, [[id, "every pair"]]);
+  assert.deepEqual(heldPlaces([held("grid of reach cells")]).near, []);
+  assert.throws(() => heldOf([held("grid of -2 cells")]), /positive number/);
+  assert.deepEqual(heldWarnings([held("every pair")], [way]), [`held   ${id}: neighbours by every pair, where the compiler would find them on a grid of reach cells`]);
+  // Held, it is written again as held, and not stale.
+  assert.deepEqual(heldAndPicked([held("every pair")], [way]), [held("every pair")]);
+  assert.deepEqual(staleChoices([held("every pair")], [way]), []);
 });

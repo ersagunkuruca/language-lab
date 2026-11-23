@@ -217,6 +217,23 @@ function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target
   });
 }
 
+// Each call of neighbours main reaches (L280g, NEARBY-2026-11-22.md), as
+// compiled JavaScript finds them: on a grid of cells reach on a side,
+// or among every pair, as held (`grid of 5 cells`, L280e's parameter).
+const NEAR = /^(\S+) way: .*'s neighbours: (every pair|grid of (reach|[^ ;]+) cells); among every pair, grid; target (.+)$/;
+export function nearLines(ir: Lowered & { nearSites?: Id[] }, names: Names): string[] {
+  if (!ir.nearSites?.length) return [];
+  const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return [...new Set(ir.nearSites.map((at) => `${at} way: ${nameOf(defOf(at))}'s neighbours: grid of reach cells; among every pair, grid; target JavaScript`))];
+}
+// The ways held, by the call: every pair, or a grid of cells this wide.
+const nearHeld = (l: string): [Id, "every pair" | number] | null => {
+  const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null;
+  return m && m[3] !== "reach" ? [m[1], m[2] === "every pair" ? "every pair" : Number(m[3])] : null;
+};
+
 // C's (`ters native`): each call its threads run (c.ts `par:`, scalar.ts
 // threadSites), by the node it is about, where the lowered code still
 // has a call of that runtime function (the passes after rebuild them).
@@ -302,11 +319,14 @@ const CHUNKED = "; in chunks of ";
 // And the runs held (L280e): JavaScript's, a command-line program's or a
 // page's, by the node; C's runs a thread, or its chunks' items.
 // And the workers or threads a program starts, by the target (`pool`).
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][] }
-export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [] };
+// And how each call of neighbours is held to find them (`near`, L280g).
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | number][] }
+export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
   for (const l of lines) {
+    const near = nearHeld(l);
+    if (near) { out.near.push(near); continue; }
     const pooled = l.startsWith(HELD) ? POOLED.exec(l.slice(HELD.length)) : null;
     if (pooled) { if (/^\d+$/.test(pooled[2])) out.pool.push([pooled[3], Number(pooled[2])]); continue; }
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
@@ -347,7 +367,12 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
       else if (place[4] !== undefined && !(Number(place[4]) >= 1 && Number(place[4]) <= 4096)) throw new Error(`a placement's runs are from 1 to 4096: ${l}`);
       continue;
     }
-    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation or a placement can be held yet: ${l}`);
+    const near = NEAR.exec(l.slice(HELD.length));
+    if (!m && near) {
+      if (near[3] !== undefined && near[3] !== "reach" && !(Number(near[3]) > 0 && Number.isFinite(Number(near[3])))) throw new Error(`a grid's cells are some positive number of the reach's units on a side: ${l}`);
+      continue;
+    }
+    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation, a placement or a way of neighbours can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
@@ -360,11 +385,13 @@ export function heldAndPicked(written: readonly string[], now: readonly string[]
   return [...held, ...now.filter((l) => !isHeld(l))].sort((a, b) => key(a).localeCompare(key(b)));
 }
 // Whether an entry made now is one a held entry stands for: a type's,
-// by the type, or a placement's, by its node and target.
+// by the type, a placement's, by its node and target, or a way of
+// neighbours, by its call.
 function heldIn(written: readonly string[]): (l: string) => boolean {
   const of = new Set(heldOf(written).keys());
   const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[5]}`] : []; }));
-  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)); };
+  const near = new Set(written.flatMap((l) => { const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null; return m ? [m[1]] : []; }));
+  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)) || near.has(NEAR.exec(l)?.[1] ?? ""); };
 }
 const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // What a check says of the held entries: where the compiler, choosing
@@ -378,7 +405,9 @@ export function heldWarnings(written: readonly string[], alone: readonly string[
     if (POOLED.test(l.slice(HELD.length))) return was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]} ${POOL_OF[p[5] as keyof typeof POOL_OF].replace(p[2] === "1" ? /s$/ : /$^/, "")}, where the compiler would start ${was[2]}`] : [];
     return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [l.includes(CHUNKED) ? `held   ${p[1]} (${p[5]}): in chunks of ${p[4]} items, where the compiler would cut it in chunks of ${was[4]}` : `held   ${p[1]} (${p[5]}): in ${p[4]} runs${p[5] === "C" ? " a thread" : ""}, where the compiler would share it in ${was[4]}`] : [])];
   });
-  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places];
+  const ways = new Map(alone.flatMap((l) => { const m = NEAR.exec(l); return m ? [[m[1], m[2]] as const] : []; }));
+  const near = written.flatMap((l) => { const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null, was = m && ways.get(m[1]); return m && was && was !== m[2] ? [`held   ${m[1]}: neighbours by ${m[2]}, where the compiler would find them on a ${was}`] : []; });
+  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places, ...near];
 }
 
 // The entries of a choices file, its comments left out.

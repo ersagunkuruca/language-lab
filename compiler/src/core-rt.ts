@@ -224,8 +224,9 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   // asked once in the items' order as the definition's map asks them, a
   // Float64 or a record of them; FAIL, for the definition as compiled,
   // where the grid can't take them or a budget counts the steps. Lists or
-  // arrays, as the call's type is.
-  if (name === "neighbours.grid") return (xs, place, reach, fuel, array, arrays) => {
+  // arrays, as the call's type is. The cells' side where the program's
+  // choices hold it.
+  if (name === "neighbours.grid") return (xs, place, reach, fuel, array, arrays, side) => {
     if (typeof reach !== "number" || (fuel !== Infinity && fuel !== undefined)) throw FAIL;
     const ps: number[][] = [];
     const take = (x: unknown) => {
@@ -239,7 +240,7 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
       if (c.tag !== CONS) throw FAIL;
       take(c.f0 ?? c.fields[0]);
     }
-    const lists = neighbourLists(ps, reach);
+    const lists = neighbourLists(ps, reach, typeof side === "number" ? side : reach);
     if (!lists) throw FAIL;
     const inner = lists.map((l) => (arrays ? arrayOf(l) : toList(l)));
     return array ? arrayOf(inner) : toList(inner as Value[]);

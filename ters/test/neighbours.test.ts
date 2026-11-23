@@ -16,8 +16,9 @@ import { base, baseNames, checkOptions } from "../src/lang/load.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
-import type { Id } from "../src/model.ts";
+import { subtree, type Id } from "../src/model.ts";
 import { compiledDefs, emitCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
+import { holdNeighbours } from "../../compiler/src/scalar.ts";
 import { call } from "../mcp/server.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
@@ -55,6 +56,17 @@ test("neighbours on a line and in the plane, within reach counted with ≤, eval
   assert.equal(evaluated[3], pairs.value(at("many")));
   // The compiled program finds them on a grid in its runtime.
   assert.match(emitCoreJs(lowerCore(p.code, p.info, p.names, [at("many")])).js, /R\.rt\("neighbours\.grid"\)/);
+  // Held (L280g, the choices' way entry): a grid of cells of another
+  // size, narrower than reach too, or every pair; the same lists.
+  const call = Object.values(p.code.nodes).find((n) => n.kind === "call" && (p.code.nodes[n.fn] as { target?: Id }).target === lib("neighbours") && subtree(p.code, at("many")).includes(n.id))!;
+  for (const way of [1, 4, "every pair"] as const) {
+    holdNeighbours([[call.id, way]]);
+    try {
+      const js = emitCoreJs(lowerCore(p.code, p.info, p.names, [at("many")])).js;
+      if (way === "every pair") assert.doesNotMatch(js, /neighbours\.grid/); else assert.match(js, new RegExp(`, ${way}\\)`));
+      assert.equal((compiledDefs(p.code, p.info, p.names, ["many"]).many as () => Value)(), evaluated[3]);
+    } finally { holdNeighbours([]); }
+  }
   const defs = compiledDefs(p.code, p.info, p.names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
 });
