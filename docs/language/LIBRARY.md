@@ -798,6 +798,18 @@ A Sound is its rate and each channel's samples. wav of writes one as a WAV file'
 - **wav of** : `(Sound, Int) -[Abort]-> Bytes` (sounds module). A sound as a WAV file's bytes: 16-bit PCM, or 32-bit float when bits is 32. Channels interleaved, the rate as a whole number; 16-bit samples outside −1 to 1 are clipped. WAV is Microsoft and IBM's RIFF format (1991).
 - **sound of wav** : `(Bytes) -[Choice, Diverge]-> Sound` (sounds module). The sound in a WAV file's bytes: 16-bit PCM or 32-bit float, any number of channels, chunks other than fmt and data passed over. No answer for bytes that aren't one.
 
+## Frames
+
+What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the screen or a texture, cleared to a CSS colour, with or without a depth buffer. A draw is a mesh, its instances, a vertex function that places each corner for each instance, and a fragment function that gives the colour; both are pure, as a shader is. A page's canvas with a render attribute draws the frame its cell holds.
+
+- **Mesh** (type). A mesh: its corners (each a record of Float64s, like a Vec3) and its triangles, three corner numbers each.
+- **Placed** (type). A corner as a vertex function places it: its position on the screen, and what it carries to the fragment function between corners.
+- **Target** (type). Where a pass draws: the screen, or a texture of a name, width and height that a later pass reads.
+- **Draw** (type). One draw of a frame, made by draw: a mesh, its instances and two functions. Its type hides the instances' type, so a pass lists draws of different things.
+- **Pass** (type). A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.
+- **Frame** (type). What a canvas renders, as its render attribute: passes, drawn in order.
+- **draw** : `(Mesh a, List b, (b, a) -> Placed c d, (d) -> e) -> Draw`. draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.
+
 ## Points, colours and slopes
 
 A record whose fields are all Float64s (a point, a direction, a colour) can be worked on part by part, and the vectors module is written that way.
