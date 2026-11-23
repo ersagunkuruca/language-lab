@@ -79,7 +79,7 @@ export const boxedCompares = (e: SExpr): SExpr => {
 
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag" | "raw";
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>", FILE_INFO_T = "std.file info<>", FILE_KIND_T = "std.file kind<>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
@@ -390,6 +390,14 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (TABLE_RT.test(name)) { const f = tableRt(name, lowered.tables); return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f; }
     if (name === "wasi.stop") return { ...wasiStop(lowered.stops ?? []), name };
     // Bytes, the module's own record (C291).
+    // File info, its Instant and File kind (C310).
+    if (/^wasi\.fileInfo(\.raw)?$/.test(name)) {
+      const info = lowered.records.find((r) => r.key === FILE_INFO_T), kind = lowered.data.find((d) => d.key === FILE_KIND_T);
+      if (!info || !kind || !isRecord(info.fields[2].t) || (info.fields[1].t !== "int" && info.fields[1].t !== "i64")) throw new Error(`${name}: the module's File info isn't as file info makes it`);
+      const f = runtime(name);
+      const i64 = info.fields[1].t === "i64";
+      return { ...f, name, uses: i64 ? f.uses.filter((x) => x !== "int.of") : f.uses, body: i64 ? f.body.replace("i64.load\n      call $int.of", "i64.load") : f.body, types: { Info: info, Instant: info.fields[2].t, Kind: kind } };
+    }
     if (/^wasi\.(read|write)Bytes(\.raw)?$/.test(name)) { const b = lowered.records.find((r) => r.key === BYTES_T); if (!b) throw new Error(`${name}: the module has no Bytes`); return { ...runtime(name), name, types: { Bytes: b } }; }
     const f = runtime(name);
     return f.array !== undefined && byteArray(lowered.arrays[f.array]) ? byteSlots(f) : f;
@@ -732,6 +740,15 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     const k = recIndex.get(bytesRec.key)!;
     helpers.push({ name: "Bytes.make", key: bytesRec.key, params: [bytesRec.fields[0].t], result: bytesRec, code: [0x20, 0x00, 0xfb, 0x00, ...u(k)], wat: ["local.get 0", `struct.new $${structs[k].name}`] });
     helpers.push({ name: "Bytes.items", key: bytesRec.key, params: [bytesRec], result: bytesRec.fields[0].t, code: [0x20, 0x00, 0xfb, 0x02, ...u(k), 0x00], wat: ["local.get 0", `struct.get $${structs[k].name} 0`] });
+  }
+  // File info (C310), for the host's file info: made from its kind, its
+  // size and its Instant; FileInfo.make64 where the size is an i64.
+  const infoRec = recs.find((r) => r.key === FILE_INFO_T), kindD = datas.find((d) => d.key === FILE_KIND_T);
+  if (infoRec && kindD && isRecord(infoRec.fields[2].t) && baseIndex.has(kindD.key)) {
+    const k = recIndex.get(infoRec.key)!, at = infoRec.fields[2].t, ak = recIndex.get(at.key)!;
+    helpers.push({ name: infoRec.fields[1].t === "i64" ? "FileInfo.make64" : "FileInfo.make", key: infoRec.key, params: infoRec.fields.map((x) => x.t), result: infoRec, code: [0x20, 0x00, 0x20, 0x01, 0x20, 0x02, 0xfb, 0x00, ...u(k)], wat: ["local.get 0", "local.get 1", "local.get 2", `struct.new $${structs[k].name}`] });
+    helpers.push({ name: "Instant.make", key: at.key, params: at.fields.map((x) => x.t), result: at, code: [0x20, 0x00, 0xfb, 0x00, ...u(ak)], wat: ["local.get 0", `struct.new $${structs[ak].name}`] });
+    kindD.cases.forEach((_, ci) => { const c = caseIndex(kindD, ci); helpers.push({ name: `FileKind.${ci}`, key: kindD.key, params: [], result: kindD, code: [0x41, ...s(ci), 0xfb, 0x00, ...u(c)], wat: [`i32.const ${ci}`, `struct.new $${structs[c].name}`] }); });
   }
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
@@ -1339,6 +1356,13 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
       w("writeBytes")!(text(p), Uint8Array.from(out));
     }),
     fileExists: (p: unknown) => (w("fileExists")(text(p)) ? 1 : 0),
+    // A file's kind, size and time last changed (C310), made by the
+    // module's helpers; File kind's cases in the order std.ts gives them.
+    fileInfo: (p: unknown) => tried(() => {
+      const ex = exports(), x = w("fileInfo")!(text(p)), wide = "FileInfo.make64" in ex;
+      const kind = ex[`FileKind.${["file", "folder", "link", "special"].indexOf(x.kind)}`]();
+      return ex[wide ? "FileInfo.make64" : "FileInfo.make"](kind, wide ? BigInt(x.size) : toInt(ex, BigInt(x.size)), ex["Instant.make"](x.modified));
+    }),
     // An environment variable (L253), as run.ts answers it.
     environmentVariable: (n: unknown) => { const v = rt.world?.environmentVariable?.(text(n)) ?? null, ex = exports(); return v === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(v.normalize("NFC"))); },
     // A zone's offset (L188): the host's Intl, NaN for a zone it doesn't know.
