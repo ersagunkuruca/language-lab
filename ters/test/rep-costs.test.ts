@@ -20,7 +20,9 @@ import { CONS, NIL } from "../src/lang/std.ts";
 
 const code = base(TREES.code), names = { ...baseNames({}), ...LIBRARY.names, ...TREES.names };
 const info = infer(code, names, undefined, { ...checkOptions, insiders: [...(checkOptions.insiders ?? []), ...TREES.code.defs] });
-const r = makeRunner(code, info, { print: () => {}, names });
+// The definitions themselves, not the library's host ways for some (an
+// `item at` that keeps the list's items, L281i), since the rows state theirs.
+const r = makeRunner(code, info, { print: () => {}, names, libraryHosts: false });
 const def = (n: string): Value => {
   const d = [...TREES.code.defs, ...LIBRARY.modules.flatMap((m) => m.exports)].find((x) => names[x] === n);
   assert.ok(d, n);
