@@ -73,7 +73,7 @@ xcrun -sdk "$SDK" clang -target "$TARGET" -c page.c -o build/page.o -O2 -ffp-con
 xcrun -sdk "$SDK" clang -target "$TARGET" -c Screen.m -o build/screen.o -O2 -fobjc-arc
 HOSTS=
 if [ -f hosts.m ]; then xcrun -sdk "$SDK" clang -target "$TARGET" -c hosts.m -o build/hosts.o -O2 -fobjc-arc; HOSTS=build/hosts.o; fi
-xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o $HOSTS -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework AVFoundation -framework CoreLocation -framework UserNotifications -lm
+xcrun -sdk "$SDK" clang -target "$TARGET" build/page.o build/screen.o $HOSTS -o "$APP/page" -fobjc-arc -fobjc-link-runtime -framework Foundation -framework UIKit -framework QuartzCore -framework CoreGraphics -framework AVFoundation -framework CoreLocation -framework UserNotifications -framework UniformTypeIdentifiers -lm
 cp Info.plist "$APP/"
 if [ -d recordings ]; then cp -R recordings/. "$APP/"; fi
 codesign --force --sign - "$APP"
@@ -271,6 +271,7 @@ const PAGE_M = (decl: string, foreign: string, sound: boolean) => String.raw`// 
 #import <AVFoundation/AVFoundation.h>
 #import <CoreLocation/CoreLocation.h>
 #import <UserNotifications/UserNotifications.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -555,8 +556,35 @@ static TWhere *W;
   W = nil;
 }
 @end
+// The person's files (L284, C313): a folder they pick in iOS's document
+// picker, its files the page's from then on, as a browser's picked
+// folder is (the app goes into it, held by its security-scoped URL);
+// none picked is no, and the files stay the app's own.
+@interface TPicked : NSObject <UIDocumentPickerDelegate>
+@end
+static TPicked *F;
+static NSURL *picked;
+@implementation TPicked
+- (void)documentPicker:(UIDocumentPickerViewController *)c didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+  NSURL *u = urls.firstObject;
+  BOOL yes = u && [u startAccessingSecurityScopedResource] && chdir(u.fileSystemRepresentation) == 0;
+  if (yes) { [picked stopAccessingSecurityScopedResource]; picked = u; }
+  answered(@"files", yes);
+  F = nil;
+}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)c { answered(@"files", NO); F = nil; }
+@end
 static int u_ask(void *c, const char *s, size_t n) {
   NSString *what = str(s, n);
+  if ([what isEqualToString:@"files"]) {
+    if (F) return 0;
+    printf("ask %s\n", what.UTF8String);
+    F = [TPicked new];
+    UIDocumentPickerViewController *d = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeFolder]];
+    d.delegate = F;
+    [P presentViewController:d animated:YES completion:nil];
+    return -1;
+  }
   if ([what isEqualToString:@"camera"] || [what isEqualToString:@"microphone"]) {
     AVMediaType t = [what isEqualToString:@"camera"] ? AVMediaTypeVideo : AVMediaTypeAudio;
     AVAuthorizationStatus a = [AVCaptureDevice authorizationStatusForMediaType:t];

@@ -849,9 +849,47 @@ static int lab__kind(const char *p) { wchar_t *w = lab__wide(p); struct _stat64 
 // A Windows error as errno, as libuv maps the ones a path gives.
 static int lab__errno(unsigned long e) { return e == 2 || e == 3 || e == 123 || e == 161 ? ENOENT : e == 5 || e == 32 ? EACCES : e == 267 ? ENOTDIR : EIO; }
 #else
-#define lab__fopen fopen
 #define lab__getenv getenv
+#if defined(__ANDROID__) || defined(LAB_TREE)
+// A folder the person picked (L284, C313): once they have, a path that
+// isn't absolute is in it, opened, told of and listed by the app's Java
+// over JNI (MainActivity treeOpen, treeKind, treeList), its files the
+// page's from then on, as a browser's picked folder is. (LAB_TREE alone:
+// the same off Android, for a test.)
+#ifndef LAB_TREE
+#define LAB_TREE 1
+#endif
+#include <unistd.h>
+#include <fcntl.h>
+static int lab_tree_on;
+// An open file's descriptor (fopen's modes), or -1.
+static int (*lab_tree_open)(const char *p, const char *mode);
+// 0 nothing there, 1 a file, 2 a folder; a file's size and when it
+// changed, in ms since 1970.
+static int (*lab_tree_kind)(const char *p, int64_t *size, double *modified);
+// A folder's names, n of them, each and all malloc'd; 0 when it isn't one.
+static char **(*lab_tree_list)(const char *p, size_t *n);
+static int lab__in_tree(const char *p) { return lab_tree_on && p[0] != '/'; }
+static FILE *lab__fopen(const char *p, const char *m) {
+  if (!lab__in_tree(p)) return fopen(p, m);
+  int64_t n; double t;
+  int k = lab_tree_kind(p, &n, &t);
+  if (k == 2) { errno = EISDIR; return 0; }
+  int fd = lab_tree_open(p, m);
+  if (fd < 0) { errno = k ? EACCES : ENOENT; return 0; }
+  if (m[0] == 'a') fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_APPEND);
+  FILE *f = fdopen(fd, m);
+  if (!f) close(fd);
+  return f;
+}
+static int lab__kind(const char *p) {
+  if (lab__in_tree(p)) { int64_t n; double t; int k = lab_tree_kind(p, &n, &t); if (!k) errno = ENOENT; return k; }
+  struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1;
+}
+#else
+#define lab__fopen fopen
 static int lab__kind(const char *p) { struct stat st; return stat(p, &st) ? 0 : S_ISDIR(st.st_mode) ? 2 : 1; }
+#endif
 #endif`,
   },
   "world.log": {
@@ -1046,6 +1084,15 @@ static double lab_world_randomSeed(void) {
 // Opened by its wide name, unchanged bytes (no \\r added before \\n).
 static int lab__open(const char *p) { wchar_t *w = lab__wide(p); int fd = _wopen(w, _O_RDWR | _O_CREAT | _O_APPEND | _O_BINARY, _S_IREAD | _S_IWRITE); free(w); return fd; }
 static ssize_t lab__pread(int fd, void *b, size_t n, int64_t at) { return _lseeki64(fd, at, SEEK_SET) < 0 ? -1 : _read(fd, b, (unsigned)n); }
+#elif defined(LAB_TREE)
+// In a picked folder (C313), read and written, writes at its end.
+static int lab__open(const char *p) {
+  if (!lab__in_tree(p)) return open(p, O_RDWR | O_CREAT | O_APPEND, 0666);
+  int fd = lab_tree_open(p, "a+");
+  if (fd >= 0) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_APPEND);
+  return fd;
+}
+#define lab__pread pread
 #else
 static int lab__open(const char *p) { return open(p, O_RDWR | O_CREAT | O_APPEND, 0666); }
 #define lab__pread pread
@@ -1455,6 +1502,16 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   int64_t t = (int64_t)((uint64_t)a.written[1] << 32 | a.written[0]) - 116444736000000000LL;
   modified = ((double)(t / 10000000) * 1e3 + (double)(t % 10000000 * 100) / 1e6) / 1000;
 #else
+#ifdef LAB_TREE
+  if (lab__in_tree(p)) {
+    int64_t n = 0;
+    double t = 0;
+    int k = lab_tree_kind(p, &n, &t);
+    free(p);
+    if (!k) { lab__fail(ENOENT, path); return (${i.record}){ &${i.kinds[0]}, ${size("0")}, { 0 } }; }
+    kind = k == 2 ? 1 : 0; bytes = k == 2 ? 0 : n; modified = t / 1000;
+  } else {
+#endif
   struct stat st;
   int bad = lstat(p, &st);
   free(p);
@@ -1466,6 +1523,9 @@ static ${i.record} lab_world_fileInfo(lab_cell *path) {
   modified = ((double)st.st_mtimespec.tv_sec * 1e3 + st.st_mtimespec.tv_nsec / 1e6) / 1000;
 #else
   modified = ((double)st.st_mtim.tv_sec * 1e3 + st.st_mtim.tv_nsec / 1e6) / 1000;
+#endif
+#ifdef LAB_TREE
+  }
 #endif
 #endif
   static const char *names[] = { "file", "folder", "link", "special" };
@@ -1777,6 +1837,21 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
   if (lab__log_begin("listFolder")) lab__log_text(path);
   char *p = lab__cstr(path);
   int kind = lab__kind(p);
+  size_t n = 0, cap = 16;
+  lab_cell **xs;
+#ifdef LAB_TREE
+  // In a picked folder (C313), its names as the app's Java reads them.
+  if (lab__in_tree(p)) {
+    char **names = kind == 2 ? lab_tree_list(p, &n) : 0;
+    free(p);
+    if (!names) { lab__fail(kind == 1 ? ENOTDIR : ENOENT, path); return 0; }
+    xs = malloc((n ? n : 1) * sizeof *xs);
+    if (!xs) lab_oom();
+    for (size_t k = 0; k < n; k++) { xs[k] = lab__text_of(names[k], strlen(names[k])); free(names[k]); }
+    free(names);
+    goto sort;
+  }
+#endif
 #ifdef _WIN32
   // By its wide name, each name back to UTF-8 (C296).
   wchar_t *w = lab__wide(p);
@@ -1787,8 +1862,7 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
 #endif
   free(p);
   if (!dir) { lab__fail(errno, path); return 0; }
-  size_t n = 0, cap = 16;
-  lab_cell **xs = malloc(cap * sizeof *xs);
+  xs = malloc(cap * sizeof *xs);
   if (!xs) lab_oom();
 #ifdef _WIN32
   for (struct _wdirent *e; (e = _wreaddir(dir));) {
@@ -1806,6 +1880,9 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
     xs[n++] = lab__text_of(e->d_name, strlen(e->d_name));
   }
   closedir(dir);
+#endif
+#ifdef LAB_TREE
+sort:
 #endif
   qsort(xs, n, sizeof *xs, lab__js_order);
   for (size_t k = 0; k < n; k++) xs[k] = lab__nfc(xs[k]);

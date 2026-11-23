@@ -291,3 +291,67 @@ test("an Android app whose page opens files outside has a provider for them and 
   assert.equal(plain[`app/src/main/java/${dir}/Files.java`], undefined);
   assert.doesNotMatch(String(plain["app/src/main/AndroidManifest.xml"]), /provider/);
 });
+
+// A page's files on Android are in a folder the person picks (C313): its C
+// asks MainActivity's treeOpen, treeKind and treeList, here a stand-in's
+// over a folder on this machine.
+test("an Android app's page reads, writes and lists the folder the person picked through MainActivity (C313)", { skip }, async () => {
+  const { Lang } = await import("../../ters/src/lang/dsl.ts");
+  const { LIBRARY } = await import("../../ters/src/lang/library.ts");
+  const { ASK_PERMISSION_OP, CELL_OPS, HTML_V, IO, SHOW_ANY } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang(LIBRARY.code);
+  const el = (tag: string, attrs: string[], kids: string[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const text = (f: () => string) => k.call(HTML_V.text, k.thunk(f));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("said", k.call(CELL_OPS.cell, k.lit("idle")), (said) =>
+    el("div", [], [
+      el("button", [k.call(HTML_V.on, k.lit("click"), k.fn(["e"], () => k.if(k.call(ASK_PERMISSION_OP, k.lit("files")),
+        k.seq(k.call(IO.writeFile, k.lit("copy.txt"), k.call(IO.readFile, k.lit("notes.txt"))),
+          k.call(IO.appendFile, k.lit("copy.txt"), k.lit(" and more")),
+          k.call(CELL_OPS.write, said, k.call(SHOW_ANY, k.list(k.call(SHOW_ANY, k.call(IO.listFolder, k.lit("."))), k.call(IO.readFile, k.lit("copy.txt")), k.call(SHOW_ANY, k.call(IO.fileExists, k.lit("gone.txt"))))))),
+        k.call(CELL_OPS.write, said, k.lit("no")))))], [text(() => k.lit("go"))]),
+      el("p", [], [text(() => k.call(CELL_OPS.read, said))]),
+    ]))));
+  const dir = mkdtempSync(join(tmpdir(), "native-tree-"));
+  writeFileSync(join(dir, "code.json"), JSON.stringify(k.code));
+  writeFileSync(join(dir, "names.default.json"), JSON.stringify(k.names));
+  const ters = join(import.meta.dirname, "../../ters/cli/ters.ts");
+  const out = spawnSync(process.execPath, [ters, "build-native-app", dir, "-o", join(dir, "app")], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  const activity = readFileSync(join(dir, "app/app/src/main/java", ...PACKAGE.split("."), "MainActivity.java"), "utf8");
+  assert.match(activity, /ACTION_OPEN_DOCUMENT_TREE/);
+  assert.match(activity, /int treeOpen\(String path, String mode\)/);
+  const inc = join(jdk!, "include");
+  execFileSync("cc", ["-std=c11", "-O2", "-DLAB_TREE", "-U_FORTIFY_SOURCE", "-DLAB_FIBER_SJLJ", "-fPIC", "-shared", "-pthread", "-Wall", "-Werror", "-Wno-unknown-pragmas", "-Wno-unused-function", "-Wno-unused-variable", "-Wno-unused-but-set-variable", "-Wno-unknown-warning-option", "-Wno-maybe-uninitialized", "-Wno-free-nonheap-object", "-Wno-format-overflow", `-I${inc}`, `-I${join(inc, "linux")}`, "-o", join(dir, "libpage.so"), join(dir, "app/app/src/main/cpp/page.c"), "-lm"]);
+  // The picked folder: tree's files, by java.io, each open file's
+  // descriptor given to C (kept open here; C closes it).
+  const picked = join(dir, "picked");
+  mkdirSync(join(picked, "sub"), { recursive: true });
+  writeFileSync(join(picked, "notes.txt"), "hello");
+  const standIn = STAND_IN.replace("  native int nativePermission(int yes);", `  native int nativePermission(int yes);
+  native void nativeTree(int on);
+  final List<Object> open = new ArrayList<>();
+  java.io.File at(String p) { return new java.io.File(System.getProperty("tree"), p); }
+  int treeOpen(String p, String mode) {
+    try {
+      Object s = mode.startsWith("r") && !mode.contains("+") ? new java.io.FileInputStream(at(p)) : mode.startsWith("a") ? new java.io.FileOutputStream(at(p), true) : new java.io.FileOutputStream(at(p));
+      open.add(s);
+      java.io.FileDescriptor d = s instanceof java.io.FileInputStream i ? i.getFD() : ((java.io.FileOutputStream) s).getFD();
+      java.lang.reflect.Field f = java.io.FileDescriptor.class.getDeclaredField("fd");
+      f.setAccessible(true);
+      return f.getInt(d);
+    } catch (Exception e) { return -1; }
+  }
+  double[] treeKind(String p) { java.io.File f = at(p); return new double[] { !f.exists() ? 0 : f.isDirectory() ? 2 : 1, f.length(), f.lastModified() }; }
+  String[] treeList(String p) { return at(p).list(); }`).replace(`int ask(String what) { System.out.println("ask " + what); return -1; }`, `int ask(String what) { System.out.println("ask " + what); nativeTree(1); return 1; }`);
+  const src = join(dir, "java", ...PACKAGE.split("."));
+  mkdirSync(src, { recursive: true });
+  writeFileSync(join(src, "MainActivity.java"), standIn);
+  execFileSync("javac", ["-d", join(dir, "classes"), join(src, "MainActivity.java")]);
+  const r = spawnSync("java", ["--add-opens", "java.base/java.io=ALL-UNNAMED", `-Dtree=${picked}`, `-Djava.library.path=${dir}`, "-cp", join(dir, "classes"), `${PACKAGE}.MainActivity`, "click:go"], { cwd: dir, encoding: "utf8" });
+  assert.equal(r.status, 0, r.stderr);
+  const shown = r.stdout.split("\u001e\n");
+  assert.match(shown[1], /^ask files\n/);
+  assert.equal(readFileSync(join(picked, "copy.txt"), "utf8"), "hello and more");
+  assert.match(shown[1], /copy\.txt.*notes\.txt.*sub.*hello and more.*false/);
+});
