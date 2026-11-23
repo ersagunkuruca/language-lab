@@ -16,7 +16,7 @@ import { browserWorld, type Store } from "../ters/src/lang/browser.ts";
 import { shower } from "./shown.ts";
 import { loadPrinted } from "../compiler/src/core-js.ts";
 import { keepOnMainThread, shareAlways } from "../compiler/src/scalar.ts";
-import { isPlace } from "./choicesFor.ts";
+import { isPlace, isPool } from "./choicesFor.ts";
 import { checkedForRun, coreMain, type CoreMain } from "./coreMain.ts";
 import { Aborted as CoreAborted, Stopped as CoreStopped } from "../compiler/src/core-rt.ts";
 import { resolvedFor, runMain, runProgram, toList, type World } from "../ters/src/lang/run.ts";
@@ -133,11 +133,13 @@ if (checksRead) {
 
 // The placements held in Choices (E292, L280h), set for the lowering of
 // the ask (scalar.ts keeps them for the next): main's work kept on the
-// main thread, or a command-line program's shared out always. The types'
-// held rows are the rest.
+// main thread, or a command-line program's shared out always; and how
+// many workers main starts (L280e), on whichever target it is lowered
+// for. The types' held rows are the rest.
 function placed(held: [Id, string][] = []): [Id, string][] {
   keepOnMainThread(held.filter(([, r]) => r === "main thread").map(([id]) => id), []);
-  shareAlways(held.filter(([, r]) => r === "worker threads").map(([id]) => id));
+  const pool = held.find(([, r]) => isPool(r)), n = pool && Number(pool[1]);
+  shareAlways(held.filter(([, r]) => r === "worker threads").map(([id]) => id), [], [], [], [], n !== undefined ? [["JavaScript", n], ["JavaScript page", n]] : []);
   return held.filter(([, r]) => !isPlace(r));
 }
 

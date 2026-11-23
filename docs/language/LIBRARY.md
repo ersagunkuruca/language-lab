@@ -274,6 +274,7 @@ A list is written [1, 2, 3]. There are no loops: map, keep and for each go throu
 - **drop** : `(List a, Int) -> List a`. The items after the first count: drop([a, b, c], 2) is [c]; a list with fewer gives []. count steps.
 - **zipped** : `(List a, List b) -> List (a, b)`. The two lists' items side by side, as tuples, as long as the shorter: zipped([1, 2, 3], ["a", "b"]) is [(1, "a"), (2, "b")].
 - **numbered** : `(List a) -> List (Int, a)`. Each item with its position, counting from 0: numbered(["a", "b"]) is [(0, "a"), (1, "b")].
+- **neighbours** : `(List a, (a) -[e]-> b, Float64) -[e]-> List (List Int)`. Each item's neighbours: the positions of the other items whose places are within reach of its own, smallest first. Places are points (any record of Float64s). Every pair is compared as written; the compiler may find them by a grid or a tree instead, which give the same lists.
 - **copies** : `(Int, a) -> List a`. A list of count copies of the item: copies(3, 0) is [0, 0, 0]. (repeated is Text's.)
 - **all pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether every item passes the test; true for an empty list. Stops at the first that doesn't.
 - **any pass** : `(List a, (a) -[e]-> Bool) -[e]-> Bool`. Whether some item passes the test; false for an empty list. Stops at the first that does.
@@ -797,6 +798,20 @@ A Sound is its rate and each channel's samples. wav of writes one as a WAV file'
 - **Sound** (type) (sounds module). A sound: how many samples a second it plays, and each channel's samples (one for mono, left and right for stereo), −1 to 1.
 - **wav of** : `(Sound, Int) -[Abort]-> Bytes` (sounds module). A sound as a WAV file's bytes: 16-bit PCM, or 32-bit float when bits is 32. Channels interleaved, the rate as a whole number; 16-bit samples outside −1 to 1 are clipped. WAV is Microsoft and IBM's RIFF format (1991).
 - **sound of wav** : `(Bytes) -[Choice, Diverge]-> Sound` (sounds module). The sound in a WAV file's bytes: 16-bit PCM or 32-bit float, any number of channels, chunks other than fmt and data passed over. No answer for bytes that aren't one.
+
+## Frames
+
+What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the screen or a texture, cleared to a CSS colour, with or without a depth buffer. A draw is a mesh, its instances, a vertex function that places each corner for each instance, and a fragment function that gives the colour; both are pure, as a shader is. A pass into a texture draws it for a later pass's fragment to read with sampled. A page's canvas with a render attribute draws the frame its cell holds.
+
+- **Mesh** (type). A mesh: its corners (each a record of Float64s, like a Vec3) and its triangles, three corner numbers each.
+- **Placed** (type). A corner as a vertex function places it: its position on the screen, and what it carries to the fragment function between corners.
+- **Target** (type). Where a pass draws: the screen, or a texture of a name, width and height that a later pass reads.
+- **Draw** (type). One draw of a frame, made by draw: a mesh, its instances and two functions. Its type hides the instances' type, so a pass lists draws of different things.
+- **Pass** (type). A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.
+- **Frame** (type). What a canvas renders, as its render attribute: passes, drawn in order.
+- **Texel** (type). A colour sampled from a texture: red, green, blue and alpha, each from 0 to 1.
+- **draw** : `(Mesh a, List b, (b, a) -> Placed c d, (d) -> e) -> Draw`. draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.
+- **sampled** : `(Target, a) -> Texel`. sampled(target, across): the colour at across (two numbers from 0 to 1, from the top left) of a texture an earlier pass of the frame drew.
 
 ## Points, colours and slopes
 

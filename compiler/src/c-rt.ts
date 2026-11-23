@@ -1226,6 +1226,61 @@ static int lab__fpark(double at) {
   },
   "world.writeFile": { uses: ["world.put"], c: `static void lab_world_writeFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "wb"); }` },
   "world.appendFile": { uses: ["world.put"], c: `static void lab_world_appendFile(lab_cell *path, lab_cell *t) { lab__put(path, t, "ab"); }` },
+  // Bytes in a run's log as worldlog.ts logText keeps them: {"bytes":[…]}.
+  "world.logBytes": {
+    uses: ["world.log"],
+    c: `static void lab__log_bytes(const uint8_t *b, size_t n) {
+  lab__log_raw("{\\"bytes\\":[");
+  for (size_t i = 0; i < n; i++) fprintf(lab_log, i ? ",%u" : "%u", (unsigned)b[i]);
+  lab__log_raw("]}");
+}`,
+  },
+  // A file's bytes as they are, and bytes written as a file (C291, as
+  // world.ts answers read bytes and write bytes): Bytes is a record of a
+  // list of Ints, its C struct o.record, as the kept files' (L213c7).
+  "world.readBytes": {
+    uses: ["world.fail", "world.logBytes"],
+    c: (o) => `static ${o.record} lab_world_readBytes(lab_cell *path) {
+  if (lab__log_begin("readBytes")) lab__log_text(path);
+  char *p = lab__cstr(path);
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "rb");
+  free(p);
+  if (!f) { lab__fail(errno, path); return (${o.record}){ &${o.nil} }; }
+  size_t n = 0, cap = 4096;
+  uint8_t *s = malloc(cap);
+  if (!s) lab_oom();
+  for (size_t got; (got = fread(s + n, 1, cap - n, f)) > 0;) { n += got; if (n == cap) { s = realloc(s, cap *= 2); if (!s) lab_oom(); } }
+  fclose(f);
+  if (lab_log_open) { lab__log_answer(); lab__log_bytes(s, n); lab__log_close(); }
+  lab_cell *acc = &${o.nil};
+  for (size_t i = n; i-- > 0;) { ${o.cons} *c = lab_new(sizeof(${o.cons}), ${o.type}, ${o.tag}); c->f${o.head} = LAB_SMALL(s[i]); c->f${1 - o.head} = acc; acc = (lab_cell *)c; }
+  free(s);
+  lab_drop(path);
+  return (${o.record}){ acc };
+}`,
+  },
+  "world.writeBytes": {
+    uses: ["world.fail", "world.logBytes"],
+    c: (o) => `static void lab_world_writeBytes(lab_cell *path, ${o.record} b) {
+  size_t n = 0;
+  for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) n++;
+  uint8_t *buf = malloc(n ? n : 1);
+  if (!buf) lab_oom();
+  n = 0;
+  for (lab_cell *c = b.f0; c->tag == ${o.tag}; c = ((${o.cons} *)c)->f${1 - o.head}) buf[n++] = (uint8_t)LAB_VAL(((${o.cons} *)c)->f${o.head});
+  lab_drop(b.f0);
+  if (lab__log_begin("writeBytes")) { lab__log_text(path); lab__log_raw(","); lab__log_bytes(buf, n); lab__log_write(); }
+  char *p = lab__cstr(path);
+  FILE *f = lab__kind(p) == 2 ? (errno = EISDIR, (FILE *)0) : fopen(p, "wb");
+  free(p);
+  if (!f) { free(buf); lab__fail(errno, path); return; }
+  int ok = fwrite(buf, 1, n, f) == n;
+  int e = errno;
+  free(buf);
+  if (fclose(f) != 0 || !ok) { lab__fail(e ? e : EIO, path); return; }
+  lab_drop(path);
+}`,
+  },
   // A zone's offset from UTC at an instant, in seconds (L188): the host's
   // zone database through TZ, NaN for a zone it doesn't have (a file under
   // TZDIR or /usr/share/zoneinfo). The local time read back as UTC by

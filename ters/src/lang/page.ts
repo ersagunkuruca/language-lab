@@ -14,7 +14,7 @@ import { browserWorld, type Store } from "./browser.ts";
 import { carried, Cells, handOver, nodeOf } from "./cells.ts";
 const cellGone = (c: Value): boolean => nodeOf(c)?.disposed ?? true;
 import { evaluatorCall, mountHtml, replayEvent, type Doc, type Node_ } from "./html.ts";
-import { equal, OutOfSteps, pageProblem, runMain, type Value, type World } from "./run.ts";
+import { equal, OutOfSteps, pageProblem, runMain, type Measure, type Value, type World } from "./run.ts";
 import { corePageScript, coreSoundScript, lowerCore, scriptSolves } from "../../../compiler/src/core-js.ts";
 import type { CoreIR } from "../../../compiler/src/scalar.ts";
 import { HTML_V } from "./std.ts";
@@ -45,6 +45,9 @@ export interface PageOptions {
   console?: Pick<Console, "log" | "error">;
   // Asks for the next animation frame (requestAnimationFrame in a browser).
   frame: (f: () => void) => void;
+  // The clock's time at each frame, in ms (a run of no browser's; by
+  // default Date.now).
+  time?: () => number;
   // Each time a part runs again: a preview can flash it.
   ran?: (el: Node_) => void;
   // coreWorkletRuntime (cli/web.ts) prebuilt: given it, a page with sound
@@ -95,10 +98,22 @@ export interface PageOptions {
   // editor's preview): past it they stop, and showPage throws TooSlow, so
   // the editor shows the compiled page instead of holding its own thread
   // while the evaluator draws (Countdown's solve, 6.6 s). Later updates
-  // have no limit.
+  // have no limit, except a frame's:
   drawWithin?: number;
+  // How long a frame may take, in ms: past it the page stops and
+  // `tooSlow` is called, so the editor waits for the compiled page
+  // instead (flock drew its first frame in time, then took 8 to 10 s a
+  // frame on the editor's thread).
+  frameWithin?: number;
+  tooSlow?: () => void;
+  // Counted while main and the handlers run (L280d, `ters choices
+  // --measure` on a page): run.ts RunOptions `measure`.
+  measure?: Measure;
 }
 
+// A run stopped as the page stops for taking too long (frameWithin): not
+// said as a handler out of steps (html.ts).
+const quietly = () => Object.assign(new OutOfSteps(), { quiet: true });
 // A page that didn't draw within its `drawWithin`.
 export class TooSlow extends Error {
   readonly ms: number;
@@ -137,7 +152,7 @@ export function showPage(o: PageOptions): Preview {
   // The cells main and the first drawing make, for handOver (cells.ts).
   if (o.keepCells || (o.log && o.window)) cells.kept = [];
   const latency = cells.own(0, "sound latency");
-  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose, latency });
+  const browser = browserWorld(o.store, o.program, out as Console, { cells, frame: (f) => { if (!stopped) o.frame(() => { if (!stopped) f(); }); }, ...(o.time ? { time: o.time } : {}), fetch: o.fetch, send: o.send, after: o.after, permission: o.permission, offer: o.offer, choose: o.choose, latency });
   const answered = o.replay ? replaying(o.replay.filter((e) => !isEvent(e)), browser, undefined, undefined, () => cells.inView()) : browser;
   // While the page is stepped through its log (I239c), the world answers
   // from the log and nothing new is logged: `asking` is which world.
@@ -157,13 +172,30 @@ export function showPage(o: PageOptions): Preview {
   // Within drawWithin: the clock read every 256 calls of a lambda while
   // main runs and the page first draws, and past the time each call stops
   // the part it's in, as a part out of steps stops (html.ts).
-  let end = o.drawWithin === undefined ? Infinity : performance.now() + o.drawWithin, calls = 0, late = false;
-  const entered = o.drawWithin === undefined ? undefined : () => {
+  // After it, within frameWithin each time the evaluator runs (a frame, an
+  // event): a run starts where the clock, read every 256 calls, jumped
+  // past GAP since the last read, as between two of the browser's tasks.
+  // Past it the run stops, quietly, the page stops and tooSlow is called.
+  let end = o.drawWithin === undefined ? Infinity : performance.now() + o.drawWithin, calls = 0, late = false, drawn = false, read = 0, slow = false;
+  const GAP = 30;
+  const entered = o.drawWithin === undefined && o.frameWithin === undefined ? undefined : () => {
+    if (slow) throw quietly();
+    if (drawn) {
+      if ((++calls & 255) !== 0) return;
+      const now = performance.now();
+      if (now - read > GAP) end = now + o.frameWithin!;
+      read = now;
+      if (now <= end) return;
+      slow = stopped = true;
+      sound?.stop();
+      setTimeout(() => o.tooSlow?.(), 0);
+      throw quietly();
+    }
     if (end === Infinity) return;
     if (!late && (++calls & 255) !== 0) return;
     if (late || performance.now() > end) { late = true; throw new OutOfSteps(); }
   };
-  const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world, entered });
+  const run = () => runMain(o.code, o.info, o.main, { print: (line) => cells.later(() => out.log(line)), names: o.names, cells, world, entered, ...(o.measure ? { measure: o.measure } : {}) });
   let sound: ReturnType<typeof soundPlayer> | null = null, root!: Node_;
   try {
     sound = o.worklet && hasSound(o.code) ? soundPlayer(cells, soundFile(o.worklet, o.code, o.info, o.names, o.main), run, o.recordings, world, latency) : null;
@@ -178,6 +210,7 @@ export function showPage(o: PageOptions): Preview {
     sound?.stop();
     throw new TooSlow(o.drawWithin!);
   }
+  if (o.frameWithin !== undefined) { drawn = true; calls = 0; read = performance.now(); }
   const kept = cells.kept;
   made = kept ?? [];
   cells.kept = null;

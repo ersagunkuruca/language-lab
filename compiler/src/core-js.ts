@@ -23,6 +23,7 @@ import { keepingWhole } from "../../ters/src/lang/check-cache.ts";
 import { keysOver } from "../../ters/src/lang/def-keys.ts";
 import { shareCalls } from "./share-calls.ts";
 import { inlineCalls, inlineSmall } from "./inline-small.ts";
+import { knownClosures } from "./known-closures.ts";
 import { itemPaths } from "./item-paths.ts";
 import { chosenParts } from "./chosen-parts.ts";
 import { keptItems, pushedInOrder } from "./kept-items.ts";
@@ -50,6 +51,7 @@ import { bindsOf } from "./uses.ts";
 import { effectOfOperation, hostOp, ownOperations } from "../../ters/src/lang/hosts.ts";
 import * as I from "../../ters/src/lang/int.ts";
 import { gpuMaps } from "./gpu-maps.ts";
+import { gpuDraws, packsOf } from "./gpu-draws.ts";
 import { rangeArrays, rangeChoices } from "./range-choices.ts";
 import { earlyAnd } from "./early-and.ts";
 import { ARRAY_RT, emptyArray, isArray, endsAsBefore, fails, keyList, kids, listSteps, mapKids, RT, isData, isRecord, lowerScalar, poolHeld, type CoreIR, type LType, type Op, type RType, type SExpr, type SFunc, type TType } from "./scalar.ts";
@@ -785,6 +787,8 @@ function lowerCoreIn(code: Code, info: Info, names: Record<Id, string>, roots: I
   if (!envSet("NO_ZP")) ir = zeroParts(ir, ir.funcs.flatMap((g, i) => (roots.includes(g.def) && !g.inner ? [i] : []))).ir;
   // A read or write at an item path, given the path's parts (C273).
   if (!envSet("NO_ITEM_PATHS")) itemPaths(ir);
+  // A closure made only to be applied at once, a call of its code (C288).
+  if (!envSet("NO_KNOWN_CLOSURES")) knownClosures(ir);
   // Small pure functions put in place, so that sharing reaches across
   // them (C194); then a pure call made twice with the same inputs, made
   // once (C189).
@@ -1392,8 +1396,12 @@ export function corePageScript(ir: CoreIR, name: string, page: string, title: st
   const kernels = worlds.includes("mapAway") ? gpuMaps(ir) : {};
   const js = Object.keys(kernels).length ? `R.pageGpu(${JSON.stringify(kernels)});\n${js1}` : js1;
   const code = codeFor(ir, js);
+  // Its draws the GPU takes, each as a site (G9c, gpu-draws.ts).
+  const draws = ir.drawSites ? gpuDraws(ir).sites : {};
+  const drawn = Object.keys(draws).length ? [using("pageDraws", page), `pageDraws(${JSON.stringify(draws)}, ${packsOf(draws)});`] : [];
   return wrapped(page, [
     using("startCorePage", page),
+    ...drawn,
     ...solverFor(code, page, js),
     ...floatsFor(js, page),
     ...builtinsFor(js, page),

@@ -484,6 +484,25 @@ test("typed field shared by two types offers each type", async () => {
   if (r.ok) assert.deepEqual(r.choices?.map((c) => c.label), ["as a Card", "as a Quick"]);
 });
 
+// A field the program's own type shares with a library type (std's
+// Placed has a position) reads as the program's, with no choices: the
+// library's value is settled where the library hands it over (R12 §2).
+// Two of the program's own still ask, as above.
+test("typed field shared with a library type reads as the program's own", async () => {
+  const { Lang } = await import("../src/lang/dsl.ts");
+  const { base, baseNames } = await import("../src/lang/load.ts");
+  const { NUMBER } = await import("../src/lang/types.ts");
+  const k = new Lang();
+  k.type("Body", [], [["body", [["position", () => k.tref(NUMBER)], ["mass", () => k.tref(NUMBER)]]]]);
+  const f = k.def("moved");
+  let hole = "";
+  k.define(f, k.fn(["b"], () => (hole = k.hole())));
+  const code = base(k.code), names = baseNames(k.names);
+  const r = fillValue(code, names, infer(code, names), hole, "b.position", f);
+  assert.ok(r.ok, !r.ok ? r.reason : "");
+  if (r.ok) assert.equal(r.choices, undefined);
+});
+
 // A call of a name several things share says which it took (E223):
 // clinic's `as float64(heap size(…))` is Int's, by its own type.
 test("a call of a shared name says which meaning it took", async () => {

@@ -93,11 +93,11 @@ import { countsInto } from "./fold-chunks.ts";
 import { originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "../../ters/src/lang/prelude-ids.ts";
 
 const ZIPPED = PRELUDE_DEFS["zipped"];
-import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
+import { ownEffects, parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
+import { FRAME_OPS, TARGET, WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
 import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW } from "../../ters/src/lang/std.ts";
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
@@ -138,7 +138,7 @@ const TABLE_RT: Record<Id, string> = {
 const LOG_EFFECT = "std.log";
 // together and race (C44): in C, each action on a fiber.
 const libDef = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
-const TOGETHER = libDef("together"), RACE = libDef("race");
+const TOGETHER = libDef("together"), RACE = libDef("race"), NEIGHBOURS = libDef("neighbours");
 
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -581,7 +581,11 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // lowered without `data`, shader or not (C163): an Int is an int32.
 // `stops`: where each stop site is (C143, stops.ts): the node a stop was
 // lowered from, and the definition it is in.
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; sharedSites?: { site: number; at: Id; how: string }[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
+// A draw (FRAMES.md, G9c): its call, its vertex and fragment functions as
+// written, and the binders they read, given to the compiled draw after
+// its site so the GPU's uniform gets their values (gpu-draws.ts).
+export interface DrawSite { site: number; at: Id; vertex: Id; fragment: Id; caps: Id[] }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; drawSites?: DrawSite[]; sharedSites?: { site: number; at: Id; how: string }[]; nearSites?: { at: Id; by: "grid" | "k-d tree" }[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -644,6 +648,11 @@ export function shareAlways(js: Iterable<Id>, c: Iterable<Id> = [], page: Iterab
 // (core-js.ts's branchesFrom and pageBranches, c.ts's lab_pool_ready).
 let pool: ReadonlyMap<string, number> = new Map();
 export const poolHeld = (target: "JavaScript" | "JavaScript page" | "C"): number | undefined => pool.get(target);
+// The way each call of neighbours is held to (L280g, the choices' `way`
+// entries), by its node: every pair compared, a grid of cells this
+// many metres (the reach's units) on a side, or a k-d tree.
+let nearHeld: ReadonlyMap<Id, "every pair" | "k-d tree" | number> = new Map();
+export const holdNeighbours = (ways: Iterable<[Id, "every pair" | "k-d tree" | number]>) => { nearHeld = new Map(ways); };
 const runsOf = (at: Id): SExpr[] => { const n = onWorkers.runs.get(at); return n ? [{ k: "num", v: n }] : []; };
 const awayOn = (at: Id): SExpr[] => { const on = onWorkers.page.get(at), n = runsOf(at); return on || n.length ? [{ k: "text", v: on ?? "" }, ...n] : []; };
 // map.worth's say, true where its site is held anywhere off the main thread.
@@ -915,6 +924,19 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // checker dropped counts too: `t > 0 and x / t` is answered because the
   // division is worked out only where t > 0 (L259).
   const acting = new Map<Id, boolean>();
+  // A function argument whose type says it only computes (it may not
+  // finish, as the definition it stands in for may not).
+  // A lambda written there, by what its body does (pure-branches.ts, as a
+  // shared map's function is read); a definition, by its type.
+  const placeComputes = (id: Id): boolean => {
+    const n = code.nodes[id];
+    if (n?.kind === "lambda") { const own = ownEffects(code, info, n.body); return !!own && [...own].every((e) => e === DIVERGE); }
+    if (n?.kind !== "ref" || code.nodes[n.target]?.kind !== "def") return false;
+    const t = info.subst.resolve(info.typeOf.get(n.target) ?? { t: "var", v: -1 });
+    if (t.t !== "fn") return false;
+    const row = info.subst.resolveRow(t.eff);
+    return row.tail === null && row.effs.every((e) => e === DIVERGE);
+  };
   const mayAct = (id: Id): boolean => {
     let r = acting.get(id);
     if (r !== undefined) return r;
@@ -1009,11 +1031,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // A page's map or keep on its workers (C61 c′): its site and the node of
   // its function, which the GPU may run too (C61 d′, gpu-maps.ts).
   const awayMaps: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[] = [];
+  const drawSites: DrawSite[] = [];
   // A command-line program's work shared out on worker threads where it
   // is worth it (C42, C43): its site, the node it is about (a map's
   // function, a fold's item arm, a search) and how; the program's choices
   // list those its code kept (cli/choices.ts placeLines).
   const sharedSites: { site: number; at: Id; how: string }[] = [];
+  // Each call of neighbours the grid may take (L280g), by its node: the
+  // choices' way entries.
+  const nearSites: { at: Id; by: "grid" | "k-d tree" }[] = [];
   // And C's: each call the threads run (c.ts `par:`), by the expression
   // itself, which the choices find in the code kept (cli/choices.ts).
   const threadSites: { e: SExpr; at: Id; how: string }[] = [];
@@ -1128,6 +1154,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     }
     if (opts.data && t.args.some(freeInside)) t = { ...t, args: t.args.map(freed) };
     if (t.id === NUMBER) return "f64";
+    // A pass's target in a shader (G10b): the number of a texture the draw
+    // samples (gpu-draws.ts), as a Float64.
+    if (opts.shader && !opts.data && t.id === TARGET) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
     // Int held in 32 bits wherever Int isn't the heap's (C66c in shaders;
@@ -1324,8 +1353,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const d = code.nodes[def] as NodeOf<"def">;
     const lam = d?.body ? code.nodes[d.body] : null;
     const fail = (why: string): never => { refused.set(key, why); throw new Refused(`calls ${nm(def)}, which ${why}`); };
-    // A constant (`data`): a function of no inputs, computed where it's used.
-    const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con" && t.id === ARRAY)) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
+    // A constant (`data`, or in a shader any value that isn't a function:
+    // an array, a Float64, a record, G9c): a function of no inputs,
+    // computed where it's used.
+    const constant = (!!opts.data || (!!opts.shader && !!t && t.t === "con")) && !!t && t.t !== "fn" && !!lam && !["lambda", "typedef", "builtin"].includes(lam.kind);
     if (!constant && (!t || t.t !== "fn" || lam?.kind !== "lambda")) fail("is not a function written in the program");
     const ft = (constant ? { t: "fn", params: [], ret: t, eff: null } : t) as Extract<Type, { t: "fn" }>;
     // A relation whose type is one of its readings (L130: polar read from
@@ -1431,10 +1462,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (later) return { ...later, tail };
         // A case with no fields (empty, nothing) written alone.
         if (opts.data && code.nodes[n.target]?.kind === "variant") return build(n.target, zonk(id), []);
-        // A constant array in a shader (C66c): a function of no inputs.
+        // A constant array in a shader (C66c), or a Float64, an Int or a
+        // record a vertex function reads (G9c, flock's `eye distance`,
+        // `still`): a function of no inputs.
         if (opts.shader && !opts.data && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
-          if (t && isArray(t)) return { k: "call", fn: func(n.target, new Map()), args: [], tail };
+          if (t && !isFn(t)) return { k: "call", fn: func(n.target, new Map()), args: [], tail };
         }
         if (defunc && code.nodes[n.target]?.kind === "def") {
           const t = stype(zonk(id));
@@ -1706,6 +1739,28 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const e = opOf.get(target)!;
           return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
         }
+        // neighbours (L280g) on a grid, in JavaScript's runtime
+        // (ters/library/near.ts, core-rt.ts `neighbours.grid`), where its
+        // place only computes; what the grid can't take, or a budget
+        // that counts steps, runs as compiled (the runtime's FAIL). Its
+        // items and reach once, as locals.
+        if (opts.host && (SPLIT_COPIED_FROM.get(target) ?? originalOf(target)) === NEIGHBOURS && n.args.length === 3 && !given.has(n.id) && placeComputes(n.args[1])) {
+          const t = stype(zonk(id)), tx = stype(zonk(n.args[0])), tr = stype(zonk(n.args[2])), tp = stype(zonk(n.args[1]));
+          // Places of more than 3 parts on the k-d tree, which takes any
+          // number; the grid looks through 3^parts cells around each.
+          const parts = tp && typeof tp === "object" && "result" in tp && typeof tp.result === "object" && "fields" in tp.result ? tp.result.fields.length : 1;
+          const by = parts > 3 ? "k-d tree" as const : "grid" as const, way = nearHeld.get(n.id) ?? (by === "k-d tree" ? by : undefined);
+          if (t && tx && tr) nearSites.push({ at: n.id, by });
+          if (t && tx && tr && way !== "every pair") {
+            const xs = f.locals.push(tx) - 1, r = f.locals.push(tr) - 1, res = f.locals.push(t) - 1, place = expr(n.args[1], env, f, false);
+            given.set(n.id, [local(xs), expr(n.args[1], env, f, false), local(r)]);
+            let plain: SExpr;
+            try { plain = expr(id, env, f, false); } finally { given.delete(n.id); }
+            const arrays: SExpr[] = [{ k: "bool", v: isArray(t) }, { k: "bool", v: isArray(t) && isArray(t.item) }];
+            const grid: SExpr = { k: "rt", fn: "neighbours.grid", args: [local(xs), place, local(r), { k: "rt", fn: "fuel.get", args: [] }, ...arrays, ...(typeof way === "number" ? [{ k: "num" as const, v: way }] : way === "k-d tree" ? [{ k: "text" as const, v: way }] : [])] };
+            return { k: "let", i: xs, value: expr(n.args[0], env, f, false), body: { k: "let", i: r, value: expr(n.args[2], env, f, false), body: { k: "attempt", body: grid, res, ok: local(res), otherwise: plain, t } } };
+          }
+        }
         // together and race in C (C44): each action on a fiber of its own,
         // which an await parks till its ticket is ready (c.ts
         // `fbranches:`), not start branch's handler, whose await is of
@@ -1901,6 +1956,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           // Their inputs' types, for WebAssembly's imports (L213c9).
           return { k: "world", op: KEPT_OPS[target], aborts: false, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
         }
+        // A file's bytes, read and written, in C and WebAssembly (C291):
+        // the world's, as JavaScript's HOST_WORLD; failing as reading a
+        // file does. Their inputs' types, for WebAssembly's imports.
+        if (opts.handlers && (target === IO.readBytes || target === IO.writeBytes)) {
+          const t = stype(zonk(id));
+          if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(id))}`);
+          return { k: "world", op: target === IO.readBytes ? "readBytes" : "writeBytes", aborts: true, args: args(), t, ins: n.args.map((x) => stype(zonk(x))!) };
+        }
         // A log line nothing handles (L213a3, for a release that logs): the
         // world's log, as the evaluator writes it.
         if ((opts.host || opts.releases) && target === LOG_OP && !tailOps.has(LOG_OP)) {
@@ -1973,6 +2036,22 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const head = lt.cases[c].fields.find((x) => x.t !== lt)!.t;
           return { k: "list", t: lt, c, items: args(), item: f.locals.push(head) - 1, acc: f.locals.push(lt) - 1 };
         }
+        // A record of Float64s' unit parts, one record per field (L230): the
+        // list written out at its type, as arith.ts writes it where the type
+        // is known there. Its input is a value of the type, used for that.
+        if (opts.data && target === S.unitParts && n.args.length === 1) {
+          const lt = stype(zonk(id)), x = stype(zonk(n.args[0]));
+          const c = lt && isData(lt) ? lt.cases.findIndex((y) => y.variant === CONS) : -1;
+          if (!lt || !isData(lt) || c < 0 || !x) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const width = x === "f64" ? 1 : isRecord(x) && x.fields.every((y) => y.t === "f64") ? x.fields.length : isData(x) && x.cases.length === 1 && x.cases[0].fields.every((y) => y.t === "f64") ? x.cases[0].fields.length : 0;
+          if (!width) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(n.args[0]))}`);
+          const unit = (i: number): SExpr => {
+            const parts = Array.from({ length: width }, (_, j): SExpr => ({ k: "num", v: i === j ? 1 : 0 }));
+            return x === "f64" ? parts[0] : isRecord(x) ? { k: "make", t: x, args: parts } : { k: "new", t: x as DType, c: 0, args: parts };
+          };
+          const head = lt.cases[c].fields.find((y) => y.t !== lt)!.t;
+          return { k: "list", t: lt, c, items: Array.from({ length: width }, (_, i) => unit(i)), item: f.locals.push(head) - 1, acc: f.locals.push(lt) - 1 };
+        }
         if (opts.records && t?.kind === "field" && n.args.length === 1) {
           const r = stype(zonk(n.args[0]));
           if (r && isData(r)) {
@@ -2021,6 +2100,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
           return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
+        }
+        // sampled(t, across) in a draw's fragment (G10b, gpu-draws.ts): the
+        // target is a texture's number among those the draw samples, held
+        // as a Float64, and across's two parts; wgsl.ts calls lab_sampled.
+        if (opts.shader && target === FRAME_OPS.sampled && n.args.length === 2) {
+          const t = stype(zonk(id)), at = stype(zonk(n.args[1]));
+          if (!t || !isRecord(t) || !at || !isRecord(at) || at.fields.length !== 2 || at.fields.some((x) => x.t !== "f64")) throw new Refused("samples a texture across something other than two Float64s");
+          const a = f.locals.push(at) - 1, across: SExpr = { k: "local", i: a };
+          return { k: "let", i: a, value: expr(n.args[1], env, f, false), body: { k: "rt", fn: "frame.sampled", args: [expr(n.args[0], env, f, false), { k: "get", rec: across, t: at, i: 0 }, { k: "get", rec: across, t: at, i: 1 }], host: { t, partial: false } } };
         }
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);
@@ -2231,6 +2319,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (deep && (!HOST_CELLS.has(target) || handsOn)) throw new Refused(`uses ${nm(target)} on data holding a Bool, which isn't lowered yet`);
     if (ts.some((t) => severalInside(t!))) throw new Refused(`uses ${nm(target)} on a function with several answers, which the evaluator's can't call yet`);
     const t = ts[ts.length - 1]!;
+    // A draw is given its site and what its two functions read (G9c).
+    if (target === FRAME_OPS.draw && n.args.length === 4) {
+      const caps = [...new Set([...refsIn(n.args[2]), ...refsIn(n.args[3])])].filter((b) => env.has(b));
+      const site = drawSites.push({ site: drawSites.length, at: n.id, vertex: n.args[2], fragment: n.args[3], caps }) - 1;
+      return { k: "rt", fn: `host:${target}`, args: [...n.args.map((a) => expr(a, env, f, false)), { k: "num", v: site }, ...caps.map((b): SExpr => ({ k: "local", i: env.get(b)! }))], host: { t, partial: false } };
+    }
     return { k: "rt", fn: `host:${target}${t === "i32" ? ":bool" : deep ? ":deep" : ""}`, args: n.args.map((a) => expr(a, env, f, false)), host: { t, partial: effs.includes(CHOICE) || !!STD_MANY[target] || target === CELL_OPS.read || target === CELL_OPS.readAt } };
   }
   // A relation run some way with one answer, for JavaScript from the core
@@ -5931,7 +6025,18 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const defaults = (r: Id): At => {
     const raw = info.typeOf.get(r) && info.subst.zonk(info.typeOf.get(r)!);
     const s = info.subst;
-    return new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+    const out = new Map(raw ? [...new Set(vars(raw))].filter((v) => s.numbers.has(v) || s.arith.has(v)).map((v): [number, Type] => [v, { t: "con", id: NUMBER, args: [] }]) : []);
+    // A shader's root as the program given typed it, where checking the
+    // passes' program again left a variable (a draw's fragment lifted with
+    // what its vertex read, gpu-draws.ts: an input it ignores).
+    const was = opts.shader && asGiven.typeOf.get(r) && asGiven.subst.zonk(asGiven.typeOf.get(r)!);
+    const match = (now: Type, then: Type): void => {
+      if (now.t === "var") { if (then.t !== "var" && !out.has(now.v)) out.set(now.v, then); }
+      else if (now.t === "con" && then.t === "con" && now.id === then.id) now.args.forEach((a, j) => then.args[j] && match(a, then.args[j]));
+      else if (now.t === "fn" && then.t === "fn" && now.params.length === then.params.length) { now.params.forEach((p, j) => match(p, then.params[j])); match(now.ret, then.ret); }
+    };
+    if (raw && was) match(raw, was);
+    return out;
   };
   for (const r of roots) {
     const from = funcs.length, shaped = shapes.length;
@@ -5968,7 +6073,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const derived = new Map([...fns.values()].flatMap((t): [string, FType][] => (derivedKeys.has(plainKey(t)) ? [[t.key, derivativeType(t)]] : [])));
   // Refusals by definition; those of one specialization stay inside.
   const niche = opts.data ? niches(funcs, [...records.values()], [...datas.values()], [...arrays.values()], [...fns.values()], shapes, [...tables.values()]) : new Set<string>();
-  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(sharedSites.length ? { sharedSites } : {}), ...(threadSites.length ? { threadSites } : {}), ...(derived.size ? { derived } : {}) };
+  const ir: CoreIR = { stops: sites, funcs, refused: new Map([...refused].filter(([k]) => !k.includes("|"))), records: [...records.values()], data: [...datas.values()].filter((d) => !niche.has(d.key)), arrays: [...arrays.values()], tables: [...tables.values()], fns: [...fns.values()], shapes, code, info, escapes: escapes.map((e) => stype({ t: "con", id: e, args: [] }) as DType), rounded, ...(opts.shader && !opts.data ? { shader: true as const } : {}), ...(!opts.data ? { int32: true as const } : {}), ...(awayMaps.length ? { awayMaps } : {}), ...(drawSites.length ? { drawSites } : {}), ...(sharedSites.length ? { sharedSites } : {}), ...(nearSites.length ? { nearSites } : {}), ...(threadSites.length ? { threadSites } : {}), ...(derived.size ? { derived } : {}) };
   // A record's Int field proved to fit 32 bits, stored as a machine word
   // (C150e): WebAssembly and C, not core JS, whose values the host reads.
   // A record a loop carries, its fields as values of their own (C68a); a

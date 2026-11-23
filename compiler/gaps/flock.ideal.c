@@ -1,7 +1,8 @@
 // flock (GAPS.md game round 3, BACKLOG G6d), written by hand: the same 3D
 // boids as compiler/gaps/flock, as a C programmer would write them. The
-// birds are columns, the grid a counting sort each tick, the arithmetic in
-// the program's order, so it prints the same digits.
+// birds are columns, the grid a counting sort each tick, each bird's
+// neighbours added in their numbers' order (as `neighbours` lists them) and
+// the arithmetic in the program's order, so it prints the same digits.
 // cc -O2 -ffp-contract=off flock.ideal.c -lm [-fopenmp]; ./a.out [ticks] [birds]
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,18 +42,20 @@ int main(int argc, char **argv) {
     for (int i = 0; i < n; i++) {
       double px = x[i], py = y[i], pz = z[i];
       double sx = 0, sy = 0, sz = 0, hx = 0, hy = 0, hz = 0, cx = 0, cy = 0, cz = 0; int count = 0;
-      int ax = along(px), ay = along(py), az = along(pz);
+      int ax = along(px), ay = along(py), az = along(pz), m = 0, near[n];
       for (int dz = -1; dz <= 1; dz++) for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
         int k = (((az + dz + SC) % SC) * SC + (ay + dy + SC) % SC) * SC + (ax + dx + SC) % SC;
         for (int r = start[k]; r < start[k + 1]; r++) {
           int j = order[r];
           double ox = x[j] - px, oy = y[j] - py, oz = z[j] - pz, d2 = ox * ox + oy * oy + oz * oz;
-          if (d2 < 100.0 && d2 > 0.0) {
-            double inv = 1.0 / d2;
-            sx = sx - ox * inv; sy = sy - oy * inv; sz = sz - oz * inv;
-            hx += vx[j]; hy += vy[j]; hz += vz[j]; cx += ox; cy += oy; cz += oz; count++;
-          }
+          if (d2 < 100.0 && d2 > 0.0) { int q = m++; while (q > 0 && near[q - 1] > j) { near[q] = near[q - 1]; q--; } near[q] = j; }
         }
+      }
+      for (int q = 0; q < m; q++) {
+        int j = near[q];
+        double ox = x[j] - px, oy = y[j] - py, oz = z[j] - pz, inv = 1.0 / (ox * ox + oy * oy + oz * oz);
+        sx = sx - ox * inv; sy = sy - oy * inv; sz = sz - oz * inv;
+        hx += vx[j]; hy += vy[j]; hz += vz[j]; cx += ox; cy += oy; cz += oz; count++;
       }
       double ux = gx - px, uy = gy - py, uz = gz - pz, ul = sqrt(ux * ux + uy * uy + uz * uz), tx = 0, ty = 0, tz = 0;
       if (ul > 0.0) { double r = 1.0 / ul; tx = ux * r; ty = uy * r; tz = uz * r; }
@@ -81,5 +84,5 @@ int main(int argc, char **argv) {
       printf("tick %d: checksum %.6f, mean speed %.6f\n", tick + 1, sum, speed / (double)n);
     }
   }
-  puts("Credits: the birds flock by Craig Reynolds's boids (Flocks, herds and schools, SIGGRAPH 1987), looking only at their own cell of a grid and the 26 around it; random numbers by Stephen Park and Keith Miller's minimal standard generator (1988).");
+  puts("Credits: the birds flock by Craig Reynolds's boids (Flocks, herds and schools, SIGGRAPH 1987), each looking only at the birds within reach, found on a grid of cells (Bentley, Stanat and Williams, 1977); random numbers by Stephen Park and Keith Miller's minimal standard generator (1988).");
 }

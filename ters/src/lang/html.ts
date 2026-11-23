@@ -16,6 +16,8 @@ import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
 import { HTML_V, MARK_V } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
+import { rasterize } from "./raster.ts";
+import { GpuFrames, sitedOf } from "./gpu-frame.ts";
 
 export interface Node_ { textContent: string | null }
 export interface El extends Node_ {
@@ -23,6 +25,10 @@ export interface El extends Node_ {
   checked?: boolean;
   append(...nodes: Node_[]): void;
   replaceChildren(...nodes: Node_[]): void;
+  // Where a host has them, a part that drew the same list element again
+  // moves only the children that changed (C287); else all are put again.
+  insertBefore?(node: Node_, before: Node_ | null): void;
+  removeChild?(node: Node_): void;
   addEventListener(type: string, f: (e: { key?: string; target?: unknown }) => void): void;
   setAttribute(name: string, value: string): void;
   removeAttribute?(name: string): void;
@@ -39,6 +45,9 @@ export interface Context2D {
   beginPath(): void; arc(x: number, y: number, r: number, a: number, b: number): void; fill(): void;
   moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; stroke(): void;
   fillText(text: string, x: number, y: number): void;
+  // For a rendered frame (G9b), drawn on the CPU.
+  createImageData?(w: number, h: number): { data: Uint8ClampedArray };
+  putImageData?(image: { data: Uint8ClampedArray }, x: number, y: number): void;
 }
 export interface Doc {
   createElement(tag: string): El;
@@ -80,7 +89,7 @@ export interface Mount {
 const placed = new WeakMap<Node_, { parent: Node_; i: number }>();
 const kidsOf = new WeakMap<Node_, Node_[]>();
 const handlersOf = new WeakMap<Node_, Map<string, (at: [string, string, number, number, number]) => void>>();
-const place = (parent: Node_, kids: Node_[]) => { kidsOf.set(parent, kids); kids.forEach((k, i) => placed.set(k, { parent, i })); };
+const place = (parent: Node_, kids: Node_[], from = 0) => { kidsOf.set(parent, kids); for (let i = from; i < kids.length; i++) placed.set(kids[i], { parent, i }); };
 export function pathOf(n: Node_): number[] {
   const path: number[] = [];
   for (let p = placed.get(n); p && kidsOf.get(p.parent)?.[p.i] === n; n = p.parent, p = placed.get(n)) path.unshift(p.i);
@@ -168,6 +177,32 @@ const fresh = (n: Node_): Node_[] => moved.has(n) ? [] : holding.get(n)?.flatMap
 // Held waits (C61 c′) not yet over, and the events that came meanwhile.
 const held = { n: 0, queue: [] as (() => void)[], frames: new Map<unknown, [string, string, number, number, number]>() };
 
+// A part drawn again as the same element with no attributes, a list's
+// `ul` with its rows (for each), say (C287): the element stays and only
+// the children that changed are put in or taken out. A card added to a
+// long list puts one row on the page, not every row again. Its children
+// that aren't kept rows were the part's, gone with its last run, and are
+// drawn again, so they change too.
+function redrawn(e: El, was: Value | null, v: Value, m: Mount, svg: boolean): boolean {
+  const a = was as Data | null, b = v as Data;
+  if (!a || typeof b !== "object" || b === null || a.tag !== HTML_V.element || b.tag !== HTML_V.element || a.fields[0] !== b.fields[0]) return false;
+  if (KEPT.has(a as object) || KEPT.has(b as object) || fromList(a.fields[1]).length || fromList(b.fields[1]).length || !e.insertBefore || !e.removeChild) return false;
+  const old = kidsOf.get(e);
+  if (!old) return false;
+  const inSvg = svg || b.fields[0] === "svg";
+  const kids = fromList(b.fields[2]).map((c) => mountHtml(c, m, inSvg));
+  let k = 0;
+  while (k < old.length && k < kids.length && old[k] === kids[k]) k++;
+  let end = 0;
+  while (end < old.length - k && end < kids.length - k && old[old.length - 1 - end] === kids[kids.length - 1 - end]) end++;
+  const before = end ? kids[kids.length - end] : null;
+  for (let i = k; i < old.length - end; i++) if (placed.get(old[i])?.parent === e) e.removeChild(old[i]);
+  for (let i = k; i < kids.length - end; i++) e.insertBefore(kids[i], before);
+  place(e, kids, k);
+  if (kids.some((x) => moved.has(x) || holding.has(x))) holding.set(e, kids); else holding.delete(e);
+  return true;
+}
+
 export function mountHtml(v: Value, m: Mount, svg = false): Node_ {
   const owner = typeof v === "object" && v !== null ? KEPT.get(v) : undefined;
   if (!owner || owner.disposed) return draw(v, m, svg);
@@ -227,8 +262,13 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
       const inSvg = svg && !!doc.createElementNS;
       const e = inSvg ? doc.createElementNS!(SVG, "g") : doc.createElement("lab-part");
       if (!inSvg) e.setAttribute("style", "display: contents");
-      let now: Node_ | undefined;
-      watch(e, "part", () => { const v = viewOf(m.call, d.fields[0]); if (v === null) { now = undefined; e.replaceChildren(); place(e, []); } else { e.replaceChildren((now = mountHtml(v, m, svg))); place(e, [now]); } }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); place(e, [now]); }, () => (now ? fresh(now) : []));
+      let now: Node_ | undefined, was: Value | null = null;
+      watch(e, "part", () => {
+        const v = viewOf(m.call, d.fields[0]);
+        if (v === null) { now = undefined; e.replaceChildren(); place(e, []); }
+        else if (!(now && redrawn(now as El, was, v, m, svg))) { e.replaceChildren((now = mountHtml(v, m, svg))); place(e, [now]); }
+        was = v;
+      }, () => { e.replaceChildren((now = doc.createTextNode(STUCK))); place(e, [now]); was = null; }, () => (now ? fresh(now) : []));
       return e;
     }
     case HTML_V.element: {
@@ -317,7 +357,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                   });
                 } else if (err instanceof Pending && !err.resume && !err.again) console.error(`${name} handler waits, and this page can't go on from a wait yet: it runs in the editor's preview (C40)`);
                 else if (err instanceof Pending) { const go = err.resume; err.ready.then(() => fire(go ? () => { for (const v of go()) return v; } : run)); }
-                else if (err instanceof OutOfSteps) console.error(`${name} handler ${STUCK}`);
+                else if (err instanceof OutOfSteps) { if (!(err as { quiet?: boolean }).quiet) console.error(`${name} handler ${STUCK}`); }
                 else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }
             };
@@ -339,6 +379,10 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           // cell the view read changes. Out of steps, it keeps what it
           // painted last.
           watch(e, "paint", () => paintMarks(e, viewOf(m.call, a.fields[0])));
+        } else if (a.tag === HTML_V.render) {
+          // A frame (G9b, FRAMES.md): drawn on the CPU here, again whenever
+          // a cell its view read changes.
+          watch(e, "render", () => renderFrame(e, viewOf(m.call, a.fields[0]), m.call));
         } else if (a.tag === HTML_V.listeningWhile) {
           // Read by the listen beside it.
         } else if (a.tag === HTML_V.listen || a.tag === HTML_V.listenStereo) {
@@ -367,6 +411,41 @@ const TYPED = new Set(["input", "textarea", "select"]);
 // The marks a canvas paints (std.ts Mark), on its 2D context, in its own
 // units. A compiled record's fields are f0, f1, … and the evaluator's are
 // in fields, so each is read either way.
+// A canvas renders with WebGPU when every draw of its first frame has a
+// site the compiled page printed (gpu-frame.ts), and with raster.ts on the
+// CPU otherwise: a canvas keeps the one kind of context it first gave. While
+// WebGPU starts, the latest frame waits and is drawn once it can be.
+const rendering = new WeakMap<El, { gpu: GpuFrames | null | "opening"; latest: Value | null }>();
+// Every draw with a site.
+const listed = (v: Value): Value[] => (Array.isArray(v) ? v : fromList(v));
+const fieldOf = (o: Value, i: number): Value => (o as unknown as Record<string, Value>)[`f${i}`] ?? (o as Data).fields[i];
+const allSited = (frame: Value) => listed(fieldOf(frame, 0)).every((p) => listed(fieldOf(p, 3)).every((d) => sitedOf(d as Data)));
+function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
+  if (v === null) return;
+  let r = rendering.get(e);
+  if (!r) {
+    r = { gpu: null, latest: null };
+    rendering.set(e, r);
+    if ((globalThis.navigator as Navigator | undefined)?.gpu && allSited(v)) {
+      const state = r;
+      state.gpu = "opening";
+      void GpuFrames.open(e as unknown as HTMLCanvasElement).catch(() => null).then((g) => {
+        state.gpu = g;
+        if (state.latest !== null) renderFrame(e, state.latest, call);
+      });
+    }
+  }
+  r.latest = v;
+  if (r.gpu === "opening") return;
+  if (r.gpu && r.gpu.draw(v, sitedOf) !== false) return;
+  const c = e.getContext?.("2d");
+  if (!c?.createImageData || !c.putImageData || v === null) return;
+  const w = e.width || 300, h = e.height || 150;
+  const img = rasterize(v, w, h, call), out = c.createImageData(w, h);
+  out.data.set(img.rgba);
+  c.putImageData(out, 0, 0);
+}
+
 function paintMarks(e: El, v: Value | null): void {
   const c = e.getContext?.("2d");
   if (!c || v === null) return;

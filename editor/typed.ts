@@ -22,7 +22,7 @@ import { addVariant, fillHole } from "../ters/src/lang/refactor.ts";
 import { partNamed } from "../ters/src/lang/results.ts";
 import { planSolve } from "../ters/src/lang/solve.ts";
 import { solveMode } from "../ters/src/lang/modes.ts";
-import { ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX } from "../ters/src/lang/std.ts";
+import { std, ARITH, ARITHMETIC, ASSOCIATIVE, LEFT_ONLY, CONS, FALSE, LITERAL, NIL, S, SIGS, TRUE, TUPLE_MAX } from "../ters/src/lang/std.ts";
 import { tuplePart, tupleVariant } from "../ters/src/lang/std-values.ts";
 import { INT, NUMBER, STRING, schemeArith, shownIn, showType, type Type } from "../ters/src/lang/types.ts";
 import { parseUnit, type Unit } from "../ters/src/units.ts";
@@ -385,6 +385,17 @@ export function fillValue(code: Code, names: Names, info: Info, hole: Id, text: 
       const e = written(code, names, info, hole, text, t, wholes(t), defId);
       const fit = e.ok ? e : wholes(t) ? written(code, names, info, hole, text, t, false, defId) : e;
       if (fit.ok) ok.set(key, fit);
+    }
+    // Of a field the program's own type has and std's or a module's types
+    // have too (std's Placed has a position, as a program's Body does),
+    // the reading whose types are all the program's own is taken: a
+    // library type's value is settled where the library hands it over (a
+    // vertex function's Placed by draw). Two of the program's own still ask.
+    if (ok.size > 1) {
+      const library = new Set([...std.defs, ...LIBRARY.code.defs]);
+      const own = asked.filter((t) => ok.has(owners(t).join(", ")) && owners.types(t).every((ty) => !library.has(ty)));
+      const keys = new Set(own.map((t) => owners(t).join(", ")));
+      if (keys.size === 1) return ok.get([...keys][0])!;
     }
     if (ok.size > 1) {
       const choices = [...ok].map(([key, edit]) => ({ label: `as ${key}`, edit }));
@@ -876,8 +887,9 @@ function fieldOwners(code: Code, info: Info, names: Names) {
   const ownerOf = new Map<Id, Id>();
   for (const v of nodesOfKindIn(code.nodes, "variant")) if (v.kind === "variant") for (const f of v.fields) ownerOf.set(f, v.id);
   const shared = (op: Id) => { const n = names[op]; return n !== undefined && Object.keys(names).filter((id) => names[id] === n && code.nodes[id]?.kind === "field").length > 1; };
-  return (t: Typed): string[] => {
-    const out = new Set<string>();
+  // The types whose shared fields a reading reads.
+  const types = (t: Typed): Id[] => {
+    const out = new Set<Id>();
     const go = (x: Typed): void => {
       if ("params" in x) return go(x.body);
       if ("cond" in x) return [x.cond, x.then, x.else].forEach(go);
@@ -886,11 +898,13 @@ function fieldOwners(code: Code, info: Info, names: Names) {
       if (!("op" in x)) return;
       x.args.forEach(go);
       const v = ownerOf.get(x.op);
-      if (v && shared(x.op)) { const ty = info.owner.get(v), n = names[ty ?? v] ?? ty ?? v; out.add(`${/^[AEIOU]/.test(n) ? "an" : "a"} ${n}`); }
+      if (v && shared(x.op)) out.add(info.owner.get(v) ?? v);
     };
     go(t);
-    return [...out].sort();
+    return [...out];
   };
+  const labels = (t: Typed): string[] => types(t).map((ty) => { const n = names[ty] ?? ty; return `${/^[AEIOU]/.test(n) ? "an" : "a"} ${n}`; }).sort();
+  return Object.assign(labels, { types });
 }
 
 function readings(t: Typed): Typed[] {

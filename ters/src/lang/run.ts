@@ -290,6 +290,8 @@ export const PAGE_STEPS = 1_000_000;
 let page: Fuel | null = null;
 // The evaluator's machine steps, counted to ask a page's deadline (I310).
 let machineTicks = 0;
+// The direct search's calls, counted for the same (I310).
+let searchTicks = 0;
 // How many it has taken so far: work, for a caller weighing a run (C255).
 export const evaluatorTicks = (): number => machineTicks;
 // Compiled code's count of deep calls (compiler/src/runtime.js, $rec):
@@ -432,7 +434,14 @@ export interface Runtime {
   // The host's answers to the program's own effects (hosts.ts, FOREIGN.md):
   // hosts/js.js's default export, by operation id.
   hosts?: Hosts;
+  // Counted while the run goes (L280d, cli/choices.ts measuredLines): each
+  // call node listed, by the job it is, and what it gave now and then.
+  measure?: Measure;
 }
+// A run's measurements: the calls to count, by node, each the job it
+// counts as; `gave` told what a call was given and gave at its 1st, 2nd,
+// 4th, … call and every 4096th after.
+export interface Measure { calls: ReadonlyMap<Id, string>; counts: Map<string, number>; gave: (job: string, v: unknown) => void }
 
 // What the world effects do. A failure throws, with a message that becomes
 // the reason the program's Abort is given.
@@ -963,6 +972,17 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const needs: Direct = () => { throw NEED; };
   // Whether a scope given from outside (ev) binds something besides binders.
   let looseScopes = false;
+  // A match or fold measured (L280d): counted, and now and then what it
+  // takes apart sized.
+  const measuredAt = (id: Id): ((v: Value) => void) | undefined => {
+    const m = rt.measure, job = m?.calls.get(id);
+    if (!m || job === undefined) return undefined;
+    return (v) => {
+      const c = (m.counts.get(job) ?? 0) + 1;
+      m.counts.set(job, c);
+      if ((c & (c - 1)) === 0 || (c & 4095) === 0) m.gave(job, v);
+    };
+  };
   const compile = (id: Id): Direct => {
     const d = compileNode(id);
     compiled.set(id, d);
@@ -1020,6 +1040,22 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         if (sc !== null) {
           let second: Direct | undefined;
           return (env) => { const x = argsOf()[0](env) as Data; return x.tag === sc ? x : (second ??= partOf(n.args[1]))(env); };
+        }
+        // A call measured (L280d): counted, and now and then what it was
+        // given and what it gave.
+        const m = rt.measure, job = m?.calls.get(id);
+        if (m && job !== undefined) {
+          let f: Direct | undefined;
+          return (env) => {
+            if (steps) spendDirect();
+            const g = (f ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k);
+            for (let i = 0; i < k; i++) vs[i] = as[i](env);
+            const c = (m.counts.get(job) ?? 0) + 1;
+            m.counts.set(job, c);
+            const v = callDirect(g, vs);
+            if ((c & (c - 1)) === 0 || (c & 4095) === 0) for (const x of [v, ...vs]) m.gave(job, x);
+            return v;
+          };
         }
         if (head.kind === "lambda") {
           let body: Direct | undefined;
@@ -1091,8 +1127,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
         let scrutinee: Direct | undefined, otherwise: Direct | undefined;
         const arms = new Map<Id, { binds: Id[]; body: Direct | undefined; id: Id }>();
         for (const [tag, arm] of matchArms(n)) arms.set(tag, { binds: arm.binds, body: undefined, id: arm.body });
+        const seen = measuredAt(id);
         return (env) => {
           const d = (scrutinee ??= compiledOf(n.scrutinee))(env) as Data, arm = arms.get(d.tag);
+          if (seen) seen(d);
           if (arm) return (arm.body ??= partOf(arm.id))(bind(env, arm.binds, d.fields));
           return (otherwise ??= partOf(n.otherwise!))(env);
         };
@@ -1105,7 +1143,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       // times for `path`'s 400 steps (I189).
       case "fold": {
         let scrutinee: Direct | undefined;
-        const bodies = new Map<Id, Direct>();
+        const bodies = new Map<Id, Direct>(), seen = measuredAt(id);
         return (env) => {
           const arms = foldArms(n);
           const go = (d: Data): Value => {
@@ -1119,7 +1157,9 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             if (!body) bodies.set(arm.arm.id, (body = compiledOf(arm.arm.body)));
             return body(inner);
           };
-          return go((scrutinee ??= compiledOf(n.scrutinee))(env) as Data);
+          const d = (scrutinee ??= compiledOf(n.scrutinee))(env) as Data;
+          if (seen) seen(d);
+          return go(d);
         };
       }
       default: return (env) => single(run((m) => m.eval(id, env)));
@@ -1154,6 +1194,10 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   };
   // The values of a call, each given to k in the order the machine finds them.
   const callSearch = (f: Value, args: Value[], k: K): boolean => {
+    // A page's deadline here too: a search through definitions that end
+    // spends no step and runs no machine (Countdown's view, 0.5 s before
+    // its first ask; Check main 11-23 saw 2.4 s).
+    if ((++searchTicks & 1023) === 0 && page?.over?.()) throw new OutOfSteps();
     const c = closureOf(f);
     const l = c && lamOf(c);
     if (l && !l.only) {
@@ -1715,6 +1759,14 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
           if (!this.fuel) spendStep();
           else if (--this.fuel.left < 0) return this.outOfFuel();
         }
+        // A call measured (L280d), made in an action: counted, and now and
+        // then what it was given (what it gives comes later, to its frame).
+        const m = rt.measure, job = m?.calls.get(n.id);
+        if (m && job !== undefined) {
+          const c = (m.counts.get(job) ?? 0) + 1;
+          m.counts.set(job, c);
+          if ((c & (c - 1)) === 0 || (c & 4095) === 0) for (let i = 1; i < vals.length; i++) m.gave(job, vals[i]);
+        }
         return this.apply(vals[0], vals.slice(1));
       }
       this.solve(n, vals, env);
@@ -1722,6 +1774,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
 
     resume(f: Frame) {
       const v = this.val;
+      // A match or fold measured (L280d), its value taken apart now.
+      if ((f.t === "match" || f.t === "fold") && rt.measure) { const m = rt.measure, job = m.calls.get(f.n.id); if (job !== undefined) { const c = (m.counts.get(job) ?? 0) + 1; m.counts.set(job, c); if ((c & (c - 1)) === 0 || (c & 4095) === 0) m.gave(job, v); } }
       switch (f.t) {
         case "parts": return this.parts(f.ids, f.i + 1, [...f.vals, v], f.env, f.n);
         case "match": {

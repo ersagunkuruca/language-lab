@@ -27,7 +27,7 @@ import { SITES, STOPS } from "./stops.ts";
 // `i64` a plain machine word, which the functions below compute with.
 // `mag` a big Int's magnitude, an array of 32-bit limbs.
 // An array function's (C66) own types: the view, its item, its buffer and the buffer's items.
-export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "raw" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
+export type VT = "i32" | "i64" | "int" | "mag" | "f64" | "text" | "raw" | "list" | "option" | "void" | "array" | "item" | "buf" | "items" | "note" | "table" | "key" | "value" | "tstore" | "tkeys" | "tvals" | "tst" | "tpath";
 
 export interface RtFn {
   name: string;
@@ -9348,6 +9348,123 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
         call $wasi.fail
         return
       end
+      i32.const 0`,
+  },
+  // A file's bytes as they are, and bytes written as a file (C291, as C's
+  // world.readBytes): Bytes the module's record of a List Int (its type
+  // given by wasm.ts as \$Bytes), made and read by the helpers the kept
+  // files' host uses (IntList.cons, Bytes.make …).
+  "wasi.readBytes": {
+    params: [["path", "text"]], result: "Bytes" as VT, partial: true, list: "std.list<type.int<>>",
+    locals: [["fd", "i32"], ["n", "i32"], ["e", "i32"], ["acc", "list"]],
+    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.readAll", "wasi_fd_close", "int.of", "IntList.nil", "IntList.cons", "Bytes.make"],
+    body: `
+      ${open(0, RIGHT.READ | RIGHT.SEEK | RIGHT.FILESTAT, 0, "ref.null $Bytes")}
+      local.get $fd
+      call $wasi.readAll
+      local.set $n
+      local.get $fd
+      call $wasi_fd_close
+      drop
+      i32.const 16
+      i32.load
+      local.tee $e
+      if void
+        ref.null $Bytes
+        local.get $e
+        local.get $path
+        call $wasi.fail
+        return
+      end
+      call $IntList.nil
+      local.set $acc
+      ${loopTo("local.get $n\ni32.eqz", `
+      local.get $n
+      i32.const 1
+      i32.sub
+      local.tee $n
+      i32.const @buf
+      i32.add
+      i32.load8_u
+      i64.extend_i32_u
+      call $int.of
+      local.get $acc
+      call $IntList.cons
+      local.set $acc`)}
+      local.get $acc
+      call $Bytes.make
+      i32.const 0`,
+  },
+  "wasi.writeBytes": {
+    params: [["path", "text"], ["b", "Bytes" as VT]], result: "i32", list: "std.list<type.int<>>",
+    locals: [["fd", "i32"], ["e", "i32"], ["n", "i32"], ["nil", "i32"], ["l", "list"], ["p", "i32"], ["w", "i32"]],
+    uses: ["wasi.kind", "wasi.open", "wasi.fail", "wasi.room", "wasi_fd_write", "wasi_fd_close", "int.small", "IntList.nil", "IntList.case", "IntList.cons.head", "IntList.cons.tail", "Bytes.items"],
+    body: `
+      ${open(1 | 8, RIGHT.WRITE | RIGHT.SEEK, 0, "")}
+      call $IntList.nil
+      call $IntList.case
+      local.set $nil
+      local.get $b
+      call $Bytes.items
+      local.set $l
+      ${loopTo("local.get $l\ncall $IntList.case\nlocal.get $nil\ni32.eq", `
+      local.get $n
+      i32.const 1
+      i32.add
+      call $wasi.room
+      i32.const @buf
+      local.get $n
+      i32.add
+      local.get $l
+      call $IntList.cons.head
+      call $int.small
+      i32.wrap_i64
+      i32.store8
+      local.get $n
+      i32.const 1
+      i32.add
+      local.set $n
+      local.get $l
+      call $IntList.cons.tail
+      local.set $l`)}
+      i32.const @buf
+      local.set $p
+      ${loopTo("local.get $n\ni32.eqz", `
+      i32.const 0
+      local.get $p
+      i32.store
+      i32.const 4
+      local.get $n
+      i32.store
+      local.get $fd
+      i32.const 0
+      i32.const 1
+      i32.const 8
+      call $wasi_fd_write
+      local.tee $e
+      if void
+        local.get $fd
+        call $wasi_fd_close
+        drop
+        local.get $e
+        local.get $path
+        call $wasi.fail
+        return
+      end
+      i32.const 8
+      i32.load
+      local.set $w
+      local.get $p
+      local.get $w
+      i32.add
+      local.set $p
+      local.get $n
+      local.get $w
+      i32.sub
+      local.set $n`)}
+      local.get $fd
+      call $wasi_fd_close
+      drop
       i32.const 0`,
   },
   "wasi.fileExists": {

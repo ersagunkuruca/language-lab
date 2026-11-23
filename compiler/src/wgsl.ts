@@ -707,6 +707,14 @@ export function emitWgsl(lowered: CoreIR, opts: { frame?: number; frameCount?: n
         case "rt": {
           // A value worked out once a frame (C175).
           { const m = /^frame:(\d+)$/.exec(e.fn); if (m) return `lab_frame.v[${Number(m[1]) >> 2}].${"xyzw"[Number(m[1]) & 3]}`; }
+          // A texture a draw samples (G10b): lab_sampled is the draw's own,
+          // which gpu-draws.ts writes beside the module, given the
+          // texture's number and the place across it.
+          if (e.fn === "frame.sampled") {
+            const s = temp();
+            pre.push(`${d}let ${s} = lab_sampled(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")});`);
+            return `${tname(e.host!.t)}(${s}.x, ${s}.y, ${s}.z, ${s}.w)`;
+          }
           const op = /^array\.(\w+)\./.exec(e.fn)?.[1];
           const at = lowered.arrays[Number(/\.a(\d+)$/.exec(e.fn)![1])];
           if (op === "of") return `${tname(at, e.args.length)}(${e.args.map((a) => bare(ex(a, pre, d))).join(", ")})`;

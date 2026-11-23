@@ -8,10 +8,11 @@
 // (REPRESENTATIONS.md), and the compiler picks every entry again.
 
 import type { Id } from "../src/model.ts";
+import type { Measure } from "../src/lang/run.ts";
 import type { Names } from "../src/presentation.ts";
 import { LIBRARY } from "../src/lang/library.ts";
 import { S } from "../src/lang/std.ts";
-import { CARRIED, HEAD, looped, uses, type Representation } from "../src/lang/represent.ts";
+import { CARRIED, FOLD_OF_ITEMS, HEAD, looped, matchJob, uses, type Measured, type Representation } from "../src/lang/represent.ts";
 import { storedRows, type Pick } from "../src/lang/library-reps.ts";
 import type { Program } from "./represented.ts";
 import { leftToWays, NEUTRAL, pickWays, waysIn, interfaceOps } from "../src/lang/ways.ts";
@@ -216,6 +217,24 @@ function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target
   });
 }
 
+// Each call of neighbours main reaches (L280g, NEARBY-2026-11-22.md), as
+// compiled JavaScript finds them: on a grid of cells reach on a side,
+// among every pair, or by a k-d tree, as held (`grid of 5 cells`, L280e's
+// parameter).
+const NEAR = /^(\S+) way: .*'s neighbours: (every pair|grid of (reach|[^ ;]+) cells|k-d tree); among every pair, grid, k-d tree; target (.+)$/;
+export function nearLines(ir: Lowered & { nearSites?: { at: Id; by: "grid" | "k-d tree" }[] }, names: Names): string[] {
+  if (!ir.nearSites?.length) return [];
+  const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
+  const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
+  const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
+  return [...new Set(ir.nearSites.map(({ at, by }) => `${at} way: ${nameOf(defOf(at))}'s neighbours: ${by === "grid" ? "grid of reach cells" : by}; among every pair, grid, k-d tree; target JavaScript`))];
+}
+// The ways held, by the call: every pair, or a grid of cells this wide.
+const nearHeld = (l: string): [Id, "every pair" | "k-d tree" | number] | null => {
+  const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null;
+  return m && m[3] !== "reach" ? [m[1], m[2] === "every pair" || m[2] === "k-d tree" ? m[2] : Number(m[3])] : null;
+};
+
 // C's (`ters native`): each call its threads run (c.ts `par:`, scalar.ts
 // threadSites), by the node it is about, where the lowered code still
 // has a call of that runtime function (the passes after rebuild them).
@@ -301,11 +320,14 @@ const CHUNKED = "; in chunks of ";
 // And the runs held (L280e): JavaScript's, a command-line program's or a
 // page's, by the node; C's runs a thread, or its chunks' items.
 // And the workers or threads a program starts, by the target (`pool`).
-export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][] }
-export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [] };
+// And how each call of neighbours is held to find them (`near`, L280g).
+export interface HeldPlaces { js: Id[]; c: Id[]; workers: Id[]; threads: Id[]; page: [Id, "workers" | "GPU"][]; runs: [Id, number][]; cRuns: [Id, number][]; pool: [string, number][]; near: [Id, "every pair" | "k-d tree" | number][] }
+export const NONE_HELD: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
 export function heldPlaces(lines: readonly string[]): HeldPlaces {
-  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [] };
+  const out: HeldPlaces = { js: [], c: [], workers: [], threads: [], page: [], runs: [], cRuns: [], pool: [], near: [] };
   for (const l of lines) {
+    const near = nearHeld(l);
+    if (near) { out.near.push(near); continue; }
     const pooled = l.startsWith(HELD) ? POOLED.exec(l.slice(HELD.length)) : null;
     if (pooled) { if (/^\d+$/.test(pooled[2])) out.pool.push([pooled[3], Number(pooled[2])]); continue; }
     const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null;
@@ -346,7 +368,12 @@ export function heldOf(lines: readonly string[]): Map<Id, string> {
       else if (place[4] !== undefined && !(Number(place[4]) >= 1 && Number(place[4]) <= 4096)) throw new Error(`a placement's runs are from 1 to 4096: ${l}`);
       continue;
     }
-    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation or a placement can be held yet: ${l}`);
+    const near = NEAR.exec(l.slice(HELD.length));
+    if (!m && near) {
+      if (near[3] !== undefined && near[3] !== "reach" && !(Number(near[3]) > 0 && Number.isFinite(Number(near[3])))) throw new Error(`a grid's cells are some positive number of the reach's units on a side: ${l}`);
+      continue;
+    }
+    if (!m && /^\S+ (way|mode plan|schedule): /.test(l.slice(HELD.length))) throw new Error(`only a type's representation, a placement or a way of neighbours can be held yet: ${l}`);
     if (!m) throw new Error(`a held choice isn't read: ${l}`);
     out.set(m[1], m[2]);
   }
@@ -359,11 +386,13 @@ export function heldAndPicked(written: readonly string[], now: readonly string[]
   return [...held, ...now.filter((l) => !isHeld(l))].sort((a, b) => key(a).localeCompare(key(b)));
 }
 // Whether an entry made now is one a held entry stands for: a type's,
-// by the type, or a placement's, by its node and target.
+// by the type, a placement's, by its node and target, or a way of
+// neighbours, by its call.
 function heldIn(written: readonly string[]): (l: string) => boolean {
   const of = new Set(heldOf(written).keys());
   const places = new Set(written.flatMap((l) => { const p = l.startsWith(HELD) ? PLACE.exec(l.slice(HELD.length)) : null; return p ? [`${p[1]} ${p[5]}`] : []; }));
-  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)); };
+  const near = new Set(written.flatMap((l) => { const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null; return m ? [m[1]] : []; }));
+  return (l) => { const p = PLACE.exec(l); return of.has(ENTRY.exec(l)?.[1] ?? "") || (!!p && places.has(`${p[1]} ${p[5]}`)) || near.has(NEAR.exec(l)?.[1] ?? ""); };
 }
 const key = (l: string) => (l.startsWith(HELD) ? l.slice(HELD.length) : l);
 // What a check says of the held entries: where the compiler, choosing
@@ -377,7 +406,9 @@ export function heldWarnings(written: readonly string[], alone: readonly string[
     if (POOLED.test(l.slice(HELD.length))) return was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]} ${POOL_OF[p[5] as keyof typeof POOL_OF].replace(p[2] === "1" ? /s$/ : /$^/, "")}, where the compiler would start ${was[2]}`] : [];
     return [...(was[2] !== p[2] ? [`held   ${p[1]} (${p[5]}): ${p[2]}, where the compiler would run it on ${was[2]}`] : []), ...(p[4] && was[4] && p[4] !== was[4] ? [l.includes(CHUNKED) ? `held   ${p[1]} (${p[5]}): in chunks of ${p[4]} items, where the compiler would cut it in chunks of ${was[4]}` : `held   ${p[1]} (${p[5]}): in ${p[4]} runs${p[5] === "C" ? " a thread" : ""}, where the compiler would share it in ${was[4]}`] : [])];
   });
-  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places];
+  const ways = new Map(alone.flatMap((l) => { const m = NEAR.exec(l); return m ? [[m[1], m[2]] as const] : []; }));
+  const near = written.flatMap((l) => { const m = l.startsWith(HELD) ? NEAR.exec(l.slice(HELD.length)) : null, was = m && ways.get(m[1]); return m && was && was !== m[2] ? [`held   ${m[1]}: neighbours by ${m[2]}, where the compiler would find them on a ${was}`] : []; });
+  return [...[...heldOf(written)].filter(([of, rep]) => picks.has(of) && picks.get(of) !== rep).map(([of, rep]) => `held   ${of}: ${rep}, where the compiler would pick ${picks.get(of)}`), ...places, ...near];
 }
 
 // The entries of a choices file, its comments left out.
@@ -386,8 +417,125 @@ export const readChoices = (text: string): string[] => text.split("\n").filter((
 // What a check says of a choices file against the picks made now.
 export function staleChoices(written: readonly string[], now: readonly string[]): string[] {
   const isHeld = heldIn(written);
-  written = written.filter((l) => !l.startsWith(HELD));
+  // A measured entry is what a run found, not a pick: never stale.
+  written = written.filter((l) => !l.startsWith(HELD) && !MEASURED.test(l));
   now = now.filter((l) => !isHeld(l));
-  const was = new Set(written), is = new Set(now);
-  return [...written.filter((l) => !is.has(l)).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(l)).map((l) => `new    ${l}`)];
+  const was = new Set(written.map(meaningOf)), is = new Set(now.map(meaningOf));
+  return [...written.filter((l) => !is.has(meaningOf(l))).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(meaningOf(l))).map((l) => `new    ${l}`)];
 }
+
+// What an entry says, not how (R12 §3): its id, kind, pick, facts, what
+// it is among and its target. A way's, a place's or a schedule's job is
+// said with the name of the definition it is in ("flown's flock over
+// walk"), which changes when that definition is renamed or the job is
+// found by another path; the words after the last "'s" name the job
+// itself. A representation's type and a mode plan's facts stay whole.
+const KIND = /^(\S+) (representation|way|mode plan|place|schedule): (.*)$/;
+function meaningOf(line: string): string {
+  const m = KIND.exec(line);
+  if (!m) return line;
+  const [head, ...rest] = m[3].split("; ");
+  if (m[2] === "representation" || m[2] === "mode plan") return line;
+  const cut = head.lastIndexOf(": ");
+  if (cut < 0) return line;
+  const about = head.slice(0, cut), i = about.lastIndexOf("'s "), job = i < 0 ? about : about.slice(i + 3);
+  return [m[1], m[2], job, head.slice(cut + 2), ...rest].join("\u0000");
+}
+
+// Measured (L280d): each type with a pick, how often main's own
+// definitions call its jobs in a run (its constructors and the functions
+// its rows implement), and the largest value of it those calls gave, in
+// items (its cases with parts: a list's cells, a tree's nodes). Written
+// by `ters choices --measure`, kept as written until measured again
+// (CHOICES rule 4: measurements are committed).
+export interface Measuring { measure: Measure; lines: (args: readonly string[], said?: string) => string[] }
+export function measuring(given: Program, main: Id, picks: readonly Pick[]): Measuring {
+  const names = { ...LIBRARY.names, ...given.names }, code = given.code;
+  const casesOf = (t: Id): Id[] => { const d = code.nodes[t]; return d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : []; };
+  // Each job's call nodes, by the type and the job (`T job`).
+  const jobOf = new Map<Id, Id>(), typeOf = new Map<string, Id>();
+  const picked = new Set(picks.map((p) => p.of));
+  for (const t of picked) for (const j of jobsOf(given, t)) if (!jobOf.has(j)) { jobOf.set(j, t); typeOf.set(`${t} ${j}`, t); }
+  const own = new Set(given.own), calls = new Map<Id, string>();
+  for (const d of [main, ...dependencies(code, main)]) {
+    if (!own.has(d)) continue;
+    for (const id of subtree(code, d)) {
+      const n = code.nodes[id];
+      // A match or fold on a picked type: its job (`match`, `fold`).
+      if (n?.kind === "match" || n?.kind === "fold") {
+        for (const t of picked) { const j = matchJob(code, n, t); if (j) { calls.set(id, `${t} ${j}`); typeOf.set(`${t} ${j}`, t); break; } }
+        continue;
+      }
+      if (n?.kind !== "call") continue;
+      const f = code.nodes[n.fn], t = f?.kind === "ref" ? jobOf.get(f.target) : undefined;
+      if (t !== undefined) calls.set(id, `${t} ${(f as NodeOf<"ref">).target}`);
+    }
+  }
+  // A value's items: the cells of the recursive types it is made of (a
+  // list's, a tree's), through the parts whose type is written as one of
+  // its types (not an item's, which is a type parameter), up to 10
+  // million: a Map's entries list, a list's cells.
+  const fieldTypes = (t: Id): Id[] => casesOf(t).flatMap((c) => (code.nodes[c] as NodeOf<"variant">).fields.flatMap((f) => {
+    const tr = code.nodes[(code.nodes[f] as NodeOf<"field">).type as Id] as { kind?: string; target?: Id } | undefined;
+    return tr?.kind === "tref" && tr.target && casesOf(tr.target).length ? [tr.target] : [];
+  }));
+  const all = new Map<Id, Set<string>>(), items = new Map<Id, Set<string>>();
+  for (const t of new Set(typeOf.values())) {
+    const reached = new Set<Id>([t]);
+    for (const x of reached) for (const y of fieldTypes(x)) reached.add(y);
+    const recursive = [...reached].filter((x) => fieldTypes(x).includes(x));
+    all.set(t, new Set([...reached].flatMap(casesOf)));
+    items.set(t, new Set(recursive.flatMap((x) => casesOf(x).filter((c) => (code.nodes[c] as NodeOf<"variant">).fields.length))));
+  }
+  const largest = new Map<Id, number>();
+  const sizeOf = (t: Id, v: unknown): number => {
+    const of = all.get(t)!, cells = items.get(t)!;
+    let n = 0;
+    const todo: unknown[] = [v];
+    while (todo.length && n < 1e7) {
+      const x = todo.pop() as { tag?: unknown; fields?: unknown[] } | null;
+      if (!x || typeof x !== "object" || typeof x.tag !== "string" || !of.has(x.tag) || !Array.isArray(x.fields)) continue;
+      if (cells.has(x.tag)) n++;
+      for (const y of x.fields) todo.push(y);
+    }
+    return n;
+  };
+  const measure: Measure = { calls, counts: new Map(), gave: (job, v) => { const t = typeOf.get(job)!, n = sizeOf(t, v); if (n > (largest.get(t) ?? 0)) largest.set(t, n); } };
+  const lines = (args: readonly string[], said = args.length ? args.join(" ") : "no arguments") => [...new Set(typeOf.values())].flatMap((t) => {
+    const counted = [...measure.counts].filter(([j, c]) => typeOf.get(j) === t && c > 0).map(([j, c]) => [names[j.slice(t.length + 1)] ?? j.slice(t.length + 1), c] as const).sort(([a], [b]) => a.localeCompare(b));
+    if (!counted.length) return [];
+    const most = largest.get(t);
+    return [`${t} measured: ${names[t] ?? t}: ${counted.map(([j, c]) => `${j} ${c} ${c === 1 ? "time" : "times"}`).join(", ")}${most ? `; up to ${most} ${most === 1 ? "item" : "items"}` : ""}; from a run with ${said}`];
+  });
+  return { measure, lines };
+}
+// A type's jobs a run counts: its constructors and the definitions its
+// rows say what they cost.
+function jobsOf(given: Program, t: Id): Set<Id> {
+  const code = given.code, d = code.nodes[t];
+  const cases = d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : [];
+  const own = storedRows(code, given.own, given.reps).filter((r) => r.of === t), rows = own.length ? own : LIBRARY.reps.filter((r) => r.of === t);
+  return new Set([...cases, ...rows.flatMap((r) => Object.keys(r.cost)).filter((k) => code.nodes[k]?.kind === "def"), "match", "fold", FOLD_OF_ITEMS]);
+}
+const MEASURED = /^\S+ measured: /;
+const MEASURE = /^(\S+) measured: [^:]*: ([^;]+?)(?:; up to (\d+) items?)?; from a run with .*$/;
+// The measured entries read back for the chooser (represent.ts Measured),
+// by the type: each job by its name among the type's jobs.
+export function measuredOf(given: Program, lines: readonly string[]): Map<Id, Measured> {
+  const names = { ...LIBRARY.names, ...given.names }, out = new Map<Id, Measured>();
+  for (const l of lines) {
+    const m = MEASURE.exec(l);
+    if (!m) continue;
+    const [, t, calls, size] = m, byName = new Map([...jobsOf(given, t)].map((j) => [names[j] ?? j, j]));
+    const counted = new Map<string, number>();
+    for (const c of calls.split(", ")) {
+      const x = /^(.+) (\d+) times?$/.exec(c), j = x && byName.get(x[1]);
+      if (!x || !j) throw new Error(`a measured entry names a job ${names[t] ?? t} doesn't have: ${l}`);
+      counted.set(j, Number(x[2]));
+    }
+    out.set(t, { calls: counted, size: size ? Number(size) : 1 });
+  }
+  return out;
+}
+// The measured entries of a choices file, kept as written.
+export const measuredIn = (lines: readonly string[]): string[] => lines.filter((l) => MEASURED.test(l));

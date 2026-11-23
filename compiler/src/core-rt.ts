@@ -23,6 +23,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
+import { neighboursFound } from "../../ters/library/near.ts";
 import type { branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker } from "./branches-rt.ts";
 
 // The builtins a printed program calls, by id (C251b): what std-run.ts
@@ -219,6 +220,31 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name.startsWith("path:")) { const v = pathValue(name.slice(5) ? name.slice(5).split(",").map((i) => ({ field: Number(i) })) : []); return () => v; }
   const away = BRANCHES?.rt(name);
   if (away) return away;
+  // neighbours (L280g) on a grid (ters/library/near.ts): its places, each
+  // asked once in the items' order as the definition's map asks them, a
+  // Float64 or a record of them; FAIL, for the definition as compiled,
+  // where neither the grid nor the tree can take them or a budget counts the steps. Lists or
+  // arrays, as the call's type is. The cells' side where the program's
+  // choices hold it, or a k-d tree.
+  if (name === "neighbours.grid") return (xs, place, reach, fuel, array, arrays, side) => {
+    if (typeof reach !== "number" || (fuel !== Infinity && fuel !== undefined)) throw FAIL;
+    const ps: number[][] = [];
+    const take = (x: unknown) => {
+      const at = (place as (x: unknown) => unknown)(x);
+      const parts = typeof at === "number" ? [at] : (at as { fields?: unknown })?.fields;
+      if (!Array.isArray(parts) || !parts.every((v) => typeof v === "number")) throw FAIL;
+      ps.push(parts);
+    };
+    if (xs instanceof ArrayView) for (let i = 0; i < xs.n; i++) take(xs.buf.items[xs.start + i]);
+    else for (let c = xs as { tag: unknown; fields: unknown[]; f0?: unknown; f1?: unknown }; c.tag !== NIL; c = (c.f1 ?? c.fields[1]) as typeof c) {
+      if (c.tag !== CONS) throw FAIL;
+      take(c.f0 ?? c.fields[0]);
+    }
+    const lists = neighboursFound(ps, reach, typeof side === "number" || side === "k-d tree" ? side : undefined);
+    if (!lists) throw FAIL;
+    const inner = lists.map((l) => (arrays ? arrayOf(l) : toList(l)));
+    return array ? arrayOf(inner) : toList(inner as Value[]);
+  };
   // A first's answer on a page's workers, or FAIL for the default (C61 c′5).
   if (name === "first.one") return (v: unknown) => { if (v === FAIL) throw FAIL; return v; };
   // A replace where every array of its type has one holder (C93 s4,
@@ -340,13 +366,29 @@ const toBoolean = (x: unknown) => ((x as { tag?: Id } | null)?.tag === TRUE ? tr
 // Each Bool inside data turned by `f` (to the evaluator's case, or back to
 // a boolean): the data copied as its tag and fields, which the printed
 // code reads as it reads its own (core-js.ts). Along a list's tail in a
-// loop, as a list may be long; what isn't data (a number, a cell, an
-// array) as it is.
-function turned(v: unknown, f: (x: unknown) => unknown): unknown {
+// loop, as a list may be long; what isn't data (a number, a cell) as it
+// is. An array stays a view, its items turned: copied as its tag and
+// fields it was a plain value every read of it copied again
+// (flock-frame-page's birds, read from the sky's cell each tick: met's
+// loop O(n²)).
+export function turned(v: unknown, f: (x: unknown) => unknown): unknown {
   type D = { tag: Id; fields: unknown[] };
+  if (v instanceof ArrayView) {
+    const items = v.buf.items, out: unknown[] = [];
+    let changed = false;
+    for (let i = 0; i < v.n; i++) { const x = items[v.start + i], y = turned(x, f); out.push(y); changed ||= y !== x; }
+    return changed ? arrayOf(out) : v;
+  }
   const data = (x: unknown): x is D => typeof x === "object" && x !== null && "tag" in x && Array.isArray((x as D).fields);
   const b = f(v);
   if (b !== v || !data(v)) return b;
+  // Data that isn't a list's cell, where nothing inside turns, as it is
+  // (a bird of the flock holds no Bool: copied, the GPU's packing read
+  // it the slow way).
+  if (!(v.tag === CONS && v.fields.length === 2)) {
+    const fs = v.fields, out = fs.map((x) => turned(x, f));
+    return out.every((x, i) => x === fs[i]) ? v : { tag: v.tag, fields: out };
+  }
   let first: D | undefined, last: D | undefined, at: D = v;
   for (;;) {
     const cons = at.tag === CONS && at.fields.length === 2;

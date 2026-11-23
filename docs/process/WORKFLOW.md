@@ -188,7 +188,10 @@ of text; they were these cells logging every finished row).
   your next job. Main red for more than an hour stops every lane's merges
   (P10, REVIEW-2026-11-16 §1: 42 merged through 16 red hours): merge
   nothing until Check main is green again, or the failing file has a row
-  a lane is taking; a lane's own fix for it merges. The coordinator
+  a lane is taking; a lane's own fix for it merges. The "Main green" check (T17,
+  ters/test/main-red.ts) enforces this: a pull request fails it while Check
+  main has been red for more than an hour, unless its title names a failing
+  file (path or file name); re-run it once main is green. The coordinator
   watches Check main and the Nightly (a red nightly is a P0). This rule is settled: when it costs too much or misses
   too much, tune affected.ts and the map, not the rule.
 - Merge when green; the editor rules (click through the live page, run every

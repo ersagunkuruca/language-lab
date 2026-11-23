@@ -16,6 +16,7 @@ import type { PureHost } from "../src/lang/hosts.ts";
 import type { Value } from "../src/lang/run.ts";
 import { CONS, FALSE, NIL, PAIR_V, TRUE } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
+import { neighboursFound } from "./near.ts";
 
 type Data = { tag: Id; fields: Value[] };
 const nums = (v: Value): number[] | null => {
@@ -152,7 +153,32 @@ function itemAt(list: Value, position: Value, otherwise: Value): Value | null {
   return position >= 0 && position < items.length && Number.isInteger(position) ? items[position] : position < 0 || position >= items.length ? otherwise : null;
 }
 
+// `neighbours` (L280g) on a grid (near.ts), what it can't take run by
+// the definition.
+function neighboursOnGrid(items: Value, place: (x: Value) => Iterable<Value>, reach: Value): Value | null {
+  if (typeof reach !== "number") return null;
+  const ps: number[][] = [];
+  for (let d = items as Data; d?.tag !== NIL; d = d.fields[1] as Data) {
+    if (d?.tag !== CONS) return null;
+    // Each place once, in the items' order, as the definition's map asks
+    // for them; a place that gives no value or several (it chooses) runs
+    // the definition instead.
+    const got = [...place(d.fields[0])];
+    if (got.length !== 1) return null;
+    const at = got[0], parts = typeof at === "number" ? [at] : nums(at);
+    if (!parts) return null;
+    ps.push(parts);
+  }
+  const lists = neighboursFound(ps, reach);
+  const list = <T,>(xs: T[], item: (x: T) => Value): Data => xs.reduceRight<Data>((rest, x) => ({ tag: CONS, fields: [item(x), rest] }), { tag: NIL, fields: [] });
+  return lists && list(lists, (l) => list(l, (j) => j));
+}
+
 export const LIBRARY_HOSTS: Record<string, PureHost> = {
+  "neighbours": (self) => (items, place, reach) => {
+    const v = typeof place === "function" ? neighboursOnGrid(items, place as (x: Value) => Iterable<Value>, reach) : null;
+    return v === null ? self(items, place, reach) : [v];
+  },
   "item at": (self) => (list, position, otherwise) => {
     const v = itemAt(list, position, otherwise);
     return v === null ? self(list, position, otherwise) : [v];

@@ -29,7 +29,8 @@
 "akeisd53rrfp3hcs4hsqed4n1v",
 "ei5mit4hlm5sll6f7ctpn00l86",
 "fjldq45ulm618evgq71645pb8s",
-"rut4j4ami5gqik68ct8jp14r0s"
+"rut4j4ami5gqik68ct8jp14r0s",
+"02fj0jdgh65pn83emc33sleo60"
 ],
 "std.await": [
 "0aqlsnjom5acg5ccjq99h8vmhu"
@@ -58,6 +59,9 @@
 "std.division": [
 "ckpeom5tqa3m7i72gfgp1bo852"
 ],
+"std.draw": [
+"8n9fln8pcfdsoorp9ptcro388j"
+],
 "std.embedding": [
 "130109agnsvtgbr78reuam6lnk"
 ],
@@ -70,6 +74,9 @@
 "std.extended": [
 "g7pfmhep87s6vqgl5deat8o96s"
 ],
+"std.frame": [
+"4ppe1pf95fhprlsqprpqc55e8p"
+],
 "std.html": [
 "iam6vso97un2hp94dotbmgna08",
 "8uqdk5pdpmm2t653gqhrabf3u0",
@@ -79,7 +86,8 @@
 "lt7fcj083ah9csjckjli84tfa7",
 "2l7g8oivmiit16g80chgbkk4tm",
 "eh0q60ofbdmkl7ndplru6deii2",
-"lcrd02i4p0uncj5ria5q4vgcgo"
+"lcrd02i4p0uncj5ria5q4vgcgo",
+"blor512d1ph8f0kdie1joi2dvc"
 ],
 "std.input": [
 "ht1k8cnv511l1unh0vife736t5",
@@ -112,6 +120,9 @@
 "std.mark": [
 "12nd89ieogvaovs9rfgg35e5fv"
 ],
+"std.mesh": [
+"anclk9mtamttaeb3qq27e95l37"
+],
 "std.open file": [
 "tabi4a58qldokc82rktrbahqi5"
 ],
@@ -128,11 +139,17 @@
 "std.outcome": [
 "lmi44oakeqlfmpprr2vvpgh9un"
 ],
+"std.pass": [
+"9pri43i9dqakvv83c6mpdao904"
+],
 "std.permissions": [
 "gtdudc7ammi5tmdb3eua88i74s"
 ],
 "std.pipe": [
 "ik42jbjsg6nunt58ng7tptmi65"
+],
+"std.placed": [
+"v3c5mu6dk39ukgo2go20clcrlh"
 ],
 "std.pool": [
 "4ug73r4jpr7lr96a06nlpt6p06"
@@ -204,8 +221,14 @@
 "std.tableEntry": [
 "occvq4bnhivirq6092mjk0h8ju"
 ],
+"std.target": [
+"043q6lee3b736ofmfdk1ig4bqa"
+],
 "std.tensor": [
 "a6aei7dllo02lhi8q5fonku2h8"
+],
+"std.texel": [
+"r07im0kii19ps7o1m1u1bc98rl"
 ],
 "std.ticket": [
 "67l2f4dhdjmp7nnlnkf1omvp6i"

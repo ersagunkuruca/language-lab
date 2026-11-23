@@ -1,5 +1,5 @@
 // flock (compiler/gaps/flock), GAPS.md game round 3 (BACKLOG G6d): 3D
-// boids on a grid of cells, the stress test beside Night watch. The
+// boids, each seeing its `neighbours`, the stress test beside Night watch. The
 // evaluator, compiled JavaScript, `ters native` and the C by hand must
 // print the same digits, so the program steers by a swept goal instead of
 // sin and cos.
@@ -30,7 +30,7 @@ test("flock: 50 ticks of 300 birds, evaluated, compiled and by hand in JS", () =
 
 test("flock: 200 ticks of 2000 birds, compiled, native and the C by hand", () => {
   const want = ran(process.execPath, [js, "200", "2000"]);
-  assert.match(want, /tick 200: checksum 787440\.499083, mean speed 0\.930227\n/);
+  assert.match(want, /tick 200: checksum 787441\.154895, mean speed 0\.930279\n/);
   if (skip) return;
   ran(process.execPath, [lab, "native", folder, "-o", join(dir, "f")]);
   assert.equal(ran(join(dir, "f"), ["200", "2000"]), want);
@@ -38,10 +38,8 @@ test("flock: 200 ticks of 2000 birds, compiled, native and the C by hand", () =>
   assert.equal(ran(join(dir, "c"), ["200", "2000"]), want);
 });
 
-test("flock: the 27 cells are walked where they are made, no list (fuse-walks.ts, G3b)", () => {
+test("flock: natively the birds' neighbours are found on a grid, not by every pair (C292)", () => {
   if (skip) return;
   ran(process.execPath, [lab, "native", folder, "-o", join(dir, "w")]);
-  const c = readFileSync(join(dir, "w.c"), "utf8");
-  assert.match(c, /lab_flock_over_over_flat_map/);
-  assert.doesNotMatch(c, /lab_flatten|lab_around_cells/);
+  assert.match(readFileSync(join(dir, "w.c"), "utf8"), /lab_grid_found/);
 });

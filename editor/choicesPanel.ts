@@ -175,6 +175,8 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
       // (L280h); a page's workers or GPU are the compiler's.
       const holds = (a: string) => at >= 0 && (e.kind === "representation" || (e.kind === "place" && (a === "main thread" || (a === "worker threads" && e.target === "JavaScript"))));
       const would = c.would.get(e.id), verb = e.kind === "place" ? "Run" : "Store", prep = e.kind === "place" ? "on" : "as";
+      // How many workers main starts (L280e): any count from 0 to 64.
+      if (e.among.length === 1 && e.among[0] === POOL_AMONG) return poolRow(e, ids, open, would, about, same.length);
       return h("div", { class: `choice${open && ids.includes(open) ? " on" : ""}`, "data-choice-row": ids.join(" "), title: [...e.facts, `target ${e.target}`].join("\n") },
         h("div", { class: "choice-head" }, h("span", { class: "choice-name" }, about, same.length > 1 ? h("span", { class: "choice-n" }, `×${same.length}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, "data-about": e.about, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
         h("div", { class: "file-chips" }, ...chips.map((a, i) => i !== on && holds(a)
@@ -184,4 +186,24 @@ export function choicesPanel(c: Choices | null, code: Code, open: Id | null): HT
     })));
   }
   return box;
+}
+
+const POOL_AMONG = "0 to 64";
+// The workers' row: the compiler's count, or the one held, and a field to
+// hold another. A count held shows in the field; Held lets it go. Only a
+// page's: the preview starts its workers, where Run runs a command-line
+// program in one worker.
+function poolRow(e: Choice, ids: Id[], open: Id | null, would: string | undefined, about: HTMLElement, n: number): HTMLElement {
+  const hold = h("button", { type: "button", hidden: "", "data-act": "choice-hold", "data-of": e.id, "data-about": e.about, "data-prep": "at" }) as HTMLButtonElement;
+  const field = h("input", { type: "number", min: "0", max: "64", step: "1", class: "choice-count", value: e.held ? e.pick : "", placeholder: "0–64", "aria-label": `${e.about}: how many`, title: `Start this many ${e.about.replace(/^.*'s /, "")}, 0 to 64` }) as HTMLInputElement;
+  field.addEventListener("change", () => {
+    const v = Number(field.value);
+    if (field.value === "" || !Number.isInteger(v) || v < 0 || v > 64 || (e.held && String(v) === e.pick)) return;
+    hold.dataset.rep = String(v);
+    hold.click();
+  });
+  return h("div", { class: `choice${open && ids.includes(open) ? " on" : ""}`, "data-choice-row": ids.join(" "), title: [...e.facts, `target ${e.target}`].join("\n") },
+    h("div", { class: "choice-head" }, h("span", { class: "choice-name" }, about, n > 1 ? h("span", { class: "choice-n" }, `×${n}`) : null), e.held ? h("button", { class: "link choice-state held", type: "button", "data-act": "choice-release", "data-of": e.id, "data-about": e.about, title: "Let the compiler pick again" }, "Held") : h("span", { class: "choice-state" }, "Auto")),
+    h("div", { class: "file-chips" }, e.held ? null : h("span", { class: "chip-btn on" }, e.pick), ...(e.held || e.target === "JavaScript page" ? [field, hold] : [])),
+    would ? h("p", { class: "status-line warn", title: `Held at ${e.pick}; with nothing held, the compiler starts ${would}` }, `Compiler would start ${would}`) : null);
 }

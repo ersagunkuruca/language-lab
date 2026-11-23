@@ -11,7 +11,9 @@ import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WASI } from "node:wasi";
-import { folder, measurements, ways } from "../gaps/fit.ts";
+import { folder, measurements, program, ways } from "../gaps/fit.ts";
+import { lowerCore } from "../src/core-js.ts";
+import { kids, type SExpr } from "../src/scalar.ts";
 import { skip } from "./c-harness.ts";
 
 const w = await ways();
@@ -64,4 +66,17 @@ test("fit through ters wasi and ters native prints what ters run prints", async 
   const built = spawnSync(process.execPath, [lab, "native", folder, "-o", join(dir, "p")], { encoding: "utf8" });
   assert.equal(built.status, 0, built.stderr);
   assert.equal(spawnSync(join(dir, "p"), [join(dir, "d.txt")], { encoding: "utf8" }).stdout, want.stdout, "ters native");
+});
+
+// C288: `predict` applies `value at(model, x)` and `slopes` its
+// derivative, each a closure made for every point; both are calls of the
+// chosen model's code, with no closure made and none applied.
+test("fit: predict and slopes make no closure and apply none", () => {
+  const p = program(), ir = lowerCore(p.code, p.info, p.names, [p.main]);
+  const has = (e: SExpr, k: string): boolean => e.k === k || kids(e).some((x) => has(x, k));
+  for (const name of ["predict", "slopes"]) {
+    const f = ir.funcs.find((g) => g.name === name);
+    assert.ok(f, name);
+    assert.ok(!has(f.body, "apply") && !has(f.body, "closure"), name);
+  }
 });

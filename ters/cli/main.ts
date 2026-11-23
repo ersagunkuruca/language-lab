@@ -5,7 +5,7 @@ import { gradeMistakes } from "../src/lang/grades.ts";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { nodesOfKindIn, merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
+import { idsSeeded, nodesOfKindIn, merge, nodeEntries, nodeIds, nodeValues, withNodes, type Code, type Id } from "../src/model.ts";
 import type { Names } from "../src/presentation.ts";
 import { fromFile } from "../src/files.ts";
 import { conflictMarkersAt, markersMessage, parseSaved, printSaved, ProgramFileError } from "../src/saved.ts";
@@ -36,7 +36,7 @@ import { execFileSync } from "node:child_process";
 import { appFolder } from "./app.ts";
 import { readWav, writeWav } from "./wav.ts";
 import { represented as representedOr, type Program } from "./represented.ts";
-import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, placeLines, scheduleLines, threadLines } from "./choices.ts";
+import { choiceLines, choicesPath, choicesText, readChoices, staleChoices, heldOf, heldAndPicked, heldPlaces, heldWarnings, type HeldPlaces, NONE_HELD, measuredIn, measuredOf, measuring, nearLines, placeLines, scheduleLines, threadLines } from "./choices.ts";
 import { keepRun, keptRun, runKey } from "./run-store.ts";
 import { keepDecisionsIn, storedRows, type DecidedStore } from "../src/lang/library-reps.ts";
 import { audioProblem, BLOCK, playBlocks, playStereoBlocks, RATE, soundStereo } from "../src/lang/audio.ts";
@@ -99,6 +99,9 @@ usage:
   ters choices <program> [--main name]   write the compiler's choices for main to <program>.choices (L280a)
                                         (an entry with "held" before it is kept, and every compile stores
                                         its type so, where that keeps the meaning: L280c)
+    [--measure args…]                   main run with args first, its types' jobs counted (L280d); a page
+    [--measure --frames n]              given n frames of a clock at 60 a second (default 120), or with
+                                        --replay the events its log holds
   ters qasm <program> --main f [--bits n] [--unroll n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
                                         its Ints n bits wide (default 8), scratch qubits uncomputed and reused;
@@ -314,7 +317,14 @@ function represented(p: Program, main: Id, hostMaps: boolean, tables = false, so
 // arrays from its counts. In C a map whose function only computes shares
 // its items out on threads (L101, c.ts `par:map`).
 // `page`: main gives Html, mounted rather than printed (C199c).
+// The ids its passes make drawn the same way each build (model.ts
+// idsSeeded), so a place C's threads run (threadLines) is about the same
+// node in `ters check`, `ters choices` and `ters native`, and a held
+// one is found again.
 function nativeLowered(main: Id, wasm = false, page = false, from: Program = p) {
+  return idsSeeded(`native ${main} ${wasm} ${page}`, () => nativeLoweredNow(main, wasm, page, from));
+}
+function nativeLoweredNow(main: Id, wasm: boolean, page: boolean, from: Program) {
   const q00 = withInverses(from.code, from.info, from.names);
   // An operation with an effect given as a value, the lambda calling it (C235).
   const q01 = withOperationLambdas(q00.code, q00.info, q00.names);
@@ -665,9 +675,10 @@ const writtenChoices = existsSync(choicesFile) ? readChoices(readFileSync(choice
 const heldHere = (() => { try { return heldOf(writtenChoices); } catch (e) { fail((e as Error).message); } })();
 // And the placements held on the main thread (L280h), for every lowering.
 const placesHeld = heldPlaces(writtenChoices), holdsPlaces = Object.values(placesHeld).some((xs) => xs.length);
-const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); };
+const onMainThread = async (h: HeldPlaces) => { const s = await import("../../compiler/src/scalar.ts"); s.keepOnMainThread(h.js, h.c); s.shareAlways(h.workers, h.threads, h.page, h.runs, h.cRuns, h.pool); s.holdNeighbours(h.near); };
 if (holdsPlaces) await onMainThread(placesHeld);
-const loaded = { ...answeredHere(load(path)), ...(heldHere.size ? { held: heldHere } : {}) };
+const answered = answeredHere(load(path)), measuredHere = (() => { try { return measuredOf(answered, writtenChoices); } catch (e) { fail((e as Error).message); } })();
+const loaded = { ...answered, ...(heldHere.size ? { held: heldHere } : {}), ...(measuredHere.size ? { measured: measuredHere } : {}) };
 const main = command === "run" || command === "compile" || command === "choices" || command === "native" || command === "wasi" || command === "build-web" || command === "build-app" || command === "build-native-app" ? entry(loaded, mainName, command.startsWith("build-")) : "";
 // A run of a program lowered before reads it back (run-store.ts, I264):
 // lowering is most of a run, and the same program lowers the same way.
@@ -689,7 +700,7 @@ async function places(q: { code: Code; info: Info; names: Names }, root: Id): Pr
   const { lowerCore: lower } = await import("../../compiler/src/core-js.ts"), { gpuMaps } = await import("../../compiler/src/gpu-maps.ts");
   let ir: ReturnType<typeof lower>;
   try { ir = lower(q.code, q.info, q.names, [root]); } catch { return []; }
-  return placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names, undefined, root);
+  return [...placeLines(ir, new Set(Object.keys(ir.awayMaps ? gpuMaps(ir) : {}).map(Number)), q.names, undefined, root), ...nearLines(ir, q.names)];
 }
 // And where a command-line program's work runs in C (`ters native`): on
 // its threads, the program stored as C stores it.
@@ -950,7 +961,44 @@ switch (command) {
     break;
   }
   case "choices": {
-    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main)].sort())));
+    // With --measure (L280d), main run as written with the arguments
+    // after it, its types' jobs counted; else the measured entries kept.
+    const m = rest.indexOf("--measure");
+    let measured = measuredIn(writtenChoices);
+    if (m >= 0 && staticPage) {
+      // A page (L280d): drawn into a document of no browser, then given
+      // its frames, or with --replay the events a run of it logged.
+      const args = rest.slice(m + 1), f = args.indexOf("--frames"), frames = f >= 0 ? Number(args[f + 1]) : 120, counting = measuring(loaded, main, p.picks ?? []);
+      if (!Number.isInteger(frames) || frames < 0) fail("--frames needs a whole number, 0 or more");
+      const { showPage } = await import("../src/lang/page.ts"), { fakeDoc } = await import("../src/lang/fake-dom.ts");
+      const kept = new Map<string, string>(), store = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v), removeItem: (k: string) => void kept.delete(k), get length() { return kept.size; }, key: (i: number) => [...kept.keys()][i] ?? null };
+      // Its clock 60 frames a second, from a fixed time, however long a
+      // frame takes here.
+      let next: (() => void)[] = [], at = Date.UTC(2026, 0, 1);
+      // Its frame handlers' frames (html.ts everyFrame) from the same.
+      const raf = (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame;
+      (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = (g: (ms: number) => void) => { next.push(() => g(at)); return 0; };
+      try {
+        const page = showPage({ code: loaded.code, info: loaded.info, names: loaded.names, main, program: mainName, doc: fakeDoc(), store, console: { log() {}, error() {} }, frame: (g) => next.push(g), time: () => at, measure: counting.measure, ...(replay ? { replay } : {}) });
+        (page.root as { connected?: boolean }).connected = true;
+        for (let i = 0; !replay && i < frames && next.length; i++) { const now = next; next = []; at += 1000 / 60; for (const g of now) g(); }
+        page.stop();
+      } catch (e) { fail(`the run to measure stopped: ${(e as Error).message}`); } finally { (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = raf; }
+      measured = counting.lines(args, replay ? "the events of its log" : `${frames} ${frames === 1 ? "frame" : "frames"}`);
+    } else if (m >= 0) {
+      const args = rest.slice(m + 1), counting = measuring(loaded, main, p.picks ?? []);
+      try { runProgram(loaded.code, loaded.info, main, args, { print: () => {}, names: loaded.names, world: world(), hosts, measure: counting.measure }); } catch (e) { fail(`the run to measure stopped: ${(e as Error).message}`); }
+      measured = counting.lines(args);
+    }
+    writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main), ...measured].sort())));
+    // What was just measured picked from: the picks above read the
+    // measurements written before, so they are made again from these.
+    const was = measuredIn(writtenChoices);
+    if (m >= 0 && (was.length !== measured.length || was.some((l, i) => l !== measured[i]))) {
+      const raw = process.argv.slice(2);
+      execFileSync(process.execPath, [...process.execArgv, process.argv[1], ...raw.slice(0, raw.indexOf("--measure"))], { stdio: "inherit" });
+      break;
+    }
     console.log(`wrote ${choicesFile}`);
     break;
   }
@@ -980,6 +1028,8 @@ switch (command) {
     // said (L280c, rule 3), and kept.
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
+      // A page's main as `ters choices` reads it (entry): no C places.
+      if (!pageProblem(p.info, start, p.names)) staticPage = true;
       for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...scheduleLines(now, start), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
       if (heldHere.size || holdsPlaces) {
         const alone = represented({ ...loaded, held: undefined }, start, true);

@@ -792,6 +792,8 @@ async function pagePreview() {
   await p.goto(page);
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   const f = p.frameLocator("iframe.page");
+  // Once it's drawn: read before, the frame is still the empty one.
+  await f.locator("#hundred").waitFor({ timeout: 30000 }).catch(() => {});
   // The page has the base look (page.ts PAGE_BASE), not the browser's serif.
   const font = await f.locator("body").evaluate((e) => getComputedStyle(e).fontFamily);
   if (!font.includes("system-ui")) errors.push(`${where}: the page is in the browser's default font (${font})`);
@@ -811,7 +813,7 @@ async function pagePreview() {
   await f.locator("#roll").click();
   if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: Roll after going back to main: the page says ${await status()}`);
   // Another program and back: the page is as it was, and still answers.
-  await p.locator('[data-set="program"]', { hasText: "Calculus" }).click();
+  await p.locator('[data-set="program"][data-value="calculus-text"]').click();
   await p.locator('[data-set="program"]', { hasText: "Page: two dice" }).click();
   if (!(await status()).startsWith("Rolls: 102;")) errors.push(`${where}: after another program and back the page says ${await status()}`);
   await f.locator("#roll").click();
@@ -858,6 +860,37 @@ async function pagePreview() {
   await ctx.close();
 }
 
+// An edit to a page's program is compiled off the editor's thread and the
+// compiled page takes over (I348): the compile was asked with the edit
+// alone and failed, and the looper's compiled page overflowed the stack
+// taking over, so each edit ran the page interpreted on the editor's
+// thread (4 s an edit, flock at 0.5 frames a second). The looper isn't
+// here: from a file its sound doesn't load (cells.test.ts has its stack).
+async function pageEditCompiles() {
+  const ctx = await browser.newContext({ viewport: { width: 1400, height: 1000 } });
+  const p = await ctx.newPage();
+  p.on("pageerror", (e) => errors.push(`${where}: ${e.stack ?? e.message}`));
+  await p.goto(page);
+  for (const [program, def] of [["Page: pond", "main"], ["Page: flock", "birds on page"]]) {
+    where = `edited page: ${program} / ${def}`;
+    await p.locator('[data-set="program"]', { hasText: program }).first().click();
+    await p.locator("[data-def]", { hasText: new RegExp(`^${def}$`) }).first().evaluate((e) => (e as HTMLElement).click());
+    // The first number shown, in Blocks or the graph.
+    const lit = await p.locator(".x[data-id]").evaluateAll((els) => { const e = els.find((e) => !e.querySelector("[data-id]") && /^\d+(\.\d+)?$/.test(e.textContent!.trim()) && (e as HTMLElement).offsetParent); e?.setAttribute("data-smoke-lit", ""); return !!e; });
+    if (!lit) { errors.push(`${where}: no number to edit`); continue; }
+    await p.locator("[data-smoke-lit]").first().click();
+    const field = p.locator("#f-lit");
+    await field.fill(String(Number(await field.inputValue()) + 1));
+    await field.press("Enter");
+    const status = () => p.locator(".page-box > p[role=status]").first().innerText({ timeout: 2000 }).catch(() => "");
+    const t0 = Date.now();
+    while (Date.now() - t0 < 60000 && /ompiling|Loading/.test(await status())) await p.waitForTimeout(250);
+    const said = await status();
+    if (/Interpreted|ompiling|Loading|stopped/.test(said)) errors.push(`${where}: after an edit the page says “${said}”, not the compiled page`);
+  }
+  await ctx.close();
+}
+
 await visit(null);
 await navScroll();
 await textKeepsPlace();
@@ -873,6 +906,7 @@ await patternRows();
 await firstSteps();
 await dotOnWire();
 await pagePreview();
+await pageEditCompiles();
 await cellsPage();
 await phone();
 await browser.close();

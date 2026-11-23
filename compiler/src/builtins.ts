@@ -9,7 +9,7 @@
 
 import type { Id } from "../../ters/src/model.ts";
 import { B } from "../../ters/src/prelude.ts";
-import { ZONE_OPS, ALGEBRAIC_OPS, REAL_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, CASE_NAME, TEXT_OPS } from "../../ters/src/lang/std.ts";
+import { ZONE_OPS, ALGEBRAIC_OPS, REAL_OPS, ARITH, ARRAY_OPS, HASH_SET_OPS, TABLE_OPS, CELL_OPS, COMPARE, INT_OPS, IO, JOBS, S, SET, SHOW_ANY, CASE_NAME, TEXT_OPS, FRAME_OPS } from "../../ters/src/lang/std.ts";
 import type { Op } from "./scalar.ts";
 
 // JavaScript for a call, from its arguments' JavaScript. `narrow[i]`:
@@ -217,6 +217,8 @@ export const TARGETS: Record<Id, Target> = {
   [TEXT_OPS.slice]: { js: "impl", scalar: DATA },
   [TEXT_OPS.characters]: { js: "impl", scalar: DATA },
   [S.listOf]: { js: "impl", scalar: DATA },
+  [FRAME_OPS.draw]: { js: "impl", scalar: DATA },
+  [FRAME_OPS.sampled]: { js: "impl", scalar: DATA },
   [TEXT_OPS.normalized]: { js: "impl", scalar: DATA },
   [TEXT_OPS.graphemes]: { js: "impl", scalar: DATA },
   [TEXT_OPS.graphemeCount]: { js: "impl", scalar: DATA },

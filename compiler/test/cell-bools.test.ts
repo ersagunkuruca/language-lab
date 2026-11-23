@@ -31,3 +31,24 @@ test("a cell holding data with a Bool in it compiles, and reads back what was wr
   defs.main();
   assert.deepEqual(lines, ["gardener(true, false)", "gardener(false, true)"]);
 });
+
+test("a cell's value turned keeps an array a view: the same one where no item changes, a new one where a Bool inside does", async () => {
+  const { turned } = await import("../src/core-rt.ts");
+  const { ArrayView, arrayOf } = await import("../../ters/src/lang/array-view.ts");
+  const { TRUE } = await import("../../ters/src/lang/std.ts");
+  const numbers = arrayOf([1, 2, 3]);
+  assert.equal(turned(numbers, (x) => x), numbers);
+  const flags = arrayOf([{ tag: TRUE, fields: [] }, 2]);
+  const back = turned(flags, (x) => ((x as { tag?: string } | null)?.tag === TRUE ? true : x));
+  assert.ok(back instanceof ArrayView);
+  assert.deepEqual((back as InstanceType<typeof ArrayView>).fields, [2, true, 2]);
+});
+
+test("data holding no Bool comes back from a cell's turn as the same value", async () => {
+  const { turned } = await import("../src/core-rt.ts");
+  const { TRUE } = await import("../../ters/src/lang/std.ts");
+  const plain = { tag: "bird", fields: [1, { tag: "v", fields: [2, 3] }] };
+  assert.equal(turned(plain, (x) => x), plain);
+  const flagged = { tag: "bird", fields: [1, { tag: TRUE, fields: [] }] };
+  assert.deepEqual(turned(flagged, (x) => ((x as { tag?: string } | null)?.tag === TRUE ? true : x)), { tag: "bird", fields: [1, true] });
+});

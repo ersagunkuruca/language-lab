@@ -18,6 +18,8 @@ type Defs = Record<string, (...xs: unknown[]) => unknown>;
 // What plays a page's sound (audio-page.ts), given by a page that has one
 // (C251c, core-js.ts corePageScript): a page without carries none of it.
 let SOUND: { recordingWorld: typeof recordingWorld; soundPlayer: typeof soundPlayer } | undefined;
+// The GPU sites of a page's draws (G9c, gpu-draws.ts), for gpu-frame.ts.
+export { pageDraws } from "../../ters/src/lang/gpu-frame.ts";
 export const useSound = (s: NonNullable<typeof SOUND>) => { SOUND = s; };
 
 // `defs` makes the printed functions from the runtime; `main` is the

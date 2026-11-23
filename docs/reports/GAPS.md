@@ -4652,6 +4652,32 @@ lists of records (G1b with G3d) and G3b both serve it.
 The bird itself costs nothing in counts: `Bird` is passed by value in C
 with no dups or drops, unlike the greenhouse's Thing (GH1, C265).
 
+### On `neighbours` (2026-11-23, C292)
+
+The flock now asks std's `neighbours` for the birds within ten metres of
+each bird, as flock-page does, and its 13 grid definitions are gone. A
+bird then adds its neighbours in their numbers' order, so the ideals do
+too: each collects the near birds from the 27 cells, sorts them, then
+adds them. Every way still prints the ideal's lines. C and WebAssembly
+find them with the prelude's `neighbours on a grid`, copied into the
+program (near-grid.ts). JavaScript uses its runtime's grid (near.ts),
+given the places alone so the birds stay columns. 100 ticks of 5,000
+birds, one run each:
+
+| way | own grid (above) | on `neighbours` |
+|---|---|---|
+| C, one thread | 0.40 s | 0.45 s |
+| `ters native`, one thread | 1.43 s | 4.07 s |
+| `ters native`, 4 threads | 0.55 s | 4.18 s |
+| `ters wasi` | 6.04 s | 7.22 s |
+| `ters compile`, one thread | 8.83 s | 5.52 s |
+| `ters compile`, workers | 8.65 s | 5.51 s |
+
+Compiled JS gains a third. Native loses most: the Ters grid allocates a
+pair per bird to sort by cell and a list per bird it sorts again, and
+keeps big-capable Int keys. Its map isn't shared out on threads either.
+That is C293.
+
 ### Proposed order
 
 G3b's second half moves up: it is two thirds of the flock natively and
@@ -5023,3 +5049,113 @@ The next stage buys under 10%. Round 21 ends at 20000 programs:
 Left for other lanes: I344 (checking mini takes 2 s, modes.ts 1.6 s of
 it, the checker's, L266) and the evaluator at 111x (L281).
 
+
+## Sweep: every benchmark against its hand-written twin (2026-11-22)
+
+After C283 and C284 closed, every `compiler/gaps/bench-*.ts` was run
+once at its own sizes (greenhouse and native left out, routes stopped
+at 400 s), to find where the compiled code is furthest from the ideal
+or grows faster than it. Core IR against the ideal, smallest size to
+largest:
+
+| program | core/ideal | grows? |
+|---|---|---|
+| strings | 21.8x, 23.8x, 29.1x | slowly (round 20 stopped) |
+| board | 22x, 14x, 15x, 35x | yes: adding a card 0.32 → 2.07 ms, the ideal's flat |
+| crew | 3.0x, 12.1x, 27.3x | yes, past 50 tasks |
+| fit | 17.3x, 17.1x, 19.2x | no |
+| rota | 10.8x to 13.2x | no |
+| notebook (as written) | 11x to 143x | yes; with trees or the table chosen 3.5 to 5x |
+| clinic | 7.0x to 8.5x | no |
+| flock, moths | 5.8x to 7.0x (wasi 5.3x to 8.5x) | wasi grows |
+| pack, chapters, trek, depot, sheet (chosen), mini, scan, audio | 3x to 6x | no |
+| machine, ledger, countdown | 1.6x to 3x | no |
+
+And one far outside the rest: machine's `primes 20000` in WebAssembly
+takes 11.2 s (the bench's own lowering) or 13.0 s (`ters wasi`)
+against 35 ms in core IR and 27 ms native. The profile is 86%
+`array.replaceAt.a1.i64` and 13% the collector: every store into the
+machine's memory copies it. owned-arrays.ts (C56) can't take it, since
+the program also keeps other Int arrays it reads after changing
+(`report`'s `program` and `better`), and that holds for every Array of
+Int at once. JS has no such case: its arrays are versions (Baker's
+trick, array-view.ts), so a replace writes in place and leaves a note
+for the old array. C285. `sort 1000` is the same (2.3 s against 0.25 s).
+
+### After C285
+
+WebAssembly's arrays are versions (wasm.ts `versioned`, `array.reroot`),
+so machine's stores write one slot. bench-machine (median of three):
+
+| program | wasm before | wasm after | core IR | native | ideal |
+|---|---|---|---|---|---|
+| primes 5000 | 810 ms | 6.3 ms | 8.7 ms | 9.7 ms | 3.6 ms |
+| primes 20000 | 11,203 ms | 22 ms | 35 ms | 26 ms | 14 ms |
+| sort 400 | 243 ms | 23 ms | 41 ms | 28 ms | 15 ms |
+| sort 1000 | 2,345 ms | 139 ms | 248 ms | 146 ms | 90 ms |
+
+### After C286
+
+crew's tasks' array, built from the back by a function calling itself,
+stays rows (columns.ts), so a task put in front goes into the room
+instead of copying every column. bench-crew: 1,000 tasks 304 → 101 ms
+(27.3x → 9.2x the ideal); 2,000 tasks 1.19 → 0.22 s.
+
+### fit again, after the sweep (C288)
+
+A fresh profile of fit at 5,000 points (core IR 0.70 s, ideal 34 ms):
+13% each in the logistic's value and its gradient (`exp`), 13% the
+collector, 4.5% making closures. Two causes:
+
+- Every point at every step made three closures: `predict` applies
+  `value at(model, x)`, and `slopes` the derivative of it, each made
+  through the runtime. Fixed (C288, known-closures.ts): a closure made
+  only to be applied at once is a call of its code, the captures given
+  as inputs. 576 → 252 ms (19.2x → 8.2x).
+- The program computes the model 2.5x as often as the ideal (4.96
+  million logistic values against 1.99 million): a step's `sse` walks
+  the points, then `sums` walks them again for the step it took, where
+  the ideal keeps the sums it tested. That's how fit is written, not
+  something the compiler adds.
+
+### rota again, after the sweep (C289)
+
+A fresh profile of `ters compile`'s rota at 14 x 16 (0.43 s from the
+command line): the table read 13%, the tuple key's spelling 7% and its
+quote test 2.5%, the collector 12%. The reads are `can work`'s: `on
+slot` and `shift on` look up `(person, day)` and `(day, shift)`, and
+`load of` a person's count, each read building a fresh text such as
+`("Ada",3)` and hashing it again. Fixed (C289, table.ts `held`): a tuple
+of Ints and Texts is spelled once and that spelling kept by its parts, so
+a key met before gives the same text, with its hash, and none is made.
+bench-rota core: 14 x 16 412 → 318 ms (12.7x → 8.7x), 21 x 18 1,101 →
+843 ms (12.6x → 9.4x), the same output.
+
+What is left is R4's: the rota's three persistent maps copied or
+versioned per branch where the ideal changes arrays and undoes them, each
+place's candidates a `keep`, a `sort by` on tuples (`merge by key` 4%)
+and a `map`, and the `set tree has` of the plan's off days (3.4%). No
+single piece of that is 10%.
+
+### strings again, after the sweep (C290, measured)
+
+A fresh profile of `ters compile`'s strings at 8 blocks, one thread (1.85
+s from the command line, core IR in process 1.68 s, 20.6x): the
+collector 31%, YIN's `difference` fold 26% (50 million items, one loop
+over both arrays since C275), and the library FFT's maps, `zipped` and
+`numbered from` most of the rest, as round 20 left them. Allocation
+sampled over the run: 4.7 GB, a sixth of it the fold's pair per item,
+the rest the FFT's lists.
+
+- The pair per item, the record made of two array reads that may fail
+  (out of range), split into its parts by chosen-parts.ts: the loop
+  makes no pair and the output is the same, but 8 blocks went from 1.68
+  to 1.75 s and 32 blocks from 7.57 to 7.50 s, five runs each. V8 already
+  keeps the pair out of the loop's time. Not landed.
+- The fold on its own, timed on the program's own arrays: 3.8 ns an item
+  as compiled, 2.4 without the Int subtraction's runtime call and the
+  pair, 1.0 on a Float64Array. At 50 million items the first step is 70
+  ms of 1.7 s, 4%.
+
+Nothing reaches 10%. What is left is the FFT as the library writes it
+(C278: arrays slower; round 20: fused maps slower). Closed as measured.
