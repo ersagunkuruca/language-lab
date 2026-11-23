@@ -1755,7 +1755,9 @@ static lab_cell *lab_world_listFolder(lab_cell *path) {
 
 export const RT_C = new Set(Object.keys(FNS));
 // What the world needs from POSIX, before any header.
-export const POSIX = "#define _POSIX_C_SOURCE 200809L";
+// On Apple, strict POSIX hides stat's st_mtimespec and sysconf's
+// _SC_NPROCESSORS_ONLN, so Darwin's own names come too (C316).
+export const POSIX = "#define _POSIX_C_SOURCE 200809L\n#ifdef __APPLE__\n#define _DARWIN_C_SOURCE\n#endif";
 export const WORLD_H = "#include <errno.h>\n#include <sys/stat.h>\n#include <dirent.h>";
 export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // The C names the runtime defines besides `lab_` + a function's, which a
