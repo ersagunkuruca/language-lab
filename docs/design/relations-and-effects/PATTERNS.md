@@ -178,3 +178,8 @@ One PR each:
    at a time (session.ts `patternMatch`, after the match compiler in
    Wadler's chapter of *The Implementation of Functional Programming
    Languages*). Guards are not part of it.
+   An inner otherwise that reads the field it matched on is a row too,
+   the field named there: `["turn", way] → abort(… way)` after the
+   `["turn", "right"]` rows. Rows that give the same value fold into the
+   otherwise unless a row left after one of them could catch it, by a `_`
+   or a name where they differ. `examples/turtle` shows both.
