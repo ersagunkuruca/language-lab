@@ -35,7 +35,7 @@ echo ${exe}\r
 set -e
 cd "$(dirname "$0")"
 case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) CC=\${CC:-gcc} ;; *) CC=\${CC:-x86_64-w64-mingw32-gcc} ;; esac
-$CC ${flags} -o "${exe}" page.c screen.c ${libs}
+$CC ${flags} $CFLAGS -o "${exe}" page.c screen.c ${libs}
 echo "${exe}"
 `,
     "README.md": `# ${title}, as a native Windows app
@@ -1242,7 +1242,25 @@ static LRESULT CALLBACK windowed(HWND h, UINT m, WPARAM w, LPARAM l) {
   return DefWindowProcW(h, m, w, l);
 }
 
+// A crash, said where the check can read it: what went wrong and the
+// frames, as offsets in the .exe (addr2line finds them in a -g build).
+static LONG WINAPI crashed(EXCEPTION_POINTERS *e) {
+  char *base = (char *)GetModuleHandleW(NULL);
+  void *at[32];
+  USHORT n = RtlCaptureStackBackTrace(0, 32, at, NULL);
+  fprintf(stderr, "crashed: exception %08lx at rva %llx\n", e->ExceptionRecord->ExceptionCode, (unsigned long long)((char *)e->ExceptionRecord->ExceptionAddress - base));
+  for (USHORT i = 0; i < n; i++) {
+    HMODULE m = NULL;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)at[i], &m);
+    if ((char *)m == base) fprintf(stderr, "  frame rva %llx\n", (unsigned long long)((char *)at[i] - base));
+  }
+  fflush(stderr);
+  fflush(stdout);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+
 int main(void) {
+  SetUnhandledExceptionFilter(crashed);
   // What the page keeps (the world's files, a page's saved values) goes in
   // the app's own folder in %APPDATA%, not beside the app.
   WCHAR dir[MAX_PATH + 64];

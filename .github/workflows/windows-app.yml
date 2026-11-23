@@ -47,6 +47,9 @@ jobs:
         run: node cli/ters.ts build-native-app "examples/$PROGRAM" --windows -o "$RUNNER_TEMP/app"
       - name: The app
         shell: bash
+        # With its lines, for a crash's frames.
+        env:
+          CFLAGS: -g
         run: sh "$RUNNER_TEMP/app/build.sh"
       - name: Started, clicked
         shell: bash
@@ -70,9 +73,11 @@ jobs:
           n=$(( 10 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
           while kill -0 $pid 2>/dev/null && [ $n -gt 0 ]; do sleep 1; n=$((n - 1)); done
           if kill -0 $pid 2>/dev/null; then echo "STILL RUNNING after the clicks"; kill $pid; fi
-          wait $pid; code=$?
+          code=0; wait $pid || code=$?
           echo "---- the app's output"; cat out.txt
           echo "---- its errors"; cat err.txt
+          base=$(objdump -p "$exe" | awk '/^ImageBase/ {print $2}')
+          for rva in $(sed -n 's/.*rva \([0-9a-f]*\).*/\1/p' err.txt); do addr2line -f -i -p -e "$exe" $(printf '0x%x' $((0x$base + 0x$rva))); done
           powershell -NoProfile -Command "Compress-Archive -Path '$exe' -DestinationPath app.zip" && cp app.zip "$GITHUB_WORKSPACE/" || true
           grep -q -- "---- started" out.txt || { echo "the page never showed"; exit 1; }
           [ $code = 0 ] || { echo "exit $code"; exit 1; }
