@@ -28,7 +28,7 @@ export type CoreMain = { printed: Printed; at: number; args: boolean; result: "i
 // be (hostMaps: the evaluator and JavaScript have std's Table), in the
 // program's own types' fields too (GAPS.md M2). A choice the rewrite
 // can't make, which `ters run` refuses, runs as written.
-// `held`: the types held in Choices (E292), stored as held or refused
+// `held`: the types held in Decisions (E292), stored as held or refused
 // with the reason.
 export function checkedForRun(code: Code, names: Names, def: Id, held: readonly [Id, string][] = []): { code: Code; names: Names; info: Info; chosen: string[] } {
   const own = code.defs.filter((d) => !LIBRARY.code.nodes[d]);

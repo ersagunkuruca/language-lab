@@ -168,9 +168,9 @@ export interface Doc {
   // their newest versions.
   modules?: Module[];
   store?: Module;
-  // Types whose representation you held in Choices (E292, L280c): the
+  // Types whose representation you held in Decisions (E292, L280c): the
   // row each is stored as, by the type's id, whatever the compiler would
-  // pick. Kept with the program, as `held` lines in `<program>.choices`.
+  // pick. Kept with the program, as `held` lines in `<program>.decisions`.
   heldReps?: Record<Id, string>;
 }
 
@@ -212,7 +212,7 @@ export interface UI {
   // Definitions open as tabs over the graph, and which inspector tab shows.
   tabs: Id[];
   panel: "node" | "program" | "checks" | "files" | "changes" | "guide";
-  // The Choices tab's row a node's badge opened (E292).
+  // The Decisions section's row a node's badge opened (E292).
   choiceAt?: Id | null;
 }
 
@@ -1190,7 +1190,7 @@ function kindLabel(id: Id): string {
   return ({ lit: "Literal", ref: "Reference", lambda: "Function", hole: "Hole", builtin: "Builtin", match: "Match", fold: "Fold", arm: "Arm", variant: "Case", field: "Field", solve: "Solve" } as Record<string, string>)[n.kind] ?? n.kind;
 }
 
-// The program's choices for main (E292), for the Choices tab and the
+// The program's decisions for main (E292), for the Decisions section and the
 // badges on the nodes they are about.
 const choicesNow = choicesOf({ code: () => prog(), names: () => pres().names, pins: () => heldPins?.all ?? doc.signatures ?? NO_PINS, held: () => doc.heldReps ?? {}, wanted: (last) => ui.panel === "checks" || (!!last.length && ((ids) => last.some((e) => ids.has(e.id)))(new Set(subtree(doc.code, ui.def)))), blocked: () => { const info = typesOf(); if (!info) return "the check"; const e = errorsIn(info), o = holesIn(info); return e ? `${e} type error${e === 1 ? "" : "s"}` : o ? `${o} hole${o === 1 ? "" : "s"}` : null; }, main: () => (EMBED ? undefined : defNamed("main") ?? undefined), render: () => renderChoices() });
 // The choices' badges as the graph and the blocks were last drawn: new
@@ -1310,7 +1310,7 @@ function blocksOf(info: T.Info): HTMLElement {
   if (!blocksKept || from.some((x, i) => x !== blocksKept!.from[i])) {
     const el = T.renderTyped(doc.code, p, info, ui.def, ui.selected, undefined, doc.layout.groups, doc.layout.folded, blockShapes());
     // A badge after each part a choice is about (E292), as in the graph.
-    for (const [id, text] of marks) el.querySelector(`[data-id="${CSS.escape(id)}"]`)?.append(h("button", { class: "choice-badge", type: "button", "data-act": "open-choice", "data-target": id, title: text, "aria-label": "Choices" }));
+    for (const [id, text] of marks) el.querySelector(`[data-id="${CSS.escape(id)}"]`)?.append(h("button", { class: "choice-badge", type: "button", "data-act": "open-choice", "data-target": id, title: text, "aria-label": "Decisions" }));
     return (blocksKept = { from, el }).el;
   }
   for (const e of blocksKept.el.querySelectorAll(".sel")) e.classList.remove("sel");
@@ -2730,7 +2730,7 @@ function sideColumn(namer: Namer, info: T.Info, p: Presentation): HTMLElement {
     ["program", "Program", () => [programPanel()]],
     // The program's choices under the definition's checks (E310: a tab
     // of their own made seven, two lines at 1400 px; Ersagun chose this).
-    ["checks", "Checks", () => [typedChecks(namer, info), h("section", { class: "checks-choices" }, head("Choices", { tip: "What the compiler picked for main: how each type is stored, the ways, where the work runs and its order, each among implementations with the same meaning" }), choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null))]],
+    ["checks", "Checks", () => [typedChecks(namer, info), h("section", { class: "checks-choices" }, head("Decisions", { tip: "What the compiler decided for main: how each type is stored, the ways, where the work runs and its order, each among implementations with the same meaning" }), choicesPanel(choicesNow(), doc.code, ui.choiceAt ?? null))]],
     ["files", "Files", () => [filesPanel()]],
     ["changes", "Changes", () => [changes.changesPanel()]],
     ["guide", "Guide", () => [guide()]],
@@ -2866,7 +2866,7 @@ document.addEventListener("click", (e) => {
       const heldReps = a === "choice-hold" ? { ...rest, [of]: act.dataset.rep! } : rest;
       const what = act.dataset.about ?? typedPres().names[of] ?? LIBRARY.names[of] ?? of;
       forgetCompiled();
-      return commit({ heldReps }, ["choices"], a === "choice-hold" ? `Held ${what} ${act.dataset.prep ?? "as"} ${act.dataset.rep}` : `${what} is the compiler's to pick again`);
+      return commit({ heldReps }, ["decisions"], a === "choice-hold" ? `Held ${what} ${act.dataset.prep ?? "as"} ${act.dataset.rep}` : `${what} is the compiler's to pick again`);
     }
     if (a === "goto-stop") { const d = act.dataset.def!, n = act.dataset.target!; if (d !== ui.def) openDef(d); return select(doc.code.nodes[n] ? n : null); }
     // The form is in the side panel's first tab: show it, whichever tab

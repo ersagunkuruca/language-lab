@@ -1,6 +1,6 @@
 // The program's choices for main as `ters choices` writes them (L280a,
 // CHOICES-2026-11-20.md), worked out in Run's worker (runWorker.ts) for
-// the Choices tab (choicesPanel.ts, E292): how each type is stored, the
+// the Decisions section (choicesPanel.ts, E292): how each type is stored, the
 // ways and mode plans, where a page's or a command-line program's maps
 // run, and which walks are one loop. JavaScript's, as the editor runs it;
 // C's threads (`ters native`) are left to the command line.
@@ -14,7 +14,7 @@ import { represented, type Program } from "../ters/cli/represented.ts";
 import { choiceLines, HELD, placeLines, scheduleLines } from "../ters/cli/choices.ts";
 import { infer, programOptions } from "./typed.ts";
 
-// `held`: the types held in Choices (E292, L280c): their entries written
+// `held`: the types held in Decisions (E292, L280c): their entries written
 // `held`, and for each, what the compiler would pick alone (`would`) when
 // that's another row.
 // `refused`: why what is held can't be, the choices then made with
