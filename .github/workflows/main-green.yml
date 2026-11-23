@@ -1,0 +1,34 @@
+# P10 as a check (T17, REVIEW-2026-11-23 §1): a pull request fails while
+# Check main has been red for more than an hour, unless its title names a
+# failing file (a lane's own fix merges). ters/test/main-red.ts decides;
+# retitling the pull request runs it again, and so does "Re-run jobs" once
+# main is green.
+name: Main green
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: main-green-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  main-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check main red for more than an hour?
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: node ters/test/main-red.ts "$TITLE"
