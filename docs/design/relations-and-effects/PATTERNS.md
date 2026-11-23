@@ -171,3 +171,10 @@ One PR each:
    is Split on it, refused while the row reads the field whole (that would
    need an `as` name); Join cases, on a row or a match, takes back a match
    whose cases all give the same value and read none of their fields.
+5. **Values in patterns (L290b, 11-23).** A field a case's body matches on
+   by value (L164c) reads as that value in the row: `cons("-", rest) → 1`,
+   `["-", ">", ..rest] → …`; the inner otherwise is `_` as before. The MCP
+   reads such rows back as the nested matches they stand for, one column
+   at a time (session.ts `patternMatch`, after the match compiler in
+   Wadler's chapter of *The Implementation of Functional Programming
+   Languages*). Guards are not part of it.

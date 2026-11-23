@@ -197,7 +197,7 @@ function blocksBare(code: Code, pres: Presentation, info: Info | null, defId: Id
   // A name, with its type beside it in the pane.
   const bind = (id: Id): Part => { const t = typeAt(id); return part("bnd", [nameOf(id), ...(t ? [{ cls: "ty", pane: true as const, kids: [`: ${t}`] }] : [])], id); };
   const con = (id: Id) => part("con", [base(id)]);
-  const pattern = (p: Pat): Piece[] => patternWith<Piece>(p, bind, con, pn);
+  const pattern = (p: Pat): Piece[] => patternWith<Piece>(p, bind, con, pn, (id) => inline(id).p);
 
   const node = (id: Id) => code.nodes[id];
   const isBool = (n: NodeOf<"match">) => n.arms.length === 2 && n.arms.every((a) => [TRUE, FALSE].includes((node(a) as NodeOf<"arm">).variant));
