@@ -154,6 +154,7 @@ Each note says why, then gives the plan as steps; each step is a backlog row.
 | [WASM.md](design/targets/WASM.md) | WebAssembly, with WASI | built (W1 to W4) |
 | [NATIVE.md](design/targets/NATIVE.md) | Native code through C | built (N1 to N5) |
 | [NATIVE-APPS.md](design/targets/NATIVE-APPS.md) | Native phone apps: C program, native shell, view host; Android and iPhone with their own views, no web view | built (C199a to C199f) |
+| [DESKTOP-APPS.md](design/targets/DESKTOP-APPS.md) | macOS and Windows apps by the phones' route, and a file browser (folders) as the example: sizes and rows C294 to C300, L282 to L284 | plan (2026-11-23) |
 | [WEB.md](design/targets/WEB.md) | Pages: a page is a value, cells and handlers, `ters build-web` | built |
 | [FOREIGN.md](design/targets/FOREIGN.md) | Foreign definitions: a program's own effect whose outermost handler is a host file per target (`hosts/js.js`, `hosts/c.c`), keyed by id, checked at the border | built (L69) |
 | [WHERE-IT-RUNS.md](design/targets/WHERE-IT-RUNS.md) | Where code runs chosen by cost (workers, the GPU): Bend 2 read, a worker's round trip measured, one-holder arrays transferred, only a caller that can wait | built (C61, closed 2026-11-11) |
