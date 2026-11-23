@@ -112,6 +112,7 @@ ${decl}
 void *ters_ui_start(ters_ui *ui, double width, double height, int dark);
 void ters_ui_resize(double width, double height, int dark);
 int ters_ui_pointer(void *view, int kind, double x, double y);
+void ters_ui_hover(void *view);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
 int ters_page_clock(void);
 int ters_page_frame(void);
@@ -209,7 +210,10 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 @interface TPage : NSObject <NSTextFieldDelegate, NSTextViewDelegate, NSWindowDelegate>
 @property (nonatomic, strong) NSWindow *window;
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSView *> *views;
-@property (nonatomic) int next;
+// Each view's number, back from the view (the pointer's box, C298), and
+// the box the pointer was last over.
+@property (nonatomic, strong) NSMapTable<NSView *, NSNumber *> *ids;
+@property (nonatomic) int next, over;
 @property (nonatomic) BOOL quiet, ticking, paused;
 @property (nonatomic, strong) NSScrollView *scroll;
 @property (nonatomic, strong) TFlip *page;
@@ -222,6 +226,21 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 - (void)frame;
 - (void)frames:(NSView *)v handler:(int)h;
 - (void)check:(NSArray<NSString *> *)taps;
+- (void)over:(NSView *)v;
+@end
+
+// The page: the pointer moving over it tells the page which box it is over
+// (:hover, pointerenter and pointerleave: C298).
+@interface TPageView : TFlip
+@end
+@implementation TPageView
+- (void)updateTrackingAreas {
+  [super updateTrackingAreas];
+  for (NSTrackingArea *t in self.trackingAreas) [self removeTrackingArea:t];
+  [self addTrackingArea:[[NSTrackingArea alloc] initWithRect:NSZeroRect options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect owner:self userInfo:nil]];
+}
+- (void)mouseMoved:(NSEvent *)e { [P over:[self hitTest:[self.superview convertPoint:e.locationInWindow fromView:nil]]]; }
+- (void)mouseExited:(NSEvent *)e { [P over:nil]; }
 @end
 
 // A frame event's view: once each frame while it is in the window, with
@@ -242,7 +261,7 @@ static void fire(int handler, NSString *value, NSString *key, double x, double y
 }
 
 static NSView *V(void *v) { return P.views[@((int)(intptr_t)v)]; }
-static void *put(NSView *v) { int n = P.next++; P.views[@(n)] = v; if ([v isKindOfClass:[TBox class]]) ((TBox *)v).num = n; return (void *)(intptr_t)n; }
+static void *put(NSView *v) { int n = P.next++; P.views[@(n)] = v; [P.ids setObject:@(n) forKey:v]; if ([v isKindOfClass:[TBox class]]) ((TBox *)v).num = n; return (void *)(intptr_t)n; }
 
 static void *u_box(void *c, const char *tag, size_t n) {
   NSString *t = str(tag, n);
@@ -446,6 +465,7 @@ static double seconds(void) { return CACurrentMediaTime(); }
   P = self;
   self.views = [NSMutableDictionary new]; self.moments = [NSMutableDictionary new]; self.heard = [NSMutableDictionary new]; self.frameViews = [NSMutableArray new];
   self.next = 1;
+  self.ids = [NSMapTable weakToStrongObjectsMapTable];
   self.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 900, 700) styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
   self.window.title = NSBundle.mainBundle.infoDictionary[@"CFBundleName"] ?: @"page";
   self.window.delegate = self;
@@ -455,7 +475,7 @@ static double seconds(void) { return CACurrentMediaTime(); }
   self.scroll.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
   self.scroll.hasVerticalScroller = YES;
   self.scroll.drawsBackground = YES;
-  self.page = [[TFlip alloc] initWithFrame:NSMakeRect(0, 0, self.scroll.contentSize.width, self.scroll.contentSize.height)];
+  self.page = [[TPageView alloc] initWithFrame:NSMakeRect(0, 0, self.scroll.contentSize.width, self.scroll.contentSize.height)];
   self.scroll.documentView = self.page;
   self.window.contentView = self.scroll;
   self.dark = [self isDark];
@@ -567,6 +587,19 @@ static void shown(NSString *when) {
   printf("---- %s\n%s\n%s\nshaped boxes (clip-path): %d\n", when.UTF8String, textsOf(P.page).UTF8String, [at componentsJoinedByString:@"\n"].UTF8String, shaped);
   fflush(stdout);
 }
+// The pointer over v: the page told of the box round it (a text's box,
+// not the text), when that changed.
+- (void)over:(NSView *)v {
+  int n = 0;
+  for (NSView *a = v; a && !n; a = a.superview) {
+    NSNumber *k = [self.ids objectForKey:a];
+    if (k && self.views[k] == a && ![a isKindOfClass:[TLabel class]]) n = k.intValue;
+  }
+  if (n == self.over) return;
+  self.over = n;
+  ters_ui_hover(n ? (void *)(intptr_t)n : 0);
+  [self tick];
+}
 - (void)check:(NSArray<NSString *> *)taps {
   if (!taps.count) { dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 2), dispatch_get_main_queue(), ^{ [NSApp terminate:nil]; }); return; }
   NSString *t = taps[0];
@@ -598,6 +631,20 @@ static void shown(NSString *when) {
       [self.window setFrame:r display:YES];
       [self resized];
       done = YES;
+    }
+    // "hover text": the pointer over the box showing text, and that box's
+    // paint after.
+    if ([t hasPrefix:@"hover "]) {
+      NSString *what = [t substringFromIndex:6];
+      for (NSNumber *k in [self.views.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
+        NSView *v = self.views[k];
+        if (done || [v isKindOfClass:[TLabel class]] || ![textsOf(v) isEqualToString:what]) continue;
+        [self over:v];
+        CGFloat c[4] = { 0, 0, 0, 0 };
+        if (v.layer.backgroundColor && CGColorGetNumberOfComponents(v.layer.backgroundColor) == 4) memcpy(c, CGColorGetComponents(v.layer.backgroundColor), sizeof c);
+        printf("hover %s: background %.0f %.0f %.0f\n", what.UTF8String, c[0] * 255, c[1] * 255, c[2] * 255);
+        done = YES;
+      }
     }
     for (NSNumber *k in [self.heard.allKeys sortedArrayUsingSelector:@selector(compare:)]) {
       NSNumber *h = self.heard[k][@"click"];

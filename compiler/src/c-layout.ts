@@ -111,6 +111,8 @@ typedef struct tl_n {
   // text's last measure.
   double sent_place[5], sent_paint[4], sent_font[5], m_size, m_width, m_w;
   int sent, m_bold, m_lines, measured, sent_clip;
+  // Whether the pointer is over it or a box inside it (:hover, C298).
+  int hover;
   // How high what's inside it is (its height as nothing held it), and what
   // the screen was told of it, for a box that scrolls.
   double inside, sent_inside, sent_side[5], sent_outline[25];
@@ -269,8 +271,9 @@ typedef struct { char tag[24], id[40], cls[4][40]; int ncls, pseudo, spec, order
 static tl_rule *tl_rules;
 static int tl_nrules;
 // The pseudo-classes this engine reads, as bits (pig's #tally:empty and
-// .line:last-child): what an element is among its parent's.
-enum { TL_EMPTY = 1, TL_FIRST = 2, TL_LAST = 4 };
+// .line:last-child): what an element is among its parent's; and :hover,
+// the pointer over it (C298).
+enum { TL_EMPTY = 1, TL_FIRST = 2, TL_LAST = 4, TL_HOVER = 8 };
 // One compound from a to b into s, its specificity added; 0 if it isn't
 // one this engine reads (another pseudo-class, an attribute).
 static int tl_compound(const char *a, const char *b, char *tag, char *id, char (*cls)[40], int *ncls, int *pseudo, int *spec) {
@@ -281,6 +284,7 @@ static int tl_compound(const char *a, const char *b, char *tag, char *id, char (
       if (n == 6 && !memcmp(x, ":empty", 6)) *pseudo |= TL_EMPTY;
       else if (n == 12 && !memcmp(x, ":first-child", 12)) *pseudo |= TL_FIRST;
       else if (n == 11 && !memcmp(x, ":last-child", 11)) *pseudo |= TL_LAST;
+      else if (n == 6 && !memcmp(x, ":hover", 6)) *pseudo |= TL_HOVER;
       else return 0;
       *spec += 10; x = y; continue;
     }
@@ -396,6 +400,7 @@ static int tl_is(const char *tag, const char *id, char (*cls)[40], int ncls, int
   if (tag[0] && strcmp(tag, "*") && strcmp(tag, e->tag)) return 0;
   if (id[0] && (!e->id || strcmp(id, e->id))) return 0;
   for (int j = 0; j < ncls; j++) if (!tl_word(e->cls, cls[j])) return 0;
+  if ((pseudo & TL_HOVER) && !e->hover) return 0;
   // :empty, no element and no text in it (an empty text is none, as
   // Chromium has pig's #tally); :first-child and :last-child among the
   // parent's elements.
@@ -1441,6 +1446,46 @@ static int ters__ui_pointer(void *view, int kind, double x, double y) {
   for (int j = 0; j < m; j++) ters_page_event(hs[j], "", 0, "", 0, ux, uy, 0);
   return m > 0;
 }
+// The pointer over view, the innermost box under it (0: over none, or
+// out of the window), as a desktop's screen tells it when that changes
+// (C298): the boxes it left lose :hover and hear pointerleave, innermost
+// first, and the ones it entered gain it and hear pointerenter, outermost
+// first, as a browser's. The boxes hovered are a path from the root.
+static int tl_hover_rules(void) {
+  for (int i = 0; i < tl_nrules; i++) {
+    if (tl_rules[i].pseudo & TL_HOVER) return 1;
+    for (int j = 0; j < tl_rules[i].nup; j++) if (tl_rules[i].up[j].pseudo & TL_HOVER) return 1;
+  }
+  return 0;
+}
+static void ters__ui_hover(void *view) {
+  if (!tl_root) return;
+  tl_n *e = view ? tl_find_view(tl_root, view) : 0;
+  tl_n *now[64], *was[64]; int nn = 0, nw = 0;
+  for (tl_n *a = e; a && a->tag && nn < 64; a = a->parent) now[nn++] = a;
+  for (tl_n *a = tl_root; a && a->hover && nw < 64;) {
+    was[nw++] = a;
+    tl_n *next = 0;
+    for (int j = 0; j < a->nk && !next; j++) if (a->kids[j]->tag && a->kids[j]->hover) next = a->kids[j];
+    a = next;
+  }
+  int hs[64], m = 0, changed = 0;
+  // Left, innermost first (was runs from the root in).
+  for (int i = nw; i-- > 0;) {
+    int still = 0; for (int k = 0; k < nn; k++) if (now[k] == was[i]) still = 1;
+    if (still) continue;
+    was[i]->hover = 0; changed = 1;
+    for (int j = 0; j < was[i]->np && m < 64; j++) if (!strcmp(was[i]->pev[j], "pointerleave")) hs[m++] = was[i]->ph[j];
+  }
+  // Entered, outermost first (now runs from e out).
+  for (int i = nn; i-- > 0;) {
+    if (now[i]->hover) continue;
+    now[i]->hover = 1; changed = 1;
+    for (int j = 0; j < now[i]->np && m < 64; j++) if (!strcmp(now[i]->pev[j], "pointerenter")) hs[m++] = now[i]->ph[j];
+  }
+  if (changed && tl_hover_rules()) tl_layout();
+  for (int j = 0; j < m; j++) ters_page_event(hs[j], "", 0, "", 0, 0, 0, 0);
+}
 // An element a part drew again: its animation starts again (as a
 // browser's new element's would) when it next has one.
 static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
@@ -1467,6 +1512,7 @@ static void ters__ui_resize(double width, double height, int dark) {
 }
 // Each way in, under the page's lock (C217).
 int ters_ui_pointer(void *view, int kind, double x, double y) { ters_page_lock(); int r = ters__ui_pointer(view, kind, x, y); ters_page_unlock(); return r; }
+void ters_ui_hover(void *view) { ters_page_lock(); ters__ui_hover(view); ters_page_unlock(); }
 void *ters_ui_start(ters_ui *ui, double width, double height, int dark) { ters_page_lock(); void *r = ters__ui_start(ui, width, height, dark); ters_page_unlock(); return r; }
 void ters_ui_resize(double width, double height, int dark) { ters_page_lock(); ters__ui_resize(width, height, dark); ters_page_unlock(); }
 `;
@@ -1477,7 +1523,8 @@ void ters_ui_resize(double width, double height, int dark) { ters_page_lock(); t
 // input:ID:TEXT, pointerdown:ID:X,Y and pointermove:ID:X,Y (X, Y from its
 // top left), frames:N:MS (N frames MS apart on a clock of its own, which
 // animations run on), and pointer:down|move|up:X,Y at a point on the page,
-// in a picture, and latency:S, a sound's latency in seconds). Texts
+// in a picture, hover:ID, the pointer over that box (hover:- over none),
+// and latency:S, a sound's latency in seconds). Texts
 // measure as if each character were half a font size wide, so places
 // that hang on texts are near a browser's, not equal.
 // The first arguments may be width:N (360 by default), height:N (none by
@@ -1690,6 +1737,15 @@ int main(int argc, char **argv) {
       tl_n *pic = u_picture(tl_root, 0, 0, px, py, &px, &py);
       if (!pic) { fprintf(stderr, "no picture at %s\n", more); return 2; }
       ters_ui_pointer(pic->view, kind, px, py);
+      free(s);
+      u_show(root);
+      continue;
+    }
+    // hover:ID, the pointer over the box with that id (hover:- over none).
+    if (!strcmp(s, "hover")) {
+      tl_n *h = strcmp(id, "-") ? u_find(tl_root, id) : 0;
+      if (!h && strcmp(id, "-")) { fprintf(stderr, "no element with id %s\n", id); return 2; }
+      ters_ui_hover(h ? h->view : 0);
       free(s);
       u_show(root);
       continue;
