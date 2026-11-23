@@ -35,6 +35,7 @@ import { choicesFor } from "./choicesFor.ts";
 import type { TestAsk, TestSays } from "./testAsk.ts";
 import type { PictureAsk, PictureSays } from "./pictureAsk.ts";
 import { buildPicture } from "./picture.ts";
+import { colourOf, paintRows, type PaintAsk } from "./pictureDraw.ts";
 import { runTests, savedFrom, type Saved } from "../ters/src/lang/tests.ts";
 
 // `core`: main printed from the core IR, by an earlier run of this same
@@ -129,11 +130,11 @@ function checked(given: SentCode, names: Names, pins: Pins, def: Id, held: [Id, 
 // started (I203), its whole check and its bodies, though the page had
 // kept them.
 const checksRead = loadChecks();
-const asked: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk>[] = [];
+const asked: MessageEvent<Ask | PaintAsk>[] = [];
 if (checksRead) {
   self.onmessage = (e) => { asked.push(e); };
-  void checksRead.then(() => { self.onmessage = answer; for (const e of asked.splice(0)) answer(e); });
-} else self.onmessage = answer;
+  void checksRead.then(() => { self.onmessage = onAsk; for (const e of asked.splice(0)) onAsk(e); });
+} else self.onmessage = onAsk;
 
 // The placements held in Choices (E292, L280h), set for the lowering of
 // the ask (scalar.ts keeps them for the next): main's work kept on the
@@ -147,7 +148,23 @@ function placed(held: [Id, string][] = []): [Id, string][] {
   return held.filter(([, r]) => !isPlace(r));
 }
 
-function answer(e: MessageEvent<RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk>) {
+// A picture drawn on the CPU (pictureDraw.ts, E319c): its program made
+// once, then its rows as they're asked for, each sent as it's drawn.
+let painting: ReturnType<typeof colourOf> | null = null;
+function paint(m: PaintAsk) {
+  const failed = (err: unknown) => (self as unknown as Worker).postMessage({ error: err instanceof Error ? err.message : String(err) });
+  if ("paint" in m) {
+    painting = colourOf(m.paint);
+    return void painting.then(({ how, moving }) => (self as unknown as Worker).postMessage({ how, moving }), failed);
+  }
+  void painting?.then((c) => { const got = paintRows(c.colourAt, m.rows); (self as unknown as Worker).postMessage(got, [got.data.buffer]); }).catch(failed);
+}
+
+type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk;
+function onAsk(e: MessageEvent<Ask | PaintAsk>) {
+  if ("paint" in e.data || "rows" in e.data) paint(e.data); else answer(e as MessageEvent<Ask>);
+}
+function answer(e: MessageEvent<Ask>) {
   answers = null; paused = false;
   // The program's groups as the build checked them (E314), from the page.
   if ("shipped" in e.data && e.data.shipped) addShipped(e.data.shipped);

@@ -89,7 +89,7 @@ export function pagePanels(host: PageHost) {
       // Otherwise it's compiled in a worker (pictureAsk.ts, E319c).
       else prebuilt<Built>(prebuiltKey("picture", code, entries, pins()))
         .then((built) => pic.for !== code ? Promise.reject(new Error("redrawn")) : built ?? (pic.making = pictureInWorker({ ...shippedOf(), code, names: pres().names, pins: pins(), entries })).done)
-        .then((built) => (pic.for !== code ? Promise.reject(new Error("redrawn")) : drawDrawable(drawableOf(built), { canvas: pic.canvas, status: pic.status })))
+        .then((built) => (pic.for !== code ? Promise.reject(new Error("redrawn")) : drawDrawable(drawableOf(built), { canvas: pic.canvas, status: pic.status, worker: newWorker })))
         .then((p) => { if (pic.for === code) pic.now = p; else p.stop(); },
           (e) => { if (pic.for === code) shown(holesIn(info) ? new Error("the program has holes; fill them first") : e); });
     }
