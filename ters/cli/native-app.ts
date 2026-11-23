@@ -380,8 +380,20 @@ static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append,
   0
 #endif
 };
+// Java checks the stack it is called from: from a handler's fiber, a
+// call that answers goes from the page's own (C313).
+#ifdef TERS_ON_PAGE
+#define J_ON_PAGE(fn, q) ters_on_page(fn, q)
+#else
+#define J_ON_PAGE(fn, q) fn(q)
+#endif
 #ifdef LAB_OPENER
 static char *j_open(const char *path);
+#endif
+#ifdef LAB_TREE
+static int j_tree_open(const char *p, const char *mode);
+static int j_tree_kind(const char *p, int64_t *size, double *modified);
+static char **j_tree_list(const char *p, size_t *n);
 #endif
 // The page on a screen width dp wide and height high, dark or not: its root's number, 0
 // when main has no answer.
@@ -393,6 +405,9 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
   for (int i = 0; i < 19; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
 #ifdef LAB_OPENER
   lab_opener = j_open;
+#endif
+#ifdef LAB_TREE
+  lab_tree_open = j_tree_open; lab_tree_kind = j_tree_kind; lab_tree_list = j_tree_list;
 #endif
   // What the page keeps (the world's files, a page's saved values) goes
   // in the app's own files, not in "/", which it can't write.
@@ -436,20 +451,91 @@ static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
 #ifdef LAB_OPENER
 // A file to another app (C311): MainActivity's openOutside, which answers
 // why it didn't open, or null.
-static char *j_open(const char *path) {
+typedef struct { const char *path; char *r; } j_open_q;
+static void j_open_at(void *v);
+static char *j_open(const char *path) { j_open_q q = { path, 0 }; J_ON_PAGE(j_open_at, &q); return q.r; }
+static void j_open_at(void *v) {
+  j_open_q *q = v;
+  const char *path = q->path;
   jmethodID m = (*ters_j)->GetMethodID(ters_j, (*ters_j)->GetObjectClass(ters_j, ters_a), "openOutside", "(Ljava/lang/String;)Ljava/lang/String;");
-  if (!m) { (*ters_j)->ExceptionClear(ters_j); return strdup("this app has no opener"); }
+  if (!m) { (*ters_j)->ExceptionClear(ters_j); q->r = strdup("this app has no opener"); return; }
   jstring t = ters_js(path, strlen(path));
   jstring r = (jstring)(*ters_j)->CallObjectMethod(ters_j, ters_a, m, t);
   (*ters_j)->DeleteLocalRef(ters_j, t);
-  if ((*ters_j)->ExceptionCheck(ters_j)) { (*ters_j)->ExceptionClear(ters_j); return strdup("the opener failed"); }
-  if (!r) return 0;
+  if ((*ters_j)->ExceptionCheck(ters_j)) { (*ters_j)->ExceptionClear(ters_j); q->r = strdup("the opener failed"); return; }
+  if (!r) return;
   char *out; size_t n;
   ters_utf8(ters_j, r, &out, &n);
   out[n] = 0;
   (*ters_j)->DeleteLocalRef(ters_j, r);
-  return out;
+  q->r = out;
 }
+#endif
+#ifdef LAB_TREE
+// The folder the person picked (C313), by MainActivity's treeOpen,
+// treeKind and treeList, called from the page's own stack (J_ON_PAGE).
+static jmethodID j_tree_m(const char *name, const char *sig) {
+  jmethodID m = (*ters_j)->GetMethodID(ters_j, (*ters_j)->GetObjectClass(ters_j, ters_a), name, sig);
+  if (!m) (*ters_j)->ExceptionClear(ters_j);
+  return m;
+}
+typedef struct { const char *p, *mode; int r; int64_t size; double modified; char **names; size_t n; } j_tree_q;
+static void j_tree_open_at(void *v) {
+  j_tree_q *q = v;
+  jmethodID m = j_tree_m("treeOpen", "(Ljava/lang/String;Ljava/lang/String;)I");
+  if (!m) return;
+  jstring a = ters_js(q->p, strlen(q->p)), b = ters_js(q->mode, strlen(q->mode));
+  jint fd = (*ters_j)->CallIntMethod(ters_j, ters_a, m, a, b);
+  (*ters_j)->DeleteLocalRef(ters_j, a); (*ters_j)->DeleteLocalRef(ters_j, b);
+  if ((*ters_j)->ExceptionCheck(ters_j)) (*ters_j)->ExceptionClear(ters_j);
+  else q->r = fd;
+}
+static int j_tree_open(const char *p, const char *mode) { j_tree_q q = { p, mode, -1 }; J_ON_PAGE(j_tree_open_at, &q); return q.r; }
+static void j_tree_kind_at(void *v) {
+  j_tree_q *q = v;
+  jmethodID m = j_tree_m("treeKind", "(Ljava/lang/String;)[D");
+  if (!m) return;
+  jstring a = ters_js(q->p, strlen(q->p));
+  jdoubleArray r = (jdoubleArray)(*ters_j)->CallObjectMethod(ters_j, ters_a, m, a);
+  (*ters_j)->DeleteLocalRef(ters_j, a);
+  if ((*ters_j)->ExceptionCheck(ters_j)) { (*ters_j)->ExceptionClear(ters_j); return; }
+  if (!r) return;
+  jdouble x[3];
+  (*ters_j)->GetDoubleArrayRegion(ters_j, r, 0, 3, x);
+  (*ters_j)->DeleteLocalRef(ters_j, r);
+  q->r = (int)x[0]; q->size = (int64_t)x[1]; q->modified = x[2];
+}
+static int j_tree_kind(const char *p, int64_t *size, double *modified) {
+  j_tree_q q = { p, 0, 0 };
+  J_ON_PAGE(j_tree_kind_at, &q);
+  *size = q.size; *modified = q.modified;
+  return q.r;
+}
+static void j_tree_list_at(void *v) {
+  j_tree_q *q = v;
+  jmethodID m = j_tree_m("treeList", "(Ljava/lang/String;)[Ljava/lang/String;");
+  if (!m) return;
+  jstring a = ters_js(q->p, strlen(q->p));
+  jobjectArray r = (jobjectArray)(*ters_j)->CallObjectMethod(ters_j, ters_a, m, a);
+  (*ters_j)->DeleteLocalRef(ters_j, a);
+  if ((*ters_j)->ExceptionCheck(ters_j)) { (*ters_j)->ExceptionClear(ters_j); return; }
+  if (!r) return;
+  jsize k = (*ters_j)->GetArrayLength(ters_j, r);
+  char **out = malloc((k ? (size_t)k : 1) * sizeof *out);
+  if (!out) lab_oom();
+  for (jsize i = 0; i < k; i++) {
+    jstring e = (jstring)(*ters_j)->GetObjectArrayElement(ters_j, r, i);
+    size_t len;
+    ters_utf8(ters_j, e, &out[i], &len);
+    out[i][len] = 0;
+    (*ters_j)->DeleteLocalRef(ters_j, e);
+  }
+  (*ters_j)->DeleteLocalRef(ters_j, r);
+  q->names = out; q->n = (size_t)k;
+}
+static char **j_tree_list(const char *p, size_t *n) { j_tree_q q = { p, 0, 0 }; J_ON_PAGE(j_tree_list_at, &q); *n = q.n; return q.names; }
+// Whether the page's files are in the picked folder from now on.
+JNIEXPORT void JNICALL Java_app_ters_page_MainActivity_nativeTree(JNIEnv *env, jobject self, jint on) { (void)env; (void)self; lab_tree_on = on; }
 #endif
 // A finger on a picture (C199f), in dp from its top left: kind 0 down, 1
 // move, 2 up, 3 cancelled. Whether the page listened.
@@ -567,6 +653,7 @@ public class MainActivity extends Activity {
   native int nativeClock();
   native int nativeFrame();
   native int nativePermission(int yes);
+  native void nativeTree(int on);
 
   private final HashMap<Integer, View> views = new HashMap<>();
   private int next = 1;
@@ -593,6 +680,7 @@ public class MainActivity extends Activity {
     width = getResources().getDisplayMetrics().widthPixels / density;
     height = getResources().getDisplayMetrics().heightPixels / density;
     dark = darkMode(getResources().getConfiguration());
+    picked(null);
     View root = views.get(nativeStart(width, height, dark));
     if (root != null) page.addView(root);
     else { TextView t = new TextView(this); t.setText("This page has no answer to draw."); page.addView(t); }
@@ -760,15 +848,17 @@ public class MainActivity extends Activity {
   }
   @Override protected void onDestroy() { sounding(0); super.onDestroy(); }
 
-  // Asking the person for a permission (L236b): 1 when they have given
-  // it, 0 for one Android has no name for, or else Android's dialog asks
-  // them and -1 now; their answer goes to the handler that asked, which
-  // waits for it (nativePermission). Notifications need no asking before
-  // Android 13.
   // A file to another app (C311, L283): an ACTION_VIEW of it through the
   // app's own provider (Files), its type by its name. Only the app's own
   // files can go. null when it opened, else why not.
   String openOutside(String path) {
+    if (tree != null && !path.startsWith("/")) {
+      android.net.Uri u = treeAt(path, false);
+      if (u == null) return "no file " + path;
+      String type = typeOf(path);
+      android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(u, type).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      try { startActivity(i); return null; } catch (android.content.ActivityNotFoundException e) { return "no app opens " + type; }
+    }
     java.io.File f = new java.io.File(path);
     if (!f.isAbsolute()) f = new java.io.File(getFilesDir(), path);
     String root, at;
@@ -788,8 +878,108 @@ public class MainActivity extends Activity {
     return t != null ? t : "application/octet-stream";
   }
 
+  // A folder the person picks (C313, L284), where the page's files are
+  // from then on: a path that isn't absolute is in it, found by its names
+  // through Android's documents (DocumentsContract). Kept across starts.
+  private static final int PICKED = 284;
+  private android.net.Uri tree;
+  private void picked(android.net.Uri u) {
+    android.content.SharedPreferences kept = getSharedPreferences("ters", MODE_PRIVATE);
+    if (u == null) {
+      String s = kept.getString("tree", null);
+      if (s == null) return;
+      u = android.net.Uri.parse(s);
+      boolean still = false;
+      for (android.content.UriPermission g : getContentResolver().getPersistedUriPermissions()) still |= g.getUri().equals(u) && g.isReadPermission() && g.isWritePermission();
+      if (!still) { kept.edit().remove("tree").apply(); return; }
+    } else kept.edit().putString("tree", u.toString()).apply();
+    tree = u;
+    try { nativeTree(1); } catch (UnsatisfiedLinkError e) { tree = null; }
+  }
+  @Override protected void onActivityResult(int code, int result, android.content.Intent data) {
+    super.onActivityResult(code, result, data);
+    if (code != PICKED) return;
+    android.net.Uri u = result == RESULT_OK && data != null ? data.getData() : null;
+    if (u != null) {
+      try { getContentResolver().takePersistableUriPermission(u, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION | android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION); } catch (SecurityException e) { Log.w("ters", "the folder: " + e); }
+      picked(u);
+    }
+    Log.d("ters", "files " + (tree != null ? "yes" : "no"));
+    nativePermission(tree != null ? 1 : 0);
+    tick();
+  }
+  // The document at path in the picked folder, or null when it isn't
+  // there; made when make (the last name a file, those before it folders
+  // that must be there).
+  private android.net.Uri treeAt(String path, boolean make) {
+    String doc = android.provider.DocumentsContract.getTreeDocumentId(tree);
+    String[] names = path.split("/");
+    for (int i = 0; i < names.length; i++) {
+      String name = names[i];
+      if (name.isEmpty() || name.equals(".")) continue;
+      if (name.equals("..")) return null;
+      String found = null;
+      android.net.Uri kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, doc);
+      try (android.database.Cursor c = getContentResolver().query(kids, new String[] { android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME }, null, null, null)) {
+        while (c != null && found == null && c.moveToNext()) if (name.equals(c.getString(1))) found = c.getString(0);
+      } catch (RuntimeException e) { return null; }
+      if (found == null) {
+        if (!make || i != names.length - 1) return null;
+        try {
+          android.net.Uri made = android.provider.DocumentsContract.createDocument(getContentResolver(), android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, doc), "application/octet-stream", name);
+          return made;
+        } catch (Exception e) { return null; }
+      }
+      doc = found;
+    }
+    return android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, doc);
+  }
+  // A file in it opened as C's fopen modes ask, its descriptor C owns; -1
+  // when it can't be.
+  int treeOpen(String path, String mode) {
+    boolean reads = mode.startsWith("r") && !mode.contains("+");
+    android.net.Uri u = treeAt(path, !reads);
+    if (u == null) return -1;
+    String how = mode.startsWith("r") ? (mode.contains("+") ? "rw" : "r") : mode.startsWith("w") ? (mode.contains("+") ? "rwt" : "wt") : mode.contains("+") ? "rw" : "wa";
+    try { return getContentResolver().openFileDescriptor(u, how).detachFd(); } catch (Exception e) { Log.w("ters", "open " + path + ": " + e); return -1; }
+  }
+  // What is at path: { 0 nothing, 1 a file, 2 a folder; its size; when it
+  // changed, in ms since 1970 }.
+  double[] treeKind(String path) {
+    android.net.Uri u = treeAt(path, false);
+    if (u == null) return new double[] { 0, 0, 0 };
+    String[] cols = { android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE, android.provider.DocumentsContract.Document.COLUMN_SIZE, android.provider.DocumentsContract.Document.COLUMN_LAST_MODIFIED };
+    try (android.database.Cursor c = getContentResolver().query(u, cols, null, null, null)) {
+      if (c == null || !c.moveToFirst()) return new double[] { 0, 0, 0 };
+      boolean folder = android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(0));
+      return new double[] { folder ? 2 : 1, c.isNull(1) ? 0 : c.getLong(1), c.isNull(2) ? 0 : c.getLong(2) };
+    } catch (RuntimeException e) { return new double[] { 0, 0, 0 }; }
+  }
+  // A folder's names, or null when it isn't one.
+  String[] treeList(String path) {
+    android.net.Uri u = treeAt(path, false);
+    if (u == null) return null;
+    android.net.Uri kids = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, android.provider.DocumentsContract.getDocumentId(u));
+    java.util.ArrayList<String> names = new java.util.ArrayList<>();
+    try (android.database.Cursor c = getContentResolver().query(kids, new String[] { android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME }, null, null, null)) {
+      while (c != null && c.moveToNext()) names.add(c.getString(0));
+    } catch (RuntimeException e) { return null; }
+    return names.toArray(new String[0]);
+  }
+
+  // Asking the person for a permission (L236b): 1 when they have given
+  // it, 0 for one Android has no name for, or else Android's dialog asks
+  // them and -1 now; their answer goes to the handler that asked, which
+  // waits for it (nativePermission). Notifications need no asking before
+  // Android 13. Files are a folder they pick (C313).
   private static final int ASKED = 236;
   int ask(String what) {
+    if (what.equals("files")) {
+      if (tree != null) return 1;
+      Log.d("ters", "ask files");
+      try { startActivityForResult(new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE), PICKED); } catch (android.content.ActivityNotFoundException e) { return 0; }
+      return -1;
+    }
     String p = what.equals("camera") ? "android.permission.CAMERA" : what.equals("microphone") ? "android.permission.RECORD_AUDIO" : what.equals("location") ? "android.permission.ACCESS_FINE_LOCATION" : what.equals("notifications") ? (Build.VERSION.SDK_INT >= 33 ? "android.permission.POST_NOTIFICATIONS" : null) : "";
     if (p == null) return 1;
     if (p.isEmpty()) return 0;

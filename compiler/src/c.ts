@@ -1487,6 +1487,15 @@ static int ters_ask(const char *what, size_t n) {
   for (int j = 0; j < ters_ev_noff; j++) lab__fpush(ters_ev_off[j]);
   return ters_ev_said;
 }
+// fn(arg) on the page's own stack, from the fiber too, which waits for it
+// (C313): an app's Java a handler's files ask checks its stack.
+#define TERS_ON_PAGE 1
+static void (*ters_ev_call)(void *); static void *ters_ev_arg;
+static void ters_on_page(void (*fn)(void *), void *arg) {
+  if (!ters_ev_in) { fn(arg); return; }
+  ters_ev_call = fn; ters_ev_arg = arg;
+  LAB_CSWAP(&ters_ev_at, &ters_ev_back);
+}
 // Into the fiber (where the handler starts or waits) until it finishes or
 // waits for the person. Whether the handler finished well (a wait: 1).
 static int ters_ev_go(lab__ctx *to) {
@@ -1494,6 +1503,13 @@ static int ters_ev_go(lab__ctx *to) {
     ters_ev_fcur = lab__fcur; ters_ev_base = lab__fn;
     ters_ev_in = 1;
     LAB_CSWAP(&ters_ev_back, to);
+    while (ters_ev_call) {
+      void (*fn)(void *) = ters_ev_call;
+      ters_ev_call = 0; ters_ev_in = 0;
+      fn(ters_ev_arg);
+      ters_ev_in = 1;
+      LAB_CSWAP(&ters_ev_back, &ters_ev_at);
+    }
     ters_ev_in = 0;
     if (!ters_ev_asking) return ters_ev_ok;
     int r = ters_asker(ters_ev_what, ters_ev_wn);

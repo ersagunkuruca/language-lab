@@ -44,3 +44,15 @@ test("an iPhone app asks iOS for a permission a page asks for (L236b)", () => {
   assert.equal(spawnSync(process.execPath, [ters, "build-native-app", join(dir, "q"), "--ios", "-o", join(dir, "app2")]).status, 0);
   assert.doesNotMatch(readFileSync(join(dir, "app2", "Info.plist"), "utf8"), /UsageDescription/);
 });
+
+// A page that asks for "files" (L284, C313): iOS's document picker for a
+// folder, the app going into the one picked.
+test("an iPhone app asks for a folder in iOS's document picker when a page asks for files (C313)", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ios-files-"));
+  const out = spawnSync(process.execPath, [ters, "build-native-app", join(import.meta.dirname, "../examples/folders"), "--ios", "-o", join(dir, "app")], { encoding: "utf8" });
+  assert.equal(out.status, 0, out.stderr);
+  const screen = readFileSync(join(dir, "app", "Screen.m"), "utf8");
+  assert.match(screen, /initForOpeningContentTypes:@\[UTTypeFolder\]/);
+  assert.match(screen, /startAccessingSecurityScopedResource\] && chdir\(u\.fileSystemRepresentation\) == 0/);
+  assert.match(readFileSync(join(dir, "app", "build.sh"), "utf8"), /-framework UniformTypeIdentifiers/);
+});
