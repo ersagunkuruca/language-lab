@@ -585,7 +585,7 @@ export interface SFunc { def: Id; name: string; params: LType[]; result: LType; 
 // written, and the binders they read, given to the compiled draw after
 // its site so the GPU's uniform gets their values (gpu-draws.ts).
 export interface DrawSite { site: number; at: Id; vertex: Id; fragment: Id; caps: Id[] }
-export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; drawSites?: DrawSite[]; sharedSites?: { site: number; at: Id; how: string }[]; nearSites?: Id[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
+export interface CoreIR { stops?: { node: Id; def: Id; name?: string }[]; funcs: SFunc[]; refused: Map<Id, string>; records: RType[]; data: DType[]; arrays: AType[]; tables: TType[]; fns: FType[]; shapes: Shape[]; code: Code; info: Info; escapes: DType[]; rounded: Set<Id>; shader?: true; int32?: true; awayMaps?: { site: number; fn: Id; how: string; caps: Id[]; params?: Id[]; hows?: string[] }[]; drawSites?: DrawSite[]; sharedSites?: { site: number; at: Id; how: string }[]; nearSites?: { at: Id; by: "grid" | "k-d tree" }[]; threadSites?: { e: SExpr; at: Id; how: string }[]; derived?: Map<string, FType> }
 
 class Refused extends Error {}
 // A closure of a function type, at `key`, gives several answers: lowering
@@ -1039,7 +1039,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const sharedSites: { site: number; at: Id; how: string }[] = [];
   // Each call of neighbours the grid may take (L280g), by its node: the
   // choices' way entries.
-  const nearSites: Id[] = [];
+  const nearSites: { at: Id; by: "grid" | "k-d tree" }[] = [];
   // And C's: each call the threads run (c.ts `par:`), by the expression
   // itself, which the choices find in the code kept (cli/choices.ts).
   const threadSites: { e: SExpr; at: Id; how: string }[] = [];
@@ -1742,8 +1742,12 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // that counts steps, runs as compiled (the runtime's FAIL). Its
         // items and reach once, as locals.
         if (opts.host && (SPLIT_COPIED_FROM.get(target) ?? originalOf(target)) === NEIGHBOURS && n.args.length === 3 && !given.has(n.id) && placeComputes(n.args[1])) {
-          const t = stype(zonk(id)), tx = stype(zonk(n.args[0])), tr = stype(zonk(n.args[2])), way = nearHeld.get(n.id);
-          if (t && tx && tr) nearSites.push(n.id);
+          const t = stype(zonk(id)), tx = stype(zonk(n.args[0])), tr = stype(zonk(n.args[2])), tp = stype(zonk(n.args[1]));
+          // Places of more than 3 parts on the k-d tree, which takes any
+          // number; the grid looks through 3^parts cells around each.
+          const parts = tp && typeof tp === "object" && "result" in tp && typeof tp.result === "object" && "fields" in tp.result ? tp.result.fields.length : 1;
+          const by = parts > 3 ? "k-d tree" as const : "grid" as const, way = nearHeld.get(n.id) ?? (by === "k-d tree" ? by : undefined);
+          if (t && tx && tr) nearSites.push({ at: n.id, by });
           if (t && tx && tr && way !== "every pair") {
             const xs = f.locals.push(tx) - 1, r = f.locals.push(tr) - 1, res = f.locals.push(t) - 1, place = expr(n.args[1], env, f, false);
             given.set(n.id, [local(xs), expr(n.args[1], env, f, false), local(r)]);

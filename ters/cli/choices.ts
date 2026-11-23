@@ -222,12 +222,12 @@ function sitesPlaced(ir: Lowered, gpu: ReadonlySet<number>, names: Names, target
 // among every pair, or by a k-d tree, as held (`grid of 5 cells`, L280e's
 // parameter).
 const NEAR = /^(\S+) way: .*'s neighbours: (every pair|grid of (reach|[^ ;]+) cells|k-d tree); among every pair, grid, k-d tree; target (.+)$/;
-export function nearLines(ir: Lowered & { nearSites?: Id[] }, names: Names): string[] {
+export function nearLines(ir: Lowered & { nearSites?: { at: Id; by: "grid" | "k-d tree" }[] }, names: Names): string[] {
   if (!ir.nearSites?.length) return [];
   const all = { ...LIBRARY.names, ...names }, up = parentLookup(ir.code);
   const defOf = (id: Id) => { let at: Id | undefined = id; for (let i = 0; at !== undefined && ir.code.nodes[at]?.kind !== "def" && i < 10000; i++) at = up(at); return at; };
   const nameOf = (d: Id | undefined) => d ? (all[d] ?? d).replace(/ as stored$/, "") : "a definition";
-  return [...new Set(ir.nearSites.map((at) => `${at} way: ${nameOf(defOf(at))}'s neighbours: grid of reach cells; among every pair, grid, k-d tree; target JavaScript`))];
+  return [...new Set(ir.nearSites.map(({ at, by }) => `${at} way: ${nameOf(defOf(at))}'s neighbours: ${by === "grid" ? "grid of reach cells" : by}; among every pair, grid, k-d tree; target JavaScript`))];
 }
 // The ways held, by the call: every pair, or a grid of cells this wide.
 const nearHeld = (l: string): [Id, "every pair" | "k-d tree" | number] | null => {

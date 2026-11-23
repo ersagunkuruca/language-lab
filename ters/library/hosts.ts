@@ -16,7 +16,7 @@ import type { PureHost } from "../src/lang/hosts.ts";
 import type { Value } from "../src/lang/run.ts";
 import { CONS, FALSE, NIL, PAIR_V, TRUE } from "../src/lang/std.ts";
 import type { Id } from "../src/model.ts";
-import { neighbourLists } from "./near.ts";
+import { neighboursFound } from "./near.ts";
 
 type Data = { tag: Id; fields: Value[] };
 const nums = (v: Value): number[] | null => {
@@ -151,7 +151,7 @@ function neighboursOnGrid(items: Value, place: (x: Value) => Iterable<Value>, re
     if (!parts) return null;
     ps.push(parts);
   }
-  const lists = neighbourLists(ps, reach);
+  const lists = neighboursFound(ps, reach);
   const list = <T,>(xs: T[], item: (x: T) => Value): Data => xs.reduceRight<Data>((rest, x) => ({ tag: CONS, fields: [item(x), rest] }), { tag: NIL, fields: [] });
   return lists && list(lists, (l) => list(l, (j) => j));
 }
