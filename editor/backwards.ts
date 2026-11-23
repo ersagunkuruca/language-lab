@@ -208,16 +208,21 @@ export function backwards(host: BackHost) {
     };
     w.onmessage = (e: MessageEvent<Found>) => done(e.data);
     w.onerror = (e) => { e.preventDefault(); done({ answers: backwardsCache.get(key)?.answers ?? [], more: false, error: e.message || "the search failed" }); };
-    try {
-      const ask: BackAsk = { backwards: true, code: sendCode(doc().code), names: pres().names, def: ui.def, values: sent };
-      w.postMessage(ask);
-      return true;
-    } catch {
-      w.terminate();
-      searching = null;
-      searchingKey = "";
-      return false;
-    }
+    // Sent after the draw: the code's copy for the worker is 30 ms of a
+    // large program's (E319k). Code that can't be sent stops the search
+    // where the short look got.
+    const code = doc().code, names = pres().names, def = ui.def;
+    setTimeout(() => {
+      if (searching !== w) return;
+      try {
+        const ask: BackAsk = { backwards: true, code: sendCode(code), names, def, values: sent };
+        w.postMessage(ask);
+      } catch {
+        const had = backwardsCache.get(key);
+        done({ answers: had?.answers ?? [], more: had?.more ?? false, cut: true });
+      }
+    }, 0);
+    return true;
   }
 
   // Stop keeps the answers found so far.
