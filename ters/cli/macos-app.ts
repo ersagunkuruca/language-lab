@@ -311,7 +311,14 @@ static void u_set_text(void *c, void *v, const char *s, size_t n) { NSView *x = 
 static void u_set_value(void *c, void *v, const char *s, size_t n) {
   NSView *x = V(v); NSString *t = str(s, n);
   P.quiet = YES;
-  if ([x isKindOfClass:[NSTextField class]] && ![((NSTextField *)x).stringValue isEqualToString:t]) ((NSTextField *)x).stringValue = t;
+  if ([x isKindOfClass:[NSTextField class]] && ![((NSTextField *)x).stringValue isEqualToString:t]) {
+    NSTextField *f = (NSTextField *)x;
+    f.stringValue = t;
+    // One being typed in shows it too (its field editor would put back
+    // what it had when editing ends), the caret at the end.
+    NSText *ed = f.currentEditor;
+    if (ed && ![ed.string isEqualToString:t]) { ed.string = t; ed.selectedRange = NSMakeRange(t.length, 0); }
+  }
   if ([x isKindOfClass:[NSTextView class]] && ![((NSTextView *)x).string isEqualToString:t]) ((NSTextView *)x).string = t;
   P.quiet = NO;
 }
