@@ -2602,3 +2602,4 @@ The second Language lane, from the 10-hour run of 2026-11-05/06: the sharing cha
 | | Can't-edit: change a call's function keeping its inputs; field types | #151, #147 |
 | | GAPS round 2: G9, G11, G13, G14, G15, G17 (one type), G19 (half) | #133 to #170 |
 | | Second review fixes 1 to 6 (builtin half), agreement test, TypeScript type-check in CI | #117 to #173 |
+| C309a | A Float32 (L286) is held as a binary32 `float` in C: the record's struct holds a float, so an array of them takes four bytes a slot, not eight. Every step already rounded to a binary32, so writing the float and reading the double back is exact; such an array isn't kept as columns (those are eight-byte fields). compiler/test/c-float32.test.ts | #PR |
