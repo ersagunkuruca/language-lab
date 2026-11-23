@@ -218,6 +218,16 @@ let lastOptions: { pins: Pins; own: [Id, unknown][]; options: Options } | null =
 const LIBRARY_DEFS = LIBRARY.code.defs.map((d) => [d, LIBRARY.code.nodes[d]] as const);
 const onLibrary = (code: Code) => LIBRARY_DEFS.every(([d, n]) => code.nodes[d] === n);
 export const infer = (code: Code, names: Names = {}): Info => {
+  const near = inferNear(code, names);
+  if (near) return near;
+  const r = check(code, names, undefined, lastOptions!.options);
+  remember(code, r);
+  return r;
+};
+// The check when it's kept, or an edit's over one checked lately; null
+// when only the whole check would do, which grows with the program (the
+// editor asks the worker for it, E319g).
+export const inferNear = (code: Code, names: Names = {}): Info | null => {
   if (!layerOf(code) && !derived.has(code) && onLibrary(code)) onLayer(code, LIBRARY.code);
   const own = Object.entries(programPins).filter(([d]) => code.nodes[d]?.kind === "def");
   const same = lastOptions && lastOptions.pins === programPins && lastOptions.own.length === own.length && own.every(([d, p], i) => lastOptions!.own[i][0] === d && lastOptions!.own[i][1] === p);
@@ -240,9 +250,7 @@ export const infer = (code: Code, names: Names = {}): Info => {
     const r = inferEdited(b.code, code, names, b.info, options);
     if (r) { remember(code, r); return r; }
   }
-  const r = check(code, names, undefined, options);
-  remember(code, r);
-  return r;
+  return null;
 };
 // The programs checked lately, newest first.
 const recent: { code: Code; info: Info }[] = [];
