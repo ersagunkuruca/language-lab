@@ -36,10 +36,8 @@ const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: p
 const LONG_MS = 200;
 // The places whose row moves or bounds them, not built yet.
 const KNOWN: Record<string, string> = {
-  // The check left the thread with E319g (a 617 ms task opening spacetime
-  // before); what's left is the first drawing of a large program: its
-  // page's first run, the graph's layout, the blocks.
-  "opening a file": "E319k",
+  // Its graph's drawing and layout, and its blocks, in one task.
+  "opening a large definition": "E319k",
   // Choosing the stored program's lists and Maps left the thread with
   // E319j (2 s on bounce before); what's left is its check over the
   // groups the worker sent (360 ms) and the interpreted page's start at the
@@ -109,7 +107,8 @@ async function drew(q: Page): Promise<string | null> {
 
 // Constructions, one of the largest examples that isn't a page, opened
 // from a file: the editor checked the whole program on its thread to draw
-// it (E319g).
+// it (E319g, a 617 ms task), then drew it, its page's first run and its
+// same-as line in one task (E319k, 504 ms).
 function opening(): Place {
   return { name: "opening a file", file: exampleFile("constructions", "Opened", () => {}), open: async () => {}, opening: true,
     then: async (q) => ((await q.locator(".p-nav [data-def]").count()) ? null : "the program didn't show") };
@@ -138,6 +137,12 @@ function longList(): Place {
     await openDef(q, "main");
     await q.getByText("Compiling…").first().waitFor({ state: "hidden", timeout: 120000 });
   } };
+}
+
+// Spacetime's largest definition opened: its graph and blocks were drawn
+// in one task (251 ms, E319h measured).
+function bigDef(): Place {
+  return { name: "opening a large definition", file: exampleFile("spacetime", "Big definition", () => {}), open: (q) => openDef(q, "rapidity picture") };
 }
 
 // An example copied and changed, as the file the editor opens.
@@ -171,7 +176,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening(), pausing(), longList()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
+for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening(), pausing(), longList(), bigDef()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };
