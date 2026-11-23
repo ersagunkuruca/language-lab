@@ -43,5 +43,5 @@ jobs:
         if: always()
         shell: bash
         env:
-          EXAMPLES: ${{ inputs.examples }}
+          EXAMPLES: ${{ inputs.examples || 'collatz chapters ledger sheet notebook wc fibonacci effects waiting countdown' }}
         run: node .github/macos/native-sweep.ts $EXAMPLES

@@ -38,7 +38,7 @@ for (const name of names) {
   else if (ran.out.startsWith("<!doctype html>")) how = "page, built";
   else {
     const got = run(bin, xs, 120);
-    how = !got ? "run timed out" : got.out === ran.out && got.code === ran.code ? "same" : `differs (exit ${got.code} for ${ran.code})`;
+    how = !got ? "run timed out" : got.out === ran.out && got.code === ran.code ? "same" : `differs (exit ${got.code} for ${ran.code})${[["ters run", ran.err], ["native", got.err]].filter(([, e]) => e.trim()).map(([w, e]) => `; ${w}: ${e.trim().split("\n").pop()}`).join("")}`;
   }
   const ok = /^(same|page, built|built|not built, as|refused)/.test(how);
   if (!ok) bad.push(name);
