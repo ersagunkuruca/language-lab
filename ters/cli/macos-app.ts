@@ -708,7 +708,6 @@ static void shown(NSString *when) {
         if ((e = [self key:e])) [self.window sendEvent:e];
       }
       NSView *f = focused(self.window);
-      if ([f isKindOfClass:[NSTextField class]]) printf("key %s: its editor \"%s\", first responder %s\n", name.UTF8String, ((NSTextField *)f).currentEditor.string.UTF8String, self.window.firstResponder.className.UTF8String);
       printf("key %s: from \"%s\"%s%s, heard %d, focus on %s\n", name.UTF8String, before.UTF8String, editing ? " editing " : "", editing ? editing.UTF8String : "", self.keysHeard, f ? [NSString stringWithFormat:@"%@ \"%@\"", f.className, textsOf(f)].UTF8String : "none");
       done = YES;
     }
@@ -735,7 +734,7 @@ static void shown(NSString *when) {
 // the key's name as a browser names it and, from an input, what's in it.
 // The platform does what it does with the key after, except where the
 // page heard an arrow, space or a page key on a box not for typing (a
-// game's, html.ts's rule) or Enter in an input, which end there.
+// game's, html.ts's rule), and Enter in a one-line input, which end there.
 - (NSEvent *)key:(NSEvent *)e {
   if (e.window != self.window) return e;
   NSView *v = focused(self.window);
@@ -745,8 +744,11 @@ static void shown(NSString *when) {
   NSString *value = [v isKindOfClass:[NSTextField class]] ? ((NSTextField *)v).stringValue : [v isKindOfClass:[NSTextView class]] ? ((NSTextView *)v).string : @"";
   BOOL heard = bubble(e.type == NSEventTypeKeyDown ? @"keydown" : @"keyup", v, value ?: @"", name, nil);
   if (heard) self.keysHeard++;
+  // Enter in a one-line input changes nothing in it, as in a browser (the
+  // field editor would end editing, or put a newline in for what's chosen).
+  if ([name isEqualToString:@"Enter"] && [v isKindOfClass:[NSTextField class]]) return nil;
   if (!heard || e.type != NSEventTypeKeyDown) return e;
-  if (typing) return [name isEqualToString:@"Enter"] && [v isKindOfClass:[NSTextField class]] ? nil : e;
+  if (typing) return e;
   return [@[ @"ArrowUp", @"ArrowDown", @"ArrowLeft", @"ArrowRight", @" ", @"PageUp", @"PageDown", @"Home", @"End" ] containsObject:name] ? nil : e;
 }
 @end
