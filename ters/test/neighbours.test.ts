@@ -4,6 +4,10 @@
 // Evaluated and compiled the same, each on its grid and every pair.
 
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import { Lang } from "../src/lang/dsl.ts";
 import { infer } from "../src/lang/infer.ts";
@@ -14,6 +18,7 @@ import { SHOW_ANY } from "../src/lang/std.ts";
 import { NUMBER } from "../src/lang/types.ts";
 import type { Id } from "../src/model.ts";
 import { compiledDefs, emitCoreJs, lowerCore } from "../../compiler/src/core-js.ts";
+import { call } from "../mcp/server.ts";
 
 const lib = (name: string) => LIBRARY.modules.flatMap((m) => m.exports).find((d) => LIBRARY.names[d] === name)!;
 
@@ -52,4 +57,33 @@ test("neighbours on a line and in the plane, within reach counted with ≤, eval
   assert.match(emitCoreJs(lowerCore(p.code, p.info, p.names, [at("many")])).js, /R\.rt\("neighbours\.grid"\)/);
   const defs = compiledDefs(p.code, p.info, p.names, NAMES) as unknown as Record<string, unknown>;
   assert.deepEqual(NAMES.map((n) => (typeof defs[n] === "function" ? (defs[n] as () => Value)() : defs[n])), evaluated);
+});
+
+// As a person writes it (through the MCP, as the editor's typed fill
+// reads text) and as `ters compile` builds it: the place's lambda leaves
+// its effects open, and the list representation calls a copy of
+// neighbours. The module still finds them on its grid, and prints what
+// the evaluator does.
+test("a program written as text and built by ters compile finds its neighbours on a grid", () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "ters-neighbours-")), "near");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "code.json"), JSON.stringify({ nodes: {}, defs: [] }) + "\n");
+  writeFileSync(join(dir, "names.default.json"), "{}\n");
+  const ask = (name: string, args: Record<string, unknown>) => { const r = call(name, args); assert.equal(r.error, false, `${name}: ${r.text}`); return r.text; };
+  const def = (name: string, params: string[] | null, body: string[]) => {
+    ask("define", { name, kind: params ? "function" : "value", params: params ?? [] });
+    // A reading nothing settles yet is asked for, as the editor would ask.
+    for (const text of body) { const r = call("replace", { at: name, find: "□", text }), as = r.error ? /Give `as` \("([^"]+)"/.exec(r.text)?.[1] : undefined; if (r.error) ask("replace", { at: name, find: "□", text, as }); }
+  };
+  ask("open", { path: dir });
+  ask("define", { name: "Vec3", kind: "type", first: "vec3(x: Float64, y: Float64, z: Float64)" });
+  def("random", ["s"], ["first(remainder(s * 16807, 2147483647), else 1)"]);
+  def("chance", ["s"], ["first(as float64(s) / 2147483647.0, else 0.0)"]);
+  def("point at", ["i"], ["s = random(i * 7919 + 13); □", "a = random(s); □", "vec3(100.0 * chance(s), 100.0 * chance(a), 100.0 * chance(random(a)))"]);
+  def("main", ["arguments"], ['n = first(read whole number(item at(arguments, 0, "300")), else 300); ps = map(range from(0, n), point at); close = neighbours(ps, (p) => p, 10.0); print(show(sum(map(close, length))) ++ " " ++ show(sum(map(close, sum))))']);
+  const ters = join(import.meta.dirname, "../cli/ters.ts"), out = join(dir, "near.mjs");
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, ["--no-warnings", ...args], { encoding: "utf8" }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  run(ters, "compile", dir, "-o", out);
+  assert.match(readFileSync(out, "utf8"), /\.rt\("neighbours\.grid"\)/);
+  assert.equal(run(out, "400"), run(ters, "run", dir, "400"));
 });

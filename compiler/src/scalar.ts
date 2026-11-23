@@ -93,7 +93,7 @@ import { countsInto } from "./fold-chunks.ts";
 import { originalOf, PRELUDE_DEFS, SPLIT_COPIED_FROM } from "../../ters/src/lang/prelude-ids.ts";
 
 const ZIPPED = PRELUDE_DEFS["zipped"];
-import { parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
+import { ownEffects, parallelCounts, parallelFolds, parallelHalves, parallelLists, parallelTogethers, parallelTreeFolds, pureTogethers, type ListJob } from "../../ters/src/lang/pure-branches.ts";
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
@@ -921,8 +921,13 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   const acting = new Map<Id, boolean>();
   // A function argument whose type says it only computes (it may not
   // finish, as the definition it stands in for may not).
+  // A lambda written there, by what its body does (pure-branches.ts, as a
+  // shared map's function is read); a definition, by its type.
   const placeComputes = (id: Id): boolean => {
-    const t = info.subst.resolve(info.typeOf.get(id) ?? { t: "var", v: -1 });
+    const n = code.nodes[id];
+    if (n?.kind === "lambda") { const own = ownEffects(code, info, n.body); return !!own && [...own].every((e) => e === DIVERGE); }
+    if (n?.kind !== "ref" || code.nodes[n.target]?.kind !== "def") return false;
+    const t = info.subst.resolve(info.typeOf.get(n.target) ?? { t: "var", v: -1 });
     if (t.t !== "fn") return false;
     const row = info.subst.resolveRow(t.eff);
     return row.tail === null && row.effs.every((e) => e === DIVERGE);
@@ -1728,7 +1733,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         // place only computes; what the grid can't take, or a budget
         // that counts steps, runs as compiled (the runtime's FAIL). Its
         // items and reach once, as locals.
-        if (opts.host && target === NEIGHBOURS && n.args.length === 3 && !given.has(n.id) && placeComputes(n.args[1])) {
+        if (opts.host && (SPLIT_COPIED_FROM.get(target) ?? originalOf(target)) === NEIGHBOURS && n.args.length === 3 && !given.has(n.id) && placeComputes(n.args[1])) {
           const t = stype(zonk(id)), tx = stype(zonk(n.args[0])), tr = stype(zonk(n.args[2]));
           if (t && tx && tr) {
             const xs = f.locals.push(tx) - 1, r = f.locals.push(tr) - 1, res = f.locals.push(t) - 1, place = expr(n.args[1], env, f, false);
