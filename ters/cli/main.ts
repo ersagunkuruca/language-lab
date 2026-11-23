@@ -99,6 +99,9 @@ usage:
   ters choices <program> [--main name]   write the compiler's choices for main to <program>.choices (L280a)
                                         (an entry with "held" before it is kept, and every compile stores
                                         its type so, where that keeps the meaning: L280c)
+    [--measure args…]                   main run with args first, its types' jobs counted (L280d); a page
+    [--measure --frames n]              given n frames of a clock at 60 a second (default 120), or with
+                                        --replay the events its log holds
   ters qasm <program> --main f [--bits n] [--unroll n] [-o out.qasm]
                                         f as a reversible circuit in OpenQASM 3: X, CNOT and Toffoli gates,
                                         its Ints n bits wide (default 8), scratch qubits uncomputed and reused;
@@ -962,12 +965,40 @@ switch (command) {
     // after it, its types' jobs counted; else the measured entries kept.
     const m = rest.indexOf("--measure");
     let measured = measuredIn(writtenChoices);
-    if (m >= 0) {
+    if (m >= 0 && staticPage) {
+      // A page (L280d): drawn into a document of no browser, then given
+      // its frames, or with --replay the events a run of it logged.
+      const args = rest.slice(m + 1), f = args.indexOf("--frames"), frames = f >= 0 ? Number(args[f + 1]) : 120, counting = measuring(loaded, main, p.picks ?? []);
+      if (!Number.isInteger(frames) || frames < 0) fail("--frames needs a whole number, 0 or more");
+      const { showPage } = await import("../src/lang/page.ts"), { fakeDoc } = await import("../src/lang/fake-dom.ts");
+      const kept = new Map<string, string>(), store = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v), removeItem: (k: string) => void kept.delete(k), get length() { return kept.size; }, key: (i: number) => [...kept.keys()][i] ?? null };
+      // Its clock 60 frames a second, from a fixed time, however long a
+      // frame takes here.
+      let next: (() => void)[] = [], at = Date.UTC(2026, 0, 1);
+      // Its frame handlers' frames (html.ts everyFrame) from the same.
+      const raf = (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame;
+      (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = (g: (ms: number) => void) => { next.push(() => g(at)); return 0; };
+      try {
+        const page = showPage({ code: loaded.code, info: loaded.info, names: loaded.names, main, program: mainName, doc: fakeDoc(), store, console: { log() {}, error() {} }, frame: (g) => next.push(g), time: () => at, measure: counting.measure, ...(replay ? { replay } : {}) });
+        (page.root as { connected?: boolean }).connected = true;
+        for (let i = 0; !replay && i < frames && next.length; i++) { const now = next; next = []; at += 1000 / 60; for (const g of now) g(); }
+        page.stop();
+      } catch (e) { fail(`the run to measure stopped: ${(e as Error).message}`); } finally { (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame = raf; }
+      measured = counting.lines(args, replay ? "the events of its log" : `${frames} ${frames === 1 ? "frame" : "frames"}`);
+    } else if (m >= 0) {
       const args = rest.slice(m + 1), counting = measuring(loaded, main, p.picks ?? []);
       try { runProgram(loaded.code, loaded.info, main, args, { print: () => {}, names: loaded.names, world: world(), hosts, measure: counting.measure }); } catch (e) { fail(`the run to measure stopped: ${(e as Error).message}`); }
       measured = counting.lines(args);
     }
     writeFileSync(choicesFile, choicesText(mainName, heldAndPicked(writtenChoices, [...choiceLines(loaded, main, p.picks ?? []), ...scheduleLines(p, main), ...await places(p, main), ...cPlaces(main), ...measured].sort())));
+    // What was just measured picked from: the picks above read the
+    // measurements written before, so they are made again from these.
+    const was = measuredIn(writtenChoices);
+    if (m >= 0 && (was.length !== measured.length || was.some((l, i) => l !== measured[i]))) {
+      const raw = process.argv.slice(2);
+      execFileSync(process.execPath, [...process.execArgv, process.argv[1], ...raw.slice(0, raw.indexOf("--measure"))], { stdio: "inherit" });
+      break;
+    }
     console.log(`wrote ${choicesFile}`);
     break;
   }

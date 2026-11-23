@@ -17,6 +17,9 @@ import { choiceLines, choicesPath, choicesText, heldAndPicked, heldOf, heldPlace
 import { lowerCore } from "../../compiler/src/core-js.ts";
 import { gpuMaps } from "../../compiler/src/gpu-maps.ts";
 import { shareAlways } from "../../compiler/src/scalar.ts";
+import { pageMain, showPage } from "../src/lang/page.ts";
+import { FakeEl, fakeDoc } from "../src/lang/fake-dom.ts";
+import { logText, type LogEntry } from "../src/lang/worldlog.ts";
 
 const root = fileURLToPath(new URL("../examples/", import.meta.url));
 
@@ -384,6 +387,31 @@ test("tally measured with 3000 words: its Map's update at counted, 505 entries a
     run("choices", at);
     assert.deepEqual(readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: ")), lines);
     assert.deepEqual(run("check", at).split("\n").filter((l) => /^(stale|new|held) /.test(l)), []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// A page measured (L280d): flock-page given 4 frames of a clock at 60 a
+// second, which fly its 2,000 birds twice; dice given again the clicks a
+// logged run of it was given (`--replay`). Then picked from those.
+test("pages measured: flock-page's frames and dice's logged clicks, its List counted", () => {
+  const dir = mkdtempSync(join(tmpdir(), "choices-")), ters = fileURLToPath(new URL("../cli/ters.ts", import.meta.url));
+  const run = (...args: string[]) => { const r = spawnSync(process.execPath, [ters, ...args], { encoding: "utf8", cwd: dir }); assert.equal(r.status, 0, r.stderr); return r.stdout; };
+  const measured = (at: string) => readFileSync(`${at}.choices`, "utf8").split("\n").filter((l) => l.includes(" measured: "));
+  try {
+    const flock = join(dir, "flock-page");
+    cpSync(root + "flock-page", flock, { recursive: true });
+    run("choices", flock, "--measure", "--frames", "4");
+    assert.deepEqual(measured(flock), ["std.list measured: List: append 12 times, cons 4 times, item at 24288 times, length 4 times, map 2 times, match 26288 times; up to 4001 items; from a run with 4 frames", "std.set measured: Set: has item 8 times; from a run with 4 frames"]);
+    assert.match(readFileSync(`${flock}.choices`, "utf8"), /\nstd\.list representation: List as array of List from /);
+    assert.deepEqual(run("check", flock).split("\n").filter((l) => /^(stale|new) /.test(l)), []);
+    const dice = join(dir, "dice"), p = loadProgram(root + "dice"), info = infer(p.code, p.pres.names, undefined, p.options), log: LogEntry[] = [];
+    cpSync(root + "dice", dice, { recursive: true });
+    const kept = new Map<string, string>(), store = { getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => void kept.set(k, v), get length() { return kept.size; }, key: (i: number) => [...kept.keys()][i] ?? null };
+    const page = showPage({ code: p.code, info, names: p.pres.names, main: pageMain(p.own.defs, info, p.pres.names)!, program: "dice", console: { log() {}, error() {} }, frame: () => {}, doc: fakeDoc(), store, log });
+    for (let i = 0; i < 3; i++) (page.root as FakeEl).find("hundred").fire("click");
+    writeFileSync(join(dir, "dice.log.json"), logText(log));
+    run("choices", dice, "--replay", join(dir, "dice.log.json"), "--measure");
+    assert.deepEqual(measured(dice), ["std.list measured: List: cons 368 times, map 11 times, match 84 times; up to 100 items; from a run with the events of its log"]);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
