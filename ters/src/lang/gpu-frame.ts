@@ -29,6 +29,10 @@ export interface Site {
   instance: Leaf[];
   corner: Leaf[];
   colour: 3 | 4;
+  // The captures that are textures the fragment samples (G10): indices
+  // into caps, in binding order (binding 4 + k), with no words of their
+  // own. Binding 3 is a linear sampler kept to the edges.
+  textures?: number[];
 }
 // A compiled draw's site (its fields after the four: the site's key in
 // the page's table, and the captured values).
@@ -66,7 +70,10 @@ function put(v: Value, leaves: Leaf[], f: Float32Array, n: Int32Array, at: numbe
 }
 const words = (count: number) => { const b = new ArrayBuffer(Math.max(16, Math.ceil(count / 4) * 16)); return { b, f: new Float32Array(b), n: new Int32Array(b) }; };
 
-interface Slot { list: Value | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: [GPUBuffer | null, GPUBuffer | null, GPUBuffer | null] }
+interface Slot { list: Value | null; items: GPUBuffer | null; caps: GPUBuffer | null; capsWere: string; group: GPUBindGroup | null; groupFor: unknown[] }
+// What a pass draws into: the canvas, or a texture of its own (G10),
+// stored as rgba8unorm as raster.ts stores one, from 0 to 1.
+const TEXTURE_FORMAT: GPUTextureFormat = "rgba8unorm";
 
 // What a frame drew: draw calls made and bytes sent, for tests and the round.
 export interface Drawn { draws: number; bytes: number }
@@ -77,7 +84,9 @@ export class GpuFrames {
   // same corners (G8a), so each writes its own corner words.
   private meshes = new WeakMap<object, Map<Site, { corners: GPUBuffer; triangles: GPUBuffer; count: number }>>();
   private slots = new Map<string, Slot>();
-  private depthTex: GPUTexture | null = null;
+  private depths = new Map<string, GPUTexture>();
+  private textures = new Map<string, GPUTexture>();
+  private sampler: GPUSampler | null = null;
   private device: GPUDevice;
   private context: GPUCanvasContext;
   private format: GPUTextureFormat;
@@ -103,15 +112,15 @@ export class GpuFrames {
     return new GpuFrames(device, context, format, canvas);
   }
 
-  private pipeline(site: Site, depth: boolean): GPURenderPipeline {
-    const key = `${depth}\u0000${site.wgsl}`;
+  private pipeline(site: Site, depth: boolean, format: GPUTextureFormat): GPURenderPipeline {
+    const key = `${depth}\u0000${format}\u0000${site.wgsl}`;
     let p = this.pipelines.get(key);
     if (p) return p;
     const module = this.device.createShaderModule({ code: site.wgsl });
     p = this.device.createRenderPipeline({
       layout: "auto",
       vertex: { module, entryPoint: "lab_vs" },
-      fragment: { module, entryPoint: "lab_fs", targets: [{ format: this.format, blend: { color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } } }] },
+      fragment: { module, entryPoint: "lab_fs", targets: [{ format, blend: { color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha" }, alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha" } } }] },
       primitive: { topology: "triangle-list" },
       ...(depth ? { depthStencil: { format: "depth24plus" as GPUTextureFormat, depthWriteEnabled: true, depthCompare: "less" as GPUCompareFunction } } : {}),
     });
@@ -139,23 +148,29 @@ export class GpuFrames {
     return got;
   }
 
-  // Draws the frame. False, drawing nothing, when a draw has no site (it
-  // was made where the compiler didn't print one): the page draws it with
-  // raster.ts instead.
+  // Draws the frame, its passes in the order written. False, drawing
+  // nothing, when a draw has no site (it was made where the compiler didn't
+  // print one): the page draws it with raster.ts instead. A texture read
+  // before a pass of the frame draws it is refused, as raster.ts refuses it.
   draw(frame: Value, siteOf: (d: Data) => Sited | null): Drawn | false {
     const passes = items(part(frame, 0));
     const sited = passes.map((p) => items(part(p, 3)).map((d) => siteOf(d as Data)));
-    if (sited.some((ds) => ds.some((s) => !s)) || passes.some((p) => (part(p, 0) as Data).tag !== FRAME_V.screen)) return false;
+    if (sited.some((ds) => ds.some((s) => !s))) return false;
     const drawn: Drawn = { draws: 0, bytes: 0 };
     const enc = this.device.createCommandEncoder();
-    const view = this.context.getCurrentTexture().createView();
+    const screen = this.context.getCurrentTexture().createView();
+    const drawnNow = new Set<string>();
     passes.forEach((pass, pi) => {
-      if ((part(pass, 0) as Data).tag !== FRAME_V.screen) return;
+      const into = part(pass, 0) as Data;
+      const name = into.tag === FRAME_V.texture ? String(part(into, 0)) : null;
+      const size: [number, number] = name === null ? [this.canvas.width, this.canvas.height] : [Math.max(1, Number(part(into, 1))), Math.max(1, Number(part(into, 2)))];
+      const format = name === null ? this.format : TEXTURE_FORMAT;
+      const view = name === null ? screen : this.texture(name, size).createView();
       const depth = (part(pass, 2) as Data).tag === TRUE || (part(pass, 2) as unknown) === true;
       const [r, g, b, a] = cssColour(String(part(pass, 1)));
       const rp = enc.beginRenderPass({
         colorAttachments: [{ view, clearValue: { r, g, b, a }, loadOp: "clear", storeOp: "store" }],
-        ...(depth ? { depthStencilAttachment: { view: this.depth().createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" } } : {}),
+        ...(depth ? { depthStencilAttachment: { view: this.depth(size).createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" } } : {}),
       });
       items(part(pass, 3)).forEach((d, di) => {
         const { site, caps } = sited[pi][di]!;
@@ -176,7 +191,7 @@ export class GpuFrames {
         // Captures: the leaves of each in order, four words to a vec4u.
         const u = words(site.caps.reduce((t, ls) => t + ls.length, 0));
         let at = 0;
-        site.caps.forEach((ls, i) => { put(caps[i], ls, u.f, u.n, at); at += ls.length; });
+        site.caps.forEach((ls, i) => { if (site.textures?.includes(i)) return; put(caps[i], ls, u.f, u.n, at); at += ls.length; });
         const said = Array.from(u.n).join(",");
         if (said !== slot.capsWere || !slot.caps) {
           if (slot.caps && slot.caps.size >= u.b.byteLength) this.device.queue.writeBuffer(slot.caps, 0, u.b);
@@ -184,10 +199,18 @@ export class GpuFrames {
           slot.capsWere = said;
           drawn.bytes += u.b.byteLength;
         }
-        const pipeline = this.pipeline(site, depth);
-        const want: Slot["groupFor"] = [slot.caps, slot.items, mesh.corners];
-        if (!slot.group || want.some((x, i) => x !== slot.groupFor[i])) {
-          slot.group = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: want.map((buffer, binding) => ({ binding, resource: { buffer: buffer! } })) });
+        const pipeline = this.pipeline(site, depth, format);
+        // The textures sampled, by the names of the targets captured.
+        const sampled = (site.textures ?? []).map((i) => {
+          const t = String(part(caps[i], 0));
+          if (!drawnNow.has(t)) throw new Error(`the texture "${t}" is read before a pass of this frame draws it`);
+          return this.textures.get(t)!;
+        });
+        const want: unknown[] = [slot.caps, slot.items, mesh.corners, pipeline, ...sampled];
+        if (!slot.group || want.length !== slot.groupFor.length || want.some((x, i) => x !== slot.groupFor[i])) {
+          const entries: GPUBindGroupEntry[] = [slot.caps!, slot.items!, mesh.corners].map((buffer, binding) => ({ binding, resource: { buffer } }));
+          if (sampled.length) entries.push({ binding: 3, resource: this.linear() }, ...sampled.map((t, k) => ({ binding: 4 + k, resource: t.createView() })));
+          slot.group = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
           slot.groupFor = want;
         }
         rp.setPipeline(pipeline);
@@ -197,6 +220,7 @@ export class GpuFrames {
         drawn.draws++;
       });
       rp.end();
+      if (name !== null) drawnNow.add(name);
     });
     this.device.queue.submit([enc.finish()]);
     return drawn;
@@ -204,15 +228,29 @@ export class GpuFrames {
 
   private slot(at: string): Slot {
     let s = this.slots.get(at);
-    if (!s) this.slots.set(at, (s = { list: null, items: null, caps: null, capsWere: "", group: null, groupFor: [null, null, null] }));
+    if (!s) this.slots.set(at, (s = { list: null, items: null, caps: null, capsWere: "", group: null, groupFor: [] }));
     return s;
   }
 
-  private depth(): GPUTexture {
-    const { width, height } = this.canvas;
-    if (this.depthTex && this.depthTex.width === width && this.depthTex.height === height) return this.depthTex;
-    this.depthTex?.destroy();
-    this.depthTex = this.device.createTexture({ size: [width, height], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT });
-    return this.depthTex;
+  // A depth buffer of each size a pass draws at.
+  private depth([width, height]: [number, number]): GPUTexture {
+    const key = `${width}x${height}`;
+    let d = this.depths.get(key);
+    if (!d) this.depths.set(key, (d = this.device.createTexture({ size: [width, height], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT })));
+    return d;
   }
+
+  // A pass's texture by its name, made again when its size changes.
+  private texture(name: string, [width, height]: [number, number]): GPUTexture {
+    let t = this.textures.get(name);
+    if (t && t.width === width && t.height === height) return t;
+    t?.destroy();
+    this.textures.set(name, (t = this.device.createTexture({ size: [width, height], format: TEXTURE_FORMAT, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING })));
+    return t;
+  }
+
+  private linear(): GPUSampler {
+    return (this.sampler ??= this.device.createSampler({ magFilter: "linear", minFilter: "linear", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge" }));
+  }
+
 }

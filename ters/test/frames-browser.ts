@@ -4,7 +4,8 @@
 // same frame on the CPU; the two must give the same pixels, but for the
 // edges of triangles, where the two fill rules may differ. Then the same
 // frame again sends nothing, and a frame whose captures changed sends only
-// them.
+// them. And (G10) a pass into a texture that a later pass samples, on its
+// own canvas, agrees with raster.ts.
 //
 //   node test/frames-browser.ts
 //
@@ -22,6 +23,7 @@ const entry = `
 import { GpuFrames, pageDraws, sitedOf } from "./src/lang/gpu-frame.ts";
 import { rasterize } from "./src/lang/raster.ts";
 import { FRAME_V, TRUE, FALSE, CONS, NIL } from "./src/lang/std-ids.ts";
+import { sampled } from "./src/lang/frame-textures.ts";
 const list = (...xs) => xs.reduceRight((t, x) => ({ tag: CONS, fields: [x, t] }), { tag: NIL, fields: [] });
 const rec = (...fields) => ({ tag: "rec", fields });
 // A square from (−1, −1) to (1, 1); instances: shift right, depth, colour.
@@ -47,6 +49,40 @@ fn w(x: u32) -> f32 { return bitcast<f32>(x); }
 @fragment fn lab_fs(o: Out) -> @location(0) vec4f { return vec4f(o.c, 1.0); }\`,
   caps: [[f32([])]], instance: [f32([0]), f32([1]), f32([2, 0]), f32([2, 1]), f32([2, 2])], corner: [f32([0]), f32([1])], colour: 3,
 } });
+// G10: a pass into a 2 × 1 texture, red with a green square over its right
+// half, and the screen sampling it across at half height.
+const glow = { tag: FRAME_V.texture, fields: ["glow", 2, 1] };
+const head = \`
+@group(0) @binding(0) var<uniform> lab_caps: array<vec4u, 1>;
+@group(0) @binding(1) var<storage, read> lab_inst: array<u32>;
+@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;
+fn w(x: u32) -> f32 { return bitcast<f32>(x); }\`;
+pageDraws({
+  t0: { wgsl: head + \`
+@vertex fn lab_vs(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> @builtin(position) vec4f {
+  _ = lab_caps[0];
+  return vec4f(w(lab_corner[v * 2u]) + w(lab_inst[i]), w(lab_corner[v * 2u + 1u]), 0.5, 1.0);
+}
+@fragment fn lab_fs() -> @location(0) vec4f { return vec4f(0.0, 1.0, 0.0, 1.0); }\`, caps: [], instance: [f32([])], corner: [f32([0]), f32([1])], colour: 3 },
+  u0: { wgsl: head + \`
+@group(0) @binding(3) var lab_sampler: sampler;
+@group(0) @binding(4) var lab_tex0: texture_2d<f32>;
+struct Out { @builtin(position) p: vec4f, @location(0) u: f32 }
+@vertex fn lab_vs(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Out {
+  _ = lab_caps[0];
+  var o: Out;
+  let x = w(lab_corner[v * 2u]) + w(lab_inst[i]);
+  o.p = vec4f(x, w(lab_corner[v * 2u + 1u]), 0.5, 1.0);
+  o.u = x * 0.5 + 0.5;
+  return o;
+}
+@fragment fn lab_fs(o: Out) -> @location(0) vec4f { return textureSampleLevel(lab_tex0, lab_sampler, vec2f(o.u, 0.5), 0.0); }\`, caps: [[]], instance: [f32([])], corner: [f32([0]), f32([1])], colour: 4, textures: [0] },
+});
+const shift = (s, c) => ({ tag: FRAME_V.placed, fields: [rec(c.fields[0] + s, c.fields[1], 0.5, 1), 0] });
+const across = (s, c) => ({ tag: FRAME_V.placed, fields: [rec(c.fields[0] + s, c.fields[1], 0.5, 1), (c.fields[0] + s) * 0.5 + 0.5] });
+const sampling = { tag: FRAME_V.frame, fields: [list(
+  { tag: FRAME_V.pass, fields: [glow, "#ff0000", { tag: FALSE, fields: [] }, list({ tag: FRAME_V.draw, fields: [square, list(1), shift, () => rec(0, 1, 0), "t0", []] })] },
+  { tag: FRAME_V.pass, fields: [{ tag: FRAME_V.screen, fields: [] }, "#000", { tag: FALSE, fields: [] }, list({ tag: FRAME_V.draw, fields: [square, list(0), across, (u) => sampled(glow, rec(u, 0.5)), "u0", [glow]] })] })] };
 const frameOf = (scale) => ({ tag: FRAME_V.frame, fields: [list({ tag: FRAME_V.pass, fields: [{ tag: FRAME_V.screen, fields: [] }, "#102030", { tag: TRUE, fields: [] },
   list({ tag: FRAME_V.draw, fields: [square, birds, vertex(scale), fragment, "s0", [scale]] })] })] });
 window.run = async () => { let stage = 'open'; try {
@@ -65,7 +101,16 @@ window.run = async () => { let stage = 'open'; try {
   stage = "read";
   const got = Array.from(g.getImageData(0, 0, W, H).data);
   const want = Array.from(rasterize(frameOf(0.5), W, H, (f, ...xs) => f(...xs)).rgba);
-  return { first, again, moved, got, want };
+  // The texture frame on a canvas of its own, read back the same way.
+  stage = "texture";
+  const t = document.createElement("canvas"); t.width = W; t.height = H; document.body.append(t);
+  const tg = await GpuFrames.open(t);
+  const drew = tg.draw(sampling, sitedOf);
+  const t2 = document.createElement("canvas"); t2.width = W; t2.height = H;
+  const tc = t2.getContext("2d"); tc.drawImage(t, 0, 0);
+  const tGot = Array.from(tc.getImageData(0, 0, W, H).data);
+  const tWant = Array.from(rasterize(sampling, W, H, (f, ...xs) => f(...xs)).rgba);
+  return { first, again, moved, got, want, drew, tGot, tWant };
   } catch (e) { return { error: stage + ': ' + e }; }
 };
 `;
@@ -96,5 +141,15 @@ try {
   assert.ok(off <= 32 * 4, `${off} of ${32 * 32} pixels differ`);
   const at = (x: number, y: number) => r.got.slice((y * 32 + x) * 4, (y * 32 + x) * 4 + 3);
   assert.deepEqual(at(1, 1), [16, 32, 48], "the clear colour");
-  console.log(`ok: GPU and CPU frames agree (${off} edge pixels differ), the same frame sends 0 bytes, a moved camera ${r.moved.bytes}`);
+  // The sampled texture: within a step of rounding everywhere (no edges).
+  const tr = r as unknown as { drew: { draws: number }; tGot: number[]; tWant: number[] };
+  assert.equal(tr.drew.draws, 2);
+  let tOff = 0, worst = 0;
+  for (let i = 0; i < tr.tGot.length; i += 4) for (const k of [0, 1, 2]) { const d = Math.abs(tr.tGot[i + k] - tr.tWant[i + k]); worst = Math.max(worst, d); if (d > 2) tOff++; }
+  assert.equal(tOff, 0, `sampled texture: ${tOff} channels differ, the worst by ${worst}`);
+  const tAt = (x: number) => tr.tGot.slice((16 * 32 + x) * 4, (16 * 32 + x) * 4 + 3);
+  assert.deepEqual(tAt(0), [255, 0, 0], "red kept to the left edge");
+  assert.deepEqual(tAt(31), [0, 255, 0], "green kept to the right edge");
+  assert.ok(tAt(16)[0] > 100 && tAt(16)[1] > 100, "a mix between");
+  console.log(`ok: GPU and CPU frames agree (${off} edge pixels differ), the same frame sends 0 bytes, a moved camera ${r.moved.bytes}; a sampled texture agrees with raster.ts (worst ${worst})`);
 } finally { await browser.close(); }

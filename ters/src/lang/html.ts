@@ -14,7 +14,7 @@ import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
-import { FRAME_V, HTML_V, MARK_V } from "./std-ids.ts";
+import { HTML_V, MARK_V } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
 import { rasterize } from "./raster.ts";
 import { GpuFrames, sitedOf } from "./gpu-frame.ts";
@@ -416,11 +416,10 @@ const TYPED = new Set(["input", "textarea", "select"]);
 // CPU otherwise: a canvas keeps the one kind of context it first gave. While
 // WebGPU starts, the latest frame waits and is drawn once it can be.
 const rendering = new WeakMap<El, { gpu: GpuFrames | null | "opening"; latest: Value | null }>();
-// Every pass into the screen (textures are drawn on the CPU until the GPU
-// draws them, G10) and every draw with a site.
+// Every draw with a site.
 const listed = (v: Value): Value[] => (Array.isArray(v) ? v : fromList(v));
 const fieldOf = (o: Value, i: number): Value => (o as unknown as Record<string, Value>)[`f${i}`] ?? (o as Data).fields[i];
-const allSited = (frame: Value) => listed(fieldOf(frame, 0)).every((p) => (fieldOf(p, 0) as Data).tag === FRAME_V.screen && listed(fieldOf(p, 3)).every((d) => sitedOf(d as Data)));
+const allSited = (frame: Value) => listed(fieldOf(frame, 0)).every((p) => listed(fieldOf(p, 3)).every((d) => sitedOf(d as Data)));
 function renderFrame(e: El, v: Value | null, call: Mount["call"]): void {
   if (v === null) return;
   let r = rendering.get(e);
