@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319j, E319k (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319k (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -73,7 +73,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | E319k | A large definition opened is drawn in five tasks of 80 to 200 ms (spacetime's `rapidity picture`, 1,229 nodes), and on this machine one of them is sometimes over the probe's 200 ms: the graph's drawing (render, up to 280 ms with its layout) or the click's own task. The graph could be drawn a frame at a time, and the side column's frames kept across a redraw instead of loaded again. The probe's "opening a large definition" place shows it. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
-| E319j | Pause on a compiled page, what's left on the editor's thread once the worker chooses the stored program's lists and Maps (runCodeAsk.ts): its check over the groups the worker sent (bounce 394 ms) and the interpreted page started at the log's last event (433 ms, its arithmetic resolved about 150). The check finds the groups but reads the whole library again (the stored program changes the library's lists, so it isn't on the library's layer) and its modes again; the page's start resolves the stored program's arithmetic afresh. Both grow with the program. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

@@ -256,6 +256,9 @@ function answer(e: MessageEvent<Ask>) {
       setProgramPins(pins);
       const before = keptKeys();
       const r = checkedForRun(receivedCode(e.data.code), names, main);
+      // Checked here as the editor checks it, so the groups sent are the
+      // ones its check looks for (E319j: 206 ms of bounce's Pause).
+      infer(r.code, r.names);
       return post({ code: sendCode(r.code), names: r.names, chosen: r.chosen, groups: groupsSince(before) });
     } catch (err) {
       return post({ error: (err as Error).message });
