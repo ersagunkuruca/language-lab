@@ -97,7 +97,7 @@ import { ownEffects, parallelCounts, parallelFolds, parallelHalves, parallelList
 import { infer } from "../../ters/src/lang/infer.ts";
 import { discharge } from "../../ters/src/lang/ledger.ts";
 import { scalarOp, TARGETS } from "./builtins.ts";
-import { FRAME_OPS, WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
+import { FRAME_OPS, TARGET, WORLD_OPS as OP_OF_BUILTIN, writtenItems } from "../../ters/src/lang/std.ts";
 import { AUDIO_BLOCK, AWAIT, AWAIT_OP, START_TIMER_OP, TICKET_V, TIME, WAIT, WAIT_OP, HANDLER_ROW, LIST, PAGE_HANDLER, PAGE_VIEW, SIGS, SOUND_ROW, VIEW_ROW } from "../../ters/src/lang/std.ts";
 import { STD_IMPL, STD_MANY } from "../../ters/src/lang/std-impl.ts";
 // Cells' operations JavaScript from the core IR takes from the evaluator
@@ -1154,6 +1154,9 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     }
     if (opts.data && t.args.some(freeInside)) t = { ...t, args: t.args.map(freed) };
     if (t.id === NUMBER) return "f64";
+    // A pass's target in a shader (G10b): the number of a texture the draw
+    // samples (gpu-draws.ts), as a Float64.
+    if (opts.shader && !opts.data && t.id === TARGET) return "f64";
     if (t.id === BOOL) return "i32";
     if (opts.data && t.id === INT) return "int";
     // Int held in 32 bits wherever Int isn't the heap's (C66c in shaders;
@@ -2097,6 +2100,15 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const t = stype(zonk(id));
           if (!t || !isFn(t)) throw new Refused(`takes ${nm(target)} giving ${whyNot(zonk(id))}`);
           return { k: "rt", fn: `derive:${target}`, args: [expr(n.args[0], env, f, false)], host: { t, partial: false } };
+        }
+        // sampled(t, across) in a draw's fragment (G10b, gpu-draws.ts): the
+        // target is a texture's number among those the draw samples, held
+        // as a Float64, and across's two parts; wgsl.ts calls lab_sampled.
+        if (opts.shader && target === FRAME_OPS.sampled && n.args.length === 2) {
+          const t = stype(zonk(id)), at = stype(zonk(n.args[1]));
+          if (!t || !isRecord(t) || !at || !isRecord(at) || at.fields.length !== 2 || at.fields.some((x) => x.t !== "f64")) throw new Refused("samples a texture across something other than two Float64s");
+          const a = f.locals.push(at) - 1, across: SExpr = { k: "local", i: a };
+          return { k: "let", i: a, value: expr(n.args[1], env, f, false), body: { k: "rt", fn: "frame.sampled", args: [expr(n.args[0], env, f, false), { k: "get", rec: across, t: at, i: 0 }, { k: "get", rec: across, t: at, i: 1 }], host: { t, partial: false } } };
         }
         const why = TARGETS[target]?.scalar;
         throw new Refused(`uses ${nm(target)}, which isn't in the scalar profile${why && typeof why === "object" && "no" in why ? `: it ${why.no}` : ""}`);

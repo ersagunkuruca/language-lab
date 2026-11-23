@@ -163,6 +163,16 @@ as a site, and gpu-frame.ts draws the sites it is given:
   array<u32>`, an instance's leaves after another's. Binding 2 is the
   same for the corners. The vertex stage reads every binding, so a
   layout made from the module has all three.
+- A captured pass target (G10b) is a texture the draw samples: its
+  leaves are `[]`, so it crosses as no words, and the site's `textures`
+  gives its index among the caps, in binding order. Binding 3 is
+  `lab_sampler`, linear and clamped to the edges; binding 4 + k is
+  `lab_tex{k}`, a `texture_2d<f32>` of the texture the pass named by the
+  k-th captured target drew (rgba8unorm). In the shader a target is its
+  number k as an f32, so it may be passed to functions, and
+  `sampled(t, across)` is `textureSampleLevel` of texture t at level 0. A
+  target the fragment makes, rather than captures, has no binding, and
+  its draw has no site.
 - The draw is `drawIndexed(triangles, instances)`, with the triangles as
   the index buffer. The vertex stage takes its corner at `vertex_index`
   and its instance at `instance_index`.

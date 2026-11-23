@@ -23,12 +23,19 @@
 // raster.ts does, anything else the first corner's (`flat`). A fragment
 // with no answer is `discard`; a corner with no answer is placed at NaN,
 // which GPUs drop (raster.ts drops its triangles).
+//
+// A captured pass target (G10) is a texture the draw samples: it crosses
+// as no words, its number among the draw's textures stands for it in the
+// shader (scalar.ts lowers a Target there as that Float64), and
+// `sampled(t, across)` reads texture t with the linear sampler kept to its
+// edges at binding 3, the k-th texture at binding 4 + k (gpu-frame.ts
+// binds the one its pass drew).
 
 import type { Code, Id } from "../../ters/src/model.ts";
 import { withNodes } from "../../ters/src/model.ts";
 import type { Info } from "../../ters/src/lang/infer.ts";
 import { NUMBER, type Type } from "../../ters/src/lang/types.ts";
-import { TRUE } from "../../ters/src/lang/std-ids.ts";
+import { TARGET, TRUE } from "../../ters/src/lang/std-ids.ts";
 import type { Names } from "../../ters/src/presentation.ts";
 import { isRecord, kids, lowerScalar, type CoreIR, type LType, type RType, type SExpr, type SFunc } from "./scalar.ts";
 import { emitWgsl, vectorWidth } from "./wgsl.ts";
@@ -166,6 +173,8 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const zonk = (x: Id) => { const y = ir.info.typeOf.get(x); return y && ir.info.subst.zonk(y); };
   const capTypes = caps.map(zonk);
   if (capTypes.some((t) => !t)) throw new Error("reads a value whose type isn't known");
+  // The captured targets, in binding order: textures it samples.
+  const textures = capTypes.flatMap((t, i) => (t!.t === "con" && t!.id === TARGET ? [i] : []));
   let nodes = ir.code.nodes;
   const typeOf = new Map(ir.info.typeOf);
   const defs: Id[] = [];
@@ -214,7 +223,7 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const structs = sh.structs;
   // The inputs' leaves: the instance, the corner, then each value read.
   const [it, ct] = vf.params, capLs = vf.params.slice(2);
-  const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t) => leavesOf(t));
+  const allInstance = unread ? [] : leavesOf(it), allCorner = leavesOf(ct), capLeaves = capLs.map((t, i) => (textures.includes(i) ? [] : leavesOf(t)));
   // Only what the vertex function reads of an instance and of a corner
   // crosses (G8): the rest is 0 in the shader.
   const instance = allInstance && reached(allInstance, readPaths(l.funcs, vi, 0)), corner = allCorner && reached(allCorner, readPaths(l.funcs, vi, 1));
@@ -242,7 +251,16 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const words = capLeaves.reduce((n, x) => n + x!.length, 0);
   const capWord = (k: number) => `lab_caps[${k >> 2}].${"xyzw"[k & 3]}`;
   const at = { k: 0 };
-  const capsWgsl = capLs.map((t) => rebuilt(t, structs, fromWord(capWord), at));
+  const capsWgsl = capLs.map((t, i) => (textures.includes(i) ? `${textures.indexOf(i)}.0` : rebuilt(t, structs, fromWord(capWord), at)));
+  if (sh.wgsl.includes("lab_sampled(") && !textures.length) throw new Error("samples a texture it doesn't capture (sampled reads a pass's target the draw's function was written beside)");
+  // Texture t at a place across it, between its four nearest texels (the
+  // sampler's), at its full size (level 0), so either stage may read it.
+  const sampling = textures.length ? `
+@group(0) @binding(3) var lab_sampler: sampler;
+${textures.map((_, k) => `@group(0) @binding(${4 + k}) var lab_tex${k}: texture_2d<f32>;`).join("\n")}
+fn lab_sampled(t: f32, u: f32, v: f32) -> vec4f {
+${textures.slice(1).map((_, j) => `  if (t == ${j + 1}.0) { return textureSampleLevel(lab_tex${j + 1}, lab_sampler, vec2f(u, v), 0.0); }\n`).join("")}  return textureSampleLevel(lab_tex0, lab_sampler, vec2f(u, v), 0.0);
+}` : "";
   const nI = instance.length, nC = corner.length;
   const fuel = sh.wgsl.includes("var<private> lab_fuel"), none = sh.wgsl.includes("var<private> lab_none");
   const start = `${fuel ? "  lab_fuel = 1.0e30;\n" : ""}${none ? "  lab_none = false;\n" : ""}`;
@@ -259,7 +277,7 @@ function drawSite(ir: CoreIR, site: number, vertex: Id, fragment: Id, caps: Id[]
   const wgsl = `${sh.wgsl}
 @group(0) @binding(0) var<uniform> lab_caps: array<vec4u, ${Math.max(1, Math.ceil(words / 4))}>;
 @group(0) @binding(1) var<storage, read> lab_inst: array<u32>;
-@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;
+@group(0) @binding(2) var<storage, read> lab_corner: array<u32>;${sampling}
 struct LabPlaced {
   @builtin(position) position: vec4f,
 ${vary.join("\n")}
@@ -274,9 +292,9 @@ ${carry.join("\n")}
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { var nan = 0x7fc00000u; o.position = vec4f(bitcast<f32>(nan)); }\n` : ""}  return o;
 }
 @fragment fn lab_fs(o: LabPlaced) -> @location(0) vec4f {
-${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
+${textures.length ? `  // The sampler and every texture in the layout, read or not.\n  _ = lab_sampler;${textures.map((_, k) => ` _ = lab_tex${k};`).join("")}\n` : ""}${start}  let k = ${fEntry}(${[v, ...capsWgsl].join(", ")});
 ${fuel || none ? `  if (${[fuel ? "lab_fuel < 0.0" : "", none ? "lab_none" : ""].filter(Boolean).join(" || ")}) { discard; }\n` : ""}  return vec4f(${k[0]}, ${k[1]}, ${k[2]}, ${colour === 4 ? k[3] : "1.0"});
 }
 `;
-  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour };
+  return { wgsl, caps: capLeaves as Leaf[][], instance, corner, colour, ...(textures.length ? { textures } : {}) };
 }
