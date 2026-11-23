@@ -6,9 +6,6 @@
 name: macOS app
 
 on:
-  push:
-    branches: [claude/project-thread-1dh8ij]
-    paths: [ters/cli/macos-app.ts, .github/workflows/macos-app.yml]
   workflow_dispatch:
     inputs:
       program:
