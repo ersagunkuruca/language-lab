@@ -69,6 +69,9 @@ export function nativeAppFolder(title: string, c: string, java?: string, sound?:
   const dir = PACKAGE.replace(/\./g, "/");
   // A page that asks for permissions (L236b) names those Android may give.
   const asks = c.includes("lab_world_askPermission(");
+  // A page that opens files in other apps (C311) gives them through the
+  // app's own provider.
+  const opens = c.includes("lab_world_openOutside(");
   return {
     "settings.gradle": `pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositories { google(); mavenCentral() } }\nrootProject.name = ${JSON.stringify(title)}\ninclude ":app"\n`,
     "build.gradle": `plugins { id "com.android.application" version "8.7.3" apply false }\n`,
@@ -93,7 +96,7 @@ ${asks ? ASKABLE : sound?.mic ? '  <uses-permission android:name="android.permis
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
-${sound ? `    <service android:name=".SoundService" android:exported="false" android:foregroundServiceType="mediaPlayback${sound.mic ? "|microphone" : ""}" />\n` : ""}  </application>
+${opens ? `    <provider android:name=".Files" android:authorities="${nativeAppId(title)}.files" android:exported="false" android:grantUriPermissions="true" />\n` : ""}${sound ? `    <service android:name=".SoundService" android:exported="false" android:foregroundServiceType="mediaPlayback${sound.mic ? "|microphone" : ""}" />\n` : ""}  </application>
 </manifest>
 `,
     "app/src/main/res/mipmap/ic_launcher.png": icon(192, rgb(hue, 0.45, 0.42)),
@@ -108,6 +111,7 @@ ${sound ? "# A page's sound (C217): AAudio, the app's assets, the log.\ntarget_c
     "app/src/main/cpp/page.c": `${c}\n${JNI_C}`,
     [`app/src/main/java/${dir}/MainActivity.java`]: ACTIVITY,
     ...(java ? { [`app/src/main/java/${dir}/Hosts.java`]: java } : {}),
+    ...(opens ? { [`app/src/main/java/${dir}/Files.java`]: FILES } : {}),
     ...(sound ? { [`app/src/main/java/${dir}/SoundService.java`]: soundService(sound.mic) } : {}),
     ...Object.fromEntries(Object.entries(sound?.files ?? {}).map(([a, b]) => [`app/src/main/assets/${a}`, b])),
     "README.md": `# ${title}, as a native Android app
@@ -376,6 +380,9 @@ static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append,
   0
 #endif
 };
+#ifdef LAB_OPENER
+static char *j_open(const char *path);
+#endif
 // The page on a screen width dp wide and height high, dark or not: its root's number, 0
 // when main has no answer.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jdouble height, jint dark) {
@@ -384,6 +391,9 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
   jclass k = (*env)->GetObjectClass(env, self);
   const char *ms[19][2] = { { "box", "(Ljava/lang/String;)I" }, { "text", "(Ljava/lang/String;)I" }, { "setText", "(ILjava/lang/String;)V" }, { "setValue", "(ILjava/lang/String;)V" }, { "append", "(II)V" }, { "clear", "(I)V" }, { "listen", "(ILjava/lang/String;I)V" }, { "gone", "(I)V" }, { "place", "(IDDDDI)V" }, { "paint", "(IIDDI)V" }, { "font", "(IDIIID)V" }, { "measure", "(Ljava/lang/String;DID)[D" }, { "page", "(DDI)V" }, { "draw", "(I[D)V" }, { "clip", "(II)V" }, { "scroll", "(ID)V" }, { "sides", "(IDDDDI)V" }, { "outline", "(I[D)V" }, { "ask", "(Ljava/lang/String;)I" } };
   for (int i = 0; i < 19; i++) ters_jm[i] = (*env)->GetMethodID(env, k, ms[i][0], ms[i][1]);
+#ifdef LAB_OPENER
+  lab_opener = j_open;
+#endif
   // What the page keeps (the world's files, a page's saved values) goes
   // in the app's own files, not in "/", which it can't write.
   jmethodID fd = (*env)->GetMethodID(env, k, "getFilesDir", "()Ljava/io/File;");
@@ -423,6 +433,24 @@ static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
   (*env)->ReleaseStringChars(env, s, u);
   *out = b; *n = k;
 }
+#ifdef LAB_OPENER
+// A file to another app (C311): MainActivity's openOutside, which answers
+// why it didn't open, or null.
+static char *j_open(const char *path) {
+  jmethodID m = (*ters_j)->GetMethodID(ters_j, (*ters_j)->GetObjectClass(ters_j, ters_a), "openOutside", "(Ljava/lang/String;)Ljava/lang/String;");
+  if (!m) { (*ters_j)->ExceptionClear(ters_j); return strdup("this app has no opener"); }
+  jstring t = ters_js(path, strlen(path));
+  jstring r = (jstring)(*ters_j)->CallObjectMethod(ters_j, ters_a, m, t);
+  (*ters_j)->DeleteLocalRef(ters_j, t);
+  if ((*ters_j)->ExceptionCheck(ters_j)) { (*ters_j)->ExceptionClear(ters_j); return strdup("the opener failed"); }
+  if (!r) return 0;
+  char *out; size_t n;
+  ters_utf8(ters_j, r, &out, &n);
+  out[n] = 0;
+  (*ters_j)->DeleteLocalRef(ters_j, r);
+  return out;
+}
+#endif
 // A finger on a picture (C199f), in dp from its top left: kind 0 down, 1
 // move, 2 up, 3 cancelled. Whether the page listened.
 JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativePointer(JNIEnv *env, jobject self, jint id, jint kind, jdouble x, jdouble y) { (void)self; ters_j = env; return ters_ui_pointer(ters_view_of(id), kind, x, y); }
@@ -450,6 +478,49 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeEvent(JNIEnv *env, 
 // The Android side (C199d): boxes and texts placed where the page's
 // layout (compiler/src/c-layout.ts, in C) puts them, painted and in the
 // fonts it gives, in dp; texts measured by Android's own text layout.
+// The app's own files to other apps, read only (C311): what an
+// ACTION_VIEW from openOutside points at, as AndroidX's FileProvider would
+// (the app has no AndroidX).
+const FILES = `package ${PACKAGE};
+
+import android.content.ContentProvider;
+import android.content.ContentValues;
+import android.database.Cursor;
+import android.database.MatrixCursor;
+import android.net.Uri;
+import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+public class Files extends ContentProvider {
+  @Override public boolean onCreate() { return true; }
+  private File file(Uri u) throws FileNotFoundException {
+    try {
+      File root = getContext().getFilesDir().getCanonicalFile(), f = new File(root, u.getPath()).getCanonicalFile();
+      if (!f.getPath().startsWith(root.getPath() + "/") || !f.isFile()) throw new FileNotFoundException(u.toString());
+      return f;
+    } catch (IOException e) { throw new FileNotFoundException(e.getMessage()); }
+  }
+  @Override public ParcelFileDescriptor openFile(Uri u, String mode) throws FileNotFoundException { return ParcelFileDescriptor.open(file(u), ParcelFileDescriptor.MODE_READ_ONLY); }
+  @Override public String getType(Uri u) { return MainActivity.typeOf(String.valueOf(u.getLastPathSegment())); }
+  @Override public Cursor query(Uri u, String[] cols, String sel, String[] args, String order) {
+    File f;
+    try { f = file(u); } catch (FileNotFoundException e) { return null; }
+    if (cols == null) cols = new String[] { OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE };
+    MatrixCursor c = new MatrixCursor(cols);
+    Object[] row = new Object[cols.length];
+    for (int i = 0; i < cols.length; i++) row[i] = OpenableColumns.DISPLAY_NAME.equals(cols[i]) ? f.getName() : OpenableColumns.SIZE.equals(cols[i]) ? (Object) f.length() : null;
+    c.addRow(row);
+    return c;
+  }
+  @Override public Uri insert(Uri u, ContentValues v) { return null; }
+  @Override public int delete(Uri u, String sel, String[] args) { return 0; }
+  @Override public int update(Uri u, ContentValues v, String sel, String[] args) { return 0; }
+}
+`;
+
 const ACTIVITY = `package ${PACKAGE};
 
 import android.app.Activity;
@@ -694,6 +765,29 @@ public class MainActivity extends Activity {
   // them and -1 now; their answer goes to the handler that asked, which
   // waits for it (nativePermission). Notifications need no asking before
   // Android 13.
+  // A file to another app (C311, L283): an ACTION_VIEW of it through the
+  // app's own provider (Files), its type by its name. Only the app's own
+  // files can go. null when it opened, else why not.
+  String openOutside(String path) {
+    java.io.File f = new java.io.File(path);
+    if (!f.isAbsolute()) f = new java.io.File(getFilesDir(), path);
+    String root, at;
+    try { root = getFilesDir().getCanonicalPath(); at = f.getCanonicalPath(); } catch (java.io.IOException e) { return String.valueOf(e.getMessage()); }
+    if (!at.startsWith(root + "/")) return "only the app's own files go to another app";
+    if (f.isDirectory()) return "a folder has no app to open it here";
+    android.net.Uri.Builder u = new android.net.Uri.Builder().scheme("content").authority(getPackageName() + ".files");
+    for (String part : at.substring(root.length() + 1).split("/")) u.appendPath(part);
+    String type = typeOf(f.getName());
+    android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_VIEW).setDataAndType(u.build(), type).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    try { startActivity(i); return null; } catch (android.content.ActivityNotFoundException e) { return "no app opens " + type; }
+  }
+  // A file's type by its name's ending, as Android knows them.
+  static String typeOf(String name) {
+    int dot = name.lastIndexOf('.');
+    String t = dot < 0 ? null : android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT));
+    return t != null ? t : "application/octet-stream";
+  }
+
   private static final int ASKED = 236;
   int ask(String what) {
     String p = what.equals("camera") ? "android.permission.CAMERA" : what.equals("microphone") ? "android.permission.RECORD_AUDIO" : what.equals("location") ? "android.permission.ACCESS_FINE_LOCATION" : what.equals("notifications") ? (Build.VERSION.SDK_INT >= 33 ? "android.permission.POST_NOTIFICATIONS" : null) : "";
