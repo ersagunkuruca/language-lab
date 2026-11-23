@@ -114,6 +114,7 @@ New targets and speed rank below every language item (Ersagun,
 | C307 | `contracted` and maps of Float32 on WebGPU in a page, raced against PyTorch on Apple's MPS with compiler/gaps/mnist-python/mnist_torch.py --device mps --float32. L286 is built (the numbers module's Float32, DG1) | GAPS.md round 22 (mnist) | 2026-11-23 |
 | C309 | Float32 (L286) stored as binary32 on every target: C `float`, wasm `f32`, a Float32Array for an array of them. Today it is a one-field record of a Float64, each step rounded with `(double)(float)`, `f32.demote_f64 f64.promote_f32` or `Math.fround`, so it computes right but takes a Float64's room and conversions | L286 | 2026-11-23 |
 | C310 | `file info(path)` (L282) in C and WASI: lstat (Windows' wide stat) and `path_filestat_get`, the File info record made in each runtime and logged as the JavaScript world logs it (`{"kind", "size", "modified"}`), so a native or WASI run replays. The evaluator, compiled JavaScript and a page's stored files have it; scalar.ts lists it as JavaScript's only (HOST_WORLD) | L282 | 2026-11-23 |
+| C311 | `open outside(path)` (L283) in C (posix_spawnp of open or xdg-open, ShellExecuteW on Windows), on Android (an ACTION_VIEW intent through a FileProvider) and in WASI (no way out: it aborts with the reason). The evaluator, compiled JavaScript and pages have it; scalar.ts lists it as JavaScript's only (HOST_WORLD) | L283 | 2026-11-23 |
 | C293 | `neighbours` on a grid in C and WebAssembly at the hand grid's speed. Step 1 (#PR): compiler/gaps/flock at 5,000 birds (100 ticks) natively 2.9 s one thread and 1.4 s on threads, against 1.4 s and 0.55 s on its own grid before C292 and 0.45 s for the ideal C; wasi 5.1 s (6.0 s before). Left: every Int big-capable (positions, cell keys: 300 million `lab_int_dup` in 30 ticks), and merging each bird's 27 runs conses onto arrays that are often copied | Compiler lane 2026-11-23 (C292) | 2026-11-23 |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md), in fix order)
@@ -242,7 +243,6 @@ Ersagun 2026-11-17: "A universal instrument tuner, metronome, looper app. This I
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L283 | `open outside(path)`: a file or folder to the platform's own app (open, ShellExecuteW, xdg-open, an Android intent); logged, and named by `--allow` | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | S | |
 | L284 | Files in a page: the disk in an app; in a browser the stored files or a picked folder (showDirectoryPicker, Chromium); a sample folder in the editor; asked for as the microphone is, refused at build time where a target can't | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 
 ### Numbers (NUMBERS.md)

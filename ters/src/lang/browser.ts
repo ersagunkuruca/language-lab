@@ -210,6 +210,13 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     readBytes,
     writeBytes: (path, bytes) => put(prefix + path, BYTES + base64Of(bytes)),
     fileExists: (path) => store.getItem(prefix + path) !== null,
+    // A stored file opened in a new tab, as the browser shows its kind
+    // (L283): what it holds, as a blob.
+    openOutside: (path) => {
+      const bytes = readBytes(path), w = globalThis as { open?: (url: string, target: string) => unknown; URL?: { createObjectURL?: (b: Blob) => string } };
+      if (typeof w.open !== "function" || !w.URL?.createObjectURL) throw new Error(`there's no browser here to open ${path} in`);
+      later(() => void w.open!(w.URL!.createObjectURL!(new Blob([bytes as BlobPart])), "_blank"));
+    },
     // Every stored file is a plain file: the store has no folders or links.
     fileInfo: (path) => ({ kind: "file", size: readBytes(path).length, modified: Number(store.getItem(`modified ${prefix}${path}`) ?? 0) }),
     // Every file, as paths: the store has no folders.

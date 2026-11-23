@@ -313,6 +313,7 @@ export const NOTES: Comments = {
   "builtin.io.fileExists": "Whether there's a file at this path.",
   "builtin.whileWaiting": "while waiting(action, shown) is the action's value if it has it now, else shown. In a page's view, a fetch that hasn't landed shows shown, and the view runs again with the reply when it lands; where nothing waits (a command line waits for the reply) it is the action's value.",
   "builtin.io.listFolder": "The names of the files in a folder.",
+  "builtin.io.openOutside": "Hands a file or folder to the platform's own app, as a double click would: open on macOS, the shell on Windows, xdg-open on Linux, a new tab on a page. It changes nothing the program reads; a path that isn't there aborts with the reason.",
   "builtin.io.fileInfo": "A file's kind, size in bytes and modified time, as File info: file info(\"notes.txt\").size. A link is told as a link, not as what it points at. A file that isn't there aborts with the reason, as read file does.",
   "builtin.io.readBytes": "A file's bytes as they are, with no decoding: for images, sound and binary formats. text of utf8(read bytes(path)) reads it as text. Aborts if the file can't be read.",
   "builtin.io.offerFile": "Hands bytes to the person as a file to keep, under a name: offer file(\"take.wav\", bytes). On a page a download, in an app the share sheet, on the command line a file in the folder it runs in. Aborts if it can't be handed over.",

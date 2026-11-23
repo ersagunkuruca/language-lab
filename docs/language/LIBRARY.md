@@ -654,6 +654,7 @@ Each of these puts its effect in the type of every function that uses it, so `di
 - **file exists** : `(Text) -[Files]-> Bool`. Whether there's a file at this path.
 - **list folder** : `(Text) -[Files, Abort]-> List Text`. The names of the files in a folder.
 - **file info** : `(Text) -[Files, Abort]-> File info`. A file's kind, size in bytes and modified time, as File info: file info("notes.txt").size. A link is told as a link, not as what it points at. A file that isn't there aborts with the reason, as read file does.
+- **open outside** : `(Text) -[Files, Abort]-> Unit`. Hands a file or folder to the platform's own app, as a double click would: open on macOS, the shell on Windows, xdg-open on Linux, a new tab on a page. It changes nothing the program reads; a path that isn't there aborts with the reason.
 - **read bytes** : `(Text) -[Files, Abort]-> Bytes`. A file's bytes as they are, with no decoding: for images, sound and binary formats. text of utf8(read bytes(path)) reads it as text. Aborts if the file can't be read.
 - **write bytes** : `(Text, Bytes) -[Files, Abort]-> Unit`. Writes bytes to a file as they are, replacing what was there: write bytes("out.bin", bytes of([0, 255])). Aborts if the file can't be written.
 - **offer file** : `(Text, Bytes) -[Files, Abort]-> Unit`. Hands bytes to the person as a file to keep, under a name: offer file("take.wav", bytes). On a page a download, in an app the share sheet, on the command line a file in the folder it runs in. Aborts if it can't be handed over.
