@@ -744,6 +744,26 @@ export class Session {
       }
       return this.fill(code, names, hole, listMatch(head, 0, written, fallback), def, as);
     }
+    // A match on values (L164c): `"+" → …`, `3 → …`, then `otherwise →`.
+    const byValue = cases.map((c) => /^("(?:[^"\\]|\\.)*"|[−-]?\d[\d.]*(?:e[+-]?\d+)?)\s*(?:→|->)\s*([\s\S]*)$/i.exec(c.trim()));
+    if (byValue.some(Boolean)) {
+      const other = cases.filter((c) => /^otherwise\s*(?:→|->)/.test(c.trim()));
+      if (other.length > 1) return { ok: false, reason: "otherwise is written twice" };
+      const bad = cases.find((c, i) => !byValue[i] && !other.includes(c));
+      if (bad) return { ok: false, reason: `a match on values has a value or otherwise before each →, not ${bad.trim()}` };
+      const written = byValue.filter((k): k is RegExpExecArray => !!k);
+      const split = T.splitOnValues(code, names, editorInfo(code, names), hole, binder, written.map((k) => k[1]));
+      if (!split.ok) return split;
+      const m = split.code.nodes[hole] as NodeOf<"match">;
+      let cur: { ok: true; code: Code; names: Names } | { ok: false; reason: string } = { ok: true, code: split.code, names: { ...split.names } };
+      const bodies = [...written.map((k, i) => [(split.code.nodes[m.arms[i]] as NodeOf<"arm">).body, dedent(k[2])] as const), [m.otherwise!, other[0] ? dedent(other[0].trim().replace(/^otherwise\s*(?:→|->)/, "")) : ""] as const];
+      for (const [at, body] of bodies) {
+        if (!cur.ok) return cur;
+        // Each case is a copy of the hole the match went into.
+        if (body && body !== "□" && body !== "?") cur = this.fill(cur.code, cur.names, at, body.replace(/[‹›]/g, ""), def, as);
+      }
+      return cur;
+    }
     const parsed = cases.map((c) => /^(.+?)\s*(?:\(([^)]*)\))?\s*(?:→|->)\s*([\s\S]*)$/.exec(c.trim()));
     const bad = parsed.findIndex((k) => !k);
     if (bad >= 0) return { ok: false, reason: `a case reads Case(fields) → value, not ${cases[bad].trim()}` };
@@ -840,8 +860,11 @@ export class Session {
     if (kase) {
       const m = this.code.nodes[target];
       if (m?.kind !== "match") throw new Error(`#${this.id(target)} isn't a match`);
-      const arm = m.arms.map((a) => this.code.nodes[a] as NodeOf<"arm">).find((a) => this.name(a.variant) === kase.trim());
-      if (!arm) throw new Error(`no case ${kase}: ${m.arms.map((a) => this.name((this.code.nodes[a] as NodeOf<"arm">).variant)).join(", ")}`);
+      // A case by its name, or in a match on values by its value (L164c).
+      const caseText = (a: NodeOf<"arm">) => (a.value ? JSON.stringify((this.code.nodes[a.value] as NodeOf<"lit">).value) : this.name(a.variant));
+      const wanted = T.valueLiteral(kase);
+      const arm = m.arms.map((a) => this.code.nodes[a] as NodeOf<"arm">).find((a) => (a.value ? !!wanted && (this.code.nodes[a.value] as NodeOf<"lit">).value === wanted.value : this.name(a.variant) === kase.trim()));
+      if (!arm) throw new Error(`no case ${kase}: ${m.arms.map((a) => caseText(this.code.nodes[a] as NodeOf<"arm">)).join(", ")}`);
       target = arm.body;
     }
     // An arm (an if's then or else line, a case of a match) is replaced by
@@ -972,11 +995,13 @@ export class Session {
   // Replace a part by a match on a variable, one case per variant, each a copy.
   // `as`: the type to split by, where nothing fixes the variable's yet
   // (I116 in the editor, I184 here): the split fixes it.
-  split(at: string, on: string, find?: string, as?: string): string {
+  split(at: string, on: string, find?: string, as?: string, values?: string[]): string {
     const target = this.part(at, find);
     const def = this.defOf(target);
     if (!def) throw new Error(`#${this.id(target)} isn't in a definition`);
     const v = this.resolve(on, def);
+    // By the values given (L164c): a case per value, then otherwise.
+    if (values?.length) return this.apply(def, () => T.splitOnValues(this.code, this.names, editorInfo(this.code, this.names), target, v, values));
     const type = as?.trim() ? this.resolve(as) : undefined;
     return this.apply(def, () => T.splitOn(this.code, this.names, editorInfo(this.code, this.names), target, v, type));
   }

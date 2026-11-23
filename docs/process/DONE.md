@@ -1525,6 +1525,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| L290a | The MCP writes a match on values as the view prints it (`match op` / `"+" → …` / `otherwise → …`), `split` takes `values` for a case per value then otherwise, and `replace` finds a case by its value; a value written twice is refused (Ersagun 11-23: nested ifs in a parser read as pattern matching) | #3235 |
 | L280 (rename) | The program's saved choices are its decisions (Ersagun 11-23: the `Choice` effect has the name): `ters decisions` writes `<program>.decisions`, and `ters choices` and a `<program>.choices` beside it are still read. The editor's Choices tab and badges go with the Editor lane. Test in choices.test | #3216 |
 | L285 (arrays) | `gradient` of a function of an `Array Float64` in one pass back (pullback.ts): pullbacks of lets, arithmetic, if/match, sum and array of over a map, definitions and recursion; array reads gathered as a `Slopes` tree, added into zeros by a written `slopes into`, so every target runs it. mnist's loss differentiated by `gradient` gives the hand-written slopes; compiled JS 4.6 s against 0.7 s. reverse-gradient.test.ts in the evaluator, JS, WebAssembly and C; CREDITS row | #3214 |
 | L266af (part) | A tuple given for several inputs was looked for by asking the check of every node of the program (spread.ts), library bodies' included, each lowering and each choice: now only of calls. machine's recompile after an edit 1.3 s -> about 1.2 s (ters/bench/edits.ts) | #3212 |
