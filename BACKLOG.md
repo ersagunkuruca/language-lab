@@ -24,11 +24,11 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319a, then E319b, E319d, E319c, E319g, E319e, E319f, E319h (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319d, E319c, E319g, E319e, E319f, E319h (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
-| L Language and library | "Speed up the interpreter on real programs" | L281j, then L281k and L281l (round 2: flock interpreted) |
+| L Language and library | "Speed up the interpreter on real programs" | L281k, L281l (round 2: flock interpreted) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -75,8 +75,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319a | A guard that keeps program code off the editor's thread: a test listing every editor-thread call into the evaluator, checker and compiler with its bound (a new one fails), and a browser probe that opens programs looping or slow in each place and fails on a long task over 200 ms. Done first, so each fix below starts from a probe that shows its hang. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
-| E319b | Tests (`runTests` in Run's Test and in Upgrade modules) run in the worker, with Stop; today they have no budget on the editor's thread. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | S | open |
 | E319c | A picture's lowering, its Float32 check, its comparison points and its CPU drawing (an OffscreenCanvas) in the worker. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
 | E319d | The compiled page bounded: its handlers and frame callbacks under a time budget as the interpreted page's are (or the page in a worker, its elements sent over; measure both, then choose); Pause's `checkedForRun` in the worker. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
 | E319e | Values on wires: the trace on the thread at about 50 ms, longer ones (given values included) in the worker, the wires filled when it answers; the divergent case given a budget too. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
@@ -136,7 +134,6 @@ Flock's page, interpreted in node, ticked twice a frame: 7.2 s a frame before L2
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| L281j | A builtin's call in a direct run makes a list of its inputs and a list of its one answer (`one`, `finiteFloat`, `single`), and Float64's + and − make an object of their ports each time (expr.js `direction`): half of flock's frame after L281i. Call a builtin's one value straight where it can say, the general call where it can't | flock interpreted 2026-11-22 | P1 | S | |
 | L281k | A name is found by walking its scope, one cell per binder (run.ts `bind`): deep bodies walk far for each read. Each lambda's binders could sit in one frame, found by place | flock interpreted 2026-11-22 | P2 | M | |
 | L281l | A `match` finds its arm in a Map by the tag each time, and binds each part as a cell of its own; garbage collection is about a fifth of flock's frame | flock interpreted 2026-11-22 | P2 | M | |
 
@@ -172,8 +169,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| C294 | `ters native` on macOS: setjmp fibers (LAB_FIBER_SJLJ) the default on Apple, as ucontext is deprecated there; the native sweep on a hand-run macOS job | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | S | |
-| C295 | macOS app: `ters build-native-app --macos`, the page C with a Screen.m over AppKit (flipped NSViews, NSTextFields, Core Graphics, CVDisplayLink, AVAudioEngine), a resizable window, build.sh making a `.app` with clang, a hand-run "macOS app" workflow clicking by text. Example: dice, then folders (C299) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 | C296 | `ters native` on Windows: llvm-mingw clang, the pool's threads over Win32, files through the wide calls with UTF-8 at the edge, Win32 fibers (CreateFiber), a UTF-8 console; the native sweep on a hand-run windows-latest job | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
 | C297 | Windows app: `ters build-native-app --windows`, a screen in C over Win32 (Direct2D boxes and pictures, DirectWrite texts, EDIT inputs, frames at the display's rate, dark mode), an `.exe` from clang alone, a hand-run "Windows app" workflow; sound by WASAPI as its own part. Example: dice, then folders | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
 | C298 | A desktop's input in the C page and both screens: the window's height, `:hover` and pointerenter/leave, the wheel scrolling the box under the pointer, keys beyond Enter with Tab focus, dblclick and contextmenu | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |

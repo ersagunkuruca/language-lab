@@ -18,6 +18,7 @@ import type { Page } from "../ters/node_modules/playwright-core/index.js";
 import { Lang } from "../ters/src/lang/dsl.ts";
 import { base, baseNames } from "../ters/src/lang/load.ts";
 import { B } from "../ters/src/prelude.ts";
+import { CHECK_OP, INT_OPS } from "../ters/src/lang/std.ts";
 import { toFile } from "../ters/src/files.ts";
 import type { Id } from "../ters/src/model.ts";
 
@@ -33,16 +34,33 @@ const KNOWN: Record<string, string> = {
   "values on a wire": "E319e",
 };
 
-type Place = { name: string; file: string; open: (p: Page) => Promise<void> };
+// `then`: what the place shows once its work is done, off the thread or not.
+type Place = { name: string; file: string; open: (p: Page) => Promise<void>; then?: (p: Page) => Promise<string | null> };
 
 // A definition with no inputs that takes seconds: Show values runs it on
 // the editor's thread (main.ts boundedTrace, GIVEN_MS: a 3 s freeze).
 function wireValues(): Place {
   const k = new Lang();
-  const fib = k.def("fib"), slow = k.def("slow");
-  k.define(fib, k.fn(["n"], (n) => k.if(k.equal(n, k.lit(0)), n, k.if(k.equal(n, k.lit(1)), n, k.call(B.add, k.call(fib, k.call(B.sub, n, k.lit(1))), k.call(fib, k.call(B.sub, n, k.lit(2))))))));
+  const fib = slowFib(k), slow = k.def("slow");
   k.define(slow, k.call(fib, k.lit(30)));
   return { name: "values on a wire", file: fileOf("Slow wires", k), open: async (p) => { await openDef(p, "slow"); await p.getByText("Show values", { exact: true }).first().click(); } };
+}
+
+// A test whose every case takes seconds: Run's Test ran it on the
+// editor's thread, with no bound (E319b).
+function slowTest(): Place {
+  const k = new Lang();
+  const fib = slowFib(k), t = k.def("fib is fib");
+  const expect = (holds: Id, what: string) => k.call(CHECK_OP, holds, k.lit(what));
+  k.define(t, k.fn(["n"], (n) => k.let("a", expect(k.call(INT_OPS.less, n, k.int(1000)), "n is small"), () => expect(k.equal(k.call(fib, k.lit(25)), k.call(fib, k.lit(25))), "fib is fib"))));
+  return { name: "a test", file: fileOf("Slow test", k), open: (p) => openDef(p, "fib is fib"),
+    then: async (p) => (await p.locator(".run .status-line", { hasText: "Passed" }).first().waitFor({ timeout: 120000 }).then(() => null, async () => `the test didn't pass: ${(await p.locator(".run").first().innerText()).slice(0, 200)}`)) };
+}
+
+function slowFib(k: Lang): Id {
+  const fib = k.def("fib");
+  k.define(fib, k.fn(["n"], (n) => k.if(k.equal(n, k.lit(0)), n, k.if(k.equal(n, k.lit(1)), n, k.call(B.add, k.call(fib, k.call(B.sub, n, k.lit(1))), k.call(fib, k.call(B.sub, n, k.lit(2))))))));
+  return fib;
 }
 
 function fileOf(title: string, k: Lang, examples: Record<Id, string[]> = {}): string {
@@ -57,7 +75,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues()]) {
+for (const place of [wireValues(), slowTest()]) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };
@@ -80,6 +98,8 @@ for (const place of [wireValues()]) {
   const said = long.length ? `tasks of ${long.join(", ")} ms` : "no long task";
   if (row) console.log(`${long.length ? "known" : "FIXED"} ${place.name} (${row}): ${said}`);
   else console.log(`${long.length ? "FAIL " : "ok   "} ${place.name}: ${said}`);
+  const after = await place.then?.(p);
+  if (after) failures.push(`${place.name}: ${after}`);
   if (row ? !long.length : long.length) failures.push(row ? `${place.name} passes now: take it off KNOWN (${row})` : `${place.name}: ${said} on the editor's thread`);
   await p.close();
 }

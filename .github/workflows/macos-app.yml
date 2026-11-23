@@ -1,0 +1,69 @@
+# A native page as a Mac app (C295, docs/design/targets/DESKTOP-APPS.md):
+# `ters build-native-app --macos`, built with clang alone (build.sh),
+# started with clicks for it to make (-ters-taps, by a button's text), so
+# the run's log shows the texts shown before and after each, and its
+# artifact the window and the app. Run by hand only.
+name: macOS app
+
+on:
+  workflow_dispatch:
+    inputs:
+      program:
+        description: "Example to build (a folder in ters/examples)"
+        default: dice
+        required: true
+      taps:
+        description: "Buttons to click, by their text, separated by | (also: type N text, resize W)"
+        default: "Roll|Throw 100"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ters/package-lock.json
+      - run: npm ci
+        working-directory: ters
+      - name: ters build-native-app --macos
+        working-directory: ters
+        env:
+          PROGRAM: ${{ inputs.program || 'dice' }}
+        run: node cli/ters.ts build-native-app "examples/$PROGRAM" --macos -o "$RUNNER_TEMP/app"
+      - name: The app
+        run: sh "$RUNNER_TEMP/app/build.sh"
+      - name: Started, clicked
+        env:
+          TAPS: ${{ inputs.taps || 'Roll|resize 420|Throw 100' }}
+        run: |
+          cd "$RUNNER_TEMP/app"
+          app=$(ls -d *.app)
+          "$app/Contents/MacOS/page" -ters-taps "$TAPS" > out.txt 2> err.txt &
+          pid=$!
+          sleep 4
+          screencapture -x "$GITHUB_WORKSPACE/screen.png" || true
+          n=$(( 10 + 2 * $(echo "$TAPS" | tr '|' '\n' | grep -c .) ))
+          while kill -0 $pid 2>/dev/null && [ $n -gt 0 ]; do sleep 1; n=$((n - 1)); done
+          if kill -0 $pid 2>/dev/null; then echo "STILL RUNNING after the clicks"; kill $pid; fi
+          wait $pid; code=$?
+          echo "---- the app's output"; cat out.txt
+          echo "---- its errors"; cat err.txt
+          zip -qr "$GITHUB_WORKSPACE/app.zip" "$app"
+          grep -q -- "---- started" out.txt || { echo "the page never showed"; exit 1; }
+          [ $code = 0 ] || { echo "exit $code"; ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | tail -5; exit 1; }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.program || 'dice' }}-macos
+          path: |
+            screen.png
+            app.zip
+          retention-days: 7

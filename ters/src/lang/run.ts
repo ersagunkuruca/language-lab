@@ -346,6 +346,10 @@ class LambdaMeta {
 // One made in a part of a constructor in the last place comes back with
 // the value built around it so far: `top` the outermost, and the part
 // (`hole`'s field `at`) where what the call gives goes (L281b).
+// A builtin's one value at its inputs, or SLOW when the builtin itself
+// must say (run.ts `fast`, L281j).
+type Fast = (a: Value, b?: Value) => Value;
+const SLOW = Symbol("slow") as unknown as Value;
 class TailCall {
   readonly c: LambdaMeta;
   readonly args: Value[];
@@ -660,23 +664,47 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // Float64 is the finite floats with one zero (FLOAT-VALUES-2026-11-01.md,
   // L125a, L125b): an operation with no answer at its inputs fails (its
   // Choice), and an overflow is an Abort, performed where it was.
-  for (const [op, f] of Object.entries(impl)) builtins[`builtin.${op}`] = op === "atan2"
-    ? (y, x) => finiteFloat(op, f((y as number) + 0, (x as number) + 0), [y as number, x as number]) // −0 is 0: atan2(−0, −1) is π
-    : (...a) => finiteFloat(op, f(...(a as number[])), a as number[]);
-  for (const [id, f] of Object.entries(STD_IMPL)) builtins[id] = id === S.mod || id === S.abs || id === S.floor || id === S.float32
-    ? (...a) => finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[])
-    : (...a) => one(f(...a));
+  // Each builtin's one value, where it has exactly one, worked out with
+  // no list made around it (L281j): a direct run calls these. SLOW where
+  // the inputs need the builtin itself (an overflow, a failure, anything
+  // but numbers), which then runs as ever.
+  const fast = new Map<Fn, Fast>();
+  const finite1 = (f: (a: number) => number): Fast => (a) => { if (typeof a === "number" && a - a === 0) { const r = f(a); if (r - r === 0) return r; } return SLOW; };
+  const finite2 = (f: (a: number, b: number) => number): Fast => (a, b) => { if (typeof a === "number" && typeof b === "number" && a - a === 0 && b - b === 0) { const r = f(a, b); if (r - r === 0) return r; } return SLOW; };
+  const finiteFast = (f: (...a: number[]) => number) => (f.length === 1 ? finite1(f) : f.length === 2 ? finite2(f) : undefined);
+  for (const [op, f] of Object.entries(impl)) {
+    const b: Fn = builtins[`builtin.${op}`] = op === "atan2"
+      ? (y, x) => finiteFloat(op, f((y as number) + 0, (x as number) + 0), [y as number, x as number]) // −0 is 0: atan2(−0, −1) is π
+      : (...a) => finiteFloat(op, f(...(a as number[])), a as number[]);
+    const q = op === "atan2" ? undefined : finiteFast(f as (...a: number[]) => number);
+    if (q) fast.set(b, q);
+  }
+  for (const [id, f] of Object.entries(STD_IMPL)) {
+    const floats = id === S.mod || id === S.abs || id === S.floor || id === S.float32;
+    const b: Fn = builtins[id] = floats
+      ? (...a) => finiteFloat(id === S.mod ? "mod" : id, f(...a) as number, a as number[])
+      : (...a) => one(f(...a));
+    const q = floats ? finiteFast(f as (...a: number[]) => number) : (f as Fast);
+    if (q) fast.set(b, q);
+  }
   for (const [id, f] of Object.entries(STD_MANY)) builtins[id] = (...a) => f(...a);
+  const ones: Record<Id, (...xs: Value[]) => Value> = {
+    [S.less]: (a, b) => bool(numberOrder(a as number, b as number) < 0),
+    [S.equal]: (a, b) => bool(equal(a, b, usedSameNumber)),
+    [S.and]: (a, b) => bool((a as Data).tag === TRUE && (b as Data).tag === TRUE),
+    [S.or]: (a, b) => bool((a as Data).tag === TRUE || (b as Data).tag === TRUE),
+    [S.not]: (a) => bool((a as Data).tag !== TRUE),
+  };
   Object.assign(builtins, {
-    [S.less]: (a, b) => one(bool(numberOrder(a as number, b as number) < 0)),
+    [S.less]: (a, b) => one(ones[S.less](a, b)),
     // Showing an overflow uses it (L218).
     [S.show]: (x) => ((x as number) - (x as number) === 0 ? one(floatText(x as number)) : overflowed()),
     [S.stop]: (why) => { throw new Aborted(why as string); },
-    [S.equal]: (a, b) => one(bool(equal(a, b, usedSameNumber))),
+    [S.equal]: (a, b) => one(ones[S.equal](a, b)),
     [COMPARE]: (a, b) => one(ORDER_VALUES[compareValues(a, b, (cmpOrder ??= variantOrder(code)), orderedBy) + 1]),
-    [S.and]: (a, b) => one(bool((a as Data).tag === TRUE && (b as Data).tag === TRUE)),
-    [S.or]: (a, b) => one(bool((a as Data).tag === TRUE || (b as Data).tag === TRUE)),
-    [S.not]: (a) => one(bool((a as Data).tag !== TRUE)),
+    [S.and]: (a, b) => one(ones[S.and](a, b)),
+    [S.or]: (a, b) => one(ones[S.or](a, b)),
+    [S.not]: (a) => one(ones[S.not](a)),
     [S.range]: (n) => one(toList(Array.from({ length: Math.max(0, n as number) }, (_, i) => i))),
     [S.oneOf]: (xs) => fromList(xs),
     // With the run's own check, which this copy has until a derivative
@@ -771,6 +799,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
       } as Fn);
     },
   } satisfies Record<Id, Fn>);
+  for (const id of Object.keys(ones)) fast.set(builtins[id], ones[id] as Fast);
   for (const [id, f] of Object.entries(builtins)) tag(f, { prim: id });
   const HANDLED = new Map<Fn, Id>([S.all, S.count, S.first, S.optional, S.fuel, S.seeded].map((h) => [builtins[h], h]));
   // Builtins that touch the world and can fail: a failure is an Abort,
@@ -946,6 +975,8 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   const callDirect = (f: Value, args: Value[]): Value => {
     const c = closureOf(f);
     if (c && runsDirect(c, directFuel)) return enter(c, args);
+    const q = fast.get(f as Fn);
+    if (q) { const v = args.length === 1 ? q(args[0]) : args.length === 2 ? q(args[0], args[1]) : SLOW; if (v !== SLOW) return v; }
     const h = HANDLED.get(f as Fn);
     if (h && searchesUnder(h, directFuel)) {
       // Under fuel the whole run goes to the machine, which runs out where
@@ -1106,6 +1137,22 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
             for (let i = 0; i < k; i++) vs[i] = as[i](env);
             if (looseScopes) return callDirect((fn ??= compiledOf(n.fn))(env), vs);
             return { tag: tg, fields: vs };
+          };
+        }
+        // A builtin with one value, called with no list of inputs made
+        // (L281j); the general call where it can't say.
+        const b0 = part?.kind === "builtin" ? builtins[target!] : undefined, q = b0 && (k === 1 || k === 2) ? fast.get(b0) : undefined;
+        if (q && !steps) {
+          const general: Direct = (env) => { const f = (fn ??= compiledOf(n.fn))(env), as = argsOf(), vs = new Array<Value>(k); for (let i = 0; i < k; i++) vs[i] = as[i](env); return callDirect(f, vs); };
+          if (k === 1) return (env) => {
+            if (looseScopes) return general(env);
+            const a = argsOf()[0](env), v = q(a);
+            return v !== SLOW ? v : callDirect(b0!, [a]);
+          };
+          return (env) => {
+            if (looseScopes) return general(env);
+            const as = argsOf(), a = as[0](env), b = as[1](env), v = q(a, b);
+            return v !== SLOW ? v : callDirect(b0!, [a, b]);
           };
         }
         if (last) return (env) => {

@@ -117,7 +117,7 @@ function foreignViews(views: IosView[]): string {
 // in a ring the render block reads. The engine is changed on the main
 // queue after the page's turn ends, never under the page's lock, since
 // detaching a node waits for a render that may be waiting for the lock.
-const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
+export const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
 void ters_sound_play(int n, const float *in, float *out, int frames);
 void ters_sound_play_stereo(int n, const float *in, const float *in2, float *out, float *out2, int frames);
 int ters_sound_stereo(int n);
