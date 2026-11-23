@@ -138,7 +138,7 @@ const TABLE_RT: Record<Id, string> = {
 const LOG_EFFECT = "std.log";
 // together and race (C44): in C, each action on a fiber.
 const libDef = (name: string) => LIBRARY.code.defs.find((d) => LIBRARY.names[d] === name);
-const TOGETHER = libDef("together"), RACE = libDef("race");
+const TOGETHER = libDef("together"), RACE = libDef("race"), NEIGHBOURS = libDef("neighbours");
 
 export const ARRAY_RT: Record<Id, string> = {
   [ARRAY_OPS.empty]: "array.empty", [ARRAY_OPS.of]: "array.of", [ARRAY_OPS.items]: "array.items",
@@ -919,6 +919,14 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
   // checker dropped counts too: `t > 0 and x / t` is answered because the
   // division is worked out only where t > 0 (L259).
   const acting = new Map<Id, boolean>();
+  // A function argument whose type says it only computes (it may not
+  // finish, as the definition it stands in for may not).
+  const placeComputes = (id: Id): boolean => {
+    const t = info.subst.resolve(info.typeOf.get(id) ?? { t: "var", v: -1 });
+    if (t.t !== "fn") return false;
+    const row = info.subst.resolveRow(t.eff);
+    return row.tail === null && row.effs.every((e) => e === DIVERGE);
+  };
   const mayAct = (id: Id): boolean => {
     let r = acting.get(id);
     if (r !== undefined) return r;
@@ -1714,6 +1722,23 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
         if (opts.data && opOf.has(target)) {
           const e = opOf.get(target)!;
           return { k: "abort", reason: build(target, { t: "con", id: e, args: [] }, args()), esc: escapeOf(e) };
+        }
+        // neighbours (L280g) on a grid, in JavaScript's runtime
+        // (ters/library/near.ts, core-rt.ts `neighbours.grid`), where its
+        // place only computes; what the grid can't take, or a budget
+        // that counts steps, runs as compiled (the runtime's FAIL). Its
+        // items and reach once, as locals.
+        if (opts.host && target === NEIGHBOURS && n.args.length === 3 && !given.has(n.id) && placeComputes(n.args[1])) {
+          const t = stype(zonk(id)), tx = stype(zonk(n.args[0])), tr = stype(zonk(n.args[2]));
+          if (t && tx && tr) {
+            const xs = f.locals.push(tx) - 1, r = f.locals.push(tr) - 1, res = f.locals.push(t) - 1, place = expr(n.args[1], env, f, false);
+            given.set(n.id, [local(xs), expr(n.args[1], env, f, false), local(r)]);
+            let plain: SExpr;
+            try { plain = expr(id, env, f, false); } finally { given.delete(n.id); }
+            const arrays: SExpr[] = [{ k: "bool", v: isArray(t) }, { k: "bool", v: isArray(t) && isArray(t.item) }];
+            const grid: SExpr = { k: "rt", fn: "neighbours.grid", args: [local(xs), place, local(r), { k: "rt", fn: "fuel.get", args: [] }, ...arrays] };
+            return { k: "let", i: xs, value: expr(n.args[0], env, f, false), body: { k: "let", i: r, value: expr(n.args[2], env, f, false), body: { k: "attempt", body: grid, res, ok: local(res), otherwise: plain, t } } };
+          }
         }
         // together and race in C (C44): each action on a fiber of its own,
         // which an await parks till its ticket is ready (c.ts
