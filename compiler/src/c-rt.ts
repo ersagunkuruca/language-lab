@@ -1537,6 +1537,135 @@ static double lab_world_zoneOffset(lab_cell *zone, double at) {
   return r;
 }
 #endif` },
+  // The person's time zone (C315), an IANA name as Node's Intl gives it:
+  // TZ, else where /etc/localtime points into zoneinfo (Android: its
+  // property; Windows: ICU's default zone); UTC's other names are UTC.
+  "world.myTimeZone": { uses: ["world.os"], c: `#ifdef _WIN32
+__declspec(dllimport) void *__stdcall LoadLibraryW(const wchar_t *);
+__declspec(dllimport) void *__stdcall GetProcAddress(void *, const char *);
+#else
+#include <unistd.h>
+#endif
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+static lab_cell *lab_world_myTimeZone(void) {
+  char buf[512];
+  const char *tz = 0;
+#ifdef _WIN32
+  void *icu = LoadLibraryW(L"icu.dll");
+  int32_t (*get)(uint16_t *, int32_t, int *) = icu ? (int32_t (*)(uint16_t *, int32_t, int *))GetProcAddress(icu, "ucal_getDefaultTimeZone") : 0;
+  uint16_t z[128];
+  int e = 0;
+  int32_t n = get ? get(z, 127, &e) : 0;
+  if (n > 0 && e <= 0) { z[n] = 0; char *s = lab__narrow((const wchar_t *)z); snprintf(buf, sizeof buf, "%s", s); free(s); tz = buf; }
+#elif defined(__ANDROID__)
+  if (__system_property_get("persist.sys.timezone", buf) > 0) tz = buf;
+#else
+  tz = getenv("TZ");
+  if (tz && *tz == ':') tz++;
+  if (!tz || !*tz) { ssize_t n = readlink("/etc/localtime", buf, sizeof buf - 1); tz = n > 0 ? (buf[n] = 0, buf) : 0; }
+  if (tz) { const char *z = strstr(tz, "zoneinfo/"); tz = z ? z + 9 : *tz == '/' ? 0 : tz; }
+#endif
+  static const char *utc[] = { "Etc/UTC", "Etc/UCT", "Etc/GMT", "Etc/GMT0", "Etc/GMT+0", "Etc/GMT-0", "Etc/Universal", "Etc/Zulu", "Etc/Greenwich", "GMT", "GMT0", "GMT+0", "GMT-0", "UCT", "Universal", "Zulu", "Greenwich" };
+  for (size_t i = 0; tz && i < sizeof utc / sizeof *utc; i++) if (!strcmp(tz, utc[i])) tz = 0;
+  if (!tz || !*tz) tz = "UTC";
+  return lab__text_of(tz, strlen(tz));
+}` },
+  // The person's locale (C315), as Node's Intl names it: LC_ALL, then
+  // LC_MESSAGES, then LANG, without its encoding and modifier and with a
+  // hyphen ("tr_TR.UTF-8" is tr-TR); C, POSIX and none are en-US. Windows:
+  // the user's locale name; Android: its property. A Locale, o.record.
+  "world.myLocale": {
+    uses: ["world.os"],
+    c: (o) => `#ifdef _WIN32
+__declspec(dllimport) int __stdcall GetUserDefaultLocaleName(wchar_t *, int);
+#endif
+#ifdef __ANDROID__
+#include <sys/system_properties.h>
+#endif
+static ${o.record} lab_world_myLocale(void) {
+  char buf[128];
+  const char *v = 0;
+#ifdef _WIN32
+  wchar_t w[85];
+  if (GetUserDefaultLocaleName(w, 85) > 0) { char *s = lab__narrow(w); snprintf(buf, sizeof buf, "%s", s); free(s); v = buf; }
+#elif defined(__ANDROID__)
+  if (__system_property_get("persist.sys.locale", buf) > 0 || __system_property_get("ro.product.locale", buf) > 0) v = buf;
+#else
+  const char *names[] = { "LC_ALL", "LC_MESSAGES", "LANG" };
+  for (int i = 0; i < 3 && (!v || !*v); i++) v = getenv(names[i]);
+#endif
+  char out[128];
+  size_t n = 0;
+  for (; v && v[n] && v[n] != '.' && v[n] != '@' && n < sizeof out - 1; n++) out[n] = v[n] == '_' ? '-' : v[n];
+  out[n] = 0;
+  if (!n || !strcmp(out, "C") || !strcmp(out, "POSIX")) { strcpy(out, "en-US"); n = 5; }
+  return (${o.record}){ lab__text_of(out, n) };
+}`,
+  },
+  // A file or folder to the platform's own app (C315, L283), as world.ts:
+  // \`open\` on a Mac, xdg-open elsewhere (TERS_OPEN_OUTSIDE names
+  // another), waited for, or Windows' ShellExecute; a phone has none here.
+  // Logged as a write; fails as reading a file does when nothing is there.
+  "world.openOutside": {
+    uses: ["world.fail"],
+    c: `#ifdef _WIN32
+__declspec(dllimport) void *__stdcall ShellExecuteW(void *, const wchar_t *, const wchar_t *, const wchar_t *, const wchar_t *, int);
+#elif defined(__APPLE__)
+#include <TargetConditionals.h>
+#endif
+#if !defined(_WIN32) && !defined(__ANDROID__) && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+#include <spawn.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+extern char **environ;
+#endif
+static void lab_world_openOutside(lab_cell *path) {
+  if (lab__log_begin("openOutside")) { lab__log_text(path); lab__log_write(); }
+  char *p = lab__cstr(path), how[96];
+  const char *why = 0;
+  if (!lab__kind(p)) { int e = errno; free(p); lab__fail(e, path); return; }
+#ifdef _WIN32
+  wchar_t *w = lab__wide(p);
+  intptr_t r = (intptr_t)ShellExecuteW(0, L"open", w, 0, 0, 1);
+  free(w);
+  if (r <= 32) { snprintf(how, sizeof how, "ShellExecute answered %d", (int)r); why = how; }
+#elif defined(__ANDROID__) || (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+  why = "this platform has no opener here";
+#else
+  const char *cmd = getenv("TERS_OPEN_OUTSIDE");
+#ifdef __APPLE__
+  if (!cmd || !*cmd) cmd = "open";
+#else
+  if (!cmd || !*cmd) cmd = "xdg-open";
+#endif
+  char *argv[] = { (char *)cmd, p, 0 };
+  posix_spawn_file_actions_t fa;
+  posix_spawn_file_actions_init(&fa);
+  for (int fd = 0; fd < 3; fd++) posix_spawn_file_actions_addopen(&fa, fd, "/dev/null", fd ? O_WRONLY : O_RDONLY, 0);
+  pid_t pid;
+  int st = 0, e = posix_spawnp(&pid, cmd, &fa, 0, argv, environ);
+  posix_spawn_file_actions_destroy(&fa);
+  if (e) { snprintf(how, sizeof how, "spawnSync %.40s %s", cmd, e == ENOENT ? "ENOENT" : strerror(e)); why = how; }
+  else if (waitpid(pid, &st, 0) < 0 || !WIFEXITED(st) || WEXITSTATUS(st)) {
+    if (WIFEXITED(st)) snprintf(how, sizeof how, "%.40s ended with %d", cmd, WEXITSTATUS(st)); else snprintf(how, sizeof how, "%.40s ended with null", cmd);
+    why = how;
+  }
+#endif
+  if (why) {
+    char *s = malloc(strlen(p) + strlen(why) + 32);
+    if (!s) lab_oom();
+    int k = sprintf(s, "could not open %s outside: %s", p, why);
+    lab_drop(lab_reason);
+    lab_reason = lab__text_of(s, (size_t)k);
+    free(s);
+    lab_st = 2;
+  }
+  free(p);
+  lab_drop(path);
+}`,
+  },
   // An environment variable (L253): getenv's value, NFC, or none.
   "world.environmentVariable": {
     uses: ["world.fail", "world.nfc", "world.log"],
