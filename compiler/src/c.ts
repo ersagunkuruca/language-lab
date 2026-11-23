@@ -598,26 +598,26 @@ static void *lab_touch(void *c) {
 // Each cell's last write, by a count of writes (C300), for a kept
 // formula: a table by the cell's address.
 #define LAB_KEEP_FORMULAS 1
-static uint64_t lab_epoch = 1, *lab_ev;
-static void **lab_ek;
-static size_t lab_ecap, lab_en;
+static uint64_t lab_epoch = 1, *lab__ev;
+static void **lab__ek;
+static size_t lab__ecap, lab__en;
 static size_t lab__eh(void *p, size_t cap) { uint64_t x = (uint64_t)(uintptr_t)p; x ^= x >> 29; x *= 0x9E3779B97F4A7C15ull; return (size_t)(x >> 32) & (cap - 1); }
 static uint64_t lab__eget(void *p) {
-  if (!lab_ecap) return 0;
-  for (size_t i = lab__eh(p, lab_ecap);; i = (i + 1) & (lab_ecap - 1)) { if (lab_ek[i] == p) return lab_ev[i]; if (!lab_ek[i]) return 0; }
+  if (!lab__ecap) return 0;
+  for (size_t i = lab__eh(p, lab__ecap);; i = (i + 1) & (lab__ecap - 1)) { if (lab__ek[i] == p) return lab__ev[i]; if (!lab__ek[i]) return 0; }
 }
 static void lab__eset(void *p, uint64_t e) {
-  if (2 * (lab_en + 1) > lab_ecap) {
-    size_t was = lab_ecap; void **k = lab_ek; uint64_t *v = lab_ev;
-    lab_ecap = was ? 2 * was : 64; lab_ek = calloc(lab_ecap, sizeof *lab_ek); lab_ev = calloc(lab_ecap, sizeof *lab_ev);
-    if (!lab_ek || !lab_ev) lab_oom();
-    for (size_t j = 0; j < was; j++) if (k[j]) { size_t i = lab__eh(k[j], lab_ecap); while (lab_ek[i]) i = (i + 1) & (lab_ecap - 1); lab_ek[i] = k[j]; lab_ev[i] = v[j]; }
+  if (2 * (lab__en + 1) > lab__ecap) {
+    size_t was = lab__ecap; void **k = lab__ek; uint64_t *v = lab__ev;
+    lab__ecap = was ? 2 * was : 64; lab__ek = calloc(lab__ecap, sizeof *lab__ek); lab__ev = calloc(lab__ecap, sizeof *lab__ev);
+    if (!lab__ek || !lab__ev) lab_oom();
+    for (size_t j = 0; j < was; j++) if (k[j]) { size_t i = lab__eh(k[j], lab__ecap); while (lab__ek[i]) i = (i + 1) & (lab__ecap - 1); lab__ek[i] = k[j]; lab__ev[i] = v[j]; }
     free(k); free(v);
   }
-  size_t i = lab__eh(p, lab_ecap);
-  while (lab_ek[i] && lab_ek[i] != p) i = (i + 1) & (lab_ecap - 1);
-  if (!lab_ek[i]) { lab_ek[i] = p; lab_en++; }
-  lab_ev[i] = e;
+  size_t i = lab__eh(p, lab__ecap);
+  while (lab__ek[i] && lab__ek[i] != p) i = (i + 1) & (lab__ecap - 1);
+  if (!lab__ek[i]) { lab__ek[i] = p; lab__en++; }
+  lab__ev[i] = e;
 }
 static void lab_wrote(void *c) {
   lab__eset(c, ++lab_epoch);
