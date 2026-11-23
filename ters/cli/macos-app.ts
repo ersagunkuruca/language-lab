@@ -708,6 +708,7 @@ static void shown(NSString *when) {
         if ((e = [self key:e])) [self.window sendEvent:e];
       }
       NSView *f = focused(self.window);
+      if ([f isKindOfClass:[NSTextField class]]) printf("key %s: its editor \"%s\", first responder %s\n", name.UTF8String, ((NSTextField *)f).currentEditor.string.UTF8String, self.window.firstResponder.className.UTF8String);
       printf("key %s: from \"%s\"%s%s, heard %d, focus on %s\n", name.UTF8String, before.UTF8String, editing ? " editing " : "", editing ? editing.UTF8String : "", self.keysHeard, f ? [NSString stringWithFormat:@"%@ \"%@\"", f.className, textsOf(f)].UTF8String : "none");
       done = YES;
     }
