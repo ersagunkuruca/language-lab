@@ -1,5 +1,6 @@
-// The Choices tab (E292, editor/choicesPanel.ts): the entries `ters
-// choices` writes, read back for the tab's rows and the nodes' badges.
+// The Checks tab's Decisions section (E292, editor/choicesPanel.ts): the
+// entries `ters decisions` writes, read back for the section's rows and the
+// nodes' badges.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
@@ -33,7 +34,7 @@ test("calc's choices: tokens's keep may run on worker threads, a badge on its fu
   assert.equal(choiceMarks({ entries, would: new Map(), working: false, failed: false }).get(keep.id), "tokens's keep: worker threads when slow");
 });
 
-test("a type held in Choices: its entry says held, and what the compiler would pick", () => {
+test("a type held in Decisions: its entry says held, and what the compiler would pick", () => {
   const p = loadProgram(fileURLToPath(new URL("../examples/numbers", import.meta.url))), names = p.pres.names;
   const main = p.own.defs.find((d) => names[d] === "main")!;
   const nat = choicesFor(p.code, names, main).choices.map(parseChoice).find((c) => c?.about === "Nat")!;
@@ -53,7 +54,7 @@ test("a type held in Choices: its entry says held, and what the compiler would p
   assert.equal(none.choices.map(parseChoice).find((c) => c?.id === nat.id)?.pick, "int");
 });
 
-test("a placement held in Choices: on the main thread, said held, and the lowering keeps it there", async () => {
+test("a placement held in Decisions: on the main thread, said held, and the lowering keeps it there", async () => {
   const p = loadProgram(fileURLToPath(new URL("../examples/calc", import.meta.url))), names = p.pres.names;
   const main = p.own.defs.find((d) => names[d] === "main")!;
   const keep = choicesFor(p.code, names, main).choices.map(parseChoice).find((c) => c?.kind === "place" && c.about === "tokens's keep")!;
@@ -71,10 +72,10 @@ test("a placement held in Choices: on the main thread, said held, and the loweri
   try { assert.ok(!sites().includes(keep.id)); } finally { keepOnMainThread([], []); shareAlways([]); }
 });
 
-// The workers a page's main starts (L280e): its entry in Choices, held to
+// The workers a page's main starts (L280e): its entry in Decisions, held to
 // a count as the editor holds it (choicesFor.ts isPool), and the page
 // compiled with that many (runWorker.ts placed).
-test("moths' workers held at 2 in Choices: said held, and its page starts two", async () => {
+test("moths' workers held at 2 in Decisions: said held, and its page starts two", async () => {
   const p = loadProgram(fileURLToPath(new URL("../examples/moths-page", import.meta.url))), names = p.pres.names;
   const main = p.own.defs.find((d) => names[d] === "main")!;
   const pool = choicesFor(p.code, names, main).choices.map(parseChoice).find((c) => c?.kind === "place" && c.id === main)!;
