@@ -129,6 +129,17 @@ function pausing(): Place {
   }, then: async (q) => ((await q.getByRole("button", { name: "Go on from here" }).count()) ? null : "the page didn't pause") };
 }
 
+// The dice page with a view that makes a list of twenty million numbers:
+// range made its items in one call, with no step from the page's budget
+// and no look at its deadline (a 1,202 ms task, E319i). Measured once the
+// page is compiled.
+function longList(): Place {
+  return { name: "a page's long list", file: exampleFile("dice", "Long list", (s) => s.replace("main", "read(said) ++ show(length(reverse(range(20000000))))", "read(said)")), open: async (q) => {
+    await openDef(q, "main");
+    await q.getByText("Compiling…").first().waitFor({ state: "hidden", timeout: 120000 });
+  } };
+}
+
 // An example copied and changed, as the file the editor opens.
 function exampleFile(example: string, title: string, change: (s: Session) => void): string {
   const dir = mkdtempSync(join(tmpdir(), "probe-"));
@@ -160,7 +171,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening(), pausing()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
+for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening(), pausing(), longList()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };

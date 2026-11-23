@@ -1,3 +1,4 @@
+import { madeItem } from "./over.ts";
 import type { Id } from "../model.ts";
 import { ItemsList } from "./bytes.ts";
 import type * as I from "./int.ts";
@@ -98,7 +99,7 @@ export const rangeArray = (n: number): ArrayView => {
   if (k >= 16 && k <= 256) { const b = new Uint8Array(k); for (let i = 0; i < k; i++) b[i] = i; return byteArray(b); }
   // No room at its ends: a push copies it, as onto a byte array.
   const xs = new Array<number>(k);
-  for (let i = 0; i < k; i++) xs[i] = i;
+  for (let i = 0; i < k; i++) { madeItem(i); xs[i] = i; }
   return new ArrayView(versionOf({ items: xs, lo: 0, hi: k }), 0, k);
 };
 // Either kind of array value: a view, or { tag, fields } made elsewhere
