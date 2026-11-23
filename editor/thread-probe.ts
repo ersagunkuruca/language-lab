@@ -40,6 +40,11 @@ const KNOWN: Record<string, string> = {
   // before); what's left is the first drawing of a large program: its
   // page's first run, the graph's layout, the blocks.
   "opening a file": "E319k",
+  // Choosing the stored program's lists and Maps left the thread with
+  // E319j (2 s on bounce before); what's left is its check over the
+  // groups the worker sent (360 ms) and the interpreted page's start at the
+  // log's last event (390 ms, its arithmetic resolved 150).
+  "pausing a compiled page": "E319j",
 };
 
 // `then`: what the place shows once its work is done, off the thread or not.
@@ -110,6 +115,20 @@ function opening(): Place {
     then: async (q) => ((await q.locator(".p-nav [data-def]").count()) ? null : "the program didn't show") };
 }
 
+// Bounce, its page compiled, paused: the interpreted page is built from
+// the program as the compiled page stores it (coreMain.ts checkedForRun),
+// which the editor made on its own thread (E319j).
+function pausing(): Place {
+  return { name: "pausing a compiled page", file: exampleFile("bounce", "Paused", () => {}), open: async (q) => {
+    await openDef(q, "main");
+    await q.getByRole("button", { name: "Pause", exact: true }).first().waitFor({ timeout: 60000 });
+    // The compiled page in place of the interpreted one.
+    await q.waitForTimeout(10000);
+    await longTasks(q);
+    await q.getByRole("button", { name: "Pause", exact: true }).first().click();
+  }, then: async (q) => ((await q.getByRole("button", { name: "Go on from here" }).count()) ? null : "the page didn't pause") };
+}
+
 // An example copied and changed, as the file the editor opens.
 function exampleFile(example: string, title: string, change: (s: Session) => void): string {
   const dir = mkdtempSync(join(tmpdir(), "probe-"));
@@ -141,7 +160,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
+for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels(), opening(), pausing()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };

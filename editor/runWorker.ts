@@ -28,13 +28,14 @@ import type { SavedScripts } from "../ters/src/lang/page.ts";
 import { received, searchBackwards, type BackAsk, type Found } from "./backSearch.ts";
 import { stuckReading, type Reading } from "../ters/src/lang/relate.ts";
 import { receivedOnto, whereAnswers, type Answer } from "./whereAnswers.ts";
-import { receivedCode, type SentCode } from "./runCode.ts";
+import { receivedCode, sendCode, type SentCode } from "./runCode.ts";
 import { addShipped, groupsSince, keptKeys, loadChecks } from "./checkStore.ts";
 import { choicesFor } from "./choicesFor.ts";
 import type { TestAsk, TestSays } from "./testAsk.ts";
 import type { PictureAsk, PictureSays } from "./pictureAsk.ts";
 import type { CheckAsk, CheckSays } from "./checkAsk.ts";
 import type { TraceAsk, TraceSays } from "./traceAsk.ts";
+import type { RunCodeAsk, RunCodeSays } from "./runCodeAsk.ts";
 import { trace } from "../ters/src/lang/trace.ts";
 import { OutOfSteps, type Value } from "../ters/src/lang/run.ts";
 import { algebrasOf, describeMask, maskOfValue } from "../ters/src/lang/grades.ts";
@@ -92,7 +93,7 @@ let lastWhere: Code | null = null;
 // The run's log of the world's answers (worldlog.ts), sent with its end.
 let answers: LogEntry[] | null = null, paused = false;
 // The whole log, writes and bytes too, so Run again can answer from it.
-const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays | PictureSays | CheckSays | TraceSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
+const post = (m: RunSays | Found | CompileSays | WhereSays | ChoicesSays | TestSays | PictureSays | CheckSays | TraceSays | RunCodeSays) => (self as unknown as Worker).postMessage(answers && ("done" in m || ("error" in m && "files" in m)) ? { ...m, answers, ...(paused ? { paused: true } : {}) } : m);
 
 // Standard input typed into Run's box (I168), read as `ters run` reads a
 // pipe (world.ts): read input takes the rest, read line a line at a time
@@ -165,7 +166,7 @@ function paint(m: PaintAsk) {
   void painting?.then((c) => { const got = paintRows(c.colourAt, m.rows); (self as unknown as Worker).postMessage(got, [got.data.buffer]); }).catch(failed);
 }
 
-type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk | CheckAsk | TraceAsk;
+type Ask = RunAsk | WarmAsk | BackAsk | CompileAsk | WhereAsk | ChoicesAsk | TestAsk | PictureAsk | CheckAsk | TraceAsk | RunCodeAsk;
 function onAsk(e: MessageEvent<Ask | PaintAsk>) {
   if ("paint" in e.data || "rows" in e.data) paint(e.data); else answer(e as MessageEvent<Ask>);
 }
@@ -243,6 +244,19 @@ function answer(e: MessageEvent<Ask>) {
       const before = keptKeys();
       infer(receivedCode(e.data.code), names);
       return post({ groups: groupsSince(before) });
+    } catch (err) {
+      return post({ error: (err as Error).message });
+    }
+  }
+  // The program as a compiled page runs it, for Pause (runCodeAsk.ts, E319j).
+  if ("runCode" in e.data) {
+    const { names, pins, main } = e.data;
+    try {
+      setDisplayNames(names);
+      setProgramPins(pins);
+      const before = keptKeys();
+      const r = checkedForRun(receivedCode(e.data.code), names, main);
+      return post({ code: sendCode(r.code), names: r.names, chosen: r.chosen, groups: groupsSince(before) });
     } catch (err) {
       return post({ error: (err as Error).message });
     }
