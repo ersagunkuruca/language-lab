@@ -31,7 +31,7 @@ export function buildModules(): Built[] {
   add("vectors", buildVectors(), [prelude, std]);
   add("html", buildHtml(), [prelude, std, m.code]);
   add("steady", buildSteady(), [prelude, std]);
-  add("cases", buildCases(), [prelude, std]);
+  add("cases", buildCases(m), [prelude, std, m.code]);
   const nu = buildNumbers(m);
   add("numbers", nu, [prelude, std, m.code]);
   add("signals", buildSignals(m, nu), [prelude, std, m.code, nu.code]);
