@@ -6,6 +6,7 @@
 
 import { bordered } from "../../ters/src/lang/border.ts";
 import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { madeItem } from "../../ters/src/lang/over.ts";
 import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
 import { directRead, directTable, tableRead, tablePutOwned, tableRemoveOwned, type Table } from "../../ters/src/lang/table.ts";
@@ -91,7 +92,7 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.exact": (a: I.Int, b: I.Int) => I.norm(big(a) / big(b)),
   "int.gcd": (a: I.Int, b: I.Int) => { let x = big(a) < 0n ? -big(a) : big(a), y = big(b) < 0n ? -big(b) : big(b); while (y) [x, y] = [y, x % y]; return I.norm(x); },
   // run.ts's, which the evaluator has outside std.ts.
-  "number.range": (n: number) => toList(Array.from({ length: Math.max(0, n) }, (_, i) => i)),
+  "number.range": (n: number) => toList(Array.from({ length: Math.max(0, n) }, (_, i) => (madeItem(i), i))),
   // A choice over number.range's items as one Float64 (range-choices.ts).
   "range.of": (x: number) => rangeCount(x) * 2 ** 26,
   "text.size": (t: string) => (ascii(t) ? t.length : utf8Of(t).length),

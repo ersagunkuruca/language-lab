@@ -15,6 +15,7 @@
 // (Console, Files) have one handler, the runtime's `World`; Log, Abort,
 // Random, Time and Wait, when nothing in the program handles them, go to it too.
 
+import { deadline, madeItem, OutOfSteps } from "./over.ts";
 import { bytesValue, plainBytes } from "./bytes.ts";
 import { plainRequest, responseValue, type PlainRequest, type PlainResponse } from "./network.ts";
 import { bordered } from "./border.ts";
@@ -283,9 +284,7 @@ interface Fuel { left: number; base?: number; over?: () => boolean }
 // couldn't prove ends), outside any `with fuel`. Running out isn't a
 // failure the program can catch, as `with fuel`'s is; the update stops and
 // the page says so. The compiled runtime spends from the same budget.
-export class OutOfSteps extends Error {
-  constructor() { super("didn't finish"); }
-}
+export { OutOfSteps };
 export const PAGE_STEPS = 1_000_000;
 let page: Fuel | null = null;
 // The evaluator's machine steps, counted to ask a page's deadline (I310).
@@ -301,9 +300,10 @@ export const depth = { d: 0 };
 // gives the page back on time (the editor's seeds run, I310: Countdown's
 // search ran 1.2 s of steps between two calls the editor timed).
 export function withSteps<T>(n: number, f: () => T, over?: () => boolean): T {
-  const saved = page, d = depth.d;
+  const saved = page, d = depth.d, was = deadline.over;
   page = over ? { left: n, over } : { left: n };
-  try { return f(); } finally { page = saved; depth.d = d; }
+  deadline.over = over;
+  try { return f(); } finally { page = saved; depth.d = d; deadline.over = was; }
 }
 // One step outside any `with fuel`: free, except under a page's budget.
 export const spendStep = () => { if (page && (--page.left < 0 || ((page.left & 1023) === 0 && page.over?.()))) throw new OutOfSteps(); };
@@ -314,9 +314,10 @@ export const setStepsLeft = (n: number): void => { if (page) page.left = n; };
 // f under a budget of n steps of its own, `used` told how many it spent,
 // whether it ends, aborts or runs out (C61 c′: a run on a page's worker).
 export function counted<T>(n: number, f: () => T, used: { n: number }): T {
-  const saved = page, d = depth.d, fuel = { left: n };
+  const saved = page, d = depth.d, fuel = { left: n }, was = deadline.over;
   page = fuel;
-  try { return f(); } finally { used.n = n - fuel.left; page = saved; depth.d = d; }
+  deadline.over = undefined;
+  try { return f(); } finally { used.n = n - fuel.left; page = saved; depth.d = d; deadline.over = was; }
 }
 // The variables in scope, as a linked list: binding one more shares the
 // rest, so a call costs one cell per parameter, not a copy of the scope.
@@ -713,7 +714,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [S.and]: (a, b) => one(ones[S.and](a, b)),
     [S.or]: (a, b) => one(ones[S.or](a, b)),
     [S.not]: (a) => one(ones[S.not](a)),
-    [S.range]: (n) => one(toList(Array.from({ length: Math.max(0, n as number) }, (_, i) => i))),
+    [S.range]: (n) => one(toList(Array.from({ length: Math.max(0, n as number) }, (_, i) => (madeItem(i), i)))),
     [S.oneOf]: (xs) => fromList(xs),
     // With the run's own check, which this copy has until a derivative
     // writes nodes into it (I190: each `for some` checked the whole program

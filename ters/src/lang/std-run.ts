@@ -6,6 +6,7 @@
 
 import type { Id } from "../model.ts";
 import { ItemsList } from "./bytes.ts";
+import { madeItem } from "./over.ts";
 import { Pending } from "./cells.ts";
 import * as I from "./int.ts";
 import * as T from "./text.ts";
@@ -53,7 +54,7 @@ export const int$show = I.show;
 export const int$toNumber = I.toNumber;
 export const int$range = (n: I.Int) => {
   let l: object = { tag: "std.list.nil", fields: [] };
-  for (let i = Number(n) - 1; i >= 0; i--) l = { tag: "std.list.cons", fields: [i, l] };
+  for (let i = Number(n) - 1; i >= 0; i--) { madeItem(i); l = { tag: "std.list.cons", fields: [i, l] }; }
   return l;
 };
 export const text$length = T.length;
