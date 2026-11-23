@@ -31,10 +31,13 @@ const store = () => {
 function both(code: Code, info: Info, names: Names, main: Id, actions: string[]) {
   const page = showPage({ code, info, names, main, program: "test", doc: fakeDoc(), store: store(), console: { log() {}, error() {} }, frame: () => {} });
   const root = page.root as FakeEl, evaluator = [root.html()];
+  let held = {};
   for (const a of actions) {
     const [what, id, more = ""] = a.split(":");
+    // held:ctrl+shift, the keys held from here on (C312).
+    if (what === "held") { held = Object.fromEntries(id.split("+").filter(Boolean).map((k) => [`${k}Key`, true])); continue; }
     if (what === "input") root.find(id).type_(more);
-    else root.find(id).fire(what, { key: more });
+    else root.find(id).fire(what, { key: more, ...held });
     evaluator.push(root.html());
   }
   page.stop();
@@ -738,5 +741,27 @@ test("a page's formulas over formulas, kept between writes in C, show what html.
   const p = both(code, info, names, main, ["click:none", "click:a", "click:none", "click:b", "click:b", "click:a", "click:none"]);
   assert.deepEqual(p.evaluator.map((h) => [...h.matchAll(/<span id="[fg]">([^<]*)</g)].map((m) => m[1]).join(" ")),
     ["2 x2", "2 x2", "6 x6", "6 x6", "6 xy6", "6 xyy6", "14 xyy14", "14 xyy14"]);
+  assert.deepEqual(p.c, p.evaluator);
+});
+
+// Keys held with a key (C312): Ctrl+F is told from F, and Shift and Meta
+// (Cmd) from neither, in C as in html.ts.
+test("a key's event says which of Ctrl, Shift, Alt and Meta are held, in C as html.ts says it (C312)", { skip }, async () => {
+  const { CELL_OPS, S } = await import("../../ters/src/lang/std.ts");
+  const k = new Lang();
+  const el = (tag: string, attrs: Id[], kids: Id[]) => k.call(HTML_V.element, k.lit(tag), k.list(...attrs), k.list(...kids));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const field = (e: Id, f: string) => k.call(`std.event.event.${f}`, e);
+  const mark = (e: Id, f: string, m: string) => k.if(field(e, f), k.lit(m), k.lit(""));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("seen", k.call(CELL_OPS.cell, k.lit("")), (seen) => el("div", [], [
+    el("input", [prop("id", "k"), k.call(HTML_V.on, k.lit("keydown"), k.fn(["e"], (e) => k.call(CELL_OPS.write, seen,
+      [mark(e, "ctrl", "Ctrl+"), mark(e, "shift", "Shift+"), mark(e, "alt", "Alt+"), mark(e, "meta", "Meta+"), field(e, "key")].reduce((a, b) => k.call(S.concat, a, b)))))], []),
+    el("span", [prop("id", "seen")], [k.call(HTML_V.text, k.thunk(() => k.call(CELL_OPS.read, seen)))]),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const p = both(code, info, names, main, ["keydown:k:f", "held:ctrl", "keydown:k:f", "held:shift+meta", "keydown:k:F", "held:alt", "keydown:k:x", "held:", "keydown:k:f"]);
+  assert.deepEqual(p.evaluator.map((h) => /<span id="seen">([^<]*)</.exec(h)![1]), ["", "f", "Ctrl+f", "Shift+Meta+F", "Alt+x", "f"]);
   assert.deepEqual(p.c, p.evaluator);
 });

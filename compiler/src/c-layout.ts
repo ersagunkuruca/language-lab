@@ -1698,6 +1698,14 @@ int main(int argc, char **argv) {
     if (!id) return 2;
     *id++ = 0;
     if ((more = strchr(id, ':'))) *more++ = 0;
+    if (!strcmp(s, "held")) {
+      // held:ctrl+shift, the keys held from here on (C312); held: none.
+      int m = 0;
+      for (char *w = strtok(id, "+"); w; w = strtok(0, "+")) m |= !strcmp(w, "ctrl") ? 1 : !strcmp(w, "shift") ? 2 : !strcmp(w, "alt") ? 4 : !strcmp(w, "meta") ? 8 : 0;
+      ters_page_held(m);
+      free(s);
+      continue;
+    }
     if (!strcmp(s, "frames")) {
       // frames:N:MS, N frames MS apart on the test's clock.
       int n = atoi(id); double ms = more ? atof(more) : 16;

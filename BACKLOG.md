@@ -163,7 +163,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C297 | Windows app: `ters build-native-app --windows`, a screen in C over Win32 (Direct2D boxes and pictures, DirectWrite texts, EDIT inputs, frames at the display's rate, dark mode), an `.exe` from clang alone, a hand-run "Windows app" workflow; sound by WASAPI as its own part. Example: dice, then folders | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
-| C312 | Keys with Ctrl, Cmd, Shift or Alt: the page's event carries which are held (html.ts's handler, the C page's ters_page_event, each screen), so a page can tell Ctrl+F from F; found by C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 | C300 | Long lists in a C page: folders at 10,000 rows. Formulas kept until a cell they read is written (C300a) took a key from 7 s to 31 ms; left: rerun only the views that read a changed cell and lay out only what moved (C199b reruns every view, C199d lays out the whole page), under 16 ms a key. Opening takes 1.4 s, 85% of it comparing names (L288) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))

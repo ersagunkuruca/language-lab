@@ -174,8 +174,10 @@ export function seeds(host: SeedHost) {
   }
   const tryCall = (f: Value, ...args: Value[]): Value | undefined => { try { return evaluatorCall(f, ...args); } catch { return undefined; } };
   // What a handler is given when it's run as if its event came: a click at
-  // 0, 0 with nothing typed, or a frame a sixtieth of a second on.
-  const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60] };
+  // 0, 0 with nothing typed and no key held, or a frame a sixtieth of a
+  // second on.
+  const no: Data = { tag: FALSE, fields: [] };
+  const NO_EVENT: Data = { tag: HTML_V.event, fields: ["", "", 0, 0, 1 / 60, no, no, no, no] };
   // And what a sound's player is given: a block of 64 samples, a sine at
   // half of full scale, about a strum's loudness.
   const BLOCK = (): Data => toList(Array.from({ length: 64 }, (_, i) => 0.5 * Math.sin((2 * Math.PI * i) / 32)));

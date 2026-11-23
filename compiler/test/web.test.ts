@@ -295,3 +295,31 @@ test("a compiled page's handler that doesn't wait runs without an error", async 
   assert.deepEqual(errors, []);
   assert.equal(root.html(), "<button>2</button>");
 });
+
+// Keys held with a key (C312), compiled as evaluated: Ctrl+F told from F.
+test("a key's event says which of Ctrl, Shift, Alt and Meta are held, both ways (C312)", () => {
+  const k = new Lang();
+  const el = (tag: string, attrs: number[] | string[], kids: unknown[]) => k.call(HTML_V.element, k.lit(tag), k.list(...(attrs as never[])), k.list(...(kids as never[])));
+  const prop = (n: string, v: string) => k.call(HTML_V.property, k.lit(n), k.thunk(() => k.lit(v)));
+  const field = (e: string, f: string) => k.call(`std.event.event.${f}`, e);
+  const mark = (e: string, f: string, m: string) => k.if(field(e, f), k.lit(m), k.lit(""));
+  const main = k.def("main");
+  k.define(main, k.thunk(() => k.let("seen", k.call(CELL_OPS.cell, k.lit("")), (seen) => el("div", [], [
+    el("input", [prop("id", "k"), k.call(HTML_V.on, k.lit("keydown"), k.fn(["e"], (e) => k.call(CELL_OPS.write, seen,
+      [mark(e, "ctrl", "Ctrl+"), mark(e, "shift", "Shift+"), mark(e, "alt", "Alt+"), mark(e, "meta", "Meta+"), field(e, "key")].reduce((a, b) => k.call(S.concat, a, b)))))] as never, []),
+    el("span", [prop("id", "seen")] as never, [k.call(HTML_V.text, k.thunk(() => k.call(CELL_OPS.read, seen)))]),
+  ]))));
+  const code = base(k.code), names = baseNames(k.names), info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const shown = (way: "evaluator" | "compiled") => {
+    const cells = new Cells(equal);
+    const v = way === "evaluator" ? runMain(code, info, main, { print: () => {}, names, cells }) : core(code, info, names, cells) as never;
+    const root = mountHtml(v, { cells, doc: fakeDoc(), call: way === "evaluator" ? evaluatorCall : coreCall }) as FakeEl;
+    return [{}, { ctrlKey: true }, { shiftKey: true, metaKey: true }, { altKey: true }].map((held) => {
+      root.find("k").fire("keydown", { key: "f", ...held });
+      return /<span id="seen">([^<]*)</.exec(root.html())![1];
+    });
+  };
+  assert.deepEqual(shown("evaluator"), ["f", "Ctrl+f", "Shift+Meta+f", "Alt+f"]);
+  assert.deepEqual(shown("compiled"), shown("evaluator"));
+});

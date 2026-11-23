@@ -711,6 +711,14 @@ int main(int argc, char **argv) {
     if (!id) return 2;
     *id++ = 0;
     if ((more = strchr(id, ':'))) *more++ = 0;
+    if (!strcmp(s, "held")) {
+      // held:ctrl+shift, the keys held from here on (C312); held: none.
+      int m = 0;
+      for (char *w = strtok(id, "+"); w; w = strtok(0, "+")) m |= !strcmp(w, "ctrl") ? 1 : !strcmp(w, "shift") ? 2 : !strcmp(w, "alt") ? 4 : !strcmp(w, "meta") ? 8 : 0;
+      ters_page_held(m);
+      free(s);
+      continue;
+    }
     if (!strcmp(s, "frames")) {
       // frames:N:MS, N frames MS milliseconds apart, as the clock goes.
       int n = atoi(id);
@@ -1543,6 +1551,7 @@ void ters_page_lock(void) { if (!ters_mu_depth++) pthread_mutex_lock(&ters_mu); 
 void ters_page_unlock(void) { if (!--ters_mu_depth) pthread_mutex_unlock(&ters_mu); }
 void *ters_page_start(ters_host *h);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
+void ters_page_held(int held);
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
@@ -2039,16 +2048,19 @@ static int ters_shown(int ok) {
   return ok;
 }
 ${waits ? PARKED_C : "static int ters__page_permission(int yes) { (void)yes; return 1; }"}
+// The keys held as events come (C312): Ctrl 1, Shift 2, Alt 4, Meta
+// (Cmd) 8, as the screen last said (html.ts Given).
+static int ters_held;
 // An event given to handler n: what was typed or chosen, the key, where
-// the pointer is and the seconds since the frame before. Then the page
-// shows what changed. 0 when the handler stopped (an abort).
+// the pointer is, the seconds since the frame before and the keys held.
+// Then the page shows what changed. 0 when the handler stopped (an abort).
 static int ters__page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) {
   ${sound ? `if (n >= TERS_SOUND_H && n < TERS_SOUND_H + ters_nsnd) { ters_snd_toggle(n - TERS_SOUND_H); return ters_shown(1); }
   for (int k = 0; k < ters_nsnd; k++) if (ters_snds[k].handler == n && n >= 0) ters_snd_toggle(k);
   ` : ""}if (n < 0 || n >= ters_nh || !ters_handlers[n]) return 1;
   lab_cell *f = ters_handlers[n];
   lab_dup(f);
-  ${ty(E)} e = { lab__text_of(value, vn), lab__text_of(key, kn), x, y, seconds };
+  ${ty(E)} e = { lab__text_of(value, vn), lab__text_of(key, kn), x, y, seconds, (ters_held & 1) != 0, (ters_held & 2) != 0, (ters_held & 4) != 0, (ters_held & 8) != 0 };
   ${waits ? "if (!ters_ev_parked) { ters_ev_f = f; ters_ev_e = e; return ters_shown(ters_ev_start()); }" : ""}
   return ters_shown(ters_ev_run(f, e));
 }
@@ -2078,6 +2090,7 @@ static int ters__page_frame(void) {
 // Each way in, under the page's lock.
 void *ters_page_start(ters_host *h) { ters_page_lock(); void *r = ters__page_start(h); ters_page_unlock(); return r; }
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds) { ters_page_lock(); int r = ters__page_event(n, value, vn, key, kn, x, y, seconds); ters_page_unlock(); return r; }
+void ters_page_held(int held) { ters_page_lock(); ters_held = held; ters_page_unlock(); }
 int ters_page_clock(void) { ters_page_lock(); int r = ters__page_clock(); ters_page_unlock(); return r; }
 int ters_page_frame(void) { ters_page_lock(); int r = ters__page_frame(); ters_page_unlock(); return r; }
 int ters_page_permission(int yes) { ters_page_lock(); int r = ters__page_permission(yes); ters_page_unlock(); return r; }
