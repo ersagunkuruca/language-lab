@@ -46,6 +46,7 @@ New items land here until the next triage gives them a lane and a priority.
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
+| E318 | A field the program's own type and a library type share (std's Placed has `position`, Event has `x`, Request has `body`) reads as the program's when nothing else settles the value (REVIEW-2026-11-23 §2, R12). The readings are made in editor/typed.ts (the typed fill's `fieldOwners` choices, ~line 375), which the editor and the MCP share, so the rule goes there: when exactly one reading's types are all the program's own, it is taken with no choices, and mcp/session.ts `programsOwn` (#3124) goes away. Two of the program's own still ask (E186). Test: each std type's field names against a program with a field of each name. Handed from the Language lane (infer.ts sees field ids, not names) | Review 2026-11-23 | P2 | S | |
 
 ### Foundations ([FOUNDATIONS-2026-11-03](docs/reports/reviews/FOUNDATIONS-2026-11-03.md))
 
