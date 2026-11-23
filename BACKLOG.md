@@ -161,7 +161,6 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | C297b | The Windows app's sound: ters_ui's sound over WASAPI (the speaker at its own rate, the microphone when the page names one), recordings carried beside the .exe, as the Mac's AVAudioEngine does (macos-app.ts macSound) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
-| C300c | A C page's layout still walks every box on every change: collapsing margins, how far boxes reach, animations stepped and each box told the screen. In folders at 10,000 files that is about 28M of the 40M instructions an arrow key takes (about 16 ms). Mark the boxes laid out somewhere new and walk only those | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

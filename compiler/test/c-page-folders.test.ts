@@ -88,3 +88,22 @@ test("folders in C lists, sorts, filters, moves through and previews a folder, a
     assert.match(c[11], /class="where" aria-label="Folder" value="."/);
   } finally { if (was === undefined) delete process.env.TZ; else process.env.TZ = was; }
 });
+
+// On a view host, a layout walks only the boxes something changed in, or
+// that moved (C300c): each step shows what laying out every box again
+// shows (TL_FRESH), with a few hundred rows, a filter and a preview.
+test("folders on a view host shows each step as a layout of every box would (C300c)", { skip }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "folders-keep-"));
+  mkdirSync(join(dir, "inner"));
+  for (let i = 0; i < 200; i++) writeFileSync(join(dir, `f${i}${i % 7 ? ".txt" : " with a rather long name to wrap.md"}`), "x".repeat(i) + "\nline\n");
+  const p0 = loadProgram(join(import.meta.dirname, "../../ters/examples/folders"));
+  const info = infer(p0.code, p0.pres.names, undefined, p0.options);
+  const main = pageMain(p0.own.defs, info, p0.pres.names)!;
+  const l = lowerScalar(p0.code, info, p0.pres.names, [main], { data: true, releases: true, handlers: true, threads: true, cells: true });
+  const c = emitC(l, { main, page: "ui-headless" }).c;
+  const actions = ["width:700", "height:500", "click:open", "permission:yes", "keydown:filter:ArrowDown", "keydown:filter:ArrowDown", "input:filter:f1", "keydown:filter:ArrowDown", "keydown:filter:Escape", "keydown:filter:End", "keydown:filter:Home", "keydown:filter:Enter", "keydown:filter:Backspace", "keydown:filter:ArrowDown"];
+  const run = (src: string) => { const r = spawnSync(compile(src), actions, { cwd: dir, env: { PATH: process.env.PATH, TZ: "UTC" }, maxBuffer: 1 << 28 }); assert.equal(r.status, 0, r.stderr.toString()); return r.stdout.toString(); };
+  const kept = run(c), fresh = run(`#define TL_FRESH 1\n${c}`);
+  assert.ok(kept.split("\n").length > 2000, "the rows are shown");
+  assert.equal(kept, fresh);
+});
