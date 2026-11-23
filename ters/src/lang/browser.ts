@@ -348,6 +348,29 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     const done = () => { if (writing.get(key) === w) writing.delete(key); };
     later(() => void folder.write(parts, bytes).then(done, (e) => { done(); console_.error(`could not write ${path}: ${(e as Error).message}`); }));
   };
+  // A handler waiting for each answer runs again from the start once it
+  // lands (L289): one wait per file told about, in a folder listed, was a
+  // run per file, so telling about every file of 3,000 took 17 s. Asked
+  // about one file of a folder this event listed, it asks about all the
+  // folder's files the event hasn't asked about yet, in one wait.
+  const siblingInfos = (path: string) => {
+    if (!clock) return;
+    const parts = partsOf(path), asked = memo(clock.cells.event), key = (ps: string[]) => `folder info ${ps.join("/")}`;
+    if (!parts.length || asked.has(key(parts))) return;
+    const up = parts.slice(0, -1), listed = asked.get(`folder list ${up.join("/")}`)?.done?.value as string[] | undefined;
+    if (!listed) return;
+    const folder = picked!, landed = clock.cells.cell(0, "fetched"), each: Promise<void>[] = [], all: Fetch[] = [];
+    for (const name of listed) {
+      const ps = [...up, name], k = key(ps);
+      if (asked.has(k) || writing.has(ps.join("/"))) continue;
+      const f: Fetch = { landed, ready: null as unknown as Promise<unknown> };
+      each.push(folder.info(ps).then((value) => { f.done = { value }; }, (e) => { f.error = (e as Error).message; }));
+      asked.set(k, f);
+      all.push(f);
+    }
+    const ready = Promise.all(each).then(() => clock.cells.write(landed, 1));
+    for (const f of all) f.ready = ready;
+  };
   const utf8 = (text: string) => new TextEncoder().encode(text);
   const inFolder: FileOps = {
     readFile: (path) => new TextDecoder().decode(folderBytes(path)),
@@ -357,7 +380,7 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     writeBytes: folderWrite,
     fileExists: folderExists,
     openOutside: (path) => openBytes(path, folderBytes(path)),
-    fileInfo: (path) => { const w = pending(path); return w ? { kind: "file", size: w.bytes.length, modified: w.at } : askFolder("info", path, (f, p) => f.info(p)); },
+    fileInfo: (path) => { const w = pending(path); if (w) return { kind: "file", size: w.bytes.length, modified: w.at }; siblingInfos(path); return askFolder("info", path, (f, p) => f.info(p)); },
     listFolder: (path) => {
       const f = partsOf(path).join("/"), listed = askFolder("list", path, (d, p) => d.list(p));
       const written = [...writing.keys()].filter((k) => !f || k.startsWith(`${f}/`)).map((k) => k.slice(f ? f.length + 1 : 0).split("/")[0]);
