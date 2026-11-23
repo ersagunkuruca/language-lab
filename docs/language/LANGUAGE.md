@@ -368,6 +368,17 @@ is `vec(2, 4, 6)`, and the normal of a surface `scene(p) = 0` is
 result may fail (`Choice`) where a slope can't be read, and the checker
 drops the Choice when it can see `f` and read every slope.
 
+`gradient(f)` of a function of an `Array Float64` is the array of its
+slopes along each item, worked out in one run forward and one pass back
+(reverse mode, `src/lang/pullback.ts`,
+`docs/design/numbers/REVERSE-GRADIENT-2026-11-23.md`), so a loss of
+25,000 parameters costs about one run of it, not 25,000. Each read of the
+array on the way gives back a (position, slope), the pairs join as a
+`Slopes` tree, and `slopes at` adds them into an array of zeros at the end.
+It goes back through lets, arithmetic, `if` and `match`, `sum` and
+`array of` of a `map` over a list that doesn't move, definitions, and a
+definition calling itself. Over an array its result keeps the `Choice`.
+
 ### Whole numbers and text, at real sizes
 
 `Int` is the whole numbers, and it **never overflows** (`src/lang/int.ts`).

@@ -161,7 +161,7 @@ const INT32_BITS: Record<Id, Op> = { [INT_OPS.bitAnd]: "iand", [INT_OPS.bitOr]: 
 export const RT: Record<Id, string> = {
   [INT_OPS.add]: "int.add", [INT_OPS.sub]: "int.sub", [INT_OPS.mul]: "int.mul", [INT_OPS.neg]: "int.neg", [INT_OPS.abs]: "int.abs",
   [INT_OPS.less]: "int.less", [INT_OPS.show]: "int.show", [INT_OPS.toNumber]: "int.toNumber",
-  [S.concat]: "text.concat", [S.show]: "number.show", [S.range]: "number.range", [INT_OPS.range]: "int.range",
+  [S.concat]: "text.concat", [S.show]: "number.show", [S.range]: "number.range", [INT_OPS.range]: "int.range", [S.slopesAt]: "slopes.at",
   [TEXT_OPS.length]: "text.length", [TEXT_OPS.slice]: "text.slice", [TEXT_OPS.characters]: "text.characters",
   [TEXT_OPS.split]: "text.split", [TEXT_OPS.joinAll]: "text.joinAll", [TEXT_OPS.less]: "text.less",
   // No answer or one (Choice): runtime functions that give a status too.

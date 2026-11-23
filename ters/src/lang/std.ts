@@ -468,6 +468,9 @@ export const S = {
   // algebra takes from its record type (L264). arith.ts writes the list
   // out where its type is known, so compiled code never calls it.
   unitParts: builtin("unitParts", "unit parts", (s) => { const r = s.fresh(false, true); return fn([r], list(r), s.freshRow()); }),
+  // A gradient's slopes along an array (pullback.ts, L285): n zeros, with
+  // each (position, slope) of the list added in. JAX's scatter-add.
+  slopesAt: builtin("slopesAt", "slopes at", () => fn([int, { t: "con", id: "std.slopes", args: [] }], arrayOf_(num), { effs: [], tail: null })),
   // Console
   print: builtin("print", "print", (s) => fn([str], unit, s.freshRow([CONSOLE]))),
   // Handlers. Each takes thunks and removes an effect from them.
@@ -1472,6 +1475,17 @@ export const FILE_INFO = typedef("std.file info", "File info", [], [
   ["file facts", [["kind", () => fiTref("kind", FILE_KIND)], ["size", () => fiTref("size", INT)], ["modified", () => fiTref("modified", INSTANT)]]],
 ]);
 export const FILE_INFO_V = "std.file info.file facts";
+// The slopes reverse-mode `gradient` gathers for an array (L285,
+// REVERSE-GRADIENT): a tree of (position, slope)s, so two join in one
+// step, added into an array by `slopes at`. Last, so the ids above don't
+// move.
+const slTref = (at: string, target: Id) => fixedTref(`std.slopes.t.${at}`, target);
+export const SLOPES = typedef("std.slopes", "Slopes", [], [
+  ["no slopes", []],
+  ["slope", [["at", () => slTref("at", INT)], ["slope", () => slTref("slope", NUMBER)]]],
+  ["both slopes", [["left", () => slTref("left", "std.slopes")], ["right", () => slTref("right", "std.slopes")]]],
+]);
+export const SLOPES_V = { none: "std.slopes.no slopes", one: "std.slopes.slope", both: "std.slopes.both slopes" } as const;
 // Ids that were renamed, as a saved program may still use them: std's Pair
 // is Tuple2 (L139).
 export const RENAMED_IDS: Record<Id, Id> = {
@@ -1504,7 +1518,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
   return x;
 }
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL, FILE_KIND, FILE_INFO] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL, FILE_KIND, FILE_INFO, SLOPES] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number
 // of inputs, and the builtins that only compute (their row has at most

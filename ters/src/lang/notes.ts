@@ -79,6 +79,7 @@ export const NOTES: Comments = {
   "std.shown": "An interface: how a type's values show as text. show any shows a value of a type that implements it through its as shown, so a type of your own shows its own way with a definition of type Shown T. Rational, Complex and Fixed do (the prelude's).",
   "std.embedding": "An embedding of a in b: a map from a into b that keeps the operations (ι(x + y) = ι(x) + ι(y), ι(x · y) = ι(x) · ι(y), ι(−x) = −ι(x), and x < y exactly when ι(x) < ι(y)), written embedding(map: …), at most one for a pair of types. ters test checks those laws. EMBEDDINGS.md.",
   "std.file info": "What file info tells of a file: file facts(kind, size, modified), its File kind, its size in bytes and the Instant it was last changed.",
+  "std.slopes": "The slopes gradient gathers for an array on its way back: a slope(at, slope) for each read, and both slopes of two, so any number join in one step each.",
   "std.file kind": "What a file is: a plain file, a folder, a link (the link itself, not what it points at), or special (a device, pipe or socket).",
   "std.instant": "An instant: seconds since 1970-01-01 00:00:00 UTC, leap seconds not counted, made by instant of. A duration is a Float64 in seconds.",
   "std.timeofday": "A time of day in whole seconds: an hour 0 to 23, a minute and a second 0 to 59, made by time of, which checks it.",
@@ -284,7 +285,8 @@ export const NOTES: Comments = {
 
   // --- calculus and records of Float64s
   "builtin.derivative": "The slope of a function of one Float64, as a function. Where a slope can't be read there's no answer (Choice).",
-  "builtin.gradient": "For a function of a record of Float64s (a point, a colour), the record of its slopes along each part.",
+  "builtin.gradient": "For a function of a record of Float64s (a point, a colour), the record of its slopes along each part. For a function of an Array Float64, the array of its slopes, in one pass back (reverse mode).",
+  "builtin.slopesAt": "n zeros with each slope of the tree added in at its position: how gradient over an array turns the slopes it gathered into an array.",
   "builtin.mapParts": "A function applied to each part of a record of Float64s: map parts(f, vec(x, y)) is vec(f(x), f(y)).",
   "builtin.zipParts": "A function applied to each pair of parts of two records of the same type.",
   "builtin.total": "The parts of a record of Float64s added up.",

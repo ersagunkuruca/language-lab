@@ -5,7 +5,7 @@
 // reads scalar.ts's tables), so nothing here needs the compiler.
 
 import { bordered } from "../../ters/src/lang/border.ts";
-import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
+import { ARRAY_OPS, CELL_OPS, CONS, FALSE, LOCALE_V, NIL, NONE, SLOPES_V, SOME, TICKET_V, TRUE } from "../../ters/src/lang/std-ids.ts";
 import { madeItem } from "../../ters/src/lang/over.ts";
 import { ArrayView, arrayOf, arrayOfItems, rangeArray, arrayView, pushFrontOwned, replaceOwned } from "../../ters/src/lang/array-view.ts";
 import { hashset$items, show as showFloat, table$empty, table$entries, table$has, table$keys, table$put, table$remove, table$size } from "../../ters/src/lang/std-run.ts";
@@ -81,6 +81,7 @@ export const rangeCount = (x: number): number => {
   if (n >= 2 ** 26) throw new RangeError("out of memory");
   return n;
 };
+type Slopes = { tag: Id; fields: unknown[]; f0?: unknown; f1?: unknown };
 const OWN: Record<string, (...xs: never[]) => unknown> = {
   "int.equal": (a: I.Int, b: I.Int) => a === b,
   "int.less": (a: I.Int, b: I.Int) => a < b,
@@ -111,6 +112,19 @@ const OWN: Record<string, (...xs: never[]) => unknown> = {
   // as `array of` makes it, a byte a slot where 16 or more are bytes.
   // `array of range(n)` of Ints with no list between (C228).
   "array.range": (n: I.Int) => rangeArray(Number(n)),
+  // A gradient's slopes along an array (ters pullback.ts, L285): n zeros
+  // with each slope of the tree added in at its position.
+  "slopes.at": (n: I.Int, bag: Slopes) => {
+    const out = new Array<number>(Math.max(0, Number(n))).fill(0);
+    // Compiled data keeps its fields as f0, f1 where it can (core-js.ts).
+    const field = (t: Slopes, i: 0 | 1) => (i === 0 ? t.f0 : t.f1) ?? t.fields[i];
+    for (const todo = [bag]; todo.length; ) {
+      const t = todo.pop()!;
+      if (t.tag === SLOPES_V.both) todo.push(field(t, 1) as Slopes, field(t, 0) as Slopes);
+      else if (t.tag === SLOPES_V.one) { const i = Number(field(t, 0)); if (i >= 0 && i < out.length) out[i] += field(t, 1) as number; }
+    }
+    return arrayOf(out);
+  },
   "array.ofItems": (...xs: unknown[]) => (xs.length >= 16 ? arrayOfItems(toList(xs as Value[]) as never) : arrayOf(xs)),
   "array.get": (a: Parameters<typeof arrayView>[0], k: number) => { const v = arrayView(a), i = Number(k); if (!(i >= 0 && i < v.n)) throw FAIL; return v.buf.items[v.start + i]; },
   // The array's items from place k on, a view of the same buffer (C30 s2b:

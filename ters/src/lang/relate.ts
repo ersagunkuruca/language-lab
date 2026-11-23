@@ -1606,6 +1606,8 @@ export function interpreter(given: Code, opts: Options = {}) {
             return interpreter(code, { ...opts, spend, plans, random: () => gen.next() }).apply(walk(b, s), [], out)(s);
           },
         });
+      // Many trees of slopes add up to one array: which one isn't known.
+      case S.slopesAt: throw new NotInvertible("slopes at adds slopes up, so the slopes can't be read back from the array");
       case S.print: throw new NotInvertible("printing can't be run backwards (or searched: it would print once per guess)");
       // Backwards, derivative would be integration: it waits for its function.
       case S.derivative:

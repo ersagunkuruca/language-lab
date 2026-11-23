@@ -116,7 +116,11 @@ function builtinOf(name: string): BuiltinOf | undefined {
   const plain = name.replace(/^array\.replaceOwned\./, "array.replaceAt.").replace(/^array\.pushFrontOwned\./, "array.pushFront.");
   const base = plain.replace(/\.a\d+$/, "");
   const id = BUILTIN.get(base === "array.get" ? "array.at" : base);
-  return id ? [id, runtime(plain).result === "i32"] : undefined;
+  if (!id) return undefined;
+  // A function WebAssembly hasn't got (slopes.at, L285) gives no i32.
+  let i32 = false;
+  try { i32 = runtime(plain).result === "i32"; } catch { /* JavaScript's alone */ }
+  return [id, i32];
 }
 // Which of a map's entries lists are its keys alone (`keys of`): a list
 // whose items are of the key's type.
