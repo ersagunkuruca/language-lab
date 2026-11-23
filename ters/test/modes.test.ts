@@ -266,6 +266,15 @@ test("forward, a definition ends exactly when the checker finds no Diverge of it
       }
       return reaches.get(d)!;
     };
+    const readsCell = (t?: Id) => t === CELL_OPS.read || t === CELL_OPS.readAt;
+    const reads = new Map<Id, boolean>();
+    const viaCellRead = (d: Id): boolean => {
+      if (!reads.has(d)) {
+        reads.set(d, false);
+        reads.set(d, subtree(p.code, d).some((x) => { const t = (p.code.nodes[x] as Partial<NodeOf<"ref">>).target; return readsCell(t) || (!!t && t !== d && p.code.nodes[t]?.kind === "def" && viaCellRead(t)); }));
+      }
+      return reads.get(d)!;
+    };
     for (const d of p.own.defs) {
       const body = p.code.nodes[(p.code.nodes[d] as NodeOf<"def">).body!];
       const t = info.typeOf.get(d);
@@ -277,9 +286,9 @@ test("forward, a definition ends exactly when the checker finds no Diverge of it
       if (v.ends && diverges && viaInverse(d)) continue;
       // Reading a cell, whole or at a place in it, may not end (it may be
       // a formula), which the mode of a function with its cell given
-      // doesn't see.
-      const readsCell = (t?: Id) => t === CELL_OPS.read || t === CELL_OPS.readAt;
-      if (v.ends && diverges && subtree(p.code, d).some((x) => readsCell((p.code.nodes[x] as Partial<NodeOf<"ref">>).target))) continue;
+      // doesn't see: here or in a definition it calls (folders' look reads
+      // its list through shown, a formula since C300a).
+      if (v.ends && diverges && viaCellRead(d)) continue;
       if (v.stuck.length || v.ends === diverges) disagree.push(`${e}: ${p.pres.names[d]}: ${describeVerdict(v)}, typed ${diverges ? "" : "without "}Diverge`);
     }
   }
