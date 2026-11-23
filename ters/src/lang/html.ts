@@ -14,7 +14,7 @@ import { nfc } from "./border.ts";
 import { KEPT, Pending, type Cells, type CellNode } from "./cells.ts";
 import type { Data, Value } from "./run.ts";
 import { fromList, OutOfSteps, PAGE_STEPS, withSteps } from "./run.ts";
-import { HTML_V, MARK_V } from "./std-ids.ts";
+import { FALSE, HTML_V, MARK_V, TRUE } from "./std-ids.ts";
 import { FOREIGN_VIEW } from "./hosts.ts";
 import { rasterize } from "./raster.ts";
 import { GpuFrames, sitedOf } from "./gpu-frame.ts";
@@ -77,22 +77,32 @@ export interface Mount {
   stopped?: (e: unknown) => void;
   // Each event a handler is given, before it runs (C172e: a page's run
   // logs its events beside the world's answers): the event's name and
-  // what the handler is given of it (value, key, x, y, seconds).
+  // what the handler is given of it (Given).
   // `path`: where its element is under the page's root (pathOf), so a
   // replay finds it again (C172g).
-  heard?: (name: string, at: [string, string, number, number, number], path: number[]) => void;
+  heard?: (name: string, at: Given, path: number[]) => void;
   // False while the page is stepped through its log (I239c): what the
   // person and the browser do (a click, a frame) isn't given to it then.
   live?: () => boolean;
 }
 
+
+// What a handler is given of an event: what was typed or chosen, the key,
+// where the pointer is, the seconds since the frame before, and the keys
+// held with it (C312), Ctrl 1, Shift 2, Alt 4, Meta (Cmd) 8.
+export type Given = [value: string, key: string, x: number, y: number, seconds: number, held?: number];
+export const HELD = { ctrl: 1, shift: 2, alt: 4, meta: 8 } as const;
+const heldOf = (ev: { ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; metaKey?: boolean }) => (ev.ctrlKey ? 1 : 0) | (ev.shiftKey ? 2 : 0) | (ev.altKey ? 4 : 0) | (ev.metaKey ? 8 : 0);
+// A Bool as the code a page runs on has it: the evaluator's data, compiled
+// code's JavaScript boolean.
+const bool = (m: Mount, b: number): Value => (m.call === evaluatorCall ? { tag: b ? TRUE : FALSE, fields: [] } : (!!b as unknown as Value));
 // Where each drawn node is: its parent and its place among the parent's
 // children as drawn, and each element's children, so an event's element
 // can be named by its path from the page's root and found again in a
 // replay of the page's run (C172g). And each element's handlers, by event.
 const placed = new WeakMap<Node_, { parent: Node_; i: number }>();
 const kidsOf = new WeakMap<Node_, Node_[]>();
-const handlersOf = new WeakMap<Node_, Map<string, (at: [string, string, number, number, number]) => void>>();
+const handlersOf = new WeakMap<Node_, Map<string, (at: Given) => void>>();
 const place = (parent: Node_, kids: Node_[], from = 0) => { kidsOf.set(parent, kids); for (let i = from; i < kids.length; i++) placed.set(kids[i], { parent, i }); };
 export function pathOf(n: Node_): number[] {
   const path: number[] = [];
@@ -102,7 +112,7 @@ export function pathOf(n: Node_): number[] {
 export const nodeAt = (root: Node_, path: number[]): Node_ | undefined => path.reduce<Node_ | undefined>((n, i) => (n ? kidsOf.get(n)?.[i] : undefined), root);
 // A logged event given again (C172g): the handler of `name` on the element
 // at `path`, given what it was given then. False where there is none.
-export function replayEvent(root: Node_, name: string, path: number[], at: [string, string, number, number, number]): boolean {
+export function replayEvent(root: Node_, name: string, path: number[], at: Given): boolean {
   const f = (() => { const n = nodeAt(root, path); return n && handlersOf.get(n)?.get(name); })();
   if (!f) return false;
   f(at);
@@ -179,7 +189,7 @@ const holding = new WeakMap<Node_, Node_[]>();
 const fresh = (n: Node_): Node_[] => moved.has(n) ? [] : holding.get(n)?.flatMap(fresh) ?? [n];
 
 // Held waits (C61 c′) not yet over, and the events that came meanwhile.
-const held = { n: 0, queue: [] as (() => void)[], frames: new Map<unknown, [string, string, number, number, number]>() };
+const held = { n: 0, queue: [] as (() => void)[], frames: new Map<unknown, Given>() };
 
 // A part drawn again as the same element with no attributes, a list's
 // `ul` with its rows (for each), say (C287): the element stays and only
@@ -310,7 +320,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
           });
         } else if (a.tag === HTML_V.on) {
           const then = a.fields[1];
-          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number; preventDefault?: () => void }) => {
+          const handle = (ev: { key?: string; target?: unknown; clientX?: number; clientY?: number; seconds?: number; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean; metaKey?: boolean; preventDefault?: () => void }) => {
             if (m.live && !m.live()) return;
             const target = (ev.target ?? e) as El & { type?: string };
             // A key a page listens for on an element that isn't for typing
@@ -320,9 +330,9 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
             // What was typed enters in NFC (L214a, border.ts).
             const value = target.type === "checkbox" ? String(!!target.checked) : nfc(String(target.value ?? ""));
             const [x, y] = pointer(e, ev);
-            given([value, ev.key ?? "", x, y, ev.seconds ?? 0]);
+            given([value, ev.key ?? "", x, y, ev.seconds ?? 0, heldOf(ev)]);
           };
-          const given = ([value, key, x, y, seconds]: [string, string, number, number, number]) => {
+          const given = ([value, key, x, y, seconds, h = 0]: Given) => {
             // While a held wait's run is away (C61 c′), an event waits its
             // turn, and frames are one, their seconds added up: as they'd
             // have come had the run not waited.
@@ -330,13 +340,13 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
               const q = name === "frame" ? held.frames.get(given) : undefined;
               if (q) q[4] += seconds;
               else {
-                const a: [string, string, number, number, number] = [value, key, x, y, seconds];
+                const a: Given = [value, key, x, y, seconds, h];
                 if (name === "frame") held.frames.set(given, a);
                 held.queue.push(() => { held.frames.delete(given); given(a); });
               }
               return;
             }
-            m.heard?.(name, [value, key, x, y, seconds], pathOf(e));
+            m.heard?.(name, [value, key, x, y, seconds, h], pathOf(e));
             // One batch per event: the page updates once, after every write.
             // A handler that fetched what hasn't come stops there, what it
             // did so far kept, and goes on from the fetch when the reply
@@ -376,7 +386,7 @@ function draw(v: Value, m: Mount, svg: boolean): Node_ {
                 else { console.error(err); m.stopped?.(err); }
               } finally { cells.event = was; }
             };
-            fire(() => m.call(then, { tag: HTML_V.event, fields: [value, key, x, y, seconds] }));
+            fire(() => m.call(then, { tag: HTML_V.event, fields: [value, key, x, y, seconds, bool(m, h & HELD.ctrl), bool(m, h & HELD.shift), bool(m, h & HELD.alt), bool(m, h & HELD.meta)] }));
           };
           let hs = handlersOf.get(e);
           if (!hs) handlersOf.set(e, (hs = new Map()));

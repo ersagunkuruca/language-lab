@@ -10,6 +10,7 @@
 // from the log and checks each write against it, and says where a run went
 // another way. Influences: Elm's time-travel debugger, rr, Redux DevTools
 // (CREDITS.md).
+import type { Given } from "./html.ts";
 import type { World } from "./run.ts";
 import { seededGenerator, type Generator } from "./random.ts";
 type Generator_<T> = globalThis.Generator<T, void, unknown>;
@@ -162,19 +163,20 @@ export function replaying(log: LogEntry[], like: World, until?: number, onPause?
 // A frame heard right after one the same element heard adds its seconds
 // to that entry (I239a): an animation's frames are most of a page's log.
 // With a window, each event is first a moment it may take a snapshot at.
-export const heardInto = (log: LogEntry[], window?: LogWindow, b?: Budget) => (name: string, at: [string, string, number, number, number], path: number[]): void => {
+export const heardInto = (log: LogEntry[], window?: LogWindow, b?: Budget) => (name: string, at: Given, path: number[]): void => {
   window?.mayTake();
-  if (name !== "frame") { const e = { op: "event", args: [name, ...at, path] }; if (fits(log, b, e)) log.push(e); return; }
+  if (name !== "frame") { const [value, key, x, y, seconds, held = 0] = at, e = { op: "event", args: [name, value, key, x, y, seconds, path, ...(held ? [held] : [])] }; if (fits(log, b, e)) log.push(e); return; }
   const [value, key, x, y, seconds] = at, last = log[log.length - 1];
   if (last?.op === "frames" && last.seconds && log.length > (window?.lastAt ?? 0) && same(last.args, [path, value, key, x, y])) { if (!b || (b.used += 8) <= b.cap) last.seconds.push(seconds); else log.push({ op: "logFull", args: [b.cap] }); }
   else { const e = { op: "frames", args: [path, value, key, x, y], seconds: [seconds] }; if (fits(log, b, e)) log.push(e); }
 };
 // A page's events in order, each frame of a run of frames on its own.
-export function* eventsIn(log: LogEntry[]): Generator_<{ at: number; name: string; given: [string, string, number, number, number]; path: number[] }> {
+export function* eventsIn(log: LogEntry[]): Generator_<{ at: number; name: string; given: Given; path: number[] }> {
   for (const [i, e] of log.entries()) {
     if (e.op === "event") {
-      const [name, value, key, x, y, seconds, path] = e.args as [string, string, string, number, number, number, number[]];
-      yield { at: i, name, given: [value, key, x, y, seconds], path: path ?? [] };
+      // The keys held (C312) after the path, where any were.
+      const [name, value, key, x, y, seconds, path, held = 0] = e.args as [string, string, string, number, number, number, number[], number?];
+      yield { at: i, name, given: held ? [value, key, x, y, seconds, held] : [value, key, x, y, seconds], path: path ?? [] };
     } else if (e.op === "frames") {
       const [path, value, key, x, y] = e.args as [number[], string, string, number, number];
       for (const s of e.seconds ?? []) yield { at: i, name: "frame", given: [value, key, x, y, s], path };

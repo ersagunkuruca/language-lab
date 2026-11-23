@@ -160,8 +160,11 @@ export const SOUND_ROW = namedRow("std.row.sound", "Sound", AUDIO_BLOCK);
 // stands for the row Diverge where a data type takes a row parameter, as
 // infer.ts's carriers do (types.ts ROW_CARRIER). Its own type, no cases.
 export const ROW_TYPE = typedef(ROW_CARRIER, "Row", [], []);
+// The keys held with an event (C312), their types named, not numbered as
+// tref's are, so the std ids after them stay as they were.
+const held = (k: string) => node({ id: `std.event.event.${k}.type`, kind: "tref", target: BOOL, args: [] });
 export const EVENT = typedef("std.event", "Event", [], [
-  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)], ["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["seconds", () => tref(NUMBER)]]],
+  ["event", [["value", () => tref(STRING)], ["key", () => tref(STRING)], ["x", () => tref(NUMBER)], ["y", () => tref(NUMBER)], ["seconds", () => tref(NUMBER)], ...["ctrl", "shift", "alt", "meta"].map((k): [string, TypeOf] => [k, () => held(k)])]],
 ]);
 // Where a sound's samples come from (AUDIO.md): the microphone, a
 // recording the page fetches by its address and plays over and over, or

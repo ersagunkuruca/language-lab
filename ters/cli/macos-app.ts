@@ -114,6 +114,7 @@ void ters_ui_resize(double width, double height, int dark);
 int ters_ui_pointer(void *view, int kind, double x, double y);
 void ters_ui_hover(void *view);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
+void ters_page_held(int held);
 int ters_page_clock(void);
 int ters_page_frame(void);
 int ters_page_permission(int yes);
@@ -280,7 +281,13 @@ static NSPoint at(NSView *v, NSEvent *e) { return [v convertPoint:e.locationInWi
 @implementation TFrames
 @end
 
+// The keys held now, told to the page before what comes with them (C312).
+static void held(void) {
+  NSEventModifierFlags f = NSEvent.modifierFlags;
+  ters_page_held((f & NSEventModifierFlagControl ? 1 : 0) | (f & NSEventModifierFlagShift ? 2 : 0) | (f & NSEventModifierFlagOption ? 4 : 0) | (f & NSEventModifierFlagCommand ? 8 : 0));
+}
 static void fire(int handler, NSString *value, NSString *key, double x, double y, double seconds) {
+  held();
   const char *v = value.UTF8String, *k = key.UTF8String;
   ters_page_event(handler, v, strlen(v), k, strlen(k), x, y, seconds);
   [P tick];
@@ -784,7 +791,7 @@ static BOOL bubble(NSString *event, NSView *from, NSString *value, NSString *key
 static BOOL keyed(NSView *v) { return [P handler:@"keydown" of:v] || [P handler:@"keyup" of:v]; }
 
 @implementation TPicture
-- (void)finger:(int)kind event:(NSEvent *)e { NSPoint p = at(self, e); ters_ui_pointer((void *)(intptr_t)self.num, kind, p.x, p.y); [P tick]; }
+- (void)finger:(int)kind event:(NSEvent *)e { NSPoint p = at(self, e); held(); ters_ui_pointer((void *)(intptr_t)self.num, kind, p.x, p.y); [P tick]; }
 - (void)mouseDown:(NSEvent *)e { [self finger:0 event:e]; }
 - (void)mouseDragged:(NSEvent *)e { [self finger:1 event:e]; }
 - (void)mouseUp:(NSEvent *)e { [self finger:2 event:e]; }

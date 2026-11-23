@@ -240,6 +240,18 @@ function unpolarInOrder(nodes: Record<Id, unknown>): void {
   }
 }
 // A field's port names are its function type's (L182c3).
+// An Event's arm saved before it had ctrl, shift, alt and meta (C312):
+// those four bound too, to binders nothing reads.
+function eventsHoldKeys(nodes: Record<Id, unknown>): void {
+  for (const [id, x] of Object.entries(nodes)) {
+    const n = x as { kind?: string; variant?: Id; binds?: Id[]; results?: unknown[] };
+    if (n.kind !== "arm" || n.variant !== "std.event.event" || n.binds?.length !== 5) continue;
+    // Named after the arm, so two reads of one file agree on them; with
+    // its id, as readSaved gives every node one.
+    const more = [0, 1, 2, 3].map((k) => { let b = `${id.slice(0, -2)}h${k}`; if (nodes[b]) b = freshId(); nodes[b] = { id: b, kind: "binder" }; return b; });
+    nodes[id] = { ...n, binds: [...n.binds, ...more], ...(n.results ? { results: [...n.results, null, null, null, null] } : {}) };
+  }
+}
 function portsOnTheType(nodes: Record<Id, unknown>): void {
   for (const [id, x] of Object.entries(nodes)) {
     const n = x as { kind?: string; type?: Id; ports?: string[] };
@@ -280,6 +292,7 @@ export const SHAPE_STEPS: { what: string; step: (nodes: Record<Id, unknown>) => 
   { what: "a definition's results are its lambda's, among its parameters (L225d)", step: resultsOnTheLambda },
   { what: "a direction of a relation is a way of it (L182c2)", step: directionsAsWays },
   { what: "a field's port names are its function type's (L182c3)", step: portsOnTheType },
+  { what: "an event taken apart binds the keys held with it too (C312)", step: eventsHoldKeys },
 ];
 export const SHAPE = SHAPE_STEPS.length;
 export const toTodaysShape = (nodes: Record<Id, unknown>, from = 0): void => { for (const s of SHAPE_STEPS.slice(from)) s.step(nodes); };
