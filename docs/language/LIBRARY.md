@@ -809,7 +809,7 @@ What a canvas renders (FRAMES.md): a Frame is passes, each drawing into the scre
 - **Draw** (type). One draw of a frame, made by draw: a mesh, its instances and two functions. Its type hides the instances' type, so a pass lists draws of different things.
 - **Pass** (type). A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.
 - **Frame** (type). What a canvas renders, as its render attribute: passes, drawn in order.
-- **Texel** (type).
+- **Texel** (type). A colour sampled from a texture: red, green, blue and alpha, each from 0 to 1.
 - **draw** : `(Mesh a, List b, (b, a) -> Placed c d, (d) -> e) -> Draw`. draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.
 - **sampled** : `(Target, a) -> Texel`. sampled(target, across): the colour at across (two numbers from 0 to 1, from the top left) of a texture an earlier pass of the frame drew.
 
