@@ -192,8 +192,12 @@ export function browserWorld(store: Store, program: string, console_ = console, 
   // are undone if it isn't.
   const later = (g: () => void) => (clock ? clock.cells.later(g) : g());
   const put = (key: string, text: string) => {
-    if (clock) { const was = store.getItem(key); clock.cells.undo(() => (was === null ? store.removeItem?.(key) : store.setItem(key, was))); }
-    store.setItem(key, text);
+    // Its modified time (L282) is kept beside it, under a key the files'
+    // prefix doesn't start, so listing finds only the files.
+    for (const [k, v] of [[key, text], [`modified ${key}`, String((clock?.time ?? Date.now)() / 1000)]]) {
+      if (clock) { const was = store.getItem(k); clock.cells.undo(() => (was === null ? store.removeItem?.(k) : store.setItem(k, was))); }
+      store.setItem(k, v);
+    }
   };
   return {
     error: (line) => later(() => console_.error(line)),
@@ -206,6 +210,15 @@ export function browserWorld(store: Store, program: string, console_ = console, 
     readBytes,
     writeBytes: (path, bytes) => put(prefix + path, BYTES + base64Of(bytes)),
     fileExists: (path) => store.getItem(prefix + path) !== null,
+    // A stored file opened in a new tab, as the browser shows its kind
+    // (L283): what it holds, as a blob.
+    openOutside: (path) => {
+      const bytes = readBytes(path), w = globalThis as { open?: (url: string, target: string) => unknown; URL?: { createObjectURL?: (b: Blob) => string } };
+      if (typeof w.open !== "function" || !w.URL?.createObjectURL) throw new Error(`there's no browser here to open ${path} in`);
+      later(() => void w.open!(w.URL!.createObjectURL!(new Blob([bytes as BlobPart])), "_blank"));
+    },
+    // Every stored file is a plain file: the store has no folders or links.
+    fileInfo: (path) => ({ kind: "file", size: readBytes(path).length, modified: Number(store.getItem(`modified ${prefix}${path}`) ?? 0) }),
     // Every file, as paths: the store has no folders.
     listFolder: () => {
       const out: string[] = [];

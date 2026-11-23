@@ -57,7 +57,10 @@ if (check) {
 // Definitions whose content changed: old id to new, by name.
 const newIds: Record<string, string> = {};
 for (const mod of [m, v, h, st, cs, nu, sg, tu, so]) for (const d of mod.code.defs) newIds[mod.names[d] ?? d] = d;
-const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old ? [[old, newIds[name]] as const] : []));
+// One still built is kept: two may share a name (as float64 is Rational's,
+// Fixed's and Float32's), and a new one of that name moves nothing.
+const still = new Set([m, v, h, st, cs, nu, sg, tu, so].flatMap((mod) => mod.code.defs));
+const moved = Object.entries(oldIds).flatMap(([name, old]) => (newIds[name] && newIds[name] !== old && !still.has(old) ? [[old, newIds[name]] as const] : []));
 // A saved program refers to library definitions by id, so one whose content
 // changed keeps opening: its old id is read as the new one (moved.json, read
 // by std.ts onTodaysIds; L184). Every move is kept, the older ones pointed

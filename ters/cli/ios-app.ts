@@ -117,7 +117,7 @@ function foreignViews(views: IosView[]): string {
 // in a ring the render block reads. The engine is changed on the main
 // queue after the page's turn ends, never under the page's lock, since
 // detaching a node waits for a render that may be waiting for the lock.
-const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
+export const SOUND_M = String.raw`void ters_sound_say(int n, const char *why);
 void ters_sound_play(int n, const float *in, float *out, int frames);
 void ters_sound_play_stereo(int n, const float *in, const float *in2, float *out, float *out2, int frames);
 int ters_sound_stereo(int n);
@@ -276,8 +276,8 @@ const PAGE_M = (decl: string, foreign: string, sound: boolean) => String.raw`// 
 #include <unistd.h>
 
 ${decl}
-void *ters_ui_start(ters_ui *ui, double width, int dark);
-void ters_ui_resize(double width, int dark);
+void *ters_ui_start(ters_ui *ui, double width, double height, int dark);
+void ters_ui_resize(double width, double height, int dark);
 int ters_ui_pointer(void *view, int kind, double x, double y);
 int ters_page_event(int n, const char *value, size_t vn, const char *key, size_t kn, double x, double y, double seconds);
 int ters_page_clock(void);
@@ -370,7 +370,7 @@ static void fire(int handler, NSString *value, NSString *key, double x, double y
 @property (nonatomic) BOOL quiet, ticking, paused;
 @property (nonatomic, strong) UIScrollView *scroll;
 @property (nonatomic, strong) UIView *page;
-@property (nonatomic) double width;
+@property (nonatomic) double width, height;
 @property (nonatomic) int dark;
 @property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSMutableDictionary<NSString *, NSNumber *> *> *moments, *heard;
 @property (nonatomic, strong) NSMutableArray *frameLinks;
@@ -604,7 +604,8 @@ static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clea
   [self.scroll addSubview:self.page];
   self.dark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
   self.width = self.view.bounds.size.width;
-  UIView *root = V(ters_ui_start(&U, self.width, self.dark));
+  self.height = self.view.bounds.size.height;
+  UIView *root = V(ters_ui_start(&U, self.width, self.height, self.dark));
   if (root) [self.page addSubview:root];
   else { UILabel *l = [UILabel new]; l.text = @"This page has no answer to draw."; [l sizeToFit]; [self.page addSubview:l]; }
   NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
@@ -612,17 +613,18 @@ static ters_ui U = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clea
   [nc addObserver:self selector:@selector(back) name:UIApplicationDidBecomeActiveNotification object:nil];
   [self tick];
 }
-// Inside the safe area, the page as wide as what's left.
+// Inside the safe area, the page as wide (and its 100vh as high) as
+// what's left.
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
   UIEdgeInsets i = self.view.safeAreaInsets;
-  [self resize:self.view.bounds.size.width - i.left - i.right dark:self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark];
+  [self resize:self.view.bounds.size.width - i.left - i.right high:self.view.bounds.size.height - i.top - i.bottom dark:self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark];
 }
 - (void)traitCollectionDidChange:(UITraitCollection *)before { [super traitCollectionDidChange:before]; [self.view setNeedsLayout]; }
-- (void)resize:(double)w dark:(int)d {
-  if (fabs(w - self.width) < 0.5 && d == self.dark) return;
-  self.width = w; self.dark = d;
-  ters_ui_resize(w, d);
+- (void)resize:(double)w high:(double)h dark:(int)d {
+  if (fabs(w - self.width) < 0.5 && fabs(h - self.height) < 0.5 && d == self.dark) return;
+  self.width = w; self.height = h; self.dark = d;
+  ters_ui_resize(w, h, d);
 }
 // The platform's moments (L236): the app left and come back to. iOS has
 // no back button, so "back" is never heard.

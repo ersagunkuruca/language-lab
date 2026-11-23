@@ -364,6 +364,34 @@ values; the raymarch picture's JavaScript in Float32 equals the
 evaluator's in Float32). The editor's picture fallback running in
 Float32 is a backlog item for the editor.
 
+**`Float32`, the type (L286, Ersagun 2026-11-23).** The representation
+above makes a whole program Float32 and has to be asked for; a program
+that mixes the two widths, as a network trained on a GPU with its
+bookkeeping on the CPU does, needs a type it can name. So the numbers
+module has `Float32`, written in the language as Fixed is:
+
+- `data Float32 = float32(value: Float64)`, its case private. The value is
+  always one a binary32 holds, kept as the Float64 it is.
+- Each step is the Float64's, rounded once by `round to Float32`: + − ×
+  ÷ and √ (`square root float32`) are then exactly binary32 hardware's
+  answers; < and = are the Float64's. sin, cos, tan, exp and log are
+  Float64's rounded, so as close as the platform's (Trig at Float32).
+- A literal at Float32 is its digits rounded once to the nearest
+  binary32, ties to even, and exactly: through a Float64 when the digits
+  fit one and the Float64 isn't halfway between two binary32s, else in
+  Ints (`nearest float32`). So 1.0000000596046447753906251 is the
+  binary32 above 1, where rounding its Float64 would give 1.
+- `show` gives the shortest decimal that reads back to the same Float32
+  (0.1, not 0.100000001), laid out as a Float64's.
+- `as float32(x)` rounds a Float64; `as float64(x)` is exact.
+- Overflow past 3.4 · 10³⁸ is an Abort, as Float64's is.
+
+Since every step is a Float64 step and a rounding, every target already
+runs it the same: the evaluator, JavaScript (`Math.fround`), C
+(`(double)(float)`) and WebAssembly (`f32.demote_f64`). Storing it as a
+binary32 (C `float`, wasm `f32`, a Float32Array) is the compiler's to
+pick, and a map of it may run on the GPU (WHERE-IT-RUNS.md, C307).
+
 ### Costs and the chooser
 
 Each representation lists the cost of each job, on a ladder: `1`,

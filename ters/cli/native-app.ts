@@ -376,9 +376,9 @@ static ters_ui ters_jui = { 0, j_box, j_text, j_set_text, j_set_value, j_append,
   0
 #endif
 };
-// The page on a screen width dp wide, dark or not: its root's number, 0
+// The page on a screen width dp wide and height high, dark or not: its root's number, 0
 // when main has no answer.
-JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jint dark) {
+JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, jobject self, jdouble width, jdouble height, jint dark) {
   ters_j = env;
   ters_a = (*env)->NewGlobalRef(env, self);
   jclass k = (*env)->GetObjectClass(env, self);
@@ -403,10 +403,10 @@ JNIEXPORT jint JNICALL Java_app_ters_page_MainActivity_nativeStart(JNIEnv *env, 
   if (am) { j_assets_ref = (*env)->NewGlobalRef(env, am); j_assets = AAssetManager_fromJava(env, j_assets_ref); }
   if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
 #endif
-  return ters_id(ters_ui_start(&ters_jui, width, dark));
+  return ters_id(ters_ui_start(&ters_jui, width, height, dark));
 }
-// The screen's width or colour scheme changed.
-JNIEXPORT void JNICALL Java_app_ters_page_MainActivity_nativeResize(JNIEnv *env, jobject self, jdouble width, jint dark) { (void)self; ters_j = env; ters_ui_resize(width, dark); }
+// The screen's size or colour scheme changed.
+JNIEXPORT void JNICALL Java_app_ters_page_MainActivity_nativeResize(JNIEnv *env, jobject self, jdouble width, jdouble height, jint dark) { (void)self; ters_j = env; ters_ui_resize(width, height, dark); }
 static void ters_utf8(JNIEnv *env, jstring s, char **out, size_t *n) {
   const jchar *u = (*env)->GetStringChars(env, s, 0);
   jsize m = (*env)->GetStringLength(env, s);
@@ -487,8 +487,8 @@ import java.util.HashMap;
 // activity's views, which C asks for by the methods below.
 public class MainActivity extends Activity {
   static { System.loadLibrary("page"); }
-  native int nativeStart(double width, int dark);
-  native void nativeResize(double width, int dark);
+  native int nativeStart(double width, double height, int dark);
+  native void nativeResize(double width, double height, int dark);
   native int nativeEvent(int handler, String value, String key, double x, double y, double seconds);
   // Whether what the page shows read the clock, and a frame that shows it
   // again (whether it still reads it).
@@ -504,7 +504,7 @@ public class MainActivity extends Activity {
   private float density;
   private ScrollView scroll;
   private FrameLayout page;
-  private double width;
+  private double width, height;
   private int dark;
 
   // The running app, for hosts/android.java's answers to reach Android's
@@ -520,8 +520,9 @@ public class MainActivity extends Activity {
     page.setClipChildren(false);
     scroll.addView(page, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     width = getResources().getDisplayMetrics().widthPixels / density;
+    height = getResources().getDisplayMetrics().heightPixels / density;
     dark = darkMode(getResources().getConfiguration());
-    View root = views.get(nativeStart(width, dark));
+    View root = views.get(nativeStart(width, height, dark));
     if (root != null) page.addView(root);
     else { TextView t = new TextView(this); t.setText("This page has no answer to draw."); page.addView(t); }
     // Below the status bar and above the navigation bar, which Android 15
@@ -533,7 +534,7 @@ public class MainActivity extends Activity {
         l = x.left; t = x.top; r = x.right; b = x.bottom;
       } else { l = insets.getSystemWindowInsetLeft(); t = insets.getSystemWindowInsetTop(); r = insets.getSystemWindowInsetRight(); b = insets.getSystemWindowInsetBottom(); }
       v.setPadding(l, t, r, b);
-      resize((getResources().getDisplayMetrics().widthPixels - l - r) / density, dark);
+      resize((getResources().getDisplayMetrics().widthPixels - l - r) / density, (getResources().getDisplayMetrics().heightPixels - t - b) / density, dark);
       return insets;
     });
     setContentView(scroll);
@@ -542,16 +543,16 @@ public class MainActivity extends Activity {
 
   @Override public void onConfigurationChanged(Configuration c) {
     super.onConfigurationChanged(c);
-    resize(getResources().getDisplayMetrics().widthPixels / density, darkMode(c));
+    resize(getResources().getDisplayMetrics().widthPixels / density, getResources().getDisplayMetrics().heightPixels / density, darkMode(c));
     scroll.requestApplyInsets();
   }
 
   private static int darkMode(Configuration c) { return (c.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES ? 1 : 0; }
 
-  private void resize(double w, int d) {
-    if (Math.abs(w - width) < 0.5 && d == dark) return;
-    width = w; dark = d;
-    nativeResize(w, d);
+  private void resize(double w, double h, int d) {
+    if (Math.abs(w - width) < 0.5 && Math.abs(h - height) < 0.5 && d == dark) return;
+    width = w; height = h; dark = d;
+    nativeResize(w, h, d);
   }
 
   // While what the page shows reads the clock, it runs again each frame,

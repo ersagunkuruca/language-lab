@@ -80,6 +80,7 @@ const { withCharacterMaps } = compiles ? await import("../../compiler/src/charac
 const { recordings, webCorePage } = compiles ? await import("./web.ts") : ({} as typeof import("./web.ts"));
 const { androidHostsC, nativeAppFolder } = compiles ? await import("./native-app.ts") : ({} as typeof import("./native-app.ts"));
 const { iosAppFolder } = compiles ? await import("./ios-app.ts") : ({} as typeof import("./ios-app.ts"));
+const { macosAppFolder } = compiles ? await import("./macos-app.ts") : ({} as typeof import("./macos-app.ts"));
 import { nativePageReport } from "./native-check.ts";
 const { soundOf, stereoSoundOf } = compiles ? await import("./sound.ts") : ({} as typeof import("./sound.ts"));
 
@@ -118,6 +119,7 @@ usage:
   ters build-native-app <program> [-o folder]  that page as a native Android app, no webview: its C and Android's
                                         own views, a Gradle project (gradle assembleDebug builds the APK);
                                         --ios: an iPhone app on UIKit's views instead (sh build.sh on a Mac)
+                                        --macos: a Mac app on AppKit's views (sh build.sh on a Mac)
   ters mcp [program]                     an MCP server over stdio: an LLM views, edits, runs and tests programs
   ters publish <program> <name…> [-o module.json]
                                         publish the named definitions, and the drafts they use, as their next
@@ -657,7 +659,7 @@ function answeredHere(q: Program): Program {
   if (!["run", "compile", "native", "wasi", "build-web", "build-app", "build-native-app"].includes(command)) return q;
   const hostText = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : ""; };
   const has = command === "native" ? cHostHas(hostText("c.c"))
-    : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText(rest.includes("--ios") ? "ios.m" : "android.java"))
+    : command === "build-native-app" ? cHostHas(hostText("c.c") + "\n" + hostText(rest.includes("--ios") ? "ios.m" : rest.includes("--macos") ? "macos.m" : "android.java"))
     : command === "wasi" ? () => false
     : jsHostHas(hosts);
   const asked = answerSupports(q.code, q.info, answeredEffects(q.code, has));
@@ -866,7 +868,7 @@ switch (command) {
   case "build-native-app": {
     // The page as C (C199c, NATIVE-APPS.md), mounted on Android's views.
     const o = rest.indexOf("-o");
-    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-${rest.includes("--ios") ? "ios" : "android"}`;
+    const out = o >= 0 ? rest[o + 1] ?? fail("-o needs a folder") : `${basename(resolve(path)).replace(/\.json$/, "")}-${rest.includes("--ios") ? "ios" : rest.includes("--macos") ? "macos" : "android"}`;
     // What the native page can't show (C205): refused where it would mean
     // something else, listed where it is only left out.
     const said = nativePageReport(p.code, main);
@@ -877,8 +879,10 @@ switch (command) {
     const own = (f: string) => { const at = existsSync(path) && statSync(path).isDirectory() ? join(path, "hosts", f) : ""; return at && existsSync(at) ? readFileSync(at, "utf8") : undefined; };
     // --ios (C199e): an iPhone app of the same C on UIKit's views
     // (cli/ios-app.ts); its own effects from hosts/c.c only.
-    const ios = rest.includes("--ios");
-    const cHost = own("c.c"), java = ios ? undefined : own("android.java"), objc = ios ? own("ios.m") : undefined, ops = hostOpsOf(p.code, p.names);
+    // --macos (C295): a Mac app of the same C on AppKit's views
+    // (cli/macos-app.ts), its own effects from hosts/c.c only.
+    const ios = rest.includes("--ios"), macos = rest.includes("--macos");
+    const cHost = own("c.c"), java = ios || macos ? undefined : own("android.java"), objc = ios ? own("ios.m") : undefined, ops = hostOpsOf(p.code, p.names);
     let fromJava = "";
     try { fromJava = java ? androidHostsC(Object.values(ops).filter((h) => h.out.k !== "view" && (!cHost || !new RegExp(`\\b${hostCName(h.op)}\\s*\\(`).test(cHost))), java) : ""; } catch (e) { fail((e as Error).message); }
     const hosts = { ops, c: cHost || fromJava ? [cHost ?? "", fromJava].join("\n") : undefined };
@@ -895,11 +899,12 @@ switch (command) {
       mic: nodesOfKindIn(p.code.nodes, "ref").some((n) => n.kind === "ref" && n.target === HTML_V.microphone),
       files: Object.fromEntries(recordings(p.code).filter((f) => statSync(path).isDirectory() && existsSync(join(path, f))).map((f) => [f, new Uint8Array(readFileSync(join(path, f)))])),
     } : undefined;
-    for (const [file, x] of Object.entries(ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {
+    for (const [file, x] of Object.entries(macos ? macosAppFolder(p.title, c, sound) : ios ? iosAppFolder(p.title, c, objc, iosViews, sound) : nativeAppFolder(p.title, c, java, sound))) {
       mkdirSync(dirname(join(out, file)), { recursive: true });
       writeFileSync(join(out, file), x);
     }
-    process.stderr.write(ios ? `ters: wrote ${out}/; build the simulator's app there on a Mac with: sh build.sh (see ${out}/README.md)\n` : `ters: wrote ${out}/; build the APK there with: gradle assembleDebug (see ${out}/README.md)\n`);
+    if (macos) process.stderr.write(`ters: wrote ${out}/; build the app there on a Mac with: sh build.sh (see ${out}/README.md)\n`);
+    else process.stderr.write(ios ? `ters: wrote ${out}/; build the simulator's app there on a Mac with: sh build.sh (see ${out}/README.md)\n` : `ters: wrote ${out}/; build the APK there with: gradle assembleDebug (see ${out}/README.md)\n`);
     break;
   }
   case "render": {

@@ -15,7 +15,7 @@ import { merge, type Id, type NodeOf } from "../model.ts";
 import { B, prelude } from "../prelude.ts";
 import { Lang } from "./dsl.ts";
 import { makeModule, publish, type Module } from "./modules.ts";
-import { ALGEBRAIC_OPS, REAL_OPS, ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std, stdNames, COST, JOBS, REPRESENTATION_V } from "./std.ts";
+import { ALGEBRAIC_OPS, REAL_OPS, ABORT_OP, ARITH, ARITHMETIC_V, CHECK_OP, ORDERED_V, CONS, LIST, NIL, PAIR_V, DIVISION_V, EMBEDDING_V, INT_OPS, LITERAL_V, S, SHOWN_V, TIMES_V, TRIG_POLAR, TRIG_UNPOLAR, TRIG_V, std, stdNames, COST, JOBS, REPRESENTATION_V, TEXT_OPS } from "./std.ts";
 import { tupleType } from "./std-values.ts";
 import { INT, NUMBER } from "./types.ts";
 import { infer } from "./infer.ts";
@@ -712,9 +712,158 @@ export function buildNumbers(pre: Module): Module {
     by(addN, INT_OPS.add, "logarithmic"), by(mulN, INT_OPS.mul, "polylogarithmic"), by(integer, integerI, "constant"), by(natural, naturalI, "constant"), by(natLiteral, natLiteralI, "constant")]);
   const natReps = [unaryRow, intRow];
 
-  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX, NT.def, natural, integer, addN, mulN, IT.def];
+  // Float32 (L286, Ersagun 2026-11-23, GAPS round 22 DG1): the binary32
+  // floats, kept as the Float64 each one is. Every step is the Float64's,
+  // rounded once to the nearest binary32 (ties to even, as IEEE 754 says
+  // and JavaScript's Math.fround does): for + − × ÷ and √ that is exactly
+  // what binary32 hardware gives, since 53 ≥ 2·24 + 2 makes the double
+  // rounding harmless (Figueroa, 1995). So a map of Float32s means what a
+  // GPU computes, and may run there (WHERE-IT-RUNS.md). The case is
+  // private: a Float32 is made by as float32, a literal or its own steps,
+  // which keep every value one binary32 has. Overflow past 3.4 · 10³⁸ is
+  // an Abort, as Float64's is.
+  const F32 = k.type("Float32", [], [["float32", [["value", () => k.tref(NUMBER)]]]], "32-bit floats");
+  const F32V = F32.v.float32;
+  (k.code.nodes[F32V] as NodeOf<"variant">).private = true;
+  const r32 = (x: Id) => k.call(S.float32, x);
+  const f32 = (v: Id, f: (x: Id) => Id, name = "value") => k.match(v, [{ variant: F32V, names: [name], body: ([x]) => f(x) }]);
+  const G = (x: Id) => k.call(F32V, x);
+  const twoG = (name: string, f: (a: Id, b: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["x", "y"], (x, y) => f32(x, (a) => f32(y, (b) => f(a, b), "value₂"))));
+    return d;
+  };
+  const oneG = (name: string, f: (a: Id) => Id) => {
+    const d = k.def(name);
+    k.define(d, k.fn(["x"], (x) => f32(x, f)));
+    return d;
+  };
+  const addG = twoG("add float32", (a, b) => G(r32(n.add(a, b))));
+  const subG = twoG("subtract float32", (a, b) => G(r32(n.sub(a, b))));
+  const mulG = twoG("multiply float32", (a, b) => G(r32(n.mul(a, b))));
+  const divG = twoG("divide float32", (a, b) => G(r32(n.div(a, b))));
+  const lessG = twoG("float32 less than", (a, b) => k.call(S.less, a, b));
+  const negG = oneG("negate float32", (a) => G(k.call(B.neg, a)));
+  const asG = k.def("as float32");
+  k.define(asG, k.fn(["x"], (x) => G(r32(x))));
+  const gF = k.def("as float64");
+  k.define(gF, k.fn(["x"], (x) => f32(x, (a) => a)));
+  const sqrtG = oneG("square root float32", (a) => G(r32(k.call(B.sqrt, a))));
+
+  // A literal, rounded once from its digits. top/bottom is the number
+  // exactly; when both fit a Float64 their quotient is the nearest Float64
+  // (one rounding), and rounding that again to binary32 is right unless it
+  // landed on a point halfway between two binary32s, where the second
+  // rounding can go the wrong way. There, and for digits too long for a
+  // Float64, the nearest binary32 is found in Ints: the quotient scaled to
+  // 24 bits (or to steps of 2⁻¹⁴⁹ below 2⁻¹²⁶), rounded half to even.
+  const low = (a: Id) => z.sub(k.call(bits, a), k.int(1));
+  const shifted = (a: Id, by: Id) => k.call(INT_OPS.shiftDown, a, k.call(INT_OPS.neg, by));
+  const nearestG = k.def("nearest float32");
+  k.define(nearestG, k.fn(["top", "bottom"], (a, b) => k.let("guess", z.sub(low(a), low(b)), (l) =>
+    k.let("power", k.if(k.if(z.less(l, k.int(0)), z.less(shifted(a, k.call(INT_OPS.neg, l)), b), z.less(a, shifted(b, l))), z.sub(l, k.int(1)), l), (e) =>
+      k.let("step", k.if(z.less(z.sub(e, k.int(23)), k.int(-149)), k.int(-149), z.sub(e, k.int(23))), (q) =>
+        k.let("scaled", k.if(z.less(q, k.int(0)), shifted(a, k.call(INT_OPS.neg, q)), a), (nn) =>
+          k.let("by", k.if(z.less(k.int(0), q), shifted(b, q), b), (d) =>
+            k.let("whole", k.call(S.first, k.thunk(() => quot(nn, d)), k.thunk(() => k.int(0))), (m) =>
+              k.let("twice left", z.mul(k.int(2), z.sub(nn, z.mul(m, d))), (r2) =>
+                k.let("rounded", k.if(k.call(S.or, z.less(d, r2), k.call(S.and, k.call(S.equal, r2, d), k.call(S.equal, k.call(INT_OPS.bitAnd, m, k.int(1)), k.int(1)))), z.add(m, k.int(1)), m), (mr) =>
+                  r32(n.mul(n.mul(k.call(INT_OPS.toNumber, mr), k.lit(2 ** -149)), k.call(INT_OPS.toNumber, shifted(k.int(1), z.add(q, k.int(149))))))))))))))));
+  const float32Literal = k.def("float32 literal");
+  const fits = (v: Id) => z.less(k.call(INT_OPS.abs, v), k.int(2n ** 53n));
+  const exactly = (t: Id, b: Id) => k.if(z.less(t, k.int(0)), k.call(B.neg, k.call(nearestG, k.call(INT_OPS.neg, t), b)), k.call(nearestG, t, b));
+  k.define(float32Literal, k.fn(["top", "bottom"], (t, b) => G(k.if(k.call(S.equal, t, k.int(0)), k.lit(0),
+    k.if(k.call(S.and, fits(t), fits(b)),
+      k.let("x", k.call(lib("divided or"), k.call(INT_OPS.toNumber, t), k.call(INT_OPS.toNumber, b), k.lit(0)), (x) => k.let("y", r32(x), (y) =>
+        k.if(k.call(S.equal, x, y), y, k.let("other", n.sub(n.mul(k.lit(2), x), y), (o) =>
+          k.if(k.call(S.equal, r32(o), o), exactly(t, b), y))))),
+      exactly(t, b))))));
+
+  // As text: the shortest decimal that reads back to the same Float32
+  // (Steele and White, 1990), so as float32(0.1) shows as 0.1, laid out as
+  // show lays out a Float64 (ECMAScript's Number::toString: 1e+21 and up,
+  // and below 10⁻⁶, with an exponent). The value is an Int of steps of
+  // 2⁻¹⁴⁹, exactly; for p = 1 … 9 digits it is rounded half to even to p
+  // digits in Ints, and the fewest that read back win. Nine always do.
+  const tens = (e: Id) => k.call(S.first, k.thunk(() => k.call(INT_OPS.power, k.int(10), e)), k.thunk(() => k.int(1)));
+  const unit149 = () => shifted(k.int(1), k.int(149));
+  // Whether steps · 2⁻¹⁴⁹ ≥ 10ᵉ.
+  const atLeast = (s: Id, e: Id) => k.if(z.less(e, k.int(0)), k.call(S.not, z.less(z.mul(s, tens(k.call(INT_OPS.neg, e))), unit149())), k.call(S.not, z.less(s, z.mul(tens(e), unit149()))));
+  const zeros = (count: Id) => k.fold(k.call(INT_OPS.range, count), [
+    { variant: NIL, names: [], body: () => k.lit("") },
+    { variant: CONS, names: ["zero", "zeros"], results: [null, "more"], body: (_, [, more]) => k.call(S.concat, k.lit("0"), more!) },
+  ]);
+  const cat = (...ts: Id[]) => ts.reduceRight((acc, t) => k.call(S.concat, t, acc));
+  const laidOut = k.def("float32 digits laid out");
+  k.define(laidOut, k.fn(["digits", "point"], (s, pt) => k.let("count", k.call(TEXT_OPS.length, s), (c) => k.let("at most 21", z.less(pt, k.int(22)), (small) =>
+    k.if(k.call(S.and, small, k.call(S.not, z.less(pt, c))), k.call(S.concat, s, zeros(z.sub(pt, c))),
+      k.if(k.call(S.and, small, z.less(k.int(0), pt)), cat(k.call(TEXT_OPS.slice, s, k.int(0), pt), k.lit("."), k.call(TEXT_OPS.slice, s, pt, c)),
+        k.if(k.call(S.and, z.less(k.int(-6), pt), k.call(S.not, z.less(k.int(0), pt))), cat(k.lit("0."), zeros(k.call(INT_OPS.neg, pt)), s),
+          k.let("exponent", z.sub(pt, k.int(1)), (ex) => cat(k.call(TEXT_OPS.slice, s, k.int(0), k.int(1)),
+            k.if(z.less(k.int(1), c), k.call(S.concat, k.lit("."), k.call(TEXT_OPS.slice, s, k.int(1), c)), k.lit("")),
+            k.lit("e"), k.if(z.less(ex, k.int(0)), k.lit("-"), k.lit("+")), k.call(INT_OPS.show, k.call(INT_OPS.abs, ex)))))))))));
+  const shortestG = k.def("float32 shortest");
+  k.define(shortestG, k.fn(["x"], (x) => k.let("steps", k.call(lib("whole of"), n.mul(x, k.lit(2 ** 149))), (s) =>
+    k.let("guess", k.call(lib("whole of"), k.call(S.first, k.thunk(() => n.div(k.call(B.log, x), k.lit(Math.LN10))), k.thunk(() => k.lit(0)))), (g) =>
+      k.let("tens", k.if(k.call(S.not, atLeast(s, g)), z.sub(g, k.int(1)), k.let("one more", z.add(g, k.int(1)), (g1) => k.if(atLeast(s, g1), g1, g))), (e) =>
+        // p = 1 first: the fold's first item is the outermost, so the
+        // fewest digits that read back win.
+        k.fold(k.list(...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((p) => k.int(p))), [
+          { variant: NIL, names: [], body: () => k.lit("") },
+          { variant: CONS, names: ["p", "more digits"], results: [null, "with more"], body: ([p], [, more]) =>
+            k.let("shift", z.sub(z.sub(p, k.int(1)), e), (sh) =>
+              k.let("scaled", k.if(z.less(sh, k.int(0)), s, z.mul(s, tens(sh))), (nn) =>
+                k.let("by", k.if(z.less(sh, k.int(0)), z.mul(unit149(), tens(k.call(INT_OPS.neg, sh))), unit149()), (d) =>
+                  k.let("whole", k.call(S.first, k.thunk(() => quot(nn, d)), k.thunk(() => k.int(0))), (m) =>
+                    k.let("twice left", z.mul(k.int(2), z.sub(nn, z.mul(m, d))), (r2) =>
+                      k.let("rounded", k.if(k.call(S.or, z.less(d, r2), k.call(S.and, k.call(S.equal, r2, d), k.call(S.equal, k.call(INT_OPS.bitAnd, m, k.int(1)), k.int(1)))), z.add(m, k.int(1)), m), (mr) =>
+                        k.let("over", k.call(S.equal, mr, tens(p)), (over) =>
+                          k.let("digits", k.if(over, tens(z.sub(p, k.int(1))), mr), (ds) =>
+                            k.let("places", k.if(over, z.sub(sh, k.int(1)), sh), (pl) =>
+                              k.let("back", k.if(z.less(pl, k.int(0)), k.call(float32Literal, z.mul(ds, tens(k.call(INT_OPS.neg, pl))), k.int(1)), k.call(float32Literal, ds, tens(pl))), (bk) =>
+                                k.if(k.call(S.equal, k.call(gF, bk), x),
+                                  k.let("text", k.call(INT_OPS.show, ds), (tx) => k.call(laidOut, tx, z.sub(k.call(TEXT_OPS.length, tx), pl))),
+                                  more!))))))))))) },
+        ]))))));
+  const showG = oneG("show float32", (a) => k.if(k.call(S.equal, a, k.lit(0)), k.lit("0"),
+    k.if(k.call(S.less, a, k.lit(0)), k.call(S.concat, k.lit("-"), k.call(shortestG, k.call(B.neg, a))), k.call(shortestG, a))));
+
+  // Trig at Float32: each Float64 function's answer rounded once. sin,
+  // cos, exp and log are within a few steps of the true value on every
+  // machine, as Float64's are (platform maths), not exact; polar and
+  // unpolar are their Float32 steps; asin and acos come by their ways.
+  const sinG = oneG("float32 sin", (a) => G(r32(k.call(B.sin, a))));
+  const cosG = oneG("float32 cos", (a) => G(r32(k.call(B.cos, a))));
+  const tanG = oneG("float32 tan", (a) => G(r32(k.call(B.tan, a))));
+  const expG = oneG("float32 exp", (a) => G(r32(k.call(B.exp, a))));
+  const logG = oneG("float32 log", (a) => G(r32(k.call(B.log, a))));
+  const polarG = k.def("float32 polar");
+  k.define(polarG, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    k.equal(x, k.call(mulG, r, k.call(cosG, t))), k.equal(y, k.call(mulG, r, k.call(sinG, t))))));
+  k.results(polarG, "x", "y");
+  const unpolarG = k.def("float32 unpolar");
+  k.define(unpolarG, k.fn(["length", "angle", "x", "y"], (r, t, x, y) => k.and(
+    // x² + y² is never below 0, so its root always has an answer.
+    k.equal(r, f32(x, (a) => f32(y, (b) => k.let("squares", r32(n.add(r32(n.mul(a, a)), r32(n.mul(b, b)))), (sq) =>
+      G(r32(k.call(S.first, k.thunk(() => k.call(B.sqrt, sq)), k.thunk(() => k.lit(0)))))), "y value"), "x value")),
+    k.equal(t, f32(x, (a) => f32(y, (b) => G(r32(k.call(B.atan2, b, a))), "y value"), "x value")))));
+  k.results(unpolarG, "length", "angle");
+  const trigG = k.def("trig at float32");
+  k.define(trigG, k.call(TRIG_V, ...[sinG, cosG, tanG, expG, logG, polarG, unpolarG, S.byItsWays, S.byItsWays].map((d) => k.x(d))));
+  const float32Impls = [
+    impl("arithmetic at float32", ARITHMETIC_V, [addG, subG, mulG, negG]),
+    impl("ordered at float32", ORDERED_V, [lessG]),
+    impl("division at float32", DIVISION_V, [divG]),
+    impl("literal at float32", LITERAL_V, [float32Literal]),
+    impl("shown at float32", SHOWN_V, [showG]),
+    trigG,
+  ];
+  impls.push(...float32Impls);
+  const float32Helpers = [addG, subG, mulG, divG, lessG, negG, nearestG, float32Literal, laidOut, shortestG, showG, sinG, cosG, tanG, expG, logG, polarG, unpolarG];
+
+  const offered = [RT.def, embedIR, embedRF, fraction, whole, toNum, ratAlg, ratReal, algRat, TC.def, embedC, asC, unitI, conjC, modulus, angle, polar, expC, csqrt, clog, cpow, casin, cacos, complexTable, T.def, embedD, asD, slopeAt, dualTable, ...mats.map((m) => m.def), MX.def, LU.def, matrixOfRows, rowsOf, rowCount, columnCount, matrixEntry, transposed, identityMatrix, matrixScaled, matrixSum, matrixProduct, matrixTimesVector, solved, factored, solvedWith, determinant, inverted, leastSquares, FX.def, asFixed, fixedF, sqrtX, F32.def, asG, gF, sqrtG, NT.def, natural, integer, addN, mulN, IT.def];
   const laws = [lawFromPolar, lawPolar];
-  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral, natLiteral, natLiteralI, intFrom, intMinus];
+  const helpers = [addF, subF, mulF, negF, lessF, divF, showF, rationalLiteral, addC, subC, mulC, negC, divC, showC, addD, subD, mulD, negD, divD, sinD, cosD, tanD, expD, logD, unpolarD, showD, ...matTables, addParts, subParts, negParts, ...matProducts, listDot, eliminated, backSubstituted, determinantOf, addX, subX, mulX, lessX, negX, divX, showX, zeroI, succI, matchI, foldI, naturalI, integerI, ...natReps, fractionDigits, showSteps, cordic, sinCos, sinX, cosX, tanX, expX, bits, logX, vector, unpolarX, asinX, acosX, polarX, fixedLiteral, natLiteral, natLiteralI, intFrom, intMinus, ...float32Helpers];
   const comments: Record<Id, string> = {
     [RT.def]: "An exact fraction, top/bottom, always in lowest terms. The same + − · < work on it. Make one with fraction(1, 3) or as fraction(n); its constructor ratio is private to the library, which keeps the rule.",
     [embedIR]: "Int in Rational: n as the fraction n/1, the one map that keeps + − · and <.",
@@ -819,6 +968,13 @@ export function buildNumbers(pre: Module): Module {
     [unaryRow]: "Nat stored as written, zero and succ cells: a number n takes n of them. One of the ways the compiler may store Nat.",
     [intRow]: "Nat stored as an Int: its meaning is natural, and each job is Int's own. One of the ways the compiler may store Nat, and the one it picks unless a program's own is cheaper.",
     [trigX]: "How Fixed does Trig: CORDIC and series, all in Ints, so the same bits on every machine. Found by its type, so not offered: sin is.",
+    [F32.def]: "A 32-bit float (IEEE 754 binary32), what a GPU computes in. The same + − · ÷ < work on it, each step rounded to the nearest Float32, so a Float32 program gives the same answer on the CPU, compiled and on a GPU. A literal is rounded once from its digits. Make one from a Float64 with as float32; its case is private, which keeps every value a Float32.",
+    [asG]: "The Float32 nearest a Float64 (ties to even). Past 3.4 · 10³⁸ it overflows, an Abort.",
+    [gF]: "A Float32 as the Float64 it is, exactly.",
+    [sqrtG]: "√x for Float32, rounded once, as a GPU's correctly rounded square root gives; no answer below 0.",
+    [showG]: "A Float32 as text: the shortest decimal that reads back to the same Float32, so as float32(0.1) shows as 0.1. Not offered: the one show shows every number.",
+    [float32Literal]: "What a number written at Float32 becomes: top/bottom rounded once to the nearest Float32. Not offered: a literal is.",
+    [trigG]: "How Float32 does Trig: each Float64 function's answer rounded to the nearest Float32. Found by its type, so not offered: sin is.",
   };
   const p = publish(merge(prelude, std, pre.code, k.code), k.names, [...offered, ...impls, ...helpers, ...laws], merge(prelude, std, pre.code));
   if (!p.ok) throw new Error(`the numbers module can't be published: ${p.reason}`);

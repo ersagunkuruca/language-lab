@@ -186,6 +186,10 @@ export const WORLD_OPS: Record<Id, { op: string; aborts: boolean }> = {
 const HOST_WORLD: Record<Id, { op: string; aborts: boolean }> = {
   [IO.readBytes]: { op: "readBytes", aborts: true }, [IO.writeBytes]: { op: "writeBytes", aborts: true }, [IO.offerFile]: { op: "offerFile", aborts: true }, [IO.askForFile]: { op: "askForFile", aborts: true }, [IO.fetchText]: { op: "fetchText", aborts: true },
   [IO.sendRequest]: { op: "sendRequest", aborts: true },
+  // A file's info (L282), a File info record: JavaScript's for now.
+  [IO.fileInfo]: { op: "fileInfo", aborts: true },
+  // A file to the platform's app (L283): JavaScript's for now.
+  [IO.openOutside]: { op: "openOutside", aborts: true },
   // A fetch as a ticket (L150, C182): ready when the body comes.
   [IO.startFetch]: { op: "startFetch", aborts: true },
 };
@@ -1677,8 +1681,10 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
           const ts = [...n.args, id].map((a) => { const t = stype(zonk(a)); if (!t) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(a))}`); return t; });
           const a = ts.find(isArray);
           if (!a) throw new Refused(`uses ${nm(target)} on no array`);
-          const l = ts.find(isData);
-          if (l) a.list = l;
+          // A list of the array's items, not an item that is data (an
+          // array of an enum's, its `first` an Op: countdown-page, C294).
+          const l = ts.find((t) => isData(t) && t.cases.length === 2 && t.cases.some((c) => !c.fields.length) && t.cases.some((c) => c.fields.length === 2 && c.fields.some((x) => x.t === t)));
+          if (l) a.list = l as DType;
           return { k: "rt", fn: `${ARRAY_RT[target] ?? "array.replaceAt"}.a${a.index}`, args: args() };
         }
         if (opts.data && TABLE_RT[target]) {

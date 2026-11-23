@@ -64,6 +64,9 @@ typedef struct ters_ui {
   // The rate it plays at, or 0 when it can't (ters_sound_say says why);
   // its audio thread then asks ters_sound_play for samples. May be null.
   double (*sound)(void *ctx, int n, int on, int mic, const char *address, size_t an);
+  // The focus to box v (an input with autofocus, as a browser gives it
+  // one once it is on the page: C298). May be null.
+  void (*focus)(void *ctx, void *v);
 } ters_ui;
 
 enum { TL_BLOCK, TL_INLINE, TL_FLEX, TL_GRID, TL_CONTENTS, TL_NONE };
@@ -111,6 +114,8 @@ typedef struct tl_n {
   // text's last measure.
   double sent_place[5], sent_paint[4], sent_font[5], m_size, m_width, m_w;
   int sent, m_bold, m_lines, measured, sent_clip;
+  // Whether the pointer is over it or a box inside it (:hover, C298).
+  int hover;
   // How high what's inside it is (its height as nothing held it), and what
   // the screen was told of it, for a box that scrolls.
   double inside, sent_inside, sent_side[5], sent_outline[25];
@@ -123,6 +128,9 @@ typedef struct tl_n {
 static ters_ui *tl_ui;
 static tl_n *tl_root;
 static double tl_width = 360;
+// The window's height, for vh (0 when the screen doesn't say, as a
+// phone's scroll has no end: 100vh is then 640, a phone's).
+static double tl_height;
 static int tl_dark;
 static char *tl_sheet;
 static size_t tl_sheet_n;
@@ -158,6 +166,7 @@ static void *tl_text(void *c, const char *s, size_t n) {
 static void tl_set_text(void *c, void *x, const char *s, size_t n) { (void)c; tl_n *e = x; free(e->s); e->s = tl_dup(s, n); e->measured = 0; tl_ui->set_text(tl_ui->ctx, e->view, s, n); }
 static void tl_set_attribute(void *c, void *x, const char *k, size_t kn, const char *v, size_t vn) {
   (void)c; tl_n *e = x;
+  if (kn == 9 && !memcmp(k, "autofocus", 9) && tl_ui->focus) tl_ui->focus(tl_ui->ctx, e->view);
   char **at = kn == 2 && !memcmp(k, "id", 2) ? &e->id : kn == 5 && !memcmp(k, "class", 5) ? &e->cls : kn == 5 && !memcmp(k, "style", 5) ? &e->style : 0;
   if (at) { free(*at); *at = tl_dup(v, vn); }
   else if (kn == 5 && !memcmp(k, "value", 5)) tl_ui->set_value(tl_ui->ctx, e->view, v, vn);
@@ -246,6 +255,10 @@ static double tl_len(const char *p, const char *e, double size, int *ok, const c
   if (u + 2 <= e && !memcmp(u, "px", 2)) u += 2;
   else if (u + 3 <= e && !memcmp(u, "rem", 3)) { r = x * 16; u += 3; }
   else if (u + 2 <= e && !memcmp(u, "em", 2)) { r = x * size; u += 2; }
+  // vh and vw (dvh, svh, lvh the same: a window's bars don't come and go).
+  else if (u + 2 <= e && !memcmp(u, "vh", 2)) { r = x * (tl_height > 0 ? tl_height : 640) / 100; u += 2; }
+  else if (u + 3 <= e && u[1] == 'v' && u[2] == 'h' && (*u == 'd' || *u == 's' || *u == 'l')) { r = x * (tl_height > 0 ? tl_height : 640) / 100; u += 3; }
+  else if (u + 2 <= e && !memcmp(u, "vw", 2)) { r = x * tl_width / 100; u += 2; }
   else if (u < e && *u == '%') { *ok = 2; u++; }
   *ok = *ok == 2 ? 2 : 1;
   if (after) *after = u;
@@ -262,8 +275,9 @@ typedef struct { char tag[24], id[40], cls[4][40]; int ncls, pseudo, spec, order
 static tl_rule *tl_rules;
 static int tl_nrules;
 // The pseudo-classes this engine reads, as bits (pig's #tally:empty and
-// .line:last-child): what an element is among its parent's.
-enum { TL_EMPTY = 1, TL_FIRST = 2, TL_LAST = 4 };
+// .line:last-child): what an element is among its parent's; and :hover,
+// the pointer over it (C298).
+enum { TL_EMPTY = 1, TL_FIRST = 2, TL_LAST = 4, TL_HOVER = 8 };
 // One compound from a to b into s, its specificity added; 0 if it isn't
 // one this engine reads (another pseudo-class, an attribute).
 static int tl_compound(const char *a, const char *b, char *tag, char *id, char (*cls)[40], int *ncls, int *pseudo, int *spec) {
@@ -274,6 +288,7 @@ static int tl_compound(const char *a, const char *b, char *tag, char *id, char (
       if (n == 6 && !memcmp(x, ":empty", 6)) *pseudo |= TL_EMPTY;
       else if (n == 12 && !memcmp(x, ":first-child", 12)) *pseudo |= TL_FIRST;
       else if (n == 11 && !memcmp(x, ":last-child", 11)) *pseudo |= TL_LAST;
+      else if (n == 6 && !memcmp(x, ":hover", 6)) *pseudo |= TL_HOVER;
       else return 0;
       *spec += 10; x = y; continue;
     }
@@ -389,6 +404,7 @@ static int tl_is(const char *tag, const char *id, char (*cls)[40], int ncls, int
   if (tag[0] && strcmp(tag, "*") && strcmp(tag, e->tag)) return 0;
   if (id[0] && (!e->id || strcmp(id, e->id))) return 0;
   for (int j = 0; j < ncls; j++) if (!tl_word(e->cls, cls[j])) return 0;
+  if ((pseudo & TL_HOVER) && !e->hover) return 0;
   // :empty, no element and no text in it (an empty text is none, as
   // Chromium has pig's #tally); :first-child and :last-child among the
   // parent's elements.
@@ -1434,16 +1450,56 @@ static int ters__ui_pointer(void *view, int kind, double x, double y) {
   for (int j = 0; j < m; j++) ters_page_event(hs[j], "", 0, "", 0, ux, uy, 0);
   return m > 0;
 }
+// The pointer over view, the innermost box under it (0: over none, or
+// out of the window), as a desktop's screen tells it when that changes
+// (C298): the boxes it left lose :hover and hear pointerleave, innermost
+// first, and the ones it entered gain it and hear pointerenter, outermost
+// first, as a browser's. The boxes hovered are a path from the root.
+static int tl_hover_rules(void) {
+  for (int i = 0; i < tl_nrules; i++) {
+    if (tl_rules[i].pseudo & TL_HOVER) return 1;
+    for (int j = 0; j < tl_rules[i].nup; j++) if (tl_rules[i].up[j].pseudo & TL_HOVER) return 1;
+  }
+  return 0;
+}
+static void ters__ui_hover(void *view) {
+  if (!tl_root) return;
+  tl_n *e = view ? tl_find_view(tl_root, view) : 0;
+  tl_n *now[64], *was[64]; int nn = 0, nw = 0;
+  for (tl_n *a = e; a && a->tag && nn < 64; a = a->parent) now[nn++] = a;
+  for (tl_n *a = tl_root; a && a->hover && nw < 64;) {
+    was[nw++] = a;
+    tl_n *next = 0;
+    for (int j = 0; j < a->nk && !next; j++) if (a->kids[j]->tag && a->kids[j]->hover) next = a->kids[j];
+    a = next;
+  }
+  int hs[64], m = 0, changed = 0;
+  // Left, innermost first (was runs from the root in).
+  for (int i = nw; i-- > 0;) {
+    int still = 0; for (int k = 0; k < nn; k++) if (now[k] == was[i]) still = 1;
+    if (still) continue;
+    was[i]->hover = 0; changed = 1;
+    for (int j = 0; j < was[i]->np && m < 64; j++) if (!strcmp(was[i]->pev[j], "pointerleave")) hs[m++] = was[i]->ph[j];
+  }
+  // Entered, outermost first (now runs from e out).
+  for (int i = nn; i-- > 0;) {
+    if (now[i]->hover) continue;
+    now[i]->hover = 1; changed = 1;
+    for (int j = 0; j < now[i]->np && m < 64; j++) if (!strcmp(now[i]->pev[j], "pointerenter")) hs[m++] = now[i]->ph[j];
+  }
+  if (changed && tl_hover_rules()) tl_layout();
+  for (int j = 0; j < m; j++) ters_page_event(hs[j], "", 0, "", 0, 0, 0, 0);
+}
 // An element a part drew again: its animation starts again (as a
 // browser's new element's would) when it next has one.
 static void tl_renew(void *c, void *x) { (void)c; ((tl_n *)x)->an[0] = 0; }
 static double tl_sound(void *c, int n, int on, int mic, const char *a, size_t an) { (void)c; return tl_ui->sound ? tl_ui->sound(tl_ui->ctx, n, on, mic, a, an) : 0; }
 static ters_host tl_host = { 0, tl_element, tl_text, tl_set_text, tl_set_attribute, tl_remove_attribute, tl_append, tl_clear, tl_listen, tl_gone, tl_renew, tl_sound, tl_marks };
-// main's page on screen ui, width wide (in the units its texts measure
-// in), dark or not: the root's view.
+// main's page on screen ui, width wide and height high (in the units its
+// texts measure in), dark or not: the root's view.
 static int tl_ask(const char *what, size_t n) { return tl_ui->ask(tl_ui->ctx, what, n); }
-static void *ters__ui_start(ters_ui *ui, double width, int dark) {
-  tl_ui = ui; tl_width = width; tl_dark = dark;
+static void *ters__ui_start(ters_ui *ui, double width, double height, int dark) {
+  tl_ui = ui; tl_width = width; tl_height = height; tl_dark = dark;
   if (ui->ask) ters_asker = tl_ask;
   ters_after = tl_layout;
   ters_moving = tl_moving;
@@ -1452,16 +1508,17 @@ static void *ters__ui_start(ters_ui *ui, double width, int dark) {
   tl_layout();
   return tl_root->view;
 }
-// The screen's width or colour scheme changed.
-static void ters__ui_resize(double width, int dark) {
-  tl_width = width;
+// The window's size or colour scheme changed.
+static void ters__ui_resize(double width, double height, int dark) {
+  tl_width = width; tl_height = height;
   if (dark != tl_dark) { tl_dark = dark; free(tl_sheet); tl_sheet = 0; free(tl_rules); tl_rules = 0; tl_nrules = 0; free(tl_kfs); tl_kfs = 0; tl_nkf = 0; }
   tl_layout();
 }
 // Each way in, under the page's lock (C217).
 int ters_ui_pointer(void *view, int kind, double x, double y) { ters_page_lock(); int r = ters__ui_pointer(view, kind, x, y); ters_page_unlock(); return r; }
-void *ters_ui_start(ters_ui *ui, double width, int dark) { ters_page_lock(); void *r = ters__ui_start(ui, width, dark); ters_page_unlock(); return r; }
-void ters_ui_resize(double width, int dark) { ters_page_lock(); ters__ui_resize(width, dark); ters_page_unlock(); }
+void ters_ui_hover(void *view) { ters_page_lock(); ters__ui_hover(view); ters_page_unlock(); }
+void *ters_ui_start(ters_ui *ui, double width, double height, int dark) { ters_page_lock(); void *r = ters__ui_start(ui, width, height, dark); ters_page_unlock(); return r; }
+void ters_ui_resize(double width, double height, int dark) { ters_page_lock(); ters__ui_resize(width, height, dark); ters_page_unlock(); }
 `;
 
 // A screen for tests (C199d): it keeps each box's place and paint, and
@@ -1470,10 +1527,12 @@ void ters_ui_resize(double width, int dark) { ters_page_lock(); ters__ui_resize(
 // input:ID:TEXT, pointerdown:ID:X,Y and pointermove:ID:X,Y (X, Y from its
 // top left), frames:N:MS (N frames MS apart on a clock of its own, which
 // animations run on), and pointer:down|move|up:X,Y at a point on the page,
-// in a picture, and latency:S, a sound's latency in seconds). Texts
+// in a picture, hover:ID, the pointer over that box (hover:- over none),
+// and latency:S, a sound's latency in seconds). Texts
 // measure as if each character were half a font size wide, so places
 // that hang on texts are near a browser's, not equal.
-// The first argument may be width:N (360 by default) and dark.
+// The first arguments may be width:N (360 by default), height:N (none by
+// default, so 100vh is 640) and dark.
 export const UI_HEADLESS_C = String.raw`
 typedef struct uv { char *tag, *s, **ev; int *eh, ne, nk, shown, bold, clip, nout; double inside, side[4], out[24]; uint32_t sidec; struct uv **kids; double x, y, w, h, size, radius, border, *ops; size_t nops; uint32_t bg, color; } uv;
 static uv *u_new(const char *tag, size_t tn, const char *s, size_t n) { uv *v = calloc(1, sizeof *v); if (tag) v->tag = tl_dup(tag, tn); if (s) v->s = tl_dup(s, n); return v; }
@@ -1488,7 +1547,9 @@ static void u_listen(void *c, void *x, const char *ev, size_t n, int h) {
   v->ev = realloc(v->ev, sizeof *v->ev * (size_t)(v->ne + 1)); v->eh = realloc(v->eh, sizeof *v->eh * (size_t)(v->ne + 1));
   v->ev[v->ne] = tl_dup(ev, n); v->eh[v->ne++] = h;
 }
-static void u_gone(void *c, void *x) { (void)c; uv *v = x; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
+// The box with the focus (autofocus).
+static uv *u_focused;
+static void u_gone(void *c, void *x) { (void)c; uv *v = x; if (u_focused == v) u_focused = 0; for (int j = 0; j < v->ne; j++) free(v->ev[j]); free(v->ev); free(v->eh); free(v->kids); free(v->tag); free(v->s); free(v->ops); free(v); }
 static void u_draw(void *c, void *x, const double *ops, size_t n) { (void)c; uv *v = x; free(v->ops); v->ops = malloc(sizeof *ops * (n + 1)); memcpy(v->ops, ops, sizeof *ops * n); v->nops = n; }
 static void u_clip(void *c, void *x, int on) { (void)c; ((uv *)x)->clip = on; }
 static void u_scroll(void *c, void *x, double inside) { (void)c; ((uv *)x)->inside = inside; }
@@ -1514,6 +1575,7 @@ static void u_measure(void *c, const char *s, size_t n, double size, int bold, d
   *w = most; *lines = k;
 }
 static double u_pw, u_ph; static uint32_t u_pbg;
+static void u_focus(void *c, void *v) { (void)c; u_focused = v; }
 static void u_page(void *c, double w, double h, uint32_t bg) { (void)c; u_pw = w; u_ph = h; u_pbg = bg; }
 // Each box and text shown, at its place on the page.
 static void u_print(uv *v, double dx, double dy, int depth) {
@@ -1528,6 +1590,7 @@ static void u_print(uv *v, double dx, double dy, int depth) {
   if (v->tag && (v->side[0] || v->side[1] || v->side[2] || v->side[3])) printf(" sides %g %g %g %g %08X", v->side[0], v->side[1], v->side[2], v->side[3], v->sidec);
   if (v->tag && v->nout) { printf(" outline"); for (int i = 0; i < v->nout; i++) printf(" %g,%g", v->out[2 * i], v->out[2 * i + 1]); }
   if (!v->tag) printf(" %g%s %08X \"%s\"", v->size, v->bold ? " bold" : "", (unsigned)v->color, v->s);
+  if (v == u_focused) printf(" focus");
   putchar('\n');
   // A picture's shapes, one a line: the box round its points on the page
   // (a curve's control points too), and its paint.
@@ -1612,20 +1675,22 @@ static void *u_play(void *x) {
 int main(int argc, char **argv) {
   static ters_ui ui = { 0, u_box, u_text, u_set_text, u_set_value, u_append, u_clear, u_listen, u_gone, u_place, u_paint, u_font, u_measure, u_page, u_draw, u_clip, u_scroll, u_sides, u_outline, u_ask,
 #ifdef TERS_BLOCK
-    u_sound
+    u_sound,
 #else
-    0
+    0,
 #endif
+    u_focus
   };
-  double width = 360; int dark = 0, a = 1;
+  double width = 360, height = 0; int dark = 0, a = 1;
   for (; a < argc; a++) {
     if (!strncmp(argv[a], "width:", 6)) width = atof(argv[a] + 6);
+    else if (!strncmp(argv[a], "height:", 7)) height = atof(argv[a] + 7);
     else if (!strcmp(argv[a], "dark")) dark = 1;
     else break;
   }
   // The clock animations run on is the test's: frames:N:MS moves it.
   tl_fake = 0;
-  uv *root = ters_ui_start(&ui, width, dark);
+  uv *root = ters_ui_start(&ui, width, height, dark);
   if (!root) return 1;
   u_show(root);
   for (; a < argc; a++) {
@@ -1681,6 +1746,15 @@ int main(int argc, char **argv) {
       tl_n *pic = u_picture(tl_root, 0, 0, px, py, &px, &py);
       if (!pic) { fprintf(stderr, "no picture at %s\n", more); return 2; }
       ters_ui_pointer(pic->view, kind, px, py);
+      free(s);
+      u_show(root);
+      continue;
+    }
+    // hover:ID, the pointer over the box with that id (hover:- over none).
+    if (!strcmp(s, "hover")) {
+      tl_n *h = strcmp(id, "-") ? u_find(tl_root, id) : 0;
+      if (!h && strcmp(id, "-")) { fprintf(stderr, "no element with id %s\n", id); return 2; }
+      ters_ui_hover(h ? h->view : 0);
       free(s);
       u_show(root);
       continue;

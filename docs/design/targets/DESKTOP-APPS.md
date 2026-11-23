@@ -48,6 +48,8 @@ in a page, and a list of thousands of rows that stays quick.
   and height. build.sh makes a `.app` with clang alone. The hand-run
   "macOS app" workflow (macos-latest, as the iOS one) builds it, starts it
   with clicks to make by a button's text, and prints what the page shows.
+  Built in C295: dice runs there, its frames tick and it lays out again
+  when the window narrows.
 - **Left for a real Mac.** Gatekeeper refuses an unsigned app from the
   internet: ad-hoc signing (`codesign -s -`) runs it after a right-click
   Open; a Developer ID and notarizing is Ersagun's call, as iOS signing is.

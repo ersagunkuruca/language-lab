@@ -151,6 +151,8 @@ export function runMainIn(code: Code, info: Info, names: Names, main: Id, given:
     appendFile: (p, t) => void files.set(p, (files.get(p) ?? "") + t),
     fileExists: (p) => files.has(p) || [...files.keys()].some((f) => f.startsWith(`${p}/`)),
     listFolder: (p) => [...new Set([...files.keys()].filter((f) => f.startsWith(`${p}/`)).map((f) => f.slice(p.length + 1).split("/")[0]))].sort(),
+    // An example's files have no times: each was modified at 0.
+    fileInfo: (p) => (files.has(p) ? { kind: "file", size: new TextEncoder().encode(files.get(p)).length, modified: 0 } : [...files.keys()].some((f) => f.startsWith(`${p}/`)) ? { kind: "folder", size: 0, modified: 0 } : missing(p)),
   };
   const print = (l: string) => void printed.push(l);
   const exit = run ? run(world, print) : runProgram(code, info, main, given.arguments, { ...rt, names, print, world } as Runtime);
