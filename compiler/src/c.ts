@@ -20,6 +20,7 @@
 // then the fields, one C struct per case. A case with no fields is one
 // static cell whose count is 0, which means it is never counted or freed.
 import { TICKET_V } from "../../ters/src/lang/std.ts";
+import { FLOAT32_TYPE } from "../../ters/src/lang/library.ts";
 // Values are owned: whoever holds one gives it on (to a call, a field, a
 // let) or drops it, so a function owns its inputs. Each use of a local is
 // the last one or a `dup`, and a local that one branch doesn't use is
@@ -1133,9 +1134,13 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   // walks the buffer as whole items in place (threads, keys). Fields of
   // eight bytes only, so each column stays aligned whatever the room.
   const colsOf = new Set<string>();
+  // A Float32 (L286, C309) is held as binary32: its one Float64, rounded
+  // to a binary32 at every step, is a float exactly, so it is written to
+  // the float and read back as the same double.
+  const binary32 = (r: RType) => !r.mutable && r.def === FLOAT32_TYPE && r.fields.length === 1 && r.fields[0].t === "f64";
   for (const a of arrays.values()) {
     const r = a.item;
-    if (!isRecord(r) || r.mutable || !r.fields.length || !r.fields.every((x) => ["double", "lab_int", "lab_cell *"].includes(ty(x.t)))) continue;
+    if (!isRecord(r) || r.mutable || binary32(r) || !r.fields.length || !r.fields.every((x) => ["double", "lab_int", "lab_cell *"].includes(ty(x.t)))) continue;
     if (![...arrayFns].some((fn) => { const m = COL_FN.exec(fn); return !!m && Number(m[4]) === a.index && m[1].startsWith("get"); })) continue;
     if ([...pars.values()].some((p) => p.ta.key === a.key || p.to.key === a.key) || keyArrays.some(([, , ai]) => ai === a.index)) continue;
     colsOf.add(a.key);
@@ -1162,7 +1167,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
     const n = sname.get(r.key)!;
     types.push(r.mutable
       ? `typedef struct { lab_cell h; ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ")} } ${n}; // a box`
-      : `typedef struct { ${r.fields.map((x, j) => `${ty(x.t)} f${j};`).join(" ") || "char none;"} } ${n}; // ${r.name}: ${r.fields.map((x) => x.name).join(", ")}`);
+      : `typedef struct { ${r.fields.map((x, j) => `${binary32(r) ? "float" : ty(x.t)} f${j};`).join(" ") || "char none;"} } ${n}; // ${r.name}: ${r.fields.map((x) => x.name).join(", ")}`);
   }
   for (const d of data.values()) {
     if (d.cases.length > 256) throw new Error(`${d.name} has ${d.cases.length} cases; a cell's tag in C holds 256`);
