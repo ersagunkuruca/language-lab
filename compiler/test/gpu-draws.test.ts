@@ -33,6 +33,7 @@ function program(build: (k: Lang, t: Kit) => Id) {
   const colour = k.type("Colour", [], [["colour", [["red", num], ["green", num], ["blue", num]]]]);
   const t: Kit = {
     corner: (x, y) => k.call(corner.v.corner2, k.lit(x), k.lit(y)),
+    at: (x, y) => k.call(corner.v.corner2, x, y),
     cx: (c) => k.call(corner.f["corner2.x"], c),
     cy: (c) => k.call(corner.f["corner2.y"], c),
     point: (x, y, z) => k.call(point.v.point4, x, y, z, k.lit(1)),
@@ -55,7 +56,7 @@ function program(build: (k: Lang, t: Kit) => Id) {
   };
 }
 interface Kit {
-  corner: (x: number, y: number) => Id; cx: (c: Id) => Id; cy: (c: Id) => Id;
+  corner: (x: number, y: number) => Id; at: (x: Id, y: Id) => Id; cx: (c: Id) => Id; cy: (c: Id) => Id;
   point: (x: Id, y: Id, z: Id) => Id; colour: (r: Id, g: Id, b: Id) => Id;
   square: () => Id; pass: (clear: string, depth: boolean, ...draws: Id[]) => Id;
 }
@@ -77,7 +78,7 @@ function drawWords(site: DrawSite, draw: { fields: Value[] }) {
   const [mesh, instances] = draw.fields, caps = draw.fields[5] as unknown as Value[];
   const its = fromList(instances);
   return {
-    caps: caps.flatMap((c, j) => words([c], site.caps[j])).concat([0, 0, 0, 0]).slice(0, Math.max(4, Math.ceil(site.caps.reduce((s, l) => s + l.length, 0) / 4) * 4)),
+    caps: caps.flatMap((c, j) => (site.caps[j].length ? words([c], site.caps[j]) : [])).concat([0, 0, 0, 0]).slice(0, Math.max(4, Math.ceil(site.caps.reduce((s, l) => s + l.length, 0) / 4) * 4)),
     instances: words(its, site.instance), corners: words(fromList(part(mesh, 0)), site.corner),
     triangles: fromList(part(mesh, 1)).map(Number), count: its.length,
   };
@@ -230,6 +231,54 @@ test("a fragment that is a definition ignoring its input, its vertex reading a c
   assert.deepEqual(p.draws.sites[0].caps.map((c) => c.map((l) => l.kind)), [["f32"]]);
 });
 
+// G10b: a pass into "glow", a 2 × 1 texture, red with a green square over
+// its right half; then the screen sampling it across at half height, the
+// texture a let of main both passes read.
+const TEXEL_F = (f: string) => `std.texel.texel.${f}` as Id;
+const sampling = () => program((k, t) => {
+  const main = k.def("main");
+  const texel = (s: Id) => t.colour(k.call(TEXEL_F("red"), s), k.call(TEXEL_F("green"), s), k.call(TEXEL_F("blue"), s));
+  k.define(main, k.thunk(() => k.let("glow", k.call(FRAME_V.texture, k.lit("glow"), k.int(2), k.int(1)), (glow) => {
+    const green = k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(1)),
+      k.fn(["i", "c"], (i, c) => k.call(FRAME_V.placed, t.point(k.call(B.add, t.cx(c), i), t.cy(c), k.lit(0.5)), k.lit(0))),
+      k.fn(["_"], () => t.colour(k.lit(0), k.lit(1), k.lit(0))));
+    const read = k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(0)),
+      k.fn(["i", "c"], (i, c) => k.let("x", k.call(B.add, t.cx(c), i), (x) => k.call(FRAME_V.placed, t.point(x, t.cy(c), k.lit(0.5)), k.call(B.add, k.call(B.mul, x, k.lit(0.5)), k.lit(0.5))))),
+      k.fn(["u"], (u) => k.let("s", k.call(FRAME_OPS.sampled, glow, t.at(u, k.lit(0.5))), texel)));
+    return k.call(FRAME_V.frame, k.list(k.call(FRAME_V.pass, glow, k.lit("#ff0000"), k.false, k.list(green)), t.pass("#000", false, read)));
+  })));
+  return main;
+});
+
+test("a fragment sampling a pass's texture gets a site that binds it, the target crossing as no words (G10b)", () => {
+  const p = sampling();
+  assert.deepEqual([...p.draws.refused], []);
+  assert.deepEqual(Object.keys(p.draws.sites), ["0", "1"]);
+  const site = p.draws.sites[1];
+  assert.deepEqual(site.textures, [0]);
+  assert.deepEqual(site.caps, [[]]);
+  assert.equal(p.draws.sites[0].textures, undefined, "the pass into the texture samples none");
+  assert.match(site.wgsl, /@group\(0\) @binding\(3\) var lab_sampler: sampler;/);
+  assert.match(site.wgsl, /@group\(0\) @binding\(4\) var lab_tex0: texture_2d<f32>;/);
+  assert.match(site.wgsl, /textureSampleLevel\(lab_tex0, lab_sampler/);
+  // The compiled draw is given the target itself, which the runtime binds by its name.
+  const draw = fromList(part(fromList(part(p.compiled(), 0))[1], 3))[0] as unknown as { fields: Value[] };
+  const [glow] = draw.fields[5] as unknown as Value[];
+  assert.equal((glow as Data).tag, FRAME_V.texture);
+  assert.deepEqual([0, 1, 2].map((i) => part(glow, i)), ["glow", 2, 1].map((x) => (typeof x === "number" ? (typeof part(glow, 1) === "bigint" ? BigInt(x) : x) : x)));
+  // A target the fragment makes rather than captures has no binding: refused.
+  const made = program((k, t) => {
+    const main = k.def("main");
+    const draw = k.call(FRAME_OPS.draw, t.square(), k.list(k.lit(0)),
+      k.fn(["_", "c"], (_, c) => k.call(FRAME_V.placed, t.point(t.cx(c), t.cy(c), k.lit(0.5)), k.lit(0))),
+      k.fn(["u"], (u) => k.let("s", k.call(FRAME_OPS.sampled, k.call(FRAME_V.texture, k.lit("glow"), k.int(2), k.int(1)), t.at(u, k.lit(0.5))), (s) => t.colour(k.call(TEXEL_F("red"), s), k.lit(0), k.lit(0)))));
+    k.define(main, k.thunk(() => k.call(FRAME_V.frame, k.list(t.pass("#000", false, draw)))));
+    return main;
+  });
+  assert.deepEqual(Object.keys(made.draws.sites), []);
+  assert.match(made.draws.refused.get(0) ?? "", /./);
+});
+
 test("each site's printed packing writes the words put would, for its instances and its corners (G8)", () => {
   for (const p of [ramp(), nearFar(true), spread(), ignored()]) {
     const packs = new Function(`return ${packsOf(p.draws.sites)};`)() as Record<string, { instance: (xs: Value[], f: Float32Array, n: Int32Array) => void; corner: (xs: Value[], f: Float32Array, n: Int32Array) => void }>;
@@ -253,9 +302,12 @@ const chromiumPath = (): string | undefined => {
   return d ? ["chrome-linux64", "chrome-linux"].map((x) => join(root, d, x, "chrome")).find((x) => existsSync(x)) : undefined;
 };
 
-// A frame of screen passes drawn with WebGPU, each draw its site's
-// pipeline over the words drawWords gives, read back as RGBA bytes. The
-// blend and depth are the ones raster.ts draws with.
+// A frame drawn with WebGPU, each draw its site's pipeline over the words
+// drawWords gives, read back as RGBA bytes. The blend and depth are the
+// ones raster.ts draws with; a pass into a texture draws into an rgba8unorm
+// one of its size, which a later draw samples with the linear sampler kept
+// to its edges at binding 3, its k-th texture at 4 + k, as gpu-frame.ts
+// binds them.
 const RENDER = `async ({ width, height, passes }) => {
   const adapter = await navigator.gpu.requestAdapter(), device = await adapter.requestDevice();
   const errors = [];
@@ -264,9 +316,12 @@ const RENDER = `async ({ width, height, passes }) => {
   const target = device.createTexture({ size: [width, height], format, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
   const depthTex = device.createTexture({ size: [width, height], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT });
   const buffer = (words, usage) => { const b = device.createBuffer({ size: words.length * 4, usage: usage | GPUBufferUsage.COPY_DST }); device.queue.writeBuffer(b, 0, new Uint32Array(words)); return b; };
+  const textures = {}, sampler = device.createSampler({ magFilter: "linear", minFilter: "linear", addressModeU: "clamp-to-edge", addressModeV: "clamp-to-edge" });
   const enc = device.createCommandEncoder();
   for (const p of passes) {
-    const rp = enc.beginRenderPass({ colorAttachments: [{ view: target.createView(), clearValue: p.clear, loadOp: "clear", storeOp: "store" }], ...(p.depth ? { depthStencilAttachment: { view: depthTex.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" } } : {}) });
+    const into = p.into ? (textures[p.into.name] = device.createTexture({ size: [p.into.width, p.into.height], format, usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING })) : target;
+    const depthOf = p.into ? device.createTexture({ size: [p.into.width, p.into.height], format: "depth24plus", usage: GPUTextureUsage.RENDER_ATTACHMENT }) : depthTex;
+    const rp = enc.beginRenderPass({ colorAttachments: [{ view: into.createView(), clearValue: p.clear, loadOp: "clear", storeOp: "store" }], ...(p.depth ? { depthStencilAttachment: { view: depthOf.createView(), depthClearValue: 1, depthLoadOp: "clear", depthStoreOp: "store" } } : {}) });
     for (const d of p.draws) {
       const module = device.createShaderModule({ code: d.wgsl });
       const info = await module.getCompilationInfo();
@@ -275,7 +330,8 @@ const RENDER = `async ({ width, height, passes }) => {
       const group = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: buffer(d.caps, GPUBufferUsage.UNIFORM) } },
         { binding: 1, resource: { buffer: buffer(d.instances, GPUBufferUsage.STORAGE) } },
-        { binding: 2, resource: { buffer: buffer(d.corners, GPUBufferUsage.STORAGE) } }] });
+        { binding: 2, resource: { buffer: buffer(d.corners, GPUBufferUsage.STORAGE) } },
+        ...(d.textures.length ? [{ binding: 3, resource: sampler }, ...d.textures.map((t, k) => ({ binding: 4 + k, resource: textures[t].createView() }))] : [])] });
       rp.setPipeline(pipeline);
       rp.setBindGroup(0, group);
       rp.setIndexBuffer(buffer(d.triangles, GPUBufferUsage.INDEX), "uint32");
@@ -295,22 +351,24 @@ const RENDER = `async ({ width, height, passes }) => {
   return { errors, rgba };
 }`;
 
-// The GPU's side of a frame: each pass's draws with their sites' words.
+// The GPU's side of a frame: each pass's target and its draws with their
+// sites' words, and the textures each samples, by name.
 function onGpu(frame: Value, sites: Record<number, DrawSite>) {
   return fromList(part(frame, 0)).map((pass) => {
+    const t = part(pass, 0) as Data, into = t.tag === FRAME_V.texture ? { name: String(part(t, 0)), width: Number(part(t, 1)), height: Number(part(t, 2)) } : null;
     const [r, g, b, a] = cssColour(String(part(pass, 1)));
     const depth = (part(pass, 2) as unknown) === true || (part(pass, 2) as Data)?.tag === "std.bool.true";
     const draws = fromList(part(pass, 3)).map((d) => {
       const draw = d as unknown as { fields: Value[] }, site = sites[draw.fields[4] as unknown as number];
       const w = drawWords(site, draw);
-      return { wgsl: site.wgsl, ...w };
+      return { wgsl: site.wgsl, ...w, textures: (site.textures ?? []).map((i) => String(part((draw.fields[5] as unknown as Value[])[i], 0))) };
     });
-    return { clear: { r, g, b, a }, depth, draws };
+    return { into, clear: { r, g, b, a }, depth, draws };
   });
 }
 
 const exe = chromiumPath();
-test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ramp read from the place it was written, and depth", { skip: !exe && "no Chromium" }, async () => {
+test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ramp read from the place it was written, depth, and a pass's texture sampled", { skip: !exe && "no Chromium" }, async () => {
   const { chromium } = await import("../../ters/node_modules/playwright-core/index.mjs");
   const browser = await chromium.launch({ executablePath: exe, args: ["--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-vulkan=swiftshader", "--use-webgpu-adapter=swiftshader"] });
   try {
@@ -321,7 +379,7 @@ test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ram
     await page.goto(`file://${blank}`);
     assert.ok(await page.evaluate(() => !!(navigator as { gpu?: unknown }).gpu), "Chromium has WebGPU");
     const width = 16, height = 8;
-    for (const [name, p] of [["ramp", ramp()], ["near and far, depth", nearFar(true)], ["near and far, no depth", nearFar(false)], ["only the read field", spread()], ["a fragment ignoring its input", ignored()]] as const) {
+    for (const [name, p] of [["ramp", ramp()], ["near and far, depth", nearFar(true)], ["near and far, no depth", nearFar(false)], ["only the read field", spread()], ["a fragment ignoring its input", ignored()], ["a pass's texture sampled (G10b)", sampling()]] as const) {
       const want = rasterize(p.evaluated(), width, height, evaluatorCall).rgba;
       const got = await page.evaluate(`(${RENDER})(${JSON.stringify({ width, height, passes: onGpu(p.compiled(), p.draws.sites) })})`) as { errors: string[]; rgba: number[] };
       assert.deepEqual(got.errors, [], name);
@@ -330,3 +388,4 @@ test("the frame drawn on WebGPU is raster.ts's, within Float32's rounding: a ram
     }
   } finally { await browser.close(); }
 });
+
