@@ -1063,8 +1063,9 @@ static int lab_handlers_give(int e) { (void)e; if (lab_htn) lab_hs[lab_htaken[--
   // back in. One-shot, as Koka's and OCaml 5's effect handlers on fibers.
   // Android's libc has no ucontext (C199f): there a fiber is started by
   // moving the stack pointer onto its stack (one instruction per
-  // processor) and switched with sigsetjmp and siglongjmp.
-  "fibers": { uses: [], c: `#if defined(__ANDROID__) || defined(LAB_FIBER_SJLJ)
+  // processor) and switched with sigsetjmp and siglongjmp. Apple's too
+  // (C294): ucontext is deprecated on macOS, and iOS builds with this.
+  "fibers": { uses: [], c: `#if defined(__ANDROID__) || defined(__APPLE__) || defined(LAB_FIBER_SJLJ)
 #include <setjmp.h>
 typedef struct { sigjmp_buf jb; void (*fn)(void); char *top; } lab__ctx;
 static void lab__cgo(lab__ctx *to) {
