@@ -45,7 +45,7 @@ jobs:
         run: sh "$RUNNER_TEMP/app/build.sh"
       - name: Started, clicked
         env:
-          TAPS: ${{ inputs.taps || 'Roll|Throw 100' }}
+          TAPS: ${{ inputs.taps || 'Roll|resize 420|Throw 100' }}
         run: |
           cd "$RUNNER_TEMP/app"
           app=$(ls -d *.app)
