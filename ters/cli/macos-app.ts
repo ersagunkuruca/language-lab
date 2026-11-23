@@ -367,7 +367,9 @@ static void u_listen(void *c, void *v, const char *e, size_t n, int h) {
   if (!P.heard[num]) P.heard[num] = [NSMutableDictionary new];
   P.heard[num][ev] = @(h);
   if ([ev isEqualToString:@"click"]) [a addGestureRecognizer:[[NSClickGestureRecognizer alloc] initWithTarget:P action:@selector(clicked:)]];
-  else if ([ev hasPrefix:@"pointer"] && [a isKindOfClass:[TBox class]] && ![a isKindOfClass:[TPicture class]]) {
+  // pointerenter and pointerleave are the page's, from where the pointer
+  // is (ters_ui_hover).
+  else if ([ev hasPrefix:@"pointer"] && ![ev isEqualToString:@"pointerenter"] && ![ev isEqualToString:@"pointerleave"] && [a isKindOfClass:[TBox class]] && ![a isKindOfClass:[TPicture class]]) {
     TBox *b = (TBox *)a;
     if (!b.pointers) b.pointers = [NSMutableDictionary new];
     b.pointers[ev] = @(h);
@@ -547,7 +549,7 @@ static double seconds(void) { return CACurrentMediaTime(); }
   [self.frameViews addObject:f];
   [self tick];
 }
-- (NSNumber *)handler:(NSString *)event of:(NSView *)v { NSNumber *n = nil; for (NSNumber *k in self.views) if (self.views[k] == v) n = k; return n ? self.heard[n][event] : nil; }
+- (NSNumber *)handler:(NSString *)event of:(NSView *)v { NSNumber *n = [self.ids objectForKey:v]; return n && self.views[n] == v ? self.heard[n][event] : nil; }
 - (void)clicked:(NSClickGestureRecognizer *)g { NSNumber *h = [self handler:@"click" of:g.view]; if (h) { printf("event %d\n", h.intValue); fire(h.intValue, @"", @"", 0, 0, 0); } }
 - (void)controlTextDidChange:(NSNotification *)n { if (self.quiet) return; NSTextField *f = n.object; NSNumber *h = [self handler:@"input" of:f]; if (h) fire(h.intValue, f.stringValue ?: @"", @"", 0, 0, 0); }
 - (void)textDidChange:(NSNotification *)n { if (self.quiet) return; NSTextView *t = n.object; NSNumber *h = [self handler:@"input" of:t]; if (h) fire(h.intValue, t.string ?: @"", @"", 0, 0, 0); }
