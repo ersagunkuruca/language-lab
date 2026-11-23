@@ -678,7 +678,13 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
   const find = (r: number): number => { let x = r; while (root.has(x) && root.get(x) !== x) x = root.get(x)!; return x; };
   for (const [a, b] of links) { const ra = find(a), rb = find(b); if (ra !== rb) root.set(ra, rb); }
   const tailOf = (r: number) => find(r);
+  // The type variables the type names; an interface's effect is shown only
+  // for one of them. Another use found on a row joined to this type's (a
+  // generic caller's, through the rows' links) is no part of it: mnist's
+  // squash showed thirteen callers' "b's Division" (I351).
+  const inType = new Set<number>();
   const count = (t: Type) => {
+    if (t.t === "var") inType.add(t.v);
     if (t.t === "con") t.args.forEach(count);
     if (t.t === "fn") {
       t.params.forEach(count);
@@ -722,6 +728,7 @@ export function showType(t: Type, names: Names, arith?: ReadonlyMap<number, Arit
     const params = t.params.map((p) => go(p, false)).join(", ");
     const tail = t.eff.tail === null ? null : tailOf(t.eff.tail);
     if (tail !== null) for (const [v, iface, , r] of uses) {
+      if (!inType.has(v)) continue;
       const by = r !== null && tailOf(r) === tail ? `${go({ t: "var", v }, true)}'s ${name(iface)}` : "";
       if (by && !effs.includes(by)) effs.push(by);
     }
