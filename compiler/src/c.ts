@@ -137,7 +137,7 @@ static int64_t lab__i64_range_split(double x) {
 }` : ""}`;
 // std's Table's runtime functions, one copy per table type (C63h).
 const TABLE_FN = /^table\.(\w+)\.t(\d+)(?:\.e(\d+))?$/;
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>", FILE_INFO_T = "std.file info<>", FILE_KIND_T = "std.file kind<>";
 
 // The runtime of counted cells. A null cell (a box's value before the
 // search sets it) is never counted.
@@ -858,6 +858,12 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
   };
   // The names a runtime function that makes or reads a list needs.
   const listNames = (fn: string): ListNames => {
+    // File info's (C310): its struct, its Instant's, File kind's cells.
+    if (fn === "world.fileInfo") {
+      const info = records.get(FILE_INFO_T)!, kind = data.get(FILE_KIND_T)!, at = info.fields[2].t;
+      if (ty(info.fields[0].t) !== "lab_cell *" || !isRecord(at) || (info.fields[1].t !== "int" && info.fields[1].t !== "i64")) throw new Error(`File info's fields aren't as file info makes them: ${info.fields.map((x) => ty(x.t)).join(", ")}`);
+      return { cons: "", nil: "", type: 0, tag: 0, head: 0, info: { record: sname.get(FILE_INFO_T)!, instant: sname.get(at.key)!, kinds: kind.cases.map((_, i) => cname(kind, i)), size: info.fields[1].t } };
+    }
     const bytes = fn === "world.keptBytes" || fn === "world.keptAddBytes" || fn === "world.readBytes" || fn === "world.writeBytes";
     const d = data.get(fn === "world.readLine" || fn === "world.keptLine" || fn === "world.environmentVariable" ? OPTION_TEXT : fn === "world.keptOpen" ? OPTION_INT : bytes ? LIST_INT : fn.startsWith("world.") ? LIST_TEXT : runtime(fn).list ?? LIST_TEXT)!;
     if (bytes) {

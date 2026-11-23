@@ -25,7 +25,10 @@
 // One with no answer (Choice) sets lab_st to 1 and gives a stand-in.
 
 import { nfcC } from "./c-nfc.ts";
-export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number; record?: string }
+export interface ListNames { cons: string; nil: string; type: number; tag: number; head: number; record?: string; info?: InfoNames }
+// File info's C names (C310): its struct, its Instant's, File kind's four
+// cases' cells (plain file, folder, link, special), and its size's type.
+export interface InfoNames { record: string; instant: string; kinds: string[]; size: "int" | "i64" }
 // A runtime function: its C, given the names of the list type it makes or
 // reads, and what it calls.
 interface Fn { c: string | ((l: ListNames) => string); uses: string[] }
@@ -1236,6 +1239,36 @@ static int lab__fpark(double at) {
   lab__log_raw("]}");
 }`,
   },
+  // A file's kind, size and time last changed (C310, as world.ts answers
+  // file info): lstat's, so a link is a link; logged as JavaScript logs
+  // it, {"kind", "size", "modified"}, modified in seconds.
+  "world.fileInfo": {
+    uses: ["world.fail"],
+    c: (o) => {
+      const i = o.info!;
+      const size = (x: string) => (i.size === "int" ? `LAB_SMALL(${x})` : `(int64_t)(${x})`);
+      return `static ${i.record} lab_world_fileInfo(lab_cell *path) {
+  if (lab__log_begin("fileInfo")) lab__log_text(path);
+  char *p = lab__cstr(path);
+  struct stat st;
+  int bad = lstat(p, &st);
+  free(p);
+  if (bad) { lab__fail(errno, path); return (${i.record}){ &${i.kinds[0]}, ${size("0")}, { 0 } }; }
+  int kind = S_ISREG(st.st_mode) ? 0 : S_ISDIR(st.st_mode) ? 1 : S_ISLNK(st.st_mode) ? 2 : 3;
+  // In ms first, then seconds, as Node's mtimeMs / 1000 (world.ts).
+#ifdef __APPLE__
+  double modified = ((double)st.st_mtimespec.tv_sec * 1e3 + st.st_mtimespec.tv_nsec / 1e6) / 1000;
+#else
+  double modified = ((double)st.st_mtim.tv_sec * 1e3 + st.st_mtim.tv_nsec / 1e6) / 1000;
+#endif
+  static const char *names[] = { "file", "folder", "link", "special" };
+  if (lab_log_open) { lab__log_answer(); fprintf(lab_log, "{\\"kind\\":\\"%s\\",\\"size\\":%lld,\\"modified\\":%.17g}", names[kind], (long long)st.st_size, modified); lab__log_close(); }
+  lab_drop(path);
+  lab_cell *kinds[] = { ${i.kinds.map((k) => `&${k}`).join(", ")} };
+  return (${i.record}){ kinds[kind], ${size("st.st_size")}, { modified } };
+}`;
+    },
+  },
   // A file's bytes as they are, and bytes written as a file (C291, as
   // world.ts answers read bytes and write bytes): Bytes is a record of a
   // list of Ints, its C struct o.record, as the kept files' (L213c7).
@@ -1390,7 +1423,7 @@ export const cName = (rt: string) => `lab_${rt.replace(/\./g, "_")}`;
 // program's own names must not take.
 // Every `lab_` name the runtime's text defines or uses counts too (I214: a
 // definition named `cell` took `lab_cell`, the runtime's cell type).
-const LIST_SAMPLE: ListNames = { cons: "List_cons", nil: "List_nil", type: 0, tag: 0, head: 0 };
+const LIST_SAMPLE: ListNames = { cons: "List_cons", nil: "List_nil", type: 0, tag: 0, head: 0, info: { record: "File_info", instant: "Instant", kinds: ["File_kind_plain_file", "File_kind_folder", "File_kind_link", "File_kind_special"], size: "int" } };
 const words = (text: string) => [...text.matchAll(/\blab_([A-Za-z0-9_]+)/g)].map((m) => m[1]);
 // Found on first use: the NFC table's text (c-nfc.ts) takes 0.2 s to
 // build, and a run on JavaScript loads this file without printing C (I264).
