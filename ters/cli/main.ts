@@ -990,6 +990,8 @@ switch (command) {
     // said (L280c, rule 3), and kept.
     if (start && !p.info.errors.length && writtenChoices.length) {
       const now = represented(loaded, start, true);
+      // A page's main as `ters choices` reads it (entry): no C places.
+      if (!pageProblem(p.info, start, p.names)) staticPage = true;
       for (const l of staleChoices(writtenChoices, [...choiceLines(loaded, start, now.picks ?? []), ...scheduleLines(now, start), ...await places(now, start), ...cPlaces(start)].sort())) console.log(l);
       if (heldHere.size || holdsPlaces) {
         const alone = represented({ ...loaded, held: undefined }, start, true);

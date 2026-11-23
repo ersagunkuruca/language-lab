@@ -390,8 +390,26 @@ export function staleChoices(written: readonly string[], now: readonly string[])
   // A measured entry is what a run found, not a pick: never stale.
   written = written.filter((l) => !l.startsWith(HELD) && !MEASURED.test(l));
   now = now.filter((l) => !isHeld(l));
-  const was = new Set(written), is = new Set(now);
-  return [...written.filter((l) => !is.has(l)).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(l)).map((l) => `new    ${l}`)];
+  const was = new Set(written.map(meaningOf)), is = new Set(now.map(meaningOf));
+  return [...written.filter((l) => !is.has(meaningOf(l))).map((l) => `stale  ${l}`), ...now.filter((l) => !was.has(meaningOf(l))).map((l) => `new    ${l}`)];
+}
+
+// What an entry says, not how (R12 §3): its id, kind, pick, facts, what
+// it is among and its target. A way's, a place's or a schedule's job is
+// said with the name of the definition it is in ("flown's flock over
+// walk"), which changes when that definition is renamed or the job is
+// found by another path; the words after the last "'s" name the job
+// itself. A representation's type and a mode plan's facts stay whole.
+const KIND = /^(\S+) (representation|way|mode plan|place|schedule): (.*)$/;
+function meaningOf(line: string): string {
+  const m = KIND.exec(line);
+  if (!m) return line;
+  const [head, ...rest] = m[3].split("; ");
+  if (m[2] === "representation" || m[2] === "mode plan") return line;
+  const cut = head.lastIndexOf(": ");
+  if (cut < 0) return line;
+  const about = head.slice(0, cut), i = about.lastIndexOf("'s "), job = i < 0 ? about : about.slice(i + 3);
+  return [m[1], m[2], job, head.slice(cut + 2), ...rest].join("\u0000");
 }
 
 // Measured (L280d): each type with a pick, how often main's own
