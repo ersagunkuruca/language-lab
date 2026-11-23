@@ -25,7 +25,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | lane | thread | next, in order |
 |---|---|---|
 | E Editor | "Editor lane" | no open row (startup: E280 to E284 done, E283 closed measured, 2026-11-21) |
-| C Compiler and targets | "Compiler lane" | no open row (C285, C286 done 2026-11-22, C287 2026-11-22) |
+| C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
@@ -186,7 +186,7 @@ all of these.
 | L280d | Measured sizes and call counts from runs written into the choices and read by the chooser in place of the cost ladder's n. Parts 1-2 done: `ters choices --measure [args]` writes `measured` entries (each picked type's jobs called by main's own definitions, how often, and the largest value given or gotten, in items), kept until measured again, and the chooser orders a measured type's rows by the steps those calls take at that size, calls made in actions counted too (part 3), and matches and folds (part 4); left: measuring a page or an app's run (from its events) | Ersagun 2026-11-20 | P3 | M | |
 | L280e | Parameters on a representation (a grid's cell size, a chunk size, a worker count), chosen by the compiler and kept in the choices. Parts 1-4 done: the runs a shared job is cut into (JavaScript's `in 32 runs`, C's `in 8 runs a thread`), C's chunks (`in chunks of 16384 items`), the workers a program starts (`main's threads: cores less one, at most 15`), held to tune; left: a grid's cell size (with L280g) | Ersagun 2026-11-20 | P3 | M | |
 | L280f | Pool as a representation of a collection, so a program writes List or Map and the choices say pooled (moves the Pool type out of the code) | Ersagun 2026-11-20 | P3 | L | |
-| L280g | Spatial partitioning as representations of the "pairs nearer than r" job: all pairs as its meaning, grid and tree as implementations, cell size as a parameter. Needs a program that uses it (flock or Night watch) | Ersagun 2026-11-20 | P3 | L | |
+| L280g | Spatial partitioning as representations of the "pairs nearer than r" job: all pairs as its meaning, grid and tree as implementations, cell size as a parameter. Needs a program that uses it (flock or Night watch). Design: docs/design/data/NEARBY-2026-11-22.md (std `neighbours(items, place, r)`, its ways all pairs, grid, k-d tree). Step 1 done: std `neighbours` as its meaning; steps 2a-2b done: the evaluator and compiled JavaScript find them on a grid (library/near.ts); left: the grid in C (and wasm), the k-d tree, the choices entry, flock-page onto it | Ersagun 2026-11-20 | P3 | L | |
 | L280i | A published library carries its own types' and ways' choices, keyed by content hash (when sharing needs it) | Ersagun 2026-11-20 | P3 | M | |
 
 ### Instrument app: tuner, metronome, looper ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))

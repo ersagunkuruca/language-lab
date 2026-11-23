@@ -1,6 +1,6 @@
 // Holes in the compiler found by the reviews (docs/reports/reviews/
 // REVIEW-2026-10-22b.md, REVIEW-2026-11-02c.md "R8", then
-// REVIEW-2026-11-16.md "R11"), as todo tests:
+// REVIEW-2026-11-16.md "R11", REVIEW-2026-11-23.md "R12"), as todo tests:
 // they run, fail today, and don't fail the suite. When a fix lands,
 // drop the todo and the test guards it.
 
@@ -17,6 +17,7 @@ import { ABORT_OP, S } from "../../ters/src/lang/std.ts";
 import { Aborted as CoreAborted, Stopped, compiledDefs, reachedImplementing } from "../src/core-js.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitWgsl } from "../src/wgsl.ts";
+import { staleChoices } from "../../ters/cli/choices.ts";
 
 // The shader preview froze the browser: raymarch's `shadow` is a loop with
 // no step limit, typed Diverge, and the scalar profile lets Diverge through
@@ -84,4 +85,17 @@ test("R11 §2 compiling a main that prints one text types only the library bodie
   const typed = [...typedBodies(info.layer)];
   assert.ok(typed.length > 0);
   assert.deepEqual(typed.filter((d) => !reached.has(d)).map((d) => names[d] ?? d), []);
+});
+
+// A program's choices (L280a) are about a stable id, and an entry is
+// stale when the pick, what it was picked among or the target changes.
+// The words that say which job it is (a definition's name, how the
+// schedule reads it) are for a person: the kept flock-page.choices went
+// stale on 11-22 only because the words for its schedules changed.
+test("R12 §3 a choice whose pick is the same but whose words changed isn't stale", { todo: "staleChoices compares whole lines" }, () => {
+  const was = "0uqile74d3s0huvbq4fs2gv2e9 schedule: flock over over flat map's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript";
+  const now = "0uqile74d3s0huvbq4fs2gv2e9 schedule: flown's flock over walk, its list made by flat map: one loop; among made then walked, one loop; target JavaScript";
+  assert.deepEqual(staleChoices([was], [now]), []);
+  // The pick changed: stale, as now.
+  assert.equal(staleChoices([was], [now.replace(": one loop; among", ": made, then walked; among")]).length, 2);
 });

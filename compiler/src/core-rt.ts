@@ -23,6 +23,7 @@ import { bytesValue, plainBytes } from "../../ters/src/lang/bytes.ts";
 import * as T from "../../ters/src/lang/text.ts";
 import type { Code, Id } from "../../ters/src/model.ts";
 import { reasonOf, STOPS } from "./stops.ts";
+import { neighbourLists } from "../../ters/library/near.ts";
 import type { branchesFrom, branchWorker, pageBranches, pageGpu, pageWorker } from "./branches-rt.ts";
 
 // The builtins a printed program calls, by id (C251b): what std-run.ts
@@ -219,6 +220,30 @@ function rtFn(name: string, builtin?: BuiltinOf, tables?: TableSpec[], rand?: Re
   if (name.startsWith("path:")) { const v = pathValue(name.slice(5) ? name.slice(5).split(",").map((i) => ({ field: Number(i) })) : []); return () => v; }
   const away = BRANCHES?.rt(name);
   if (away) return away;
+  // neighbours (L280g) on a grid (ters/library/near.ts): its places, each
+  // asked once in the items' order as the definition's map asks them, a
+  // Float64 or a record of them; FAIL, for the definition as compiled,
+  // where the grid can't take them or a budget counts the steps. Lists or
+  // arrays, as the call's type is.
+  if (name === "neighbours.grid") return (xs, place, reach, fuel, array, arrays) => {
+    if (typeof reach !== "number" || (fuel !== Infinity && fuel !== undefined)) throw FAIL;
+    const ps: number[][] = [];
+    const take = (x: unknown) => {
+      const at = (place as (x: unknown) => unknown)(x);
+      const parts = typeof at === "number" ? [at] : (at as { fields?: unknown })?.fields;
+      if (!Array.isArray(parts) || !parts.every((v) => typeof v === "number")) throw FAIL;
+      ps.push(parts);
+    };
+    if (xs instanceof ArrayView) for (let i = 0; i < xs.n; i++) take(xs.buf.items[xs.start + i]);
+    else for (let c = xs as { tag: unknown; fields: unknown[]; f0?: unknown; f1?: unknown }; c.tag !== NIL; c = (c.f1 ?? c.fields[1]) as typeof c) {
+      if (c.tag !== CONS) throw FAIL;
+      take(c.f0 ?? c.fields[0]);
+    }
+    const lists = neighbourLists(ps, reach);
+    if (!lists) throw FAIL;
+    const inner = lists.map((l) => (arrays ? arrayOf(l) : toList(l)));
+    return array ? arrayOf(inner) : toList(inner as Value[]);
+  };
   // A first's answer on a page's workers, or FAIL for the default (C61 c′5).
   if (name === "first.one") return (v: unknown) => { if (v === FAIL) throw FAIL; return v; };
   // A replace where every array of its type has one holder (C93 s4,
