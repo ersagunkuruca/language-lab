@@ -183,6 +183,11 @@ let lastGrip: { id: Id; at: number } | null = null;
 
 // The longest a title or a case's row reads before it is shortened.
 const APART = 24;
+// Layer children put in a frame when a large graph is first drawn (E319k).
+const PART = 600;
+// How far a definition's inputs reach left of its boxes, for a fit made
+// before the graph is drawn (spacetime's rapidity picture: 36).
+const PLAN_LEFT = 36;
 // A function's frame titled by its parameters, which its dots already
 // show by name: past APART it reads (…) => (Ersagun 2026-10-29).
 function paramsTitle(names: string[], rest?: string): string {
@@ -292,8 +297,38 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
   // covers: nothing else moves (Ersagun 2026-11-01, replacing I57's
   // spacing out). Tidy puts things apart when wanted.
   drawnAt.set(key, new Map([...scene.items].map(([k, it]) => [k, { ...it.auto, frame: it.frame ?? null }])));
-  let waiting = !!hooks.later;
-  const draw = (at: Record<Id, Pos>) => { waiting = false; canvas.world.replaceChildren(...render(shown(at), hooks, at, picked)); };
+  let waiting = !!hooks.later, drawing = 0;
+  const draw = (at: Record<Id, Pos>) => { waiting = false; drawing++; canvas.world.removeAttribute("data-drawing"); canvas.world.replaceChildren(...render(shown(at), hooks, at, picked)); };
+  // A large graph's first drawing goes in a part of each layer a frame:
+  // the browser's styling and layout of 10,000 elements at once was one
+  // task of 300 ms (E319k). Fitted and mapped once all of it is in.
+  canvas.planned = () => {
+    const sc = shown(hooks.at), { pos, boxes } = placeAll(sc, hooks.at);
+    const rs = [...[...sc.items.values()].map((it) => ({ ...pos.get(it.key)!, w: it.w, h: it.h })), ...boxes.values()];
+    if (!rs.length) return null;
+    // Past the boxes on the left: the definition's inputs, their dots and values.
+    const x = Math.min(...rs.map((r) => r.x)) - PLAN_LEFT, y = Math.min(...rs.map((r) => r.y));
+    const box = { x, y, width: Math.max(...rs.map((r) => r.x + r.w)) - x, height: Math.max(...rs.map((r) => r.y + r.h)) - y };
+    const st = hooks.page ? [] : steps.map((id) => pos.get(id)).filter((p): p is Pos => !!p);
+    return { box, start: st.length ? { l: Math.min(...st.map((p) => p.x)), t: Math.min(...st.map((p) => p.y)) } : null };
+  };
+  const drawInParts = (at: Record<Id, Pos>) => {
+    draw(at);
+    const run = drawing, layers = [...canvas.world.children];
+    const kids = layers.map((l) => [...l.childNodes]);
+    const total = kids.reduce((n, k) => n + k.length, 0), frames = Math.ceil(total / PART);
+    if (frames < 2) return;
+    canvas.world.setAttribute("data-drawing", "");
+    for (const l of layers) l.replaceChildren();
+    let i = 0;
+    const next = () => {
+      if (run !== drawing) return;
+      i++;
+      layers.forEach((l, k) => { const from = Math.floor((kids[k].length * (i - 1)) / frames), to = Math.floor((kids[k].length * i) / frames); l.append(...kids[k].slice(from, to)); });
+      if (i < frames) requestAnimationFrame(next); else canvas.world.removeAttribute("data-drawing");
+    };
+    next();
+  };
   if (!waiting) draw(hooks.at);
   // A node being resized, drawn at the size so far with its wires: the
   // definition built again with that size, the node and its wires taken
@@ -317,7 +352,7 @@ export function typedGraph(code: Code, pres: Presentation, info: Info | null, de
     picked: () => [...picked],
     pick: (id) => { if (!picked.delete(id)) picked.add(id); },
     unpickAll: () => picked.clear(),
-    drawNow: () => { if (waiting) draw(hooks.at); },
+    drawNow: () => { if (waiting) drawInParts(hooks.at); },
     frameOf: (id) => scene.items.get(id)?.frame ?? (scene.frames.has(id) ? scene.frames.get(id)!.parent : undefined),
     posOf: (id) => { const it = scene.items.get(id); return it ? hooks.at[id] ?? { x: it.auto.x, y: it.auto.y } : undefined; },
     expand: (ids) => [...expand(scene, ids)],

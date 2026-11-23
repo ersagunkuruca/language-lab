@@ -154,6 +154,11 @@ export interface Canvas {
   zoom: () => number;       // screen pixels per world unit
   fit: () => void;
   reveal: (els: Element[]) => void;
+  // Where what's drawn will be, known before it's in the DOM: a graph drawn
+  // a part a frame is fitted from it first, so each part is laid out once,
+  // at the scale it's shown (E319k: the fit's zoom laid out every label
+  // again, 170 ms).
+  planned?: () => { box: { x: number; y: number; width: number; height: number }; start: { l: number; t: number } | null } | null;
 }
 
 type View = { x: number; y: number; z: number };
@@ -185,8 +190,8 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
   // Fit: the whole picture, centered both ways. Readable: never smaller than
   // READABLE, and a side that doesn't fit then starts at its top or left
   // edge, the rest a pan away.
-  const fit = (readable = false) => {
-    const b = world.getBBox(), r = root.getBoundingClientRect();
+  const fit = (readable = false, plan: ReturnType<NonNullable<Canvas["planned"]>> = null) => {
+    const b = plan?.box ?? world.getBBox(), r = root.getBoundingClientRect();
     if (!b.width || !r.width) return;
     // The bottom strip is the Fit / zoom pill's, so nothing is fitted under it.
     const high = r.height - PILL;
@@ -197,7 +202,7 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
     // Too wide: the picture's right edge at the right (the start and what
     // it leads to), what feeds it to its left, unless that hides the start's
     // left edge; too tall: the start's top at the top.
-    const on = readable ? startBox() : null;
+    const on = readable ? (plan ? plan.start : startBox()) : null;
     if (on && b.width * z > r.width - 32) x = Math.max(16 - on.l * z, r.width - 16 - (b.x + b.width) * z);
     if (on && b.height * z > high - 32) y = 16 - on.t * z;
     set({ z, x, y });
@@ -232,14 +237,24 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
     if (dx || dy) set({ ...view, x: view.x + dx, y: view.y + dy });
   };
   apply();
+  const canvas: Canvas = { el: null as unknown as HTMLElement, root, world, zoom: () => view?.z ?? 1, fit, reveal };
   // First time this graph is shown: fit it readably, once it has a size
   // and something drawn (a large definition's is drawn a task after it's
   // made, E319k).
   let tries = 0;
-  const first = () => { if (view) return; if (root.isConnected && world.firstChild) return fit(true); if (++tries < 60) requestAnimationFrame(first); };
+  // A graph drawn a part a frame (data-drawing, E319k) is fitted from its
+  // plan before the parts go in; any other once something is drawn.
+  const first = () => {
+    if (view) return;
+    const plan = world.hasAttribute("data-drawing") ? canvas.planned?.() ?? null : null;
+    if (root.isConnected && plan) return fit(true, plan);
+    if (root.isConnected && world.firstChild && !world.hasAttribute("data-drawing")) return fit(true);
+    if (++tries < 120) requestAnimationFrame(first);
+  };
   if (!view) requestAnimationFrame(first);
 
   const el = document.createElement("div");
+  canvas.el = el;
   el.className = "canvas-wrap";
   // Pan: a press on the svg that nothing in it took (a node, a port, a
   // wire). Listening on the window around the svg means every handler on
@@ -317,7 +332,10 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
   const clear = () => {
     const r = root.getBoundingClientRect(), { w, h } = size();
     const c = { l: r.right - 10 - w, t: r.bottom - 10 - h, r: r.right - 10, b: r.bottom - 10 };
-    return ![...world.querySelectorAll("[data-move]")].some((el) => { const b = el.getBoundingClientRect(); return b.right > c.l && b.left < c.r && b.bottom > c.t && b.top < c.b; });
+    // Looked at through a grid of points, not each node's box: a large
+    // graph's 1,000 boxes took 130 ms (E319k).
+    for (let x = c.l; x <= c.r; x += 12) for (let y = c.t; y <= c.b; y += 12) if (document.elementsFromPoint(x, y).some((e) => world.contains(e) && e.closest("[data-move]"))) return false;
+    return true;
   };
   const wanted = () => { const r = root.getBoundingClientRect(); return on ?? (auto ??= r.width >= 600 && r.height >= 400 && clear()); };
   mapBtn.className += " map-toggle";
@@ -372,8 +390,9 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
   let measuring = 0;
   if (typeof MutationObserver !== "undefined") new MutationObserver(() => {
     stale = true;
+    if (world.hasAttribute("data-drawing")) return;
     measuring ||= requestAnimationFrame(() => { measuring = 0; whole = root.isConnected ? world.getBBox() : null; mapped(); });
-  }).observe(world, { childList: true });
+  }).observe(world, { childList: true, attributes: true, attributeFilter: ["data-drawing"] });
   // Look at the point under the pointer: it goes to the window's middle.
   const look = (e: PointerEvent) => {
     if (!view) return;
@@ -389,5 +408,5 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
   });
   map.setAttribute("display", "none");
   el.append(root, tools, map);
-  return { el, root, world, zoom: () => view?.z ?? 1, fit, reveal };
+  return canvas;
 }
