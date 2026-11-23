@@ -11,7 +11,7 @@
 // none, and the nodes the person wrote keep their ids.
 
 import type { Code, Id, Node, NodeOf } from "../model.ts";
-import { freshId, isCall, type Call, copyNodes, dropNode, nodeIds } from "../model.ts";
+import { freshId, isCall, type Call, copyNodes, dropNode, nodeIds, nodesOfKind } from "../model.ts";
 import type { Names } from "../presentation.ts";
 import { infer, type Info } from "./infer.ts";
 import { OverMap, OverSet } from "./types.ts";
@@ -30,8 +30,9 @@ export function spreadTuples(code: Code, info: Info, names: Names, own = false):
   // the steps before put one over another (L281g).
   const ownSet = (m: ReadonlySet<Id> | undefined): Id[] => { const out = new Set<Id>(); for (let x = m; x instanceof OverSet; x = x.below) for (const k of x.own()) out.add(k); return [...out]; };
   const ownMap = <V,>(m: ReadonlyMap<Id, V> | undefined): [Id, V][] => { const out = new Map<Id, V>(); for (let x = m; x instanceof OverMap; x = x.below) for (const [k, v] of x.own()) if (!out.has(k)) out.set(k, v); return [...out]; };
-  const ids = own && info.spread instanceof OverSet ? ownSet(info.spread) : nodeIds(code.nodes).filter((id) => info.spread?.has(id));
-  const calls = ids.filter((id) => isCall(code.nodes[id]));
+  // Only calls are asked of the check: asking of every node typed nothing
+  // more but cost 30 ms of each lowering of machine (L266af).
+  const calls = own && info.spread instanceof OverSet ? ownSet(info.spread).filter((id) => isCall(code.nodes[id])) : nodesOfKind(code, "call").filter((n) => isCall(n) && info.spread?.has(n.id)).map((n) => n.id);
   const reshaped = own && info.reshape instanceof OverMap ? ownMap(info.reshape).filter(([id]) => code.nodes[id]) : nodeIds(code.nodes).flatMap((id) => { const r = info.reshape?.get(id); return r ? [[id, r] as const] : []; });
   if (!calls.length && !reshaped.length) return { code, info, names };
   const nodes: Record<Id, Node> = copyNodes(code.nodes);
