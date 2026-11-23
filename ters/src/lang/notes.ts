@@ -50,6 +50,7 @@ export const NOTES: Comments = {
   "std.pass": "A pass of a frame: where it draws, the CSS colour it clears to, whether it keeps a depth buffer, and its draws.",
   "std.frame": "What a canvas renders, as its render attribute: passes, drawn in order.",
   "builtin.frame.draw": "draw(mesh, instances, vertex, fragment): the mesh drawn once for each instance. vertex places each corner for an instance; fragment gives the colour from what vertex carried. Both are pure, as a shader is.",
+  "builtin.frame.sampled": "sampled(target, across): the colour at across (two numbers from 0 to 1, from the top left) of a texture an earlier pass of the frame drew.",
   "std.mark": "What a canvas paints, in its own units (its width and height): disk(x, y, radius, fill), rectangle(x, y, width, height, fill), segment(x, y, to x, to y, width, colour) and writing(x, y, text, size, fill), each colour a CSS colour like \"#ffc85a\".",
   "std.html": "A page: elements with attributes and children, text, and parts that are drawn again when what they read changes.",
   "std.algebra": "A Clifford algebra built once by clifford algebra(squares) from its signature alone: its signature, its basis (the record type's, L264), each blade beside its basis element, and its multiplication table. The clifford functions take one, so a product, sandwich, reflection or exp doesn't build a table on every call.",

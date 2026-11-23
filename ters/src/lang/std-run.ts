@@ -13,6 +13,7 @@ import * as A from "./algebraic.ts";
 import * as RL from "./real.ts";
 import { FALSE, NONE, ORDER_V, PAIR_V, SOME, TRUE } from "./std-ids.ts";
 import { floatText, itemsOf, listOf, ofAlg, realOf, toAlg, toReal, truth, type RealData } from "./std-values.ts";
+import { sampled as textureSampled } from "./frame-textures.ts";
 import { ArrayView, arrayOf, arrayOfItems, arrayView, itemsIn, pushBack, pushFront, replaceIn, restOf, sliceOf, type ArrayValue } from "./array-view.ts";
 import { change, held, keyOf, keyOrder, Keyed, numberEntries, numberKeys, Table, valueOf } from "./table.ts";
 
@@ -152,3 +153,5 @@ export const arith$abs = /* @__PURE__ */ unresolved("abs");
 // read (G9c, compiler/src/gpu-draws.ts), as fields 4 and 5: what the
 // GPU's pipeline for the site and its uniform are made from (gpu-frame.ts).
 export const frame$draw = (mesh: unknown, instances: unknown, vertex: unknown, fragment: unknown, site?: number, ...caps: unknown[]) => ({ tag: "builtin.frame.draw", fields: site === undefined ? [mesh, instances, vertex, fragment] : [mesh, instances, vertex, fragment, site, caps] });
+// What a texture an earlier pass drew has at a point (G10, frame-textures.ts).
+export const frame$sampled = (target: unknown, across: unknown) => textureSampled(target as never, across as never);

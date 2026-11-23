@@ -145,7 +145,7 @@ export class GpuFrames {
   draw(frame: Value, siteOf: (d: Data) => Sited | null): Drawn | false {
     const passes = items(part(frame, 0));
     const sited = passes.map((p) => items(part(p, 3)).map((d) => siteOf(d as Data)));
-    if (sited.some((ds) => ds.some((s) => !s))) return false;
+    if (sited.some((ds) => ds.some((s) => !s)) || passes.some((p) => (part(p, 0) as Data).tag !== FRAME_V.screen)) return false;
     const drawn: Drawn = { draws: 0, bytes: 0 };
     const enc = this.device.createCommandEncoder();
     const view = this.context.getCurrentTexture().createView();

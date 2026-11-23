@@ -1422,7 +1422,12 @@ export const PASS = typedef("std.pass", "Pass", [], [
 export const FRAME = typedef("std.frame", "Frame", [], [
   ["frame", [["passes", () => ftref("frame.passes", LIST, ftref("frame.passes.item", PASS))]]],
 ]);
-export const FRAME_V = { mesh: "std.mesh.mesh", placed: "std.placed.placed", screen: "std.target.screen", texture: "std.target.texture", pass: "std.pass.pass", frame: "std.frame.frame", draw: "builtin.frame.draw" } as const;
+// What a fragment reads from a texture an earlier pass drew (G10): red,
+// green, blue and alpha, each from 0 to 1.
+export const TEXEL = typedef("std.texel", "Texel", [], [
+  ["texel", [["red", () => ftref("texel.red", NUMBER)], ["green", () => ftref("texel.green", NUMBER)], ["blue", () => ftref("texel.blue", NUMBER)], ["alpha", () => ftref("texel.alpha", NUMBER)]]],
+]);
+export const FRAME_V = { mesh: "std.mesh.mesh", placed: "std.placed.placed", screen: "std.target.screen", texture: "std.target.texture", pass: "std.pass.pass", frame: "std.frame.frame", draw: "builtin.frame.draw", texel: "std.texel.texel", sampled: "builtin.frame.sampled" } as const;
 // draw(mesh, instances, vertex, fragment): the vertex function places
 // each corner of the mesh for each instance and gives what the fragment
 // is given between corners; the fragment gives the colour. Both pure, as
@@ -1434,6 +1439,11 @@ export const FRAME_OPS = {
     const none = { effs: [], tail: null };
     return fn([con(MESH, [c]), list(i), fn([i, c], con(PLACED, [p, v]), none), fn([v], k, none)], con(DRAW), s.freshRow());
   }),
+  // sampled(target, across): the colour a texture an earlier pass of the
+  // frame drew has at `across`, a record of two Float64s from 0 to 1 (0, 0
+  // its top left), put between its four nearest texels and kept to its
+  // edges, as a GPU's linear sampler does.
+  sampled: builtin("frame.sampled", "sampled", (s) => fn([{ t: "con", id: TARGET, args: [] }, s.fresh(false, true)], { t: "con", id: TEXEL, args: [] }, s.freshRow())),
 };
 // Ids that were renamed, as a saved program may still use them: std's Pair
 // is Tuple2 (L139).
@@ -1467,7 +1477,7 @@ export function onTodaysIds<T>(x: T, from = (x as { shape?: unknown } | null)?.s
   return x;
 }
 
-export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME] };
+export const std: Code = { nodes: Object.fromEntries(nodes.map((n) => [n.id, n])), defs: [BOOL, UNIT, LIST, OPTIONAL, ABORT, LOG, RANDOM, CHECK, TIME, WAIT, EVENT, INPUT, ATTRIBUTE, HTML, ORDER, OUTCOME, MAP, SET_TYPE, TABLE_ENTRY, ALGEBRA, EXTENDED, TICKET, AWAIT, BRANCH, ALGEBRAIC, TRIG, ARITHMETIC, ORDERED, COST, REPRESENTATION, CONSOLE_TYPE, FILES_TYPE, NETWORK_TYPE, VIEW_ROW, HANDLER_ROW, SOUND_ROW, ROW_TYPE, ...TUPLES, DIVISION, QUEUE, PRIORITY_QUEUE, STATE, SEND, RECEIVE, PIPE, SHOWN, WORD8, WORD32, WORD64, BITS, WORD16, TENSOR, BYTES, JSON_TYPE, DATE, TIME_OF_DAY, INSTANT, EMBEDDING, REQUEST, RESPONSE, LOCALE, SETTINGS, PERMISSIONS, ENVIRONMENT, RELEASE, OPEN_FILE, KEPT_FILES, LITERAL, REAL, POOL, POOL_KEY, MARK, MESH, PLACED, TARGET, DRAW, PASS, FRAME, TEXEL] };
 // What the signatures say that a run needs, as data (C251), so the
 // evaluator and a page don't carry the signatures: each builtin's number
 // of inputs, and the builtins that only compute (their row has at most
