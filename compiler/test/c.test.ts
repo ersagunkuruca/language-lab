@@ -728,6 +728,11 @@ test("a record whose array fields a function only reads is lent to it (C58l: swa
   // Its pool in slots (L280f): the slots' item.
   assert.match(c, /lab_pool_slots_item_b\(p0, /);
   assert.doesNotMatch(c, /lab_pool_slots_item_b\(Pool_slots_dup\(/);
+  // Its check that a slot holds the key's mote, a few reads calling
+  // nothing, marked inline, and the lent array's read too (C317).
+  assert.match(c, /static inline int32_t lab_pool_slots_holds_b\(/);
+  assert.match(c, /static inline lab_int lab_array_atb_a\d+\(/);
+  assert.doesNotMatch(c, /static inline \w+ lab_pool_slots_slot_of_b\(/);
   const evaluator = spawnSync(process.execPath, ["--experimental-strip-types", "--no-warnings", ters, "run", "--evaluator", at, "20", "10"]).stdout.toString();
   assert.match(evaluator, /motes after 20 ticks/);
   assert.equal(spawnSync(join(out, "swarm"), ["20", "10"]).stdout.toString(), evaluator);
