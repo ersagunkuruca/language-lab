@@ -600,6 +600,9 @@ function showProgram() {
   ui.touched = [];
   ui.refused = false;
   ui.note = OPENING;
+  // Its graph in a task of its own, after the rest (E319k), as a big
+  // definition's is when it's opened.
+  graphLater = true;
   save();
   render();
   // A program's open definition may be below the navigator's fold (pedal's

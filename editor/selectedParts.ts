@@ -117,8 +117,18 @@ export function selectedParts(host: SelectedHost) {
   // codebase manager, which reports it as another name (CREDITS.md).
   const sameMemo = new WeakMap<Code, Map<Id, Same>>();
   function sameLine(namer: Namer): HTMLElement | null {
-    let all = sameMemo.get(doc().code);
-    if (!all) { try { all = sameAs(doc().code, LIBRARY); } catch { all = new Map(); } sameMemo.set(doc().code, all); }
+    const code = doc().code, all = sameMemo.get(code);
+    // Worked out for each version, in a task of its own (E319k: hashing a
+    // large program's every definition, 77 ms of opening constructions),
+    // the line put in its place when it's done.
+    if (!all) {
+      const spot = h("p", { class: "hint same", hidden: "" });
+      setTimeout(() => {
+        if (!sameMemo.has(code)) { let made; try { made = sameAs(code, LIBRARY); } catch { made = new Map(); } sameMemo.set(code, made); }
+        if (spot.isConnected && doc().code === code) { const line = sameLine(namer); if (line) spot.replaceWith(line); }
+      }, 0);
+      return spot;
+    }
     const same = all.get(ui.def);
     if (!same) return null;
     const link = (d: Id) => h("button", { type: "button", class: "link", "data-act": "goto", "data-target": d, title: "Open it" }, namer.name(d));

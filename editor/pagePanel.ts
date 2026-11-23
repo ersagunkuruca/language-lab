@@ -3,6 +3,7 @@
 // a page runs in a frame (page.ts), and both go on across renders. What
 // they read of the editor comes through `PageHost`.
 import { addGroups, shippedFor } from "./checkStore.ts";
+import { resolvedFor, resolvedKnown } from "../ters/src/lang/run.ts";
 import type { Code, Id } from "../ters/src/model.ts";
 import type { Names, Presentation } from "../ters/src/presentation.ts";
 import type { Pins } from "../ters/src/lang/signatures.ts";
@@ -155,6 +156,19 @@ export function pagePanels(host: PageHost) {
   };
   // The program version a page will run for once the edit has drawn.
   let pageSoon: Code | null = null;
+  // The page started just after this drawing, once, for this version.
+  function startSoon(start: () => void) {
+    const want = prog();
+    if (pageSoon === want) return;
+    pageSoon = want;
+    const go = () => {
+      if (pageSoon !== want) return;
+      pageSoon = null;
+      if (prog() !== want || page.for === want) return;
+      start();
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
+  }
   function pageSection(info: T.Info | null): HTMLElement | null {
     const main = info && !errorsIn(info) && !holesIn(info) ? pageMain(ownDefs(), info, pres().names) : null;
     if (!main || !info) { leavePage(); return null; }
@@ -162,29 +176,36 @@ export function pagePanels(host: PageHost) {
       // An edit to the page's program: the edit draws first and the page runs
       // again just after, so the page's run (2 s in Spacetime) doesn't hold
       // the edit back. Till then the page as it was stays.
-      const want = prog();
-      if (pageSoon !== want) {
-        pageSoon = want;
-        const go = () => {
-          if (pageSoon !== want) return;
-          pageSoon = null;
-          if (prog() !== want || page.for === want) return;
-          // What was done on the page goes on in the new version (E279a);
-          // after Restart (page.for null) it starts from the beginning.
-          const from = page.for ? page.now?.kept ?? null : null;
-          if (from && page.now && compiledNow.has(page.now) && hasCoreRuntime()) return compileOver(info, main, from);
-          leavePage();
-          startPage(info, main, from);
-          render();
-        };
-        if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); else setTimeout(go, 0);
-      }
+      startSoon(() => {
+        // What was done on the page goes on in the new version (E279a);
+        // after Restart (page.for null) it starts from the beginning.
+        const from = page.for ? page.now?.kept ?? null : null;
+        if (from && page.now && compiledNow.has(page.now) && hasCoreRuntime()) return compileOver(info, main, from);
+        leavePage();
+        startPage(info, main, from);
+        render();
+      });
     } else if (page.for !== prog()) {
       leavePage();
       const kept = keptPages.get(doc().program);
       keptPages.delete(doc().program);
       if (kept?.for === prog() && kept.now) Object.assign(page, kept, { program: doc().program });
-      else { kept?.now?.stop(); startPage(info, main); }
+      // A program opened: it draws first, and its page's first run (its
+      // arithmetic resolved, main run: 170 ms of opening constructions) in
+      // a task of its own (E319k).
+      // Its arithmetic resolved in a task of its own before that (80 ms of
+      // constructions, seeds.ts resolves it too), and drawn again in one
+      // after (renderSoon).
+      else {
+        kept?.now?.stop();
+        const begin = () => { startPage(info, main); renderSoon(); };
+        startSoon(() => {
+          const code = prog();
+          if (resolvedKnown(code, info)) return begin();
+          resolvedFor(code, info, pres().names);
+          setTimeout(() => { if (prog() === code && page.for !== code) begin(); }, 0);
+        });
+      }
     }
     // Chrome drops every event listener in a frame's document when the frame
     // leaves the page, and this redraw takes the frame out and puts it back.

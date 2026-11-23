@@ -38,6 +38,7 @@ const ON_THE_THREAD: Record<string, [number, string]> = {
   "main.ts T.infer": [4, "typed.ts infer, over a recent check (edits), or whole with its groups kept (typesOf, E319g)"],
   "main.ts trace": [2, "values on wires: QUICK_MS (50 ms); longer, and a divergent definition given values, in the worker (traceAsk.ts); all here only where there is no worker (a test's page)"],
   "main.ts algebrasOf": [1, "kept per check: grows with the program (E319h)"],
+  "pagePanel.ts resolvedFor": [1, "a page's program opened: its arithmetic resolved once a version, in a task before its first run (E319k), as seeds.ts's"],
   "pagePanel.ts showPage": [1, "the interpreted page: PAGE_STEPS an update, drawWithin for its first drawing"],
   "pagePanel.ts infer": [1, "Pause on a compiled page: the program stored for running, made in the worker (runCodeAsk.ts), checked over the groups it sent, once a version: bounce 0.3 s, was 2 s (E319j)"],
   "seeds.ts trace": [1, "main's seed values: withSteps"],
