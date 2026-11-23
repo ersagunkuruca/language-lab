@@ -1254,7 +1254,7 @@ export function emitC(lowered: CoreIR, opts: { harness?: boolean; main?: string;
       `static ${TL}const char *lab_stop_why = 0; static ${TL}size_t lab_stop_n = 0;`,
       // Each stop site's definition (C143b), printed after the reason.
       `static const char *lab_sites[] = { ${[...(lowered.stops ?? []).map((x) => JSON.stringify(x.name ?? "")), "0"].join(", ")} };`,
-      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); int s = (int)i / " + SITES + " - 1; if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why); else if (s >= 0 && s < " + (lowered.stops?.length ?? 0) + " && lab_sites[s][0]) fprintf(stderr, \"%s (in %s)\\n\", lab_stops[(int)i % " + SITES + "], lab_sites[s]); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
+      "static double lab_stop(double i) { if (lab_stop_at) { lab_stopped = (int)i; longjmp(*lab_stop_at, 1); } fflush(stdout); int s = (int)i / " + SITES + " - 1; if (i < 0) fprintf(stderr, \"%.*s\\n\", (int)lab_stop_n, lab_stop_why ? lab_stop_why : \"\"); else if (s >= 0 && s < " + (lowered.stops?.length ?? 0) + " && lab_sites[s][0]) fprintf(stderr, \"%s (in %s)\\n\", lab_stops[(int)i % " + SITES + "], lab_sites[s]); else fprintf(stderr, \"%s\\n\", lab_stops[(int)i % " + SITES + "]); exit(1); }"] : []),
     ...[...statics.values()].map((x) => x.decl),
     ...(rts.size ? ["", runtimeC(rts, listNames)] : []),
     ...(hostsUsed.size ? ["", HOST_RT, "// hosts/c.c", opts.hosts!.c!, "", ...[...hostsUsed].map(([op, n]) => hostWrapper(opts.hosts!.ops[Object.keys(opts.hosts!.ops).find((k) => opts.hosts!.ops[k].op === op)!], n, hostTypes.get(op)!))] : []),

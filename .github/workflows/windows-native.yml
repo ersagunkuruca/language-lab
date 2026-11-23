@@ -40,6 +40,7 @@ jobs:
           NATIVE_CFLAGS: -static
         run: node --test compiler/test/c-file-info.test.ts compiler/test/bytes-files.test.ts
       - name: Every example, native beside ters run
+        if: always()
         shell: bash
         env:
           EXAMPLES: ${{ inputs.examples }}
