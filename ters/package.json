@@ -13,6 +13,7 @@
     "affected": "node test/affected.ts",
     "build-editor": "node ../editor/build.ts",
     "smoke": "node ../editor/smoke.ts",
+    "thread-probe": "node ../editor/thread-probe.ts",
     "error-table": "node test/errors.test.ts --write",
     "ledger-table": "node test/ledger.test.ts --write",
     "smoke-shaders": "node ../editor/shaders-smoke.ts",

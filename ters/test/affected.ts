@@ -340,6 +340,7 @@ if (page && browser && !shard) {
   runs.push({ what: "build the pages", cwd: "ters", cmd: ["node", "../editor/build.ts"] });
   runs.push({ what: "the editor in a browser", cwd: "ters", cmd: ["node", "../editor/smoke.ts"] });
   runs.push({ what: "shaders in a browser", cwd: "ters", cmd: ["node", "../editor/shaders-smoke.ts"] });
+  runs.push({ what: "the editor's thread kept free", cwd: "ters", cmd: ["node", "../editor/thread-probe.ts"] });
 }
 if (gpu && browser && !shard) runs.push({ what: "WGSL on a GPU", cwd: "compiler", cmd: ["node", "gpu.ts"] });
 if (sound && browser && !shard) runs.push({ what: "sound in a browser", cwd: "ters", cmd: ["node", "test/sound-browser.ts"] });
