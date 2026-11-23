@@ -114,5 +114,6 @@ hour):
 | greenhouse | JavaScript | 3.3 | 3.9 |
 | greenhouse | native | 0.94 | 0.99 |
 
-swarm-pool is slower because it looks up many stale keys, each by
-halves (L280j).
+swarm-pool is slower, but not for its stale keys: 5.6% of its lookups
+look along the order, under 1% of its native instructions (L280j,
+measured). The three calls of each lookup are about 39% (C317).
