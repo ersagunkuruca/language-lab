@@ -28,6 +28,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
+| L Language and library | "Speed up the interpreter on real programs" | L281j, then L281k and L281l (round 2: flock interpreted) |
 | G Game | "Build a game to test Ters against engines" | stage 1: done (C265, C267 done, C283 and C284 closed measured; G1b with G3d, columns: done in JS, closed for C and WebAssembly 2026-11-22) ([GAME-READINESS-2026-11-17](docs/reports/GAME-READINESS-2026-11-17.md)) |
 | L Language and library | "Build a tuner, metronome and looper app" | L271c |
 | T Testing | "Make testing granular and cheap" | no open row (T16 done; TESTING.md §8 names the follow-ups to measure once the test map is full) |
@@ -116,6 +117,16 @@ New targets and speed rank below every language item (Ersagun,
 |---|---|---|---|---|---|
 | L266af | Incremental compile after edits, parts 2 to 5 (plan doc https://claude.ai/artifact/WaH3BBwr84Rai5dm6mddVn): definition keys kept by node objects; lowering per function kept (a stop's number is counted over the whole program today, so a kept function's stops need numbering of their own); the whole-program analyses (ownership, zero parts, arithmetic, first arms, reach) as per-definition summaries kept by key; the choice made from kept summaries with a per-definition rewrite. Each part checked by compiler/test/edits.test.ts and the 78-program sweep. Goal: machine's recompile after a one-definition edit under 0.3 s (1.48 s at part 1) | Ersagun 2026-11-20 (card: incremental compile after edits) | 2026-11-20 | high | L | open |
 | L266u | Make the List choice carry its types, as the Map and Set choice does (carried-reps.ts, #2899), so a first compile doesn't check the program again (about 0.2 s of machine's 2.3 s warm). The rewrite's old nodes keep their types, with List read as the array on the arrays' side; refs to builtins at the boundary, the conversions and the loops' new definitions are typed by unifying what they're given. On machine that rule types every old node the way the check does, except 55 of these. Set aside on 11-19 for stage 4, whose stable ids already let a recompile skip this check | compiler redesign, 2026-11-19 | low | M | open |
+
+### Speed of the interpreter, round 2 (Ersagun 2026-11-22: flock ran interpreted at 0.5 fps after an edit whose compile failed; "Why is the interpreter THAT much slower though?")
+
+Flock's page, interpreted in node, ticked twice a frame: 7.2 s a frame before L281i.
+
+| id | item | source | pri | size | status |
+|---|---|---|---|---|---|
+| L281j | A builtin's call in a direct run makes a list of its inputs and a list of its one answer (`one`, `finiteFloat`, `single`), and Float64's + and − make an object of their ports each time (expr.js `direction`): half of flock's frame after L281i. Call a builtin's one value straight where it can say, the general call where it can't | flock interpreted 2026-11-22 | P1 | S | |
+| L281k | A name is found by walking its scope, one cell per binder (run.ts `bind`): deep bodies walk far for each read. Each lambda's binders could sit in one frame, found by place | flock interpreted 2026-11-22 | P2 | M | |
+| L281l | A `match` finds its arm in a Map by the tag each time, and binds each part as a cell of its own; garbage collection is about a fifth of flock's frame | flock interpreted 2026-11-22 | P2 | M | |
 
 ### Instrument app ([INSTRUMENT-APP-2026-11-17](docs/reports/INSTRUMENT-APP-2026-11-17.md))
 

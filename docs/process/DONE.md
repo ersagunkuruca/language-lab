@@ -1482,6 +1482,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
+| L281i | Reading a list's item by position (the library's `item at`, run by its host way) walked the list from its start each time: flock reads its 2,000 birds by position, each bird those in its cell and the 26 around it, every tick. The first read now keeps the list's items in an array beside it (a list is never changed once made), so later reads of it take one step. Flock's page interpreted in node, 7.2 to 3.6 s a frame. test/jets.test.ts | #3094 |
 | L280d part 5 | A page measured: `ters choices <page> --measure` draws it into a document of no browser (src/lang/fake-dom.ts, the tests' moved) and gives it frames on a clock at 60 a second (`--frames n`, 120 by default), or with `--replay` the events a logged run was given; its picks then made again from what was measured. flock-page in 4 frames: its List's item at 24,288 times at 4,001 items, still arrays | #3147 |
 | L280g step 2e | `neighbours` of places of more than 3 parts on the k-d tree (now in any number of parts): picked by the place's type, its choices entry `k-d tree`; the tree asked wherever the grid can't take the places, the definition only where neither can | #3144 |
 | L280g step 2d | `neighbours` on a k-d tree (Bentley 1975): leaves of up to 8 places split at the median by cycling axes, boxes pruned per axis; held in the choices as `k-d tree` beside every pair and a grid; checked against every pair on random and clustered points | #3140 |

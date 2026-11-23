@@ -89,6 +89,13 @@ test("item at, put entry and entries have: their host ways give the definitions'
     const [atFast, atSlow] = call("item at", list([1, 2, 3, 4]), rand(7) - 2, 0);
     assert.equal(atFast, atSlow, `item at ${t}`);
   }
+  // One list asked again and again (its items kept beside it, L281i):
+  // every position, a fraction, before and past the end.
+  const kept = list([5, 6, 7, 8, 9]);
+  for (const at of [0, 4, 2, -1, 5, 9, 1.5, 3, 0.25, -0.5]) {
+    const [atFast, atSlow] = call("item at", kept, at, 0);
+    assert.equal(atFast, atSlow, `item at ${at}`);
+  }
   // A key of text isn't the host way's: the definition runs.
   let called = false;
   first(LIBRARY_HOSTS["put entry"](() => { called = true; return []; })(list([pair("a", 1)]), "b", 2));

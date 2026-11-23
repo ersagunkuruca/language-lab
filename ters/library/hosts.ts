@@ -127,12 +127,30 @@ function entriesHave(list: Value, key: Value): boolean | null {
     if (c === 0) return true;
   }
 }
-// A list's item at a position, as written: down the list.
+// A list's item at a position. The first read walks the list once and
+// keeps its items in an array beside it, so the later reads of the same
+// list take one step, not one per item before (L281i: flock reads its
+// 2,000 birds by position, each bird its neighbours, every tick). A list
+// is never changed once made, so the array stays right.
+const itemsOf = new WeakMap<Data, Value[] | null>();
 function itemAt(list: Value, position: Value, otherwise: Value): Value | null {
   if (typeof position !== "number") return null;
-  let d = list as Data;
-  for (let i = position; d?.tag === CONS; d = d.fields[1] as Data, i--) if (i < 1) return i < 0 ? otherwise : d.fields[0];
-  return d?.tag === NIL ? otherwise : null;
+  const head = list as Data;
+  if (head?.tag !== CONS) return head?.tag === NIL ? otherwise : null;
+  let items = itemsOf.get(head);
+  if (items === undefined) {
+    const out: Value[] = [];
+    let d = head;
+    for (; d?.tag === CONS; d = d.fields[1] as Data) out.push(d.fields[0]);
+    items = d?.tag === NIL ? out : null;
+    itemsOf.set(head, items);
+  }
+  if (items === null) {
+    let d = head;
+    for (let i = position; d?.tag === CONS; d = d.fields[1] as Data, i--) if (i < 1) return i < 0 ? otherwise : d.fields[0];
+    return d?.tag === NIL ? otherwise : null;
+  }
+  return position >= 0 && position < items.length && Number.isInteger(position) ? items[position] : position < 0 || position >= items.length ? otherwise : null;
 }
 
 // `neighbours` (L280g) on a grid (near.ts), what it can't take run by
