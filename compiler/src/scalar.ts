@@ -5258,9 +5258,32 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     const { fn, shape } = cellGivers.get(ft.key)!;
     return { k: "closure", t: ft, fn, shape, caps: [v] };
   }
+  // A formula's function kept (C300): what it gave is given again while
+  // no cell it read was written since (the runtime's formula.fresh, by the
+  // formula's number), else it runs again, its reads noted (formula.begin,
+  // formula.end). A formula can only read cells, so that is all it hangs on.
+  const keptFormulas = new Map<string, { fn: number; shape: number; memo: RType }>();
+  function kept(ft: FType, fnv: SExpr): SExpr {
+    if (!keptFormulas.has(ft.key)) {
+      const a = ft.result, mkey = `kept:${ft.key}`;
+      if (!records.has(mkey)) records.set(mkey, { key: mkey, name: "Kept", def: mkey, variant: mkey, fields: [{ name: "value", t: a }, { name: "id", t: "i32" }], mutable: true });
+      const memo = records.get(mkey)!, shape = shapes.push({ t: ft, caps: [ft, memo] }) - 1;
+      const cap = (i: number): SExpr => ({ k: "cap", t: ft, shape, i });
+      const id: SExpr = { k: "get", rec: cap(1), t: memo, i: 1 };
+      const body: SExpr = { k: "if", t: a, cond: { k: "rt", fn: "formula.fresh", args: [id] }, then: { k: "get", rec: cap(1), t: memo, i: 0 },
+        else: { k: "let", i: 2, value: { k: "rt", fn: "formula.begin", args: [id] }, body: { k: "let", i: 1, value: { k: "apply", fn: cap(0), t: ft, args: [], tail: false, tmp: 3 },
+          body: { k: "let", i: 2, value: { k: "rt", fn: "formula.end", args: [id] }, body: { k: "set", rec: cap(1), t: memo, i: 0, value: { k: "local", i: 1 }, then: { k: "local", i: 1 } } } } } };
+      const g: SFunc = { def: mkey, name: "formula.kept", params: [ft], result: a, locals: [ft, a, "i32", ft], body, spends: false, budgeted: false, inner: true, partial: true };
+      const fn = funcs.push(g) - 1;
+      closureCode.add(fn);
+      keptFormulas.set(ft.key, { fn, shape, memo });
+    }
+    const { fn, shape, memo } = keptFormulas.get(ft.key)!;
+    return { k: "closure", t: ft, fn, shape, caps: [fnv, { k: "make", t: memo, args: [{ k: "zero", t: ft.result }, { k: "rt", fn: "formula.new", args: [] }] }] };
+  }
   // cell, formula, read and write in C (C199a): a cell is a box (cellBox);
-  // a formula's is its function, run at each read, which gives what
-  // cells.ts's formula gives, as it can only read cells.
+  // a formula's is its function, kept (C300), which gives what cells.ts's
+  // formula gives, as it can only read cells.
   function cellOp(n: Call, target: Id, id: Id, env: Map<Id, number>, f: SFunc): SExpr {
     const ct = stype(zonk(target === CELL_OPS.cell || target === CELL_OPS.formula ? id : n.args[0]));
     if (!ct || !isRecord(ct) || !ct.key.startsWith("cell:")) throw new Refused(`uses ${nm(target)} on ${whyNot(zonk(target === CELL_OPS.cell || target === CELL_OPS.formula ? id : n.args[0]))}`);
@@ -5270,7 +5293,7 @@ function lowerOnceIn(code: Code, info: Info, names: Names, roots: Id[], opts: { 
     if (target === CELL_OPS.formula) {
       const th = stype(zonk(n.args[0]));
       if (!th || typeof th !== "object" || !("params" in th) || th.key !== ft.key) throw new Refused(`uses formula on a function of type ${th && typeof th === "object" ? th.key : th}, not ${ft.key}`);
-      return { k: "make", t: ct, args: [arg(0)] };
+      return { k: "make", t: ct, args: [kept(ft, arg(0))] };
     }
     if (target === CELL_OPS.read) return { k: "apply", fn: { k: "get", rec: arg(0), t: ct, i: 0 }, t: ft, args: [], tail: false, tmp: f.locals.push(ft) - 1 };
     const unit = stype(zonk(id));

@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319f, E319h, E319i, E319j, E319k (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319h, E319i, E319j, E319k (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -75,7 +75,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319f | Seeds' `resolvedFor` and `warmCalls` in the worker (calc's resolving 0.6 s on the thread). | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319k | Opening a large program draws it in one task: after its check (E319g), constructions' first drawing is about 500 ms (the page's first run 120 ms, garbage collection 100, the changes' hashes 50, the graph's layout and blocks 100). Split it: the open definition first, the rest a frame at a time. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 | E319h | What grows with the open definition (backwards.ts `analyze`, `unitInfer`, algebras, the changes diff, graph layout) measured on the largest examples: past 16 ms each moves to the worker or is kept per version. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | M | open |
 | E319i | Builtins that make data from a number (`range`, and any like it) take a step per item from a page's budget, so a page's update is bounded by its time even when one call makes a million items: after E319d the probe's "a page's view" (`sum(range(1000000))` in a view) still shows 210 to 230 ms tasks, that call's allocation and its collection. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
@@ -126,6 +125,8 @@ New targets and speed rank below every language item (Ersagun,
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
 | L285 | A reverse-mode `gradient` for functions of arrays and tensors: one pass back (Linnainmaa 1970, Speelpenning 1980; JAX's `grad`). `gradient` is forward mode on records, one pass per part: mnist's 25,450 parameters would be 25,450 passes a step, so its backward pass is written by hand. With it, both modes are the language's own differentiation; the Hessian times a vector already comes from duals over that pass (DG3) | GAPS.md round 22 (mnist), Ersagun 2026-11-23 | P2 | L | |
+| L288 | A collation key: `collated` works out each name's collation elements again at every compare, so sorting 10,000 names in C takes 1.2 s, 85% of folders' opening (C300). A key per text (each level's weights after a 0, as ICU's sort keys and the UCA's do), worked out once and compared as numbers, sorts by it with `sort by`; folders sorts with it | C300 measured, 2026-11-23 | P2 | S | |
+| L289 | A browser page opening a picked folder is quadratic: the handler runs again from the start at every awaited read of the folder, so folders takes 2 s at 1,000 files and 17 s at 3,000. A handler should go on from the read it waited on (or read the folder's entries in one wait) | C300 measured, 2026-11-23 | P2 | M | |
 | L266af | Incremental compile after edits, parts 2 to 5 (plan doc https://claude.ai/artifact/WaH3BBwr84Rai5dm6mddVn): definition keys kept by node objects; lowering per function kept (a stop's number is counted over the whole program today, so a kept function's stops need numbering of their own); the whole-program analyses (ownership, zero parts, arithmetic, first arms, reach) as per-definition summaries kept by key; the choice made from kept summaries with a per-definition rewrite. Each part checked by compiler/test/edits.test.ts and the 78-program sweep. Goal: machine's recompile after a one-definition edit under 0.3 s (1.48 s at part 1) | Ersagun 2026-11-20 (card: incremental compile after edits) | 2026-11-20 | high | L | open |
 | L266u | Make the List choice carry its types, as the Map and Set choice does (carried-reps.ts, #2899), so a first compile doesn't check the program again (about 0.2 s of machine's 2.3 s warm). The rewrite's old nodes keep their types, with List read as the array on the arrays' side; refs to builtins at the boundary, the conversions and the loops' new definitions are typed by unifying what they're given. On machine that rule types every old node the way the check does, except 55 of these. Set aside on 11-19 for stage 4, whose stable ids already let a recompile skip this check | compiler redesign, 2026-11-19 | low | M | open |
 
@@ -170,7 +171,7 @@ All invisible to programs: no annotations or hints (Ersagun 2026-10-29).
 |---|---|---|---|---|---|
 | C297 | Windows app: `ters build-native-app --windows`, a screen in C over Win32 (Direct2D boxes and pictures, DirectWrite texts, EDIT inputs, frames at the display's rate, dark mode), an `.exe` from clang alone, a hand-run "Windows app" workflow; sound by WASAPI as its own part. Example: dice, then folders | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | L | |
 | C312 | Keys with Ctrl, Cmd, Shift or Alt: the page's event carries which are held (html.ts's handler, the C page's ters_page_event, each screen), so a page can tell Ctrl+F from F; found by C298 | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
-| C300 | Long lists in a C page: folders at 10,000 rows measured first; past 16 ms a key, rerun only the views that read a changed cell and lay out only what moved (C199b reruns every view, C199d lays out the whole page) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
+| C300 | Long lists in a C page: folders at 10,000 rows. Formulas kept until a cell they read is written (C300a) took a key from 7 s to 31 ms; left: rerun only the views that read a changed cell and lay out only what moved (C199b reruns every view, C199d lays out the whole page), under 16 ms a key. Opening takes 1.4 s, 85% of it comparing names (L288) | Ersagun 2026-11-23 ("If we want to target windows and macos apps, is that too much work? Can I make my own file browser with it for example?") | P1 | M | |
 
 ### Blind spots ([BLIND-SPOTS-2026-11-03](docs/reports/reviews/BLIND-SPOTS-2026-11-03.md))
 

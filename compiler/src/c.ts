@@ -324,11 +324,12 @@ static void lab__held(void) {
 // at the exit, as compiled JavaScript says it (branches-rt.ts).
 // With how many threads it starts (L280e): cores less one, at most 15,
 // or as many as its choices hold (at most 64); TERS_WORKERS says otherwise.
-const poolC = (held: number | undefined) => `#ifdef _WIN32
-#define LAB_POOL_HELD ${held ?? "pthread_num_processors_np() - 1"}
+// A held count is the same on every system.
+const poolC = (held: number | undefined) => `${held !== undefined ? `#define LAB_POOL_HELD ${held}` : `#ifdef _WIN32
+#define LAB_POOL_HELD (pthread_num_processors_np() - 1)
 #else
-#define LAB_POOL_HELD ${held ?? "sysconf(_SC_NPROCESSORS_ONLN) - 1"}
-#endif
+#define LAB_POOL_HELD (sysconf(_SC_NPROCESSORS_ONLN) - 1)
+#endif`}
 #define LAB_POOL_MAX ${held === undefined ? 15 : 64}
 ${POOL_C}`;
 // A thread's stack (C296): on Windows the size given to a thread is what
@@ -594,7 +595,32 @@ static void *lab_touch(void *c) {
   if (lab_rding) { if (lab_nrd == lab_crd) { lab_crd = lab_crd ? 2 * lab_crd : 16; lab_rd = realloc(lab_rd, sizeof *lab_rd * (size_t)lab_crd); } lab_rd[lab_nrd++] = c; }
   return c;
 }
+// Each cell's last write, by a count of writes (C300), for a kept
+// formula: a table by the cell's address.
+#define LAB_KEEP_FORMULAS 1
+static uint64_t lab_epoch = 1, *lab_ev;
+static void **lab_ek;
+static size_t lab_ecap, lab_en;
+static size_t lab__eh(void *p, size_t cap) { uint64_t x = (uint64_t)(uintptr_t)p; x ^= x >> 29; x *= 0x9E3779B97F4A7C15ull; return (size_t)(x >> 32) & (cap - 1); }
+static uint64_t lab__eget(void *p) {
+  if (!lab_ecap) return 0;
+  for (size_t i = lab__eh(p, lab_ecap);; i = (i + 1) & (lab_ecap - 1)) { if (lab_ek[i] == p) return lab_ev[i]; if (!lab_ek[i]) return 0; }
+}
+static void lab__eset(void *p, uint64_t e) {
+  if (2 * (lab_en + 1) > lab_ecap) {
+    size_t was = lab_ecap; void **k = lab_ek; uint64_t *v = lab_ev;
+    lab_ecap = was ? 2 * was : 64; lab_ek = calloc(lab_ecap, sizeof *lab_ek); lab_ev = calloc(lab_ecap, sizeof *lab_ev);
+    if (!lab_ek || !lab_ev) lab_oom();
+    for (size_t j = 0; j < was; j++) if (k[j]) { size_t i = lab__eh(k[j], lab_ecap); while (lab_ek[i]) i = (i + 1) & (lab_ecap - 1); lab_ek[i] = k[j]; lab_ev[i] = v[j]; }
+    free(k); free(v);
+  }
+  size_t i = lab__eh(p, lab_ecap);
+  while (lab_ek[i] && lab_ek[i] != p) i = (i + 1) & (lab_ecap - 1);
+  if (!lab_ek[i]) { lab_ek[i] = p; lab_en++; }
+  lab_ev[i] = e;
+}
 static void lab_wrote(void *c) {
+  lab__eset(c, ++lab_epoch);
   for (int j = 0; j < lab_nwr; j++) if (lab_wr[j] == c) return;
   if (lab_nwr == lab_cwr) { lab_cwr = lab_cwr ? 2 * lab_cwr : 16; lab_wr = realloc(lab_wr, sizeof *lab_wr * (size_t)lab_cwr); }
   lab_wr[lab_nwr++] = c;

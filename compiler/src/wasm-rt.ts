@@ -9085,6 +9085,11 @@ const WASI: Record<string, Omit<RtFn, "name">> = {
       global.set $reason
       i32.const 2`,
   },
+  // A formula kept (C300) in C; WebAssembly runs its function at each read.
+  "formula.new": { params: [], result: "i32", locals: [], uses: [], body: "i32.const 0" },
+  "formula.fresh": { params: [["id", "i32"]], result: "i32", locals: [], uses: [], body: "i32.const 0" },
+  "formula.begin": { params: [["id", "i32"]], result: "i32", locals: [], uses: [], body: "i32.const 0" },
+  "formula.end": { params: [["id", "i32"]], result: "i32", locals: [], uses: [], body: "i32.const 0" },
   "wasi.reason": { params: [], result: "text", locals: [], uses: [], body: "global.get $reason" },
   // What's at path: 0 nothing, 1 a file (or anything but a folder), 2 a folder.
   "wasi.kind": {
