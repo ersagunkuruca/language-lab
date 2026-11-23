@@ -268,7 +268,7 @@ export const isData = (t: LType): t is DType => typeof t === "object" && "cases"
 export const isRecord = (t: LType): t is RType => typeof t === "object" && "variant" in t;
 // A Float32 (L286): its one Float64, rounded to a binary32 at every step,
 // so a target may hold it in 32 bits (C309).
-export const isFloat32 = (t: LType): t is RType => isRecord(t) && !t.mutable && t.def === FLOAT32_TYPE && t.fields.length === 1 && t.fields[0].t === "f64";
+export const isFloat32 = (t: LType): boolean => isRecord(t) && !t.mutable && t.def === FLOAT32_TYPE && t.fields.length === 1 && t.fields[0].t === "f64";
 export const isFn = (t: LType): t is FType => typeof t === "object" && "result" in t;
 // A closure's own struct: the function type it has and what it captured.
 export interface Shape { t: FType; caps: LType[] }

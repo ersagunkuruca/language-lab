@@ -1,6 +1,7 @@
 // Float32 stored as binary32 (C309): in C the Float32 record's struct
-// holds a `float`, an array of them four bytes a slot; in JavaScript an
-// array of them kept as columns is a Float32Array (sparks). The program prints what
+// holds a `float`, an array of them four bytes a slot; in WebAssembly its
+// struct an `f32`; in JavaScript an array of them kept as columns is a
+// Float32Array (sparks). The program prints what
 // the evaluator prints.
 
 import { test } from "node:test";
@@ -15,6 +16,11 @@ import { ARITH, ARRAY_OPS, CONS, DIVIDE, INT_OPS, NIL, S, SHOW_ANY } from "../..
 import type { Id } from "../../ters/src/model.ts";
 import { lowerScalar } from "../src/scalar.ts";
 import { emitC } from "../src/c.ts";
+import { emitWasm } from "../src/wasm.ts";
+import { closeSync, mkdtempSync, openSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { WASI } from "node:wasi";
 import { compile, skip } from "./c-harness.ts";
 import { lowerCore, printed, runCoreMain } from "../src/core-js.ts";
 import { load } from "../src/program.ts";
@@ -76,4 +82,19 @@ test("JavaScript keeps sparks' Float32s as Float32Arrays, as the evaluator compu
   runCoreMain(ir, "main", ["300"], { print: (s) => out.push(s) });
   runProgram(r.code, r.info, main, ["300"], { print: (s) => want.push(s), names: r.names });
   assert.deepEqual(out, want);
+});
+
+test("WebAssembly holds a Float32 as an f32, as the evaluator computes (C309)", () => {
+  const p = float32Program();
+  const want: string[] = [];
+  runMain(p.code, p.info, p.main, { print: (l) => want.push(l), names: p.names });
+  const l = lowerScalar(p.code, p.info, p.names, [p.main], { data: true, releases: true, handlers: true });
+  assert.deepEqual([...l.refused.values()], []);
+  const m = emitWasm(l, { wasi: true, main: p.main });
+  assert.match(m.wat, /\(type \$Float32\d+ \(struct \(field \$value f32\)\)\)/);
+  const out = join(mkdtempSync(join(tmpdir(), "float32-wasi-")), "out.txt"), fd = openSync(out, "w");
+  const w = new WASI({ version: "preview1", args: ["p"], stdout: fd, stderr: fd, returnOnExit: true });
+  w.start(new WebAssembly.Instance(new WebAssembly.Module(m.bytes), w.getImportObject() as WebAssembly.Imports));
+  closeSync(fd);
+  assert.deepEqual(readFileSync(out, "utf8").split("\n").filter((x) => x), want);
 });

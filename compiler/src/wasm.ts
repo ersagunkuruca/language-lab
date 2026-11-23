@@ -49,7 +49,7 @@ import { norm } from "../../ters/src/lang/int.ts";
 import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
 import { hostLocale, hostZone, zoneOffset } from "../../ters/src/lang/text.ts";
 import type { HostOps } from "./core-rt.ts";
-import { emptyArray, fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, mapLocals, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
+import { emptyArray, fails, isFloat32, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, mapLocals, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
 // int32 (an Int in 32 bits) is the shaders' only (C66c); WebAssembly has Int.
 // columns.ts's ops on an array kept as columns (C60 w2).
@@ -503,7 +503,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   // `bytes`: Text's array.
   // `items`: an Array's items (C66), a mutable array of the item type;
   // a field with `ref` holds a (nullable) reference to that type.
-  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
+  const structs: { name: string; fields: { name: string; t: MType; code?: number; ref?: number; narrow?: true }[]; sup?: number; final: boolean; func?: FType; maker?: { self: FType; result: FType }; bytes?: true; i64s?: true; u32s?: true; refs?: true; mutable?: true; items?: MType }[] = [];
   if (texty) structs.push({ name: "bytes", fields: [], final: true, bytes: true });
   // A Text (I222): its bytes' array, where in it the text starts, its
   // size, its characters (-1 till counted), and the array's fill when it
@@ -522,7 +522,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   if (stack) structs.push({ name: "hstack", fields: [], final: true, refs: true });
   const recIndex = new Map<string, number>(), baseIndex = new Map<string, number>();
   const ident = (x: string) => x.replace(/[^\w]+/g, "_");
-  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
+  // A Float32's value is held as an f32 (C309): a binary32 already, so
+  // demoted where it is made and promoted where it is read, exactly.
+  for (const r of recs) { recIndex.set(r.key, structs.length); structs.push({ name: `${ident(r.name)}${structs.length}`, fields: isFloat32(r) ? [{ ...r.fields[0], narrow: true }] : r.fields, final: true, ...(r.mutable ? { mutable: true as const } : {}) }); }
   const CASE = { name: "case", t: "i32" as const };
   for (const d of datas) {
     const b = structs.length, name = `${ident(d.name)}${b}`;
@@ -667,9 +669,9 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
   const helpers: { name: string; key: string; params: LType[]; result: LType; code: number[]; wat: string[] }[] = [];
   for (const r of recs) {
     const k = recIndex.get(r.key)!;
-    helpers.push({ name: `${r.name}.${r.case ?? "make"}`, key: r.key, params: r.fields.map((x) => x.t), result: r, code: [...r.fields.flatMap((_, j) => [0x20, ...u(j)]), 0xfb, 0x00, ...u(k)], wat: [...r.fields.map((_, j) => `local.get ${j}`), `struct.new $${structs[k].name}`] });
+    helpers.push({ name: `${r.name}.${r.case ?? "make"}`, key: r.key, params: r.fields.map((x) => x.t), result: r, code: [...r.fields.flatMap((_, j) => [0x20, ...u(j)]), ...(isFloat32(r) ? [0xb6] : []), 0xfb, 0x00, ...u(k)], wat: [...r.fields.map((_, j) => `local.get ${j}`), ...(isFloat32(r) ? ["f32.demote_f64"] : []), `struct.new $${structs[k].name}`] });
   }
-  for (const r of recs) r.fields.forEach((x, j) => helpers.push({ name: `${r.name}.${x.name}`, key: r.key, params: [r], result: x.t, code: [0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(r.key)!), ...u(j)], wat: ["local.get 0", `struct.get $${structs[recIndex.get(r.key)!].name} ${j}`] }));
+  for (const r of recs) r.fields.forEach((x, j) => helpers.push({ name: `${r.name}.${x.name}`, key: r.key, params: [r], result: x.t, code: [0x20, 0x00, 0xfb, 0x02, ...u(recIndex.get(r.key)!), ...u(j), ...(isFloat32(r) ? [0xbb] : [])], wat: ["local.get 0", `struct.get $${structs[recIndex.get(r.key)!].name} ${j}`, ...(isFloat32(r) ? ["f64.promote_f32"] : [])] }));
   for (const d of datas) {
     if (d.inner) continue;
     const b = baseIndex.get(d.key)!;
@@ -783,7 +785,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     if (x.items) return [0x5e, ...typeOf(x.items), 0x01];
     if (x.func) return [0x60, ...vec([x.func, ...x.func.params].map(typeOf)), ...vec([typeOf(x.func.result), ...(x.func.partial ? [[0x7f]] : [])])];
     if (x.maker) return [0x60, ...vec([typeOf(x.maker.self)]), ...vec([typeOf(x.maker.result)])];
-    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
+    const body = [0x5f, ...vec(x.fields.map((y) => [...(y.code !== undefined ? [0x64, ...s(y.code)] : y.ref !== undefined ? [0x63, ...s(y.ref)] : y.narrow ? [0x7d] : typeOf(y.t)), x.mutable ? 0x01 : 0x00]))];
     return x.final && x.sup === undefined ? body : [x.final ? 0x4f : 0x50, ...vec(x.sup === undefined ? [] : [u(x.sup)]), ...body];
   };
   const typeSec = vec([
@@ -952,8 +954,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         if (looped && e.tail && e.fn === self) return [...e.args.flatMap(code1), ...e.args.flatMap((_, j) => [0x21, ...u(e.args.length - 1 - j)]), 0x0c, ...u(d - 1)];
         return [...e.args.flatMap(code1), tail ? 0x12 : 0x10, ...u(fnIndex(e.fn)), ...(g.partial && !tail ? check(d, fl) : [])];
       }
-      case "make": return [...e.args.flatMap(code1), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
-      case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i)];
+      case "make": return [...e.args.flatMap(code1), ...(isFloat32(e.t) ? [0xb6] : []), 0xfb, 0x00, ...u(recIndex.get(e.t.key)!)];
+      case "get": return [...code1(e.rec), 0xfb, 0x02, ...u(recIndex.get(e.t.key)!), ...u(e.i), ...(isFloat32(e.t) ? [0xbb] : [])];
       case "new": return [0x41, ...s(e.c), ...e.args.flatMap(code1), 0xfb, 0x00, ...u(caseIndex(e.t, e.c))];
       // The items in order on the stack, then from the last: each into
       // `item`, made into a cons onto `acc` (L181b).
@@ -1139,8 +1141,8 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
         if (kept.has(e.fn)) return [`${d}global.get $kept${e.fn}`, `${d}ref.is_null`, `${d}(if (then call ${id(g)} global.set $kept${e.fn}))`, `${d}global.get $kept${e.fn}`].join("\n");
         return [...e.args.map(w), `${d}${tail ? "return_call" : "call"} ${id(g)}`, ...(g.partial && !tail ? check(ld) : [])].join("\n");
       }
-      case "make": return [...e.args.map(w), `${d}struct.new ${recName(e.t)}`].join("\n");
-      case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}`;
+      case "make": return [...e.args.map(w), ...(isFloat32(e.t) ? [`${d}f32.demote_f64`] : []), `${d}struct.new ${recName(e.t)}`].join("\n");
+      case "get": return `${w(e.rec)}\n${d}struct.get ${recName(e.t)} ${e.i}${isFloat32(e.t) ? `\n${d}f64.promote_f32` : ""}`;
       case "new": return [`${d}i32.const ${e.c}`, ...e.args.map(w), `${d}struct.new ${sname(caseIndex(e.t, e.c))}`].join("\n");
       case "list": {
         const [nil, cons] = listSteps(e);
@@ -1235,7 +1237,7 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
       if (x.items) return `    (type $${x.name} (array (mut ${ty(x.items)})))`;
       if (x.func) return `    (type $${x.name} (func (param ${[x.func, ...x.func.params].map(ty).join(" ")}) (result ${ty(x.func.result)}${x.func.partial ? " i32" : ""})))`;
       if (x.maker) return `    (type $${x.name} (func (param ${ty(x.maker.self)}) (result ${ty(x.maker.result)})))`;
-      const fty = (y: (typeof x.fields)[number]) => (y.ref !== undefined ? `(ref null ${sname(y.ref)})` : ty(y.t));
+      const fty = (y: (typeof x.fields)[number]) => (y.ref !== undefined ? `(ref null ${sname(y.ref)})` : y.narrow ? "f32" : ty(y.t));
       const body = `(struct${x.fields.map((y) => ` (field $${ident(y.name)} ${y.code !== undefined ? `(ref ${sname(y.code)})` : x.mutable ? `(mut ${fty(y)})` : fty(y)})`).join("")})`;
       return `    (type $${x.name} ${x.final && x.sup === undefined ? body : `(sub${x.final ? " final" : ""}${x.sup === undefined ? "" : ` ${sname(x.sup)}`} ${body})`})`;
     }),
