@@ -40,7 +40,7 @@ superseded.
 
 | id | item | PR |
 |---|---|---|
-| E319b | Tests run in the worker (testAsk.ts): Run's Test shows Testing… with Stop and draws the result when it answers; Upgrade modules checks and tests the upgraded program there, then commits. The probe's "a test" place: a 3,240 ms freeze before, no long task after | #PR |
+| E319b | Tests run in the worker (testAsk.ts): Run's Test shows Testing… with Stop and draws the result when it answers; Upgrade modules checks and tests the upgraded program there, then commits. The probe's "a test" place: a 3,240 ms freeze before, no long task after | #3160 |
 | E319a | The editor's thread guarded (EDITOR-THREAD-2026-11-23): editor-thread.test.ts lists every call from the editor's bundle into the evaluator, checker or compiler with its bound (a new one fails), and editor/thread-probe.ts records the editor's long tasks in places that run slow code (over 200 ms fails; places not yet fixed listed with their row) | #3152, #3156 |
 | E318 | A field the program's own type and a library type share reads as the program's: editor/typed.ts's typed fill takes the one reading whose types are all the program's own, with no choices; mcp/session.ts's `programsOwn` (#3124) removed (REVIEW-2026-11-23 §2) | #3143 |
 | G10 (step) | Passes into textures, the runtime's side: raster.ts draws each pass in written order into the screen or a texture of its own size, `sampled(target, across)` reads one linearly, clamped, and a texture read before a pass drew it is refused (#3132); gpu-frame.ts does the same on WebGPU, rgba8unorm targets, sampler at binding 3 and textures at 4+k, checked against raster.ts on SwiftShader, worst channel 0 (#3142); Texel's note (#3146) | #3132, #3142, #3146 |
