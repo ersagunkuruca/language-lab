@@ -80,7 +80,24 @@ function slowPage(): Place {
 // a frame.
 function picture(): Place {
   return { name: "a picture", file: exampleFile("raymarch", "Slow picture", (s) => s.replace("colour", "rgb(1, 0, 0.9)", "rgb(1, 0, 1)")), open: (q) => openDef(q, "colour"),
-    then: async (q) => { const said = await q.locator(".pic-status").first().innerText(); return /Can't|Drawing…/.test(said) || await q.locator("canvas.picture").first().isHidden() ? `the picture didn't draw: ${said}` : null; } };
+    then: drew };
+}
+
+// Mandelbrot with ten thousand times the steps a pixel, so a pixel in the
+// set takes milliseconds: without a GPU the editor drew its rows on its
+// own thread, at least a row at a time (E319c).
+function slowPixels(): Place {
+  return { name: "a picture's pixels", file: exampleFile("mandelbrot", "Slow pixels", (s) => {
+    s.replace("escape", "2999999 < steps", "299 < steps");
+    s.replace("colour", "6000000", "600");
+    s.replace("colour", "2999999 < steps", "299 < steps");
+  }), open: (q) => openDef(q, "colour"), then: drew };
+}
+
+// Whether the picture drew, on the GPU or the CPU, and didn't stop.
+async function drew(q: Page): Promise<string | null> {
+  const said = await q.locator(".pic-status").first().innerText();
+  return /Can't|stopped|Drawing…/.test(said) || await q.locator("canvas.picture").first().isHidden() ? `the picture didn't draw: ${said}` : null;
 }
 
 // An example copied and changed, as the file the editor opens.
@@ -114,7 +131,7 @@ async function openDef(p: Page, name: string) {
 const longTasks = (p: Page) => p.evaluate(() => (globalThis as unknown as { labLong: number[] }).labLong.splice(0));
 
 const failures: string[] = [];
-for (const place of [wireValues(), slowTest(), slowPage(), picture()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
+for (const place of [wireValues(), slowTest(), slowPage(), picture(), slowPixels()].filter((x) => !process.env.PLACE || x.name === process.env.PLACE)) {
   const p = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await p.addInitScript(() => {
     const g = globalThis as unknown as { labLong: number[] };

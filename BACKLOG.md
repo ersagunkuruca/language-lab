@@ -24,7 +24,7 @@ Defaults first (Ersagun 2026-11-10 15:34): "I want the default compiled code to 
 
 | lane | thread | next, in order |
 |---|---|---|
-| E Editor | "Editor lane" | E319c, E319g, E319e, E319f, E319h, E319i, E319j (editor thread, Ersagun 2026-11-23) |
+| E Editor | "Editor lane" | E319g, E319e, E319f, E319h, E319i, E319j (editor thread, Ersagun 2026-11-23) |
 | C Compiler and targets | "Compiler lane" | G10 with the Editor lane (its texture contract first) |
 | L Language and library | "Language lane" | L266 (Ersagun 2026-11-17) |
 | L Language and library | "Language lane B" | L251, L253 (P3, from the 2026-11-13 docs refresh) |
@@ -76,7 +76,6 @@ Ersagun 2026-11-17: a program's inputs (arguments, files, standard input) are vi
 
 | id | item | source | pri | size | status |
 |---|---|---|---|---|---|
-| E319c | A picture's CPU drawing (an OffscreenCanvas) in the worker: a slice of rows a frame on the editor's thread is bounded only while each pixel is (its lowering went to the worker in E319c (step)). | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | M | open |
 | E319e | Values on wires: the trace on the thread at about 50 ms, longer ones (given values included) in the worker, the wires filled when it answers; the divergent case given a budget too. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319f | Seeds' `resolvedFor` and `warmCalls` in the worker (calc's resolving 0.6 s on the thread). | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P2 | S | open |
 | E319g | The whole check (on open, and on a miss in the recent checks) in the worker: the program drawn at once, its types when they come. Edits keep the incremental check on the thread, bounded by the edit. | Ersagun 2026-11-23; [EDITOR-THREAD-2026-11-23](docs/reports/EDITOR-THREAD-2026-11-23.md) | P1 | L | open |

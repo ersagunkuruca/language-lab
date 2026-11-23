@@ -146,6 +146,68 @@ export interface DrawOptions {
   check?: HTMLElement;
   // A fixed time instead of the clock (for screenshots and tests).
   still?: number | null;
+  // Where the CPU's picture is drawn, a row at a time: a worker that
+  // answers PaintAsks (editor/runWorker.ts), so a picture whose pixels
+  // take long doesn't hold the page (E319c). On the page's thread without.
+  worker?: () => Worker;
+}
+
+// The CPU's picture, drawn rows at a time: from row `from` of an n by n
+// picture at time t, for about `ms`, at least one row. `data` holds the
+// rows' pixels, `to` is the row after the last.
+export type Rows = { n: number; t: number; from: number; ms: number };
+export type Painted = { to: number; data: Uint8ClampedArray; busy: number };
+type Painter = { how: string; moving: boolean; rows(r: Rows): Promise<Painted>; stop(): void };
+type ColourAt = (x: number, y: number, t: number) => number[];
+
+export function paintRows(colourAt: ColourAt, { n, t, from, ms }: Rows): Painted {
+  const data = new Uint8ClampedArray(4 * n * (n - from));
+  const t0 = performance.now();
+  let row = from;
+  while (row < n && (row === from || performance.now() - t0 < ms)) {
+    for (let px = 0; px < n; px++) {
+      const x = (2 * (px + 0.5) - n) / n, y = (n - 2 * (row + 0.5)) / n, at = 4 * ((row - from) * n + px);
+      colourAt(x, y, t).forEach((v, k) => { data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
+      data[at + 3] = 255;
+    }
+    row++;
+  }
+  return { to: row, data: data.slice(0, 4 * n * (row - from)), busy: performance.now() - t0 };
+}
+
+// The CPU's program made runnable: WebAssembly, or JavaScript where
+// WebAssembly can't take it; whether it moves, from a few points at two
+// times.
+export async function colourOf(program: CpuProgram): Promise<{ colourAt: ColourAt; how: string; moving: boolean }> {
+  const wasm = await inWasm(program).catch(() => null);
+  const colourAt = wasm ?? inJs(program)!;
+  const probe = [-0.7, 0, 0.7].flatMap((x) => [-0.7, 0, 0.7].map((y) => [x, y]));
+  const moving = probe.some(([x, y]) => String(colourAt(x, y, 0.3)) !== String(colourAt(x, y, 1.9)));
+  return { colourAt, how: wasm ? "WebAssembly" : "JavaScript", moving };
+}
+
+async function onThread(program: CpuProgram): Promise<Painter> {
+  const { colourAt, how, moving } = await colourOf(program);
+  return { how, moving, rows: async (r) => paintRows(colourAt, r), stop: () => {} };
+}
+
+// Asked of the worker: the program once, then rows; each answered in turn.
+export type PaintAsk = { paint: CpuProgram } | { rows: Rows };
+export type PaintSays = { how: string; moving: boolean } | Painted | { error: string };
+
+function inWorker(w: Worker, program: CpuProgram): Promise<Painter> {
+  const waiting: [(m: PaintSays) => void, (e: Error) => void][] = [];
+  const ask = (m: PaintAsk) => new Promise<PaintSays>((ok, fail) => { waiting.push([ok, fail]); w.postMessage(m); });
+  const end = (e: Error) => { w.terminate(); for (const [, fail] of waiting.splice(0)) fail(e); };
+  w.onmessage = (e: MessageEvent<PaintSays>) => {
+    const [ok, fail] = waiting.shift() ?? [];
+    if ("error" in e.data) { end(new Error(e.data.error)); fail?.(new Error(e.data.error)); } else ok?.(e.data);
+  };
+  w.onerror = (e) => { e.preventDefault(); end(new Error(e.message || "the picture's worker failed")); };
+  return ask({ paint: program }).then((m) => {
+    const { how, moving } = m as { how: string; moving: boolean };
+    return { how, moving, rows: (r) => ask({ rows: r }) as Promise<Painted>, stop: () => end(new Error("stopped")) };
+  }, (e) => { end(e); throw e; });
 }
 
 export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture> {
@@ -153,7 +215,8 @@ export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture
   const started = performance.now();
   const now = () => o.still ?? (performance.now() - started) / 1000;
   let stopped = false;
-  const stop = () => { stopped = true; };
+  const stops: (() => void)[] = [];
+  const stop = () => { stopped = true; for (const f of stops.splice(0)) f(); };
   const floats = p.in32 ? "in 32-bit floats, as the GPU" : "in 64-bit floats";
   const picture: Picture = { wgsl: p.wgsl, fragment: p.fragment.slice(p.wgsl.length).trim(), ready: Promise.resolve(), stop };
 
@@ -320,26 +383,23 @@ export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture
   async function cpu(why: string) {
     const program = p.cpu();
     if ("refused" in program) { status.textContent = `No GPU here (${why}), and ${program.refused}.`; return; }
-    const wasm = await inWasm(program).catch(() => null);
-    const colourAt = wasm ?? inJs(program)!;
     // A canvas the GPU drew on can't be drawn on any other way.
     const ctx = canvas.getContext("2d");
     if (!ctx) { status.textContent = `No GPU now (${why}), and this picture was on the GPU before: reload the page to draw it on the CPU.`; return; }
+    const painter = await (o.worker ? inWorker(o.worker(), program) : onThread(program)).catch((e: unknown) => e instanceof Error ? e : new Error(String(e)));
+    if (painter instanceof Error) { status.textContent = `No GPU here (${why}), and the picture stopped: ${painter.message}.`; return; }
+    if (stopped) return painter.stop();
+    stops.push(painter.stop);
+    const failed = (e: unknown) => { if (!stopped) status.textContent = `The picture stopped: ${e instanceof Error ? e.message : String(e)}.`; };
     // A moving picture is drawn small enough to keep a frame near 25 ms. A
     // still one, or a moving one paused (click it), is then drawn again at
     // the canvas's own size, a slice of rows a frame, over the small one.
     let size = 64;
-    const how = wasm ? "WebAssembly" : "JavaScript";
-    status.title = `No GPU here (${why}). The same program as ${how}, ${floats}.`;
-    const probe = [-0.7, 0, 0.7].flatMap((x) => [-0.7, 0, 0.7].map((y) => [x, y]));
-    const moving = o.still == null && probe.some(([x, y]) => String(colourAt(x, y, 0.3)) !== String(colourAt(x, y, 1.9)));
+    const { how, moving: movingNow } = painter;
+    const moving = o.still == null && movingNow;
+    status.title = `No GPU here (${why}). The same program as ${how}, ${floats}${o.worker ? ", drawn off the page's thread" : ""}.`;
     let paused: number | null = null;
     const sharp = () => Math.min(512, Math.round((canvas.clientWidth || 256) * Math.min(2, devicePixelRatio || 1)));
-    const pixel = (img: ImageData, n: number, px: number, py: number, t: number) => {
-      const x = (2 * (px + 0.5) - n) / n, y = (n - 2 * (py + 0.5)) / n, at = 4 * (py * n + px);
-      colourAt(x, y, t).forEach((v, k) => { img.data[at + k] = 255 * Math.min(1, Math.max(0, v)); });
-      img.data[at + 3] = 255;
-    };
     const say = (what: string) => { status.textContent = `Drawn as ${how} on the CPU (no GPU here), ${what}`; };
     // A frame is drawn a few rows at a time, at most ~10 ms at once, and a
     // slow one leaves the page as much time again before the next, so a
@@ -352,18 +412,21 @@ export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture
       let row = 0, busy = 0;
       const rows = () => {
         if (stopped || paused !== null || mine !== frame) return;
-        const t0 = performance.now();
-        while (row < n && performance.now() - t0 < 10) { for (let px = 0; px < n; px++) pixel(img, n, px, row, t); row++; }
-        busy += performance.now() - t0;
-        if (row < n) { setTimeout(rows, 0); return; }
-        if (canvas.width !== n) canvas.width = canvas.height = n;
-        ctx.putImageData(img, 0, 0);
-        if (busy > 40) size = Math.max(32, Math.round(size * 0.8));
-        else if (busy < 15) size = Math.min(256, Math.round(size * 1.15));
-        if (!moving) return refine(t);
-        say(`${n}×${n}, ${Math.round(busy)} ms a frame. Click it to pause and sharpen.`);
-        if (busy > 40) setTimeout(() => requestAnimationFrame(draw), busy);
-        else requestAnimationFrame(draw);
+        painter.rows({ n, t, from: row, ms: 10 }).then((got) => {
+          if (stopped || paused !== null || mine !== frame) return;
+          img.data.set(got.data, 4 * n * row);
+          row = got.to;
+          busy += got.busy;
+          if (row < n) { setTimeout(rows, 0); return; }
+          if (canvas.width !== n) canvas.width = canvas.height = n;
+          ctx.putImageData(img, 0, 0);
+          if (busy > 40) size = Math.max(32, Math.round(size * 0.8));
+          else if (busy < 15) size = Math.min(256, Math.round(size * 1.15));
+          if (!moving) return refine(t);
+          say(`${n}×${n}, ${Math.round(busy)} ms a frame. Click it to pause and sharpen.`);
+          if (busy > 40) setTimeout(() => requestAnimationFrame(draw), busy);
+          else requestAnimationFrame(draw);
+        }, failed);
       };
       rows();
     };
@@ -380,11 +443,15 @@ export async function drawDrawable(p: Drawable, o: DrawOptions): Promise<Picture
       let row = 0;
       const slice = () => {
         if (stopped || (moving && paused === null)) return;
-        const t0 = performance.now(), from = row;
-        while (row < n && performance.now() - t0 < 25) { for (let px = 0; px < n; px++) pixel(img, n, px, row, t); row++; }
-        ctx.putImageData(img, 0, 0, 0, from, n, row - from);
-        say(row < n ? `sharpening: ${Math.round((100 * row) / n)}%` : `${n}×${n}.${moving ? " Paused: click it to play." : ""}`);
-        if (row < n) requestAnimationFrame(slice);
+        painter.rows({ n, t, from: row, ms: 25 }).then((got) => {
+          if (stopped || (moving && paused === null)) return;
+          const from = row;
+          img.data.set(got.data, 4 * n * from);
+          row = got.to;
+          ctx.putImageData(img, 0, 0, 0, from, n, row - from);
+          say(row < n ? `sharpening: ${Math.round((100 * row) / n)}%` : `${n}×${n}.${moving ? " Paused: click it to play." : ""}`);
+          if (row < n) requestAnimationFrame(slice);
+        }, failed);
       };
       slice();
     };
