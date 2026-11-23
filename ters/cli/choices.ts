@@ -448,7 +448,7 @@ function meaningOf(line: string): string {
 // items (its cases with parts: a list's cells, a tree's nodes). Written
 // by `ters choices --measure`, kept as written until measured again
 // (CHOICES rule 4: measurements are committed).
-export interface Measuring { measure: Measure; lines: (args: readonly string[]) => string[] }
+export interface Measuring { measure: Measure; lines: (args: readonly string[], said?: string) => string[] }
 export function measuring(given: Program, main: Id, picks: readonly Pick[]): Measuring {
   const names = { ...LIBRARY.names, ...given.names }, code = given.code;
   const casesOf = (t: Id): Id[] => { const d = code.nodes[t]; return d?.kind === "def" && code.nodes[d.body!]?.kind === "typedef" ? (code.nodes[d.body!] as NodeOf<"typedef">).variants : []; };
@@ -501,11 +501,11 @@ export function measuring(given: Program, main: Id, picks: readonly Pick[]): Mea
     return n;
   };
   const measure: Measure = { calls, counts: new Map(), gave: (job, v) => { const t = typeOf.get(job)!, n = sizeOf(t, v); if (n > (largest.get(t) ?? 0)) largest.set(t, n); } };
-  const lines = (args: readonly string[]) => [...new Set(typeOf.values())].flatMap((t) => {
+  const lines = (args: readonly string[], said = args.length ? args.join(" ") : "no arguments") => [...new Set(typeOf.values())].flatMap((t) => {
     const counted = [...measure.counts].filter(([j, c]) => typeOf.get(j) === t && c > 0).map(([j, c]) => [names[j.slice(t.length + 1)] ?? j.slice(t.length + 1), c] as const).sort(([a], [b]) => a.localeCompare(b));
     if (!counted.length) return [];
     const most = largest.get(t);
-    return [`${t} measured: ${names[t] ?? t}: ${counted.map(([j, c]) => `${j} ${c} ${c === 1 ? "time" : "times"}`).join(", ")}${most ? `; up to ${most} ${most === 1 ? "item" : "items"}` : ""}; from a run with ${args.length ? args.join(" ") : "no arguments"}`];
+    return [`${t} measured: ${names[t] ?? t}: ${counted.map(([j, c]) => `${j} ${c} ${c === 1 ? "time" : "times"}`).join(", ")}${most ? `; up to ${most} ${most === 1 ? "item" : "items"}` : ""}; from a run with ${said}`];
   });
   return { measure, lines };
 }
