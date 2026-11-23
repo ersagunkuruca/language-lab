@@ -47,7 +47,7 @@ import type { Id } from "../../ters/src/model.ts";
 import { answerByShapes, type Shape } from "../../ters/src/lang/hosts.ts";
 import { norm } from "../../ters/src/lang/int.ts";
 import { FALSE, TRUE } from "../../ters/src/lang/std.ts";
-import { zoneOffset } from "../../ters/src/lang/text.ts";
+import { hostLocale, hostZone, zoneOffset } from "../../ters/src/lang/text.ts";
 import type { HostOps } from "./core-rt.ts";
 import { emptyArray, fails, listSteps, isArray, isTable, isData, isFn, isRecord, kids, mapKids, mapLocals, OPS, STOPS, type AType, type DType, type FType, type LType, type CoreIR, type Op, type RType, type SExpr, type SFunc, type SType, type TType } from "./scalar.ts";
 
@@ -79,7 +79,7 @@ export const boxedCompares = (e: SExpr): SExpr => {
 
 // A type in the module: the program's (scalar.ts), or a machine word the runtime computes with.
 type MType = LType | "i64" | "mag" | "raw";
-const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>", FILE_INFO_T = "std.file info<>", FILE_KIND_T = "std.file kind<>";
+const LIST_TEXT = "std.list<type.string<>>", OPTION_TEXT = "std.optional<type.string<>>", OPTION_INT = "std.optional<type.int<>>", LIST_INT = "std.list<type.int<>>", BYTES_T = "std.bytes<>", FILE_INFO_T = "std.file info<>", FILE_KIND_T = "std.file kind<>", LOCALE_T = "std.locale<>";
 const HOST: Partial<Record<Op, { name: string; params: number }>> = {
   sin: { name: "sin", params: 1 }, cos: { name: "cos", params: 1 }, tan: { name: "tan", params: 1 },
   exp: { name: "exp", params: 1 }, log: { name: "log", params: 1 }, pow: { name: "pow", params: 2 }, atan2: { name: "atan2", params: 2 },
@@ -750,6 +750,12 @@ export function emitWasm(lowered: CoreIR, opts: { wasi?: boolean; hosts?: HostOp
     helpers.push({ name: "Instant.make", key: at.key, params: at.fields.map((x) => x.t), result: at, code: [0x20, 0x00, 0xfb, 0x00, ...u(ak)], wat: ["local.get 0", `struct.new $${structs[ak].name}`] });
     kindD.cases.forEach((_, ci) => { const c = caseIndex(kindD, ci); helpers.push({ name: `FileKind.${ci}`, key: kindD.key, params: [], result: kindD, code: [0x41, ...s(ci), 0xfb, 0x00, ...u(c)], wat: [`i32.const ${ci}`, `struct.new $${structs[c].name}`] }); });
   }
+  // A Locale (C315), for the host's my locale: made from its name.
+  const localeRec = recs.find((r) => r.key === LOCALE_T);
+  if (localeRec) {
+    const k = recIndex.get(localeRec.key)!;
+    helpers.push({ name: "Locale.make", key: localeRec.key, params: [localeRec.fields[0].t], result: localeRec, code: [0x20, 0x00, 0xfb, 0x00, ...u(k)], wat: ["local.get 0", `struct.new ${structs[k].name}`] });
+  }
   helpers.forEach((x, k) => { if (helpers.findIndex((y) => y.name === x.name) !== k) x.name = `${x.name}(${x.key})`; });
   const helperSig = helpers.map((x) => sig(x.params, x.result));
   // _start: main, given the arguments; an abort's reason to standard
@@ -1365,6 +1371,11 @@ function worldOf(rt: Runtime, exports: () => Record<string, (...xs: unknown[]) =
     }),
     // An environment variable (L253), as run.ts answers it.
     environmentVariable: (n: unknown) => { const v = rt.world?.environmentVariable?.(text(n)) ?? null, ex = exports(); return v === null ? ex["TextOption.none"]() : ex["TextOption.some"](make(v.normalize("NFC"))); },
+    // The person's time zone and locale, and a file to the platform's app
+    // (C315), as run.ts answers them.
+    myTimeZone: () => make((rt.world?.timeZone ?? hostZone)()),
+    myLocale: () => exports()["Locale.make"](make((rt.world?.locale ?? hostLocale)())),
+    openOutside: (p: unknown) => unit(() => w("openOutside")!(text(p))),
     // A zone's offset (L188): the host's Intl, NaN for a zone it doesn't know.
     zoneOffset: (z: unknown, s: number) => zoneOffset(text(z), s)[0] ?? NaN,
     listFolder: (p: unknown) => tried(() => textList(exports(), w("listFolder")(text(p)))),
