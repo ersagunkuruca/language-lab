@@ -10,6 +10,7 @@ import { CONS, FALSE, NIL, TRUE } from "./std.ts";
 
 // `lit`: a value a match on values (L164c) takes, `text` how it reads:
 // a field matched on by value inside a case, cons("-", rest).
+// A name an inner otherwise reads is its row's for the field.
 export type Pat = { v: Id } | { con: Id; args: Pat[] } | { lit: Id; text: string } | { any: true };
 // `at` is the node a row stands for: its leaf case, or the inner match
 // whose otherwise it is.
@@ -41,7 +42,8 @@ export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Ro
     if (n.kind !== "match" || !plainMatch(code, info, n)) return undefined;
     const s = code.nodes[n.scrutinee];
     if (s.kind !== "ref" || !binds.includes(s.target)) return undefined;
-    return [...n.arms, ...(n.otherwise ? [n.otherwise] : [])].some((x) => reads(code, x, [s.target])) ? undefined : n;
+    // The otherwise may read it: its row names the field there.
+    return n.arms.some((x) => reads(code, x, [s.target])) ? undefined : n;
   };
   const rows = (pat: Pat, binds: Id[], body: Id, at: Id): Row[] => {
     const inner = deeper(binds, body);
@@ -53,7 +55,7 @@ export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Ro
         const arm = code.nodes[a] as NodeOf<"arm">;
         return rows(put(pat, b, arm.value ? litPat(code, arm.value) : { con: arm.variant, args: arm.binds.map((x) => ({ v: x })) }), [...rest, ...arm.binds], arm.body, a);
       }),
-      ...(inner.otherwise ? rows(put(pat, b, { any: true }), rest, inner.otherwise, inner.id) : []),
+      ...(inner.otherwise ? (reads(code, inner.otherwise, [b]) ? rows(put(pat, b, { v: b }), binds, inner.otherwise, inner.id) : rows(put(pat, b, { any: true }), rest, inner.otherwise, inner.id)) : []),
     ];
   };
   return m.arms.flatMap((a) => {
@@ -65,7 +67,12 @@ export function matchRows(code: Code, info: Info | null, m: NodeOf<"match">): Ro
 // Are these rows more than the match's own cases?
 export const flattened = (rows: Row[]) => rows.some((r) => "con" in r.pat && r.pat.args.some((a) => !("v" in a)));
 
-const hasAny = (p: Pat): boolean => "any" in p || ("con" in p && p.args.some(hasAny));
+// Could a value match both? Rows of one decision tree can't, but for a
+// row that takes anything somewhere (an otherwise read as _ or a name).
+const overlap = (p: Pat, q: Pat): boolean =>
+  "any" in p || "v" in p || "any" in q || "v" in q ? true
+  : "lit" in p || "lit" in q ? "lit" in p && "lit" in q && p.text === q.text
+  : p.con === q.con && p.args.every((a, i) => overlap(a, q.args[i]));
 
 // What an expression says, without its ids: two copies of ‹bad line›(n)
 // are the same.
@@ -76,7 +83,8 @@ export function shape(code: Code, root: Id): string {
 
 // Rows that give the same value, reading none of their own names, read
 // once as the otherwise: the line too short, the line too long. Only when
-// no row left has a _ that would catch them first.
+// no row left after one of them could catch it (a _ or a name where they
+// differ), as it would once that one is read last.
 export function sharedOtherwise(code: Code, all: Row[], otherwise?: Id): { rows: Row[]; otherwise?: Id; folded: Row[] } {
   const groups = new Map<string, Row[]>();
   // A fresh match, every case still a hole, shares nothing: each case has
@@ -89,7 +97,7 @@ export function sharedOtherwise(code: Code, all: Row[], otherwise?: Id): { rows:
   for (const r of all) if (!open(r) && !reads(code, r.body, r.binds)) { const k = shape(code, r.body); groups.set(k, [...(groups.get(k) ?? []), r]); }
   const same = otherwise ? groups.get(shape(code, otherwise)) : [...groups.values()].filter((g) => g.length > 1).sort((a, b) => b.length - a.length)[0];
   const kept = same ? all.filter((r) => !same.includes(r)) : all;
-  if (!same || kept.some((r) => hasAny(r.pat))) return { rows: all, otherwise, folded: [] };
+  if (!same || kept.some((k) => same.some((r) => all.indexOf(r) < all.indexOf(k) && overlap(k.pat, r.pat)))) return { rows: all, otherwise, folded: [] };
   return { rows: kept, otherwise: otherwise ?? same[0].body, folded: same };
 }
 

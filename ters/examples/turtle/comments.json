@@ -1,0 +1,12 @@
+{"0recvhpqb8dj64ia1f4138vvmb": "The heading as a word.",
+"2gfhbk8v4opdtp7nlvta8e9b96": "The turtle after a line, or, when the line isn't a command, the reason on standard error and the turtle as it was.",
+"5nf1es0r2513ju1puen0kqlsss": "One line of commands: each command is a list of words matched by the words in it, so the turtle language is the cases of one match.",
+"bqq1pnei007esqaa909lc4f159": "The turtle turned right by quarter turns, 3 being a left turn.",
+"dpp411kee2ksk4icter7d7nv8r": "The turtle n steps ahead (back when n is negative), counting the steps drawn while its pen is down.",
+"dsmg96lnlhc6knig46vg14uukt": "Where the turtle is, which way it faces, and how many steps it has drawn.",
+"gsvvv2hr157tvg64b27uccn49u": "How far a step takes the turtle east: heading 0 is north, 1 east, 2 south, 3 west.",
+"heahbqceu7f5hf3i6ec2i208cj": "The number of steps a word spells, or a stop saying it isn't one.",
+"heih5sb6deorffvetc06vr4kab": "The turtle with its pen down or up.",
+"hs01g06qibse5irru124iudht0": "Each line in order, saying where the turtle is after it. Plain recursion on the list, so the checker sees it ends.",
+"r517f813g4s0kcshnkit968ih2": "turtle: a turtle on a grid of whole steps, steered by lines of standard input: forward n, back n, turn left, right or around, pen up or down. After each line it says where it is. The commands are the cases of one match in obey, on the line's words: a word in a case is that word, a name takes any.",
+"v2vfi25ktmademumfgfrpqgui4": "How far a step takes the turtle north."}
