@@ -188,6 +188,8 @@ const HOST_WORLD: Record<Id, { op: string; aborts: boolean }> = {
   [IO.sendRequest]: { op: "sendRequest", aborts: true },
   // A file's info (L282), a File info record: JavaScript's for now.
   [IO.fileInfo]: { op: "fileInfo", aborts: true },
+  // A file to the platform's app (L283): JavaScript's for now.
+  [IO.openOutside]: { op: "openOutside", aborts: true },
   // A fetch as a ticket (L150, C182): ready when the body comes.
   [IO.startFetch]: { op: "startFetch", aborts: true },
 };

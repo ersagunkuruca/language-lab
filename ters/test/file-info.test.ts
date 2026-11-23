@@ -1,11 +1,11 @@
-// file info (L282): a file's kind, size and modified time, from lstat, so a
+// file info (L282) and open outside (L283): a file's kind, size and modified time, from lstat, so a
 // link is a link; a missing file aborts with the reason, as read file does.
 // The evaluator and compiled JavaScript agree, and so does the store of a
 // page, where every file is a plain one.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compiledMain } from "../../compiler/src/core-js.ts";
@@ -70,4 +70,32 @@ test("file info on a page: a stored file is a plain file, with its size in bytes
   runMain(code, info, main, { print: (l) => out.push(l), names, world: browserWorld(store, "t") });
   assert.deepEqual(out, ["plain file 3", '["note.txt"]']);
   assert.ok(Number(m.get("modified lab:t:note.txt")) >= Math.floor(before));
+});
+
+// open outside (L283): the path to the platform's opener, here a script
+// that writes down what it was given; a path that isn't there aborts.
+test("open outside hands the path to the opener, evaluated and compiled; a missing path aborts", () => {
+  const dir = mkdtempSync(join(tmpdir(), "open-outside-"));
+  const opener = join(dir, "opener.sh"), seen = join(dir, "seen.txt");
+  writeFileSync(opener, `#!/bin/sh\nprintf '%s\\n' "$1" >> "${seen}"\n`, { mode: 0o755 });
+  writeFileSync(join(dir, "a.txt"), "x");
+  const k = new Lang(LIBRARY.code);
+  const main = k.def("main");
+  const opened = (p: string) => k.call(S.print, k.handle(k.seq(k.call(IO.openOutside, k.lit(join(dir, p))), k.lit("opened")), [{ variant: ABORT_OP, names: ["why"], body: () => k.lit("not opened") }]));
+  k.define(main, k.thunk(() => k.seq(opened("a.txt"), opened("missing"))));
+  const code = base(k.code), names = baseNames(k.names);
+  const info = infer(code, names, undefined, checkOptions);
+  assert.deepEqual(info.errors.map((e) => e.message), []);
+  const was = process.env.TERS_OPEN_OUTSIDE;
+  process.env.TERS_OPEN_OUTSIDE = opener;
+  try {
+    const ran: string[] = [], compiled: string[] = [];
+    runMain(code, info, main, { print: (l) => ran.push(l), names, world: nodeWorld() });
+    compiledMain(code, info, names, { print: (l: string) => compiled.push(l), world: nodeWorld() } as never);
+    assert.deepEqual(ran, ["opened", "not opened"]);
+    assert.deepEqual(compiled, ran);
+    assert.equal(readFileSync(seen, "utf8"), `${join(dir, "a.txt")}\n`.repeat(2));
+  } finally {
+    if (was === undefined) delete process.env.TERS_OPEN_OUTSIDE; else process.env.TERS_OPEN_OUTSIDE = was;
+  }
 });

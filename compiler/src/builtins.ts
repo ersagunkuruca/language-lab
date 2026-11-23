@@ -126,6 +126,7 @@ export const TARGETS: Record<Id, Target> = {
   [IO.fileExists]: { js: op(([a]) => `$io.fileExists(${a})`), scalar: WORLD },
   [IO.listFolder]: { js: op(([a]) => `$io.listFolder(${a})`), scalar: WORLD },
   [IO.fileInfo]: { js: op(([a]) => `$io.fileInfo(${a})`), scalar: WORLD },
+  [IO.openOutside]: { js: op(([a]) => `$io.openOutside(${a})`), scalar: WORLD },
   [IO.fetchText]: { js: op(([a]) => `$io.fetchText(${a})`), scalar: WORLD },
   [IO.readBytes]: { js: op(([a]) => `$io.readBytes(${a})`), scalar: WORLD },
   [IO.writeBytes]: { js: op(([a, b]) => `$io.writeBytes(${a}, ${b})`), scalar: WORLD },

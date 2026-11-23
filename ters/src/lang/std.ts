@@ -522,6 +522,10 @@ export const IO = {
   // A file's kind, size and modified time (L282); a missing one aborts
   // with the reason, as read file does.
   fileInfo: world("io.fileInfo", "file info", [str], { t: "con", id: "std.file info", args: [] }, [FILES, ABORT]),
+  // A file or folder handed to the platform's own app (L283): open on
+  // macOS, the shell's on Windows, xdg-open elsewhere, a new tab on a page.
+  // It changes nothing the program reads; it aborts when it can't be done.
+  openOutside: world("io.openOutside", "open outside", [str], unit, [FILES, ABORT]),
   // A file's bytes as they are, and bytes written as they are (L189c,
   // bytes.ts): no UTF-8 decoding or NFC, for images, sound and binary
   // formats.
@@ -615,6 +619,7 @@ export const FILES_TYPE = typedef(FILES, "Files", [], [
   ["ask for file", [["kinds", () => fixedTref(`${FILES}.ask for file.kinds.type`, STRING)]], () => fixedTref(`${FILES}.ask for file.returns`, "std.bytes")],
   // A file's info (L282): after the rest, so their ids don't move.
   ["file info", [["path", () => fixedTref(`${FILES}.file info.path.type`, STRING)]], () => fixedTref(`${FILES}.file info.returns`, "std.file info")],
+  ["open outside", [["path", () => fixedTref(`${FILES}.open outside.path.type`, STRING)]], () => fixedTref(`${FILES}.open outside.returns`, UNIT)],
 ], true);
 
 // start fetch's types are nodes with ids of their own, so the numbered
@@ -630,7 +635,7 @@ export const NETWORK_TYPE = typedef(NETWORK, "Network", [], [
 // Each builtin that acts on the world, by the operation it performs.
 export const WORLD_OPS: Record<Id, Id> = {
   [S.print]: `${CONSOLE}.print`, [IO.printError]: `${CONSOLE}.print error`, [IO.readInput]: `${CONSOLE}.read input`, [IO.readLine]: `${CONSOLE}.read line`,
-  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`, [IO.offerFile]: `${FILES}.offer file`, [IO.askForFile]: `${FILES}.ask for file`, [IO.fileInfo]: `${FILES}.file info`,
+  [IO.readFile]: `${FILES}.read file`, [IO.writeFile]: `${FILES}.write file`, [IO.appendFile]: `${FILES}.add to file`, [IO.fileExists]: `${FILES}.file exists`, [IO.listFolder]: `${FILES}.list folder`, [IO.readBytes]: `${FILES}.read bytes`, [IO.writeBytes]: `${FILES}.write bytes`, [IO.offerFile]: `${FILES}.offer file`, [IO.askForFile]: `${FILES}.ask for file`, [IO.fileInfo]: `${FILES}.file info`, [IO.openOutside]: `${FILES}.open outside`,
   [IO.fetchText]: `${NETWORK}.fetch text`, [IO.startFetch]: `${NETWORK}.start fetch`, [IO.sendRequest]: `${NETWORK}.send request`,
 };
 for (const v of Object.values(WORLD_OPS)) (nodes.find((n) => n.id === v) as NodeOf<"variant">).private = true;

@@ -470,6 +470,8 @@ export interface World {
   // A file's kind, size in bytes and modified time in seconds since 1970
   // (L282), read without following a link.
   fileInfo?(path: string): FileFacts;
+  // A file or folder to the platform's own app (L283).
+  openOutside?(path: string): void;
   // A file's bytes as they are, and bytes written (L189c, bytes.ts).
   readBytes?(path: string): Uint8Array;
   writeBytes?(path: string, bytes: Uint8Array): void;
@@ -740,6 +742,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
     [IO.fileExists]: (p) => one(bool(world("fileExists")(p as string))),
     [IO.listFolder]: (p) => one(toList(world("listFolder")(p as string))),
     [IO.fileInfo]: (p) => one(fileInfoValue(world("fileInfo")!(p as string))),
+    [IO.openOutside]: (p) => (world("openOutside")!(p as string), one(unit)),
     [IO.readBytes]: (p) => one(bytesValue(world("readBytes")!(p as string)) as Value),
     [IO.writeBytes]: (p, b) => (world("writeBytes")!(p as string, plainBytes(b)), one(unit)),
     [IO.offerFile]: (n, b) => (world("offerFile")!(n as string, plainBytes(b)), one(unit)),
@@ -813,7 +816,7 @@ export function makeRunner(code: Code, info: Info, rt: Runtime) {
   // performed where they were called.
   const hosted = hostedEffects(code, rt.hosts);
   const timers = worldTimers((m) => { throw new Aborted(m); });
-  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.fileInfo, IO.readBytes, IO.offerFile, IO.askForFile, IO.writeBytes, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
+  const FALLIBLE = new Set<Fn>([...Object.keys(impl).map((op) => `builtin.${op}`), S.mod, S.float32, IO.readFile, IO.writeFile, IO.appendFile, IO.listFolder, IO.fileInfo, IO.openOutside, IO.readBytes, IO.offerFile, IO.askForFile, IO.writeBytes, IO.readInput, IO.readLine, IO.fetchText, IO.startFetch, IO.sendRequest].map((id) => builtins[id]));
   function world<K extends keyof World>(k: K): World[K] {
     const f = rt.world?.[k];
     if (!f) return (() => { throw new Error(`this runtime can't ${k === "error" || k === "log" ? "write to standard error" : k}`); }) as unknown as World[K];

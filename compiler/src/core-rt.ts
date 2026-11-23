@@ -788,6 +788,7 @@ function worldFn(op: string, rt: Runtime, timers: Timers, handlers: Frame[]): (.
     case "zoneOffset": return (z, s) => T.zoneOffset(z as string, s as number)[0] ?? NaN;
     case "listFolder": return (p) => tried(() => toList(w("listFolder")(p as string)));
     case "fileInfo": return (p) => tried(() => fileInfoValue(w("fileInfo")!(p as string)));
+    case "openOutside": return (p) => tried(() => { w("openOutside")!(p as string); return []; });
   }
   return () => { throw new Unsupported(`world ${op}`); };
 }
