@@ -1,6 +1,6 @@
 // A walk over a list made by `map` or `flat map`, the walk over what they
 // were given (G3b, GAPS game rounds 1 to 3: moths' nine cells, the
-// greenhouse's nine and the flock's 27, each a list made per bird only to
+// greenhouse's nine and, until it asked for `neighbours`, the flock's 27, each a list made per bird only to
 // be walked once by `flock over`).
 //
 // A walker is a definition that goes down one of its inputs carrying an
@@ -22,7 +22,7 @@
 // bit (a sum of floats included). v is a new definition, given what f or g
 // read from where they were written as inputs of its own (lambda lifting,
 // Johnsson 1985). A list made where it is walked, through lets or a call
-// of a definition that only computes (the flock's `around cells`), is
+// of a definition that only computes (moths' `around cells`), is
 // walked where it is made: the call goes into the lets, and the
 // definition is put in place. Then the inner walk `w(…, f(x), acc)` is a
 // walker's call on a made list in turn, so `flat map` of `flat map` of

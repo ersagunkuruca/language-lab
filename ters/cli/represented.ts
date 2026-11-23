@@ -10,7 +10,7 @@ import { choosingFor, endedAsWritten, storedRows, withLibraryRepresentations, ty
 import { classKey, optionsText } from "../src/lang/class-key.ts";
 import { keepingWhole } from "../src/lang/check-cache.ts";
 import { ownLibraryHolders } from "../src/lang/own-holders.ts";
-import { nearOnGrid } from "../src/lang/near-grid.ts";
+import { nearByPlaces, nearOnGrid } from "../src/lang/near-grid.ts";
 import { shareFoldItems } from "../../compiler/src/fold-items.ts";
 import { fuseWalks } from "../../compiler/src/fuse-walks.ts";
 import { intCases, usesIntCases } from "../src/lang/int-cases.ts";
@@ -51,8 +51,10 @@ function representedIn<P extends Program>(p00: P, main: Id, hostMaps: boolean, t
   const p10 = held ? { ...reached, code: held.code, names: held.names, own: held.own, info: held.info } : reached;
   // C and WebAssembly (`tables`) find neighbours on a grid written in Ters
   // (near-grid.ts, C292), the program's own so it is stored as the rest.
+  // Elsewhere each is given its places alone, so its items may be columns.
   const gridded = tables ? nearOnGrid(p10.code, p10.info, p10.names, main, p10.own) : null;
-  const p1 = gridded ? { ...p10, code: gridded.code, names: gridded.names, own: gridded.own, info: gridded.info } : p10;
+  const placed = tables ? null : nearByPlaces(p10.code, p10.info, p10.names, main, p10.own);
+  const p1 = gridded ? { ...p10, code: gridded.code, names: gridded.names, own: gridded.own, info: gridded.info } : placed ? { ...p10, code: placed.code, info: placed.info } : p10;
   // A walk over a list made by map or flat map, a walk over what they were
   // given, so no list is made (fuse-walks.ts, G3b); its walks are the
   // program's own, stored as the rest.

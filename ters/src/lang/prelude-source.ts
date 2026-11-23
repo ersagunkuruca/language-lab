@@ -1187,7 +1187,9 @@ export function buildPrelude(): Module {
   // code. Each place once, in the items' order; a cell a little wider than
   // reach per place, by its unit parts, so two places within reach are in
   // cells next to each other however the division rounds; the cells as
-  // Int keys in a Map; each place compared with those in the 3, 9 or 27
+  // Int keys, the places sorted by them so each cell is a run of one array
+  // (a Map of Ints gives where it starts: a Map holding lists would keep
+  // the program's lists as written in C); each place compared with those in the 3, 9 or 27
   // cells around its own by the definition's own sum and ≤, and each list
   // sorted, so the lists are the definition's (ters/library/near.ts does
   // the same in the evaluator and compiled JavaScript). What the grid
@@ -1211,11 +1213,14 @@ export function buildPrelude(): Module {
     { variant: CONS, names: ["unit", "units rest"], body: ([, rest]) => k.call(flatMap, k.call(gridAround, rest),
       k.fn(["offsets"], (o) => k.call(map, k.list(k.int(-1), k.int(0), k.int(1)), k.fn(["offset"], (c) => k.call(CONS, c, o))))) },
   ])));
+  // Where each cell's run starts among the places sorted by cell.
   const gridFiled = k.def("grid filed");
-  k.define(gridFiled, k.fn(["grid", "keys", "position"], (g, keys, i) => k.match(keys, [
-    { variant: NIL, names: [], body: () => g },
-    { variant: CONS, names: ["key", "keys rest"], body: ([key, rest]) => k.call(gridFiled,
-      k.call(put, g, key, k.call(CONS, i, first(k.call(lookup, g, key), k.x(NIL)))), rest, k.call(INT_OPS.add, i, k.int(1))) },
+  k.define(gridFiled, k.fn(["starts", "sorted", "position"], (m, sorted, at) => k.match(sorted, [
+    { variant: NIL, names: [], body: () => m },
+    { variant: CONS, names: ["placed", "sorted rest"], body: ([pr, rest]) => k.match(pr, [
+      { variant: PAIR_V, names: ["number", "key"], body: ([, key]) => k.call(gridFiled,
+        k.if(k.call(hasKey, m, key), m, k.call(put, m, key, at)), rest, k.call(INT_OPS.add, at, k.int(1))) },
+    ]) },
   ])));
   const inGrid = (x: Id) => k.and(k.call(S.not, k.call(INT_OPS.less, x, k.int(-65535))), k.call(INT_OPS.less, x, k.int(65535)));
   const gridFits = def("grid fits", ["reach", "units", "cells"], (r, us, cs) => k.and(
@@ -1224,15 +1229,30 @@ export function buildPrelude(): Module {
     k.call(allPass, cs, k.fn(["cells of one"], (c) => k.call(allPass, c, k.fn(["cell"], inGrid))))));
   const gridClose = def("grid close", ["reach squared", "a", "b"], (r2, a, b) =>
     k.let("apart", k.call(S.zipParts, B.sub, a, b), (d) => k.call(S.not, k.call(S.less, r2, k.call(S.total, k.call(S.zipParts, B.mul, d, d))))));
+  // The places within reach of place i at the start of `run` (the places
+  // sorted by cell, from where cell `key`'s start), put before `found`.
+  const gridRun = k.def("grid run");
+  k.define(gridRun, k.fn(["run", "key", "number", "place", "reach squared", "places", "first place", "found"], (run, key, i, a, r2, placed, p0, acc) =>
+    k.match(run, [
+      { variant: NIL, names: [], body: () => acc },
+      { variant: CONS, names: ["placed", "run rest"], body: ([pr, rest]) => k.match(pr, [
+        { variant: PAIR_V, names: ["there", "its key"], body: ([j, kk]) => k.if(k.equal(kk, key),
+          k.call(gridRun, rest, key, i, a, r2, placed, p0,
+            k.if(k.and(k.call(S.not, k.equal(j, i)), k.call(gridClose, r2, a, first(k.call(ARRAY_OPS.at, placed, j), p0))), k.call(CONS, j, acc), acc)),
+          acc) },
+      ]) },
+    ])));
   const gridFound = def("grid found", ["places", "first place", "units", "cells", "reach"], (placed, p0, us, cs, r) =>
-    k.let("grid", k.call(gridFiled, k.x(emptyMap), k.call(map, cs, k.fn(["cells of one"], (c) => k.call(gridKey, c, k.call(map, us, k.fn(["unit"], () => k.int(0))), k.int(0)))), k.int(0)), (g) =>
+    k.let("sorted", k.call(sortBy, k.call(numbered, k.call(map, cs, k.fn(["cells of one"], (c) => k.call(gridKey, c, k.call(map, us, k.fn(["unit"], () => k.int(0))), k.int(0))))),
+      k.fn(["placed"], (pr) => k.match(pr, [{ variant: PAIR_V, names: ["number", "key"], body: ([, key]) => key }]))), (sorted) =>
+    k.let("starts", k.call(gridFiled, k.x(emptyMap), sorted, k.int(0)), (g) =>
+      k.let("count", k.call(length, sorted), (n) =>
       k.let("around", k.call(gridAround, us), (offs) =>
         k.let("reach squared", k.call(B.mul, r, r), (r2) =>
           k.call(map, k.call(numbered, cs), k.fn(["here"], (here) => second(here, (i, c) =>
             k.let("at", first(k.call(ARRAY_OPS.at, placed, i), p0), (a) =>
-              k.call(sort, k.call(keep,
-                k.call(flatMap, offs, k.fn(["offsets"], (o) => first(k.call(lookup, g, k.call(gridKey, c, o, k.int(0))), k.x(NIL)))),
-                k.fn(["there"], (j) => k.and(k.call(S.not, k.equal(j, i)), k.call(gridClose, r2, a, first(k.call(ARRAY_OPS.at, placed, j), p0))))))))))))));
+              k.call(sort, k.call(flatMap, offs, k.fn(["offsets"], (o) => k.let("key", k.call(gridKey, c, o, k.int(0)), (key) =>
+                k.call(gridRun, k.call(drop, sorted, first(k.call(lookup, g, key), n)), key, i, a, r2, placed, p0, k.x(NIL))))))))))))))));
   const everyPairOf = def("neighbours by every pair", ["places", "reach"], (ps0, r) => k.let("placed", k.call(numbered, ps0), (ps) => everyPair(ps, r)));
   const onGrid = def("neighbours on a grid", ["items", "place", "reach"], (xs, place, r) =>
     k.let("places", k.call(map, xs, place), (ps) => k.match(ps, [
@@ -1242,7 +1262,7 @@ export function buildPrelude(): Module {
           k.let("cells", k.call(map, ps, k.fn(["p"], (p) => k.call(gridCells, p, us, k.call(B.mul, r, k.lit(1 + 2 ** -20))))), (cs) =>
             k.if(k.call(gridFits, r, us, cs), k.call(gridFound, k.call(ARRAY_OPS.of, ps), p0, us, cs, r), k.call(everyPairOf, ps, r)))) },
     ])));
-  const gridHelpers = [gridKey, gridCells, gridAround, gridFiled, gridFits, gridClose, gridFound, everyPairOf];
+  const gridHelpers = [gridKey, gridCells, gridAround, gridFiled, gridFits, gridClose, gridRun, gridFound, everyPairOf];
   const entries = def("entries of", ["map"], (m) => entriesOf(m, (es) => es));
   const keys = def("keys of", ["map"], (m) => entriesOf(m, (es) => k.call(map, es, k.fn(["entry"], (e) => entry(e, (key) => key)))));
   const values = def("values of", ["map"], (m) => entriesOf(m, (es) => k.call(map, es, k.fn(["entry"], (e) => entry(e, (_, v) => v)))));

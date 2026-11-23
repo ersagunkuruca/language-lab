@@ -4652,6 +4652,32 @@ lists of records (G1b with G3d) and G3b both serve it.
 The bird itself costs nothing in counts: `Bird` is passed by value in C
 with no dups or drops, unlike the greenhouse's Thing (GH1, C265).
 
+### On `neighbours` (2026-11-23, C292)
+
+The flock now asks std's `neighbours` for the birds within ten metres of
+each bird, as flock-page does, and its 13 grid definitions are gone. A
+bird then adds its neighbours in their numbers' order, so the ideals do
+too: each collects the near birds from the 27 cells, sorts them, then
+adds them. Every way still prints the ideal's lines. C and WebAssembly
+find them with the prelude's `neighbours on a grid`, copied into the
+program (near-grid.ts). JavaScript uses its runtime's grid (near.ts),
+given the places alone so the birds stay columns. 100 ticks of 5,000
+birds, one run each:
+
+| way | own grid (above) | on `neighbours` |
+|---|---|---|
+| C, one thread | 0.40 s | 0.45 s |
+| `ters native`, one thread | 1.43 s | 4.07 s |
+| `ters native`, 4 threads | 0.55 s | 4.18 s |
+| `ters wasi` | 6.04 s | 7.22 s |
+| `ters compile`, one thread | 8.83 s | 5.52 s |
+| `ters compile`, workers | 8.65 s | 5.51 s |
+
+Compiled JS gains a third. Native loses most: the Ters grid allocates a
+pair per bird to sort by cell and a list per bird it sorts again, and
+keeps big-capable Int keys. Its map isn't shared out on threads either.
+That is C293.
+
 ### Proposed order
 
 G3b's second half moves up: it is two thirds of the flock natively and
