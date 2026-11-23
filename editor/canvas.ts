@@ -362,7 +362,14 @@ export function infiniteCanvas(key: string, cls: string, start?: () => Element[]
     Object.entries({ x: at.x + sx * k, y: at.y + sy * k, width: sw * k, height: sh * k }).forEach(([a, v]) => frame.setAttribute(a, String(v)));
   };
   // (Tests draw graphs in a DOM without observers, and need no map.)
-  if (typeof MutationObserver !== "undefined") new MutationObserver(() => { whole = root.isConnected ? world.getBBox() : null; stale = true; mapped(); }).observe(world, { childList: true });
+  // Measured in the next frame, which lays the graph out anyway: measured
+  // at once, the layout of a large one was forced in the task that drew
+  // it (E319k: 96 ms of Spacetime's rapidity picture).
+  let measuring = 0;
+  if (typeof MutationObserver !== "undefined") new MutationObserver(() => {
+    stale = true;
+    measuring ||= requestAnimationFrame(() => { measuring = 0; whole = root.isConnected ? world.getBBox() : null; mapped(); });
+  }).observe(world, { childList: true });
   // Look at the point under the pointer: it goes to the window's middle.
   const look = (e: PointerEvent) => {
     if (!view) return;
