@@ -56,7 +56,7 @@ test("area counts its eight bands on workers, and says what it says in order and
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/area"), "-o", "area.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/area"), "100"], {})]);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone, small] = await Promise.all([run(["area.mjs", "900"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["area.mjs", "900"], { TERS_WORKERS: "0" }, dir), run(["area.mjs", "100"], { TERS_BRANCHES: "say" }, dir, true)]);
+  const [side, alone, small] = await Promise.all([run(["area.mjs", "900"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["area.mjs", "900"], { TERS_WORKERS: "0" }, dir), run(["area.mjs", "100"], { TERS_BRANCHES: "say" }, dir, true)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-7]\n/, slowStart);
   // Bands this small stay on the main thread: starting workers would cost more.
@@ -77,7 +77,7 @@ test("values cross back as they were, lists and what the branches captured (C41)
     )))))));
     return main;
   });
-  const [many, one] = await Promise.all([run([file], { TERS_BRANCHES: "say", TERS_WORKERS: "2" }), run([file], { TERS_WORKERS: "0" })]);
+  const [many, one] = await Promise.all([run([file], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "2" }), run([file], { TERS_WORKERS: "0" })]);
   assert.equal(many[2], 0, many[1]);
   assert.equal(many[0], one[0]);
   assert.match(many[0], /^\[\[1124999250000, 0\.5, 1\], \[2249998500000, 1, 2\], /);
@@ -104,7 +104,7 @@ test("mandelbrot-rows draws its rows by one map on workers, the same picture in 
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/mandelbrot-rows"), "-o", "mandelbrot-rows.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/mandelbrot-rows"), "40", "60"], {})]);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone, small] = await Promise.all([run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_WORKERS: "0" }, dir), run(["mandelbrot-rows.mjs", "40", "60"], { TERS_BRANCHES: "say" }, dir, true)]);
+  const [side, alone, small] = await Promise.all([run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["mandelbrot-rows.mjs", "600", "3000"], { TERS_WORKERS: "0" }, dir), run(["mandelbrot-rows.mjs", "40", "60"], { TERS_BRANCHES: "say" }, dir, true)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
   assert.equal(small[0], inEvaluator[0]);
@@ -119,7 +119,7 @@ test("a map's items cross with what its function captured, and its first abort i
       k.fn(["i"], (i) => k.list(work(k, 600000, 1), k.call(B.mul, scale, k.call(INT_OPS.toNumber, i))))))))));
     return main;
   });
-  const [many, one] = await Promise.all([run([file], { TERS_BRANCHES: "say", TERS_WORKERS: "2" }), run([file], { TERS_WORKERS: "0" })]);
+  const [many, one] = await Promise.all([run([file], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "2" }), run([file], { TERS_WORKERS: "0" })]);
   assert.equal(many[2], 0, many[1]);
   assert.equal(many[0], one[0]);
   assert.match(many[0], /^\[\[179999700000, 0\], \[179999700000, 0\.5\], /);
@@ -183,7 +183,7 @@ test("fingerprint works out its numbers' walks on workers and hashes them in tur
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/fingerprint"), "-o", "fingerprint.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/fingerprint"), "12", "--evaluator"], {})]);
   assert.equal(made[2], 0, made[1]);
   assert.match(readFileSync(join(dir, "fingerprint.mjs"), "utf8"), /R\d*\.rt\("map\.pure"/);
-  const [side, alone, small] = await Promise.all([run(["fingerprint.mjs", "400"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["fingerprint.mjs", "400"], { TERS_WORKERS: "0" }, dir), run(["fingerprint.mjs", "12"], {}, dir)]);
+  const [side, alone, small] = await Promise.all([run(["fingerprint.mjs", "400"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["fingerprint.mjs", "400"], { TERS_WORKERS: "0" }, dir), run(["fingerprint.mjs", "12"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /below 400: \d+\n$/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
@@ -198,7 +198,7 @@ test("pond's plans are made on workers from its fish sent by shape, the same pon
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const made = await run([ters, "compile", join(here, "../gaps/pond"), "-o", "pond.mjs"], { NO_WHOLE_COLUMNS: "1" }, dir);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
+  const [side, alone] = await Promise.all([run(["pond.mjs", "100", "40"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["pond.mjs", "100", "40"], { TERS_WORKERS: "0" }, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
 });
@@ -213,7 +213,7 @@ test("collatz keeps its long walks on workers, the same numbers in the same orde
   // the largest, shared out and put together by its own join (C42d).
   assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /R\d*\.rt\("fold\.pure"/);
   assert.match(readFileSync(join(dir, "collatz.mjs"), "utf8"), /, "with", (fuel|Infinity), /);
-  const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
+  const [side, alone, small] = await Promise.all([run(["collatz.mjs", "300000", "300"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["collatz.mjs", "300000", "300"], { TERS_WORKERS: "0" }, dir), run(["collatz.mjs", "2000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /^665 numbers below 300000 take more than 300 steps/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
@@ -224,7 +224,7 @@ test("nicomachus checks its ks by all pass and any pass on workers, the same ans
   const dir = mkdtempSync(join(tmpdir(), "branches-"));
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/nicomachus"), "-o", "nicomachus.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/nicomachus"), "200"], {})]);
   assert.equal(made[2], 0, made[1]);
-  const [side, alone, small] = await Promise.all([run(["nicomachus.mjs", "10000"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["nicomachus.mjs", "10000"], { TERS_WORKERS: "0" }, dir), run(["nicomachus.mjs", "200"], {}, dir)]);
+  const [side, alone, small] = await Promise.all([run(["nicomachus.mjs", "10000"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["nicomachus.mjs", "10000"], { TERS_WORKERS: "0" }, dir), run(["nicomachus.mjs", "200"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /for every k below 10000: true; some sum of cubes past 10¹²: true/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
@@ -236,7 +236,7 @@ test("divisors finds its n by first where on workers, the same answer as in turn
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/divisors"), "-o", "divisors.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/divisors"), "1000", "100"], {})]);
   assert.equal(made[2], 0, made[1]);
   assert.match(readFileSync(join(dir, "divisors.mjs"), "utf8"), /R\d*\.rt\("first\.pure"/);
-  const [side, alone, none, small] = await Promise.all([run(["divisors.mjs", "10000", "400"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "10000", "400"], { TERS_WORKERS: "0" }, dir), run(["divisors.mjs", "1500", "2000"], { TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "1000", "100"], {}, dir)]);
+  const [side, alone, none, small] = await Promise.all([run(["divisors.mjs", "10000", "400"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "10000", "400"], { TERS_WORKERS: "0" }, dir), run(["divisors.mjs", "1500", "2000"], { TERS_WORKERS: "3" }, dir), run(["divisors.mjs", "1000", "100"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /more than 400 divisors: some\(5984\)/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
@@ -255,7 +255,7 @@ test("queens-count counts its boards by the first row's columns on workers, the 
   assert.match(js, /R\d*\.rt\("range\.split"\)/);
   // And `safe`'s loop stops once a queen attacks (C207m on JavaScript).
   assert.match(js, /for \(; ; \) \{\n\s*if \(l\d+\) \{\n\s*if \(l\d+ === l\d+\) \{/);
-  const [side, alone, small] = await Promise.all([run(["queens-count.mjs", "11"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["queens-count.mjs", "11"], { TERS_WORKERS: "0" }, dir), run(["queens-count.mjs", "6"], {}, dir)]);
+  const [side, alone, small] = await Promise.all([run(["queens-count.mjs", "11"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["queens-count.mjs", "11"], { TERS_WORKERS: "0" }, dir), run(["queens-count.mjs", "6"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.match(side[0], /boards of 11 queens: 2680\n/);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
@@ -373,7 +373,7 @@ test("fibonacci's two calls of itself are shared out on workers, the same number
   const [made, inEvaluator] = await Promise.all([run([ters, "compile", join(here, "../../ters/examples/fibonacci"), "-o", "fibonacci.mjs"], {}, dir), run([ters, "run", join(here, "../../ters/examples/fibonacci"), "15"], {})]);
   assert.equal(made[2], 0, made[1]);
   assert.match(readFileSync(join(dir, "fibonacci.mjs"), "utf8"), /R\d*\.rt\("both\.pure"/);
-  const [side, alone, small] = await Promise.all([run(["fibonacci.mjs", "36"], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }, dir), run(["fibonacci.mjs", "36"], { TERS_WORKERS: "0" }, dir), run(["fibonacci.mjs", "15"], {}, dir)]);
+  const [side, alone, small] = await Promise.all([run(["fibonacci.mjs", "36"], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }, dir), run(["fibonacci.mjs", "36"], { TERS_WORKERS: "0" }, dir), run(["fibonacci.mjs", "15"], {}, dir)]);
   assert.equal(side[0], alone[0]);
   assert.equal(side[0], "14930352\n");
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);
@@ -398,7 +398,7 @@ test("a fold over a tree works out its two halves on workers, the same total as 
   }, false);
   const js = readFileSync(file, "utf8");
   assert.match(js, /R\.rt\("both\.pure"/);
-  const [side, alone] = await Promise.all([run([file], { TERS_BRANCHES: "say", TERS_WORKERS: "3" }), run([file], { TERS_WORKERS: "0" })]);
+  const [side, alone] = await Promise.all([run([file], { TERS_BRANCHES: "say,wait", TERS_WORKERS: "3" }), run([file], { TERS_WORKERS: "0" })]);
   assert.equal(side[2], 0, side[1]);
   assert.equal(side[0], alone[0]);
   assert.match(side[1], /branches on workers: [1-9]\d*\n/, slowStart);

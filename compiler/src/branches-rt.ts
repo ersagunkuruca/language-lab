@@ -230,9 +230,13 @@ const canShare = () => (workers ??= !!wt());
 // still starting takes what is left when it is.
 interface Helper { port: import("node:worker_threads").MessagePort }
 let pool: Helper[] | null = null, job = 0, onWorkers = 0;
-// With TERS_BRANCHES=say, how many branches ran on workers, said at the
-// exit (the tests' check that they did).
-if ((globalThis as { process?: NodeJS.Process }).process?.env?.TERS_BRANCHES === "say") process.on("exit", () => { if (mod && wt()?.isMainThread) process.stderr.write(`branches on workers: ${onWorkers}\n`); });
+// TERS_BRANCHES, words with commas, for tests: `say`, how many branches
+// ran on workers, said at the exit (the tests' check that they did);
+// `wait`, the pool, once started, waits until each worker listens, so a
+// test of what crosses doesn't race the workers' start (a loaded
+// runner's workers came up after the main thread had done every unit).
+const KNOBS = new Set(((globalThis as { process?: NodeJS.Process }).process?.env?.TERS_BRANCHES ?? "").split(","));
+if (KNOBS.has("say")) process.on("exit", () => { if (mod && wt()?.isMainThread) process.stderr.write(`branches on workers: ${onWorkers}\n`); });
 const quick = new WeakSet<Fn>();
 // What a site's unit takes on this thread with the workers idle, from
 // its first units, run here (C277); and how many of its shared jobs in a
@@ -249,14 +253,16 @@ const sizeOf = () => { try { const os = (globalThis as { process?: { getBuiltinM
 function startPool(): Helper[] {
   const w = wt();
   if (!w || !mod || process.env.TERS_WORKERS === "0") return [];
-  const out: Helper[] = [];
-  for (let i = 0, n = Number(process.env.TERS_WORKERS ?? SIZE()); i < n; i++) {
+  const out: Helper[] = [], n = Number(process.env.TERS_WORKERS ?? SIZE());
+  const ready = KNOBS.has("wait") ? new Int32Array(new SharedArrayBuffer(4)) : undefined;
+  for (let i = 0; i < n; i++) {
     const { port1, port2 } = new w.MessageChannel();
-    const worker = new w.Worker(new URL(mod.url), { workerData: { tersBranches: true, port: port2 }, transferList: [port2] });
+    const worker = new w.Worker(new URL(mod.url), { workerData: { tersBranches: true, port: port2, ready }, transferList: [port2] });
     worker.unref();
     port1.unref();
     out.push({ port: port1 });
   }
+  if (ready) for (let k = Atomics.load(ready, 0), until = Date.now() + 120_000; k < n && Date.now() < until; k = Atomics.load(ready, 0)) Atomics.wait(ready, 0, k, 1000);
   return out;
 }
 
@@ -275,7 +281,8 @@ export function branchesFrom(url: string, fns: Record<string, Fn>, closure: Modu
 export function branchWorker(): boolean {
   const w = wt();
   if (!w || w.isMainThread || !(w.workerData as { tersBranches?: boolean })?.tersBranches || !mod) return false;
-  const { port } = w.workerData as { port: import("node:worker_threads").MessagePort };
+  const { port, ready } = w.workerData as { port: import("node:worker_threads").MessagePort; ready?: Int32Array };
+  if (ready) queueMicrotask(() => { Atomics.add(ready, 0, 1); Atomics.notify(ready, 0); });
   port.on("message", (m: Job) => {
     let unit: ((i: number) => unknown) | undefined;
     for (let i = 0; i < m.units; i++) {
